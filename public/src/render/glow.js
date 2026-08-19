@@ -19,7 +19,8 @@ import * as THREE from '../../vendor/three.module.min.js';
 const GLOW_TEXTURE_SIZE = 64;
 const cache = new Map();
 
-// Two profiles, because one did not work for both jobs and the difference is visible in a capture.
+// Three profiles, because one did not work for all three jobs and the difference is visible in a
+// capture.
 //
 //   'lamp'  a hot white core inside a warm falloff. A flame reads as white in the middle whatever
 //           colour its halo is, and this is what makes a street lantern look switched ON.
@@ -27,9 +28,22 @@ const cache = new Map();
 //           lamp profile at 0.34 m, and at gameplay distance a small sprite is ALL core -- the tint
 //           never gets a chance to show, so they photographed as white specks and read as falling
 //           snow in a warm tree. A mote has to be the colour it is tinted, all the way through.
+//   'shock' HOLLOW: nothing in the middle, a bright edge, gone again outside it. Added for GP1-C5's
+//           combat impacts, and added only after looking: the first hit burst used 'lamp', and in
+//           .local/runtime-test/fight-wolf-hit-flash.png it reads as the wolf briefly getting
+//           brighter rather than as something striking it. A filled blob that grows is a light
+//           turning up; an EDGE that travels outward is an impact, and the edge is the part that
+//           still reads when the whole fight is a tenth of frame height. The kill burst deliberately
+//           keeps 'lamp' -- a wolf's stolen light dissipating SHOULD be a soft bloom, and having the
+//           two events differ in shape as well as colour and size is the entire point of that phase.
 const PROFILES = {
   lamp: [[0, 'rgba(255,255,255,1)'], [0.25, 'rgba(255,255,255,0.85)'], [0.55, 'rgba(255,255,255,0.28)'], [1, 'rgba(255,255,255,0)']],
   mote: [[0, 'rgba(255,255,255,0.72)'], [0.35, 'rgba(255,255,255,0.42)'], [0.7, 'rgba(255,255,255,0.12)'], [1, 'rgba(255,255,255,0)']],
+  shock: [
+    [0, 'rgba(255,255,255,0)'], [0.42, 'rgba(255,255,255,0)'],
+    [0.62, 'rgba(255,255,255,0.55)'], [0.76, 'rgba(255,255,255,1)'],
+    [0.88, 'rgba(255,255,255,0.45)'], [1, 'rgba(255,255,255,0)'],
+  ],
 };
 
 /** A glow texture by profile name, made on first use and shared forever after. Callers never
@@ -59,9 +73,9 @@ export function glowTexture(profile = 'lamp') {
  * whatever is behind it instead of punching a dark hole in it, and never sorts wrongly against the
  * foliage it hangs in.
  */
-export function createGlowSprite(color, sizeMeters) {
+export function createGlowSprite(color, sizeMeters, profile = 'lamp') {
   const material = new THREE.SpriteMaterial({
-    map: glowTexture(),
+    map: glowTexture(profile),
     color,
     blending: THREE.AdditiveBlending,
     depthWrite: false,

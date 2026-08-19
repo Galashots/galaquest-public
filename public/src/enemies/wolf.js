@@ -10,6 +10,7 @@ import {
 // than restated (GQ-007) -- WOLF_MAX_HP has already been retuned once on the owner's word.
 import { WOLF_MAX_HP } from '../combat/encounter.js';
 import { createGlowSprite, setGlowStrength } from '../render/glow.js';
+import { prefersReducedMotion } from '../render/motionPreference.js';
 import { CHARACTER, setLayer } from '../render/layers.js';
 import { loadGLB } from '../world/assets.js';
 
@@ -37,12 +38,10 @@ const CROSSFADE_SECONDS = 0.12;
 const FLASH_COLOR = new THREE.Color(0xffffff);
 
 // Read once per flash rather than cached, so a child (or a testing adult) toggling the OS setting
-// mid-game takes effect on the next hit rather than needing a reload. matchMedia does not exist under
-// plain `node --test`, which is deliberate: it lets wolf.test.mjs exercise flashHit()/flashDefeated()
-// without a DOM.
-function prefersReducedMotion() {
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-}
+// mid-game takes effect on the next hit rather than needing a reload. It now lives in
+// render/motionPreference.js, imported above: render/impactBurst.js needed the same answer, and two
+// copies of "what counts as reduced" is exactly the drift GQ-007 exists to stop. The no-DOM
+// behaviour wolf.test.mjs relies on moved with it, unchanged.
 
 // As authored the wolf measures 1.022m tall and 1.878m long against a 1.479m hero -- its shoulder
 // reaches the boy's chest and it is longer than he is tall. That is close to life size for a big grey
@@ -115,6 +114,21 @@ export const WOLF_SPARK_FADE_PER_SECOND = 3.2;
 // It never goes fully out while the wolf lives: a wolf on its last hit point still has to be findable
 // across the map, which is the spark's other job.
 export const WOLF_SPARK_LAST_HIT_STRENGTH = 0.4;
+
+// GP1-C5: the finishing blow's own colour, and the reason a kill is no longer a hit held longer.
+//
+// WOLF_DEFEAT_FLASH_SECONDS has claimed since it was written that duration alone made the two read
+// differently. The baseline captures say otherwise -- fight-wolf-hit-flash.png and
+// fight-04-defeated.png are the same white shape, because both flashes lerped the same materials
+// toward the same white, and a still frame is what a child actually gets. Duration cannot separate
+// two events for someone who is not timing them.
+//
+// So the wolf does not blanch on the killing blow: it briefly blazes with the light it stole, in
+// that light's OWN colour, and then the light leaves (tickSpark takes the spark out on the same
+// frame, and render/impactBurst.js blooms that same colour outward from the body -- soft and wide,
+// where a hit draws a hard little shockwave ring). White means "struck"; warm gold means "the
+// light is coming out of it". Two colours and two shapes, one glance.
+const DEFEAT_FLASH_COLOR = new THREE.Color(WOLF_SPARK_COLOR);
 
 /** How brightly a wolf carries the tree's light: full at full health, down to
  *  WOLF_SPARK_LAST_HIT_STRENGTH on its last hit point, and out the moment it goes down. */
@@ -248,10 +262,11 @@ export function createWolfPresenter(root, animations) {
     root.visible = presence > 0;
   }
 
-  function beginFlash(durationSeconds) {
+  function beginFlash(durationSeconds, color) {
     flash = {
       durationSeconds: prefersReducedMotion() ? REDUCED_MOTION_FLASH_SECONDS : durationSeconds,
       elapsedSeconds: 0,
+      color,
     };
   }
 
@@ -259,7 +274,7 @@ export function createWolfPresenter(root, animations) {
     if (!flash) return;
     flash.elapsedSeconds += deltaSeconds;
     const t = flashIntensity(flash.elapsedSeconds, flash.durationSeconds);
-    for (const target of flashTargets) target.material.emissive.lerpColors(target.base, FLASH_COLOR, t);
+    for (const target of flashTargets) target.material.emissive.lerpColors(target.base, flash.color, t);
     if (t <= 0) flash = null;
   }
 
@@ -293,12 +308,13 @@ export function createWolfPresenter(root, animations) {
     },
     /** Call when encounter.js raises wolf-hit. A quick white flash -- see FLASH_COLOR above. */
     flashHit() {
-      beginFlash(WOLF_HIT_FLASH_SECONDS);
+      beginFlash(WOLF_HIT_FLASH_SECONDS, FLASH_COLOR);
     },
-    /** Call when encounter.js raises wolf-defeated. Longer than flashHit(), so the finishing blow
-     *  does not read as just another hit; see WOLF_DEFEAT_FLASH_SECONDS in combat/feedback.js. */
+    /** Call when encounter.js raises wolf-defeated. Longer than flashHit() AND a different colour --
+     *  the length keeps it on screen, the colour is what actually tells the two apart. See
+     *  DEFEAT_FLASH_COLOR above for why the original duration-only claim did not survive a capture. */
     flashDefeated() {
-      beginFlash(WOLF_DEFEAT_FLASH_SECONDS);
+      beginFlash(WOLF_DEFEAT_FLASH_SECONDS, DEFEAT_FLASH_COLOR);
     },
     getState() {
       return { clip: currentName, presence: +presence.toFixed(3), spark: +sparkStrength.toFixed(3) };

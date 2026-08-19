@@ -130,7 +130,77 @@ export const WOLF_HIT_FLASH_SECONDS = 0.18;
 // Distinctly longer than the hit flash, so the finishing blow does not read as just another hit --
 // see wolf-defeated in wolf.js. The death clip (DEATH_SECONDS 1.75s in encounter.js) supplies the
 // rest of the distinction; this only needs to outlast a regular hit's flash, not the whole animation.
+//
+// GP1-C5 correction: duration alone did NOT carry that distinction, and the claim above was wrong on
+// screen for as long as it has been written down. tools/runtime-test/play-fight.mjs's own baseline
+// captures, looked at rather than described (.local/combat-baseline/): fight-wolf-hit-flash.png and
+// fight-04-defeated.png are the same white shape. Both flashes lerp the same materials toward the
+// same FLASH_COLOR, so a kill was a hit held longer -- and a still frame is exactly what a ten-year-
+// old gets, because they are looking at the wolf for a quarter of a second, not timing it. The
+// distinction now lives in COLOUR and in what the burst below does, and the duration is merely what
+// keeps it on screen. See WOLF_DEFEAT_FLASH_COLOR in enemies/wolf.js.
 export const WOLF_DEFEAT_FLASH_SECONDS = 0.5;
+
+// ── impact bursts ────────────────────────────────────────────────────────────────────────────────
+//
+// GP1-C5. The white flash marks WHICH thing was hit; it cannot mark that a blow LANDED, because at
+// the distance the fight is actually played (the baseline captures put the hero at roughly a tenth of
+// frame height) a recoloured wolf is a small pale smudge among other small pale smudges. What reads
+// at that size is a shape that was not there a frame ago and is bigger than the thing it happened to.
+// So contact gets its own object in the world, at the contact point, for a fraction of a second.
+//
+// Reference research, per AGENTS.md "Look before you derive" -- three-plus independent examples
+// before any number here was chosen. The expanding-ring-plus-flare impact is close to universal:
+// Zelda: Breath of the Wild's hit sparks, Hades' hit "pops", and generic engine VFX tutorials for
+// Unity/Unreal impact effects all resolve to the same two-part shape (a bright core at the contact
+// point plus a ring that expands outward and fades), and none of the three cites the others. The
+// ring is what survives being small: it moves OUTWARD, and motion away from a point is legible at
+// sizes where colour and detail are not.
+//
+// The numbers themselves are not from the references -- references establish the convention, the
+// captures set the tuning (same rule the flash durations above follow).
+
+// A hit is a punch: small, fast, gone before the stagger pose finishes so it never competes with the
+// wolf's own reaction. It ends larger than the wolf is wide (WOLF_SCALE puts the body near 1m) so the
+// ring clearly leaves the body rather than sitting inside it.
+export const HIT_BURST_SECONDS = 0.26;
+export const HIT_BURST_START_METERS = 0.35;
+export const HIT_BURST_END_METERS = 1.55;
+
+// A kill is an event: bigger, slower, and it keeps expanding after the hit-sized ring would already
+// be gone, so the two are told apart by the SHAPE of the motion and not only by its colour. This is
+// the "stolen light leaving" made visible -- the light the wolf carried blows outward and is gone,
+// which is why enemies/wolf.js tints the defeat flash with the spark's own warm colour rather than
+// the hit's white.
+export const KILL_BURST_SECONDS = 0.62;
+export const KILL_BURST_START_METERS = 0.5;
+export const KILL_BURST_END_METERS = 4.2;
+
+/**
+ * How wide the ring is at `elapsedSeconds`, in metres. Ease-out cubic: almost all of the growth
+ * happens in the first third, which is what makes it read as something that BURST rather than
+ * something that inflated. Clamps to `endMeters` past the end rather than running away, so a caller
+ * that ticks one frame late gets the final size instead of a ring the size of the village.
+ */
+export function burstScaleMeters(elapsedSeconds, durationSeconds, startMeters, endMeters) {
+  if (!(durationSeconds > 0) || !(elapsedSeconds > 0)) return startMeters;
+  const t = Math.min(1, elapsedSeconds / durationSeconds);
+  return startMeters + (endMeters - startMeters) * (1 - (1 - t) ** 3);
+}
+
+/**
+ * How bright the ring is at `elapsedSeconds`, 1 down to 0. Quadratic rather than the linear
+ * flashIntensity() above, on purpose: a linear fade spends half its life at half brightness, which
+ * on an additive sprite reads as a lingering smear over the wolf. This holds near full for the first
+ * moments -- the part a child's eye actually catches -- and then leaves quickly.
+ *
+ * Same defensive shape as flashIntensity(): 0 outside the window, including for negative or
+ * non-finite input, so a caller need not check before asking.
+ */
+export function burstOpacity(elapsedSeconds, durationSeconds) {
+  if (!(durationSeconds > 0) || !(elapsedSeconds >= 0) || elapsedSeconds >= durationSeconds) return 0;
+  return (1 - elapsedSeconds / durationSeconds) ** 2;
+}
 
 // prefers-reduced-motion still needs the STATE change -- index.html's own reduced-motion rule zeroes
 // a transition's duration rather than removing the state it transitions to -- so wolf.js reaches for

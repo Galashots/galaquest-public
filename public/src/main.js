@@ -12,6 +12,10 @@ import {
   canHeroAttack,
   createEncounterState,
   requestAttack,
+  // GP1-C5: the hero's own down time, so the "you are coming back" bar finishes exactly when he
+  // stands up. Imported rather than restated -- a bar that promises 2s while the rules take 3 is
+  // worse than no bar, and this is precisely the "one number, one home" case GQ-007 names.
+  RESPAWN_SECONDS,
   stepEncounter,
 } from './combat/encounter.js';
 import { createEncounterFeedback, heartsForHp } from './combat/feedback.js';
@@ -42,6 +46,7 @@ import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
 import { createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
 import { createMarkSparks } from './rewards/markSpark.js';
+import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
 import { createWolfPresenter, loadWolf, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
 import { createSwingAnimator } from './character/swing.js';
@@ -815,6 +820,10 @@ async function bootstrap() {
   // The visible half of a Lantern Mark: a warm spark that lifts off the beaten wolf and flies to
   // the hero's belt. See rewards/markSpark.js.
   const markSparks = createMarkSparks(scene);
+  // GP1-C5: the thing that appears where a blow lands -- a hard shockwave ring for a hit, a wide
+  // soft bloom for a kill. See render/impactBurst.js for why the wolf's own material flash could
+  // not carry that job on its own.
+  const impactBursts = createImpactBursts(scene);
 
   // GP2's own physical loot -- built immediately (unlike cartReaction above, this needs no loaded
   // GLB, only CART_SEARCH.at, which is plain data) but stays invisible until world/cartLoot.js's own
@@ -852,12 +861,24 @@ async function bootstrap() {
     heroHurtTimer = window.setTimeout(() => { heroHurtFlashElement.dataset.shown = 'false'; }, 90);
   }
 
+  // GP1-C5: going down is a STATE the whole screen enters, not a line of text. See #hero-down-veil
+  // in index.html for why it is deliberately not the red the hurt flash uses, and why the bar is the
+  // half that stops a dark screen from reading as a crash.
+  const heroDownVeilElement = document.querySelector('#hero-down-veil');
+  heroDownVeilElement.style.setProperty('--hero-down-seconds', `${RESPAWN_SECONDS}s`);
+  function showHeroDown(down) {
+    heroDownVeilElement.dataset.shown = String(down);
+  }
+
   // A whiff pulses the attack button instead of touching the wolf at all -- see combat/feedback.js.
   let missPulseTimer = null;
   function pulseMiss() {
     attackButtonElement.dataset.feedback = 'miss';
     window.clearTimeout(missPulseTimer);
-    missPulseTimer = window.setTimeout(() => { delete attackButtonElement.dataset.feedback; }, 160);
+    // 320ms, matching the miss-ring keyframe in index.html: the attribute is what the animation
+    // hangs on, so clearing it early (it was 160) cut the ring off halfway out and left the pulse
+    // looking like a flicker rather than a throw.
+    missPulseTimer = window.setTimeout(() => { delete attackButtonElement.dataset.feedback; }, 320);
   }
 
   // One place where a rule event becomes something a young player can see. Kept separate from the
@@ -876,10 +897,28 @@ async function bootstrap() {
     'swing-dropped'() {},
     'wolf-hit'(event) {
       wolfPresenter?.flashHit();
+      // GP1-C5: the ring, at the same point on the wolf the damage number is already anchored to, so
+      // the three signals for one blow (flash, ring, number) all land in the same place instead of
+      // scattering the child's eye across the frame.
+      impactBursts.burst({
+        x: encounterState.wolf.x, y: WOLF_SPARK_HEIGHT_METERS, z: encounterState.wolf.z, kind: 'hit',
+      });
       // event.damage, not a hardcoded 1 -- see WOLF_DAMAGE_PER_HIT's own comment in encounter.js.
       popDamageNumber(encounterState.wolf.x, WOLF_SPARK_HEIGHT_METERS, encounterState.wolf.z, event.damage);
     },
-    'wolf-defeated'() { wolfPresenter?.flashDefeated(); banner('The wolf is beaten!', 1800); },
+    // GP1-C5: the kill is a COMPOSITION, and the pieces were always here -- they just never added up
+    // to one moment. Same frame: the defeat flash turns the wolf the colour of the light it stole
+    // (not the white a plain hit uses), a ring of that same light blows outward far wider and slower
+    // than a hit's, the wolf's own spark goes out, and the death clip starts. A beat later
+    // mark-earned launches that light to the boy's belt and says so. Nothing here is new machinery;
+    // what changed is that a kill no longer looks like the hit before it.
+    'wolf-defeated'() {
+      wolfPresenter?.flashDefeated();
+      impactBursts.burst({
+        x: encounterState.wolf.x, y: WOLF_SPARK_HEIGHT_METERS, z: encounterState.wolf.z, kind: 'kill',
+      });
+      banner('The wolf is beaten!', 1800);
+    },
     // The flinch is gated on the swing state at dispatch time: the owner's precedence rule (2026-08-13)
     // is that attack wins and a hit only shows when the testers are not attacking. reactClips.js
     // refuses the trigger itself (and is null until the rig actually ships hit/death clips), so
@@ -891,8 +930,9 @@ async function bootstrap() {
     },
     // The wolf's jaws visibly close on nothing; that already reads without extra feedback.
     'bite-missed'() {},
-    'hero-down'() { banner('You went down…', 1600); },
-    'hero-respawned'() { renderHearts(HERO_MAX_HP); banner('Back on your feet', 1200); },
+    // The banner says it; the veil and the filling bar are what a child who is not reading gets.
+    'hero-down'() { showHeroDown(true); banner('You went down…', 1600); },
+    'hero-respawned'() { showHeroDown(false); renderHearts(HERO_MAX_HP); banner('Back on your feet', 1200); },
     // Beating a wolf gives a heart back. No banner: wolf-defeated's "The wolf is beaten!" is already
     // on screen from the same frame, and a second banner would replace it mid-read. The hearts row
     // popping IS the message, and it points at exactly the thing that changed.
@@ -1043,6 +1083,12 @@ async function bootstrap() {
     // confirm a mark's spark actually launched rather than inferring it from a screenshot taken at
     // a guessed moment (the exact defect that photographed a corpse while every check passed).
     markSparksInFlight: () => markSparks.liveCount(),
+    // GP1-C5: whether the screen is currently in the knocked-out state, so a harness can assert
+    // the state exists rather than inferring it from a banner that has already faded.
+    heroDownShown: () => heroDownVeilElement.dataset.shown === 'true',
+    // GP1-C5: how many impact rings are on screen this instant, so a harness can prove a blow
+    // produced a visible event rather than only that the rules said it landed.
+    impactBurstsLive: () => impactBursts.liveCount(),
     guestId: () => net.guestId,
     // A copy, not the live array -- a harness must not be able to mutate this session's own record
     // of what it heard.
@@ -1614,6 +1660,7 @@ async function bootstrap() {
     // Flown toward the hero's CURRENT position, not the one he stood at when the wolf died, so a
     // child who keeps walking is still caught up with.
     markSparks.update(deltaSeconds, player.position);
+    impactBursts.update(deltaSeconds);
     const keeperSpeech = keeperSpeechState({
       heroX: player.position.x,
       heroZ: player.position.z,
