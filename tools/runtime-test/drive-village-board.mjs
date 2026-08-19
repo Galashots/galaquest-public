@@ -893,6 +893,16 @@ async function runRestartPhase() {
     const bought = await pollUntil(tab, (s) => s.village.workshopOwned === true, { timeoutMs: 4000 });
     check('restart: Workshop I is bought before the restart', bought.village.workshopOwned === true,
       JSON.stringify(bought.village));
+    // This buyer tapped UPGRADE up at the cart, 42 m from the village, with the Workshop nowhere on
+    // screen. The one-time ceremony must be ARMED for them, not spent on an empty room -- the
+    // building stays unbuilt on their screen until they walk home and actually look at it
+    // (workshop.js: "the ceremony waits for its audience"). Read a beat after the purchase settles,
+    // so a gate that merely delayed the trigger by a frame could not pass this by accident.
+    await sleep(600);
+    const armed = await state(tab);
+    check('restart: bought from the cart clearing, the ceremony is armed and waiting, not played to nobody',
+      armed.workshop?.built === false && armed.workshop?.ceremonyPending === true,
+      JSON.stringify({ workshop: armed.workshop, heroPos: armed.heroPos }));
     collectedBefore = bought.loot.collected;
     check('restart: all 5 pickups are recorded collected before the restart',
       Object.keys(collectedBefore).length === CART_LOOT_TABLE.length, JSON.stringify(collectedBefore));

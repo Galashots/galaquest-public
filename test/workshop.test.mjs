@@ -1,8 +1,15 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
+import * as THREE from '../public/vendor/three.module.min.js';
+import { createFollowCamera } from '../public/src/camera/follow.js';
+import { headingToward } from '../public/src/world/zoneLoader.js';
 import {
+  CEREMONY_AUDIENCE_METERS,
+  CEREMONY_ON_SCREEN_NDC_X,
+  CEREMONY_ON_SCREEN_NDC_Y,
   WORKSHOP_BUILD_SECONDS,
+  audienceCanSee,
   buildStageProgress,
   workshopTransition,
 } from '../public/src/world/workshop.js';
@@ -142,4 +149,67 @@ test('sabotage: the ceremony length really is the last stage\'s end, not a numbe
   const justBefore = buildStageProgress(WORKSHOP_BUILD_SECONDS - 0.01);
   assert.ok(Object.values(justBefore).some((v) => v < 1),
     'every stage was already finished a hundredth of a second before the ceremony ended');
+});
+
+// ── the ceremony waits for its audience ──────────────────────────────────────────────────────────
+//
+// Driven through the game's OWN follow camera (camera/follow.js, three's math runs in node), not
+// hand-typed NDC: the claim is about what a player can see, so the camera is placed exactly where
+// the game would place it for a hero standing here facing there, and the test only says where the
+// hero and the Workshop are.
+
+function seenFrom({ heroAt, heading, workshopAt, distance }) {
+  const camera = new THREE.PerspectiveCamera(42, 768 / 1024, 0.1, 100);
+  const follow = createFollowCamera(camera, { heading, distance });
+  follow.update(new THREE.Vector3(heroAt[0], 0, heroAt[1]));
+  camera.updateMatrixWorld(true);
+  camera.updateProjectionMatrix();
+  const probe = new THREE.Vector3(workshopAt[0], 1.4, workshopAt[1]).project(camera);
+  return audienceCanSee({
+    metersFromHero: Math.hypot(workshopAt[0] - heroAt[0], workshopAt[1] - heroAt[1]),
+    ndcX: probe.x, ndcY: probe.y, ndcZ: probe.z,
+  });
+}
+
+test('audience: a Workshop a few metres ahead of a player who is facing it has an audience', () => {
+  assert.equal(seenFrom({ heroAt: [0, 0], heading: headingToward(0, 0, -4, -4), workshopAt: [-4, -4] }), true);
+  assert.equal(seenFrom({ heroAt: [0, 0], heading: headingToward(0, 0, -6, -6), workshopAt: [-6, -6] }), true);
+});
+
+test('audience: a Workshop straight ahead but beyond reading range is not an audience yet -- walk closer', () => {
+  const far = [-9, -9];   // 12.7 m
+  assert.equal(seenFrom({ heroAt: [0, 0], heading: headingToward(0, 0, ...far), workshopAt: far }), false);
+  const near = [-6.5, -6.5];   // 9.2 m
+  assert.equal(seenFrom({ heroAt: [0, 0], heading: headingToward(0, 0, ...near), workshopAt: near }), true);
+});
+
+test('audience: a Workshop off to the side of the frame is not an audience -- the player is not facing it', () => {
+  // Facing north (+z), the Workshop 6 m due east: 21 degrees off the camera axis, outside a portrait
+  // frame's 16-degree half-width.
+  assert.equal(seenFrom({ heroAt: [0, 0], heading: headingToward(0, 0, 0, 10), workshopAt: [6, 0] }), false);
+});
+
+test('audience: a Workshop BEHIND the camera has no audience, however near the hero is to it', () => {
+  // Zoomed right in, facing away: the camera sits between the hero and the building.
+  assert.equal(seenFrom({ heroAt: [0, 0], heading: headingToward(0, 0, 0, 10), workshopAt: [0, -5], distance: 3 }), false);
+});
+
+test('audience: the vertical band is the wide one -- a building beyond the hero sits high in a follow-camera frame and still counts', () => {
+  assert.equal(audienceCanSee({ metersFromHero: 8, ndcX: 0, ndcY: 0.85, ndcZ: 0.5 }), true);
+  assert.equal(audienceCanSee({ metersFromHero: 8, ndcX: 0, ndcY: CEREMONY_ON_SCREEN_NDC_Y + 0.01, ndcZ: 0.5 }), false);
+  assert.equal(audienceCanSee({ metersFromHero: 8, ndcX: CEREMONY_ON_SCREEN_NDC_X + 0.01, ndcY: 0, ndcZ: 0.5 }), false);
+  assert.ok(CEREMONY_ON_SCREEN_NDC_X < CEREMONY_ON_SCREEN_NDC_Y);
+});
+
+test('audience: NaN range or NaN coordinates never count as an audience (a lost camera must not fire the one-time ceremony)', () => {
+  assert.equal(audienceCanSee({ metersFromHero: NaN, ndcX: 0, ndcY: 0, ndcZ: 0.5 }), false);
+  assert.equal(audienceCanSee({ metersFromHero: 3, ndcX: NaN, ndcY: 0, ndcZ: 0.5 }), false);
+  assert.equal(audienceCanSee({ metersFromHero: 3, ndcX: 0, ndcY: 0, ndcZ: NaN }), false);
+});
+
+test('sabotage: audienceCanSee is not "always true when near" -- nearness with the building behind the camera is refused', () => {
+  const near = { metersFromHero: 2 };
+  assert.equal(audienceCanSee({ ...near, ndcX: 0, ndcY: 0, ndcZ: 0.5 }), true);
+  assert.equal(audienceCanSee({ ...near, ndcX: 0, ndcY: 0, ndcZ: 1.2 }), false);
+  assert.ok(CEREMONY_AUDIENCE_METERS > 2);
 });

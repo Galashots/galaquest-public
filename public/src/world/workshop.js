@@ -82,9 +82,9 @@ const BUILD_STAGES = Object.freeze({
 // The whole ceremony, in seconds: 2.05. DERIVED from the stages rather than typed beside them, so
 // retuning any one of them cannot leave this claiming the ceremony ends before it does -- the exact
 // drift GQ-007 exists to stop. Inside the "roughly 1-2 seconds of concentrated transformation
-// feedback" this game's own section 7 asks for, and comfortably inside the 4 s budget
-// tools/runtime-test/drive-village-board.mjs allows the transformation before it calls a purchase
-// hung -- deliberately, so lengthening this is a decision somebody has to make on purpose.
+// feedback" this game's own section 7 asks for. tools/runtime-test/drive-village-board.mjs derives
+// its own ceremony budget FROM this number (CEREMONY_BUDGET_MS), so lengthening the ceremony is a
+// decision somebody makes here, on purpose, and the gate follows.
 export const WORKSHOP_BUILD_SECONDS = Object.values(BUILD_STAGES)
   .reduce((latest, stage) => Math.max(latest, stage.start + stage.seconds), 0);
 
@@ -112,6 +112,52 @@ export function buildStageProgress(elapsedSeconds) {
     tools: at(BUILD_STAGES.tools),
     ignite: at(BUILD_STAGES.ignite),
   };
+}
+
+// ── the ceremony waits for its audience ──────────────────────────────────────────────────────────
+//
+// The Village Board is a HUD button. It opens from anywhere, and the moment a child can first afford
+// Workshop I is the moment they pick up the last coin at the cart -- 42 m up the trail, with the
+// village nowhere on screen. Played that way (.local/workshop-play/p2cart-*.png), the purchase fired
+// the whole 2.05 s ceremony into an empty room: frame, roof, chimney and ignition all came and went
+// while the camera looked at a fence, and the child walked home to a building that had simply always
+// been there. The one-time payoff they paid for was spent with nobody watching.
+//
+// So the ceremony is not started on the purchase. It is ARMED on the purchase and started the first
+// frame the Workshop is actually in front of the player: on screen, and near enough to read -- the
+// same way the building would wait if a crew were doing it. A child standing at the door sees it
+// begin the instant the Board clears, exactly as before; a child who bought it from the cart sees it
+// go up as they come round the Lantern Tree. Reload or reconnect before ever looking at it and the
+// ordinary late-join path hands over the finished building -- the ceremony is never owed twice.
+//
+// Ten metres, not the follow distance: at sixteen the bay is the width of a thumb behind the tree
+// and a chimney rising there is a flicker, not an event (p2cart-06b: the village from 12 m north of
+// spawn, Workshop at the frame's top-left corner, 23 m off). Filmed walking home from the cart
+// (p2cartB/C-06w-home-*), 12 m fired with the bay still tucked behind the Lantern Tree's canopy;
+// ten fires a few strides later, where the roof and the rising stack clear it. The horizontal band
+// is the narrow one -- 0.7 of the half-width means "you are facing it", not "it is somewhere in the
+// corner of your eye" -- while the vertical band only keeps it off the very top and bottom edges,
+// because a follow camera looking down at the hero puts everything beyond the hero in the UPPER
+// part of the screen by construction (default pitch: a building 4-10 m ahead sits at roughly
+// 0.25-0.4 of the half-height), and the HUD owns the last strip at the top.
+export const CEREMONY_AUDIENCE_METERS = 10;
+export const CEREMONY_ON_SCREEN_NDC_X = 0.7;
+export const CEREMONY_ON_SCREEN_NDC_Y = 0.9;
+// Where on the building the audience test looks: the bay's anchor on the east face, lifted to the
+// height the chimney and roof arrive at, so "on screen" means the part that moves, not the grass.
+const CEREMONY_SIGHT_HEIGHT_METERS = 1.4;
+
+/**
+ * Pure. Is a Workshop at these screen coordinates and this range something the player can be said
+ * to be LOOKING AT? `ndc*` are normalised device coordinates straight out of Vector3.project: x and
+ * y in -1..1 across the screen, z in -1..1 between the near and far planes; a point behind the
+ * camera projects outside that z range. Split out so the decision can be asserted against a real
+ * PerspectiveCamera in node without a GPU, the same way buildStageProgress is asserted without one.
+ */
+export function audienceCanSee({ metersFromHero, ndcX, ndcY, ndcZ }) {
+  if (!(metersFromHero <= CEREMONY_AUDIENCE_METERS)) return false;
+  if (!(ndcZ > -1 && ndcZ < 1)) return false;
+  return Math.abs(ndcX) <= CEREMONY_ON_SCREEN_NDC_X && Math.abs(ndcY) <= CEREMONY_ON_SCREEN_NDC_Y;
 }
 
 /** Decelerating -- the shape a raised thing settles with. */
@@ -329,6 +375,9 @@ export function createWorkshopReaction(scene, workshopMesh) {
   }
 
   let built = false;
+  // One vector, reused every frame the ceremony is armed: no per-frame allocation, the same rule
+  // update() below already keeps.
+  const sightProbe = new THREE.Vector3();
   // -1 means "not currently building" -- the same sentinel-clock convention createCartReaction's own
   // joltSeconds already uses.
   let buildSeconds = -1;
@@ -369,6 +418,20 @@ export function createWorkshopReaction(scene, workshopMesh) {
   }
 
   return {
+    /** Is the Workshop in front of this player right now -- on screen and within reading range? The
+     *  gate main.js holds the LOCAL ceremony behind (see "the ceremony waits for its audience"
+     *  above). `camera` is the renderer's own camera, whose matrices are current as of the last
+     *  rendered frame, which is current enough for a question answered every frame. A Workshop with
+     *  no building to attach to has nothing to watch -- it reports an audience immediately rather
+     *  than holding the purchase's own sound hostage to geometry that does not exist. */
+    hasAudience(camera, heroPosition) {
+      if (!workshopMesh) return true;
+      group.getWorldPosition(sightProbe);
+      sightProbe.y += CEREMONY_SIGHT_HEIGHT_METERS;
+      const metersFromHero = Math.hypot(sightProbe.x - heroPosition.x, sightProbe.z - heroPosition.z);
+      sightProbe.project(camera);
+      return audienceCanSee({ metersFromHero, ndcX: sightProbe.x, ndcY: sightProbe.y, ndcZ: sightProbe.z });
+    },
     // `instant`: skips the ceremony entirely -- for a client whose FIRST known observation of this
     // Workshop is already built (a late joiner, or a page reload after someone else bought it), the
     // same "already unlocked, no ceremony" rule zoneLoader.js's own tree-relight logic applies via

@@ -423,3 +423,25 @@ too small — hosted CI measured the ceremony completing at ~4.8x wall clock, ro
 multiplier is now 10x and the comment records the measurement it came from. A liveness check earns
 nothing from a tight budget.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A one-time ceremony fired off a server edge plays to whoever happens to be looking.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+**Rule:** A one-shot world payoff (a build, a relight, a burst) that is triggered the instant a
+shared flag flips is correct about WHEN it happened and says nothing about WHO SAW IT. If the control
+that causes the flag lives in the HUD, or the flag can flip while the player is anywhere, the ceremony
+must be ARMED on the edge and STARTED on the first frame its subject is actually in front of the
+local player -- on screen and within reading range -- or it spends itself on an empty room. Hydration
+("already done, show the finished state") is the other path and must stay immediate; the audience
+test is only for the ceremony that was paid for. Sibling of "Hydration restores state; it must not
+replay the ceremony" above: that one keeps a ceremony from playing twice, this one keeps it from
+playing zero times.
+**Incidents:** The Village Board is a HUD button, and the moment a child can first afford Workshop I
+is at the cart, 42 m up the trail. Bought there, the 2.05 s build ceremony ran to completion with the
+camera looking at a fence (`.local/workshop-play/p2cart-05-buy-*`), and the child walked home to a
+building that had simply always been there. Every harness and probe had bought it standing at the
+door, so nothing red ever said so; it was found by PLAYING the purchase from where the money is
+actually earned. Fixed by arming the ceremony on the edge in `main.js` and firing it from
+`workshop.js`'s `hasAudience(camera, heroPosition)` (range plus a projected on-screen band); pinned
+by the follow-camera-driven tests in `test/workshop.test.mjs` and a `drive-village-board.mjs` check
+that a cart-clearing buyer's Workshop is still armed, not built, a beat after the purchase.
+**Foreknowledge helped:** not yet recorded.
