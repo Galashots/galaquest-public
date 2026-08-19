@@ -1,0 +1,96 @@
+name: movement-diagnostic-probe
+
+# MEASUREMENT ONLY, and NON-GATING. Runs tools/diagnostics/diagnose-movement.mjs on a hosted runner
+# to obtain the second half of an A/B whose first half was measured on a developer desktop. It
+# asserts nothing and gates nothing.
+#
+# THE QUESTION. When a harness commands a movement pulse (70-260 ms of W held down), does a non-zero
+# intent actually reach authority on a frame-starved hosted runner? main.js samples input and calls
+# net.setIntent() only from the rendered frame loop, so a whole pulse can fall between two rendered
+# frames and never be transmitted at all.
+#
+# WHAT DISCRIMINATES THE CAUSES. Sends per pulse are bounded by BOTH the rendered-frame count and the
+# INPUT_SEND_HZ throttle, and which one binds is the whole question:
+#   - On a healthy desktop, frames per pulse (12-16) far exceed the throttle's quota (3-4), so the
+#     THROTTLE binds and there is comfortable margin.
+#   - On a starved runner the binding constraint flips to FRAMES, and a short pulse that renders one
+#     frame or none can transmit nothing.
+# An instrument that counts setIntent CALLS cannot see this, because a call that the throttle drops
+# looks identical to one that went on the wire. This one records the return value and separates
+# attempts from sends.
+#
+# NOT AN INVARIANT: the send count for a pulse is not floor(duration / interval). The due test runs
+# against the last ACTUAL send and is only evaluated on a rendered frame, so the phase at key-down
+# (reported as due0) changes the count by one.
+#
+# LOCAL CONTROL, developer desktop, 6 pulses:
+#   pulsesWithNoRenderedFrame 0, pulsesWithNoNonZeroSend 0, pulsesAttemptedButNeverSent 0,
+#   pulsesWithNoReleaseSent 0, pulsesServerDidNotMove 0, framesOver250ms 0,
+#   meanFrameDeltaMs 17.7, totalNonZeroAttempted 86, totalNonZeroSent 22,
+#   release transmitted on every pulse, mean latency 12.7 ms.
+# So none of the candidate causes reproduces locally. The hosted half is what discriminates them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pulses:
+        description: 'How many movement pulses to command'
+        required: false
+        default: '14'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: movement-diag-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Byte-identical to the canonical matrix's own Chrome setup, so the frame timing measured here
+      # is the frame timing the failing harnesses actually run under.
+      - name: Launch isolated Chrome
+        run: |
+          google-chrome \
+            --remote-debugging-port=9224 \
+            --user-data-dir="$RUNNER_TEMP/gq-chrome" \
+            --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu \
+            --hide-scrollbars --no-first-run --no-default-browser-check about:blank \
+            >"$RUNNER_TEMP/chrome.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/gq-chrome.pid"
+          for i in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:9224/json/version >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          cat "$RUNNER_TEMP/chrome.log"
+          exit 1
+
+      - name: Diagnose movement
+        run: node tools/diagnostics/diagnose-movement.mjs --pulses ${{ inputs.pulses || '14' }}
+
+      - name: Upload diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: movement-diagnosis-${{ github.run_id }}
+          path: .local/runtime-test/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Clean owned processes
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/gq-chrome.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/gq-chrome.pid")" 2>/dev/null || true
+          fi
+          pkill -f 'node server.mjs' 2>/dev/null || true
