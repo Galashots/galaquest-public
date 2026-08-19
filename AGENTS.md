@@ -360,3 +360,22 @@ Verified against the three.js r170 source, not inferred. Full working in
 - **Never send this hero to Mixamo's auto-rigger.** It is documented to fail on disjoined parts and
   the mesh is 978 disconnected shells. Mixamo is a clip source only, via "Without Skin".
 - **Author locomotion in place, not with root motion.** The server owns position.
+- **Light layers are tested against the CAMERA, not against each object.** `projectObject` pushes a
+  light only when `light.layers.test(camera.layers)`, and the pushed set then lights everything that
+  camera draws. So layers cannot be used to light one object differently from another in a single
+  pass -- but a camera rendering its OWN layer sees no scene lights at all unless lights are put on
+  that layer too. `render/heroPreview.js`'s showcase pass carries its own key/fill/kicker rig for
+  exactly this reason; without it the hero renders black.
+- **`scene.background` repaints the whole frame at the top of every `render()` call.** A second pass
+  with `renderer.autoClear = false` does not clear, but the background box/quad is still added to the
+  render list and still covers everything the first pass drew. Null `scene.background` for the extra
+  pass and restore it after.
+- **`renderOrder` cannot put a transparent object behind an opaque one.** three.js keeps two render
+  lists and always draws the opaque one first; `renderOrder` only sorts WITHIN a list. A translucent
+  backdrop that must land behind opaque subjects needs its own render pass (and therefore its own
+  layer), not a negative renderOrder.
+- **`renderer.clearDepth()` is what makes an overlay pass immune to world geometry.** Depth values
+  left by a previous pass belong to that camera's projection; a second camera's fragments tested
+  against them occlude arbitrarily. Measured on this game: with the clear removed and the follow
+  camera pinched to `MIN_DISTANCE` at a building edge, the Hero screen renders no hero at all, while
+  every one of the harness's own 64 checks still passes.

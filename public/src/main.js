@@ -29,7 +29,7 @@ import { attachBeltLantern, BELT_LANTERN_URL } from './character/gear.js';
 import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
 import { DEFAULT_EQUIPPED_WEAPON_ID } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
-import { createHeroPreviewMarker, createHeroScreen, heroScreenViewModel } from './progression/heroScreen.js';
+import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
@@ -56,6 +56,7 @@ import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
+import { createHeroPreview } from './render/heroPreview.js';
 import { createRimLight } from './render/rimLight.js';
 import { createRenderer } from './render/renderer.js';
 import { ndcToOverlayPixels } from './render/screenProjection.js';
@@ -386,26 +387,46 @@ async function bootstrap() {
   const follow = createFollowCamera(camera, {
     heading: headingToward(HERO_SPAWN.x, HERO_SPAWN.z, TREE_X, TREE_Z),
   });
+  // GP1-C3: the Hero screen's showcase pass. Created HERE, before the gesture, because the gesture is
+  // handed a camera it can turn, and while the Hero screen is open that is the PREVIEW's turntable,
+  // not the world's follow camera -- see the adapter below.
+  const heroPreview = createHeroPreview(scene, THREE);
+  // Drag-to-turn, routed. While the Hero screen is open every gesture goes to the preview's own yaw
+  // and the world camera is not touched AT ALL -- which is also what makes "closing Hero restores the
+  // normal game camera" true by construction rather than by saving and restoring three numbers (the
+  // old dolly did exactly that, and a restore is a thing that can be got wrong; not moving is not).
+  // Yaw only: pitch and zoom are dropped rather than forwarded, because a preview a child can pitch
+  // is a preview a child can leave aimed at the sky with no way back except closing the screen.
+  const cameraTarget = {
+    get heading() { return follow.heading; },
+    get pitch() { return follow.pitch; },
+    get distance() { return follow.distance; },
+    orbit(yawDelta, pitchDelta) {
+      if (heroPreview.isActive()) heroPreview.orbit(yawDelta);
+      else follow.orbit(yawDelta, pitchDelta);
+    },
+    setDistance(next) { if (!heroPreview.isActive()) follow.setDistance(next); },
+    zoomBy(factor) { if (!heroPreview.isActive()) follow.zoomBy(factor); },
+  };
   // Camera gesture goes on after the thumb controls so they can veto pointers that belong to them.
   // Both are checked: without the attack half, a thumb that taps ATTACK also drags the camera, and
   // the view lurches on every swing.
-  const cameraGesture = createCameraGesture(gameSurface, follow, {
+  const cameraGesture = createCameraGesture(gameSurface, cameraTarget, {
     isStickPointer: (event) => touch.ownsPointer(event) || attack.ownsPointer(event),
   });
 
   // GP1: the Hero screen's "actual 3D equipped hero preview" (plan section 8) is the running game
-  // itself, dollied close, rather than a second three.js scene/renderer. A second WebGL context was
-  // considered and rejected: iOS Safari enforces a small ceiling on simultaneous contexts and this
-  // game already targets real iPads, so a permanent second context for an occasional overlay is a
-  // real risk for a cosmetic gain -- reusing `follow`/`cameraGesture`, both already bound to `#game`,
-  // costs nothing new and the drag-to-rotate gesture keeps working underneath the overlay for free
-  // (see index.html's #hero-screen comment for why the overlay leaves its own middle click-through).
-  // Distance/pitch below are a first pass, tuned against a real capture in the browser verification
-  // pass rather than by arithmetic alone -- AGENTS.md's "look before you derive" rule applies to a
-  // camera framing exactly as much as to a gear fit.
-  const HERO_SCREEN_PREVIEW_DISTANCE = 2.4;
-  const HERO_SCREEN_PREVIEW_PITCH = 0.16;
-  let heroScreenSavedCamera = null;
+  // itself -- the REAL live hero with whatever it is actually wearing -- rather than a second
+  // three.js scene/renderer. A second WebGL context was considered and rejected: iOS Safari enforces
+  // a small ceiling on simultaneous contexts and this game already targets real iPads, so a permanent
+  // second context for an occasional overlay is a real risk for a cosmetic gain.
+  //
+  // GP1-C3 replaced HOW that hero is presented. It used to be "dolly `follow` in to 2.4 m and let the
+  // world keep rendering underneath a transparent overlay", and that was measured broken from four
+  // hostile positions in the running game -- at the Workshop and at the Lantern Tree the hero was
+  // ENTIRELY invisible, the camera being inside a wall and inside a trunk respectively. It is now a
+  // dedicated render pass over a cleared depth buffer (render/heroPreview.js's own header carries the
+  // full before/after). Nothing dollies, so there is no saved camera to restore.
   // Offline fallback (Phase D's own pattern, see OFFLINE_HERO_ID / offlineMarks below): with no
   // server there is no rewards mirror to read an equip choice off, so this is progression's own
   // small piece of local state, applied instead of net.sendEquip when netStatus is not 'online'.
@@ -431,10 +452,11 @@ async function bootstrap() {
     },
     // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
     // unable to originate a touch, so input/touch.js's own ownsPointer() gate never has to know Hero
-    // screen exists) and hands the follow camera to the close preview framing, restoring the exact
-    // heading/pitch/distance the child left the WORLD at on close -- see input gating below for the
-    // frame-loop half of this (movement/attack are also force-zeroed there, not just visually hidden,
-    // so a keyboard tester or a stray event cannot move the hero while this is open).
+    // screen exists) and hands the hero to render/heroPreview.js's showcase pass -- see input gating
+    // below for the frame-loop half of this (movement/attack are also force-zeroed there, not just
+    // visually hidden, so a keyboard tester or a stray event cannot move the hero while this is
+    // open). The WORLD camera is deliberately left exactly where the child put it, so there is no
+    // heading/pitch/distance to restore and no way for a restore to be got wrong.
     onOpenChange: (open) => {
       // GP3: opening Hero closes the Village Board first, if it was open -- see villageBoard's own
       // onOpenChange for the symmetric direction. Two full-screen overlays open at once would fight
@@ -447,31 +469,19 @@ async function bootstrap() {
       // bubble collided at spawn, which is exactly where a child is standing the first time they'd
       // plausibly open this screen.
       gameSurface.dataset.heroScreenOpen = String(open);
-      if (open) {
-        heroScreenSavedCamera = { distance: follow.distance, pitch: follow.pitch, heading: follow.heading };
-        follow.setDistance(HERO_SCREEN_PREVIEW_DISTANCE);
-        follow.orbit(0, HERO_SCREEN_PREVIEW_PITCH - follow.pitch);
-        // A "hide the WORLD render layer for a clean backdrop" approach was tried and reverted here:
-        // render/layers.js's CHARACTER layer covers the wolf, remote players, the Keeper and
-        // villagers as well as the local hero (see e.g. enemies/wolf.js, net/remotes.js), not "world
-        // vs. this one hero" as hoped, so dropping WORLD left those floating with no ground under
-        // them -- worse than the clutter it was meant to fix. index.html's #hero-screen vignette
-        // (a plain radial-gradient, no layer changes) is the real fix for now; a dedicated "local
-        // hero only" render layer would isolate this properly but touches the character-pipeline
-        // layer assignments the asset stream owns, so it is left as a follow-up rather than done here.
-      } else if (heroScreenSavedCamera !== null) {
-        follow.setDistance(heroScreenSavedCamera.distance);
-        follow.orbit(0, heroScreenSavedCamera.pitch - follow.pitch);
-        follow.setHeading(heroScreenSavedCamera.heading);
-        heroScreenSavedCamera = null;
-      }
+      // GP1-C3: the whole 3D half of open/close is this one line. The preview takes the LIVE hero
+      // (runtime.hero, not a clone), moves it onto its own render layer for as long as the screen is
+      // up, and puts every layer mask back exactly on close.
+      //
+      // An earlier attempt at the backdrop problem, kept here because it is the trap: "hide the WORLD
+      // render layer for a clean backdrop" does not work, because render/layers.js's CHARACTER layer
+      // covers the wolf, remote players, the Keeper and the villagers as well as the local hero (see
+      // enemies/wolf.js, net/remotes.js), not "world vs. this one hero" -- dropping WORLD left those
+      // floating with no ground under them. What was missing was a layer meaning THIS hero and a pass
+      // of its own to draw it in; both now exist.
+      heroPreview.setActive(open, runtime.hero);
     },
   });
-  // GP1-C2: the visible-hero-proof marker. See createHeroPreviewMarker's own header for the full
-  // reasoning -- summary: a small, unmistakably-temporary floating shape, positioned in world space
-  // (never touching hero.root or the rig), recoloured to whatever is equipped, visible only while
-  // the Hero screen is open.
-  const heroPreviewMarker = createHeroPreviewMarker(scene, THREE);
   // Section 7's own causal sequence: "immediate confirmation -> attention returns to 3D world ->
   // Workshop visibly transforms". Long enough that the Board's own BUILT confirmation is legible for
   // a beat first, short enough that this reads as one continuous sequence rather than a second wait.
@@ -923,13 +933,14 @@ async function bootstrap() {
     heroScreenEquippedWeaponId: () => equippedWeaponIdFromRewards(netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
       : { equippedWeaponId: offlineEquippedWeaponId }),
-    // GP1-C2: proves the visible-hero-proof marker actually tracks the equipped item, without a
-    // harness having to raycast the scene or diff pixels -- same "observable without seeing it"
-    // pattern as every other zone/audio debug accessor here.
-    heroPreviewMarkerState: () => ({
-      visible: heroPreviewMarker.mesh.visible,
-      colorHex: `#${heroPreviewMarker.mesh.material.color.getHexString()}`,
-    }),
+    // GP1-C3: the showcase pass's own state -- whether it is drawing, which accent the equipped
+    // weapon put on its kickers, the framing it solved for this viewport, and the live hero's bounds
+    // PROJECTED THROUGH THE PREVIEW CAMERA into normalized screen space. Same "observable without
+    // seeing it" pattern as every other accessor here, with one deliberate limit: a harness may use
+    // heroFrame to REJECT a preview that framed the hero off-screen or at postage-stamp size, and may
+    // never use it to accept one. Accepting a character showcase is a thing you do by looking at the
+    // capture (AGENTS.md, "Playtests are mandatory").
+    heroPreviewState: () => heroPreview.debugState(),
     // GP2: the server's own loot block, read the identical way the frame loop itself reads it --
     // "observable without seeing it" once more, so a harness can assert spawned/collected directly
     // rather than inferring the world state from a screenshot.
@@ -1069,8 +1080,8 @@ async function bootstrap() {
     // already gives, just widened to cover both screens now that there are two.
     const anyOverlayOpen = heroScreenOpen || villageBoardOpen;
     // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
-    // and GP1-C2's preview marker needs the current equipped id even while the screen is closed, so
-    // it can pick up mid-frame whatever the DOM render below just set.
+    // and the showcase pass needs the current equipped id the frame the screen OPENS, so it can pick
+    // up mid-frame whatever the DOM render below just set rather than painting one frame stale.
     const ownRewards = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
       : { equippedWeaponId: offlineEquippedWeaponId };
@@ -1082,9 +1093,17 @@ async function bootstrap() {
         selectedItemId: selectedHeroItemId,
       }));
     }
-    // GP1-C2: world-space, not attached to the rig -- see createHeroPreviewMarker's own header.
-    // Visible only while heroScreenOpen; update() itself no-ops the position/colour work when hidden.
-    heroPreviewMarker.update(player.position, currentEquippedWeaponId, heroScreenOpen, deltaSeconds);
+    // GP1-C3: the showcase pass's per-frame input. No-ops entirely while the screen is closed, and
+    // re-reads the live hero every frame so gear mounted mid-screen joins the preview rather than
+    // being left behind on CHARACTER. The accent is the equipped weapon's OWN swatch -- the same
+    // number the item card and the owned strip paint with -- which is what makes tapping EQUIP a
+    // visible change in 3D and not only in the DOM.
+    heroPreview.update({
+      heroRoot: runtime.hero,
+      accentColorHex: swatchHexFor(currentEquippedWeaponId),
+      width: runtimeRenderer.size.width,
+      height: runtimeRenderer.size.height,
+    });
 
     // touch.read()/keyboard.read() are plain snapshot reads with no drain/consume semantics (unlike
     // the attack takeAttack() calls below, which DO have to run every frame regardless) -- safe to
@@ -1832,6 +1851,9 @@ async function bootstrap() {
     follow.update(player.position);
     rimLight.update(player.position);
     runtimeRenderer.renderer.render(scene, camera);
+    // GP1-C3: drawn OVER the world pass, against a depth buffer this call clears first. No-op unless
+    // the Hero screen is open. See render/heroPreview.js for why that ordering is the whole fix.
+    heroPreview.render(runtimeRenderer.renderer, scene);
     const frameCostMs = performance.now() - frameStart;
     quality.recordFrame(frameCostMs, frameDeltaMs);
     diagnostics.recordFrame(frameCostMs);

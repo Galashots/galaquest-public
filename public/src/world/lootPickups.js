@@ -28,9 +28,9 @@ const COIN_THICKNESS_METERS = 0.02;
 const COIN_SPIN_RADIANS_PER_SECOND = 5.2;
 const COIN_REST_HEIGHT_METERS = 0.14;
 
-// Deliberately not WILDWOOD_COLOR (world/wildwoodBlade.js / the GP1-C2 hero-preview marker already
-// own that teal for "a Blade is equipped") -- a Shard needs its OWN identity as a currency object, not
-// a second use of a colour that already means something else on screen.
+// Deliberately not WILDWOOD_COLOR (world/wildwoodBlade.js, and the Hero screen's own showcase accent,
+// already own that teal for "a Blade is equipped") -- a Shard needs its OWN identity as a currency
+// object, not a second use of a colour that already means something else on screen.
 const SHARD_COLOR = 0x9b6bde;
 const SHARD_RADIUS_METERS = 0.09;
 const SHARD_HEIGHT_METERS = 0.26;
@@ -84,7 +84,7 @@ function buildCoinMesh() {
 function buildShardMesh() {
   // A 5-sided cone, not a smooth one: low segment count is what makes it read as a rough, faceted
   // crystal spike rather than a smooth pointed pill -- the same "cheap geometry, deliberate facets"
-  // trade bramble.js's boxes and the Hero-preview marker's flat-shaded octahedron already make.
+  // trade bramble.js's boxes and world/workshop.js's own temporary primitives already make.
   const geometry = new THREE.ConeGeometry(SHARD_RADIUS_METERS, SHARD_HEIGHT_METERS, 5);
   const material = new THREE.MeshStandardMaterial({
     color: SHARD_COLOR, emissive: SHARD_COLOR, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.15,
