@@ -386,3 +386,19 @@ schema. Fixed with `tools/sol-review/reviewCheckout.mjs`, a trusted adjacent sch
 server/import paths, explicit SHA attribution, and `test/sol-review-checkout.test.mjs` plus the shared
 protocol tests.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A capture is only evidence if the subject is actually in the frame.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+**Rule:** Before a capture is filed as the acceptance seam for how something LOOKS, point the camera
+at it deliberately and open the file. A follow camera lands wherever the last leg of a walk left the
+hero facing; that bearing is chosen by pathfinding, not by what the shot is for. Sibling of "Green
+checks are not a look at the game" above, and a distinct failure from it: there the assertion and the
+photograph were of different moments, here the photograph was of the right moment pointed at the
+wrong thing.
+**Incidents:** `village-board-workshop-before-3d-portrait.png`, committed as the evidence of how the
+Workshop reads before a purchase, contained no Workshop — it was a photograph of the Lantern Tree,
+which stands 3.4 m due north of the building with a canopy wider than that gap, directly on the one
+bearing the follow camera always lands on after the walk down from the camp. Every Workshop capture
+in `drive-village-board.mjs` had been taken from that bearing since the harness was written. Fixed by
+`aimAtWorkshop()`, which points the camera down the plaza-side approach before each Workshop capture.
+**Foreknowledge helped:** not yet recorded.
