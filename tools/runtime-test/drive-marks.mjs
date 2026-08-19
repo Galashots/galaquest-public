@@ -37,7 +37,19 @@ const server = await startOwnedServer();
 const ORIGIN_UNDER_TEST = server.origin;
 const URL_UNDER_TEST = server.url;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
-const VIEWPORT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
+// GP1-C6: the same run, in whichever orientation is asked for.
+//
+//     node tools/runtime-test/drive-marks.mjs [--landscape]
+//
+// Two runs rather than one run that rotates, deliberately. The FIRST Lantern Mark happens once per
+// guest, and this harness clears localStorage before it loads -- so each run earns a genuine first
+// mark rather than photographing mark 2 and calling it mark 1. Captures are prefixed with the
+// orientation so the two runs cannot overwrite each other's evidence.
+const LANDSCAPE = process.argv.includes('--landscape');
+const ORIENTATION = LANDSCAPE ? 'landscape' : 'portrait';
+const VIEWPORT = LANDSCAPE
+  ? { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true }
+  : { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -176,8 +188,8 @@ const touch = (type, points) => page.send('Input.dispatchTouchEvent', {
 
 async function shot(name) {
   const { data } = await page.send('Page.captureScreenshot', { format: 'png' });
-  writeFileSync(`${OUT}marks-${name}.png`, Buffer.from(data, 'base64'));
-  console.log(`  captured marks-${name}.png`);
+  writeFileSync(`${OUT}marks-${ORIENTATION}-${name}.png`, Buffer.from(data, 'base64'));
+  console.log(`  captured marks-${ORIENTATION}-${name}.png`);
 }
 
 // Self-verifying, same as play-fight.mjs: records the state a capture was taken in, so a picture
@@ -285,6 +297,69 @@ for (let swing = 0; swing < 40 && !killed; swing += 1) {
 }
 check('the wolf can actually be killed', killed);
 
+// GP1-C6: the reward MOMENT, caught while it is happening rather than after it has finished.
+//
+// `01-one-mark` below is taken after a poll for the pip, which is the STATE the reward leaves behind
+// -- by then the spark that carries the mark from the wolf to the belt may already have landed. Both
+// are worth having and they are different pictures: one is "what did I just earn", the other is "what
+// do I have now". Triggered off the spark's own live count rather than a sleep, so the frame cannot
+// claim to show a flight that had already ended.
+const inFlight = await (async () => {
+  const deadline = deadlineAfter(4000);
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const live = await page.eval('window.__galaQuestRuntime.markSparksInFlight()');
+    if (live >= 1) return live;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(20);
+  }
+  return 0;
+})();
+await shot('03-mark-in-flight');
+check(`${ORIENTATION}: the mark's own light was caught in flight, not after it landed`,
+  inFlight >= 1, `markSparksInFlight() ${inFlight}`);
+
+// THE REWARD BEAT ITSELF -- the frame this whole lane is judged on. Triggered off the ignite
+// attribute main.js sets the moment the light reaches the boy, so the capture cannot be taken before
+// the thing it is evidence for has started, and cannot claim an arrival that never happened.
+const ignited = await (async () => {
+  const deadline = deadlineAfter(6000);
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const lit = await page.eval(
+      `document.querySelector('#lantern-marks')?.dataset.justLit === 'true'`,
+    );
+    if (lit) return true;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(20);
+  }
+  return false;
+})();
+await shot('05-mark-arrival');
+check(`${ORIENTATION}: the mark ARRIVING is its own moment -- the pip ignites when the light lands`,
+  ignited, 'the lantern-marks pill never entered its just-lit state');
+
+// THE TWO NUMBERS MUST AGREE. The first version of this beat said "LANTERN MARK 2 / 3" next to a
+// single lit pip, because the pip count and the banner count were derived separately and one of them
+// double-counted a mark that the render had already revealed. Caught by looking at the capture, which
+// is the only reason it was caught -- both numbers were individually plausible. This is the check
+// that makes the capture unnecessary next time.
+const arrival = await page.eval(`(() => {
+  const banner = document.querySelector('#banner');
+  const pips = Array.from(document.querySelectorAll('#lantern-marks .mark'));
+  return JSON.stringify({
+    bannerText: banner?.dataset.shown === 'true' ? banner.textContent : '',
+    pipsFilled: pips.filter((el) => el.dataset.filled === 'true').length,
+  });
+})()`).then(JSON.parse);
+const bannerCount = Number((/LANTERN MARK\s+(\d+)\s*\/\s*(\d+)/.exec(arrival.bannerText) ?? [])[1]);
+check(`${ORIENTATION}: the reward toast names the mark AND the progress`,
+  Number.isFinite(bannerCount) && /LANTERN MARK/.test(arrival.bannerText),
+  `banner read ${JSON.stringify(arrival.bannerText)}`);
+check(`${ORIENTATION}: the toast's count and the lit pips are the SAME number`,
+  bannerCount === arrival.pipsFilled,
+  `toast says ${bannerCount}, ${arrival.pipsFilled} pip(s) lit`);
+
 // The mark is awarded server-side off the SAME snapshot cadence combat events ride (net/gameServer.mjs,
 // D3) -- 10 Hz -- so the pip filling and the reward event landing both need a poll, not an instant
 // read the moment killed flips true.
@@ -303,6 +378,25 @@ check('the server-side mark count for this guest is exactly 1',
   ownGuestRewards?.marks === 1, JSON.stringify(afterKill.rewards));
 check('one mark is not yet an unlock', ownGuestRewards?.lanternUnlocked === false, `MARKS_TO_UNLOCK is ${MARKS_TO_UNLOCK}`);
 await shot('01-one-mark');
+
+// The steady state: every part of the reward has resolved and this is what the child is left looking
+// at. If the progress is only legible DURING the effect, it is not legible.
+const settled = await (async () => {
+  const deadline = deadlineAfter(6000);
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const live = await page.eval('window.__galaQuestRuntime.markSparksInFlight()');
+    if (live === 0) return true;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(50);
+  }
+  return false;
+})();
+await sleep(1800);
+await shot('04-mark-steady');
+const steady = await state();
+check(`${ORIENTATION}: after the effect resolves the progress is still on screen -- one pip filled, no leftovers`,
+  settled && steady.pipsFilled === 1, `sparks drained ${settled}, pipsFilled ${steady.pipsFilled}`);
 
 // ── reload: same localStorage, same guestId, marks survive from the welcome state ────────────────
 await page.send('Page.navigate', { url: URL_UNDER_TEST });

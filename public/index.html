@@ -153,12 +153,46 @@
         display: flex; gap: 0.15rem; align-items: center;
         padding: 0.3rem 0.5rem; border-radius: 0.35rem;
         background: rgb(12 20 31 / 75%);
-        font-size: 1.1rem; line-height: 1;
+        font-size: 1.35rem; line-height: 1;
         pointer-events: none; touch-action: none;
       }
-      #lantern-marks .mark { color: rgb(255 255 255 / 25%); transition: color 120ms ease-out; }
-      #lantern-marks .mark[data-filled="true"] { color: #f2b33d; }
-      #lantern-marks .mark::after { content: '\25CF'; }
+      /* GP1-C6: A LANTERN MARK, NOT A DOT.
+         These were three U+25CF bullets that changed colour, which is exactly what a Lantern Mark
+         must not look like: the reward the whole first chapter is built around read as 'something
+         happened to one of the dots'. An empty slot is now a HOLLOW four-point spark and a filled
+         one is a SOLID, glowing one -- the same shape as the light that just flew off the wolf and
+         into the boy, so the icon and the thing it counts are visibly the same object. Earned vs not
+         is now shape AND fill AND glow rather than hue alone, which also means it survives being
+         looked at by someone who does not tell gold from grey. */
+      #lantern-marks .mark {
+        color: rgb(255 255 255 / 28%);
+        display: inline-block;
+        transition: color 120ms ease-out, text-shadow 200ms ease-out;
+      }
+      #lantern-marks .mark::after { content: '\2727'; }
+      #lantern-marks .mark[data-filled="true"] {
+        color: #f2b33d; text-shadow: 0 0 10px rgb(242 179 61 / 90%), 0 0 22px rgb(242 179 61 / 45%);
+      }
+      #lantern-marks .mark[data-filled="true"]::after { content: '\2726'; }
+      /* The moment it lights. main.js sets this for one beat when the mark's own light ARRIVES at
+         the boy -- not when the server says the kill counted, which is most of a second earlier and
+         is why the reward used to land underneath the kill's own payoff and lose. One pip igniting
+         is the smallest thing that can say 'THAT is what you just earned'; it does not need a
+         fireworks system, it needs to be the thing moving at the moment nothing else is. */
+      #lantern-marks .mark[data-just-lit="true"] { animation: mark-ignite 700ms ease-out 1; }
+      @keyframes mark-ignite {
+        0%   { transform: scale(1);    filter: brightness(1); }
+        18%  { transform: scale(1.85); filter: brightness(2.2); }
+        100% { transform: scale(1);    filter: brightness(1); }
+      }
+      /* ...and the pill it sits in leans in with it, so the eye is PULLED to the corner rather than
+         being expected to already be looking there. */
+      #lantern-marks[data-just-lit="true"] { animation: mark-pill-lift 700ms ease-out 1; }
+      @keyframes mark-pill-lift {
+        0%   { background: rgb(12 20 31 / 75%); }
+        18%  { background: rgb(78 56 18 / 94%); }
+        100% { background: rgb(12 20 31 / 75%); }
+      }
       /* GP2: coins and Wildwood Shards, same dark-pill/read-only/out-of-touch-flow treatment as
          hero-health and lantern-marks -- this is the fourth member of the same top-left status
          column, not a new visual language. Top-right rather than stacking under lantern-marks: that
@@ -341,7 +375,7 @@
       }
       .damage-number[data-rise="true"] { transform: translate(-50%, -260%); opacity: 0; }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .heart, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .heart, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
       }
       /* Y/Task F2: debug-only, hidden by default -- the GPU/frame-cost panel was competing with the
          game and Keeper dialogue in every capture (found by looking at village-keeper-wave.png-style

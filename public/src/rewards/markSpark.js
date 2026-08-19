@@ -96,8 +96,18 @@ export function createMarkSparks(scene) {
       setGlowStrength(spark.sprite, 0);
       spark.sprite.position.copy(spark.from);
     },
-    /** @param heroPosition a live THREE.Vector3-ish `{x, z}`; read every frame, never captured. */
+    /**
+     * @param heroPosition a live THREE.Vector3-ish `{x, z}`; read every frame, never captured.
+     * @returns how many sparks finished their flight on THIS EXACT FRAME -- 0 almost always.
+     *
+     * GP1-C6. The arrival is the moment the mark is actually earned as far as a child is concerned:
+     * the light reaches them. Reported the same way world/lootPickups.js reports a pickup whose
+     * attraction flight completed, and for the same reason -- it lets the HUD wait for the thing to
+     * land instead of updating while it is still crossing the screen, which is what collapsed the
+     * kill beat and the reward beat into one frame that showed both and read as neither.
+     */
     update(deltaSeconds, heroPosition) {
+      let arrived = 0;
       for (const spark of sparks) {
         if (!spark.live) continue;
         spark.elapsed += deltaSeconds;
@@ -105,6 +115,7 @@ export function createMarkSparks(scene) {
         if (beat.done) {
           spark.live = false;
           setGlowStrength(spark.sprite, 0);
+          arrived += 1;
           continue;
         }
         spark.sprite.position.set(
@@ -115,6 +126,7 @@ export function createMarkSparks(scene) {
         spark.sprite.scale.setScalar(beat.sizeMeters);
         setGlowStrength(spark.sprite, beat.strength01);
       }
+      return arrived;
     },
     /** For a harness: how many sparks are in flight right now. */
     liveCount: () => sparks.filter((spark) => spark.live).length,
