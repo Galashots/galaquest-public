@@ -35,7 +35,7 @@
 // from outside. That is what a real outshot looks like from the street, and it is the only form that
 // reads at distance without touching the house model.
 //
-// And the part that actually does the work at sixteen metres: THE CHIMNEY. It stands 3.18 m against
+// And the part that actually does the work at sixteen metres: THE CHIMNEY. It stands 3.21 m against
 // a 2.141 m house -- half again the building's height -- and it is the one element that cannot be
 // foreshortened away, which is the failure this village has already been bitten by once (see the Y
 // phase's own exit note: a canopy silhouette that read from one bearing and vanished from another).
