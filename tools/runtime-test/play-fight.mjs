@@ -56,8 +56,14 @@ import {
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
   WOLF_MAX_HP,
+  // The world's own respawn delay, so the landscape pass at the end waits exactly as long as the
+  // rules say a new wolf takes -- not a guessed sleep that goes stale the day that number moves.
+  WOLF_RESPAWN_SECONDS,
   canAttack,
 } from '../../public/src/combat/encounter.js';
+// Aiming the world camera at something, so a capture can be made to CONTAIN the thing it is
+// evidence about. Imported rather than re-deriving atan2 by hand in a harness.
+import { headingToward } from '../../public/src/world/zoneLoader.js';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -309,8 +315,11 @@ const authoritativeGap = (s) => (s.serverPos === null
   : Math.hypot(s.serverPos[0] - s.wolf.x, s.serverPos[1] - s.wolf.z));
 
 // Centre of the attack button: 1rem inset plus half of its 112px.
-const attackX = VIEWPORT.width - 68;
-const attackY = VIEWPORT.height - 68;
+// `let`, not `const`: the landscape sanity pass at the end of this file rotates the viewport, and
+// every touch coordinate in this harness is derived from the viewport's own size. A const here is
+// how a landscape pass ends up tapping empty grass 200px from the button it meant to press.
+let attackX = VIEWPORT.width - 68;
+let attackY = VIEWPORT.height - 68;
 
 async function tapAttack() {
   await touch('touchStart', [{ x: attackX, y: attackY }]);
@@ -336,14 +345,47 @@ await shot('01-start');
 
 // Deliberately thrown from 8+m away, against a 1.7m reach -- a guaranteed miss, with the wolf far too
 // distant to be any part of the frame. Captures swing-missed's own feedback in isolation: the button
-// must pulse a flat grey instead of its usual orange, and nothing on the wolf should move at all.
-// Polling would have nothing to wait for here (hp never changes on a miss), so this uses a fixed
-// delay timed to SWING_CONTACT_SECONDS (0.18s in combat/encounter.js) the same way the swing-windup/
-// contact/follow sequence below does.
+// must show its miss state, and nothing on the wolf should move at all.
+//
+// GP1-C5 FIX. This used to `sleep(200)` and shoot, with a comment saying 200ms was "timed to
+// SWING_CONTACT_SECONDS (0.18s)". SWING_CONTACT_SECONDS is 0.5167s and has been since the 1.5s
+// sword_slash clip landed -- the same stale 0.18 that the comment 100 lines below already had to be
+// corrected for. So this capture fired 317ms BEFORE the miss it is named after could possibly be
+// raised, and every fight-swing-miss.png ever committed shows a hero mid-windup next to an ordinary
+// orange button. The miss feedback had never once been photographed, which is exactly how it stayed
+// weak enough to need this phase.
+//
+// Polled on the button's OWN state rather than re-derived from a duration: the capture now cannot be
+// taken unless the thing it claims to show is on screen. `pollUntil` works on state(), so this uses
+// a small dedicated poll on the DOM attribute main.js sets.
 const beforeMiss = await state();
+// The wolf has to be IN the frame for this capture to say what it claims. The original beat threw
+// the miss with the wolf far behind the camera, which proves "no damage" in the state JSON but shows
+// a picture of an empty field -- "the wolf is untouched" and "the wolf is not here" look identical.
+// So the camera is aimed at it first: still 8+m away, still a guaranteed miss against a 1.7m reach,
+// still not aggroed (the run's first check is that it starts outside its aggro range), but now
+// visibly standing there not reacting. Distance is untouched -- this stays the real play camera.
+await page.eval(`window.__galaQuestRuntime.follow.setHeading(${headingToward(
+  beforeMiss.heroPos[0], beforeMiss.heroPos[1], beforeMiss.wolf.x, beforeMiss.wolf.z,
+)})`);
+await sleep(400);
 await tapAttack();
-await sleep(200);
+const missFeedback = await (async () => {
+  const deadline = deadlineAfter(3000);
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const shown = await page.eval(
+      "document.querySelector('#attack-button')?.dataset.feedback ?? ''",
+    );
+    if (shown === 'miss') return true;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(25);
+  }
+  return false;
+})();
 await shot('swing-miss');
+check('the miss capture actually contains the miss feedback, rather than a hero still winding up',
+  missFeedback, 'the attack button never entered its miss state within 3s of the tap');
 const afterMiss = await state();
 check('a swing thrown well outside reach is a miss, not silent damage',
   afterMiss.wolf.hp === beforeMiss.wolf.hp, `wolf hp ${beforeMiss.wolf.hp} -> ${afterMiss.wolf.hp}`);
@@ -358,8 +400,24 @@ check('a swing thrown well outside reach is a miss, not silent damage',
 // backwards once already, and this harness got it backwards a second time, steering the hero to
 // x=-13.4 while aiming for x=+2.5. The hero only turns while walking, so steering correctly also
 // leaves the hero FACING the wolf, which the strike arc requires.
-const stickX = VIEWPORT.width * 0.18;
-const stickY = VIEWPORT.height * 0.86;
+let stickX = VIEWPORT.width * 0.18;
+let stickY = VIEWPORT.height * 0.86;
+
+// The other orientation a child holds the iPad in. Combat is a 3D effect and mostly orientation-
+// blind, but the HUD around it is not -- the miss ring hangs off a button that moves, and the
+// hero-down bar is sized in vw against a frame that changes shape.
+const LANDSCAPE_VIEWPORT = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
+
+async function useViewport(viewport) {
+  await page.send('Emulation.setDeviceMetricsOverride', viewport);
+  attackX = viewport.width - 68;
+  attackY = viewport.height - 68;
+  stickX = viewport.width * 0.18;
+  stickY = viewport.height * 0.86;
+  // A beat for the resize to reach the renderer and for CSS media queries to re-evaluate before
+  // anything is tapped or photographed against the new layout.
+  await sleep(500);
+}
 const STICK_PX = 56;
 
 // `aim` is called fresh on EVERY iteration, with the just-polled state, and steers at whatever it
@@ -564,6 +622,36 @@ await shot('hero-hurt-flash');
 check('a wolf bite lands and the capture catches it while the hurt flash is still up',
   biteState.hero.hp < beforeBite.hero.hp, `hero ${beforeBite.hero.hp}hp -> ${biteState.hero.hp}hp`);
 
+// ── GP1-C5: being knocked out, photographed ─────────────────────────────────────────────────────
+//
+// The fifth combat state, and the only one this harness had no picture of at all -- so "you went
+// down" was shipped, reviewed and re-reviewed without anybody once looking at what it does to the
+// screen. It did almost nothing: a banner, for 1.6s, over an otherwise normal-looking game with a
+// dimmed ATTACK button. A child mashing that button has no way to tell that from the button having
+// broken, which is the specific failure this phase was commissioned to fix.
+//
+// Reached by simply CONTINUING to stand there. The beat above already walked into bite range and
+// took one bite without attacking; three bites is a knockout at HERO_MAX_HP 3, so this needs no new
+// technique and no forced state -- just patience, which is also exactly how a real child gets
+// knocked out. Nothing here touches the rules: the wolf does it.
+const downState = await pollUntil((s) => s.hero.downSeconds >= 0, { intervalMs: 40, timeoutMs: 25000 });
+check('the hero can actually be knocked out by standing and taking bites',
+  downState.hero.downSeconds >= 0, `hp ${downState.hero.hp}, downSeconds ${downState.hero.downSeconds}`);
+await shot('hero-down');
+const downShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+check('going down puts the WHOLE SCREEN into the knocked-out state, not just a banner that fades',
+  downShown === true, `heroDownShown() ${JSON.stringify(downShown)}`);
+
+// And the other half of the promise: it has to end, visibly, on its own. A veil that outlived the
+// rules would be worse than no veil -- the child would be looking at a knocked-out screen while
+// holding a hero who can already swing.
+const backUp = await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000 });
+check('the hero gets back up on his own', backUp.hero.downSeconds < 0,
+  `downSeconds ${backUp.hero.downSeconds}`);
+const stillShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+check('and the knocked-out state clears when he does, rather than outliving the rules',
+  stillShown === false, `heroDownShown() ${JSON.stringify(stillShown)} after standing up`);
+
 // Prove the control works before blaming the rules: one tap must start a swing.
 //
 // Polled, not a fixed sleep(50): that fixed wait is the exact same gotcha class the B5 scope
@@ -735,6 +823,92 @@ async function photographTheSwing() {
     frames.length === 3 && spread > SWING_SECONDS * 0.3, `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`);
 }
 await photographTheSwing();
+
+// ── landscape sanity pass ────────────────────────────────────────────────────────────────────────
+//
+// Everything above is portrait, which is how the iPad is held most of the time and therefore where
+// the evidence that matters lives. This is the other way it gets held, and it is a SANITY pass, not
+// a second full matrix: the impact effects are 3D and cannot care which way the frame is, but the
+// chrome wrapped around them can -- the miss ring hangs off a button that moves to a different
+// corner, and the hero-down bar is sized against the frame's width.
+//
+// The wolf respawns WOLF_RESPAWN_SECONDS after it dies (world rules, not this harness's doing), so
+// this waits for a live one rather than forcing anything.
+await useViewport(LANDSCAPE_VIEWPORT);
+const respawned = await pollUntil((s) => s.wolf.mode !== 'dead' && s.wolf.hp > 0,
+  { intervalMs: 200, timeoutMs: (WOLF_RESPAWN_SECONDS + 6) * 1000 });
+check('landscape: a fresh wolf is back to fight, rather than this pass photographing a corpse',
+  respawned.wolf.mode !== 'dead' && respawned.wolf.hp > 0,
+  `mode ${respawned.wolf.mode}, hp ${respawned.wolf.hp}`);
+
+// MISS, in landscape. Thrown from wherever the hero is standing after the swing photographs, which
+// is well outside reach of a wolf that has only just reappeared at its own spawn.
+await tapAttack();
+const landscapeMissShown = await (async () => {
+  const deadline = deadlineAfter(3000);
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const shown = await page.eval("document.querySelector('#attack-button')?.dataset.feedback ?? ''");
+    if (shown === 'miss') return true;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(25);
+  }
+  return false;
+})();
+await shot('landscape-swing-miss');
+check('landscape: the miss ring is thrown from the button in its new corner too',
+  landscapeMissShown, `attack button miss state seen: ${landscapeMissShown}`);
+
+// HIT, in landscape.
+await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 15000, { faceTarget: true });
+let landscapeHit = false;
+for (let attempt = 0; attempt < 30 && !landscapeHit; attempt += 1) {
+  // eslint-disable-next-line no-await-in-loop
+  await tapAttack();
+  // eslint-disable-next-line no-await-in-loop
+  const after = await pollUntil((s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
+    { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 });
+  landscapeHit = after.wolf.mode === 'hit';
+  if (landscapeHit) await shot('landscape-wolf-hit-flash');
+  if (after.wolf.mode === 'dying' || after.wolf.mode === 'dead') break;
+}
+check('landscape: a landed hit was photographed', landscapeHit,
+  `wolf caught in its hit reaction: ${landscapeHit}`);
+
+// HERO DOWN, in landscape -- the state whose layout is most likely to break when the frame changes
+// shape, because the bar under the message is sized against the viewport width.
+const beforeDown = await state();
+const landscapeDown = await pollUntil((s) => s.hero.downSeconds >= 0,
+  { intervalMs: 40, timeoutMs: 30000 });
+check('landscape: the hero can still be knocked out', landscapeDown.hero.downSeconds >= 0,
+  `hp ${beforeDown.hero.hp} -> ${landscapeDown.hero.hp}, downSeconds ${landscapeDown.hero.downSeconds}`);
+await shot('landscape-hero-down');
+const landscapeDownShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+check('landscape: the knocked-out state is on screen in this orientation too',
+  landscapeDownShown === true, `heroDownShown() ${JSON.stringify(landscapeDownShown)}`);
+
+// KILL, in landscape -- the fourth state, and the last one needed to say the cues survive outside
+// portrait. He stands back up on full hearts RESPAWN_SECONDS after going down, so this waits for
+// that rather than swinging at a wolf while downed and having every tap refused.
+await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000 });
+let landscapeKilled = false;
+for (let attempt = 0; attempt < 40 && !landscapeKilled; attempt += 1) {
+  // eslint-disable-next-line no-await-in-loop
+  await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 6000, { faceTarget: true });
+  // eslint-disable-next-line no-await-in-loop
+  await tapAttack();
+  // eslint-disable-next-line no-await-in-loop
+  const after = await pollUntil(
+    (s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
+    { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 },
+  );
+  landscapeKilled = after.wolf.mode === 'dying' || after.wolf.mode === 'dead';
+  // Caught at first detection, while the defeat flash and its bloom are still up -- the same reason
+  // the portrait kill capture sits inside its own loop rather than after it.
+  if (landscapeKilled) await shot('landscape-defeated');
+}
+check('landscape: the finishing blow was photographed too', landscapeKilled,
+  `wolf reached its death state: ${landscapeKilled}`);
 
 // Split rather than filtered, so a known-missing asset is reported as itself instead of either
 // failing the run or vanishing from it.
