@@ -45,11 +45,28 @@ import { CAMP, CART_SEARCH, ROWAN, WORKSHOP_INTERACT, WORKSHOP_PROP } from '../.
 import { headingToward } from '../../public/src/world/zoneLoader.js';
 import { CART_LOOT_TABLE, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
 import { WORKSHOP_I_ID, remainingVillageSupplies } from '../../public/src/village/economy.js';
+import { WORKSHOP_BUILD_SECONDS } from '../../public/src/world/workshop.js';
 import { movementPulseMillis } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
+
+// How long to wait for the Workshop's build ceremony to finish, DERIVED from the ceremony rather
+// than typed as a round number beside it.
+//
+// It used to be a flat 4000 ms, which was comfortable for a 1.4 s ceremony and became a red gate on
+// hosted CI the moment that ceremony grew to 2.05 s. The mechanism is main.js's own frame clamp:
+// `deltaSeconds = Math.min(realDelta, 0.1)`, which exists so a hitch cannot teleport the hero and
+// which means that below 10 fps the ceremony advances SLOWER THAN WALL CLOCK. On a loaded hosted
+// runner at ~5 fps a 2.05 s ceremony takes ~4.1 s of wall clock, and a 4000 ms budget calls that
+// hung. Nothing was broken; the budget simply did not know what it was waiting for.
+//
+// 4x covers a sustained 2.5 fps floor, which is far below anything this matrix has produced. This is
+// the same lesson the ledger already carries as "Automation timeouts are wall-clock budgets, not
+// sample counts", applied to the other end of it: a wall-clock budget still has to be derived from
+// the work, not from a habit.
+const CEREMONY_BUDGET_MS = Math.ceil(WORKSHOP_BUILD_SECONDS * 1000 * 4);
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
 const STICK_PX = 56;
@@ -640,7 +657,7 @@ async function runPurchasePhase(viewport, label) {
     // -> mere proximity STILL has not opened anything -> a deliberate tap opens it -> closing and
     // interacting again reopens it (reusable, not once-ever).
     const ceremonyDone = await pollUntil(tab, (s) => s.workshop?.transforming === false && s.workshopInteractAvailable === true,
-      { timeoutMs: 4000 });
+      { timeoutMs: CEREMONY_BUDGET_MS });
     check(`${label}: once the ceremony finishes, the deliberate interact prompt becomes available`,
       ceremonyDone.workshop?.transforming === false && ceremonyDone.workshopInteractAvailable === true,
       JSON.stringify({ workshop: ceremonyDone.workshop, workshopInteractAvailable: ceremonyDone.workshopInteractAvailable }));
@@ -733,7 +750,7 @@ async function runWorkshopInteractLandscapePhase() {
       bought.village.workshopOwned === true, JSON.stringify(bought.village));
 
     const ceremonyDone = await pollUntil(tab,
-      (s) => s.workshop?.built === true && s.workshop?.transforming === false, { timeoutMs: 4000 });
+      (s) => s.workshop?.built === true && s.workshop?.transforming === false, { timeoutMs: CEREMONY_BUDGET_MS });
     check('landscape (direct): the Workshop finishes building and its ceremony completes',
       ceremonyDone.workshop?.built === true && ceremonyDone.workshop?.transforming === false,
       JSON.stringify(ceremonyDone.workshop));
@@ -942,11 +959,25 @@ async function runRestartPhase() {
     await walkToward(tab, WORKSHOP_INTERACT.at[0], WORKSHOP_INTERACT.at[1], WORKSHOP_INTERACT.radiusMeters * 0.5, 120000);
     await aimAtWorkshop(tab);
     await shot(tab, 'restart-late-join-workshop');
-    const lateJoin = await state(tab);
+    // Polled, not read once: arriving and the prompt appearing are two different frames, and on a
+    // hosted runner they can be a long way apart. The failure detail carries the hero's actual
+    // distance from the interact point, so a red gate here says whether the walk fell short or the
+    // gate itself refused -- rather than needing another run to find out which.
+    const lateJoin = await pollUntil(tab, (s) => s.workshopInteractAvailable === true,
+      { timeoutMs: CEREMONY_BUDGET_MS });
+    const lateJoinDistance = Math.hypot(
+      lateJoin.heroPos[0] - WORKSHOP_INTERACT.at[0], lateJoin.heroPos[1] - WORKSHOP_INTERACT.at[1],
+    );
     check('restart: the late joiner walks up to a finished Workshop that is immediately interactable',
       lateJoin.workshop?.built === true && lateJoin.workshop?.transforming === false
         && lateJoin.workshopInteractAvailable === true,
-      JSON.stringify({ workshop: lateJoin.workshop, interact: lateJoin.workshopInteractAvailable }));
+      JSON.stringify({
+        workshop: lateJoin.workshop,
+        interact: lateJoin.workshopInteractAvailable,
+        heroPos: lateJoin.heroPos,
+        metresFromInteractPoint: +lateJoinDistance.toFixed(2),
+        interactRadius: WORKSHOP_INTERACT.radiusMeters,
+      }));
 
     await openWorkshopDetail(tab);
     await shot(tab, 'restart-board-still-built');

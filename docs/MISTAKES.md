@@ -402,3 +402,21 @@ bearing the follow camera always lands on after the walk down from the camp. Eve
 in `drive-village-board.mjs` had been taken from that bearing since the harness was written. Fixed by
 `aimAtWorkshop()`, which points the camera down the plaza-side approach before each Workshop capture.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A wall-clock budget waiting on simulated time must account for the frame clamp.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+**Rule:** `main.js` clamps `deltaSeconds` to 0.1 s so a hitch cannot teleport the hero. The
+consequence is that below 10 fps every timed animation advances SLOWER THAN WALL CLOCK, by the ratio
+of frame time to the clamp. A harness waiting N milliseconds for an M-second animation is really
+asserting a frame rate. Derive such a budget from the animation's own exported length with headroom
+for that ratio; never type a round number beside it. Sibling of "Automation timeouts are wall-clock
+budgets, not sample counts" above, and the mirror of it: there a budget was converted into samples,
+here a budget in real time was measuring work counted in simulated time.
+**Incidents:** The Workshop build ceremony grew from 1.4 s to 2.05 s. `drive-village-board.mjs`'s
+flat 4000 ms ceremony poll had been comfortable for the old length and went red on hosted CI at the
+new one, at roughly 5 fps, while passing 53/53 locally — nothing was broken, the budget simply did
+not know what it was waiting for. A unit test asserting the ceremony fitted inside that same 4000 ms
+passed throughout, because it shared the false premise. Fixed by deriving `CEREMONY_BUDGET_MS` from
+the exported `WORKSHOP_BUILD_SECONDS`, and by deleting the unit test's claim about another file's
+number rather than adjusting it.
+**Foreknowledge helped:** not yet recorded.

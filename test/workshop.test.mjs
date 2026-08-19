@@ -47,17 +47,16 @@ test('sabotage: workshopTransition\'s changed flag is not always true -- the ide
 // you have to look at. What IS testable is the claim the whole staging rests on -- that the building
 // finishes CHANGING SHAPE before it starts GLOWING -- which is a fact about five numbers.
 
+// This began as two tests: one on the window the beat is budgeted, and one asserting the ceremony
+// fitted inside drive-village-board.mjs's flat 4000 ms poll. The second passed, and the gate went
+// red on hosted CI anyway -- main.js clamps deltaSeconds to 0.1 s, so below 10 fps the ceremony
+// advances slower than wall clock and a 2.05 s build can take over 4 s of it on a loaded runner.
+// A ceremony length cannot be checked against a number some other file happens to hold, so that
+// harness now derives its budget from WORKSHOP_BUILD_SECONDS and this asserts only the property
+// that is genuinely local: a ceremony a child sits through before regaining control stays short.
 test('the ceremony fits the window the transformation is supposed to occupy', () => {
   assert.ok(WORKSHOP_BUILD_SECONDS >= 1 && WORKSHOP_BUILD_SECONDS <= 2.5,
     `${WORKSHOP_BUILD_SECONDS}s is outside the 1-2s of concentrated feedback this beat is budgeted`);
-});
-
-// drive-village-board.mjs waits 4000 ms for `transforming` to clear before it calls the purchase
-// hung. Asserted against a real margin rather than against the bare number, so a future retune that
-// creeps up on that budget fails here instead of flaking there.
-test('the ceremony finishes with room to spare inside the harness\'s own ceremony budget', () => {
-  assert.ok(WORKSHOP_BUILD_SECONDS * 1000 < 4000 * 0.75,
-    `a ${WORKSHOP_BUILD_SECONDS}s ceremony leaves too little slack in a 4000ms poll`);
 });
 
 test('every stage is finished by the time the ceremony is over', () => {

@@ -1956,8 +1956,11 @@ async function bootstrap() {
       // WORKSHOP_INTERACT range, and neither full-screen overlay already owns the input. Gating on
       // isTransforming() rather than time is what actually removes the reported Board/Hero crossfade
       // at the root: the Board already auto-closes at WORKSHOP_BOARD_AUTOCLOSE_MS (900ms), well before
-      // the pop-in's own POP_IN_SECONDS (1.4s) finishes, so by the time this ever reads true the Board
-      // is already gone -- no overlap is possible by construction, not by timing luck.
+      // the build's own WORKSHOP_BUILD_SECONDS (2.05s) finishes, so by the time this ever reads true
+      // the Board is already gone -- no overlap is possible by construction, not by timing luck.
+      // (Was POP_IN_SECONDS, 1.4s, when the ceremony was a single pop of an already-finished object.
+      // The margin only grew when it became a staged build, but the number here was a stale claim
+      // about another file either way -- GQ-002.)
       const workshopInteractAvailable = village.workshopOwned && zoneWorkshop != null
         && zoneWorkshop.isBuilt() && !zoneWorkshop.isTransforming()
         && !heroScreen.isOpen() && !villageBoard.isOpen()
