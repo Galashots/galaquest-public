@@ -55,6 +55,28 @@ isolation that used to come by accident from different ports is now something ea
 for itself. Six files violated the rule at `b9238e0`.
 **Foreknowledge helped:** not yet recorded.
 
+### GQ-009 — A diagnostic that partitions events by harness timestamp measures the harness, not the system.
+**Status:** ENFORCED · **Hits:** 1 · **First:** 2026-08-19 · **Last:** 2026-08-19
+**Enforced by:** `test/release-classification.test.mjs`
+**Rule:** When the system under test decides something from its OWN state, the instrument must
+reconstruct that state, not approximate it with a wall-clock window. Anchor on the structural event
+(a sampled non-zero → zero transition) and, where a second seam exists, cross-check against it — for
+transport, what the socket actually carried. An instrument that can only ever report "no defect" is
+not evidence; it needs a red-capable reproduction of the defect it claims to rule out.
+**Incidents:** `tools/diagnostics/diagnose-movement.mjs` classified a movement release by whether the
+zero-magnitude call landed before or after the harness's `upT`, and asserted in a comment that
+in-window zeros "are not the release". Production decides it instead from
+`magnitude === 0 && lastSentMagnitude > 0`. On a hosted runner at ~2.3 fps the release was sampled
+**~500 ms before `upT` was even recorded** (`upT` is a CDP round-trip taken after the key-up
+dispatch), so the real release fell inside the window the instrument dismissed. It then read the 46
+later zeros — which `setIntent` refuses correctly, because exactly one release is sent per
+transition — as 46 failed releases, and a release-transmission defect was reported that did not
+exist. The independent `Network.webSocketFrameSent` seam showed a clean alternating
+`1,0,1,0…` of 16 frames: every release had transmitted. Two replacement classifiers were also wrong
+(one used the individual send as its unit, one still anchored on `upT`) and both were caught only by
+that wire cross-check.
+**Foreknowledge helped:** not yet recorded.
+
 ### GQ-001 — A harness tuned against a local fight embeds the absence of latency everywhere.
 **Status:** RULE · **Hits:** 3 · **First:** 2026-08-13 · **Last:** 2026-08-13
 **Not enforced because:** this is a harness-authoring discipline (re-sample live state, poll for a
