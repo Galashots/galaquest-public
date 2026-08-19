@@ -155,8 +155,15 @@ const BACKDROP_TEXTURE_SIZE = 256;
 // centre the village behind the hero was still fully legible, and at the NPC cluster a cottage roof
 // ran straight under his feet so he read as standing ON a rooftop. The world is meant to be a place
 // he is standing IN, not a scene competing with him.
+//
+// Centre raised again, 0.56 -> 0.65, on the visual reviewer's ruling against the second set of
+// captures: "in Workshop portrait the red roof and large tree remain identifiable enough to compete
+// with the lower body; in landscape the giant tree mass at left still has a lot of visual authority.
+// Take the centre from 0.56 to roughly 0.64-0.66 and leave the heavy edge falloff alone. Do not
+// erase the world." Keeping the world is the identity call -- this is a boy standing in HIS
+// adventure, not a showroom mannequin -- so the edge stops below are untouched.
 const BACKDROP_STOPS = Object.freeze([
-  Object.freeze([0.00, 'rgba(12, 20, 31, 0.56)']),
+  Object.freeze([0.00, 'rgba(12, 20, 31, 0.65)']),
   Object.freeze([0.40, 'rgba(10, 17, 27, 0.75)']),
   Object.freeze([0.72, 'rgba(6, 11, 19, 0.92)']),
   Object.freeze([1.00, 'rgba(3, 6, 11, 0.99)']),
