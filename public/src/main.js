@@ -1,0 +1,1886 @@
+import * as THREE from '../vendor/three.module.min.js';
+import { createFollowCamera } from './camera/follow.js';
+import { worldDirectionForInput } from './camera/rotation.js';
+import { loadHero } from './character/hero.js';
+import {
+  createLocomotionController,
+  groundSpeedForInput,
+  locomotionModeForSpeed,
+} from './character/locomotion.js';
+import {
+  canAttack,
+  canHeroAttack,
+  createEncounterState,
+  requestAttack,
+  stepEncounter,
+} from './combat/encounter.js';
+import { createEncounterFeedback, heartsForHp } from './combat/feedback.js';
+import { createAudioEngine } from './audio/engine.js';
+import {
+  CART_JOLT_RECIPE_NAME,
+  COIN_PICKUP_RECIPE_NAME,
+  KEEPER_GREETING_RECIPE_NAME,
+  RELIGHT_RECIPE_NAME,
+  SHARD_PICKUP_RECIPE_NAME,
+  WORKSHOP_BUILD_RECIPE_NAME,
+  soundForEvent,
+} from './audio/recipes.js';
+import { attachBeltLantern, BELT_LANTERN_URL } from './character/gear.js';
+import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
+import { DEFAULT_EQUIPPED_WEAPON_ID } from './progression/items.js';
+import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
+import { createHeroPreviewMarker, createHeroScreen, heroScreenViewModel } from './progression/heroScreen.js';
+import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
+import { remainingVillageSupplies } from './village/economy.js';
+import { pipsForMarks } from './rewards/hud.js';
+import { createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
+import { createMarkSparks } from './rewards/markSpark.js';
+import { loadGLB } from './world/assets.js';
+import { createWolfPresenter, loadWolf, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
+import { createSwingAnimator } from './character/swing.js';
+import { createClipSwingAnimator } from './character/swingClip.js';
+import { createReactionAnimator } from './character/reactClips.js';
+import {
+  ATTACK_REACH,
+  HERO_MAX_HP,
+  SWING_CONTACT_SECONDS,
+  SWING_SECONDS,
+  isWithinStrike,
+  separateFromWolf,
+} from './combat/encounter.js';
+import { createAttackInput } from './input/attackButton.js';
+import { createKeyboardInput } from './input/keyboard.js';
+import { createTouchInput } from './input/touch.js';
+import { createCameraGesture } from './input/cameraGesture.js';
+import { createDiagnostics } from './debug/diagnostics.js';
+import { createNetClient } from './net/client.js';
+import { createRemotePlayers } from './net/remotes.js';
+import { CHARACTER, WORLD } from './render/layers.js';
+import { createRimLight } from './render/rimLight.js';
+import { createRenderer } from './render/renderer.js';
+import { ndcToOverlayPixels } from './render/screenProjection.js';
+import { createQualityLadder } from './render/quality.js';
+import { applySky } from './render/sky.js';
+import { createGround } from './world/ground.js';
+import {
+  KEEPER_WAVE_RADIUS_METERS,
+  RELIGHT_TRIGGER_RADIUS_METERS,
+  distance,
+  headingToward,
+  isTreeLandmark,
+  lanternUnlockedFromRewards,
+  loadZone,
+} from './world/zoneLoader.js';
+import { KEEPER_NAME, keeperSpeechState, speakKeeperLine } from './world/keeperSpeech.js';
+import { ROWAN_NAME, rowanSpeechState } from './world/rowanSpeech.js';
+import { questObjectiveFor } from './world/quest.js';
+import {
+  BRAMBLE_EXTRA_REACH_METERS,
+  bramblesCut,
+  nearStandingBramble,
+  nearestPointOnBramble,
+  noBramblesCut,
+  noTrailLightsLit,
+  reachedCamp,
+  strikeBrambles,
+  trailLightsLit,
+  wakeTrailLights,
+} from './world/trail.js';
+import { clampToWorldX, clampToWorldZ } from './world/bounds.js';
+import {
+  CART_LOOT_TABLE,
+  COIN_KIND,
+  PICKUP_COLLECT_RADIUS_METERS,
+  SHARD_KIND,
+  pickupWorldPosition,
+} from './world/cartLoot.js';
+import { createCartReaction, createLootPickups } from './world/lootPickups.js';
+import { createWorkshopReaction } from './world/workshop.js';
+import { predictionStep } from './net/prediction.js';
+import * as VILLAGE from './world/zones/village.js';
+
+// Defensive fallbacks for the online mirror, for the one frame (if any) where netStatus has
+// already flipped to 'online' but onEncounter has not yet run -- see net/client.js: setStatus is
+// called before onEncounter inside the same synchronous 'welcome' handler, so in practice this
+// window never survives to a rendered frame. Kept anyway so a mirror read never throws.
+const EMPTY_SERVER_ENCOUNTER = Object.freeze({
+  revision: 0,
+  wolf: Object.freeze({ x: 0, z: 0, heading: 0, hp: 0, mode: 'idle', targetId: null }),
+  heroes: Object.freeze({}),
+});
+// The wire's hero shape (protocol.js decodeHeroes): only the four fields a client needs to
+// predict its own attack button and render hearts. Matches createPartyEncounterState's freshHero
+// on those same four fields.
+const DEFAULT_HERO_VIEW = Object.freeze({ hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1 });
+// Shared with net/gameServer.mjs through the zone data both sides import (Phase R2, GQ-007). These
+// used to be two hand-written copies of `{ x: 2.5, z: 8 }` kept equal by a human noticing, because
+// gameServer.mjs is server-only and cannot be imported here -- the fix was not to import the server,
+// it was to give both sides the same PURE data module to read. Used to boot the offline fallback
+// below and to give the online mirror a real spawn to carry (see the frame loop's
+// `netStatus === 'online'` branch and its comment).
+const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
+
+// Phase D, offline fallback (brief D4): rewards/marks.js's foldEvents attributes a mark to whoever
+// landed the hit, read off event.heroId -- but the OFFLINE solo path's events (combat/encounter.js's
+// stripHeroId, the same shape createEncounter()'s old stateful surface always produced) never carry
+// one, since there has only ever been exactly one hero to mean. This fixed id is stamped on before
+// folding, purely locally, so the offline loop is demonstrable with no server at all; it is never
+// sent anywhere and never confused with a real playerId (net/gameServer.mjs's ids are `p<n>`).
+const OFFLINE_HERO_ID = 'offline-hero';
+
+const canvas = document.querySelector('#game-canvas');
+const status = document.querySelector('#runtime-status');
+const perfHud = document.querySelector('#perf-hud');
+const attackButtonElement = document.querySelector('#attack-button');
+
+// Y/Task F2: debug-only HUD, off by default -- see index.html's #perf-hud[data-debug] comment for
+// why. Read once at startup, not reactively: this is a boot-time opt-in for a runtime-test harness's
+// own navigation, not a setting a child ever toggles mid-session.
+perfHud.dataset.debug = new URLSearchParams(location.search).get('debug') === '1' ? 'true' : 'false';
+
+async function bootstrap() {
+  const scene = new THREE.Scene();
+  // Gradient sky + distance haze, both from render/sky.js. This was one flat colour and no fog,
+  // which left the top 40% of a portrait frame empty and let a player standing in the wilderness
+  // see the 28x28 ground plane END, with open sky under the edge of the world.
+  applySky(scene);
+
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  camera.layers.enable(WORLD);
+  camera.layers.enable(CHARACTER);
+  camera.position.set(2.8, 1.8, 3.8);
+  camera.lookAt(0, 0.7, 0);
+
+  const runtimeRenderer = createRenderer(canvas, {
+    onContextLost: () => { status.textContent = 'rendering paused — WebGL context lost'; },
+    onContextRestored: () => { status.textContent = 'WebGL restored — hero standing'; },
+  });
+  const quality = createQualityLadder({
+    onLevelChange: ({ level }) => {
+      runtimeRenderer.setResolutionScale(level.resolutionScale);
+      runtimeRenderer.resize();
+    },
+  });
+  const diagnostics = createDiagnostics(runtimeRenderer.renderer, perfHud);
+  let loadingLabel = 'hero';
+
+  const world = createGround();
+  scene.add(world);
+  const rimLight = createRimLight();
+  scene.add(rimLight.light, rimLight.target);
+
+  // Phase V: the village zone, additive over the placeholder ground the same way the wolf is
+  // additive over the hero -- loadZone() returns immediately with a live `counts` object (mutated
+  // as each landmark/prop/the keeper settles) so a harness can poll `zoneDebug()` without waiting
+  // on the whole zone, and a `ready` promise for the one consumer (the keeper's proximity
+  // flourish) that needs the loaded result itself.
+  const zone = loadZone(scene, VILLAGE);
+  let zoneKeeper = null;
+  // W2: the Lantern Tree's own relight presenter, null until the landmark's GLB settles (same
+  // "await ready, degrade to null until then" shape zoneKeeper already uses).
+  let zoneTree = null;
+  // The three villagers, same shape again: null until the keeper's rig lands, because they are
+  // clones of it.
+  let zoneVillagers = null;
+  // The Dark Trail's dormant lamps, in the same order VILLAGE.TRAIL_LIGHTS lists them -- so an index
+  // from world/trail.js addresses the right one. Empty until the props settle, which is why the
+  // trail tick below checks its length rather than assuming.
+  let zoneTrailLights = [];
+  let zoneBrambles = [];
+  // Rowan, at the camp -- same "null until the keeper's rig lands" shape as the villagers, since
+  // they are cloned off the same load.
+  let zoneRowan = null;
+  // GP2: the cart's own physical-acknowledgement presenter, null until its mesh exists. Not part of
+  // loadZone()'s own `result` (only the keeper/tree/villagers/trailLights/brambles/rowan are handed
+  // back there) -- found instead by NAME, the same way every prop instance is already addressable
+  // (zoneLoader.js's loadProp names every clone `prop-${prop.model}`), so this needs no change to
+  // zoneLoader.js's own return shape for one more consumer.
+  let cartReaction = null;
+  // GP3: the Workshop's own presenter, same "found by name, not part of loadZone()'s own result"
+  // shape as cartReaction just above, and for the identical reason -- world/zones/village.js's
+  // WORKSHOP_PROP is an ordinary PROPS entry, already in the scene the instant zone.ready resolves.
+  let zoneWorkshop = null;
+  zone.ready.then((result) => {
+    zoneKeeper = result.keeper;
+    zoneTree = result.tree;
+    zoneVillagers = result.villagers;
+    zoneTrailLights = result.trailLights ?? [];
+    zoneBrambles = result.brambles ?? [];
+    zoneRowan = result.rowan;
+    const cartMesh = scene.getObjectByName(`prop-${VILLAGE.CART_PROP.model}`) ?? null;
+    if (!cartMesh) {
+      console.warn('[runtime] GP2: the cart prop was not found by name -- the jolt reaction is dust-only');
+    }
+    cartReaction = createCartReaction(scene, cartMesh);
+    const workshopMesh = scene.getObjectByName(`prop-${VILLAGE.WORKSHOP_PROP.model}`) ?? null;
+    if (!workshopMesh) {
+      console.warn('[runtime] GP3: the Workshop prop was not found by name -- the dressing has no home');
+    }
+    zoneWorkshop = createWorkshopReaction(scene, workshopMesh);
+  }).catch((error) => {
+    console.warn('[runtime] village zone failed to finish loading', error);
+  });
+  const [KEEPER_X, KEEPER_Z] = VILLAGE.SPAWNS.keeper;
+  const [ROWAN_X, ROWAN_Z] = VILLAGE.ROWAN.at;
+  const [TREE_X, TREE_Z] = VILLAGE.LANDMARKS.find(isTreeLandmark)?.at ?? VILLAGE.SPAWNS.keeper;
+  // The relight is a one-shot per session, and which of its two paths runs depends on whether this
+  // client ever saw the tree dark -- see the frame loop's own comment where these are read.
+  let sawTreeDark = false;
+  let relightSpent = false;
+  // The finished quest's breadcrumb: once the tree burns, the last two lanterns of the relight
+  // stand at the north treeline and the quest log points at them. Walking between them is the
+  // discovery, announced once per session -- there is no persistence behind this on purpose, it is
+  // a "you found it" beat and not a reward that has to survive a reload.
+  const [GATE_X, GATE_Z] = VILLAGE.WILDWOOD_GATE.at;
+  let gateFound = false;
+  // THE TREE->GATE HANDOFF. The second child playtest lost them right here: the objective chip
+  // already flips to "follow the lit path north" the instant the tree lights (world/quest.js), but
+  // the only thing that ever SAID it out loud was Aldric's proximity speech bubble -- gated to
+  // KEEPER_WAVE_RADIUS_METERS (2 m) around a man standing 3.8 m from the tree. A child who stays at
+  // the tree to watch it, which is what the ceremony is FOR, never walks back into that circle.
+  // Fired once, off `isTreeLit()` turning true rather than a duplicated timer -- that is already the
+  // exact frame the ceremony finishes (zoneLoader.js's tree presenter only sets `lit` at the end of
+  // its update loop), and it is also the instant an already-unlocked returning guest's tree lights
+  // with no ceremony at all, so one check covers both paths for free.
+  let gateCallGiven = false;
+  // ── the Dark Trail (Chapter 2) ───────────────────────────────────────────────────────────────
+  //
+  // Session-only, like gateFound and for the same reason: waking a light is a "you did this" beat,
+  // not a possession. A child who comes back tomorrow gets to do it again, which is the right answer
+  // for the one moment in this game where the reward IS the experience of the light arriving.
+  //
+  // Per-CLIENT and not on the server, deliberately. Two brothers each wake the lights for
+  // themselves, so neither can walk into a trail somebody else already finished -- and it needs no
+  // protocol change to say so. What they share is the world they are standing in, which is the part
+  // that makes "come and see this" work.
+  let trailLit = noTrailLightsLit(VILLAGE.TRAIL_LIGHTS.length);
+  let trailWoken = false;
+  let campFound = false;
+  // Rowan answers "who left this camp?" -- session-only, the same reasoning campFound above gives:
+  // a "you did this" beat, not a possession, so a child who comes back tomorrow gets to meet them
+  // again. Latched from rowanSpeech.visible below the same way questGiven latches from the Keeper's.
+  let rowanMet = false;
+  // The cart Rowan sends a child to search. Gated on rowanMet at the trigger site (not here) so the
+  // beats land in the order Rowan's own line puts them: meet Rowan, THEN search the cart.
+  let cartSearched = false;
+  // GP2: whether the server has told this client the cart's own loot burst already happened, and the
+  // local, DELIBERATELY LAGGED HUD totals -- see the frame loop's own comment on why these are not
+  // simply `ownRewards.coins`/`.shards` read live. Seeded once from the authoritative value the first
+  // frame it is known (a returning guest's own past haul must appear immediately, no flight to watch
+  // for currency collected in a previous session), then only ever advanced by a pickup's own
+  // attraction flight completing THIS session.
+  let lootWasSpawned = false;
+  // The same "only play the ceremony if this client actually watched it happen" guard sawTreeDark
+  // gives the relight: a client that connects AFTER the cart was already searched must not replay the
+  // jolt/dust/sound for a burst it never saw begin -- the pickups it can still see and collect are
+  // real either way, only the one-time acknowledgement is gated.
+  let sawCartUnspawned = false;
+  // GP3: the same "have we seen the false state" edge-tracker cartReaction's own sawCartUnspawned
+  // and the relight's own sawTreeDark already use -- a client connecting AFTER the Workshop was
+  // already bought must not replay the transformation ceremony for something it never watched
+  // happen. sawWorkshopUnowned only ever becomes true once this client has actually observed
+  // workshopOwned === false; workshopWasOwned is the plain previous-frame value the edge itself is
+  // read off, the same two-variable shape loot.spawned's own trigger below already uses.
+  let sawWorkshopUnowned = false;
+  let workshopWasOwned = false;
+  // GP3-C1 replaces the old once-ever proximity auto-open (see git history) with a deliberate,
+  // reusable interaction -- #workshop-interact only becomes tappable, never opens anything itself.
+  // Tracked here (not just read off the DOM) so renderWorkshopInteract can skip touching the element
+  // on frames where nothing changed, the same discipline renderQuestObjective/renderNpcSpeech below
+  // already use.
+  let workshopInteractShown = false;
+  let coinsDisplayed = 0;
+  let shardsDisplayed = 0;
+  let lootHudSeeded = false;
+  // GP3: which of THIS hero's own collected pickups have already had their arrival visually land.
+  // Section 5's own rule ("other connected client... may synchronize... without inventing a fake
+  // local flight") means a background change to the shared total (a sibling's own collect, or a
+  // Workshop purchase) should sync onto this HUD immediately, with none of GP2's causal delay --
+  // but only once nothing of THIS hero's own is still mid-flight, or that would reveal this hero's
+  // own not-yet-landed pickup early (the exact bug GP2's original delay exists to prevent). See the
+  // frame loop's own comment where this Set is read.
+  const revealedPickupIds = new Set();
+  // The sequence's own closing beat, fired once the whole shared haul is gone (by anyone -- this is
+  // about the AUTHORED MOMENT finishing, not about what this one hero personally carries home).
+  let lootHookShown = false;
+  // GP2: when this client last asked the server to collect each pickup, keyed by pickup id -- throttled
+  // to once per LOOT_REQUEST_RETRY_MS while in reach, not every frame (the same "do not spam a request"
+  // restraint sendAttack's own button-gating already applies to swings), but NOT a one-shot-forever gate.
+  // A one-shot Set was the first version of this and it undercounted the real haul: a hero merely
+  // passing near a pickup en route to a DIFFERENT one can trigger a request while still a hair outside
+  // PICKUP_COLLECT_RADIUS_METERS by the time the SERVER'S OWN (authoritative, and by then slightly
+  // later) position check runs -- a real race, not a bug in the check itself, since the hero keeps
+  // moving during the round trip. The server correctly refuses that request, but a Set that never
+  // forgets having asked then permanently stops asking again, even once the hero is standing right on
+  // top of the pickup. Measured in tools/runtime-test/drive-cart-loot.mjs: a hero 0.07m from a pickup
+  // still would not collect it, because an earlier, farther-away brush-past had already spent its one
+  // request.
+  const lootRequestedAt = new Map();
+  const LOOT_REQUEST_RETRY_MS = 500;
+  // The "nothing has happened" shape offline (and before the first snapshot online) collapses to --
+  // same role EMPTY_ENCOUNTER plays in protocol.js, just local to this file since main.js is the only
+  // consumer that ever needs a stand-in loot block.
+  const EMPTY_LOOT = Object.freeze({ spawned: false, collected: Object.freeze({}) });
+  // Same role, for GP3's village block -- there is no offline fallback for Village Supplies (see
+  // net/gameServer.mjs's applyVillageUpgradePurchase: an ephemeral/disconnected session has no
+  // durable identity to spend against), so this is what the Board reads whenever the wire has not
+  // said otherwise yet.
+  const EMPTY_VILLAGE = Object.freeze({ coins: 0, shards: 0, workshopOwned: false });
+  // Blows landed on each black bramble, and the swing clock's value on the previous frame -- the
+  // blade is judged to land on the frame that clock CROSSES contact, so the previous value is the
+  // whole of the state that needs keeping.
+  let brambleBlows = noBramblesCut(VILLAGE.BRAMBLES.length);
+  let swingPrevious = -1;
+  // Whether Keeper Aldric has actually said his piece this session. Session-only on purpose, like
+  // gateFound above: it decides which of two instructions the chip shows, and a returning child with
+  // marks already on the books is past it either way (see world/quest.js).
+  let questGiven = false;
+  // The opening hail: Aldric calls across the plaza a beat after the world settles, so the first
+  // thing that happens in the game is a person, not a wait. 1.4 s is long enough for the props to
+  // have popped in and the camera to have settled, short enough that nobody has started walking the
+  // wrong way yet.
+  const KEEPER_HAIL_DELAY_SECONDS = 1.4;
+  let keeperHailed = false;
+  let secondsSinceZoneReady = 0;
+  // Whether an NPC's line is on screen right now (either of them -- one shared bubble), so the
+  // greeting sounds once per approach and not once per frame for as long as a child stands next to
+  // someone.
+  let npcSpeaking = false;
+
+  // Phase C: the audio engine is created at boot but stays silent until unlock() runs on the first
+  // pointerdown below (ruling 4) -- iOS Safari will not play audio before a user gesture, and
+  // engine.js's own play() is a no-op with no context to schedule against until then.
+  const audio = createAudioEngine();
+  // Ruling 4: the FIRST pointerdown anywhere unlocks audio, not only a tap on ATTACK -- a child's
+  // first touch is usually the movement stick. A single gesture is not guaranteed to leave the
+  // context running (resume() can reject or simply not settle in time), so this keeps listening
+  // and retrying on every subsequent gesture until audioDebug() reports 'running', then stops --
+  // engine.js's own unlock() is idempotent and skips redundant work once already running, so this
+  // is belt and braces rather than the only guard.
+  function tryUnlockAudio() {
+    audio.unlock();
+    if (audio.audioDebug().contextState === 'running') {
+      window.removeEventListener('pointerdown', tryUnlockAudio);
+    }
+  }
+  window.addEventListener('pointerdown', tryUnlockAudio, { passive: true });
+
+  const keyboard = createKeyboardInput();
+  const gameSurface = document.querySelector('#game');
+  const touch = createTouchInput(
+    gameSurface,
+    document.querySelector('#touch-stick'),
+    document.querySelector('#touch-stick-knob'),
+  );
+  const attack = createAttackInput(attackButtonElement);
+  // THE OPENING SHOT. The camera used to default to heading 0 -- looking due north, up the empty
+  // lane toward the wolf. A child's very first frame was a green field, five unlit lamp posts, and
+  // the Keeper cropped in half at the bottom-right corner because the camera stood almost on top of
+  // him (keeper-01-the-very-first-frame.png, before this change). The village, the Lantern Tree and
+  // the man with the quest were all behind the camera.
+  //
+  // It now opens looking at the Lantern Tree, which is the whole premise: the child sees the dark
+  // tree, the cottages around it and the Keeper beside it in the first frame, before touching
+  // anything. Derived from the two placements rather than written as an angle, so moving either the
+  // spawn or the tree re-aims the shot instead of silently pointing it at nothing.
+  const follow = createFollowCamera(camera, {
+    heading: headingToward(HERO_SPAWN.x, HERO_SPAWN.z, TREE_X, TREE_Z),
+  });
+  // Camera gesture goes on after the thumb controls so they can veto pointers that belong to them.
+  // Both are checked: without the attack half, a thumb that taps ATTACK also drags the camera, and
+  // the view lurches on every swing.
+  const cameraGesture = createCameraGesture(gameSurface, follow, {
+    isStickPointer: (event) => touch.ownsPointer(event) || attack.ownsPointer(event),
+  });
+
+  // GP1: the Hero screen's "actual 3D equipped hero preview" (plan section 8) is the running game
+  // itself, dollied close, rather than a second three.js scene/renderer. A second WebGL context was
+  // considered and rejected: iOS Safari enforces a small ceiling on simultaneous contexts and this
+  // game already targets real iPads, so a permanent second context for an occasional overlay is a
+  // real risk for a cosmetic gain -- reusing `follow`/`cameraGesture`, both already bound to `#game`,
+  // costs nothing new and the drag-to-rotate gesture keeps working underneath the overlay for free
+  // (see index.html's #hero-screen comment for why the overlay leaves its own middle click-through).
+  // Distance/pitch below are a first pass, tuned against a real capture in the browser verification
+  // pass rather than by arithmetic alone -- AGENTS.md's "look before you derive" rule applies to a
+  // camera framing exactly as much as to a gear fit.
+  const HERO_SCREEN_PREVIEW_DISTANCE = 2.4;
+  const HERO_SCREEN_PREVIEW_PITCH = 0.16;
+  let heroScreenSavedCamera = null;
+  // Offline fallback (Phase D's own pattern, see OFFLINE_HERO_ID / offlineMarks below): with no
+  // server there is no rewards mirror to read an equip choice off, so this is progression's own
+  // small piece of local state, applied instead of net.sendEquip when netStatus is not 'online'.
+  let offlineEquippedWeaponId = DEFAULT_EQUIPPED_WEAPON_ID;
+  // Which weapon is highlighted in the owned-item strip, independent of which is actually equipped --
+  // null until the child taps one, at which point heroScreenViewModel's own fallback (unowned/null
+  // resolves to the equipped item) stops applying.
+  let selectedHeroItemId = null;
+  const touchStickElement = document.querySelector('#touch-stick');
+  // GP3: forward-declared so Hero screen's own onOpenChange (defined next) can close the Village
+  // Board when it opens -- the two full-screen overlays are mutually exclusive, and this is the
+  // earlier-created one, so it is the one that needs a reference to the not-yet-created other. Safe
+  // before assignment: onOpenChange is a callback, not run until a real click, by which point
+  // villageBoard below has long since been assigned.
+  let villageBoard = null;
+  const heroScreen = createHeroScreen({
+    onSelect: (itemId) => { selectedHeroItemId = itemId; },
+    onEquip: (itemId) => {
+      if (!canEquip(itemId)) return;
+      if (netStatus === 'online') net.sendEquip(itemId);
+      else offlineEquippedWeaponId = itemId;
+      selectedHeroItemId = itemId;
+    },
+    // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
+    // unable to originate a touch, so input/touch.js's own ownsPointer() gate never has to know Hero
+    // screen exists) and hands the follow camera to the close preview framing, restoring the exact
+    // heading/pitch/distance the child left the WORLD at on close -- see input gating below for the
+    // frame-loop half of this (movement/attack are also force-zeroed there, not just visually hidden,
+    // so a keyboard tester or a stray event cannot move the hero while this is open).
+    onOpenChange: (open) => {
+      // GP3: opening Hero closes the Village Board first, if it was open -- see villageBoard's own
+      // onOpenChange for the symmetric direction. Two full-screen overlays open at once would fight
+      // over the same suspended-input/hidden-HUD attributes.
+      if (open) villageBoard?.close();
+      touchStickElement.dataset.suspended = String(open);
+      attackButtonElement.dataset.suspended = String(open);
+      // index.html's own [data-hero-screen-open] rules hide keeper-speech/quest-objective while
+      // this is open -- found by looking at a real capture where the slots row and Aldric's speech
+      // bubble collided at spawn, which is exactly where a child is standing the first time they'd
+      // plausibly open this screen.
+      gameSurface.dataset.heroScreenOpen = String(open);
+      if (open) {
+        heroScreenSavedCamera = { distance: follow.distance, pitch: follow.pitch, heading: follow.heading };
+        follow.setDistance(HERO_SCREEN_PREVIEW_DISTANCE);
+        follow.orbit(0, HERO_SCREEN_PREVIEW_PITCH - follow.pitch);
+        // A "hide the WORLD render layer for a clean backdrop" approach was tried and reverted here:
+        // render/layers.js's CHARACTER layer covers the wolf, remote players, the Keeper and
+        // villagers as well as the local hero (see e.g. enemies/wolf.js, net/remotes.js), not "world
+        // vs. this one hero" as hoped, so dropping WORLD left those floating with no ground under
+        // them -- worse than the clutter it was meant to fix. index.html's #hero-screen vignette
+        // (a plain radial-gradient, no layer changes) is the real fix for now; a dedicated "local
+        // hero only" render layer would isolate this properly but touches the character-pipeline
+        // layer assignments the asset stream owns, so it is left as a follow-up rather than done here.
+      } else if (heroScreenSavedCamera !== null) {
+        follow.setDistance(heroScreenSavedCamera.distance);
+        follow.orbit(0, heroScreenSavedCamera.pitch - follow.pitch);
+        follow.setHeading(heroScreenSavedCamera.heading);
+        heroScreenSavedCamera = null;
+      }
+    },
+  });
+  // GP1-C2: the visible-hero-proof marker. See createHeroPreviewMarker's own header for the full
+  // reasoning -- summary: a small, unmistakably-temporary floating shape, positioned in world space
+  // (never touching hero.root or the rig), recoloured to whatever is equipped, visible only while
+  // the Hero screen is open.
+  const heroPreviewMarker = createHeroPreviewMarker(scene, THREE);
+  // Section 7's own causal sequence: "immediate confirmation -> attention returns to 3D world ->
+  // Workshop visibly transforms". Long enough that the Board's own BUILT confirmation is legible for
+  // a beat first, short enough that this reads as one continuous sequence rather than a second wait.
+  const WORKSHOP_BOARD_AUTOCLOSE_MS = 900;
+  // GP3: the Village Board. Which node (if any) is drilled into -- null until a child taps one, the
+  // same "presenter holds no selection state of its own" split selectedHeroItemId already draws for
+  // the Hero screen's own strip.
+  let selectedVillageNodeId = null;
+  villageBoard = createVillageBoardScreen({
+    onSelectNode: (nodeId) => { selectedVillageNodeId = nodeId; },
+    onPurchase: (upgradeId) => {
+      // No offline fallback, unlike onEquip above -- Village Supplies is server-authoritative shared
+      // state with nothing local to spend against (net/gameServer.mjs's applyVillageUpgradePurchase
+      // has no ephemeral path either; see its own comment). A tap while offline is silently a no-op,
+      // the same posture sendCollectLoot's own online-only guard already takes for physical loot.
+      if (netStatus === 'online') net.sendVillageUpgradePurchase(upgradeId);
+    },
+    // Same shape as Hero screen's own onOpenChange, and the same reasons for each line -- see that
+    // callback's comments for touch-stick/attack-button suspension and the mutual-exclusion note.
+    // No camera dolly here: the Board is a control surface, not a 3D preview (section 4's own "the
+    // actual 3D Village is the reward, not this screen"), so there is nothing to hand the follow
+    // camera to or restore.
+    onOpenChange: (open) => {
+      if (open) heroScreen.close();
+      touchStickElement.dataset.suspended = String(open);
+      attackButtonElement.dataset.suspended = String(open);
+      gameSurface.dataset.villageBoardOpen = String(open);
+    },
+  });
+  const player = {
+    groundSpeed: 0,
+    heading: 0,
+    position: new THREE.Vector3(),
+  };
+  let locomotion = null;
+  let remotes = null;
+  let wolfPresenter = null;
+  let swing = null;
+  let reactions = null;
+  follow.update(player.position);
+
+  // Local rules, run only offline (Phase B, Task B4: online the server runs stepParty and this
+  // object is overwritten every frame by a mirror of what it publishes -- see the frame loop
+  // below). Kept exactly as before for the offline fallback (ruling 8): a child with no server
+  // still gets the same fight this always was. Spawned ahead of the hero's start so a child walks
+  // INTO the fight. 8.4m out, deliberately outside the wolf's 6m aggro range. Spawned inside it,
+  // the wolf charges the instant the page loads and a young player is in a fight before they
+  // have found the stick.
+  // Held as published state and advanced through the seam, not as an object with methods that own
+  // hidden mutable fields. Everything downstream -- the swing, the wolf presenter, the hearts, the
+  // status line -- reads THIS, and none of them reach into the rules, whether it holds the local
+  // step's result or the server's mirror. That is what made the move to a server-owned fight a
+  // change of who calls stepParty rather than a rewrite of every reader.
+  let encounterState = createEncounterState({ wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS, heroSpawn: HERO_SPAWN });
+  let nextCommandId = 1;
+  // Online-only mirror of the server's last published encounter block (party-shaped: { revision,
+  // wolf, heroes }), set from net client's onEncounter. canHeroAttack needs this exact shape --
+  // heroes keyed by id -- which is why it is kept separate from `encounterState` above rather than
+  // merged into it; `encounterState` itself is overwritten every online frame with the { wolf,
+  // hero } view every existing consumer already reads (see the frame loop).
+  let serverEncounter = null;
+  // Events queued between frames by onEncounter (snapshots arrive at 10 Hz, independent of the
+  // 60fps frame loop) and drained once per frame, the same shape the offline path builds locally.
+  let pendingServerEvents = [];
+  // Presentation-only local clock for the swing clip while online (Design ruling 3): started the
+  // instant ATTACK is pressed and accepted, so the sword moves before the round trip confirms it,
+  // then handed off to the server's own hero.swingSeconds (mirrored below) the moment it catches
+  // up. Never read by canHeroAttack or anything that decides combat truth -- only by the one
+  // swing?.update() call in the frame loop.
+  let predictedSwingSeconds = -1;
+
+  const bannerElement = document.querySelector('#banner');
+  let bannerTimer = null;
+  function banner(text, milliseconds) {
+    bannerElement.textContent = text;
+    bannerElement.dataset.shown = 'true';
+    window.clearTimeout(bannerTimer);
+    bannerTimer = window.setTimeout(() => { bannerElement.dataset.shown = 'false'; }, milliseconds);
+  }
+
+  // Hearts, not the status line's "you Nhp": see combat/feedback.js for the reference research
+  // behind that choice. heartsForHp() is the only part of this worth unit testing; wiring its result
+  // onto three fixed spans is not.
+  const heartElements = Array.from(document.querySelectorAll('#hero-health .heart'));
+  const heartsElement = document.querySelector('#hero-health');
+  function renderHearts(hp) {
+    const filled = heartsForHp(hp, HERO_MAX_HP);
+    heartElements.forEach((heart, index) => { heart.dataset.filled = String(filled[index] ?? false); });
+  }
+
+  // The heal's own signal -- see the #hero-health[data-healing] rule in index.html. Same
+  // hold-then-release shape as flashHeroHurt below; the CSS owns the fade.
+  let heartPopTimer = null;
+  function popHearts() {
+    heartsElement.dataset.healing = 'true';
+    window.clearTimeout(heartPopTimer);
+    heartPopTimer = window.setTimeout(() => { delete heartsElement.dataset.healing; }, 200);
+  }
+
+  // Floating damage numbers. Until now a landed hit was only visible as the wolf's own spark
+  // dimming one notch -- readable if you already know to look for it, invisible to a child watching
+  // the swing land. Positioned by projecting the wolf's world position through the CURRENT camera
+  // once, at the moment it pops, rather than tracked every frame for its own short life: 900ms is
+  // short enough that a fixed spawn point still reads as "the hit landed there", and tracking it
+  // would mean carrying a live reference into a frame loop for an effect that owes the DOM nothing
+  // else, the same reasoning popHearts() above already follows.
+  const damageNumbersElement = document.querySelector('#damage-numbers');
+  const DAMAGE_NUMBER_LIFETIME_MS = 900;
+  function popDamageNumber(worldX, worldY, worldZ, amount) {
+    const projected = new THREE.Vector3(worldX, worldY, worldZ).project(camera);
+    // Behind the camera: painting a number for a hit nobody's frame could show is worse than
+    // skipping it -- three.js does not clip project() itself, so this is the caller's job.
+    if (projected.z > 1) return;
+    const rect = gameSurface.getBoundingClientRect();
+    const { x, y } = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    const el = document.createElement('div');
+    el.className = 'damage-number';
+    el.textContent = `-${amount}`;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    damageNumbersElement.appendChild(el);
+    // A frame between the insert and the class that starts the rise, or the browser coalesces both
+    // style states into one and the number appears already risen instead of animating there --
+    // the same reason a CSS transition never fires on an element's own first paint.
+    window.requestAnimationFrame(() => { el.dataset.rise = 'true'; });
+    window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
+  }
+
+  // Phase D (D4): three lantern-mark pips by the hearts, filling as marks arrive. Same read-only,
+  // re-render-from-current-value pattern as renderHearts above -- pipsForMarks() is the only part of
+  // this worth unit testing (test/rewards-hud.test.mjs); wiring its result onto three fixed spans is
+  // not, the same reasoning renderHearts' own comment gives.
+  const lanternPipElements = Array.from(document.querySelectorAll('#lantern-marks .mark'));
+  function renderLanternPips(marks) {
+    const filled = pipsForMarks(marks);
+    lanternPipElements.forEach((pip, index) => { pip.dataset.filled = String(filled[index] ?? false); });
+  }
+
+  // GP2: the coin/shard HUD, re-rendered from whatever coinsDisplayed/shardsDisplayed currently hold
+  // -- the same "read-only, paint from the current value" pattern renderHearts/renderLanternPips
+  // already use. Deliberately NOT reading ownRewards.coins/.shards directly (see the frame loop's own
+  // comment): those two module-level numbers are what stays gated behind a pickup's own arrival.
+  const coinCountElement = document.querySelector('#coin-count');
+  const shardCountElement = document.querySelector('#shard-count');
+  const coinCountWrapElement = document.querySelector('#loot-hud [data-kind="coin"]');
+  const shardCountWrapElement = document.querySelector('#loot-hud [data-kind="shard"]');
+  function renderLootHud() {
+    coinCountElement.textContent = String(coinsDisplayed);
+    shardCountElement.textContent = String(shardsDisplayed);
+  }
+  // The brief pop the CSS keyframe plays on arrival -- a fresh data-popped="true" per pickup, cleared
+  // after the animation's own duration, the same setTimeout-driven flash flashHeroHurt already uses,
+  // so two pickups of the same kind landing close together each get their own pop rather than the
+  // second one doing nothing because the attribute was already "true".
+  const LOOT_POP_MS = 280;
+  let coinPopTimer = null;
+  let shardPopTimer = null;
+  function popLootHud(kind) {
+    const element = kind === COIN_KIND ? coinCountWrapElement : shardCountWrapElement;
+    element.dataset.popped = 'false';
+    window.requestAnimationFrame(() => { element.dataset.popped = 'true'; });
+    const clear = () => { element.dataset.popped = 'false'; };
+    if (kind === COIN_KIND) { window.clearTimeout(coinPopTimer); coinPopTimer = window.setTimeout(clear, LOOT_POP_MS); }
+    else { window.clearTimeout(shardPopTimer); shardPopTimer = window.setTimeout(clear, LOOT_POP_MS); }
+  }
+
+  // W1, extended for Rowan: the ONE speech bubble, shared between the two NPCs (they stand tens of
+  // metres apart and can never both be in range at once -- see the frame loop's own npcSpeech pick).
+  // Text, name and shown/hidden are all driven every frame by keeperSpeechState/rowanSpeechState --
+  // this function only paints whatever it was handed, the same read-only "render from current
+  // value" pattern renderHearts/renderLanternPips use. The name row used to be set once at boot to
+  // KEEPER_NAME; now it has to change with whoever is actually speaking.
+  const keeperSpeechElement = document.querySelector('#keeper-speech');
+  const keeperSpeechTextElement = document.querySelector('#keeper-speech-text');
+  const keeperSpeechNameElement = document.querySelector('#keeper-speech-name');
+  const keeperSpeechSpeakElement = document.querySelector('#keeper-speech-speak');
+  let npcSpeechLine = null;
+  let npcSpeechName = null;
+
+  // The standing objective, same render-from-current-value discipline as the hearts and the pips.
+  const questObjectiveElement = document.querySelector('#quest-objective');
+  let questObjectiveLine = null;
+  function renderQuestObjective(line) {
+    if (line === questObjectiveLine) return;
+    questObjectiveLine = line;
+    questObjectiveElement.dataset.shown = String(line !== null);
+    if (line !== null) questObjectiveElement.textContent = line;
+  }
+  function renderNpcSpeech(next) {
+    keeperSpeechElement.dataset.shown = String(next.visible);
+    if (next.line !== npcSpeechLine) {
+      npcSpeechLine = next.line;
+      keeperSpeechTextElement.textContent = next.line ?? '';
+    }
+    if (next.name !== npcSpeechName) {
+      npcSpeechName = next.name;
+      keeperSpeechNameElement.textContent = next.name ?? '';
+    }
+  }
+  // Stops the tap from also reaching #game's own cameraGesture listener (which has no other veto
+  // for this button -- see index.html's comment on this element) before wiring the real action: the
+  // tap itself is the iOS user gesture that unlocks speechSynthesis, so speak() runs directly inside
+  // this handler, not deferred to a later frame.
+  keeperSpeechSpeakElement.addEventListener('pointerdown', (event) => event.stopPropagation());
+  keeperSpeechSpeakElement.addEventListener('click', () => speakKeeperLine(npcSpeechLine));
+
+  // GP3-C1: the Workshop's own deliberate interaction -- reuses the existing Hero/Gear screen
+  // verbatim (heroScreen.open(), the exact call #hero-button's own click handler already makes
+  // inside progression/heroScreen.js), so this needs no new screen, no crafting UI, nothing GP9
+  // owns. Same stopPropagation discipline as #keeper-speech-speak, for the same reason: without it a
+  // tap here also reaches #game's own cameraGesture listener underneath.
+  const workshopInteractElement = document.querySelector('#workshop-interact');
+  workshopInteractElement.addEventListener('pointerdown', (event) => event.stopPropagation());
+  workshopInteractElement.addEventListener('click', () => heroScreen.open());
+  function renderWorkshopInteract(shown) {
+    if (shown === workshopInteractShown) return;
+    workshopInteractShown = shown;
+    workshopInteractElement.dataset.shown = String(shown);
+  }
+
+  // Offline fallback (brief D4): the SAME pure fold the server runs (rewards/marks.js), run locally
+  // against OFFLINE_HERO_ID-stamped events, so the mark-per-kill loop is demonstrable with no server
+  // at all. Deliberately session-only -- no sqlite, no guestId sent anywhere, nothing survives a
+  // refresh -- and that is not a bug to fix here: it is the honest, visible difference between this
+  // fallback and the real, persisted, online loop. A refresh while offline resets these three
+  // variables along with everything else in this closure, which is exactly the point.
+  let offlineRewardLedger = createRewardLedger();
+  let offlineMarks = 0;
+  let offlineLanternUnlocked = false;
+
+  // Belt-lantern mount state (brief D4). `lanternMounted` only ever flips true after a REAL attach
+  // succeeds; a missing asset or an unloaded hero must not latch it, or a legitimately-unlocked
+  // guest who reconnects before the hero mesh has finished loading would never get a retry.
+  // `lanternAssetMissingLogged` is separate and DOES latch on the first 404, specifically so a
+  // missing asset logs once and then stays quiet rather than warning every frame forever -- the
+  // asset lands on its own track (orchestrator, Meshy) and code must not nag about it.
+  let lanternMounted = false;
+  let lanternMountInFlight = false;
+  let lanternAssetMissingLogged = false;
+  function ensureLanternMounted(shouldBeUnlocked) {
+    if (!shouldBeUnlocked || lanternMounted || lanternMountInFlight || !runtime.hero) return;
+    lanternMountInFlight = true;
+    loadGLB(BELT_LANTERN_URL).then((gltf) => {
+      lanternMountInFlight = false;
+      if (gltf.userData?.loadError) {
+        if (!lanternAssetMissingLogged) {
+          lanternAssetMissingLogged = true;
+          console.warn(
+            `[rewards] ${BELT_LANTERN_URL} is missing -- marks and the unlock state still work; `
+            + 'the belt stays bare until the asset lands.',
+          );
+        }
+        return;
+      }
+      attachBeltLantern(runtime.hero, gltf.scene);
+      lanternMounted = true;
+    }).catch((error) => {
+      lanternMountInFlight = false;
+      console.warn('[rewards] failed to mount the belt lantern:', error);
+    });
+  }
+
+  // Phase D (D6): "observable without hearing it" (see audioDebug's own comment on runtime, below)
+  // applied to reward events -- mark-earned/lantern-unlocked carry no sound and no banner for the
+  // former, so a harness has no OTHER way to confirm the event itself was heard and dispatched
+  // rather than merely inferring it from the derived pip count, which could be right for the wrong
+  // reason. Append-only for the session; runtime.rewardEvents() hands back a copy.
+  const rewardEventLog = [];
+
+  // The visible half of a Lantern Mark: a warm spark that lifts off the beaten wolf and flies to
+  // the hero's belt. See rewards/markSpark.js.
+  const markSparks = createMarkSparks(scene);
+
+  // GP2's own physical loot -- built immediately (unlike cartReaction above, this needs no loaded
+  // GLB, only CART_SEARCH.at, which is plain data) but stays invisible until world/cartLoot.js's own
+  // `spawned` flag says the cart has actually been searched; see lootPickups.js's own header.
+  const lootPickups = createLootPickups(scene, VILLAGE.CART_SEARCH.at);
+
+  // Phase D (D4): mark-earned/lantern-unlocked are never raised by combat/encounter.js, so they can
+  // never enter createEncounterFeedback's table (see rewards/feedback.js's header for why that is a
+  // hard boundary, not an oversight) -- this is their own dispatcher, same discipline.
+  const onRewardEvent = createRewardFeedback({
+    // Pips are re-rendered directly from the current mark count every frame below, the same way
+    // hearts are re-rendered from event.remaining above; nothing extra needed per-event.
+    // The banner AND the spark are what tell the child a wolf was worth something -- the pip alone
+    // is 1.1rem of dot in a corner they are not looking at while a wolf is biting them. The spark
+    // lifts off wherever the wolf went down (its last published position, read here rather than at
+    // dispatch time so it is the position the child just watched it die at) and flies to the belt.
+    'mark-earned'(event) {
+      rewardEventLog.push(event);
+      banner('Lantern Mark!', 1400);
+      markSparks?.launch({ x: encounterState.wolf.x, z: encounterState.wolf.z });
+    },
+    // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
+    // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
+    'lantern-unlocked'(event) { rewardEventLog.push(event); banner('All three marks! Take them home.', 3200); },
+  });
+
+  // The gap that mattered most: previously a bitten hero got no feedback at all. See
+  // combat/feedback.js for the "damage vignette" reference; the fade-out lives in index.html's CSS
+  // transition on #hero-hurt-flash, so this only needs to hold it open for a beat before releasing it.
+  const heroHurtFlashElement = document.querySelector('#hero-hurt-flash');
+  let heroHurtTimer = null;
+  function flashHeroHurt() {
+    heroHurtFlashElement.dataset.shown = 'true';
+    window.clearTimeout(heroHurtTimer);
+    heroHurtTimer = window.setTimeout(() => { heroHurtFlashElement.dataset.shown = 'false'; }, 90);
+  }
+
+  // A whiff pulses the attack button instead of touching the wolf at all -- see combat/feedback.js.
+  let missPulseTimer = null;
+  function pulseMiss() {
+    attackButtonElement.dataset.feedback = 'miss';
+    window.clearTimeout(missPulseTimer);
+    missPulseTimer = window.setTimeout(() => { delete attackButtonElement.dataset.feedback; }, 160);
+  }
+
+  // One place where a rule event becomes something a young player can see. Kept separate from the
+  // rules on purpose: encounter.js must stay importable by a node server with no DOM. Built with
+  // createEncounterFeedback() so a new event type raised by encounter.js throws here at startup
+  // instead of being silently dropped the way every event but three used to be -- see
+  // combat/feedback.js and feedback.test.mjs.
+  const onEncounterEvent = createEncounterFeedback({
+    // The arm swing already playing is the feedback for a swing starting; nothing else needed yet.
+    swing() {},
+    'swing-missed'() { pulseMiss(); },
+    // Going down mid-swing already produces the hurt flash and the "You went down" banner from the
+    // same frame's hero-hurt/hero-down events. The dropped swing needs no extra signal of its own;
+    // it is declared here because the dispatcher requires every event to be accounted for, and that
+    // requirement is the point -- it is how this event announced itself instead of vanishing.
+    'swing-dropped'() {},
+    'wolf-hit'(event) {
+      wolfPresenter?.flashHit();
+      // event.damage, not a hardcoded 1 -- see WOLF_DAMAGE_PER_HIT's own comment in encounter.js.
+      popDamageNumber(encounterState.wolf.x, WOLF_SPARK_HEIGHT_METERS, encounterState.wolf.z, event.damage);
+    },
+    'wolf-defeated'() { wolfPresenter?.flashDefeated(); banner('The wolf is beaten!', 1800); },
+    // The flinch is gated on the swing state at dispatch time: the owner's precedence rule (2026-08-13)
+    // is that attack wins and a hit only shows when the testers are not attacking. reactClips.js
+    // refuses the trigger itself (and is null until the rig actually ships hit/death clips), so
+    // the flash and hearts here remain the guaranteed feedback either way.
+    'hero-hurt'(event) {
+      flashHeroHurt();
+      renderHearts(event.remaining);
+      reactions?.triggerHit({ swinging: swing?.isSwinging() === true });
+    },
+    // The wolf's jaws visibly close on nothing; that already reads without extra feedback.
+    'bite-missed'() {},
+    'hero-down'() { banner('You went down…', 1600); },
+    'hero-respawned'() { renderHearts(HERO_MAX_HP); banner('Back on your feet', 1200); },
+    // Beating a wolf gives a heart back. No banner: wolf-defeated's "The wolf is beaten!" is already
+    // on screen from the same frame, and a second banner would replace it mid-read. The hearts row
+    // popping IS the message, and it points at exactly the thing that changed.
+    'hero-healed'(event) { renderHearts(event.remaining); popHearts(); },
+    // the owner's ruling, 2026-08-13: WOLF_RESPAWN_SECONDS after a kill, the wolf is back. No presenter
+    // consumer yet -- wolfPresenter?.update() already reads wolf.mode/hp off encounterState every
+    // frame and draws whatever it finds, so the wolf reappearing needs no push here. Declared
+    // (rather than left off the table) for the same reason every other event is: the dispatcher
+    // throws at startup on a gap instead of silently dropping an event during a fight.
+    'wolf-respawned'() {},
+  });
+  // Paint from the encounter's own starting hp rather than trusting the markup's default -- the
+  // markup only needs to be right until this line runs.
+  renderHearts(encounterState.hero.hp);
+  renderLanternPips(0);
+
+  // Party events (Task B1) carry heroId; a solo consumer table like onEncounterEvent's above
+  // expects the old heroId-less shape. wolf-hit/wolf-defeated apply "regardless of who landed
+  // them" (B4 brief) -- every hero's presenter should flinch or celebrate together -- and
+  // bite-missed never carries a heroId at all (nobody was hit), so it is inherently everyone's.
+  // wolf-respawned is the same shape as bite-missed (encounter.js pushes it with no heroId --
+  // nobody in particular caused a respawn), so it belongs in this set for the same reason.
+  // Everything else (swing, swing-missed, swing-dropped, hero-hurt, hero-down, hero-respawned) is
+  // filtered to the local hero: a sibling's swing must not flash this child's own hurt vignette.
+  const GLOBAL_ENCOUNTER_EVENT_TYPES = new Set(['wolf-hit', 'wolf-defeated', 'bite-missed', 'wolf-respawned']);
+  function stripHeroId(event) {
+    if (!('heroId' in event)) return event;
+    const { heroId, ...rest } = event;
+    return rest;
+  }
+
+  // Multiplayer is additive: the socket is never awaited, and every failure path leaves a playable
+  // single-player game. A child on a phone with no server still gets a hero that walks.
+  let netStatus = 'offline';
+  let lastReconcile = { drift: 0, snapped: false };
+  const net = createNetClient({
+    name: 'player',
+    onStatus: (next) => { netStatus = next; },
+    onLeave: (id) => remotes?.remove(id),
+    // Snapshots arrive at 10 Hz on their own schedule, independent of the frame loop, so the
+    // block is captured here and the events queued; the frame loop mirrors/drains both once per
+    // frame (Task B4) rather than reacting mid-frame to a message event.
+    onEncounter: (encounter, events) => {
+      serverEncounter = encounter;
+      if (events.length > 0) pendingServerEvents.push(...events);
+    },
+  });
+
+  const runtime = {
+    scene,
+    camera,
+    follow,
+    keyboard,
+    touch,
+    cameraGesture,
+    locomotion: () => locomotion,
+    // The published state, not a handle on the rules. A harness that could call requestAttack() on
+    // this object could drive the fight down a path no child can reach; reading state cannot.
+    encounterState: () => encounterState,
+    wolf: () => wolfPresenter,
+    net,
+    remotes: () => remotes,
+    netState: () => ({
+      status: netStatus,
+      selfId: net.selfId,
+      remoteCount: remotes?.count ?? 0,
+      remotes: remotes?.describe() ?? [],
+      serverSelf: net.serverSelf,
+      snapshots: net.snapshotCount,
+      drift: lastReconcile.drift,
+      snapped: lastReconcile.snapped,
+      url: net.url,
+    }),
+    player,
+    renderer: runtimeRenderer.renderer,
+    rimLight,
+    diagnostics,
+    quality,
+    scene,
+    world,
+    hero: null,
+    contextLost: () => runtimeRenderer.contextLost,
+    // Ruling 6: the same "observable without hearing it" pattern encounterState() already gives
+    // harness probes for combat truth, now for sound.
+    audioDebug: () => audio.audioDebug(),
+    // Phase D (D6): the same "published state, not a handle on the rules" pattern encounterState()
+    // uses -- online, the wire's own encounter.rewards (net/protocol.js decodeRewards); offline, the
+    // local D1 fold's own two numbers, keyed the same shape so a harness can read one property path
+    // regardless of mode. lanternMounted() is a plain boolean, not derived from the scene graph, so
+    // a harness does not need to know gear.js's node-naming convention to ask "did it mount".
+    rewards: () => (netStatus === 'online'
+      ? (serverEncounter?.rewards ?? {})
+      : { [OFFLINE_HERO_ID]: { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked } }),
+    lanternMounted: () => lanternMounted,
+    // GP1: "observable without seeing it" once more (see zoneKeeperState's own comment for the
+    // pattern) -- a harness can confirm the Hero screen actually opened/closed and read what it is
+    // currently showing, without screenshotting to prove a boolean.
+    heroScreenOpen: () => heroScreen.isOpen(),
+    heroScreenEquippedWeaponId: () => equippedWeaponIdFromRewards(netStatus === 'online'
+      ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
+      : { equippedWeaponId: offlineEquippedWeaponId }),
+    // GP1-C2: proves the visible-hero-proof marker actually tracks the equipped item, without a
+    // harness having to raycast the scene or diff pixels -- same "observable without seeing it"
+    // pattern as every other zone/audio debug accessor here.
+    heroPreviewMarkerState: () => ({
+      visible: heroPreviewMarker.mesh.visible,
+      colorHex: `#${heroPreviewMarker.mesh.material.color.getHexString()}`,
+    }),
+    // GP2: the server's own loot block, read the identical way the frame loop itself reads it --
+    // "observable without seeing it" once more, so a harness can assert spawned/collected directly
+    // rather than inferring the world state from a screenshot.
+    lootState: () => (netStatus === 'online' && serverEncounter?.loot ? serverEncounter.loot : EMPTY_LOOT),
+    // GP3: same "observable without seeing it" pattern as lootState just above, for the Village
+    // Board -- a harness can assert coins/shards/workshopOwned and which node is currently drilled
+    // into directly, rather than reading pixels out of a capture.
+    villageState: () => (netStatus === 'online' && serverEncounter?.village ? serverEncounter.village : EMPTY_VILLAGE),
+    villageBoardOpen: () => villageBoard.isOpen(),
+    villageBoardSelectedNodeId: () => selectedVillageNodeId,
+    // The DISPLAYED (deliberately lagged) HUD totals, distinct from lootState()'s authoritative
+    // collected map -- a harness proving "the HUD does not update before the pickup arrives" needs
+    // to read exactly this number, not the server's own (already-credited) rewards.coins/.shards.
+    lootHudDisplayed: () => ({ coins: coinsDisplayed, shards: shardsDisplayed }),
+    // Same "observable without seeing it" pattern as audioDebug()/zoneTreeState(): a harness can
+    // confirm a mark's spark actually launched rather than inferring it from a screenshot taken at
+    // a guessed moment (the exact defect that photographed a corpse while every check passed).
+    markSparksInFlight: () => markSparks.liveCount(),
+    guestId: () => net.guestId,
+    // A copy, not the live array -- a harness must not be able to mutate this session's own record
+    // of what it heard.
+    rewardEvents: () => rewardEventLog.slice(),
+    // Phase V (V3): "requested/loaded/failed" for a harness to poll until the zone has finished
+    // loading, without a handle on the scene graph itself.
+    zoneDebug: () => ({ ...zone.counts }),
+    // Phase V (V3): "observable without hearing it" (see audioDebug's own comment) applied to the
+    // keeper's proximity flourish -- a harness can confirm `wave` actually fired instead of only
+    // inferring it from a screenshot taken at a guessed moment.
+    zoneKeeperState: () => (zoneKeeper
+      ? {
+        waving: zoneKeeper.isWaving(),
+        opacity: zoneKeeper.opacity(),
+        // Is the "talk to me" marker up? Same "observable without seeing it" rule as the rest of
+        // this object: a harness must be able to prove the marker went out when he gave the quest,
+        // rather than squinting at two screenshots.
+        questMarker: zoneKeeper.hasQuestMarker(),
+        // Sol's 7-step regression (2026-08-16): the greeting latch's whole point is that `talking`
+        // and `waving` trade off in a specific order (wave beats talk temporarily, wave completes,
+        // talk resumes) -- proving that from outside needs both booleans on the same read, not just
+        // one.
+        talking: zoneKeeper.isTalking(),
+      }
+      : null),
+    // W2: the same "observable without hearing it" pattern for the relight -- a harness can confirm
+    // the tree's lit state directly instead of only inferring it from a screenshot's pixel colours.
+    zoneTreeState: () => (zoneTree ? { lit: zoneTree.isTreeLit() } : null),
+    // GP3: same pattern again, for the Workshop -- a harness can confirm the transformation actually
+    // fired directly instead of only inferring it from a screenshot's pixel colours.
+    zoneWorkshopState: () => (zoneWorkshop
+      ? { built: zoneWorkshop.isBuilt(), transforming: zoneWorkshop.isTransforming() }
+      : null),
+    // GP3-C1: "observable without seeing it" once more -- a harness can assert the deliberate
+    // interaction prompt is actually tappable (or actually hidden) directly, rather than inferring it
+    // from a screenshot or from the DOM's own data-shown attribute.
+    workshopInteractAvailable: () => workshopInteractShown,
+    // Same pattern once more, for the villagers: how many stood up, and how far each has turned off
+    // their resting heading right now -- so a harness can prove the village is ALIVE rather than
+    // three statues, without reading pixels out of two screenshots taken seconds apart.
+    zoneVillagerState: () => (zoneVillagers
+      ? { count: zoneVillagers.count, headingOffsets: zoneVillagers.headingOffsets() }
+      : null),
+    // The Dark Trail, same pattern again. `lit` is the rules layer's own array and `loaded` is how
+    // many lamps the scene actually built, and they are reported SEPARATELY on purpose: if the two
+    // ever disagree, a harness sees a trail that thinks it is lit standing over lamps that are dark.
+    zoneTrailState: () => ({
+      loaded: zoneTrailLights.length,
+      lit: [...trailLit],
+      campFound,
+      rowanMet,
+      cartSearched,
+      brambleBlows: [...brambleBlows],
+      bramblesCut: bramblesCut(brambleBlows),
+      // Whether the SCENE agrees the tangle is gone, reported separately from the rules layer's
+      // blow count for the same reason `loaded` is reported separately from `lit`: if these two ever
+      // disagree, a harness sees a bramble the rules think is cut still standing in the trail.
+      bramblesGone: zoneBrambles.filter((bramble) => bramble.isGone()).length,
+    }),
+  };
+  window.__galaQuestRuntime = runtime;
+
+  const resize = () => {
+    runtimeRenderer.resize();
+    camera.aspect = runtimeRenderer.size.width / runtimeRenderer.size.height;
+    camera.updateProjectionMatrix();
+  };
+  window.addEventListener('resize', resize, { passive: true });
+  // iOS Safari changes the usable viewport without always firing a window resize: the URL bar
+  // collapses on scroll, and orientationchange can land before the new innerWidth is readable. Both
+  // routes drive the same resize(), so the worst case is a redundant call.
+  window.visualViewport?.addEventListener('resize', resize, { passive: true });
+  // Two frames, not one: on iOS the metrics immediately after this event are still the old ones.
+  window.addEventListener('orientationchange', () => {
+    resize();
+    window.requestAnimationFrame(() => window.requestAnimationFrame(resize));
+  }, { passive: true });
+  // Once at boot, because no resize event fires on a plain page load. Without this the camera keeps
+  // its constructor aspect of 1 until the first rotation or window change -- measured as a 0.46x
+  // horizontal squeeze of the whole scene on a 390x844 phone, and ~1.78x stretch at 1280x720.
+  resize();
+
+  let previousTimestamp = null;
+  // Frame time the prediction owes the hero but was not allowed to spend in one bite. See
+  // net/prediction.js -- without this, every frame over 100 ms silently walked the client's hero
+  // less far than the server walked its own, and reconciliation snapped him forward to catch up.
+  let predictionBacklogSeconds = 0;
+  // Whether the previous frame had a thumb on the stick. A frame gap that elapsed while the hero
+  // stood still is not time either simulation walked -- see predictionStep's `wasMoving`.
+  let predictionWasMoving = false;
+  const frame = (timestamp) => {
+    window.requestAnimationFrame(frame);
+    if (runtimeRenderer.contextLost) {
+      diagnostics.update('WebGL context lost', quality.level.name);
+      return;
+    }
+    if (!runtimeRenderer.frameLimiter.shouldRender(timestamp)) return;
+
+    const frameStart = performance.now();
+
+    // Raw gap since the previous *rendered* frame, for the quality ladder. Deliberately not the
+    // clamped deltaSeconds below: that clamp exists so a hitch cannot teleport the hero, and it would
+    // also flatten a 500ms stall into 100ms for the one measurement that needs to see it whole.
+    const frameDeltaMs = previousTimestamp === null ? null : timestamp - previousTimestamp;
+    const deltaSeconds = previousTimestamp === null
+      ? 0
+      : Math.min((timestamp - previousTimestamp) / 1000, 0.1);
+    previousTimestamp = timestamp;
+
+    // GP1: the Hero screen is a non-blocking overlay (the multiplayer world keeps simulating behind
+    // it, same as Keeper speech), but LOCAL input has to stop while it is open -- checked once here
+    // and reused below, rather than letting each of movement/attack independently poll isOpen().
+    const heroScreenOpen = heroScreen.isOpen();
+    // GP3: the Village Board is the second (and, by construction, mutually exclusive -- see its own
+    // onOpenChange) full-screen overlay that owns input the same way Hero screen does.
+    const villageBoardOpen = villageBoard.isOpen();
+    // Either overlay open suspends the same movement/attack input -- checked once here and reused
+    // below, the same "checked once, not polled per-system" reasoning heroScreenOpen's own comment
+    // already gives, just widened to cover both screens now that there are two.
+    const anyOverlayOpen = heroScreenOpen || villageBoardOpen;
+    // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
+    // and GP1-C2's preview marker needs the current equipped id even while the screen is closed, so
+    // it can pick up mid-frame whatever the DOM render below just set.
+    const ownRewards = netStatus === 'online'
+      ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
+      : { equippedWeaponId: offlineEquippedWeaponId };
+    const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
+    if (heroScreenOpen) {
+      heroScreen.render(heroScreenViewModel({
+        equippedWeaponId: currentEquippedWeaponId,
+        ownedItemIds: ownedItemIdsFromRewards(ownRewards),
+        selectedItemId: selectedHeroItemId,
+      }));
+    }
+    // GP1-C2: world-space, not attached to the rig -- see createHeroPreviewMarker's own header.
+    // Visible only while heroScreenOpen; update() itself no-ops the position/colour work when hidden.
+    heroPreviewMarker.update(player.position, currentEquippedWeaponId, heroScreenOpen, deltaSeconds);
+
+    // touch.read()/keyboard.read() are plain snapshot reads with no drain/consume semantics (unlike
+    // the attack takeAttack() calls below, which DO have to run every frame regardless) -- safe to
+    // skip outright while an overlay owns input, not merely safe to zero afterwards. The stick is
+    // also visually suspended (pointer-events: none) at the same moment, so it cannot have an active
+    // pointer here anyway; this is what makes that true for keyboard too.
+    const touchInput = anyOverlayOpen ? { active: false, run: false, screen: { x: 0, y: 0 } } : touch.read();
+    const input = anyOverlayOpen ? touchInput : (touchInput.active ? touchInput : keyboard.read());
+    const inputMagnitude = Math.hypot(input.screen.x, input.screen.y);
+    player.groundSpeed = groundSpeedForInput(inputMagnitude, input.run);
+    // One direction, used for both the local integration and the wire, so the server can never be
+    // told a different heading from the one the hero is walking.
+    const worldDirection = worldDirectionForInput(input.screen, follow.heading);
+    // Movement gets its OWN time budget, not the animation delta above: a slow frame must not lose
+    // distance the server already walked (net/prediction.js), while the mixer and the offline rules
+    // keep the plain clamped delta they have always used.
+    const movement = predictionStep({
+      // frameDeltaMs, not `timestamp - previousTimestamp`: previousTimestamp was already advanced
+      // above, and frameDeltaMs is deliberately the UNCLAMPED gap -- which is exactly what a
+      // catch-up budget has to be measured from.
+      rawDeltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
+      backlogSeconds: predictionBacklogSeconds,
+      moving: inputMagnitude > 0,
+      wasMoving: predictionWasMoving,
+    });
+    predictionBacklogSeconds = movement.backlogSeconds;
+    predictionWasMoving = inputMagnitude > 0;
+    if (inputMagnitude > 0) {
+      // Clamped to the SAME walkable bounds net/gameServer.mjs enforces (world/bounds.js). Without
+      // this the prediction walks off the rim while authority stays pinned to it, and the growing
+      // disagreement rubber-bands and then teleports the hero -- measured in the running game.
+      player.position.x = clampToWorldX(player.position.x + worldDirection.x * player.groundSpeed * movement.deltaSeconds);
+      player.position.z = clampToWorldZ(player.position.z + worldDirection.z * player.groundSpeed * movement.deltaSeconds);
+      player.heading = Math.atan2(worldDirection.x, worldDirection.z);
+    }
+    // Intent out. The client throttles to 15 Hz and sends a release immediately.
+    net.setIntent(worldDirection.x, worldDirection.z, inputMagnitude, input.run);
+    // Pull the local prediction back towards the server's version of us. The local hero stays
+    // locally predicted -- it must respond to a thumb without waiting for a round trip -- so this
+    // only corrects the accumulated difference.
+    lastReconcile = net.reconcile(player.position);
+
+    // Online: the fight is the server's (Task B4). Mirror the last published block onto
+    // encounterState -- hearts, the swing, the wolf presenter, the status line all read `wolf` and
+    // `hero` off it, none of them needing to know whether they are reading a local step's result or
+    // the server's. Offline: encounterState is still advanced by the local rules further down,
+    // unchanged (ruling 8).
+    //
+    // The mirror carries a COMPLETE encounter state, not just { wolf, hero } -- root-caused
+    // 2026-08-13 (the private engineering archive, test/offline-handover.test.mjs): the
+    // moment netStatus first leaves 'online', the offline branch below calls
+    // stepEncounter/requestAttack directly on this same `encounterState`, and encounter.js's
+    // publish()/publishParty() unconditionally read state.wolfSpawn.x/state.heroSpawn.x
+    // (encounter.js:289, :618). A two-key mirror left those undefined, so `.x` threw every frame,
+    // forever, with no try/catch around this requestAnimationFrame callback -- freezing the whole
+    // render loop, not just combat. wolfSpawn/heroSpawn/revision/lastCommandId are filled in here so
+    // this object is a valid state on its own terms the instant the socket drops, not only a view
+    // for the online-only readers below. biteCooldown/biteLanded/swingLanded never ride the wire
+    // (protocol.js: "Internal-only fields ... never leave the server"), so they default the same way
+    // a fresh createEncounterState() does; the real fields from the server override them.
+    if (netStatus === 'online') {
+      const published = serverEncounter ?? EMPTY_SERVER_ENCOUNTER;
+      const ownHeroId = net.selfId;
+      const ownHero = (ownHeroId !== null && published.heroes[ownHeroId]) || DEFAULT_HERO_VIEW;
+      encounterState = {
+        revision: published.revision,
+        lastCommandId: null,
+        wolfSpawn: WOLF_SPAWN,
+        // The patrol never rides the wire (the client does not need to know where the NEXT wolf will
+        // be -- it is told where this one IS). Seeded from the zone so that if the socket drops
+        // mid-quest, the offline rules that take over keep moving the wolf around the same three
+        // spots instead of pinning it to the first one for the rest of the session.
+        wolfSpawns: WOLF_SPAWNS,
+        heroSpawn: HERO_SPAWN,
+        wolf: { biteCooldown: 0, biteLanded: false, modeSeconds: 0, ...published.wolf },
+        hero: { swingLanded: false, ...ownHero },
+      };
+    }
+
+    // Stop the hero walking through the wolf. Applied after movement and reconciliation so it is the
+    // last word on where the hero stands, and before the hero is drawn, so no frame ever shows the
+    // two bodies overlapping. Online, the server already does this (Design ruling 6, Task B3's
+    // `simulation.step()`) and net.reconcile() above is what pulls this client's own prediction
+    // back to agree with it -- applying the local push again here would double-correct against a
+    // wolf position this same tick's snapshot may already have moved.
+    if (netStatus !== 'online') {
+      const separated = separateFromWolf(player.position, encounterState.wolf);
+      player.position.x = separated.x;
+      player.position.z = separated.z;
+    }
+
+    // GP3: Village Supplies, read once per frame and shared by every consumer below -- the Board's
+    // own render, the loot HUD's now-shared totals, and the Workshop's own build trigger. Computed
+    // HERE, outside the `if (runtime.hero)` guard just below, for the identical reason
+    // rewardsForRelight/lanternUnlockedNow already are (see that pair's own comment further down):
+    // the Board, the Workshop ceremony, and the loot-collect request all still have to work the
+    // moment the zone has loaded even before the hero mesh itself has. A first version declared this
+    // inside the hero guard and threw "village is not defined" on every single frame the instant
+    // control reached the Board-render/Workshop-trigger code below it -- unit tests never caught it
+    // because main.js's own frame loop is browser-only and none of them exercise it; only a real
+    // browser run (tools/runtime-test/drive-village-board.mjs) surfaced it. No offline fallback
+    // (EMPTY_VILLAGE's own comment): there is nothing durable to read without a server.
+    const village = netStatus === 'online' && serverEncounter?.village ? serverEncounter.village : EMPTY_VILLAGE;
+
+    if (runtime.hero) {
+      runtime.hero.position.copy(player.position);
+      runtime.hero.rotation.y = player.heading;
+      // A DOWNED HERO DOES NOT WALK, and this line is why his death animation is visible at all.
+      //
+      // "You went down" used to be a banner and a screen flash while the hero stood there upright
+      // with his sword out for the whole two-second respawn. The death clip WAS playing -- measured
+      // over CDP, his head really did drop from 1.05m to 0.10m -- and then snapped back upright on
+      // exactly the frame the clip finished. A finished action stops writing; it does not hold. The
+      // wolf's corpse stays down only because nothing else writes the wolf's pose, and here
+      // locomotion was rewriting a full idle pose every single frame underneath it.
+      //
+      // So while he is down, locomotion is not called at all: the reaction animator is the only
+      // thing posing him, and clampWhenFinished means what it says.
+      const heroIsDown = (encounterState.hero?.downSeconds ?? -1) >= 0;
+      if (!heroIsDown) locomotion?.update(deltaSeconds, player.groundSpeed);
+      // Remotes are drawn from interpolated snapshots, not predicted: we have no idea what another
+      // child's thumb is doing, and guessing would walk them through scenery.
+      remotes?.update(net.sampleRemotes(), deltaSeconds);
+      // Read the mode from the speed the locomotion controller is given, not from the run flag, so
+      // the status line cannot disagree with the clip actually playing.
+      // Read from the controller, not from the speed alone: standing now plays a real idle clip on
+      // a rig that has one and still holds a walk frame on a rig that does not, and the status line
+      // must never claim the one while the other is on screen.
+      const standing = locomotion?.getState();
+      const own = player.groundSpeed === 0
+        ? `hero ${standing?.activeMode === 'idle' ? 'idle' : 'idle — walk frame held'}`
+        : `hero ${locomotionModeForSpeed(player.groundSpeed) === 'run' ? 'running' : 'walking'} at `
+          + `${player.groundSpeed.toFixed(2)} m/s`;
+      const others = netStatus === 'online'
+        ? `players ${(remotes?.count ?? 0) + 1}`
+        : netStatus;
+
+      // Both controls are drained every frame, not just the active one: a child can have a thumb on
+      // the stick and still tap ATTACK, and a desktop tester can do both too. Draining only the
+      // "active" input would silently swallow one of them.
+      // Drained into locals first. Written as `a() || b()` the second call short-circuits away, and a
+      // keyboard press made in the same frame as a button tap would survive to fire a frame later.
+      // Both calls still run every frame regardless of anyOverlayOpen -- draining is not optional,
+      // see the comment two lines up -- but forced false while either overlay is open, the same
+      // "suspend the ACTION, not the bookkeeping" rule the input block above applies to movement.
+      // Without this a spacebar press (the attack button itself is visually suspended and cannot
+      // originate a touch) would still swing the sword with an overlay open.
+      const tappedAttack = attack.takeAttack() && !anyOverlayOpen;
+      const pressedAttack = keyboard.takeAttack() && !anyOverlayOpen;
+      // Two commands, in the order a player produces them: the button press, then the clock. Events
+      // from both are collected and dispatched together below, which is the order this loop has
+      // always used -- the presenters are updated to the newest state first, then told what changed.
+      const events = [];
+      if (netStatus === 'online') {
+        // Combat commands are server-applied, presentation is client-predicted (Design ruling 3).
+        // No local stepEncounter/requestAttack/separateFromWolf here at all -- HP, wolf mode,
+        // hearts, banners and events all come exclusively from the mirror set up above.
+        const ownHeroId = net.selfId;
+        const canSwing = ownHeroId !== null && serverEncounter !== null
+          && canHeroAttack(serverEncounter, ownHeroId);
+        attack.setReady(canSwing);
+        if ((tappedAttack || pressedAttack) && canSwing) {
+          net.sendAttack();
+          // Presentation only: the clip starts on the button press, not on the server's ack, so a
+          // thumb sees the sword move immediately. Handed off to the server's own swingSeconds (in
+          // `hero` below) below the moment it confirms.
+          predictedSwingSeconds = 0;
+        } else if (predictedSwingSeconds >= 0) {
+          predictedSwingSeconds += deltaSeconds;
+        }
+        // Events ride snapshots at 10 Hz (ruling 7), queued by onEncounter between frames and
+        // drained here, filtered to this hero and mapped back to the solo shape onEncounterEvent's
+        // table expects.
+        const drained = pendingServerEvents.splice(0, pendingServerEvents.length);
+        for (const event of drained) {
+          if (GLOBAL_ENCOUNTER_EVENT_TYPES.has(event.type) || event.heroId === ownHeroId) {
+            events.push(stripHeroId(event));
+          }
+        }
+      } else {
+        if (tappedAttack || pressedAttack) {
+          const asked = requestAttack(encounterState, nextCommandId++);
+          encounterState = asked.state;
+          events.push(...asked.events);
+        }
+        attack.setReady(canAttack(encounterState));
+
+        // The fight runs off the same predicted position the hero is drawn at, so a swing lands where
+        // the child sees themselves standing rather than where the server last heard from them.
+        const stepped = stepEncounter(encounterState, {
+          commandId: nextCommandId++,
+          deltaSeconds,
+          heroPosition: player.position,
+          heroHeading: player.heading,
+        });
+        encounterState = stepped.state;
+        events.push(...stepped.events);
+
+        // Offline fallback reward loop (brief D4): the same D1 fold net/gameServer.mjs runs online,
+        // run here against the solo hero's own (heroId-less) events, stamped with OFFLINE_HERO_ID so
+        // foldEvents has someone to credit. See offlineRewardLedger's own comment above for why this
+        // is session-only by construction.
+        const offlineFolded = foldEvents(
+          offlineRewardLedger,
+          stepped.events.map((event) => ({ ...event, heroId: OFFLINE_HERO_ID })),
+        );
+        offlineRewardLedger = offlineFolded.ledger;
+        for (const award of offlineFolded.awards) {
+          if (award.type !== 'mark-earned') continue;
+          offlineMarks += 1;
+          events.push({ type: 'mark-earned' });
+        }
+        if (!offlineLanternUnlocked && offlineMarks >= MARKS_TO_UNLOCK) {
+          offlineLanternUnlocked = true;
+          events.push({ type: 'lantern-unlocked' });
+        }
+      }
+
+      // The current guest's own marks/unlock state, read fresh every frame the same way `wolf`/
+      // `hero` below are: online, the server (via encounter.rewards, D3) is the source of truth;
+      // offline, it is the local fold just above. Neither branch accumulates a THIRD copy of this
+      // state -- pips and the lantern mount always read whichever of these two is live right now.
+      const ownRewards = netStatus === 'online'
+        ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
+        : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
+      renderLanternPips(ownRewards?.marks ?? 0);
+      ensureLanternMounted(ownRewards?.lanternUnlocked === true);
+
+      // GP2/GP3: seed the displayed HUD totals from the authoritative value ONCE, the first frame it
+      // is known -- a returning guest's own past haul (or a fresh guest's honest zero) has to appear
+      // immediately, with nothing to fly in and watch arrive. Every count AFTER this seed only ever
+      // advances via a pickup's own attraction flight completing, or a background sync once nothing
+      // of this hero's own is still in flight (below) -- that gap is GP2's own "HUD totals must not
+      // update before the pickup reaches its collection endpoint" rule, made real rather than merely
+      // intended, now extended to Village Supplies' own shared remaining balance (GP3 brief section
+      // 5) instead of this hero's own personal collected total.
+      if (!lootHudSeeded && netStatus === 'online' && ownRewards) {
+        const remaining = remainingVillageSupplies(village.coins, village.shards, village.workshopOwned);
+        coinsDisplayed = remaining.coins;
+        shardsDisplayed = remaining.shards;
+        lootHudSeeded = true;
+        renderLootHud();
+      }
+
+      // The published state, read once and shared by every consumer below. Nothing here calls back
+      // into the rules -- online or offline, `encounterState` is just data by this point.
+      const { wolf, hero } = encounterState;
+      // The server's own swingSeconds (mirrored into `hero` above) takes over the instant it
+      // confirms, or the prediction times out on its own clock -- either way nothing downstream of
+      // this line ever decides whether a swing lands; that stays server truth online.
+      if (netStatus === 'online' && (hero.swingSeconds >= 0 || predictedSwingSeconds >= SWING_SECONDS)) {
+        predictedSwingSeconds = -1;
+      }
+      const swingSecondsForClip = netStatus === 'online' && hero.swingSeconds < 0 && predictedSwingSeconds >= 0
+        ? predictedSwingSeconds
+        : hero.swingSeconds;
+      // Between locomotion (the base pose) and the swing (the top priority): reactions write over
+      // the stride, and an active swing writes over a reaction, which is the mechanical half of
+      // the owner's attack-takes-precedence rule -- reactClips.js's trigger gate is the other half.
+      //
+      // EXCEPT while the hero is down. swingClip.js's action.stop() (via three.js's own
+      // saveOriginalState/restoreOriginalState pair -- see test/swing-arbitration.test.mjs) restores
+      // the pose the skeleton held at the instant the swing STARTED, which is stale the moment a hero
+      // dies mid-swing. Locomotion papers over that restore one frame later in the ordinary case;
+      // while down, locomotion is skipped entirely (heroIsDown above), so nothing does. Running swing
+      // FIRST when down means any stale restore lands before reactions writes the death pose, so
+      // death's write is the one that survives the frame -- "death visually supersedes swing" without
+      // touching swingClip.js itself.
+      if (heroIsDown) {
+        swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
+        reactions?.update(deltaSeconds, hero);
+      } else {
+        reactions?.update(deltaSeconds, hero);
+        // AFTER locomotion.update(), which is what writes the walk pose. The swing is an offset on
+        // top of that pose, so running it first would be overwritten the same frame.
+        swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
+      }
+      wolfPresenter?.update(deltaSeconds, wolf);
+      // The single event-dispatch point (ruling 5): both the online (server-mirrored) and offline
+      // (locally stepped) paths above funnel their events through this one loop, which is exactly
+      // why sound attaches here and nowhere else -- no reaching into encounterState, only the
+      // events already flowing through. soundForEvent's table decides every event explicitly (six
+      // mapped, three silent by name), so a null recipe name is expected, not a gap.
+      //
+      // mark-earned/lantern-unlocked are split off to their own table (rewards/feedback.js) rather
+      // than joining onEncounterEvent's: they are never raised by combat/encounter.js, so they can
+      // never be members of ENCOUNTER_EVENT_TYPES (feedback.test.mjs pins that list to a regex scan
+      // of encounter.js's own source) without either editing the guarded combat/ directory or
+      // breaking that guard's own regression test. Same "every event accounted for, sound decided
+      // explicitly" discipline, just addressed through its own two small tables.
+      for (const event of events) {
+        if (event.type === 'mark-earned' || event.type === 'lantern-unlocked') {
+          const rewardRecipeName = soundForRewardEvent(event.type);
+          if (rewardRecipeName) audio.play(rewardRecipeName);
+          onRewardEvent(event);
+          continue;
+        }
+        const recipeName = soundForEvent(event.type);
+        if (recipeName) audio.play(recipeName);
+        onEncounterEvent(event);
+      }
+
+      const fight = wolf.mode === 'dead'
+        ? 'wolf down'
+        : `wolf ${wolf.hp}hp · you ${Math.max(0, hero.hp)}hp`;
+      status.textContent = `${own} · ${fight} · ${others}`;
+    }
+    // The keeper's proximity flourish reads local AND remote hero positions (brief V2: "any hero
+    // (local or remote published position)"), so it runs here rather than inside the `if
+    // (runtime.hero)` block above -- a sibling child standing next to the keeper must trigger the
+    // wave even on a client whose own hero has not finished loading yet.
+    if (zoneKeeper) {
+      const heroPositions = [{ x: player.position.x, z: player.position.z }];
+      for (const remote of remotes?.describe() ?? []) heroPositions.push({ x: remote.x, z: remote.z });
+      // The occlusion fade is always about THIS client's own camera and own hero, never a remote's:
+      // a sibling walking behind the Keeper on the other iPad must not make him go see-through here.
+      zoneKeeper.update(deltaSeconds, heroPositions, {
+        camera: camera.position,
+        hero: player.position,
+      });
+      // Rowan watches the same way, no occlusion fade -- they stand alone in a clearing, not on the
+      // road the follow camera has to swing through.
+      zoneRowan?.update(deltaSeconds, heroPositions);
+    }
+    // The villagers breathe and look around whether or not anyone is near them -- that is the whole
+    // point of them, and a village that only comes alive once you are standing in it is a village
+    // you had no reason to walk into.
+    zoneVillagers?.update(deltaSeconds);
+    // W1/W2: the keeper's line and the tree's relight both read the SAME two sources the pips and
+    // the belt lantern already read above (welcome state via serverEncounter.rewards, or the local
+    // D1 fold offline) -- computed here, outside the `if (runtime.hero)` guard, because both must
+    // still work the moment the zone has loaded even before the hero mesh itself has (matching the
+    // keeper's own wave, just above). lanternUnlockedFromRewards is the one pure function that
+    // decides "lit or not" from that shape; see zoneLoader.js.
+    const rewardsForRelight = netStatus === 'online'
+      ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
+      : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
+    const lanternUnlockedNow = lanternUnlockedFromRewards(rewardsForRelight);
+    // GP3: the Village Board's own render, reusing lanternUnlockedNow just computed above rather
+    // than re-deriving a second "is the tree lit" answer -- see village/boardScreen.js's own
+    // villageBoardViewModel comment for why the Lantern Tree node is fed this exact flag. village
+    // has no offline fallback (EMPTY_VILLAGE's own comment): a disconnected session sees zero/
+    // unowned, which is honest -- there is nothing durable to read.
+    if (villageBoardOpen) {
+      villageBoard.render(villageBoardViewModel({
+        village,
+        lanternUnlocked: lanternUnlockedNow,
+        selectedNodeId: selectedVillageNodeId,
+      }));
+    }
+    // "Do we actually KNOW this hero's marks yet" -- which is not the same question as "is
+    // rewardsForRelight non-null". While the socket is still opening, netStatus is 'connecting' and
+    // the expression above quietly falls through to the OFFLINE fold, which is a real object
+    // reading zero marks and no lantern. Boot therefore looked exactly like "this player watched
+    // the tree be dark", for every player, every load -- so a returning guest whose tree should
+    // have been lit on arrival got armed for the earned ceremony instead. Measured, not reasoned
+    // about: drive-relight.mjs's "the tree is LIT, driven purely by welcome state" went red.
+    //
+    // 'connecting' is the one status that means "no answer yet" (net/client.js sets it before the
+    // socket opens and replaces it with 'online' on welcome or 'offline' on failure), so a genuine
+    // no-server session still counts its own local fold as the truth immediately.
+    const rewardsKnown = netStatus === 'online'
+      ? rewardsForRelight != null
+      : netStatus === 'offline';
+    // W2 as shipped was one line -- `setTreeLit(unlocked)` -- and it fired the instant the third
+    // mark landed, which is at the wolf, 18 m from the tree, with the camera behind the hero. The
+    // whole quest's payoff happened off screen. Three states now, not two:
+    //
+    //   - rewards not known yet (pre-welcome): do nothing at all. Treating "no rewards yet" as "not
+    //     unlocked" would arm the ceremony for a returning guest and hold their tree dark until they
+    //     walked to it, which is not what they earned and would break drive-relight's own
+    //     "lit from welcome state alone" check.
+    //   - unlocked BEFORE this client ever saw it dark: light it instantly, no ceremony. A relight
+    //     that plays on every page load stops being a moment.
+    //   - went dark -> unlocked while playing: hold it, point the child home, and play the full
+    //     beat when they are back in the plaza with the tree in front of them.
+    //
+    // `relightSpent` is only ever set inside the `zoneTree` guard, and that placement is
+    // load-bearing rather than tidy: the first version latched it outside, and the welcome message
+    // routinely lands BEFORE the tree's own GLB has finished loading. A returning, already-unlocked
+    // guest therefore spent the one-shot on a null tree and then stood in front of a dark one for
+    // the rest of the session. Caught by drive-relight.mjs's "the tree is LIT, driven purely by
+    // welcome state" check going 13/14, not by reading this back.
+    if (rewardsKnown && !relightSpent) {
+      if (!lanternUnlockedNow) {
+        sawTreeDark = true;
+        zoneTree?.setTreeLit(false);
+      } else if (zoneTree) {
+        if (!sawTreeDark) {
+          zoneTree.setTreeLit(true);
+          relightSpent = true;
+        } else if (distance(player.position.x, player.position.z, TREE_X, TREE_Z)
+          <= RELIGHT_TRIGGER_RADIUS_METERS) {
+          zoneTree.beginRelight();
+          zoneKeeper?.celebrate();
+          // Played directly rather than through an event table: the ceremony is a client-side
+          // presentation beat with no encounter or reward event behind it. audio/recipes.js's
+          // DIRECTLY_PLAYED_RECIPES names it, so the "no unused recipes" test stays a real test.
+          audio.play(RELIGHT_RECIPE_NAME);
+          banner('The Lantern Tree is alight!', 3200);
+          relightSpent = true;
+        }
+      }
+    }
+    zoneTree?.update(deltaSeconds);
+    // THE CALL NORTH. Not proximity-gated, unlike the speech bubble Aldric's full line lives in --
+    // a child watching the ceremony is standing at the tree, not next to him, and that is correct,
+    // not a bug to route around. A SHORT banner and not his full three-sentence line: #banner is
+    // `white-space: nowrap` for a reason -- built for "The Lantern Tree is alight!"-length text,
+    // and KEEPER_LINE_UNLOCKED ran off both edges of a 768px frame when tried here (looked at,
+    // gate-call-02-banner-fired.png). Echoes the chip's own already-vetted "follow the lit path
+    // north" rather than inventing new words for a young player to parse.
+    if (!gateCallGiven && !gateFound && (zoneTree?.isTreeLit() ?? false)) {
+      gateCallGiven = true;
+      zoneKeeper?.celebrate();
+      audio.play(KEEPER_GREETING_RECIPE_NAME);
+      banner('Aldric: follow the lit path north!', 3600);
+    }
+    // Flown toward the hero's CURRENT position, not the one he stood at when the wolf died, so a
+    // child who keeps walking is still caught up with.
+    markSparks.update(deltaSeconds, player.position);
+    const keeperSpeech = keeperSpeechState({
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      keeperX: KEEPER_X,
+      keeperZ: KEEPER_Z,
+      radiusMeters: KEEPER_WAVE_RADIUS_METERS,
+      lanternUnlocked: lanternUnlockedNow,
+      // The Keeper counts your marks now. Same rewards object the pips read, so what he says and
+      // what the HUD shows can never disagree.
+      marks: rewardsForRelight?.marks ?? 0,
+      // He stops sending a finished hero north once they have actually been.
+      gateFound,
+    });
+    // Same radius idea as the Keeper's own (brief W1: "the same proximity the wave uses") -- there is
+    // no wave to reuse for Rowan, but "close enough to talk to" is the same distance either way.
+    const rowanSpeech = rowanSpeechState({
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      rowanX: ROWAN_X,
+      rowanZ: ROWAN_Z,
+      radiusMeters: KEEPER_WAVE_RADIUS_METERS,
+      cartSearched,
+    });
+    // ONE bubble, shared: they stand tens of metres apart (the village plaza and the trail's own
+    // camp) and can never both be in range at once, so there is no real priority decision here, only
+    // a way to pick one shape when neither is visible.
+    const npcSpeech = keeperSpeech.visible
+      ? { visible: true, line: keeperSpeech.line, name: KEEPER_NAME }
+      : rowanSpeech.visible
+        ? { visible: true, line: rowanSpeech.line, name: ROWAN_NAME }
+        : { visible: false, line: null, name: null };
+    renderNpcSpeech(npcSpeech);
+    // AP2-A: the Keeper talks while his OWN line is on screen (setTalking gracefully no-ops on a rig
+    // shipped without a 'talk' clip -- same optional-clip contract as wave/turn). Keyed on
+    // keeperSpeech specifically, not the shared npcSpeech bubble above -- Rowan's line being visible
+    // must not make the Keeper start talking from across the map.
+    zoneKeeper?.setTalking(keeperSpeech.visible);
+    // A soft two-note greeting on the EDGE into range, not every frame inside it. Walking up to
+    // somebody who then talks at you in complete silence is the difference between a character and a
+    // sign; firing it continuously would be the difference between a character and an alarm.
+    if (npcSpeech.visible && !npcSpeaking) audio.play(KEEPER_GREETING_RECIPE_NAME);
+    npcSpeaking = npcSpeech.visible;
+    // Rowan has been met the moment their own line is first shown -- same "latched, not read live"
+    // reasoning questGiven follows just below, so the beat does not un-happen when the child steps
+    // back out of range.
+    if (rowanSpeech.visible) rowanMet = true;
+    // He has told you, so the objective chip can stop telling you first. Latched rather than read
+    // live, so the instruction does not vanish again the moment the child steps out of his radius.
+    if (keeperSpeech.visible) questGiven = true;
+    // And the "!" over his head goes out with it. Shown only while he is the thing to do: a child
+    // who has already been told, or who came back tomorrow with two marks on record, is not sent to
+    // queue at an old man again. Keyed on the same latch the objective chip reads, so the floating
+    // marker and the words in the corner can never disagree about whether he still wants you.
+    const keeperWantsYou = !questGiven && (rewardsForRelight?.marks ?? 0) === 0;
+    zoneKeeper?.setQuestMarker(keeperWantsYou);
+
+    // THE VILLAGE NOTICES YOU ARRIVE.
+    //
+    // A child wakes up at the edge of the plaza with the whole village in front of them and, until
+    // this, absolutely nothing happened until they had walked eighteen metres and stood inside a
+    // six-metre circle around an old man. The first thing the game ever did was wait.
+    //
+    // Now, a beat after the world has finished loading, Aldric waves and calls across the plaza.
+    // It is the same wave clip he already has and the same two-note greeting he already plays -- no
+    // new mechanism, no cutscene, no camera takeover -- but it turns the opening from "you are
+    // standing in a diorama" into "somebody over there wants you", which is the entire reason to
+    // walk in. Once per session, and only while he still has the quest to give.
+    if (zoneKeeper && keeperWantsYou && !keeperHailed) {
+      secondsSinceZoneReady += deltaSeconds;
+      if (secondsSinceZoneReady >= KEEPER_HAIL_DELAY_SECONDS) {
+        keeperHailed = true;
+        zoneKeeper.celebrate();
+        audio.play(KEEPER_GREETING_RECIPE_NAME);
+        banner('Keeper Aldric is waving you over!', 3200);
+      }
+    }
+    // Keyed on the TREE, not on the unlock: between earning the third mark and walking home those
+    // two disagree on purpose, and that window is exactly when the child most needs telling.
+    const treeLitNow = zoneTree?.isTreeLit() ?? false;
+    if (treeLitNow && !gateFound
+      && distance(player.position.x, player.position.z, GATE_X, GATE_Z) <= VILLAGE.WILDWOOD_GATE.radiusMeters) {
+      gateFound = true;
+      banner('You found the Wildwood Gate!', 3000);
+    }
+
+    // THE DARK TRAIL. Carrying the lantern earned in Chapter 1 is what wakes the old lights -- see
+    // world/trail.js. Gated on the tree being lit as well as the unlock, so the whole of Chapter 2
+    // cannot start while a child is still being told to take the light home.
+    if (treeLitNow && zoneTrailLights.length > 0) {
+      const step = wakeTrailLights(
+        trailLit, VILLAGE.TRAIL_LIGHTS, player.position.x, player.position.z,
+        lanternUnlockedFromRewards(rewardsForRelight),
+      );
+      if (step.lit !== trailLit) {
+        trailLit = step.lit;
+        for (const index of step.woken) zoneTrailLights[index]?.setLit(true);
+        audio.play(RELIGHT_RECIPE_NAME);
+        // Once, on the first one, and it says what just happened rather than what to do -- the chip
+        // underneath is already saying what to do, and a child who has seen a lamp light up in front
+        // of them does not need to be told a lamp lit up.
+        if (!trailWoken) {
+          trailWoken = true;
+          banner('Your lantern wakes the old lights!', 3400);
+        }
+      }
+      // THE BLACK BRAMBLE. The sword's second job: a thing in the world that changes when you hit
+      // it. Resolved on the frame the BLADE lands, not the frame the button is pressed -- the same
+      // SWING_CONTACT_SECONDS the wolf is judged on -- so cutting a bramble and hitting a wolf feel
+      // like the same action, because they are.
+      //
+      // Detected by watching the published swing clock cross contact, rather than by hooking the
+      // attack button: online, the swing is the SERVER's, and this client only ever learns about it
+      // through `encounterState.hero.swingSeconds`. Reading the same field in both modes means the
+      // bramble cannot become a thing that only cuts offline.
+      const swingNow = encounterState.hero?.swingSeconds ?? -1;
+      const bladeLanded = swingPrevious >= 0 && swingPrevious < SWING_CONTACT_SECONDS
+        && swingNow >= SWING_CONTACT_SECONDS;
+      swingPrevious = swingNow;
+      if (bladeLanded && zoneBrambles.length > 0) {
+        const strike = strikeBrambles(brambleBlows, VILLAGE.BRAMBLES, (bramble) => {
+          // Aimed at the nearest point ON the tangle, not at its centre. A five-metre hedge is
+          // hittable anywhere along it, and measuring the swing's ARC against its midpoint would
+          // make standing at one end and facing the part in front of you count as a sideways miss.
+          const [x, z] = nearestPointOnBramble(bramble, player.position.x, player.position.z);
+          return isWithinStrike(
+            { x: player.position.x, z: player.position.z },
+            player.heading,
+            { x, z },
+            ATTACK_REACH + BRAMBLE_EXTRA_REACH_METERS,
+          );
+        });
+        if (strike.blows !== brambleBlows) {
+          brambleBlows = strike.blows;
+          for (const index of strike.struck) {
+            zoneBrambles[index]?.hit(brambleBlows[index], strike.broken.includes(index));
+          }
+          // The wolf's own two sounds, reused rather than given the bramble a third pair: a blow
+          // landing is a blow landing, and the point of this feature is that the sword does the
+          // same thing to the world that it does to an animal.
+          const recipe = soundForEvent(strike.broken.length > 0 ? 'wolf-defeated' : 'wolf-hit');
+          if (recipe) audio.play(recipe);
+          if (strike.broken.length > 0) banner('The bramble falls away!', 2600);
+        }
+      }
+      for (const bramble of zoneBrambles) bramble.update(deltaSeconds);
+
+      if (!campFound && reachedCamp(VILLAGE.CAMP, player.position.x, player.position.z)) {
+        campFound = true;
+        banner('Somebody left here in a hurry…', 4000);
+      }
+
+      // THE CART ROWAN SENDS YOU TO. Gated on rowanMet, not just proximity -- reachedCamp is
+      // generic (world/trail.js) and CART_SEARCH is just another `{ at, radiusMeters }` to it, but
+      // the beat only makes sense in the order Rowan's own line puts it: meet them, THEN search.
+      if (campFound && rowanMet && !cartSearched
+        && reachedCamp(VILLAGE.CART_SEARCH, player.position.x, player.position.z)) {
+        cartSearched = true;
+        banner('The cart holds tools and a map.', 3000);
+        // GP2: tell the server too, online only. No offline fallback for physical loot -- it is a
+        // one-time shared-world bonus, not core moment-to-moment play the way combat is, and the
+        // banner above already covers offline play honestly (the plan's own pre-GP2 text). Reuses
+        // this SAME trigger rather than a second copy of it, so "the narrative beat fires" and "the
+        // server is told" can never drift out of step with each other.
+        if (netStatus === 'online') net.sendSearchCart();
+      }
+
+      // GP2: the server's own loot state, diffed every frame -- see world/cartLoot.js's header for
+      // why this is a diff and not a chase after a transient event, and world/lootPickups.js's own
+      // header for why the burst/attraction/despawn sequence lives there and not inline here.
+      const loot = netStatus === 'online' && serverEncounter?.loot ? serverEncounter.loot : EMPTY_LOOT;
+
+      // GP3: has this Workshop just been bought? -- the cart-jolt idiom (this file's own
+      // sawCartUnspawned/lootWasSpawned pair, just below): a session-local edge-tracking boolean,
+      // diffed against the shared authoritative flag, firing the world-transform trigger once on the
+      // false->true edge THIS CLIENT ACTUALLY WATCHED, the same "one shared moment, everyone sees it
+      // from their own snapshot" contract the cart jolt and zoneLoader.js's treeLitTransition both
+      // already give their own one-time world acknowledgements.
+      //
+      // GP3-C1 closeout addition: villageKnown mirrors rewardsKnown's own gate above (see that
+      // constant's comment) -- serverEncounter.village can lag netStatus flipping 'online' by a frame
+      // or two, and `village` folds to EMPTY_VILLAGE (workshopOwned: false) during that gap. Reading
+      // that fold as a real "unowned" observation would arm EVERY late-joining or reconnecting client
+      // to replay the full ceremony (audio + pop-in) for a purchase it never watched happen -- found
+      // by tracing this edge-tracker's own logic against a restart-viewer tab rather than by a failing
+      // check, the identical failure mode rewardsKnown's own comment already documents for the tree.
+      // Gating workshopWasOwned's own update on villageKnown too closes the second half of the same
+      // gap: an UNGATED late-joiner whose first known state is already-built must get the workshop
+      // group made visible some other way, since trigger()'s ceremony path only ever fires on a
+      // locally-witnessed false->true edge -- workshop.js's own trigger(true) is that other way.
+      const villageKnown = netStatus === 'online' ? serverEncounter?.village != null : netStatus === 'offline';
+      if (villageKnown) {
+        if (!village.workshopOwned) {
+          sawWorkshopUnowned = true;
+        } else if (!workshopWasOwned) {
+          if (sawWorkshopUnowned) {
+            zoneWorkshop?.trigger();
+            audio.play(WORKSHOP_BUILD_RECIPE_NAME);
+            // If this client's own Board happens to be open right now (the buyer's own screen, or a
+            // sibling's Board that was open on some other node when the purchase landed), it dismisses
+            // itself a beat later so the transforming Workshop is the very next thing this child sees
+            // -- not a second manual tap required to get there.
+            if (villageBoard.isOpen()) {
+              window.setTimeout(() => villageBoard.close(), WORKSHOP_BOARD_AUTOCLOSE_MS);
+            }
+          } else {
+            // A late joiner / a reconnect after someone else bought it: show the built Workshop
+            // instantly, no ceremony -- the same "unlocked before this client ever saw it dark, light
+            // it instantly" rule the Lantern Tree's own rewardsKnown branch already applies.
+            zoneWorkshop?.trigger(true);
+          }
+        }
+        workshopWasOwned = village.workshopOwned;
+      }
+      zoneWorkshop?.update(deltaSeconds);
+
+      // GP3-C1 (replaces GP3-4's old once-ever proximity auto-open, per Sol's closeout review): the
+      // Workshop's own location is a DELIBERATE, REUSABLE interaction, not a walk-through trigger.
+      // #workshop-interact only becomes tappable -- it never opens Hero/Gear on its own -- once the
+      // Workshop is owned, its build ceremony has actually finished (zoneWorkshop.isTransforming(),
+      // not a guessed millisecond delay: see workshop.js's own isTransforming comment), the hero is in
+      // WORKSHOP_INTERACT range, and neither full-screen overlay already owns the input. Gating on
+      // isTransforming() rather than time is what actually removes the reported Board/Hero crossfade
+      // at the root: the Board already auto-closes at WORKSHOP_BOARD_AUTOCLOSE_MS (900ms), well before
+      // the pop-in's own POP_IN_SECONDS (1.4s) finishes, so by the time this ever reads true the Board
+      // is already gone -- no overlap is possible by construction, not by timing luck.
+      const workshopInteractAvailable = village.workshopOwned && zoneWorkshop != null
+        && zoneWorkshop.isBuilt() && !zoneWorkshop.isTransforming()
+        && !heroScreen.isOpen() && !villageBoard.isOpen()
+        && reachedCamp(VILLAGE.WORKSHOP_INTERACT, player.position.x, player.position.z);
+      renderWorkshopInteract(workshopInteractAvailable);
+
+      // The cart's own cheap physical acknowledgement, once, the instant a snapshot first says the
+      // cart is searched -- fires identically for every connected client off the SAME edge, regardless
+      // of which player's own search caused it, the same "one shared moment, everyone sees it from
+      // their own snapshot" contract zoneLoader.js's treeLitTransition already gives the Lantern Tree.
+      if (netStatus === 'online' && !loot.spawned) sawCartUnspawned = true;
+      if (loot.spawned && !lootWasSpawned && sawCartUnspawned) {
+        cartReaction?.trigger();
+        audio.play(CART_JOLT_RECIPE_NAME);
+      }
+      lootWasSpawned = loot.spawned;
+      cartReaction?.update(deltaSeconds);
+
+      // Bursts, sits, and (for whichever pickups THIS hero has reached) attracts and arrives. Returns
+      // only the pickups whose attraction flight completed on this exact frame -- everything else
+      // (still bursting, still resting, someone else's pickup despawning) is silent by design.
+      const lootArrivals = lootPickups.update(deltaSeconds, loot, net.selfId, player.position);
+      for (const arrival of lootArrivals) {
+        revealedPickupIds.add(arrival.id);
+        if (arrival.kind === COIN_KIND) {
+          coinsDisplayed += 1;
+          audio.play(COIN_PICKUP_RECIPE_NAME);
+          popLootHud(COIN_KIND);
+        } else {
+          shardsDisplayed += 1;
+          audio.play(SHARD_PICKUP_RECIPE_NAME);
+          popLootHud(SHARD_KIND);
+        }
+      }
+      // GP3 brief section 5: once this hero's own pickups are all either not-yet-collected-by-them
+      // or already visually arrived (i.e. nothing of theirs is currently mid-flight), it is safe to
+      // silently sync the displayed totals straight to the shared authoritative remaining balance --
+      // a sibling's own collect, or a Workshop purchase, becomes visible immediately, with no fake
+      // local flight invented for either. Skipped only while something of THIS hero's own is still
+      // in flight: syncing then would reveal that hero's own not-yet-landed pickup early, exactly
+      // the bug GP2's original arrival-gated delay exists to prevent.
+      const somethingOfMineInFlight = CART_LOOT_TABLE.some(
+        (pickup) => loot.collected[pickup.id] === net.selfId && !revealedPickupIds.has(pickup.id),
+      );
+      let backgroundSynced = false;
+      if (!somethingOfMineInFlight && lootHudSeeded) {
+        const remaining = remainingVillageSupplies(village.coins, village.shards, village.workshopOwned);
+        if (remaining.coins !== coinsDisplayed || remaining.shards !== shardsDisplayed) {
+          coinsDisplayed = remaining.coins;
+          shardsDisplayed = remaining.shards;
+          backgroundSynced = true;
+        }
+      }
+      if (lootArrivals.length > 0 || backgroundSynced) renderLootHud();
+
+      // The required sequence's own closing beat -- "leave with a reason to care about what the
+      // resources are for" (the acceptance test's own words). Fired once the whole authored haul is
+      // gone, not on this hero's own first pickup: the moment being closed out is the CART's, shared
+      // by whoever is present when the last piece of it is collected, the same "one shared moment"
+      // treatment the cart-jolt trigger above already gives the burst itself. GP3 (the Workshop) is
+      // deliberately not named -- it does not exist as a mechanic yet, and this line only has to be
+      // true today, not promise a feature nobody can act on.
+      if (loot.spawned && !lootHookShown && Object.keys(loot.collected).length >= CART_LOOT_TABLE.length) {
+        lootHookShown = true;
+        banner('Coins and Wildwood Shards. Rowan will know what to do with these.', 3400);
+      }
+
+      // Ask the server to collect whatever is in reach and not yet gone -- throttled per pickup (see
+      // lootRequestedAt's own comment), not every frame. The server re-checks reach, ownership and
+      // "already gone" itself (world/cartLoot.js's requestCollectLoot); this is only "do not bother
+      // asking for something obviously out of reach", and retries a refused ask rather than giving up
+      // on it forever.
+      if (loot.spawned && netStatus === 'online') {
+        for (const pickup of CART_LOOT_TABLE) {
+          if (loot.collected[pickup.id] != null) continue;
+          const lastRequestedAt = lootRequestedAt.get(pickup.id);
+          if (lastRequestedAt != null && frameStart - lastRequestedAt < LOOT_REQUEST_RETRY_MS) continue;
+          const at = pickupWorldPosition(pickup, VILLAGE.CART_SEARCH.at);
+          const distance = Math.hypot(player.position.x - at.x, player.position.z - at.z);
+          if (distance <= PICKUP_COLLECT_RADIUS_METERS) {
+            lootRequestedAt.set(pickup.id, frameStart);
+            net.sendCollectLoot(pickup.id);
+          }
+        }
+      }
+    }
+
+    renderQuestObjective(questObjectiveFor(
+      rewardsKnown ? rewardsForRelight : null, treeLitNow, gateFound, questGiven,
+      {
+        lights: VILLAGE.TRAIL_LIGHTS.length,
+        lit: trailLightsLit(trailLit),
+        campFound,
+        rowanMet,
+        cartSearched,
+        atBramble: nearStandingBramble(brambleBlows, VILLAGE.BRAMBLES, player.position.x, player.position.z),
+      },
+    ));
+    follow.update(player.position);
+    rimLight.update(player.position);
+    runtimeRenderer.renderer.render(scene, camera);
+    const frameCostMs = performance.now() - frameStart;
+    quality.recordFrame(frameCostMs, frameDeltaMs);
+    diagnostics.recordFrame(frameCostMs);
+    diagnostics.update(loadingLabel, quality.level.name);
+  };
+  window.requestAnimationFrame(frame);
+
+  const hero = await loadHero();
+  loadingLabel = null;
+  scene.add(hero.root);
+  runtime.hero = hero.root;
+  // AP2-A shipped raw Idle_11 with the settle off (createLocomotionController's own doc comment).
+  // window.__DEBUG_FORCE_IDLE_SETTLE__ exists only so a future idle-candidate review can reuse
+  // review-hero-idle11.mjs's raw-vs-settled A/B without editing this file -- deliberately opt-IN
+  // (must be explicitly set to true), so an unset/forgotten global can never silently re-enable a
+  // correction Sol ruled off. Undefined in every real session, so this changes nothing shipped.
+  locomotion = createLocomotionController(hero.root, hero.animations, {
+    applyIdleSettle: window.__DEBUG_FORCE_IDLE_SETTLE__ === true,
+  });
+  // Prefer the real clip; fall back to the procedural arc only if the hero ships without one. The
+  // choice is made here rather than hidden inside a module so that a hero export that quietly loses
+  // its attack clip degrades to a visible stand-in instead of to a hero who does not move his arm.
+  swing = createClipSwingAnimator(hero.root, hero.animations) ?? createSwingAnimator(hero.root);
+  // Null only if the rig ships neither clip. The shipped hero carries both (`hit`/`death`,
+  // encounter.js's STAGGER_SECONDS/DEATH_SECONDS are pinned against their real durations in
+  // test/clip-inventory.test.mjs), so this stays live in every real session; degrading to the
+  // hurt flash and banners alone is the fallback for a future export that loses one, not today.
+  reactions = createReactionAnimator(hero.root, hero.animations);
+  // Remote heroes clone this same loaded asset, so the pool cannot exist before it has arrived. Until
+  // then sampleRemotes() is simply never drawn -- snapshots still buffer, so nobody is missed.
+  remotes = createRemotePlayers(scene, hero);
+  status.textContent = hero.failed ? 'hero load failed — placeholder shown' : 'hero standing';
+
+  // The wolf is loaded after the hero and never awaited alongside it. A missing or broken wolf must
+  // leave a walkable world rather than an empty screen -- the same rule the socket follows.
+  try {
+    const wolf = await loadWolf();
+    if (!wolf.failed) {
+      scene.add(wolf.root);
+      wolfPresenter = createWolfPresenter(wolf.root, wolf.animations);
+    } else {
+      console.warn('[runtime] wolf load failed — world is playable without it');
+    }
+  } catch (error) {
+    console.warn('[runtime] wolf load threw — world is playable without it', error);
+  }
+}
+
+bootstrap().catch((error) => {
+  console.error('[runtime] bootstrap failed', error);
+  status.textContent = 'runtime failed — see console';
+});

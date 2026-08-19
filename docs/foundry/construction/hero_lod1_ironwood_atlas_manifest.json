@@ -1,0 +1,81 @@
+{
+  "formatVersion": 1,
+  "tool": "tools/blender/merge_gear_atlas.py",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "origin": "lower-left",
+    "padding": 4,
+    "regionSizeStatus": "provisional-human-art-decision-constrained-by-current-occupancy",
+    "regionSizeNote": "The requested starting size was 72x72 inner pixels per accepted rigid item for this build. It is not a final texel-density decision; it is the explicit provisional size that fit both items after the measured hero occupancy and 4px dilation. An 80x80 trial placed the shield but rejected the sword because no second padded rectangle was free."
+  },
+  "hero": {
+    "source": "public/assets/hero/hero_lod1_6800.glb",
+    "sourceTriangles": 6800,
+    "occupancy": {
+      "occupiedPixels": 538828,
+      "uvBounds": [
+        [
+          0.0,
+          -8.106231689453125e-06
+        ],
+        [
+          1.0,
+          0.9998679757118225
+        ]
+      ]
+    }
+  },
+  "items": [
+    {
+      "id": "shield_ironwood",
+      "source": "public/assets/gear/shield_ironwood.glb",
+      "x": 213,
+      "y": 98,
+      "innerWidth": 72,
+      "innerHeight": 72,
+      "padding": 4,
+      "sourceTriangles": 311
+    },
+    {
+      "id": "sword_ironwood",
+      "source": "public/assets/gear/sword_ironwood.glb",
+      "x": 0,
+      "y": 108,
+      "innerWidth": 72,
+      "innerHeight": 72,
+      "padding": 4,
+      "sourceTriangles": 330
+    }
+  ],
+  "output": {
+    "glb": "public/assets/hero/hero_lod1_ironwood_atlas.glb",
+    "bytes": 760516,
+    "sha256": "ba2c7362f95e98bba7eb59dae9edea1da4c6d4e770b2c1f231f15d9c2c8226db",
+    "triangles": 7441,
+    "meshes": 3,
+    "primitives": 3,
+    "materials": 1,
+    "images": 1,
+    "image": {
+      "mimeType": "image/jpeg",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 189187
+    },
+    "gearUvBounds": {
+      "shield_ironwood": [
+        0.21192988753318787,
+        0.2820259630680084,
+        0.8300789594650269,
+        0.9003888368606567
+      ],
+      "sword_ironwood": [
+        0.0039073750376701355,
+        0.07388152927160263,
+        0.8203133344650269,
+        0.8906201720237732
+      ]
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "tier": 3,
+  "name": "Silverguard",
+  "note": "Sizes and offsets are in HERO WORLD units and were measured in tools/blender/fit_gear.py against the profile of the body at the height each piece sits, not against bounding boxes. The shield is still the Tier 2 Ironwood one; the ladder does not call for a new shield at Tier 3.",
+  "items": [
+    {
+      "name": "helmet",
+      "glb": "public/assets/gear/helmet_silverguard.glb",
+      "bone": "Head",
+      "worldHeight": 0.5,
+      "stretch": [
+        1,
+        1,
+        0.857
+      ],
+      "offset": [
+        0,
+        0.032,
+        0.265
+      ],
+      "why": "0.50 wide clears the skull's 0.444 at ear level (z 1.259). The Z squash to 0.857 is what makes it fit at all: at natural proportions the arch apex lands at z 1.32, below his eyes at 1.33. Squashed, the apex sits at 1.360 and the crown at 1.540, just over the head's 1.500."
+    },
+    {
+      "name": "shoulderL",
+      "glb": "public/assets/gear/shoulder_silverguard.glb",
+      "bone": "LeftArm",
+      "worldHeight": 0.21,
+      "stretch": [
+        1,
+        2.5,
+        1
+      ],
+      "offset": [
+        0.036,
+        0.008,
+        0.012
+      ]
+    },
+    {
+      "name": "shoulderR",
+      "glb": "public/assets/gear/shoulder_silverguard.glb",
+      "bone": "RightArm",
+      "worldHeight": 0.21,
+      "stretch": [
+        -1,
+        2.5,
+        1
+      ],
+      "offset": [
+        -0.036,
+        0.008,
+        0.012
+      ],
+      "why": "The SAME mesh as the left, mirrored by a negative X scale rather than generated twice. That saved a 15-credit generation and makes the pair symmetric by construction. A negative scale inverts winding order; it is safe here only because the material is doubleSided, which was checked in the GLB rather than assumed."
+    },
+    {
+      "name": "sword",
+      "glb": "public/assets/gear/sword_silverguard.glb",
+      "bone": "RightHand",
+      "worldHeight": 0.6,
+      "offset": [
+        0,
+        0,
+        0.176
+      ],
+      "why": "0.60 against the Ironwood sword's 0.47, so it reads as 0.400 of his height rather than 0.313. anchor 'grip' is load-bearing: the RightHand bone HEAD is the wrist, and anchoring there left the grip 0.0893 short of the palm with the crossguard lying across the forearm. The 90 degree Z rotation turns the guard front-to-back so it no longer spans the arm, dropping the sword's x-extent from 0.199 to 0.064.",
+      "anchor": "grip",
+      "rotationEuler": [
+        0,
+        0,
+        90
+      ]
+    },
+    {
+      "name": "shield",
+      "glb": "public/assets/gear/shield_ironwood.glb",
+      "bone": "LeftHand",
+      "worldHeight": 0.45,
+      "offset": [
+        0,
+        -0.12,
+        0
+      ],
+      "anchor": "grip",
+      "why": "anchor 'grip' moves it 0.0836 out to the palm. The same wrist-not-palm error affected the shield from Tier 2 onward; it was simply less visible on a disc than on a crossguard."
+    }
+  ]
+}

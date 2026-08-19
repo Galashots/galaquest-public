@@ -1,0 +1,4 @@
+{ "items": [
+  { "name": "sword",  "glb": "public/assets/gear/sword_ironwood.glb",  "bone": "RightHand", "worldHeight": 0.47, "rotationEuler": [0,0,0], "offset": [0,0,0.176] },
+  { "name": "shield", "glb": "public/assets/gear/shield_ironwood.glb", "bone": "LeftHand",  "worldHeight": 0.45, "rotationEuler": [0,0,0], "offset": [0,-0.12,0] }
+] }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GalaQuest Character Foundry"
+  short_description: "Guardrails for GalaQuest 3D character production"
+  default_prompt: "Use $galaquest-character-foundry to plan or review GalaQuest 3D character work against the repository contracts."

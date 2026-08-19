@@ -1,0 +1,36 @@
+GalaQuest
+Copyright (c) 2026 the GalaQuest authors. All rights reserved.
+
+LICENSING POSTURE
+-----------------
+
+This repository is published so the project can be read, discussed, tested and developed in the
+open. Publishing it does NOT place it in the public domain and does NOT grant a general licence to
+reuse it.
+
+No open-source licence has been granted for the source code at this time. All rights are reserved
+except where an individual file or asset family states otherwise. If you want to use part of this
+work, please open an issue and ask — the answer is likely yes, but it should be a decision rather
+than an assumption.
+
+THIRD-PARTY COMPONENTS
+----------------------
+
+Some components in this repository ARE covered by their own licences, and those licences govern
+those components regardless of the paragraph above:
+
+  * public/vendor/three.module.min.js and the loaders/utils beside it are three.js,
+    Copyright 2010-2024 Three.js Authors, MIT licensed. Their licence headers are intact and must
+    remain intact in any redistribution.
+
+  * Several environment and prop models derive from CC0 1.0 Universal asset packs. CC0 material may
+    be reused freely under CC0 terms.
+
+ASSETS ARE NOT COVERED BY THE SOURCE POSTURE
+--------------------------------------------
+
+Binary assets — characters, gear, props, textures — have mixed provenance. Some are CC0. Some are
+owner-created work generated under a paid third-party service plan and finished by hand. None of
+them are automatically licensed by anything in this file.
+
+See ASSET-LICENSES.md for the per-family breakdown before reusing any binary asset.

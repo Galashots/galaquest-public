@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>GalaQuest Runtime Slice</title>
+    <!-- Zero-network: a bare "no icon yet" declaration, not a real icon asset (Y/Task F1). Without
+         this, a browser with no <link rel="icon"> still auto-requests /favicon.ico and logs a 404 --
+         every runtime-test harness has carried a "cosmetic, ignore it" allowlist entry for exactly
+         this since Phase V. A transparent 1x1 data URI costs one request-free string, not a fetch. -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>">
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #182331; touch-action: none; overscroll-behavior: none; }
+      #game { position: relative; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #game-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+      /* Bottom CENTRE. It was bottom-right, chosen because the perf HUD spans the full width of a
+         390px phone and a top-left status line sat unreadable underneath it. The attack button now
+         claims the bottom-right — that corner is where the right thumb rests, so it belongs to the
+         primary action, not to a readout. Centre is the "lower" zone: least reachable, which is
+         exactly right for something you read and never press. */
+      #runtime-status {
+        position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%);
+        max-width: calc(100% - 17rem); padding: 0.4rem 0.6rem;
+        color: #fff; background: rgb(12 20 31 / 75%); border-radius: 0.35rem;
+        font: 700 0.8rem/1.2 system-ui, sans-serif; text-align: center;
+        touch-action: none; pointer-events: none;
+      }
+      /* Mirrors the stick: same size, same inset, opposite corner. Microsoft's touch-layout guidance,
+         drawn from over 200 streamed titles, reserves the right inner wheel for exactly ONE control —
+         the most frequent action — with a large hit area, and warns that thumbs cannot reach far
+         toward the centre of the screen. So: primary attack, big, out at the grip. */
+      #attack-button {
+        position: absolute; right: 1rem; bottom: 1rem; width: 112px; height: 112px;
+        display: grid; place-items: center;
+        border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%;
+        background: rgb(196 92 62 / 42%); color: #fff;
+        font: 800 1.05rem/1 system-ui, sans-serif; letter-spacing: 0.04em;
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        transition: transform 90ms ease-out, background-color 90ms ease-out;
+      }
+      #attack-button[data-pressed="true"] { background: rgb(226 122 84 / 78%); transform: scale(0.94); }
+      /* GP1: hidden, not merely disabled, while the Hero screen is open -- main.js's own onOpenChange
+         sets this, matched by the SAME frame-loop input gate (heroScreenOpen) that force-zeroes
+         movement and attack, so this is belt-and-braces the same way #attack-button[data-ready] is:
+         a visual promise checked by real logic, not the only thing enforcing it. */
+      #touch-stick[data-suspended="true"], #attack-button[data-suspended="true"] {
+        opacity: 0; pointer-events: none; transition: opacity 150ms ease-out;
+      }
+      /* Found by looking at a real capture (hero-screen-portrait-open.png): the slots row and
+         Aldric's speech bubble both sit centred in roughly the same vertical band, so opening Hero
+         while standing near an NPC read as the two fighting for the same space. #game carries
+         data-hero-screen-open (main.js's onOpenChange, same pattern as the button-suspend attributes
+         above) rather than putting this on #hero-screen itself, because keeper-speech/quest-objective
+         are EARLIER siblings in the DOM and a CSS sibling combinator only reaches forward. A full-
+         screen modal hiding transient background HUD text is standard, not a scope add -- the world
+         keeps simulating underneath (this is still non-blocking), only the text callouts pause. */
+      #game[data-hero-screen-open="true"] #keeper-speech,
+      #game[data-hero-screen-open="true"] #quest-objective,
+      #game[data-hero-screen-open="true"] #banner,
+      #game[data-hero-screen-open="true"] #hero-health,
+      #game[data-hero-screen-open="true"] #lantern-marks,
+      #game[data-hero-screen-open="true"] #loot-hud {
+        opacity: 0 !important; pointer-events: none !important;
+      }
+      /* GP3: the Village Board hides the identical set of transient HUD text, for the identical
+         reason -- a second full-screen overlay competing with keeper-speech/quest-objective for the
+         same on-screen space. Its own attribute rather than folding into [data-hero-screen-open]
+         above: the two screens are mutually exclusive (main.js closes one before opening the other),
+         but keeping each screen's own boolean keeps this rule readable from either screen's own
+         onOpenChange without one having to know the other's attribute name. */
+      #game[data-village-board-open="true"] #keeper-speech,
+      #game[data-village-board-open="true"] #quest-objective,
+      #game[data-village-board-open="true"] #banner,
+      #game[data-village-board-open="true"] #hero-health,
+      #game[data-village-board-open="true"] #lantern-marks,
+      #game[data-village-board-open="true"] #loot-hud {
+        opacity: 0 !important; pointer-events: none !important;
+      }
+      /* Greyed while the swing is on cooldown, so mashing it reads as "not yet" rather than "broken". */
+      #attack-button[data-ready="false"] { opacity: 0.45; }
+      /* A whiff reads differently from a hit without any text: nothing happens to the wolf (nothing
+         was struck), and the button the child's thumb is already on pulses a flat neutral grey
+         instead of its usual orange press colour. After data-pressed so it wins if a slow tap is
+         still down when the swing resolves -- see combat/feedback.js for the reasoning. Explicit
+         opacity: 1 because a miss always lands during the same cooldown window that dims the button
+         to 0.45 -- measured in tools/runtime-test/play-fight.mjs's fight-swing-miss.png capture,
+         where the grey was nearly invisible under that dimming until this line was added. A miss is
+         more informative than "not ready yet" and must read at full strength over it. */
+      #attack-button[data-feedback="miss"] { background: rgb(150 150 150 / 60%); opacity: 1; }
+      /* Hearts, not a bar: see combat/feedback.js for why. Same dark pill treatment as the other HUD
+         readouts so a red heart still reads against open sky. */
+      #hero-health {
+        position: absolute; top: 0.75rem; left: 0.75rem;
+        display: flex; gap: 0.15rem; align-items: center;
+        padding: 0.3rem 0.5rem; border-radius: 0.35rem;
+        background: rgb(12 20 31 / 75%);
+        font-size: 1.5rem; line-height: 1;
+        pointer-events: none; touch-action: none;
+      }
+      #hero-health .heart { color: rgb(255 255 255 / 25%); transition: color 120ms ease-out; }
+      #hero-health .heart[data-filled="true"] { color: #e0334f; }
+      #hero-health .heart::after { content: '\2665'; }
+      /* Beating a wolf gives a heart back (healTheStanding in combat/encounter.js). The refilled
+         heart lights on its own from renderHearts -- this makes the row ANNOUNCE it, because a child
+         watching a wolf dissolve eighteen metres away is not looking at the top-left corner. Green,
+         and scaling UP, so it cannot be confused with the red damage vignette, which is the other
+         thing that happens to the hearts and means the opposite. Fast in, slow out, the same shape
+         #hero-hurt-flash uses and for the same reason. */
+      #hero-health { transform-origin: left center; transition: transform 320ms ease-out, box-shadow 320ms ease-out; }
+      #hero-health[data-healing="true"] {
+        transform: scale(1.16);
+        box-shadow: 0 0 0.85rem 0.15rem rgb(126 226 138 / 75%);
+        transition: transform 90ms ease-out, box-shadow 90ms ease-out;
+      }
+      /* Lantern Marks, D4: three pips directly under the hearts, same dark-pill / same fill
+         convention (see combat/feedback.js's heartsForHp comment for why filled-icon-not-a-bar
+         suits a small fixed integer -- MARKS_TO_UNLOCK is 3, exactly like HERO_MAX_HP). Read-only
+         and out of touch-flow, so the touch-target-size rules elsewhere on this page do not apply.
+         Glyph is a plain filled dot, not a lantern pictogram: a placeholder shape like the six
+         audio recipes are placeholder sounds -- what it looks like is a later the owner-on-iPad call,
+         same as the growl and the other five. */
+      #lantern-marks {
+        position: absolute; top: calc(0.75rem + 2.5rem); left: 0.75rem;
+        display: flex; gap: 0.15rem; align-items: center;
+        padding: 0.3rem 0.5rem; border-radius: 0.35rem;
+        background: rgb(12 20 31 / 75%);
+        font-size: 1.1rem; line-height: 1;
+        pointer-events: none; touch-action: none;
+      }
+      #lantern-marks .mark { color: rgb(255 255 255 / 25%); transition: color 120ms ease-out; }
+      #lantern-marks .mark[data-filled="true"] { color: #f2b33d; }
+      #lantern-marks .mark::after { content: '\25CF'; }
+      /* GP2: coins and Wildwood Shards, same dark-pill/read-only/out-of-touch-flow treatment as
+         hero-health and lantern-marks -- this is the fourth member of the same top-left status
+         column, not a new visual language. Top-right rather than stacking under lantern-marks: that
+         corner already holds #perf-hud (debug-only, hidden by default) and #hero-button, both far
+         enough from the thumbs that a third small pill reads as one status cluster rather than
+         crowding the left side where the child's own health/marks live. Two glyphs, not one shared
+         "loot" icon -- a filled circle (coin) and a diamond (shard), the same silhouette difference
+         the physical pickups themselves use, so a glance at the HUD and a glance at the ground agree
+         on what a coin looks like versus what a shard looks like. Deliberately NOT updated the
+         instant a server snapshot says the count went up -- main.js only calls renderLootHud() once
+         a pickup's own attraction flight has actually arrived (world/lootPickups.js's `update()`
+         return value), which is the whole point of GP2's "HUD totals must not update before the
+         pickup reaches its collection endpoint" rule. */
+      #loot-hud {
+        position: absolute; top: calc(0.75rem + 52px + 0.5rem); right: 0.75rem;
+        display: flex; gap: 0.5rem; align-items: center;
+        padding: 0.3rem 0.55rem; border-radius: 0.35rem;
+        background: rgb(12 20 31 / 75%);
+        font: 700 1rem/1 system-ui, sans-serif; color: #fff;
+        pointer-events: none; touch-action: none;
+      }
+      #loot-hud .loot-count { display: inline-flex; align-items: center; gap: 0.3rem; }
+      #loot-hud .loot-icon { font-size: 1rem; line-height: 1; }
+      #loot-hud .loot-icon::after { content: '\25CF'; }
+      #loot-hud .loot-count[data-kind="shard"] .loot-icon { color: #b98be0; }
+      #loot-hud .loot-count[data-kind="shard"] .loot-icon::after { content: '\25C6'; }
+      #loot-hud .loot-count[data-kind="coin"] .loot-icon { color: #f2c14e; }
+      /* Same brief pop-and-settle the hearts row uses on a heal (#hero-health[data-healing]) -- a
+         number that merely changes value is easy to miss in a HUD corner; a number that visibly
+         pops is not. Reset by main.js the same way flashHeroHurt's timer is: a fresh setTimeout on
+         every arrival, so two pickups landing close together each get their own pop. */
+      #loot-hud .loot-count[data-popped="true"] { animation: loot-pop 260ms ease-out; }
+      @keyframes loot-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+      /* The standing objective. Sits directly under #lantern-marks (0.75 + 2.5 for the hearts row,
+         + 2.2 for the pips row), same pill treatment, same read-only/out-of-touch-flow rules. Left
+         aligned with the hearts and pips so the whole top-left corner reads as one status column. */
+      #quest-objective {
+        position: absolute; top: calc(0.75rem + 2.5rem + 2.2rem); left: 0.75rem;
+        max-width: min(20rem, calc(100% - 10rem));
+        padding: 0.3rem 0.55rem; border-radius: 0.35rem;
+        color: #fff; background: rgb(12 20 31 / 75%);
+        font: 700 0.9rem/1.25 system-ui, sans-serif;
+        opacity: 0; transition: opacity 220ms ease-out;
+        pointer-events: none; touch-action: none;
+      }
+      #quest-objective[data-shown="true"] { opacity: 1; }
+      /* The gap that mattered most: before this, a bitten hero got no feedback beyond a number in
+         the status line. A red glow at the screen EDGES -- the "damage vignette" convention, see
+         combat/feedback.js -- because it has to register without the child looking at the hearts in
+         the corner. Fast in, slower fade out: the [data-shown="true"] rule below overrides the base
+         transition so the rise reads as sudden and the decay reads as a fade. */
+      #hero-hurt-flash {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 55%, rgb(200 20 20 / 65%) 100%);
+        opacity: 0; transition: opacity 420ms ease-out;
+      }
+      #hero-hurt-flash[data-shown="true"] { opacity: 1; transition: opacity 40ms ease-in; }
+      /* W1: the keeper's line, kid-large text matching banner's own weight/size discipline (not
+         the smaller runtime-status pill -- this is read, not glanced at). Centred, but NOT in the
+         top row with hero-health/lantern-marks/perf-hud: a first version sat at top:0.75rem and
+         drive-village.mjs's own capture caught it sitting almost entirely BEHIND perf-hud's panel,
+         whose GPU string wraps to several lines and can span nearly the full width on a narrow
+         phone -- found the same "step back and look at the whole picture" way Phase V's ground.js
+         placeholder boxes were. 9rem clears every measured perf-hud height with margin and still
+         sits well above #banner's 22%, so the two can coexist without stacking. Hidden (opacity 0,
+         pointer-events none) far from the keeper; shown (and clickable, for the speaker button)
+         within KEEPER_WAVE_RADIUS_METERS -- see world/keeperSpeech.js's keeperSpeechState, the one
+         function that decides both. */
+      #keeper-speech {
+        position: absolute; top: 9rem; left: 50%; transform: translateX(-50%);
+        max-width: min(28rem, calc(100% - 12rem));
+        display: flex; align-items: center; gap: 0.6rem;
+        padding: 0.5rem 0.7rem; border-radius: 0.5rem;
+        background: rgb(12 20 31 / 85%); color: #fff;
+        font: 700 1.05rem/1.35 system-ui, sans-serif; text-align: left;
+        opacity: 0; transition: opacity 200ms ease-out; pointer-events: none;
+      }
+      #keeper-speech[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      #keeper-speech-body { flex: 1 1 auto; }
+      /* The name reads as a label, not as part of the sentence: smaller, warm, and on its own line
+         so the child's eye starts at the words they actually have to read. */
+      #keeper-speech-name {
+        display: block; color: #f2b33d; font-size: 0.78rem; letter-spacing: 0.06em;
+        text-transform: uppercase; margin-bottom: 0.15rem;
+      }
+      #keeper-speech-text { display: block; }
+      /* >=44px touch target, same discipline as #attack-button. A tap fires speechSynthesis.speak()
+         from inside its own click handler -- iOS Safari counts that tap itself as the user gesture,
+         so no separate unlock step is needed (see keeperSpeech.js's speakKeeperLine comment). */
+      #keeper-speech-speak {
+        flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+        border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%;
+        background: rgb(255 255 255 / 14%); color: #fff;
+        font-size: 1.3rem; line-height: 1; padding: 0;
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        transition: background-color 90ms ease-out;
+      }
+      #keeper-speech-speak[data-pressed="true"] { background: rgb(255 255 255 / 34%); }
+      /* Moved from top:22% to 68%, both steps found by looking at captures rather than by reasoning
+         about layout. At 22% the banner sat exactly across the Lantern Tree's canopy, so the one
+         moment the whole quest builds to announced itself by covering the thing you are meant to be
+         watching (moment-07-relight-t0800.png). 58% was better but still landed on the hero and the
+         wolf whenever the camera framed them low -- the Wildwood Gate capture caught it covering a
+         live fight (moment-14-wildwood-gate.png). 68% is below every framing of the hero seen so
+         far and still well above #runtime-status and both 112px thumb controls. */
+      #banner {
+        position: absolute; top: 68%; left: 50%; transform: translateX(-50%);
+        padding: 0.5rem 1.1rem; border-radius: 0.5rem;
+        color: #fff; background: rgb(12 20 31 / 82%);
+        font: 800 1.5rem/1.2 system-ui, sans-serif; text-align: center; white-space: nowrap;
+        opacity: 0; transition: opacity 220ms ease-out; pointer-events: none;
+      }
+      #banner[data-shown="true"] { opacity: 1; }
+      /* One per landed hit -- a wolf-hit was otherwise only visible as its spark dimming one notch,
+         readable if you already know to look, invisible mid-swing. #damage-numbers is a plain
+         inset:0 layer so children are positioned in the same pixel space main.js's projection maths
+         already targets (the game surface's own rect); the rise is transform, not top/left, so it
+         never fights the JS-set spawn position each one starts from. */
+      #damage-numbers { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .damage-number {
+        position: absolute; transform: translate(-50%, -50%);
+        color: #fff; font: 800 2rem/1 system-ui, sans-serif;
+        -webkit-text-stroke: 2px rgb(12 20 31 / 85%); paint-order: stroke fill;
+        text-shadow: 0 3px 4px rgb(0 0 0 / 55%), 0 0 12px rgb(255 82 82 / 70%);
+        opacity: 1; transition: transform 750ms ease-out, opacity 750ms ease-out;
+      }
+      .damage-number[data-rise="true"] { transform: translate(-50%, -260%); opacity: 0; }
+      @media (prefers-reduced-motion: reduce) {
+        #attack-button, #banner, #hero-hurt-flash, #hero-health, #hero-health .heart, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+      }
+      /* Y/Task F2: debug-only, hidden by default -- the GPU/frame-cost panel was competing with the
+         game and Keeper dialogue in every capture (found by looking at village-keeper-wave.png-style
+         shots, not assumed). data-debug follows this file's own [data-shown]/[data-filled] convention
+         for JS-driven visibility rather than a one-off display toggle. main.js sets it once at
+         startup from ?debug=1 in the URL -- normal child-facing play never has that param, so the
+         panel stays gone; a runtime-test harness that wants performance evidence in its own capture
+         opts in by navigating with it, same as any other query param. The element and its live
+         textContent updates keep running underneath either way (no test/harness parses this text
+         programmatically -- checked before hiding it -- so this only affects what a screenshot shows). */
+      #perf-hud { position: absolute; top: 0.75rem; right: 0.75rem; max-width: min(34rem, calc(100% - 2rem)); padding: 0.45rem 0.6rem; color: #fff; background: rgb(12 20 31 / 78%); border-radius: 0.35rem; white-space: pre-wrap; font: 600 0.7rem/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; pointer-events: none; touch-action: none; }
+      #perf-hud[data-debug="false"] { display: none; }
+      /* GP1: the Hero screen. Gold border/text throughout -- section 33's own colour doctrine,
+         "warm gold = reward/ownership" -- so it reads as the same visual family as an equip flourish
+         before a child ever opens it. Top-right, the same corner #perf-hud sits in (debug-hidden by
+         default, so that corner is otherwise empty during real play): out of the thumbs' way, same
+         44px+ touch-target discipline as #keeper-speech-speak. */
+      #hero-button {
+        position: absolute; top: 0.75rem; right: 0.75rem; width: 52px; height: 52px;
+        display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 75%); border-radius: 50%;
+        background: rgb(12 20 31 / 75%); color: #f2b33d;
+        font-size: 1.5rem; line-height: 1; padding: 0;
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        transition: background-color 90ms ease-out, transform 90ms ease-out;
+      }
+      #hero-button[aria-pressed="true"] { background: rgb(242 179 61 / 30%); transform: scale(0.94); }
+      /* The screen itself is NOT a solid overlay: pointer-events none on the container, auto only on
+         its own chrome (header/slots/list/card below). The centre stays clickable straight through
+         to #game, so the SAME cameraGesture already bound to #game (input/cameraGesture.js) keeps
+         working underneath -- dragging the empty middle rotates the live hero exactly like dragging
+         the world does, at whatever close distance main.js dollies the follow camera to while this
+         is open. That is GP1's "actual 3D equipped hero preview" (plan section 8): the running game
+         IS the preview, not a second WebGL context -- see main.js's own comment for why a second
+         renderer was rejected (iOS Safari's WebGL context ceiling, unnecessary risk on the testers'
+         actual iPads). */
+      /* The vignette (found by looking at a real capture): the Hero screen can open anywhere in the
+         world, so there is no fixed camera heading that guarantees a clean backdrop behind the
+         chrome -- a capture taken near the Lantern Tree showed its dark canopy sitting right behind
+         the slots row, reading as one confused shape. Darkening the EDGES while leaving the centre
+         (where the hero actually stands) clear reads correctly regardless of what world geometry is
+         back there, without needing to special-case any one location. Still pointer-events: none --
+         a painted background does not participate in hit-testing, so the drag-to-rotate gesture
+         underneath is untouched. */
+      #hero-screen {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 32%, rgb(12 20 31 / 62%) 100%);
+        opacity: 0; transition: opacity 180ms ease-out;
+      }
+      #hero-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      #hero-screen[data-shown="false"] { pointer-events: none; }
+      #hero-screen-header {
+        position: absolute; top: 0.75rem; left: 0.75rem; right: 4.25rem;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.4rem 0.7rem; border-radius: 0.5rem;
+        background: rgb(12 20 31 / 82%); color: #f2b33d;
+        font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
+        pointer-events: auto;
+      }
+      #hero-screen-close {
+        width: 36px; height: 36px; display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
+        background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
+      }
+      /* One box per slot, gold-ringed and named when filled, dim and lock-glyphed when GP1 has no
+         item to put there yet -- section 8's five slots, only Weapon interactive today. */
+      .hero-slot {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
+        width: 4.4rem; height: 4.4rem; padding: 0.3rem;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 0.6rem;
+        background: rgb(12 20 31 / 78%); color: #fff;
+        font: 700 0.68rem/1.1 system-ui, sans-serif; text-align: center;
+      }
+      .hero-slot::before {
+        content: ''; width: 1.4rem; height: 1.4rem; border-radius: 0.3rem;
+        background: var(--slot-swatch, transparent);
+      }
+      .hero-slot[data-locked="true"] {
+        border-color: rgb(255 255 255 / 22%); opacity: 0.55;
+      }
+      .hero-slot[data-locked="true"]::before { content: '🔒'; background: none; font-size: 1.1rem; }
+      .hero-slot-label { opacity: 0.8; }
+      #hero-slots {
+        position: absolute; display: flex; gap: 0.5rem; pointer-events: auto;
+      }
+      #hero-item-list {
+        display: flex; gap: 0.5rem; overflow-x: auto; pointer-events: auto;
+      }
+      .hero-item {
+        flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+        width: 4.6rem; padding: 0.4rem 0.3rem; border-radius: 0.5rem;
+        border: 2px solid rgb(255 255 255 / 30%); background: rgb(12 20 31 / 78%); color: #fff;
+        font: 700 0.65rem/1.15 system-ui, sans-serif; text-align: center;
+      }
+      .hero-item[data-selected="true"] { border-color: #f2b33d; background: rgb(242 179 61 / 18%); }
+      .hero-item-swatch {
+        display: block; width: 1.6rem; height: 1.6rem; border-radius: 0.35rem;
+        background: var(--slot-swatch, #8a97a6);
+      }
+      .hero-item-equipped-tag { color: #f2b33d; font-size: 0.55rem; letter-spacing: 0.05em; }
+      #hero-item-card {
+        display: flex; flex-direction: column; gap: 0.3rem; pointer-events: auto;
+        padding: 0.6rem 0.8rem; border-radius: 0.6rem;
+        background: rgb(12 20 31 / 85%); color: #fff;
+        min-width: 9rem;
+      }
+      #hero-item-name { font: 800 1rem/1.2 system-ui, sans-serif; }
+      #hero-item-damage { font: 700 0.85rem/1.2 system-ui, sans-serif; opacity: 0.85; }
+      /* Child-readable "1 -> 2 DAMAGE" (section 8's own worked example). Gold when it is an upgrade
+         -- the only comparison GP1 can produce, since a strictly worse owned weapon is not a case
+         this item table has, but the flag is read rather than assumed so that stays true by
+         construction, not by luck (see hero-screen.test.mjs's own sabotage case for this). */
+      #hero-item-compare { font: 800 1.15rem/1.2 system-ui, sans-serif; color: #f2b33d; min-height: 1.2em; }
+      #hero-equip-button {
+        margin-top: 0.2rem; padding: 0.5rem 0.8rem; border-radius: 0.4rem; border: none;
+        background: #f2b33d; color: #182331; font: 800 0.85rem/1 system-ui, sans-serif; letter-spacing: 0.05em;
+      }
+      #hero-equip-button[data-shown="false"] { display: none; }
+      #hero-equip-button:disabled { opacity: 0.5; }
+      /* Landscape (section 8): slots left, hero preview centre (the live game canvas, clear), item
+         list + card right. Portrait: header top, slots as a row just under it, list + card docked to
+         the bottom -- the preview lives in the clear band between, which is the tallest single gap
+         available once both docks are pinned to an edge instead of the middle. */
+      @media (orientation: landscape) {
+        #hero-slots { top: 4.5rem; left: 0.75rem; flex-direction: column; }
+        #hero-item-list { position: absolute; right: 0.75rem; bottom: 8.5rem; top: 4.5rem; flex-direction: column; width: 5.4rem; }
+        #hero-item-card { position: absolute; right: 0.75rem; bottom: 0.75rem; }
+      }
+      @media (orientation: portrait) {
+        #hero-slots { top: 4.5rem; left: 0.75rem; right: 0.75rem; flex-direction: row; justify-content: center; flex-wrap: wrap; }
+        #hero-item-list { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 6.5rem; }
+        #hero-item-card { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; }
+      }
+      /* GP3: the Village Board. Same gold-accent/dark-pill family as the Hero screen just above --
+         this repo's own "warm gold = reward/ownership" colour doctrine, so a child reads the two
+         menu buttons as one visual family before ever opening either. Positioned LEFT of #hero-button
+         rather than stacked under it (where #loot-hud already sits): two same-size circles sharing
+         the top-right row, a small gap apart. */
+      #village-board-button {
+        position: absolute; top: 0.75rem; right: calc(0.75rem + 52px + 0.5rem); width: 52px; height: 52px;
+        display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 75%); border-radius: 50%;
+        background: rgb(12 20 31 / 75%); color: #f2b33d;
+        font-size: 1.4rem; line-height: 1; padding: 0;
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        transition: background-color 90ms ease-out, transform 90ms ease-out;
+      }
+      #village-board-button[aria-pressed="true"] { background: rgb(242 179 61 / 30%); transform: scale(0.94); }
+      /* Same "pointer-events none on the container, auto only on its own chrome" split #hero-screen
+         uses -- the Board does not claim a live 3D preview the way Hero does (section 4: "the actual
+         3D Village is the reward", not this popup), so there is no camera dolly to keep click-through
+         working for, but the same vignette/backdrop treatment still reads correctly over any world
+         geometry the Board happens to open above. */
+      #village-board-screen {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 32%, rgb(12 20 31 / 62%) 100%);
+        opacity: 0; transition: opacity 180ms ease-out;
+      }
+      #village-board-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      #village-board-screen[data-shown="false"] { pointer-events: none; }
+      #village-board-header {
+        position: absolute; top: 0.75rem; left: 0.75rem; right: calc(0.75rem + 52px + 52px + 1rem);
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.4rem 0.7rem; border-radius: 0.5rem;
+        background: rgb(12 20 31 / 82%); color: #f2b33d;
+        font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
+        pointer-events: auto;
+      }
+      #village-board-close {
+        width: 36px; height: 36px; display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
+        background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
+      }
+      /* One box per node, section 4's own five. Gold-ringed when actionable (Workshop today), dim
+         when future ("not yet" communicated by treatment, not by a fabricated lock icon implying a
+         mechanic that does not exist yet -- see boardScreen.js's own comment on this). */
+      .village-board-node {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
+        width: 6rem; height: 4.6rem; padding: 0.4rem;
+        border: 2px solid rgb(242 179 61 / 40%); border-radius: 0.6rem;
+        background: rgb(12 20 31 / 78%); color: #fff;
+        font: 700 0.72rem/1.15 system-ui, sans-serif; text-align: center;
+      }
+      .village-board-node[data-kind="actionable"] { border-color: #f2b33d; }
+      .village-board-node[data-kind="future"] { border-color: rgb(255 255 255 / 22%); opacity: 0.6; }
+      .village-board-node[data-selected="true"] { background: rgb(242 179 61 / 18%); }
+      .village-board-node-label { display: block; font-weight: 800; }
+      .village-board-node-status { display: block; opacity: 0.75; font-size: 0.62rem; margin-top: 0.1rem; }
+      #village-board-nodes {
+        position: absolute; display: flex; gap: 0.5rem; flex-wrap: wrap; pointer-events: auto;
+      }
+      #village-board-detail {
+        pointer-events: auto;
+        padding: 0.6rem 0.8rem; border-radius: 0.6rem;
+        background: rgb(12 20 31 / 85%); color: #fff;
+        min-width: 11rem;
+        opacity: 0; transition: opacity 150ms ease-out;
+      }
+      #village-board-detail[data-shown="true"] { opacity: 1; }
+      #village-board-detail[data-shown="false"] { pointer-events: none; }
+      #village-board-detail-title { font: 800 1rem/1.2 system-ui, sans-serif; color: #f2b33d; margin-bottom: 0.2rem; }
+      #village-board-detail-what { font: 700 0.85rem/1.3 system-ui, sans-serif; opacity: 0.9; margin-bottom: 0.4rem; }
+      /* Section 4's own answer to "what does it cost?" -- clear coin/shard icons with owned/required
+         values, the SAME glyphs #loot-hud already draws (filled circle / diamond) so a glance at the
+         Board and a glance at the HUD agree on what a coin looks like versus a shard. */
+      #village-board-detail-cost { display: flex; gap: 0.8rem; margin-bottom: 0.5rem; }
+      #village-board-detail-cost[data-shown="false"] { display: none; }
+      .village-board-cost-icon { display: inline-flex; align-items: center; gap: 0.3rem; font: 800 1rem/1 system-ui, sans-serif; }
+      .village-board-cost-glyph { font-size: 1rem; line-height: 1; }
+      .village-board-cost-glyph::after { content: '\25CF'; }
+      .village-board-cost-coin .village-board-cost-glyph { color: #f2c14e; }
+      .village-board-cost-shard .village-board-cost-glyph { color: #b98be0; }
+      .village-board-cost-shard .village-board-cost-glyph::after { content: '\25C6'; }
+      /* Short (not enough owned yet) reads red rather than the base white -- instantly legible
+         without reading the numbers, the same "must not depend on paragraph reading" rule section 4
+         states outright. */
+      .village-board-cost-icon[data-short="true"] .village-board-cost-value { color: #ff8a8a; }
+      #village-board-detail-future {
+        font: 700 0.85rem/1.3 system-ui, sans-serif; opacity: 0.7; margin-bottom: 0.4rem;
+      }
+      #village-board-detail-future[data-shown="false"] { display: none; }
+      #village-board-upgrade-button {
+        padding: 0.5rem 0.8rem; border-radius: 0.4rem; border: none;
+        background: #f2b33d; color: #182331; font: 800 0.85rem/1 system-ui, sans-serif; letter-spacing: 0.05em;
+      }
+      #village-board-upgrade-button[data-shown="false"] { display: none; }
+      /* GP3-C1: the Workshop's own deliberate interaction prompt -- replaces the old "mere proximity
+         opens Hero/Gear" trigger (Sol's closeout review: that stole attention from the build ceremony
+         and only ever fired once). Same fixed-screen-position, driven-every-frame-from-state pattern
+         as #keeper-speech (main.js decides visible/hidden purely off village.workshopOwned, the
+         Workshop's own ceremony having finished, and WORKSHOP_INTERACT range -- this element only
+         paints it), positioned in its own vertical band so it can never collide with #keeper-speech
+         (9rem) or #banner (68%) if a child somehow lingers where both would be visible. Gold/dark-pill
+         family, matching #hero-button/#village-board-button's own "warm gold = reward/ownership"
+         doctrine -- the Workshop IS a reward location. */
+      #workshop-interact {
+        position: absolute; top: 80%; left: 50%; transform: translateX(-50%);
+        padding: 0.5rem 1rem; min-height: 44px;
+        display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 75%); border-radius: 0.6rem;
+        background: rgb(12 20 31 / 85%); color: #f2b33d;
+        font: 800 1rem/1.2 system-ui, sans-serif; letter-spacing: 0.05em; white-space: nowrap;
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        opacity: 0; transition: opacity 200ms ease-out; pointer-events: none;
+      }
+      #workshop-interact[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      #village-board-upgrade-button:disabled { opacity: 0.5; }
+      /* Same landscape/portrait split as the Hero screen: nodes docked to one edge, detail docked to
+         the opposite/bottom edge, leaving the tallest clear band available in each orientation. */
+      @media (orientation: landscape) {
+        #village-board-nodes { top: 4.5rem; left: 0.75rem; flex-direction: column; width: 6.5rem; }
+        #village-board-detail { position: absolute; right: 0.75rem; bottom: 0.75rem; top: 4.5rem; overflow-y: auto; }
+      }
+      @media (orientation: portrait) {
+        #village-board-nodes { top: 4.5rem; left: 0.75rem; right: 0.75rem; justify-content: center; }
+        #village-board-detail { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; }
+      }
+      #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 112px; height: 112px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
+      #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / 72%); transform: translate(-50%, -50%); pointer-events: none; }
+      /* RUNNING. younger players told us at the first child playtest that their character moved too slowly,
+         and the most likely reason is that nothing in this game ever said a harder push was faster
+         -- the only feedback for crossing into a run was the hero going faster, which you cannot
+         notice if you never crossed. The ring lights and the knob swells under the thumb that is
+         already there and already being looked at (input/touch.js sets data-run). Warm, not white,
+         so it cannot be mistaken for the plain resting stick at a glance. */
+      #touch-stick { transition: border-color 90ms ease-out, box-shadow 90ms ease-out; }
+      #touch-stick[data-run="true"] { border-color: rgb(255 208 130 / 95%); box-shadow: 0 0 0.8rem 0.1rem rgb(255 190 96 / 55%); }
+      #touch-stick-knob { transition: width 90ms ease-out, height 90ms ease-out, background-color 90ms ease-out; }
+      #touch-stick[data-run="true"] #touch-stick-knob { width: 54px; height: 54px; background: rgb(255 224 170 / 92%); }
+    </style>
+  </head>
+  <body>
+    <main id="game" aria-label="GalaQuest runtime slice">
+      <canvas id="game-canvas" aria-label="GalaQuest game view"></canvas>
+      <div id="hero-hurt-flash" aria-hidden="true" data-shown="false"></div>
+      <!-- Floating damage numbers. Decorative only -- the wolf's own spark and hp already carry the
+           real state, this is juice on top of it -- so aria-hidden, same as the hurt flash above.
+           Populated/emptied by main.js's popDamageNumber(); see screenProjection.js for the maths. -->
+      <div id="damage-numbers" aria-hidden="true"></div>
+      <!-- Three spans: matches HERO_MAX_HP in combat/encounter.js. feedback.test.mjs asserts that,
+           so this drifting out of sync with a future HERO_MAX_HP change fails loudly rather than
+           quietly under- or over-drawing hearts. -->
+      <div id="hero-health" role="status" aria-live="polite" aria-label="Hero health">
+        <span class="heart" data-filled="true"></span>
+        <span class="heart" data-filled="true"></span>
+        <span class="heart" data-filled="true"></span>
+      </div>
+      <!-- Three spans: matches MARKS_TO_UNLOCK in rewards/marks.js. test/rewards-hud.test.mjs
+           asserts that, the same guard feedback.test.mjs already runs for the hearts above. -->
+      <div id="lantern-marks" role="status" aria-live="polite" aria-label="Lantern marks">
+        <span class="mark" data-filled="false"></span>
+        <span class="mark" data-filled="false"></span>
+        <span class="mark" data-filled="false"></span>
+      </div>
+      <!-- GP2: coins and Wildwood Shards. See this element's own CSS comment for why it lives here,
+           top-right, rather than stacked into the left-hand status column. -->
+      <div id="loot-hud" role="status" aria-live="polite" aria-label="Coins and Wildwood Shards">
+        <span class="loot-count" data-kind="coin" data-popped="false">
+          <span class="loot-icon" aria-hidden="true"></span><span id="coin-count">0</span>
+        </span>
+        <span class="loot-count" data-kind="shard" data-popped="false">
+          <span class="loot-icon" aria-hidden="true"></span><span id="shard-count">0</span>
+        </span>
+      </div>
+      <!-- What to do next, always on screen while there is something to do. Under the pips, in the
+           same dark-pill family, because it answers the question the pips raise ("one of three
+           WHAT?"). world/quest.js decides the text; main.js only paints it. -->
+      <div id="quest-objective" role="status" aria-live="polite" data-shown="false"></div>
+      <!-- GP3-C1: the Workshop's own deliberate interact prompt. Hidden by default, shown only while
+           the built Workshop's own ceremony has finished AND the hero is within WORKSHOP_INTERACT's
+           radius (main.js decides both every frame) -- tapping it opens the existing Hero/Gear screen,
+           repeatably, same as #hero-button. -->
+      <button id="workshop-interact" type="button" data-shown="false">🛠 GEAR</button>
+      <!-- W1: the keeper's line. Hidden by default (data-shown="false"), driven every frame from
+           world/keeperSpeech.js's keeperSpeechState -- proximity, unlock state and show/hide are
+           all decided there, not here. main.js stops the speaker button's own pointerdown from
+           bubbling to #game, so a tap on it is never mistaken for the start of a camera drag
+           (input/cameraGesture.js listens on #game itself and has no other veto for this button). -->
+      <div id="keeper-speech" role="status" aria-live="polite" data-shown="false">
+        <div id="keeper-speech-body">
+          <!-- The speaker's own row. It used to be the first six words of every line, which on a
+               768px viewport pushed a the younger bracket reader's actual sentence onto a fourth wrapped line
+               and made the read-aloud button say "Keeper Aldric" before every single utterance.
+               main.js fills it from keeperSpeech.js's KEEPER_NAME. -->
+          <span id="keeper-speech-name"></span>
+          <span id="keeper-speech-text"></span>
+        </div>
+        <button id="keeper-speech-speak" type="button" aria-label="Hear this line aloud">🔊</button>
+      </div>
+      <div id="runtime-status" role="status">loading hero…</div>
+      <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
+      <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
+      <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
+      <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
+      <!-- GP1: the Hero screen. aria-pressed mirrors data-shown on #hero-screen -- one boolean, two
+           readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/
+           attack thumb zones, not a second stick or attack surface. -->
+      <button id="hero-button" type="button" aria-label="Hero" aria-pressed="false">🗡</button>
+      <div id="hero-screen" role="dialog" aria-modal="true" aria-label="Hero" data-shown="false">
+        <div id="hero-screen-header">
+          <span id="hero-screen-title">HERO</span>
+          <button id="hero-screen-close" type="button" aria-label="Close Hero screen">✕</button>
+        </div>
+        <!-- Five slots, always. Populated/locked by progression/heroScreen.js's renderSlots -- see
+             its own header comment for why only the first (Weapon) is interactive in GP1. -->
+        <div id="hero-slots">
+          <div class="hero-slot" data-slot="weapon"><span class="hero-slot-name hero-slot-label"></span></div>
+          <div class="hero-slot" data-slot="shield" data-locked="true"><span class="hero-slot-label">Shield</span></div>
+          <div class="hero-slot" data-slot="helmet" data-locked="true"><span class="hero-slot-label">Helmet</span></div>
+          <div class="hero-slot" data-slot="shoulders" data-locked="true"><span class="hero-slot-label">Shoulders</span></div>
+          <div class="hero-slot" data-slot="chest" data-locked="true"><span class="hero-slot-label">Chest</span></div>
+        </div>
+        <!-- Owned-item strip. Rebuilt per render() by progression/heroScreen.js -- both v0 items
+             ship owned (progression/items.js), so this always shows the Starter Sword and the
+             Wildwood Blade side by side, ahead of GP9's real reward ceremony. -->
+        <div id="hero-item-list" role="listbox" aria-label="Owned weapons"></div>
+        <div id="hero-item-card">
+          <div id="hero-item-name"></div>
+          <div id="hero-item-damage"></div>
+          <div id="hero-item-compare"></div>
+          <button id="hero-equip-button" type="button" data-shown="false">EQUIP</button>
+        </div>
+      </div>
+      <!-- GP3: the Village Board -- a strategic popup map, not an economy spreadsheet (see
+           village/boardScreen.js's own header). Same aria-pressed/data-shown pairing as the Hero
+           button/screen above. -->
+      <button id="village-board-button" type="button" aria-label="Village Board" aria-pressed="false">🗺</button>
+      <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false">
+        <div id="village-board-header">
+          <span id="village-board-title">VILLAGE</span>
+          <button id="village-board-close" type="button" aria-label="Close Village Board">✕</button>
+        </div>
+        <!-- Five nodes, always -- the brief's own fixed list (section 4). Populated by
+             village/boardScreen.js's renderNodes; only Workshop opens a real detail state below. -->
+        <div id="village-board-nodes" role="listbox" aria-label="Village nodes">
+          <button class="village-board-node" type="button" data-node="lantern-tree" data-kind="current">
+            <span class="village-board-node-label">Lantern Tree</span>
+            <span class="village-board-node-status"></span>
+          </button>
+          <button class="village-board-node" type="button" data-node="workshop" data-kind="actionable">
+            <span class="village-board-node-label">Workshop</span>
+            <span class="village-board-node-status"></span>
+          </button>
+          <button class="village-board-node" type="button" data-node="lantern-library" data-kind="future">
+            <span class="village-board-node-label">Lantern Library</span>
+            <span class="village-board-node-status"></span>
+          </button>
+          <button class="village-board-node" type="button" data-node="ranger-lodge" data-kind="future">
+            <span class="village-board-node-label">Ranger Lodge</span>
+            <span class="village-board-node-status"></span>
+          </button>
+          <button class="village-board-node" type="button" data-node="garden-farm" data-kind="future">
+            <span class="village-board-node-label">Garden &amp; Farm</span>
+            <span class="village-board-node-status"></span>
+          </button>
+        </div>
+        <!-- Workshop's own detail state (section 4: "what is it / what changes / what does it
+             cost"). Populated/shown by village/boardScreen.js's renderDetail; hidden entirely
+             (data-shown="false") whenever nothing actionable is selected. -->
+        <div id="village-board-detail" data-shown="false">
+          <div id="village-board-detail-title"></div>
+          <div id="village-board-detail-what"></div>
+          <div id="village-board-detail-cost" data-shown="false">
+            <span class="village-board-cost-icon village-board-cost-coin" data-kind="coin">
+              <span class="village-board-cost-glyph" aria-hidden="true"></span>
+              <span class="village-board-cost-value"></span>
+            </span>
+            <span class="village-board-cost-icon village-board-cost-shard" data-kind="shard">
+              <span class="village-board-cost-glyph" aria-hidden="true"></span>
+              <span class="village-board-cost-value"></span>
+            </span>
+          </div>
+          <div id="village-board-detail-future" data-shown="false">Not yet.</div>
+          <button id="village-board-upgrade-button" type="button" data-shown="false">UPGRADE</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

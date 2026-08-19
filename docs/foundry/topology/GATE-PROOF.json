@@ -1,0 +1,887 @@
+{
+  "blenderVersion": "4.2.23 LTS",
+  "baselineClean": true,
+  "fixtures": [
+    "torus",
+    "arm_segment"
+  ],
+  "baselines": {
+    "torus": {
+      "G1": {
+        "id": "G1",
+        "passed": true,
+        "summary": "closed and manifold",
+        "boundaryEdges": [],
+        "edgesWithThreeOrMoreFaces": [],
+        "wireEdges": [],
+        "looseVerts": []
+      },
+      "G2": {
+        "id": "G2",
+        "passed": true,
+        "summary": "no zero-area faces",
+        "faces": []
+      },
+      "G3": {
+        "id": "G3",
+        "passed": true,
+        "summary": "no doubled verts",
+        "positions": []
+      },
+      "G4": {
+        "id": "G4",
+        "passed": true,
+        "summary": "normals consistent",
+        "faces": []
+      },
+      "G5": {
+        "id": "G5",
+        "passed": true,
+        "summary": "no n-gons",
+        "faces": []
+      },
+      "G6": {
+        "id": "G6",
+        "passed": true,
+        "summary": "no self-intersection",
+        "facePairs": []
+      },
+      "G7": {
+        "id": "G7",
+        "passed": true,
+        "summary": "quad ratio 1.0000 over 288 faces, 0 triangles all rigid",
+        "faceCounts": {
+          "4": 288
+        },
+        "quadRatio": 1.0,
+        "triangles": 0,
+        "trianglesTouchingBlendedWeights": [],
+        "declaredStaticTriangles": []
+      },
+      "G8": {
+        "id": "G8",
+        "passed": true,
+        "summary": "1 declared joint loops are closed cycles at blended weights",
+        "loops": {
+          "TorusJoint": {
+            "verts": 12,
+            "cycleComponents": 1,
+            "verticesNotDegreeTwo": [],
+            "verticesWithoutBlendedWeights": [],
+            "missingIndices": []
+          }
+        },
+        "jointsTheWeightsImply": [
+          {
+            "bones": [
+              "DEF_Neck",
+              "DEF_Spine"
+            ],
+            "sharedVerts": 12
+          }
+        ],
+        "note": "The bone pairs are recorded, not gated. An undeclared joint shows up here without this gate inventing a quota for how many loops a region owes."
+      },
+      "G9": {
+        "id": "G9",
+        "passed": true,
+        "summary": "no poles on or beside any declared joint loop",
+        "zones": {
+          "TorusJoint": {
+            "zoneVerts": 36,
+            "poles": []
+          }
+        }
+      },
+      "G10": {
+        "id": "G10",
+        "passed": true,
+        "summary": "0 three-poles, 0 five-poles, 0 other, 0 of them in a joint zone",
+        "polesByValence": {},
+        "polesInJointZones": [],
+        "threePolesInJointZones": [],
+        "note": "Counts outside joint zones are recorded, not gated. No ratio threshold is invented here."
+      },
+      "G11": {
+        "id": "G11",
+        "passed": true,
+        "summary": "arm bones are roughly horizontal",
+        "bones": [
+          {
+            "bone": "DEF_UpperArm_L",
+            "alignmentToWorldX": 1.0
+          },
+          {
+            "bone": "DEF_UpperArm_R",
+            "alignmentToWorldX": 1.0
+          }
+        ],
+        "heuristic": true,
+        "note": "A-pose deforms shoulders better than T-pose. T-pose is kept for retargeting; see QUALIFICATION.md."
+      },
+      "G12": {
+        "id": "G12",
+        "passed": true,
+        "summary": "single Root bone at the origin",
+        "rootNames": [
+          "Root"
+        ]
+      },
+      "G13": {
+        "id": "G13",
+        "passed": true,
+        "summary": "every bone carries a layer prefix",
+        "offenders": []
+      },
+      "G14": {
+        "id": "G14",
+        "passed": true,
+        "summary": "6 deform bones, contract expects 6",
+        "deformBones": [
+          "DEF_Clavicle_L",
+          "DEF_Head",
+          "DEF_Neck",
+          "DEF_Spine",
+          "DEF_UpperArm_L",
+          "DEF_UpperArm_R"
+        ],
+        "expected": 6,
+        "regionShareNote": ""
+      },
+      "G15": {
+        "id": "G15",
+        "passed": true,
+        "summary": "deform flags match the DEF_ prefix"
+      },
+      "G16": {
+        "id": "G16",
+        "passed": true,
+        "summary": "armature scale is unit",
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "G17": {
+        "id": "G17",
+        "passed": true,
+        "summary": "every vertex is weighted",
+        "verts": []
+      },
+      "G18": {
+        "id": "G18",
+        "passed": true,
+        "summary": "max 2 influences per vertex, cap is 4",
+        "cap": 4,
+        "maxObserved": 2,
+        "offenders": [],
+        "note": "Three.js drops the fifth influence silently. This gate is the only thing that notices."
+      },
+      "G19": {
+        "id": "G19",
+        "passed": true,
+        "summary": "weights normalised",
+        "epsilon": 0.0001,
+        "offenders": []
+      },
+      "G20": {
+        "id": "G20",
+        "passed": true,
+        "summary": "all names are export-safe",
+        "offenders": []
+      },
+      "G21": {
+        "id": "G21",
+        "passed": true,
+        "summary": "one material, one atlas within budget",
+        "materials": [
+          "HeroAtlas"
+        ],
+        "textures": {
+          "HeroAtlas": [
+            1024,
+            1024
+          ]
+        },
+        "maxAtlasPx": 1024
+      },
+      "G22": {
+        "id": "G22",
+        "passed": true,
+        "summary": "all materials round-trip to glTF",
+        "offenders": [],
+        "note": "Blender's viewport renders these fine. The GLB will not."
+      },
+      "G24": {
+        "id": "G24",
+        "passed": true,
+        "summary": "every mesh has UVs",
+        "meshes": []
+      },
+      "G26": {
+        "id": "G26",
+        "passed": true,
+        "summary": "no shape keys, so vertex order is still free to change",
+        "meshes": [],
+        "note": "Not a prohibition on shape keys. It records that geometry must be frozen before they exist."
+      }
+    },
+    "arm_segment": {
+      "G1": {
+        "id": "G1",
+        "passed": true,
+        "summary": "closed and manifold",
+        "boundaryEdges": [],
+        "edgesWithThreeOrMoreFaces": [],
+        "wireEdges": [],
+        "looseVerts": []
+      },
+      "G2": {
+        "id": "G2",
+        "passed": true,
+        "summary": "no zero-area faces",
+        "faces": []
+      },
+      "G3": {
+        "id": "G3",
+        "passed": true,
+        "summary": "no doubled verts",
+        "positions": []
+      },
+      "G4": {
+        "id": "G4",
+        "passed": true,
+        "summary": "normals consistent",
+        "faces": []
+      },
+      "G5": {
+        "id": "G5",
+        "passed": true,
+        "summary": "no n-gons",
+        "faces": []
+      },
+      "G6": {
+        "id": "G6",
+        "passed": true,
+        "summary": "no self-intersection",
+        "facePairs": []
+      },
+      "G7": {
+        "id": "G7",
+        "passed": true,
+        "summary": "quad ratio 0.7500 over 128 faces, 32 triangles all rigid",
+        "faceCounts": {
+          "3": 32,
+          "4": 96
+        },
+        "quadRatio": 0.75,
+        "triangles": 32,
+        "trianglesTouchingBlendedWeights": [],
+        "declaredStaticTriangles": [
+          "CapFans"
+        ]
+      },
+      "G8": {
+        "id": "G8",
+        "passed": true,
+        "summary": "1 declared joint loops are closed cycles at blended weights",
+        "loops": {
+          "Elbow_L": {
+            "verts": 16,
+            "cycleComponents": 1,
+            "verticesNotDegreeTwo": [],
+            "verticesWithoutBlendedWeights": [],
+            "missingIndices": []
+          }
+        },
+        "jointsTheWeightsImply": [
+          {
+            "bones": [
+              "DEF_Forearm_L",
+              "DEF_UpperArm_L"
+            ],
+            "sharedVerts": 16
+          }
+        ],
+        "note": "The bone pairs are recorded, not gated. An undeclared joint shows up here without this gate inventing a quota for how many loops a region owes."
+      },
+      "G9": {
+        "id": "G9",
+        "passed": true,
+        "summary": "no poles on or beside any declared joint loop",
+        "zones": {
+          "Elbow_L": {
+            "zoneVerts": 48,
+            "poles": []
+          }
+        }
+      },
+      "G10": {
+        "id": "G10",
+        "passed": true,
+        "summary": "0 three-poles, 0 five-poles, 2 other, 0 of them in a joint zone",
+        "polesByValence": {
+          "16": 2
+        },
+        "polesInJointZones": [],
+        "threePolesInJointZones": [],
+        "note": "Counts outside joint zones are recorded, not gated. No ratio threshold is invented here."
+      },
+      "G11": {
+        "id": "G11",
+        "passed": true,
+        "summary": "arm bones are roughly horizontal",
+        "bones": [
+          {
+            "bone": "DEF_UpperArm_L",
+            "alignmentToWorldX": 1.0
+          }
+        ],
+        "heuristic": true,
+        "note": "A-pose deforms shoulders better than T-pose. T-pose is kept for retargeting; see QUALIFICATION.md."
+      },
+      "G12": {
+        "id": "G12",
+        "passed": true,
+        "summary": "single Root bone at the origin",
+        "rootNames": [
+          "Root"
+        ]
+      },
+      "G13": {
+        "id": "G13",
+        "passed": true,
+        "summary": "every bone carries a layer prefix",
+        "offenders": []
+      },
+      "G14": {
+        "id": "G14",
+        "passed": true,
+        "summary": "2 deform bones, contract expects 2",
+        "deformBones": [
+          "DEF_Forearm_L",
+          "DEF_UpperArm_L"
+        ],
+        "expected": 2,
+        "regionShareNote": ""
+      },
+      "G15": {
+        "id": "G15",
+        "passed": true,
+        "summary": "deform flags match the DEF_ prefix"
+      },
+      "G16": {
+        "id": "G16",
+        "passed": true,
+        "summary": "armature scale is unit",
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "G17": {
+        "id": "G17",
+        "passed": true,
+        "summary": "every vertex is weighted",
+        "verts": []
+      },
+      "G18": {
+        "id": "G18",
+        "passed": true,
+        "summary": "max 2 influences per vertex, cap is 4",
+        "cap": 4,
+        "maxObserved": 2,
+        "offenders": [],
+        "note": "Three.js drops the fifth influence silently. This gate is the only thing that notices."
+      },
+      "G19": {
+        "id": "G19",
+        "passed": true,
+        "summary": "weights normalised",
+        "epsilon": 0.0001,
+        "offenders": []
+      },
+      "G20": {
+        "id": "G20",
+        "passed": true,
+        "summary": "all names are export-safe",
+        "offenders": []
+      },
+      "G21": {
+        "id": "G21",
+        "passed": true,
+        "summary": "one material, one atlas within budget",
+        "materials": [
+          "HeroAtlas"
+        ],
+        "textures": {
+          "HeroAtlas": [
+            1024,
+            1024
+          ]
+        },
+        "maxAtlasPx": 1024
+      },
+      "G22": {
+        "id": "G22",
+        "passed": true,
+        "summary": "all materials round-trip to glTF",
+        "offenders": [],
+        "note": "Blender's viewport renders these fine. The GLB will not."
+      },
+      "G24": {
+        "id": "G24",
+        "passed": true,
+        "summary": "every mesh has UVs",
+        "meshes": []
+      },
+      "G26": {
+        "id": "G26",
+        "passed": true,
+        "summary": "no shape keys, so vertex order is still free to change",
+        "meshes": [],
+        "note": "Not a prohibition on shape keys. It records that geometry must be frozen before they exist."
+      }
+    }
+  },
+  "mutationsRun": true,
+  "gatesImplemented": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7",
+    "G8",
+    "G9",
+    "G10",
+    "G11",
+    "G12",
+    "G13",
+    "G14",
+    "G15",
+    "G16",
+    "G17",
+    "G18",
+    "G19",
+    "G20",
+    "G21",
+    "G22",
+    "G24",
+    "G26"
+  ],
+  "gatesNotCheckedHere": {
+    "G23": "export_apply=False is an argument to the export call, so it is proven when the export step exists.",
+    "G25": "'.blend is committed' is a repository fact, checked by the build script, not by bpy.",
+    "G27": "Determinism needs two real builds to compare, so it is proven by the build script."
+  },
+  "flippedBy": {
+    "G1": [
+      "delete_a_face",
+      "add_a_loose_vertex",
+      "duplicate_a_vertex"
+    ],
+    "G2": [
+      "collapse_a_face_to_a_line"
+    ],
+    "G3": [
+      "collapse_a_face_to_a_line",
+      "duplicate_a_vertex",
+      "push_a_vertex_through_the_far_wall"
+    ],
+    "G4": [
+      "flip_one_face"
+    ],
+    "G5": [
+      "dissolve_an_edge_into_an_ngon",
+      "dissolve_a_vertex_on_the_joint_loop"
+    ],
+    "G6": [
+      "push_a_vertex_through_the_far_wall"
+    ],
+    "G7": [
+      "bleed_weights_into_a_cap_triangle",
+      "stop_documenting_the_static_triangles",
+      "split_a_quad_touching_the_joint_loop"
+    ],
+    "G8": [
+      "declare_a_joint_loop_in_rigid_geometry",
+      "break_the_declared_loop_into_an_arc",
+      "declare_no_joint_loops_at_all",
+      "dissolve_a_vertex_on_the_joint_loop"
+    ],
+    "G9": [
+      "declare_no_joint_loops_at_all",
+      "split_a_quad_touching_the_joint_loop",
+      "dissolve_a_vertex_on_the_joint_loop"
+    ],
+    "G10": [
+      "dissolve_a_vertex_on_the_joint_loop"
+    ],
+    "G11": [
+      "droop_the_arm_out_of_T_pose",
+      "rename_the_arms_unrecognisably"
+    ],
+    "G12": [
+      "rename_the_root_bone",
+      "move_the_root_bone_to_hip_height",
+      "add_a_second_root_bone"
+    ],
+    "G13": [
+      "add_a_Socket_bone_with_no_layer_prefix"
+    ],
+    "G14": [
+      "add_an_extra_deform_bone",
+      "clear_a_deform_flag"
+    ],
+    "G15": [
+      "clear_a_deform_flag"
+    ],
+    "G16": [
+      "scale_the_armature"
+    ],
+    "G17": [
+      "add_a_loose_vertex",
+      "duplicate_a_vertex",
+      "clear_a_deform_flag",
+      "unweight_a_vertex"
+    ],
+    "G18": [
+      "give_a_vertex_five_influences"
+    ],
+    "G19": [
+      "unnormalise_a_vertex_weight"
+    ],
+    "G20": [
+      "use_an_unsafe_object_name"
+    ],
+    "G21": [
+      "add_a_second_material",
+      "double_the_atlas_resolution"
+    ],
+    "G22": [
+      "add_a_Color_Ramp_node"
+    ],
+    "G24": [
+      "remove_the_UV_layer"
+    ],
+    "G26": [
+      "add_a_shape_key"
+    ]
+  },
+  "mutations": [
+    {
+      "mutation": "delete_a_face",
+      "targetGate": "G1",
+      "fixture": "torus",
+      "why": "a hole left by a bad boolean or a stray delete",
+      "targetFlipped": true,
+      "targetSummary": "4 boundary edges, 0 edges shared by 3+ faces, 0 wire edges, 0 loose verts",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_a_loose_vertex",
+      "targetGate": "G1",
+      "fixture": "torus",
+      "why": "left over from modelling; exports as a stray vertex",
+      "targetFlipped": true,
+      "targetSummary": "0 boundary edges, 0 edges shared by 3+ faces, 0 wire edges, 1 loose verts",
+      "collateralGates": [
+        "G17"
+      ]
+    },
+    {
+      "mutation": "collapse_a_face_to_a_line",
+      "targetGate": "G2",
+      "fixture": "torus",
+      "why": "a face squashed flat; produces NaN normals",
+      "targetFlipped": true,
+      "targetSummary": "1 zero-area faces",
+      "collateralGates": [
+        "G3"
+      ]
+    },
+    {
+      "mutation": "duplicate_a_vertex",
+      "targetGate": "G3",
+      "fixture": "torus",
+      "why": "merging two halves without merging by distance",
+      "targetFlipped": true,
+      "targetSummary": "1 positions with more than one vert",
+      "collateralGates": [
+        "G1",
+        "G17"
+      ]
+    },
+    {
+      "mutation": "flip_one_face",
+      "targetGate": "G4",
+      "fixture": "torus",
+      "why": "reads as a hole in the character at runtime",
+      "targetFlipped": true,
+      "targetSummary": "1 faces have inverted normals",
+      "collateralGates": []
+    },
+    {
+      "mutation": "dissolve_an_edge_into_an_ngon",
+      "targetGate": "G5",
+      "fixture": "torus",
+      "why": "n-gons triangulate unpredictably on export",
+      "targetFlipped": true,
+      "targetSummary": "1 faces with more than 4 verts",
+      "collateralGates": []
+    },
+    {
+      "mutation": "push_a_vertex_through_the_far_wall",
+      "targetGate": "G6",
+      "fixture": "torus",
+      "why": "geometry through itself",
+      "targetFlipped": true,
+      "targetSummary": "23 intersecting face pairs",
+      "collateralGates": [
+        "G3"
+      ]
+    },
+    {
+      "mutation": "bleed_weights_into_a_cap_triangle",
+      "targetGate": "G7",
+      "fixture": "arm_segment",
+      "why": "weight painting escaping a rigid cap, so its triangles start to deform",
+      "targetFlipped": true,
+      "targetSummary": "16 triangles have a vertex with blended weights",
+      "collateralGates": []
+    },
+    {
+      "mutation": "stop_documenting_the_static_triangles",
+      "targetGate": "G7",
+      "fixture": "arm_segment",
+      "why": "the triangles are still rigid, but 'documented' is half the gate",
+      "targetFlipped": true,
+      "targetSummary": "32 triangles exist but the manifest declares no static triangles",
+      "collateralGates": []
+    },
+    {
+      "mutation": "declare_a_joint_loop_in_rigid_geometry",
+      "targetGate": "G8",
+      "fixture": "torus",
+      "why": "the gaming move: park the declaration somewhere harmless",
+      "targetFlipped": true,
+      "targetSummary": "ParkedLoop has 12 vertices with no blended weights, so it is not at a joint",
+      "collateralGates": []
+    },
+    {
+      "mutation": "break_the_declared_loop_into_an_arc",
+      "targetGate": "G8",
+      "fixture": "torus",
+      "why": "a declaration that is a bag of vertices, not a closed loop",
+      "targetFlipped": true,
+      "targetSummary": "TorusJoint is not a closed cycle: 2 vertices are not degree 2",
+      "collateralGates": []
+    },
+    {
+      "mutation": "declare_no_joint_loops_at_all",
+      "targetGate": "G9",
+      "fixture": "torus",
+      "why": "nothing to check: a gate with no input must fail, not pass",
+      "targetFlipped": true,
+      "targetSummary": "the manifest declares no joint loops, so there are no zones to check. Reported as a failure on purpose.",
+      "collateralGates": [
+        "G8"
+      ]
+    },
+    {
+      "mutation": "split_a_quad_touching_the_joint_loop",
+      "targetGate": "G9",
+      "fixture": "torus",
+      "why": "a pole exactly where the surface has to stretch",
+      "targetFlipped": true,
+      "targetSummary": "poles found in a joint zone",
+      "collateralGates": [
+        "G7"
+      ]
+    },
+    {
+      "mutation": "dissolve_a_vertex_on_the_joint_loop",
+      "targetGate": "G10",
+      "fixture": "torus",
+      "why": "tidying topology by dissolving, right at a joint",
+      "targetFlipped": true,
+      "targetSummary": "3 three-poles sit in a joint zone",
+      "collateralGates": [
+        "G5",
+        "G8",
+        "G9"
+      ]
+    },
+    {
+      "mutation": "droop_the_arm_out_of_T_pose",
+      "targetGate": "G11",
+      "fixture": "torus",
+      "why": "an A-pose rest breaks CC0 retargeting",
+      "targetFlipped": true,
+      "targetSummary": "arm bones are not horizontal",
+      "collateralGates": []
+    },
+    {
+      "mutation": "rename_the_arms_unrecognisably",
+      "targetGate": "G11",
+      "fixture": "torus",
+      "why": "nothing to check: the heuristic must fail, not pass, when it finds no arm",
+      "targetFlipped": true,
+      "targetSummary": "no bone name suggests an upper arm, so the pose cannot be checked",
+      "collateralGates": []
+    },
+    {
+      "mutation": "rename_the_root_bone",
+      "targetGate": "G12",
+      "fixture": "torus",
+      "why": "engines look for Root by name",
+      "targetFlipped": true,
+      "targetSummary": "root bone is named \"MCH_Hips\", expected \"Root\"",
+      "collateralGates": []
+    },
+    {
+      "mutation": "move_the_root_bone_to_hip_height",
+      "targetGate": "G12",
+      "fixture": "torus",
+      "why": "the named anti-pattern; breaks ground calculations",
+      "targetFlipped": true,
+      "targetSummary": "root head is at (0.0, 0.0, 0.45), not the origin",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_a_second_root_bone",
+      "targetGate": "G12",
+      "fixture": "torus",
+      "why": "two roots, no single transform",
+      "targetFlipped": true,
+      "targetSummary": "2 root bones, expected exactly 1",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_a_Socket_bone_with_no_layer_prefix",
+      "targetGate": "G13",
+      "fixture": "torus",
+      "why": "gear attachment points are a real need the three-layer scheme has no category for",
+      "targetFlipped": true,
+      "targetSummary": "1 bones have no DEF_/CTRL_/MCH_ prefix",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_an_extra_deform_bone",
+      "targetGate": "G14",
+      "fixture": "torus",
+      "why": "budget creep; the contract pins the count",
+      "targetFlipped": true,
+      "targetSummary": "7 deform bones, contract expects 6",
+      "collateralGates": []
+    },
+    {
+      "mutation": "clear_a_deform_flag",
+      "targetGate": "G15",
+      "fixture": "torus",
+      "why": "the bone exists, its vertices stay behind",
+      "targetFlipped": true,
+      "targetSummary": "deform flags disagree with naming",
+      "collateralGates": [
+        "G14",
+        "G17"
+      ]
+    },
+    {
+      "mutation": "scale_the_armature",
+      "targetGate": "G16",
+      "fixture": "torus",
+      "why": "non-unit scale deforms animation on export",
+      "targetFlipped": true,
+      "targetSummary": "armature scale is (1.0, 1.0, 1.2)",
+      "collateralGates": []
+    },
+    {
+      "mutation": "unweight_a_vertex",
+      "targetGate": "G17",
+      "fixture": "torus",
+      "why": "the vertex stays put while the character moves",
+      "targetFlipped": true,
+      "targetSummary": "1 vertices have no weight at all",
+      "collateralGates": []
+    },
+    {
+      "mutation": "give_a_vertex_five_influences",
+      "targetGate": "G18",
+      "fixture": "torus",
+      "why": "Three.js drops the fifth silently",
+      "targetFlipped": true,
+      "targetSummary": "max 5 influences per vertex, cap is 4",
+      "collateralGates": []
+    },
+    {
+      "mutation": "unnormalise_a_vertex_weight",
+      "targetGate": "G19",
+      "fixture": "torus",
+      "why": "the vertex drifts",
+      "targetFlipped": true,
+      "targetSummary": "1 vertices have weights not summing to 1",
+      "collateralGates": []
+    },
+    {
+      "mutation": "use_an_unsafe_object_name",
+      "targetGate": "G20",
+      "fixture": "torus",
+      "why": "special characters break glTF/FBX export",
+      "targetFlipped": true,
+      "targetSummary": "1 names contain special characters",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_a_second_material",
+      "targetGate": "G21",
+      "fixture": "torus",
+      "why": "an extra material is an extra draw call",
+      "targetFlipped": true,
+      "targetSummary": "2 materials, expected exactly 1",
+      "collateralGates": []
+    },
+    {
+      "mutation": "double_the_atlas_resolution",
+      "targetGate": "G21",
+      "fixture": "torus",
+      "why": "silently blows the texture budget",
+      "targetFlipped": true,
+      "targetSummary": "textures exceed 1024px: {'HeroAtlas': (2048, 2048)}",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_a_Color_Ramp_node",
+      "targetGate": "G22",
+      "fixture": "torus",
+      "why": "renders in Blender, gone in the GLB",
+      "targetFlipped": true,
+      "targetSummary": "1 nodes are lost on glTF export",
+      "collateralGates": []
+    },
+    {
+      "mutation": "remove_the_UV_layer",
+      "targetGate": "G24",
+      "fixture": "torus",
+      "why": "no UVs, no atlas",
+      "targetFlipped": true,
+      "targetSummary": "1 meshes have no UV layer",
+      "collateralGates": []
+    },
+    {
+      "mutation": "add_a_shape_key",
+      "targetGate": "G26",
+      "fixture": "torus",
+      "why": "freezes vertex order before geometry is final",
+      "targetFlipped": true,
+      "targetSummary": "1 meshes already carry shape keys",
+      "collateralGates": []
+    }
+  ],
+  "neverFlipped": [],
+  "proven": true
+}

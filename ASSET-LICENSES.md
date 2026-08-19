@@ -1,0 +1,75 @@
+# Asset provenance and licensing
+
+Binary assets in this repository do **not** share a single licence. This file records, per family,
+where each one came from and on what basis it may be redistributed. Where provenance is partial, that
+is stated rather than smoothed over.
+
+Nothing here grants rights over third-party assets beyond what their own licences give. See
+[`NOTICE`](NOTICE) for the source-code posture.
+
+## Vendored dependencies — MIT
+
+| Path | Component | Licence |
+| --- | --- | --- |
+| `public/vendor/three.module.min.js` | three.js r170 | MIT — `Copyright 2010-2024 Three.js Authors`, `SPDX-License-Identifier: MIT` |
+| `public/vendor/loaders/GLTFLoader.js` | three.js example loader | MIT, same project |
+| `public/vendor/utils/BufferGeometryUtils.js` | three.js example util | MIT, same project |
+| `public/vendor/utils/SkeletonUtils.js` | three.js example util | MIT, same project |
+
+The upstream licence headers are intact in these files and must stay intact in any redistribution.
+
+## Village props and environment — CC0 1.0
+
+`public/assets/props/village/*.glb` (14 files) and the world set derive from public-domain asset
+packs. Their licences were verified by reading the licence file *inside* each downloaded archive
+rather than trusting a store page, and each archive was recorded by SHA-256 in the engineering
+archive at selection time.
+
+| Pack | Author | Licence |
+| --- | --- | --- |
+| KayKit — City Builder Bits, Medieval Hexagon, Dungeon Remastered | Kay Lousberg | CC0 1.0 Universal |
+| Quaternius — Universal Base Characters, Modular Character Outfits | Quaternius | CC0 1.0 Universal |
+
+CC0 does not require attribution. It is given because these packs are the origin of measured values
+this project relies on.
+
+## Characters — owner-created, generated on a paid plan
+
+`public/assets/hero/*.glb`, `public/assets/world/keeper.glb`, `public/assets/enemies/wolf.glb`
+
+Produced by the project owner using Meshy under a **paid Meshy plan**, then rigged, retopologised and
+finished in Blender by the owner. Redistribution rests on the owner's rights in that generated output
+together with the paid-plan terms in force at generation time — **not** on CC0 and **not** on the
+source licence in `NOTICE`.
+
+## Gear — owner-created, generated on a paid plan
+
+`public/assets/gear/*.glb`
+
+| Asset | Basis |
+| --- | --- |
+| `sword_ironwood.glb`, `shield_ironwood.glb` | Meshy paid-plan generation, owner-directed, Blender finishing |
+| `sword_silverguard.glb` | Meshy paid-plan generation from an owner-drawn concept, Blender finishing |
+| `helmet_silverguard.glb`, `shoulder_silverguard.glb` | Meshy paid-plan generation, owner-directed, Blender finishing. The right shoulder is the left mirrored by a negative X scale, not a second generation. |
+| `candidates/sword_wildwood_w1a.glb` | Meshy paid-plan generation, owner-directed. Candidate, not yet promoted to gameplay. |
+
+**Input-provenance check.** These were reviewed for deliberate third-party or franchise input before
+publication. The generation prompts themselves are not recoverable from this repository — they lived
+in a gitignored working directory — but the surrounding engineering record describes what was asked
+for in each case (for example an open-faced helmet with no visor; a single isolated shoulder piece
+with no arm sleeve), and it is consistently generic fantasy-armour language. A targeted search of the
+full engineering tree for named franchises, characters and recognisable properties returned **no
+matches** in any gear-generation record. On that evidence these assets are treated as original work.
+
+Design *references* cited in project documentation — naming other games when discussing, say, a row of
+hearts as a health-display precedent — are commentary, not derivation. No asset here is traced from
+another game's art.
+
+## Audio
+
+Audio is synthesised at runtime in `public/src/audio/`. No third-party audio files ship.
+
+## Reporting
+
+If you believe any asset here infringes your rights, please open an issue and it will be removed
+pending review.

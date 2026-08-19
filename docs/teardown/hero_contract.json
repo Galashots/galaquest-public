@@ -1,0 +1,232 @@
+{
+  "version": 8,
+  "derivedFrom": [
+    {
+      "file": "KayKit_Adventurers_2.0_FREE/Characters/fbx/Ranger.fbx",
+      "sha256": "0058f761d01d6465717badb13565f1ad1cfbc3afa7841b993cc6902e3a9bea08"
+    },
+    {
+      "file": "KayKit_Adventurers_2.0_FREE/Characters/gltf/Ranger.glb",
+      "sha256": "3a0b0166b9d61d58dcaaa739c3cc0538be46e00d2928dd5cb513d9a41770d2e9"
+    },
+    {
+      "file": "KayKit_Adventurers_2.0_FREE/Animations/gltf/Rig_Medium/Rig_Medium_General.glb",
+      "sha256": "5f725c0f745f36078c7238968cd5c04843cbc6260689eb6e7f5e2bbd7ffdd7ad"
+    },
+    {
+      "file": "KayKit_Adventurers_2.0_FREE/Animations/gltf/Rig_Medium/Rig_Medium_MovementBasic.glb",
+      "sha256": "11422afd50abf7e8c92ea107e2e0bc94abd38023d6d15f55ad580347efbfa29e"
+    },
+    {
+      "file": "Universal Base Characters[Standard]/Base Characters/Unity/Superhero_Male_FullBody.fbx",
+      "sha256": "79344418d754a59730b79d1874752e9592143db34abe8adf138fa9a92a4768e9"
+    },
+    {
+      "file": "Universal Base Characters[Standard]/Base Characters/Unity/Superhero_Female_FullBody.fbx",
+      "sha256": "0727e7b236eeea4115531e07aeb2bb7690c1a58155f743bbf54282944fb97ea9"
+    },
+    {
+      "file": "Modular Character Outfits - Fantasy[Standard]/Exports/FBX (Unity)/Outfits/Male_Ranger.fbx",
+      "sha256": "f142f1c0fee43d0b1a635928469289dff2abeaaa2c3daf95dd7b74a8044b244e"
+    },
+    {
+      "file": "Modular Character Outfits - Fantasy[Standard]/Exports/glTF (Godot-Unreal)/Modular Parts/Female_Ranger_Body.gltf",
+      "sha256": "7215f19c1c31fa8f19286357f93e6e043b0dd162d4418fdc73f530a88717db35"
+    }
+  ],
+  "proportions": {
+    "status": "owner-locked-final",
+    "adoptedHeadsTall": 3.84,
+    "settledBy": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+    "finalLockConditions": [
+      "WAIVED BY OWNER 2026-08-10 — bare head. Owner directive note-6 required candidate C to be judged bare-headed before lock. NOT SATISFIED IN THE FORM WRITTEN, but substantially overtaken: the locked master is bare-headed, so the concern behind the directive — that a wizard hat was carrying the visual work — does not apply to the image the lock is measured from.",
+      "Recorded in the private engineering archive. Value is authoritative for tooling.",
+      "Recorded in the private engineering archive. Value is authoritative for tooling."
+    ],
+    "ownerDirectives": [
+      {
+        "id": "note-1-upper-body-width",
+        "kind": "range-directive",
+        "ownerText": "1. Broaden the upper body slightly.\nThe shoulders are still a little narrow relative to the head. I'd test approximately +8–12% shoulder width, mostly by moving the arm attachment outward rather than making the torso uniformly wider. This will help armor enormously.",
+        "appliesTo": "Shoulder width, and arm attachment as a parameter separable from it (spec section 6, Stage 1).",
+        "mechanism": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+        "deltaPercentRange": [
+          8,
+          12
+        ],
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+        "baseline": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      },
+      {
+        "id": "note-2-hand-size",
+        "kind": "range-directive",
+        "ownerText": "2. Hands should probably be a little larger.\nAt GQ scale, slightly oversized hands improve animation readability and make weapons feel properly anchored. Maybe +10–15%, then judge at gameplay scale.",
+        "appliesTo": "Hand size, already a Stage 1 parameter (spec section 6).",
+        "deltaPercentRange": [
+          10,
+          15
+        ],
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+        "baseline": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      },
+      {
+        "id": "note-3-chunky-feet-permitted",
+        "kind": "permission",
+        "ownerText": "3. Feet need more silhouette.\nThe current legs terminate in a fairly anonymous bar. Boots will eventually solve much of this, but the underlying proportion contract should allow deliberately chunky feet/boots.",
+        "appliesTo": "Foot and boot size, which spec section 6's Stage 1 parameter list gained in the same change — it previously named hand size and leg thickness but no foot parameter at all, so the specified generator had nothing to move.",
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      },
+      {
+        "id": "note-4-limb-thickness-floor",
+        "kind": "floor-directive",
+        "ownerText": "4. Keep the limbs relatively thick.\nDo not chase realistic arms and legs from here. At ~90 CSS px, narrow limbs disappear. C's current arm thickness is directionally good; I'd probably increase the forearms slightly rather than reduce anything.",
+        "appliesTo": "Arm, forearm and leg thickness. Spec section 6's Stage 1 list named leg thickness only; arm and forearm thickness were added in the same change, because a floor nobody can act on is not a constraint.",
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+        "justification": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      },
+      {
+        "id": "note-5-torso-cross-sections",
+        "kind": "topology-requirement",
+        "ownerText": "5. The torso currently reads as a tube/block because this is a blockout.\nThat's fine. The next topology stage should introduce a subtle:\n\nshoulder/chest taper,\nnarrower waist,\npelvis transition,\n\nwithout substantially changing the overall C silhouette.",
+        "appliesTo": "The canonical authored topology template of spec section 13, \"The topology architecture this settles\", which now names these three semantic cross-sections where it previously named none. Waist width was already a Stage 1 parameter; chest taper and pelvis transition were not.",
+        "mechanism": "Vertex movement on fixed connectivity — the generator moves vertices via semantic cross-sections and landmarks and does not add or remove edge loops. The waist must end up narrower than both chest and hip; that is what \"narrower waist\" means and it is not a number.",
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      },
+      {
+        "id": "note-6-bare-head-before-lock",
+        "kind": "test-precondition",
+        "ownerText": "6. Don't let the giant wizard hat bias the body-ratio decision.\nThe hat is doing huge visual work in all three candidates. Before final proportion lock, I would render C with bare head/simple hair as well. If C still reads well without class-defining headgear, we know the body contract itself is good.",
+        "appliesTo": "The settling method. It is a blocking precondition on final lock, not a suggestion: finalLockConditions entry 1.",
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      },
+      {
+        "id": "note-7-narrow-head-only-sweep",
+        "kind": "test-method-change",
+        "ownerText": "One thing I'd test before final lock\n\nI would not create another broad A/B/C sweep.\n\nTake C and make only three closely spaced versions:\n\nC−: head ~5% smaller\nC: exactly this\nC+: head ~5% larger\n\nEverything else identical.\n\nThen render them at the actual GQ gameplay size",
+        "appliesTo": "The settling method, replacing the broad 3.5 / 4.5 / 5.5 sweep: finalLockConditions entry 2. headsTallCandidates is retained as the historical record of the sweep that was run, not as the live set.",
+        "valueStatus": "open",
+        "gate": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      }
+    ],
+    "headsTallCandidates": [
+      3.5,
+      4.5,
+      5.5
+    ],
+    "comparativeBaselines": [
+      {
+        "pack": "KayKit Adventurers",
+        "asset": "Ranger.fbx",
+        "sha256": "0058f761d01d6465717badb13565f1ad1cfbc3afa7841b993cc6902e3a9bea08",
+        "headsTall": 2.1062,
+        "shoulderWidthHeads": 0.3926,
+        "armLengthHeads": 0.4647,
+        "legLengthHeads": 0.3486,
+        "handWidthHeads": 0.1706
+      },
+      {
+        "pack": "Quaternius Universal Base Characters",
+        "asset": "Superhero_Male_FullBody.fbx",
+        "sha256": "79344418d754a59730b79d1874752e9592143db34abe8adf138fa9a92a4768e9",
+        "headsTall": 7.7925,
+        "shoulderWidthHeads": 1.8813,
+        "armLengthHeads": 2.1186,
+        "legLengthHeads": 3.8011,
+        "handWidthHeads": 0.4475
+      },
+      {
+        "pack": "Quaternius Universal Base Characters",
+        "asset": "Superhero_Female_FullBody.fbx",
+        "sha256": "0727e7b236eeea4115531e07aeb2bb7690c1a58155f743bbf54282944fb97ea9",
+        "headsTall": 7.7664,
+        "shoulderWidthHeads": 1.3377,
+        "armLengthHeads": 2.1424,
+        "legLengthHeads": 3.8326,
+        "handWidthHeads": 0.3186
+      }
+    ],
+    "previousValues": [
+      {
+        "value": 4.5,
+        "status": "owner-adopted-working-value",
+        "heldFrom": "2026-08-09",
+        "supersededOn": "2026-08-10",
+        "why": "Recorded in the private engineering archive. Value is authoritative for tooling."
+      }
+    ],
+    "lockedValueProvenance": {
+      "origin": "owner-decision",
+      "measuredBasis": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+      "measuredBy": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+      "convention": "HAIR INCLUDED. Stage T measured headHeight from head-weighted vertices, so hair and headgear count as head. The skull-to-chin figure for the same image is 4.31 and is a HEURISTIC; quoting it against a Stage T baseline would repeat the error STAGE_T_REFERENCE_BASELINES.md section 2.3 warns about.",
+      "precision": "The measurement comes from a 1086x1521 illustration with heuristic neck detection, so it is good to roughly a twentieth of a head, not to two decimal places. 3.84 is a TARGET for the mesh, not a measured property of any mesh. Nothing may claim a GalaQuest mesh is 3.84 heads until a mesh is measured.",
+      "notEvidenceFor": "The illustration is stamped NON-DIMENSIONAL DESIGN REFERENCE — DO NOT TRACE. It fixes one ratio because the owner chose to adopt that ratio. It supplies no other dimension, and no shoulder width, hand size, foot size or limb thickness may be derived from it."
+    }
+  },
+  "topology": {
+    "status": "no-gq-target",
+    "settledBy": "Recorded in the private engineering archive. Value is authoritative for tooling.",
+    "comparativeBaselines": [
+      {
+        "pack": "KayKit Adventurers",
+        "asset": "Ranger.fbx",
+        "sha256": "0058f761d01d6465717badb13565f1ad1cfbc3afa7841b993cc6902e3a9bea08",
+        "selectedMesh": "Ranger_Body",
+        "quadRatioSelectedMesh": 0.9006,
+        "quadRatioAllMeshes": 0.8643
+      },
+      {
+        "pack": "Quaternius Universal Base Characters",
+        "asset": "Superhero_Male_FullBody.fbx",
+        "sha256": "79344418d754a59730b79d1874752e9592143db34abe8adf138fa9a92a4768e9",
+        "selectedMesh": "SuperHero_Male",
+        "quadRatioSelectedMesh": 0.987,
+        "quadRatioAllMeshes": 0.9886
+      },
+      {
+        "pack": "Quaternius Universal Base Characters",
+        "asset": "Superhero_Female_FullBody.fbx",
+        "sha256": "0727e7b236eeea4115531e07aeb2bb7690c1a58155f743bbf54282944fb97ea9",
+        "selectedMesh": "Superhero_Female",
+        "quadRatioSelectedMesh": 0.9888,
+        "quadRatioAllMeshes": 0.9905
+      }
+    ]
+  },
+  "rig": {
+    "deformJointTarget": 30,
+    "maxInfluencesPerVertex": 4,
+    "fingerChains": false
+  },
+  "surface": {
+    "baseColourAuthority": "shared-texture-atlas",
+    "vertexColourRole": "optional-modulation",
+    "uniqueFullBodyTextures": 1,
+    "sharedAtlasMaxPx": 1024
+  },
+  "budgets": {
+    "triangles": {
+      "lod0": {
+        "target": 16000,
+        "hardCap": 20000
+      },
+      "lod1": {
+        "target": 8000,
+        "hardCap": 10000
+      },
+      "lod2": {
+        "target": 3000,
+        "hardCap": 4000
+      }
+    },
+    "heroMaxDraws": 6,
+    "heroPayloadMaxBytes": 1572864
+  },
+  "publicNotice": "Public export of the GalaQuest hero contract. Technical values are unchanged from the private engineering archive; decision provenance has been removed for publication."
+}

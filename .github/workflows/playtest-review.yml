@@ -1,0 +1,127 @@
+﻿name: playtest-review
+
+# Phase RP1. Produces running-game review evidence for an INDEPENDENT reviewer, on demand.
+#
+# This is not a test job -- `test.yml` already owns the unit suite and runs on every push. This one
+# is manual, drives real Chrome against the real game, and its product is an artifact of screenshots
+# plus a machine-readable manifest saying exactly what was reviewed. A screenshot with no SHA is an
+# anecdote, so the SHA is recorded in the manifest, echoed in the log, and put in the run summary.
+#
+# Still zero installs: three.js is vendored, the harnesses use CDP over a WebSocket, and Chrome is
+# already on the runner image. No npm, no Puppeteer, no Playwright.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Which review suite to run'
+        required: true
+        default: keeper
+        type: choice
+        options: [keeper, hero, full]
+      ref:
+        description: 'Commit SHA, branch or tag to review (default: the branch this was dispatched on)'
+        required: false
+        type: string
+
+# One review at a time. Two concurrent runs would fight over nothing (each harness owns its own
+# server and its own Chrome profile), but serialising keeps the artifact list legible.
+concurrency:
+  group: playtest-review
+  cancel-in-progress: false
+
+# Least privilege: this job reads the checkout and uploads an artifact; it writes nothing to the repo.
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          # 24, matching test.yml: the reward store uses the built-in node:sqlite, which on 22 sits
+          # behind --experimental-sqlite.
+          node-version: '24'
+
+      - name: Report exactly what is under review
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "reviewing $SHA"
+          git log -1 --pretty='  %s%n  %an, %ad' --date=iso
+          {
+            echo "## Playtest review â€” \`${{ inputs.suite }}\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| reviewed SHA | \`$SHA\` |"
+            echo "| requested ref | \`${{ inputs.ref || github.ref_name }}\` |"
+            echo "| subject | $(git log -1 --pretty=%s) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Confirm system Chrome (no install step)
+        run: |
+          which google-chrome || which google-chrome-stable || which chromium-browser
+          google-chrome --version
+
+      - name: Run the review suite
+        id: review
+        run: |
+          node tools/runtime-test/run-review-suite.mjs "${{ inputs.suite }}" \
+            --launch-chrome --out .local/review-artifact
+
+      - name: Print the review manifest
+        if: always()
+        run: |
+          if [ -f .local/review-artifact/manifest.json ]; then
+            cat .local/review-artifact/manifest.json
+          else
+            echo "no manifest was written -- the runner died before finishing"
+          fi
+
+      - name: Summarise the manifest into the run summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const path = ".local/review-artifact/manifest.json";
+            if (!fs.existsSync(path)) { console.log("no manifest"); process.exit(0); }
+            const m = JSON.parse(fs.readFileSync(path, "utf8"));
+            const out = [];
+            out.push("", "### Result", "", "| harness | verdict | exit | files | seconds |", "|---|---|---|---|---|");
+            for (const c of m.commands) {
+              const verdict = c.exitCodeIsGate ? (c.exitCode === 0 ? "PASS" : "**FAIL**") : "info";
+              out.push(`| ${c.name} | ${verdict} | ${c.exitCode} | ${c.artifacts.length} | ${(c.durationMs/1000).toFixed(1)} |`);
+            }
+            out.push("", `${m.totals.evidenceFiles} evidence files, ${(m.totals.evidenceBytes/1024/1024).toFixed(2)} MB. Chrome ${m.runner.chrome}.`);
+            if (m.head.dirty) out.push("", "> **The working tree was dirty.** This reviews something that is not on any branch.");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, out.join("\n") + "\n");
+          '
+
+      # always(): a harness that fails is exactly when the pictures matter most.
+      - name: Upload the review evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-${{ inputs.suite }}-${{ github.run_id }}
+          path: .local/review-artifact
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Prove nothing was left running
+        if: always()
+        run: |
+          # The runner kills the Chrome it launched from its own process 'exit' handler, and each
+          # harness kills the server it spawned the same way. This asserts it rather than assuming.
+          LEFT=$(pgrep -c -f 'remote-debugging-port=9224' || true)
+          SERVERS=$(pgrep -c -f 'node server.mjs' || true)
+          echo "chrome on 9224 still running: ${LEFT:-0}"
+          echo "game servers still running:   ${SERVERS:-0}"
+          if [ "${LEFT:-0}" != "0" ] || [ "${SERVERS:-0}" != "0" ]; then
+            echo "::warning::orphan processes survived the run"
+          fi

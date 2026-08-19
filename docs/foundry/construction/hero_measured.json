@@ -1,0 +1,51 @@
+{
+  "source": "hero.glb",
+  "armatureScale": [
+    0.009999999776482582,
+    0.009999999776482582,
+    0.009999999776482582
+  ],
+  "convention": {
+    "headHeight": "Z extent of vertices with combined weight >= 0.5 to Head/head_end/headfront; HAIR COUNTS AS HEAD",
+    "shoulderWidth": "upper-arm bone HEADS; this rig's bone tails are importer-synthesized and unusable",
+    "space": "world space, armature scale applied",
+    "pose": "rest",
+    "boneTailsUsable": false
+  },
+  "counts": {
+    "triangles": 15642,
+    "vertices": 14042,
+    "joints": 24,
+    "headWeightedVertices": 6444,
+    "handWeightedVertices": 679
+  },
+  "absolute": {
+    "totalHeight": 1.4999997826916456,
+    "feetMinZ": -2.1110224679432577e-08,
+    "headHeight": 0.42827367782592773,
+    "headHeightSkeletal": 0.3886375427246094,
+    "hairAboveHeadEnd": 0.006704211235046387,
+    "shoulderWidthUpperArmHeads": 0.3041834395115091,
+    "handWidthX": 0.18612360954284668,
+    "handLengthZ": 0.09119546413421631,
+    "footLengthY": 0.2501821182668209,
+    "footWidthX": 0.1947830244898796,
+    "forearmThicknessX": 0.16663947701454163,
+    "upperArmThicknessX": 0.18252144753932953,
+    "armLength": 0.3516863953037713,
+    "legLength": 0.533197696765116
+  },
+  "inHeads": {
+    "headsTall": 3.5024328142373533,
+    "headsTallSkeletal": 3.8596368538552475,
+    "shoulderWidthUpperArmHeads": 0.7102548096246643,
+    "handWidthX": 0.4345903546715211,
+    "handLengthZ": 0.21293735491090068,
+    "footLengthY": 0.5841641249979124,
+    "footWidthX": 0.45480970364246703,
+    "forearmThicknessX": 0.389095771331229,
+    "upperArmThicknessX": 0.4261794665174719,
+    "armLength": 0.8211720997868905,
+    "legLength": 1.2449929201155219
+  }
+}

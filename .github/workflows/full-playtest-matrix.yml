@@ -1,0 +1,101 @@
+﻿name: full-playtest-matrix
+
+on:
+  # `integration/**` is a reviewed convergence lane. It is on the PUSH trigger deliberately, and not
+  # on pull_request: a pull_request run reports against a synthetic merge SHA, and an integration
+  # result has to bind to the exact branch head an independent reviewer audits.
+  push:
+    branches: [main, 'integration/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit SHA, branch or tag to review'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-playtest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          - drive-village
+          - drive-relight
+          - drive-lifecycle
+          - drive-marks
+          - drive-touch
+          - drive-two-clients
+          - play-fight
+          - fit-carry
+          - fit-sword
+          - fit-shield
+          - fit-lantern
+          - fit-wildwood-blade
+          - review-keeper-idle
+          - review-hero-attack
+          - review-keeper-material
+          - review-keeper-turn
+          - review-hero-idle11
+          - review-shipping-assets
+          - review-rowan-camp-composite
+          - drive-hero-screen
+          - drive-cart-loot
+          - drive-village-board
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Launch isolated Chrome
+        run: |
+          google-chrome \
+            --remote-debugging-port=9224 \
+            --user-data-dir="$RUNNER_TEMP/gq-chrome" \
+            --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu \
+            --hide-scrollbars --no-first-run --no-default-browser-check about:blank \
+            >"$RUNNER_TEMP/chrome.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/gq-chrome.pid"
+          for i in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:9224/json/version >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          cat "$RUNNER_TEMP/chrome.log"
+          exit 1
+      - name: Run ${{ matrix.name }}
+        # A measuring instrument expresses "no automated verdict" by exiting 0 and publishing its
+        # evidence. Any non-zero exit is therefore an execution/infrastructure failure and must stay
+        # red; converting it to success made missing Chrome, syntax errors and crashes fail open.
+        run: node tools/runtime-test/${{ matrix.name }}.mjs
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playtest-${{ matrix.name }}-${{ github.run_id }}
+          path: .local/runtime-test
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Clean owned review processes
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/gq-chrome.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/gq-chrome.pid")" 2>/dev/null || true
+          fi
+          pkill -f 'node server.mjs' 2>/dev/null || true
+          sleep 1
+          LEFT=$(pgrep -c -f 'remote-debugging-port=9224' || true)
+          SERVERS=$(pgrep -c -f 'node server.mjs' || true)
+          echo "chrome on 9224 still running: ${LEFT:-0}"
+          echo "game servers still running:   ${SERVERS:-0}"

@@ -1,0 +1,388 @@
+# MISTAKES.md — the lessons ratchet
+
+the owner's instruction, 2026-08-13: *"All lessons learned must be tracked where appropriate to avoid
+repeated gotchas."* This file is where they live now. `AGENTS.md` used to carry them as prose (see
+its former "Gotchas that have already repeated" section); that section drifted stale inside the very
+paragraph warning about staleness (see GQ-003 below), which is the reason this file exists as a
+ratchet instead of a list.
+
+**Ratchet, not archive.** Promotion is mechanical, not a judgment call.
+
+| Rung | Trigger | What happens |
+|---|---|---|
+| `OBSERVED` | 1st hit | Logged with its incident. No ID, no citation duty. |
+| `RULE` | 2nd hit | Gets a stable ID (`GQ-NNN`, never reused). Briefs must cite applicable IDs. |
+| `ENFORCED` | 2nd hit **and** expressible as a check | A test named for the ID lands in `test/`. If genuinely untestable, the entry **stays at `RULE` and must state why in one sentence** — an unexplained `RULE` at 3+ hits is itself a finding. |
+
+`Foreknowledge helped:` is u/LividCan4323's contribution and the only field that says whether an
+entry earns its context budget. An agent that dodged a mistake because of an entry appends a dated
+line. Entries with many hits and no help get rewritten or deleted, not promoted.
+
+`test/mistakes-ledger.test.mjs` enforces the mechanical parts of this table: every `ENFORCED` entry
+names a test file that actually exists, every `GQ-NNN` ID is unique and never reused, and every
+`RULE` entry at 3+ hits carries a stated reason it isn't enforced.
+
+---
+
+### GQ-007 — Never restate a constant. Import it.
+**Status:** ENFORCED · **Hits:** 5 · **First:** 2026-08-11 · **Last:** 2026-08-13
+**Enforced by:** `test/shared-constants.test.mjs`
+**Rule:** A value used by two modules lives in one importable module. If a module cannot import it,
+that is the thing to fix.
+**Incidents:** play-fight's `wolf.hp < 3`; the fixed 500 ms hit poll; three fixed swing offsets;
+three tests restating their own formula; `WOLF_SPAWN` duplicated across `net/gameServer.mjs:35` and
+`public/src/main.js:54` plus three test files (2026-08-14 audit P0.2).
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-008 — A harness that navigates to the game must start from a known guest.
+**Status:** ENFORCED · **Hits:** 2 · **First:** 2026-08-14 · **Last:** 2026-08-15
+**Enforced by:** `test/harness-fresh-guest.test.mjs`
+**Rule:** The automation Chrome on 9224 uses a persistent profile, so `gq-guest-id` survives between
+runs. Any harness that navigates to the game clears `localStorage` for the origin **before its first
+navigation** — not after, by which point the guest has already been minted. The rule is deliberately
+"every navigating harness", not "every harness that can award a mark": that judgement goes stale the
+moment somebody adds an attack tap, and it is fragile in exactly the way that caused hit 2's
+misdiagnosis.
+**Incidents:** (1) Phase Y, 2026-08-14 — `play-fight.mjs` landed three reward rows on
+`drive-relight.mjs`'s RESERVED fixture identity `relight-probe-guest-0001`; Phase Z1's R1-A fixed
+that one file. (2) Phase R3a, 2026-08-15 — `drive-two-clients.mjs` was still doing it and nobody had
+noticed: `mark:relight-probe-guest-0001:3/4/5/6` in `data/rewards.db`, in **pairs 87–220 ms apart**
+because it runs two tabs and both inherited the same stale id, which then failed `drive-relight`'s own
+"exactly 3 marks" assertion at marks 5 — a red harness for a reason with nothing to do with
+relighting. Phase H1 turned this from occasional to reproducible: every harness now draws a server
+port from one shared pool, so they all share one origin and therefore one `localStorage`, and the
+isolation that used to come by accident from different ports is now something each harness must do
+for itself. Six files violated the rule at `b9238e0`.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-001 — A harness tuned against a local fight embeds the absence of latency everywhere.
+**Status:** RULE · **Hits:** 3 · **First:** 2026-08-13 · **Last:** 2026-08-13
+**Not enforced because:** this is a harness-authoring discipline (re-sample live state, poll for a
+condition instead of sleeping, pace re-taps on the real gate) rather than a static property a scanner
+can verify — enforcing it mechanically would mean re-deriving intent, which is a judgment call, not a
+check.
+**Rule:** When a harness fails after authority moves across a wire, list every place it assumes an
+answer arrives instantly — position freshness, state transitions, and input acceptance, not only
+timeouts. Fix by re-sampling live state and polling for the condition, never by lengthening a wait.
+**Incidents:** Phase B (2026-08-13) proved this three times in one day against the *correct* game once
+the fight gained a real ~66 ms round trip: `play-fight.mjs` steered at a wolf position sampled once
+and held for up to 2.5 s while the server's wolf kept moving; it waited a fixed 50 ms for a swing that
+now takes ~66 ms to round-trip; and its retry loop re-tapped while the hero was still mid-swing, got
+refused, and burned the iteration while the wolf's own timer ran on. Suite fell from 16/16 to 11/16.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-002 — A stale file header is a lie the file tells about itself.
+**Status:** RULE · **Hits:** 3 · **First:** 2026-08-14 · **Last:** 2026-08-14
+**Not enforced because:** a stale comment is prose about intent; verifying it is current requires
+re-deriving what's still true, which no regex can do safely without also re-deriving the design.
+**Rule:** This repo deliberately puts its reasoning in the code; an agent reading a file top-to-bottom
+is supposed to trust its header. When a header's claim stops being true, rewrite it in the same commit
+that makes it stop being true — don't leave the next reader to discover the gap.
+**Incidents (2026-08-14 audit P2.5):** `combat/encounter.js:1-6` still described a protocol-v2 branch
+reconciliation that never happened — the wire is v3 and the server already owns the state it said
+would move there "when reconciled". `combat/encounter.js:68-72` argued splitting
+`WOLF_BITE_COOLDOWN_SECONDS` "was not worth doing" thirteen lines above the split that had already
+shipped. `net/protocol.js:1` said "GalaQuest wire protocol v1" three lines above
+`PROTOCOL_VERSION = 3`, and its `EMPTY_ENCOUNTER` comment named a "Task B3" as not-yet-landed after B3
+had landed.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-13 · **Last:** 2026-08-14
+**Not enforced because:** no test scans docs for a bare numeric test-count claim yet. The audit that
+found the second hit recommends exactly that scanner as future work; it is not built in this pass.
+**Rule:** Record the invariant, not the number. "CI passes one fewer than a local run, and skips one"
+survives; "the true figure is 190" does not. If a number must appear, it needs to be read off a live
+run at the moment of writing, not carried forward from memory.
+**Incidents:** `AGENTS.md`'s own anti-stale-count paragraph said "the true figure on 2026-08-13 is
+190" inside the paragraph whose entire subject was staleness; the 2026-08-14 audit measured 257 —
+off by 67 (audit P2.1). Separately, `the private engineering archive:297` labelled a figure as the output of
+`node --test test/*.test.mjs` (the local command) but reported CI's shape — 256 passed / 1 skipped —
+instead of the local 257/257/0 the audit actually measured that day (audit P2.4).
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Watch for one constant doing two jobs.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** unspecified in source (AGENTS.md gotchas
+section, authored 2026-08-13)
+**Rule:** Split a constant the moment it starts meaning two different things, even if both currently
+want the same number. Don't wait until retuning one meaning breaks the other.
+**Incidents:** `WOLF_BITE_COOLDOWN_SECONDS` meant both "how long the wolf stays in its bite" and "how
+long until it can bite again." Fine while both wanted the same number; raising it to make the wolf
+less relentless would have frozen the wolf in a clamped bite pose for over a second, because its bite
+clip is only 1.167 s.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Assert the property, not the mechanism.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** unspecified in source (AGENTS.md gotchas
+section, authored 2026-08-13)
+**Rule:** Ask what a test is really for before encoding how it currently happens to work. A test
+should survive any future retuning of the mechanism it's protecting.
+**Incidents:** A test named "mashing is not a win button" checked that a *cooldown* blocked the next
+swing. When the cooldown went to 0 — the 1.5 s swing having become its own rate limiter — the test
+failed while the property it was named for still held perfectly. Rewritten to hammer the button for
+ten seconds and assert the swing count cannot exceed what the duration allows, it now survives any
+future retuning.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A name-fragment lookup needs a uniqueness test.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** unspecified in source (AGENTS.md gotchas
+section, authored 2026-08-13)
+**Rule:** A lookup that takes the first substring match is safe by inspection at a handful of items
+and unsafe the moment a new item's name could contain another's fragment. Require an exact match, or
+require the fragment to match exactly one item.
+**Incidents:** `locomotion.js` and `swingClip.js` found clips with
+`name.toLowerCase().includes(fragment)` and took the first match — safe at two clips, not at six. A
+future clip called `idle_combat` or `sword_slash_heavy` would silently become the hero's idle or
+attack depending on export order, and nothing would throw. Already enforced in practice by
+`test/clip-inventory.test.mjs`, which requires every fragment the runtime looks up to match exactly
+one clip; formal ledger promotion to `RULE`/`ENFORCED` awaits a second hit per the ratchet.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Green checks are not a look at the game.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** unspecified in source (AGENTS.md gotchas
+section, authored 2026-08-13)
+**Rule:** A passing assertion and a photograph can describe different moments of the same run.
+Captures must record the state they were taken in and fail rather than write a misleading file — and
+a human should still open them.
+**Incidents:** Three swing captures showed a defeated hero under a "You went down…" banner for two
+consecutive runs at 13/13. The assertion and the photograph were of different moments and nothing
+connected them.
+**Foreknowledge helped:** 2026-08-16 — the SR3 `studioCapture` worker exited cleanly (process exit 0)
+and synced a `result.json` to Drive, but `result.status` was `error` with zero captures rather than a
+fabricated success; the existing discipline of separating process success from evidence truth is what
+made that the correct, legible outcome instead of a silent lie. See the new runtime-identity entry
+below for the incident this came from.
+
+### OBSERVED — Source, vendor, and review names are not runtime identifiers.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-16
+**Rule:** Before programmatically controlling a shipping asset, discover/read the identifiers from
+the actual loaded runtime asset or Studio state and use those canonical runtime identifiers. Do not
+copy Meshy action names, donor filenames, old review labels, historical commit prose, or source
+filenames into automation and assume they survived import/merge/rename unchanged. If a
+source-to-runtime alias is useful for provenance, record it explicitly as metadata — do not add
+silent alias magic to a control protocol.
+**Incidents:** 2026-08-16, SR3 external Character Studio acceptance (`the private engineering archive`).
+Sol requested animation `Idle_11`, the approved/source animation name. The shipping Hero intentionally
+exposes that same approved native animation under runtime name `idle`, because it was merged under the
+existing locomotion lookup name (`public/src/character/locomotion.js`). `tools/sol-review/worker.mjs`'s
+`studioCapture` correctly rejected the unknown runtime name before capture and returned the live clip
+inventory (`availableClips`) in `result.json` instead of silently substituting a clip or guessing.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A discovery endpoint must only advertise capabilities it can actually execute.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-16
+**Rule:** When a discovery/state operation lists supported values (view scales, presets, modes, and
+similar), that list is a claim about what the system can currently DO, not a plan for what it will
+eventually do. Adding a value to a `supported*` vocabulary and adding the code path that actually
+executes it are two different changes; landing the first without the second produces a caller-facing
+lie that looks like a green check. Verify by actually exercising the advertised value end to end, not
+by reading the enum.
+**Incidents:** 2026-08-16, SR4 (`the private engineering archive`). Sol's own
+audit of the SR4 comparison primitive found that `tools/sol-review/worker.mjs`'s `studioState`
+discovery response advertised `supportedViewportPresets: ['portrait', 'landscape']` while
+`bootStudioPage()` unconditionally applied `PORTRAIT_VIEWPORT` regardless of any request field --
+`studioCapture` could never actually produce a landscape capture, so SR4's own explicit "gameplay
+portrait AND landscape" requirement (armour-progression-doctrine.md section 5.1) was unmet despite the
+discovery endpoint claiming otherwise. Fixed by threading an allow-listed `viewportPreset` field
+through to the real `Emulation.setDeviceMetricsOverride` call, then proving both presets are reachable
+with four real captures (shipping/candidate x portrait/landscape) that were opened and looked at.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A cross-check whose expected and actual values come from the same expression proves nothing.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-16
+**Rule:** A test that claims to verify two independently-derived values agree must actually compute
+them two different ways. `assert.equal(x.field, x.field)` — or any variant where the "expected" side
+is read from the same object/call as the "actual" side — is syntactically a comparison and
+semantically a no-op: it passes whether the code under test is correct, broken, or entirely deleted.
+When writing a "matches the same authority" test, name the two independent code paths in the test
+itself and confirm the assertion can fail — sabotage it once by hand (change one input) before trusting
+it.
+**Incidents:** 2026-08-16, SR4 (`test/pose-anatomy.test.mjs`). A test named "jsonReport time mode
+measurement matches measure() called directly at the same pose" asserted
+`report.clips.idle.measurement.pelvisTilt === report.clips.idle.measurement.pelvisTilt` — both sides
+read from the exact same object, so the assertion could not fail regardless of whether `jsonReport`'s
+time-mode path was correct. The suite was green throughout; Sol's audit caught it by reading the test
+body, not by a failing run. Fixed by deriving the expected value through a genuinely separate call
+chain (`poseAt` -> `forward` -> `measure`, called directly, not through `jsonReport`) and comparing the
+full measurement object, plus a new sabotage test confirming the cross-check can actually distinguish
+two different poses.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A selftest must tear down every Chrome target/server/process it creates, unconditionally.
+**Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-16
+**Rule:** A local-only selftest that boots an owned server and opens a Chrome target must guarantee
+teardown of both, even on an exception or an early return — `try`/`finally`, not a happy-path
+`close()` call at the bottom of the function. A leftover target/server from one selftest run silently
+becomes a false "chrome busy" positive on the next one, and the fix is never to kill/restart resources
+that might belong to another session — verify a leftover is genuinely this session's own artifact
+(e.g. by checking which process is actually bound to the port) before closing anything. This does not
+authorize killing or restarting resources belonging to another session; the "do not kill/restart
+shared Chrome" rule (owner-plan.md section 10) still applies to everything except a selftest's own
+already-identified leftovers. Second incident's refinement: calling an unconditional cleanup function
+is not the same as the cleanup having actually succeeded — `owned-server.mjs`'s `kill()` gives up
+silently after a bounded timeout without escalating, and `worker.mjs`'s `closeStudioPage()` awaits it
+without checking the result, so code that already satisfies the "always call cleanup" half of this
+rule can still leak. Confirm teardown by an independent check (a fresh port probe / CDP target list),
+not by having awaited the cleanup call.
+**Incidents:** 2026-08-16, SR4 closeout (`tools/sol-review/worker.mjs`'s selftest discipline,
+`the private engineering archive`). Between two selftest rounds in the same
+session, an owned `server.mjs 5202` process and its Chrome tab from an earlier round had not fully torn
+down (the `server.kill?.()` call in `closeStudioPage()` did not guarantee the underlying process had
+actually exited), and the stale tab's URL matched the chrome-busy regex on the next run, producing a
+`blocked-chrome-busy` result on a request that should have succeeded. Diagnosed by checking
+`netstat`/`tasklist` for the actual PID bound to the port (confirming it was this session's own
+leftover, not another session), then closed via the same `Target.closeTarget` CDP call and process kill
+the harness itself already uses for its own cleanup — not a bypass of the "don't touch shared Chrome"
+rule.
+2026-08-16, SR5 selftest (`tools/sol-review/worker-selftest.mjs`'s local-only verification round, same
+CSB phase). Despite `closeStudioPage()` already being called unconditionally (the fix the first
+incident above produced), the owned `server.mjs` process outlived multiple selftest rounds at least
+twice more — confirmed live via an actual `HTTP 200` response on its port minutes after the run that
+started it had already printed a successful result and exited. Root cause identified as
+`owned-server.mjs`'s `kill()`: it races `child.kill()` against a 5-second timeout and resolves `false`
+on timeout without ever escalating (e.g. a force-kill), and `closeStudioPage()` discards that boolean.
+Initially routed around locally rather than fixed, since `owned-server.mjs` is shared infrastructure
+outside SR5's own narrow scope (CLAUDE.md rule 3) — flagged as a standalone follow-up task instead.
+2026-08-16, SR5 closeout pass (Sol's own direct instruction, same session: "fix the owned-server
+teardown leak now as the separate follow-up already identified"). `kill()` rewritten to escalate with a
+stronger kill signal against ONLY its own child PID if the graceful attempt times out, and to never
+resolve `true` until independently re-verified. That verification exposed a SECOND, deeper, unrelated
+bug in the same file: `portFree()` probed `'127.0.0.1'`, while `server.mjs` itself binds `'0.0.0.0'`
+(`server.listen(port, '0.0.0.0', ...)`). On Windows, binding a specific address does not conflict at
+bind time with an EXISTING wildcard listener on the same port, so the probe fired `'listening'` (port
+reported "free") even while a real `server.mjs` was up and answering real HTTP 200s on it — confirmed
+directly and reproducibly: the exact same probe code returned `true` against `'127.0.0.1'` and correctly
+`EADDRINUSE`/`false` against `'0.0.0.0'` for the identical busy port. This means the ORIGINAL
+`startOwnedServer()` candidate-port scan itself could have silently double-allocated a port under the
+right timing, not just the new `kill()` verification — a wider-reaching defect than the one being fixed.
+Both fixed together (`portFree()` now probes `'0.0.0.0'`); proven with 3 new tests in
+`test/owned-server.test.mjs` against REAL spawned server processes (mocking `child_process` would not
+have caught either bug, since both were genuine OS-level binding/timing behavior).
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A reported per-pose measurement that never changes across genuinely different poses is measuring the wrong state.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-16
+**Rule:** three.js's `Box3.expandByObject()` on a `SkinnedMesh` reads the geometry's BIND-POSE vertex
+positions transformed by the mesh's own `matrixWorld` — skinning is applied on the GPU in the vertex
+shader, not through `matrixWorld`, so the resulting box is the same regardless of which animation
+frame is actually posed. Any measurement meant to vary with pose (a bounding envelope, a silhouette,
+anything sampled across a clip sweep) must be sanity-checked the same way a cross-check test is:
+compute it at two genuinely different poses and confirm the numbers actually differ before trusting
+the code, not just before trusting a test of the code. A flat, unchanging report across obviously
+different inputs is itself the finding, even when nothing throws and the status says "ok".
+**Incidents:** 2026-08-16, SR5 (`public/src/character/gearInspectors.js`'s `computeBodyOccupancyBox`,
+`the private engineering archive`). The Fit Envelope's Body Occupancy
+Envelope reported byte-identical `min`/`max` boxes across every sampled frame of `idle`, a walk clip,
+a run clip, and an attack clip in a live `studioFitEnvelope` selftest — an impossible result for a
+walking/running/attacking pose sweep. Caught by manually eyeballing the returned numbers rather than
+trusting the request's `"status": "ok"`. Fixed by building the box from the skeleton's own bone WORLD
+positions (which genuinely update from the `AnimationMixer` every frame) instead of
+`Box3.expandByObject()` on the body mesh; re-verified with a live re-run showing height/width now
+varying per clip and per frame, plus a new regression test
+(`test/gear-inspectors.test.mjs`'s "sabotage: computeBodyOccupancyBox is not a constant") pinning the
+fix against the exact same failure mode reappearing silently.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A hand-rolled schema interpreter only enforces the keywords it has actually been exercised against.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-16
+**Rule:** `tools/sol-review/protocol.mjs`'s `validate()` is a small, deliberately-partial JSON Schema
+interpreter (its own header names exactly which keywords it implements). Adding a NEW keyword to the
+schema JSON (`request.schema.json`) does nothing on its own — if `validate()` has no matching branch,
+the field is silently unconstrained, and a request the schema author intended to reject sails through.
+This is invisible in code review of the schema file alone: the JSON reads correctly; only exercising
+the interpreter against a request that should fail catches it. Any new schema keyword introduced by a
+future phase (`maximum`, `type: boolean` were the first two to ever appear in this schema) needs both
+the schema JSON updated AND a corresponding `validate()` branch, proven by a test that constructs an
+invalid value and asserts it is actually rejected — not just a test that a valid value passes.
+**Incidents:** 2026-08-16, SR5 (`tools/sol-review/protocol.mjs`, `test/sol-review-protocol.test.mjs`).
+Adding `studioFitEnvelope`'s optional `samples` field (`"type": "integer", "maximum": 60`) and
+`studioCapture`'s optional `includeMeasurements` field (`"type": "boolean"`) to
+`sol-review/request.schema.json` exposed that `validate()` never checked `schema.maximum` for
+`integer`/`number` types (only `minimum`), and had no branch at all for `schema.type === 'boolean'`
+(a boolean-typed field fell through every `else if` as a silent no-op). `samples: 61` and
+`includeMeasurements: "yes"` both validated cleanly before the fix. Caught by a new test asserting the
+over-limit/wrong-type values are rejected, which failed against the THEN-current interpreter rather
+than the schema. Fixed by adding `maximum` checks alongside the existing `minimum` ones and a
+`type === 'boolean'` branch, plus two interpreter-level regression tests
+(`test/sol-review-protocol.test.mjs`'s two "regression:" tests) pinning both keywords independently of
+any one schema's use of them.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A documented claim about a commit is not evidence until it's run.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-14
+**Rule:** A plan step that cancels itself by citing another commit's contents must show the command
+that checked those contents. An assertion about a commit is a claim, not a fact, until `git show` or
+`git log -S` backs it.
+**Incidents (2026-08-14 audit P2.2):** `the private engineering archive`
+Task A1 Step 3 read "VOID — superseded. Opus's `6eeb3bd` already removed the stale AGENTS.md count."
+`git show 6eeb3bd -- AGENTS.md` has no matching hunk; that commit added the gotchas section, not
+removed a count. The count was still there. A task was cancelled on a claim about another commit that
+nobody checked — and the cancelled task was the one that would have fixed it. Named in the audit as
+its sharpest single item.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A proof that was not committed did not happen.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-14
+**Rule:** A phase does not close until a committed harness drives the whole path end to end in the
+running game and passes. A throwaway probe run once from a scratch script is a memory, not evidence,
+and cannot be re-run to check it still holds.
+**Incidents (2026-08-14 audit P0.3):** combat sounds, the 10 s wolf respawn, and the online→offline
+handover fix all shipped 2026-08-13 with unit tests but no committed browser proof. The audio proof
+specifically existed only as "probed live (CDP…, throwaway harness, not committed)" per
+`the private engineering archive` — a proof that cannot be re-run.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A durable event id must outlive the process that minted it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
+**Rule:** A process-local counter is not a durable idempotency key. Any event that can be written after
+restart needs an identifier whose uniqueness survives restart; and any ignored durable write must be
+checked rather than treated as success. State ordering belongs in the store (`rowid`/an explicit
+sequence), not in the lexical shape of an idempotency key.
+**Incidents:** GP1 equipment used `equip:<guest>:<process-local counter>`. After every server restart
+the counter returned to one, `INSERT OR IGNORE` discarded the new choice as a duplicate, and the
+server ignored `applied: false`, so the previous weapon remained equipped while the client was told
+the new request succeeded. Fixed by UUID-backed event ids, checking the durable write result, reading
+the latest equip by insertion order, and restart → equip again → restart coverage in
+`test/game-server.test.mjs` and `test/reward-store.test.mjs`.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Hydration restores state; it must not replay the ceremony that created it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
+**Rule:** A presenter constructed from a persisted snapshot starts in the visual state represented by
+that snapshot. Transitional animation states are for live edges only. If a persisted object is
+already consumed, collected, built, opened, or completed, hydration must begin at its terminal state
+without replaying particles, rewards, sounds, or other one-shot ceremony.
+**Incidents:** Every cart-loot presenter began in `bursting` even when the initial server snapshot
+already named `collectedBy`. A restart or late join therefore replayed all consumed reward objects for
+about a second before hiding them. Fixed by passing the initial collection state into construction and
+starting collected pickups at `gone`; pinned by `test/loot-pickups.test.mjs`.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Automation timeouts are wall-clock budgets, not sample counts.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
+**Rule:** A browser driver that promises “try for N milliseconds” must compare against a monotonic
+wall-clock deadline. Never convert milliseconds into a fixed number of CDP reads: each read can take
+hundreds of milliseconds under hosted 3D load. Release movement input before every slow observation,
+so instrumentation latency cannot become unobserved travel.
+**Incidents:** Several full-matrix harnesses used names such as `maxSamples`/`maxSteps` as if one CDP
+state read cost one millisecond, while keeping movement held during each read. Under GitHub-hosted
+load nominal ten-second walks and fight polls expanded into multi-minute overshoots and false red
+gates. Fixed by `tools/runtime-test/automation-timing.mjs`, wall-clock deadlines, pulse/release/read
+movement, and structural coverage in `test/automation-timing.test.mjs` and
+`test/review-suite.test.mjs`.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Evidence may name a commit only after executing from that exact clean commit.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
+**Rule:** Resolving and printing a requested ref is not enough. A review worker must create an isolated,
+detached, clean checkout of the resolved SHA; every server path, dynamic import, and asset path used by
+the review must come from that checkout; and the result must record both requested and actual reviewed
+SHAs. The authoritative request schema belongs beside the trusted worker, not on the requester-controlled
+branch where it can drift from what the worker enforces.
+**Incidents:** The Sol worker resolved a requested ref but booted Character Studio from its existing
+`REPO_ROOT`, so a dirty or different checkout could produce evidence labelled with another SHA. The
+live control-branch schema also rejected the Wave 1A loadout accepted by the worker's duplicated test
+schema. Fixed with `tools/sol-review/reviewCheckout.mjs`, a trusted adjacent schema, worktree-rooted
+server/import paths, explicit SHA attribution, and `test/sol-review-checkout.test.mjs` plus the shared
+protocol tests.
+**Foreknowledge helped:** not yet recorded.

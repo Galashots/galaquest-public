@@ -1,0 +1,30 @@
+name: test
+
+# The runtime suite has zero dependencies: three.js is vendored under public/vendor/ and the tests
+# import it directly. So there is deliberately no install step -- nothing to install, and npm
+# lookups are the one thing this project cannot afford (see README, "Zero npm installs").
+on:
+  push:
+  pull_request:
+
+# Least privilege. The suite reads the checkout and writes nothing back. Fork pull requests get a
+# read-only token regardless; stating it here means the job cannot quietly gain write scope if the
+# repository default ever changes.
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # 24, not 22, because persistence will use the built-in node:sqlite. On 22 that module
+          # exists only behind --experimental-sqlite, so a 22 runner would force the flag onto every
+          # test command for a store player save data depends on. Moving the runner is the cheaper
+          # half of that trade. Local development is on 24 already.
+          node-version: '24'
+      # Scoped on purpose. A bare `node --test` also sweeps tools/teardown/test/, which needs
+      # Vitest and fails -- pre-existing and unrelated to the runtime.
+      - run: node --test test/*.test.mjs
