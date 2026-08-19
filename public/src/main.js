@@ -627,9 +627,68 @@ async function bootstrap() {
   // this worth unit testing (test/rewards-hud.test.mjs); wiring its result onto three fixed spans is
   // not, the same reasoning renderHearts' own comment gives.
   const lanternPipElements = Array.from(document.querySelectorAll('#lantern-marks .mark'));
+  const lanternMarksElement = document.querySelector('#lantern-marks');
+  // Matches the mark-ignite / mark-pill-lift keyframes in index.html. One number, because the
+  // attribute is what the animation hangs on and clearing it early cuts the animation off -- the
+  // same mistake the miss pulse made against its own ring.
+  const MARK_IGNITE_MS = 700;
   function renderLanternPips(marks) {
     const filled = pipsForMarks(marks);
     lanternPipElements.forEach((pip, index) => { pip.dataset.filled = String(filled[index] ?? false); });
+  }
+
+  // GP1-C6: HOW MANY MARKS THE CHILD HAS ACTUALLY BEEN SHOWN, which is not the same number as how
+  // many the server says they have -- for about a second after each kill.
+  //
+  // The mark is awarded the instant the wolf dies, and the pip used to fill on that same frame, which
+  // put it underneath the kill's own gold payoff. Two things happened at once and the smaller one, in
+  // a corner, lost. So the pip now waits for the mark's own light to finish flying to the boy, and
+  // lights when it arrives -- kill beat, then reward beat, which is the sequencing this lane exists
+  // for. Exactly the discipline world/lootPickups.js already uses for a pickup that has not landed.
+  //
+  // `null` until the first frame that knows anything, so a RELOAD adopts whatever is already on the
+  // books and shows it immediately: there is no light in flight to wait for, and a returning child
+  // must not watch their earned marks appear one at a time.
+  // Marks whose light has been launched and has not landed yet. The HUD shows everything the server
+  // has credited MINUS these, so a mark appears exactly when its light reaches the boy.
+  //
+  // Counted rather than inferred from "is a spark alive right now", which was the first attempt and
+  // was quietly wrong: reward events are dispatched further down this same frame function than the
+  // pip render is, so on the frame a kill credits a mark the render ran FIRST, saw nothing in flight,
+  // decided nobody was going to deliver it and filled the pip immediately -- and then the arrival a
+  // second later counted it a second time. The capture said LANTERN MARK 2 / 3 next to one lit pip.
+  // Incrementing in the same statement that launches the light means the two cannot disagree
+  // whatever order the frame runs in.
+  //
+  // No timeout to clean this up, on purpose: sparkFlight has a fixed duration and update() reports
+  // every completion, so the only way a launched light never lands is the frame loop stopping, and
+  // then nobody is looking at the HUD anyway.
+  let marksInTheAir = 0;
+  let authoritativeMarksThisFrame = 0;
+  function markProgressToShow(authoritativeMarks) {
+    authoritativeMarksThisFrame = authoritativeMarks;
+    return Math.max(0, authoritativeMarks - marksInTheAir);
+  }
+
+  // The reward beat itself, fired the frame the light lands. Everything it does is presentation: the
+  // mark was already earned, already counted and already persisted a second ago.
+  let markIgniteTimer = null;
+  function celebrateMarkArrival(totalMarks) {
+    banner(`LANTERN MARK  ${totalMarks} / ${MARKS_TO_UNLOCK}`, 1800);
+    const pip = lanternPipElements[Math.min(totalMarks, lanternPipElements.length) - 1];
+    // Re-triggering a CSS animation needs the attribute to actually leave and come back, which needs
+    // a frame in between -- the same reason popDamageNumber waits a frame before starting its rise.
+    if (pip) delete pip.dataset.justLit;
+    delete lanternMarksElement.dataset.justLit;
+    window.requestAnimationFrame(() => {
+      if (pip) pip.dataset.justLit = 'true';
+      lanternMarksElement.dataset.justLit = 'true';
+    });
+    window.clearTimeout(markIgniteTimer);
+    markIgniteTimer = window.setTimeout(() => {
+      if (pip) delete pip.dataset.justLit;
+      delete lanternMarksElement.dataset.justLit;
+    }, MARK_IGNITE_MS);
   }
 
   // GP2: the coin/shard HUD, re-rendered from whatever coinsDisplayed/shardsDisplayed currently hold
@@ -842,7 +901,12 @@ async function bootstrap() {
     // dispatch time so it is the position the child just watched it die at) and flies to the belt.
     'mark-earned'(event) {
       rewardEventLog.push(event);
-      banner('Lantern Mark!', 1400);
+      // GP1-C6: NO BANNER HERE ANY MORE. This fires on the same frame as wolf-defeated, so the two
+      // announcements used to overwrite each other -- "The wolf is beaten!" appeared and was replaced
+      // by "Lantern Mark!" before it could be read, and both landed under the kill's own gold burst.
+      // The reward now speaks when its light arrives, about a second later, with the frame to itself.
+      // See celebrateMarkArrival.
+      marksInTheAir += 1;
       markSparks?.launch({ x: encounterState.wolf.x, z: encounterState.wolf.z });
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
@@ -1465,7 +1529,7 @@ async function bootstrap() {
       const ownRewards = netStatus === 'online'
         ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
         : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
-      renderLanternPips(ownRewards?.marks ?? 0);
+      renderLanternPips(markProgressToShow(ownRewards?.marks ?? 0));
       ensureLanternMounted(ownRewards?.lanternUnlocked === true);
 
       // GP2/GP3: seed the displayed HUD totals from the authoritative value ONCE, the first frame it
@@ -1660,7 +1724,14 @@ async function bootstrap() {
     }
     // Flown toward the hero's CURRENT position, not the one he stood at when the wolf died, so a
     // child who keeps walking is still caught up with.
-    markSparks.update(deltaSeconds, player.position);
+    // GP1-C6: the light landing IS the reward moment. See celebrateMarkArrival.
+    const marksArrived = markSparks.update(deltaSeconds, player.position);
+    if (marksArrived > 0) {
+      marksInTheAir = Math.max(0, marksInTheAir - marksArrived);
+      // The count the child is now looking at, derived the same way the pips are rather than kept as
+      // a third running total -- the banner and the pips cannot say different numbers.
+      celebrateMarkArrival(Math.max(0, authoritativeMarksThisFrame - marksInTheAir));
+    }
     impactBursts.update(deltaSeconds);
     const keeperSpeech = keeperSpeechState({
       heroX: player.position.x,
