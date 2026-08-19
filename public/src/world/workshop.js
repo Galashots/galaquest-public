@@ -191,6 +191,16 @@ const FORGE_MOUTH_EMISSIVE = 0xff6a1a;
 const FORGE_MOUTH_INTENSITY = 1.5;
 const FORGE_GLOW_COLOR = 0xff8a3d;
 const FORGE_GLOW_SIZE_METERS = 0.95;
+// The moment the forge LIGHTS is the reveal, and a fade-in is not a moment. Played from the plaza
+// (.local/workshop-play/p2a-05-buy-06), ignition read as a glow quietly appearing at somebody's
+// feet -- the one beat of the ceremony a child paid to see, and the one easiest to miss. So the
+// hearth flares when it catches: the glow swells to this multiple of its resting size and the mouth
+// overshoots its resting intensity, both following one bump that rises and settles INSIDE the ignite
+// stage, so the ceremony still ends in exactly the resting pose hydration starts from. The mouth is
+// allowed to clip toward white for that one beat -- the same clip the resting 2.6 was rejected for
+// (see FORGE_MOUTH_INTENSITY) is what a forge catching looks like, as long as it does not stay.
+const FORGE_FLARE_SCALE = 2.3;
+const FORGE_MOUTH_FLARE_INTENSITY = 3.0;
 const EMBER_COLOR = 0xffcf7a;
 const EMBER_SIZE_METERS = 0.13;
 const EMBER_COUNT = 3;
@@ -375,6 +385,8 @@ export function createWorkshopReaction(scene, workshopMesh) {
   }
 
   let built = false;
+  // How hard the hearth is flaring right now, 0..1 -- set by poseAt, read by update for the glow.
+  let flare = 0;
   // One vector, reused every frame the ceremony is armed: no per-frame allocation, the same rule
   // update() below already keeps.
   const sightProbe = new THREE.Vector3();
@@ -413,7 +425,12 @@ export function createWorkshopReaction(scene, workshopMesh) {
     // The mouth is a hole in the hearth's front face and has nowhere to be until that hearth is
     // built -- it does not scale with the masonry, so shown early it would hang in the air.
     mouth.visible = stage.ignite > 0;
-    mouthMaterial.emissiveIntensity = stage.ignite * FORGE_MOUTH_INTENSITY;
+    // One bump across the ignite stage: 0 at the first spark, peak halfway, 0 again as it settles --
+    // so a finished pose (ignite = 1) is the resting forge, never a frozen flash.
+    flare = Math.sin(Math.PI * stage.ignite);
+    mouthMaterial.emissiveIntensity = stage.ignite * FORGE_MOUTH_INTENSITY
+      + flare * (FORGE_MOUTH_FLARE_INTENSITY - FORGE_MOUTH_INTENSITY);
+    forgeGlow.scale.setScalar(FORGE_GLOW_SIZE_METERS * (1 + (FORGE_FLARE_SCALE - 1) * flare));
     return stage.ignite;
   }
 
@@ -474,7 +491,9 @@ export function createWorkshopReaction(scene, workshopMesh) {
       // A slow forge breath, always running once lit. Bounded on purpose: one sine, one opacity, no
       // allocation, and nothing whose cost grows with how long the page has been open.
       const breath = quiet ? 0.85 : 0.82 + Math.sin(ambientClock * 2.6) * 0.11;
-      setGlowStrength(forgeGlow, breath * lit);
+      // The flare adds on top of the ramp, so the catch goes straight to full rather than waiting
+      // for the emissive ramp to get there; setGlowStrength clamps at 1.
+      setGlowStrength(forgeGlow, breath * lit + flare);
 
       for (let i = 0; i < embers.length; i += 1) {
         // Each ember owns its own slice of one shared cycle, so the three leave the hearth staggered
