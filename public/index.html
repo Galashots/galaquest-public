@@ -290,23 +290,23 @@
       /* The screen itself is NOT a solid overlay: pointer-events none on the container, auto only on
          its own chrome (header/slots/list/card below). The centre stays clickable straight through
          to #game, so the SAME cameraGesture already bound to #game (input/cameraGesture.js) keeps
-         working underneath -- dragging the empty middle rotates the live hero exactly like dragging
-         the world does, at whatever close distance main.js dollies the follow camera to while this
-         is open. That is GP1's "actual 3D equipped hero preview" (plan section 8): the running game
-         IS the preview, not a second WebGL context -- see main.js's own comment for why a second
-         renderer was rejected (iOS Safari's WebGL context ceiling, unnecessary risk on the testers'
-         actual iPads). */
-      /* The vignette (found by looking at a real capture): the Hero screen can open anywhere in the
-         world, so there is no fixed camera heading that guarantees a clean backdrop behind the
-         chrome -- a capture taken near the Lantern Tree showed its dark canopy sitting right behind
-         the slots row, reading as one confused shape. Darkening the EDGES while leaving the centre
-         (where the hero actually stands) clear reads correctly regardless of what world geometry is
-         back there, without needing to special-case any one location. Still pointer-events: none --
-         a painted background does not participate in hit-testing, so the drag-to-rotate gesture
-         underneath is untouched. */
+         working underneath -- while this screen is up main.js routes that drag to the PREVIEW's own
+         turntable instead of the world camera, so dragging the empty middle turns your guy around.
+         That is GP1's "actual 3D equipped hero preview" (plan section 8): the running game IS the
+         preview, not a second WebGL context -- see main.js's own comment for why a second renderer
+         was rejected (iOS Safari's WebGL context ceiling, unnecessary risk on the testers' actual
+         iPads).
+
+         NO BACKGROUND HERE, deliberately. This used to carry a radial-gradient vignette, because the
+         Hero screen can open anywhere in the world and there is no camera heading that guarantees a
+         clean backdrop. GP1-C3 moved that job INSIDE the renderer (render/heroPreview.js's backdrop
+         card): a DOM gradient is composited over the whole canvas, so it dims the hero as much as the
+         clutter behind him, and it could never do anything about world geometry standing in FRONT of
+         him -- which is what the captures at the Workshop and the Lantern Tree actually showed. The
+         card sits behind the hero and in front of the world, which a DOM layer cannot. Two vignettes
+         would only double-darken the subject, so this one is gone rather than merely reduced. */
       #hero-screen {
         position: absolute; inset: 0; pointer-events: none;
-        background: radial-gradient(ellipse at center, transparent 32%, rgb(12 20 31 / 62%) 100%);
         opacity: 0; transition: opacity 180ms ease-out;
       }
       #hero-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }

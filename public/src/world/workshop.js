@@ -7,9 +7,10 @@
 // one-shot physical acknowledgement of a server-authoritative edge (the wire's own
 // village.workshopOwned flipping true), not a per-frame simulation.
 //
-// TEMP BY DESIGN, not just by name (the same posture progression/heroScreen.js's own
-// createHeroPreviewMarker already takes on GP1-C2's marker): the goal is proving the causal contract
-// "buy Workshop I -> the Village visibly changes", not shipping art. Every mesh this file builds is
+// TEMP BY DESIGN, not just by name: the goal is proving the causal contract
+// "buy Workshop I -> the Village visibly changes", not shipping art. (GP1-C2's own temporary proof
+// marker on the Hero screen took the same posture and has since been deleted outright, replaced by
+// render/heroPreview.js's real showcase -- which is what retiring one of these looks like.) Every mesh this file builds is
 // named with a -TEMPORARY suffix, isolated inside its own named group, and built from primitive
 // geometry rather than a new asset -- delete/replace the group's contents the moment a real Workshop
 // model ships. No hero rigging, gear-fit system, Character Studio, or production mesh is touched --
