@@ -336,14 +336,37 @@ await shot('01-start');
 
 // Deliberately thrown from 8+m away, against a 1.7m reach -- a guaranteed miss, with the wolf far too
 // distant to be any part of the frame. Captures swing-missed's own feedback in isolation: the button
-// must pulse a flat grey instead of its usual orange, and nothing on the wolf should move at all.
-// Polling would have nothing to wait for here (hp never changes on a miss), so this uses a fixed
-// delay timed to SWING_CONTACT_SECONDS (0.18s in combat/encounter.js) the same way the swing-windup/
-// contact/follow sequence below does.
+// must show its miss state, and nothing on the wolf should move at all.
+//
+// GP1-C5 FIX. This used to `sleep(200)` and shoot, with a comment saying 200ms was "timed to
+// SWING_CONTACT_SECONDS (0.18s)". SWING_CONTACT_SECONDS is 0.5167s and has been since the 1.5s
+// sword_slash clip landed -- the same stale 0.18 that the comment 100 lines below already had to be
+// corrected for. So this capture fired 317ms BEFORE the miss it is named after could possibly be
+// raised, and every fight-swing-miss.png ever committed shows a hero mid-windup next to an ordinary
+// orange button. The miss feedback had never once been photographed, which is exactly how it stayed
+// weak enough to need this phase.
+//
+// Polled on the button's OWN state rather than re-derived from a duration: the capture now cannot be
+// taken unless the thing it claims to show is on screen. `pollUntil` works on state(), so this uses
+// a small dedicated poll on the DOM attribute main.js sets.
 const beforeMiss = await state();
 await tapAttack();
-await sleep(200);
+const missFeedback = await (async () => {
+  const deadline = deadlineAfter(3000);
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const shown = await page.eval(
+      "document.querySelector('#attack-button')?.dataset.feedback ?? ''",
+    );
+    if (shown === 'miss') return true;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(25);
+  }
+  return false;
+})();
 await shot('swing-miss');
+check('the miss capture actually contains the miss feedback, rather than a hero still winding up',
+  missFeedback, 'the attack button never entered its miss state within 3s of the tap');
 const afterMiss = await state();
 check('a swing thrown well outside reach is a miss, not silent damage',
   afterMiss.wolf.hp === beforeMiss.wolf.hp, `wolf hp ${beforeMiss.wolf.hp} -> ${afterMiss.wolf.hp}`);
@@ -563,6 +586,36 @@ const biteState = await pollUntil((s) => s.hero.hp < beforeBite.hero.hp, { timeo
 await shot('hero-hurt-flash');
 check('a wolf bite lands and the capture catches it while the hurt flash is still up',
   biteState.hero.hp < beforeBite.hero.hp, `hero ${beforeBite.hero.hp}hp -> ${biteState.hero.hp}hp`);
+
+// ── GP1-C5: being knocked out, photographed ─────────────────────────────────────────────────────
+//
+// The fifth combat state, and the only one this harness had no picture of at all -- so "you went
+// down" was shipped, reviewed and re-reviewed without anybody once looking at what it does to the
+// screen. It did almost nothing: a banner, for 1.6s, over an otherwise normal-looking game with a
+// dimmed ATTACK button. A child mashing that button has no way to tell that from the button having
+// broken, which is the specific failure this phase was commissioned to fix.
+//
+// Reached by simply CONTINUING to stand there. The beat above already walked into bite range and
+// took one bite without attacking; three bites is a knockout at HERO_MAX_HP 3, so this needs no new
+// technique and no forced state -- just patience, which is also exactly how a real child gets
+// knocked out. Nothing here touches the rules: the wolf does it.
+const downState = await pollUntil((s) => s.hero.downSeconds >= 0, { intervalMs: 40, timeoutMs: 25000 });
+check('the hero can actually be knocked out by standing and taking bites',
+  downState.hero.downSeconds >= 0, `hp ${downState.hero.hp}, downSeconds ${downState.hero.downSeconds}`);
+await shot('hero-down');
+const downShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+check('going down puts the WHOLE SCREEN into the knocked-out state, not just a banner that fades',
+  downShown === true, `heroDownShown() ${JSON.stringify(downShown)}`);
+
+// And the other half of the promise: it has to end, visibly, on its own. A veil that outlived the
+// rules would be worse than no veil -- the child would be looking at a knocked-out screen while
+// holding a hero who can already swing.
+const backUp = await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000 });
+check('the hero gets back up on his own', backUp.hero.downSeconds < 0,
+  `downSeconds ${backUp.hero.downSeconds}`);
+const stillShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+check('and the knocked-out state clears when he does, rather than outliving the rules',
+  stillShown === false, `heroDownShown() ${JSON.stringify(stillShown)} after standing up`);
 
 // Prove the control works before blaming the rules: one tap must start a swing.
 //
