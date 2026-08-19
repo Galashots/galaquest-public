@@ -100,13 +100,21 @@
          it. */
       #attack-button::after {
         content: ""; position: absolute; inset: 0; border-radius: 50%;
-        border: 3px solid rgb(255 255 255 / 85%);
+        border: 5px solid rgb(255 255 255 / 92%);
         opacity: 0; transform: scale(1); pointer-events: none;
       }
-      #attack-button[data-feedback="miss"]::after { animation: miss-ring 320ms ease-out 1; }
+      #attack-button[data-feedback="miss"]::after { animation: miss-ring 420ms ease-out 1; }
+      /* HOLDS before it goes. The first version faded linearly from the instant it appeared, and in
+         .local/runtime-test/fight-landscape-swing-miss.png -- the first frame that ever caught this
+         at all -- it had already thinned to a barely-there hairline by the time the screenshot
+         encoded. A ring that is only bright for the few milliseconds nobody is looking at is not
+         feedback. So: full strength through the first 45%, then leave. It also travels less far now
+         (1.45 rather than 1.7) -- spreading the same amount of ink over a bigger circle is what made
+         it thin, and a ring that stays near the thumb is still clear of it. */
       @keyframes miss-ring {
-        0%   { opacity: 0.9; transform: scale(1); }
-        100% { opacity: 0;   transform: scale(1.7); }
+        0%   { opacity: 1; transform: scale(1); }
+        45%  { opacity: 1; transform: scale(1.28); }
+        100% { opacity: 0; transform: scale(1.45); }
       }
       /* Hearts, not a bar: see combat/feedback.js for why. Same dark pill treatment as the other HUD
          readouts so a red heart still reads against open sky. */
@@ -224,12 +232,18 @@
          someone retuning the rules. */
       #hero-down-veil {
         position: absolute; inset: 0; pointer-events: none;
-        display: grid; place-items: end center; padding-bottom: 34%;
         background: radial-gradient(ellipse at center, rgb(8 12 22 / 62%) 0%, rgb(4 6 12 / 88%) 100%);
         opacity: 0; transition: opacity 420ms ease-out;
       }
       #hero-down-veil[data-shown="true"] { opacity: 1; transition: opacity 120ms ease-in; }
+      /* Anchored to #banner's OWN 68% line, not to the bottom of the frame. The first version placed
+         it with padding-bottom: 34%, which is 34% of the VIEWPORT HEIGHT -- so it happened to land
+         under the message in portrait and floated 130px above it in landscape, detached, sitting
+         across the hero and the wolf. Caught by the landscape sanity pass, which is the entire reason
+         that pass exists (.local/runtime-test/fight-landscape-hero-down.png, before this). Sharing
+         the banner's percentage means the two now move together in any frame shape. */
       #hero-down-bar {
+        position: absolute; top: calc(68% + 3.4rem); left: 50%; transform: translateX(-50%);
         width: min(48vw, 260px); height: 10px; border-radius: 999px;
         background: rgb(255 255 255 / 22%); overflow: hidden;
       }

@@ -875,10 +875,11 @@ async function bootstrap() {
   function pulseMiss() {
     attackButtonElement.dataset.feedback = 'miss';
     window.clearTimeout(missPulseTimer);
-    // 320ms, matching the miss-ring keyframe in index.html: the attribute is what the animation
-    // hangs on, so clearing it early (it was 160) cut the ring off halfway out and left the pulse
-    // looking like a flicker rather than a throw.
-    missPulseTimer = window.setTimeout(() => { delete attackButtonElement.dataset.feedback; }, 320);
+    // Matches the miss-ring keyframe duration in index.html: the attribute is what the animation
+    // hangs on, so clearing it early (it was 160, against a 320ms ring) cut the ring off halfway out
+    // and left the pulse looking like a flicker rather than a throw. 420 now, with the ring holding
+    // full strength for the first 45% of it -- see that keyframe's own comment.
+    missPulseTimer = window.setTimeout(() => { delete attackButtonElement.dataset.feedback; }, 420);
   }
 
   // One place where a rule event becomes something a young player can see. Kept separate from the
