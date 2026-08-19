@@ -62,11 +62,19 @@ const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url)
 // runner at ~5 fps a 2.05 s ceremony takes ~4.1 s of wall clock, and a 4000 ms budget calls that
 // hung. Nothing was broken; the budget simply did not know what it was waiting for.
 //
-// 4x covers a sustained 2.5 fps floor, which is far below anything this matrix has produced. This is
-// the same lesson the ledger already carries as "Automation timeouts are wall-clock budgets, not
-// sample counts", applied to the other end of it: a wall-clock budget still has to be derived from
-// the work, not from a habit.
-const CEREMONY_BUDGET_MS = Math.ceil(WORKSHOP_BUILD_SECONDS * 1000 * 4);
+// The multiplier is MEASURED, not chosen. 4x was the first guess and hosted CI rejected it: in run
+// 32258891974 the landscape phase's ceremony completed 9.9 s after the purchase -- about 4.8x wall
+// clock, so roughly 2 fps -- and the very next check, taken 1.4 s later, passed. The ceremony was
+// never hung; the budget was 1.7 s short. 10x covers a sustained 1 fps floor with room under it.
+//
+// This is a liveness check ("did the ceremony ever finish"), not a performance assertion, so a
+// generous budget costs nothing and a tight one buys nothing. Frame rate is measured by the quality
+// ladder, which is the thing that actually owns that question.
+//
+// Same lesson the ledger already carries as "Automation timeouts are wall-clock budgets, not sample
+// counts", applied to the other end of it: a wall-clock budget still has to be derived from the
+// work, not from a habit.
+const CEREMONY_BUDGET_MS = Math.ceil(WORKSHOP_BUILD_SECONDS * 1000 * 10);
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
 const STICK_PX = 56;

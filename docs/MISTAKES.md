@@ -418,5 +418,8 @@ new one, at roughly 5 fps, while passing 53/53 locally — nothing was broken, t
 not know what it was waiting for. A unit test asserting the ceremony fitted inside that same 4000 ms
 passed throughout, because it shared the false premise. Fixed by deriving `CEREMONY_BUDGET_MS` from
 the exported `WORKSHOP_BUILD_SECONDS`, and by deleting the unit test's claim about another file's
-number rather than adjusting it.
+number rather than adjusting it. The first headroom multiplier (4x) was itself a guess and was also
+too small — hosted CI measured the ceremony completing at ~4.8x wall clock, roughly 2 fps — so the
+multiplier is now 10x and the comment records the measurement it came from. A liveness check earns
+nothing from a tight budget.
 **Foreknowledge helped:** not yet recorded.
