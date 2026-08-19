@@ -153,6 +153,16 @@ function matrixFromRestTransform(restRelativeToHeroRoot) {
   );
 }
 
+/**
+ * The name every rigid gear anchor gets. One definition, because three places now need to AGREE on
+ * it: the two attach functions that build anchors, and character/weaponLoadout.js, which has to find
+ * them again by name inside a SkeletonUtils clone (a clone has new object identities, so the record
+ * attachRigidTier2Gear returned for the original is no use there -- the name is the only handle).
+ */
+export function rigidAnchorName(gearId, boneName) {
+  return `InterimAdapter_${gearId}_${boneName}`;
+}
+
 function requiredObject(root, name, kind) {
   const object = root.getObjectByName(name);
   if (!object) {
@@ -188,7 +198,7 @@ export function attachRigidTier2Gear(heroRoot) {
     const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
     const local = new THREE.Matrix4().copy(bone.matrixWorld).invert().multiply(world);
     const anchor = new THREE.Group();
-    anchor.name = `InterimAdapter_${item.id}_${item.boneName}`;
+    anchor.name = rigidAnchorName(item.id, item.boneName);
     local.decompose(anchor.position, anchor.quaternion, anchor.scale);
 
     // The merged GLB supplies canonical source-space gear at identity. Reparenting
@@ -267,7 +277,7 @@ export function attachBeltLantern(heroRoot, lanternRoot) {
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
   const local = new THREE.Matrix4().copy(bone.matrixWorld).invert().multiply(world);
   const anchor = new THREE.Group();
-  anchor.name = `InterimAdapter_${RIGID_BELT_LANTERN.id}_${RIGID_BELT_LANTERN.boneName}`;
+  anchor.name = rigidAnchorName(RIGID_BELT_LANTERN.id, RIGID_BELT_LANTERN.boneName);
   local.decompose(anchor.position, anchor.quaternion, anchor.scale);
 
   bone.add(anchor);
@@ -391,7 +401,7 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
   const local = new THREE.Matrix4().copy(bindMatrixWorld).invert().multiply(world);
   const anchor = new THREE.Group();
-  anchor.name = `InterimAdapter_${RIGID_WILDWOOD_BLADE_CANDIDATE.id}_${RIGID_WILDWOOD_BLADE_CANDIDATE.boneName}`;
+  anchor.name = rigidAnchorName(RIGID_WILDWOOD_BLADE_CANDIDATE.id, RIGID_WILDWOOD_BLADE_CANDIDATE.boneName);
   local.decompose(anchor.position, anchor.quaternion, anchor.scale);
 
   bone.add(anchor);
