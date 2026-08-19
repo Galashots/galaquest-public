@@ -32,6 +32,7 @@ import { movementPulseMillis } from '../runtime-test/automation-timing.mjs';
 // Read the real throttle period rather than restating it. A diagnostic that hard-codes 66.67 would
 // keep reporting confidently after somebody changed INPUT_SEND_HZ.
 import { INPUT_SEND_HZ } from '../../public/src/net/protocol.js';
+import { classifyReleases } from './release-classification.mjs';
 
 const SEND_INTERVAL_MS = 1000 / INPUT_SEND_HZ;
 // How long to keep looking for the release after key-up before giving up. STALE_INPUT_MS is 1000 ms
@@ -49,6 +50,7 @@ class CDP {
     this.ws = new WebSocket(wsUrl);
     this.id = 0;
     this.pending = new Map();
+    this.listeners = new Map();
     this.ws.addEventListener('message', (event) => {
       const message = JSON.parse(event.data);
       if (message.id && this.pending.has(message.id)) {
@@ -56,8 +58,18 @@ class CDP {
         this.pending.delete(message.id);
         if (message.error) reject(new Error(JSON.stringify(message.error)));
         else resolve(message.result);
+        return;
+      }
+      // CDP EVENTS have no id. They are how the wire seam works: Network.webSocketFrameSent tells us
+      // what the page ACTUALLY put on the socket, independently of what setIntent claims it returned.
+      if (message.method) {
+        for (const fn of this.listeners.get(message.method) ?? []) fn(message.params);
       }
     });
+  }
+  on(method, fn) {
+    if (!this.listeners.has(method)) this.listeners.set(method, []);
+    this.listeners.get(method).push(fn);
   }
   ready() { return new Promise((r) => this.ws.addEventListener('open', r, { once: true })); }
   // An open WebSocket is a live handle, and Node will not exit while one is held. Without this the
@@ -92,7 +104,11 @@ const key = (page, type) => page.send('Input.dispatchKeyEvent', {
 const INSTALL_PROBE = `(() => {
   const r = window.__galaQuestRuntime;
   if (!r || window.__gqMoveProbe) return Boolean(window.__gqMoveProbe);
-  const probe = { intents: [], frames: [], installedAt: performance.now(), lastSendT: null };
+  const probe = {
+    intents: [], frames: [], installedAt: performance.now(), lastSendT: null,
+    // Mirrors production's own lastSentMagnitude so release candidacy can be recomputed per call.
+    lastSentMagnitude: 0,
+  };
   const realSetIntent = r.net.setIntent.bind(r.net);
   r.net.setIntent = (dirX, dirZ, magnitude, run) => {
     // setIntent RETURNS whether a message actually reached the wire, and it returns false in two very
@@ -103,8 +119,19 @@ const INSTALL_PROBE = `(() => {
     // non-zero intent was transmitted" are different facts, and the gap between them is exactly where
     // cause C would hide.
     const t = performance.now();
+    // Captured BEFORE the call, because the call mutates the very state that decides whether this
+    // was a release. Production computes "released = magnitude === 0 && lastSentMagnitude > 0", and
+    // lastSentMagnitude is exactly the magnitude of the last call that returned true -- so mirroring
+    // it here reconstructs production's own release test without reaching into the closure.
+    const prevSentMagnitude = probe.lastSentMagnitude;
+    const status = (() => { try { return r.netState().status; } catch { return 'unknown'; } })();
+    const releaseCandidate = magnitude === 0 && prevSentMagnitude > 0;
     const sent = realSetIntent(dirX, dirZ, magnitude, run);
-    probe.intents.push({ t, dirX, dirZ, magnitude, run: Boolean(run), sent: sent === true });
+    if (sent === true) probe.lastSentMagnitude = magnitude;
+    probe.intents.push({
+      t, dirX, dirZ, magnitude, run: Boolean(run), sent: sent === true,
+      prevSentMagnitude, status, releaseCandidate, seq: probe.intents.length,
+    });
     // The throttle is phase-dependent, not a flat quota. setIntent's due test is
     // "now - lastSentAtMs >= INPUT_SEND_INTERVAL_MS", measured from the last ACTUAL send -- so a pulse
     // that begins already past due transmits on its very first sampled frame, and one that begins
@@ -140,6 +167,20 @@ const READ = `(() => {
   });
 })()`;
 
+// The whole ordered call list, plus frame times. This is the evidence the previous version threw
+// away: it reported per-window COUNTS, which cannot answer "what happened next after this send".
+const TRACE = `(() => {
+  const p = window.__gqMoveProbe;
+  return JSON.stringify({
+    intents: p.intents.map((i) => ({
+      seq: i.seq, t: +i.t.toFixed(1), magnitude: +i.magnitude.toFixed(3), sent: i.sent,
+      prevSentMagnitude: +i.prevSentMagnitude.toFixed(3), status: i.status,
+      releaseCandidate: i.releaseCandidate,
+    })),
+    frames: p.frames.map((f) => +f.t.toFixed(1)),
+  });
+})()`;
+
 const windowSince = (fromT, toT) => `(() => {
   const p = window.__gqMoveProbe;
   const frames = p.frames.filter((f) => f.t >= ${fromT} && f.t <= ${toT});
@@ -160,14 +201,21 @@ const windowSince = (fromT, toT) => `(() => {
     // this and the line above is the INPUT_SEND_HZ throttle doing its job -- or, if it is zero while
     // attempts are non-zero, authority never heard the movement at all.
     nonZeroIntentsSent: nonZeroSent.length,
-    // Zero-magnitude calls raised DURING the pulse. These are not the release -- they are frames on
-    // which the key was not registered as down. setIntent refuses them outright (magnitude === 0
-    // and not a release returns false), so they can never transmit; counting them separately keeps
-    // them from inflating either of the numbers above.
+    // Zero-magnitude calls raised inside [downT, upT].
+    //
+    // AN EARLIER VERSION OF THIS FILE ASSERTED THESE "ARE NOT THE RELEASE". That assertion was
+    // wrong, and it is exactly what invalidated the first hosted conclusion. Under starvation a
+    // rendered frame can land 700 ms after the previous one, so the frame that first samples a zero
+    // input may fall INSIDE the next nominal pulse window rather than after key-up. Whether a call
+    // is the release is decided by client state -- magnitude === 0 while lastSentMagnitude > 0 --
+    // never by which side of a harness timestamp it happens to land on. These counts are kept only
+    // as a window summary; classification is done chronologically in classifyReleases() below.
     zeroMagnitudeAttemptsInPulse: zeroMag.length,
+    zeroMagnitudeSentInPulse: zeroMag.filter((i) => i.sent).length,
     maxMagnitude: nonZero.length ? +Math.max(...nonZero.map((i) => i.magnitude)).toFixed(3) : 0,
   });
 })()`;
+
 
 // The throttle phase at the moment the pulse begins. setIntent's `due` test measures from the last
 // ACTUAL send, so an idle gap before key-down decides whether the very first sampled frame can
@@ -190,9 +238,10 @@ const releaseSince = (fromT) => `(() => {
   const rel = p.intents.filter((i) => i.t > ${fromT} && i.magnitude === 0);
   const sent = rel.filter((i) => i.sent);
   return JSON.stringify({
-    // A release bypasses the throttle by design, so unlike a movement intent this SHOULD transmit on
-    // the first frame after key-up. Attempts without sends means the frame loop saw the key come up
-    // and the message still did not go.
+    // KEPT AS A WINDOW SUMMARY ONLY -- NOT AS A VERDICT. A high attempts-with-zero-sends count here
+    // is the expected shape once a release has already been consumed: lastSentMagnitude is 0, so
+    // every subsequent zero is correctly refused and none of them are releases. Reading this field
+    // as "failed releases" is what produced the wrong first conclusion. classifyReleases() decides.
     releaseAttemptsAfterKeyUp: rel.length,
     releaseMessagesSent: sent.length,
     releaseLatencyMs: sent.length ? +(sent[0].t - ${fromT}).toFixed(1) : null,
@@ -208,16 +257,34 @@ const { targetId } = await browser.send('Target.createTarget', { url: 'about:bla
 const { sessionId } = await browser.send('Target.attachToTarget', { targetId, flatten: true });
 const wsUrl = version.webSocketDebuggerUrl.replace(/\/devtools\/browser\/.*/, `/devtools/page/${targetId}`);
 const page = new CDP(wsUrl);
+
+// INDEPENDENT WIRE SEAM. setIntent's return value is the client's own claim about transmission;
+// this is what the socket actually carried. If the two ever disagree, the wire wins.
+const wireFrames = [];
+page.on('Network.webSocketFrameSent', ({ response }) => {
+  const payload = response?.payloadData;
+  if (typeof payload !== 'string') return;
+  try {
+    const msg = JSON.parse(payload);
+    if (msg?.type !== 'input') return;
+    wireFrames.push({ seq: msg.seq, magnitude: msg.magnitude, dirX: msg.dirX, dirZ: msg.dirZ, run: msg.run });
+  } catch { /* non-JSON frame, not ours */ }
+});
 await page.ready();
 void sessionId;
 
 const records = [];
+// Key dispatch times, in page-clock terms. The classifier needs these to anchor each pulse's single
+// release candidate; the aggregates alone cannot say when a key-up actually happened.
+const pulseKeys = [];
 try {
   await page.send('Emulation.setDeviceMetricsOverride', { width: 768, height: 1024, deviceScaleFactor: 1, mobile: false });
   // GQ-008: start from a known guest. A diagnostic is not exempt -- a run that inherits somebody
   // else's localStorage (marks, lantern unlock, workshop ownership) is not reproducible, and these
   // numbers are only worth anything if the next run starts from the same place.
   await page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
+  // Before navigating, so the join and every input frame are observed from the first byte.
+  await page.send('Network.enable');
   await page.send('Page.navigate', { url: server.url });
 
   let ready = false;
@@ -252,6 +319,7 @@ try {
     await sleep(requestedMs);
     await key(page, 'keyUp');
     const upT = await page.eval('performance.now()');
+    pulseKeys.push({ pulse, downT, upT });
 
     const win = JSON.parse(await page.eval(windowSince(downT, upT)));
 
@@ -311,12 +379,34 @@ try {
   const pulsesAttemptedButNeverSent = records.filter(
     (r) => r.nonZeroIntentsAttempted > 0 && r.nonZeroIntentsSent === 0,
   ).length;
-  // A release bypasses the throttle, so a pulse that rendered frames after keyUp and still sent no
-  // release means authority kept walking the hero on the last non-zero intent (cause D territory).
+  // Window-scoped only, and NOT a verdict -- see the note on releaseAttemptsAfterKeyUp.
   const pulsesWithNoReleaseSent = records.filter((r) => r.releaseMessagesSent === 0).length;
   const pulsesServerDidNotMove = records.filter((r) => (r.serverMoved ?? 0) < 0.05).length;
   const allDeltas = records.flatMap((r) => r.frameDeltasMs);
   const relLatencies = records.map((r) => r.releaseLatencyMs).filter((v) => v != null);
+  // THE CLASSIFICATION. Chronological, over the whole run, independent of pulse windows.
+  const trace = JSON.parse(await page.eval(TRACE));
+  const { episodes, transitionCount } = classifyReleases(trace.intents, pulseKeys);
+  const countOf = (v) => episodes.filter((e) => e.verdict === v).length;
+  const wireZero = wireFrames.filter((f) => f.magnitude === 0).length;
+  const wireNonZero = wireFrames.filter((f) => f.magnitude > 0).length;
+  const release = {
+    pulsesClassified: episodes.length,
+    A_releaseNeverSampled: countOf('A'),
+    B_releaseSampledAndTransmitted: countOf('B'),
+    B_releaseAlreadyConsumed: countOf('B-consumed'),
+    C_genuineReleaseRejected: countOf('C'),
+    C_offlineAtRelease: countOf('C-offline'),
+    releasesSampledLateIntoNextPulse: episodes.filter((e) => e.landedAfterNextKeyDown === true).length,
+    // Structural non-zero -> zero transitions actually sampled anywhere in the run.
+    sampledNonZeroToZeroTransitions: transitionCount,
+    // Independent of setIntent's return value entirely.
+    wireInputFramesTotal: wireFrames.length,
+    wireZeroMagnitudeFrames: wireZero,
+    wireNonZeroMagnitudeFrames: wireNonZero,
+    totalSetIntentCalls: trace.intents.length,
+  };
+
   const summary = {
     pulses: records.length,
     pulsesWithNoRenderedFrame: pulsesWithNoFrame,
@@ -340,19 +430,37 @@ try {
       ? +(relLatencies.reduce((a, b) => a + b, 0) / relLatencies.length).toFixed(1) : null,
   };
 
+  console.log('\n--- release classification (chronological, NOT window-based) ---');
+  for (const [k, v] of Object.entries(release)) console.log(`  ${k}: ${v}`);
+  console.log('\n  per pulse:');
+  for (const e of episodes) {
+    console.log(`    pulse ${String(e.pulse).padStart(2)}  -> ${e.verdict.padEnd(10)}`
+      + ` sentNonZero=${e.transmittedNonZeroInPulse ? 'Y' : 'n'}`
+      + `  candidate#${String(e.candidateSeq ?? '-').padStart(4)} sent=${String(e.candidateSent ?? '-').padStart(5)}`
+      + ` prevSentMag=${String(e.candidatePrevSentMagnitude ?? '-').padStart(4)} status=${e.candidateStatus ?? '-'}`
+      + ` keyUp+${String(e.msFromKeyUpToCandidate ?? '-').padStart(7)}ms`
+      + `${e.landedAfterNextKeyDown ? '  LATE(into next pulse)' : ''}`
+      + `${e.mergedWithPulse ? `  MERGED with pulse ${e.mergedWithPulse}` : ''}`);
+  }
+  console.log(
+    '\n  A = release never sampled (frame starvation / pulse shape). NOT a setIntent defect.\n'
+    + '  B = release sampled and transmitted. Release semantics work.\n'
+    + '  C = genuine first non-zero -> zero transition, online, prevSentMagnitude > 0, NOT transmitted.\n'
+    + '      ONLY C establishes a release-transmission defect.\n'
+    + '  Cross-check: wireZeroMagnitudeFrames should equal B. If they disagree, trust the wire.',
+  );
+
   console.log('\n--- summary ---');
   for (const [k, v] of Object.entries(summary)) console.log(`  ${k}: ${v}`);
   console.log(
     '\nREAD THIS AS EVIDENCE, NOT A VERDICT:\n'
     + '  pulsesWithNoRenderedFrame > 0   => the whole pulse fell between two rendered frames; input was\n'
-    + '                                     never sampled at all (cause C, upstream form).\n'
+    + '                                     never sampled at all.\n'
     + '  pulsesAttemptedButNeverSent > 0 => the frame loop DID see the input but the throttle swallowed\n'
-    + '                                     every attempt, so authority heard nothing (cause C).\n'
-    + '  framesOver250ms > 0             => raw deltas exceed prediction\'s 250 ms step cap (cause B).\n'
-    + '  sends delivered AND server moved AND client/server still diverge => cause A.\n'
-    + '  pulsesWithNoReleaseSent > 0     => keyUp raised no transmitted release, so authority held the\n'
-    + '                                     last non-zero intent until STALE_INPUT_MS expired (cause D).\n'
-    + '  sends delivered but authority stops moving => look at STALE_INPUT_MS (cause D).\n'
+    + '                                     every attempt, so authority heard nothing.\n'
+    + '  framesOver250ms > 0             => raw deltas exceed prediction\'s 250 ms step cap.\n'
+    + '  pulsesWithNoReleaseSent is a WINDOW COUNT and is NOT evidence of a release defect on its own:\n'
+    + '  once a release has been consumed, later zeros are correctly refused. Read the A/B/C block.\n'
     + '\n  NOTE ON THE THROTTLE. totalNonZeroAttempted > totalNonZeroSent is NORMAL -- INPUT_SEND_HZ\n'
     + '  deliberately rate-limits. But the send count for a pulse is NOT floor(duration / interval).\n'
     + '  setIntent tests `now - lastSentAtMs >= INPUT_SEND_INTERVAL_MS` against the last ACTUAL send,\n'
@@ -365,7 +473,9 @@ try {
   );
 
   mkdirSync(OUT, { recursive: true });
-  writeFileSync(`${OUT}movement-diagnosis.json`, JSON.stringify({ summary, records }, null, 2));
+  writeFileSync(`${OUT}movement-diagnosis.json`, JSON.stringify({
+    summary, release, episodes, records, trace, wireFrames,
+  }, null, 2));
   console.log(`\nwrote ${OUT}movement-diagnosis.json`);
 } finally {
   await browser.send('Target.closeTarget', { targetId }).catch(() => {});
