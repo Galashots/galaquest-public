@@ -310,7 +310,23 @@
         opacity: 0; transition: opacity 180ms ease-out;
       }
       #hero-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      /* THE DESCENDANT RULE IS NOT OPTIONAL. `pointer-events: none` on this container does NOT make
+         the screen inert, because every piece of its chrome below sets `pointer-events: auto` on
+         itself -- and in CSS a descendant may re-enable hit-testing under a `none` ancestor. So a
+         CLOSED Hero screen, invisible at opacity 0, went on swallowing taps across everything its
+         chrome covers.
+         In portrait that is the whole bottom of the screen: #hero-item-card spans left 0.75rem to
+         right 0.75rem and sits ON TOP of both the ATTACK button and the movement stick. Open Hero
+         once, close it, and both thumbs are dead for the rest of the session.
+         Found from the running game, not by reading this file: a harness swing produced 0.002 m of
+         hand movement, and document.elementFromPoint at the ATTACK button's own centre answered
+         `hero-item-name`. The existing "closing the screen un-suspends the stick and attack button"
+         check passed the whole time -- it reads data-suspended, and the attribute was correct while
+         the button underneath it was unreachable. tools/runtime-test/drive-hero-screen.mjs now
+         hit-tests both thumbs after each overlay closes, which is the check that could have caught
+         this. */
       #hero-screen[data-shown="false"] { pointer-events: none; }
+      #hero-screen[data-shown="false"] * { pointer-events: none; }
       #hero-screen-header {
         position: absolute; top: 0.75rem; left: 0.75rem; right: 4.25rem;
         display: flex; align-items: center; justify-content: space-between;
@@ -420,6 +436,10 @@
       }
       #village-board-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
       #village-board-screen[data-shown="false"] { pointer-events: none; }
+      /* Same defect, same fix -- see #hero-screen's own comment above. This screen's chrome sets
+         pointer-events: auto on itself too, so a closed Board would go on catching taps over the
+         thumbs exactly the way a closed Hero screen did. */
+      #village-board-screen[data-shown="false"] * { pointer-events: none; }
       #village-board-header {
         position: absolute; top: 0.75rem; left: 0.75rem; right: calc(0.75rem + 52px + 52px + 1rem);
         display: flex; align-items: center; justify-content: space-between;

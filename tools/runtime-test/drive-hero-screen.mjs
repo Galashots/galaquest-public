@@ -11,7 +11,10 @@
  *   3. GP1-C2/C3 -- equipping produces a visible change in the Hero screen's 3D preview: the showcase
  *      pass (render/heroPreview.js) is dark while the screen is closed, and its two kicker lights
  *      carry whichever weapon is equipped while it is open.
- *   4. GP1-C3 -- the showcase is LOCATION-INDEPENDENT. Phase 3 walks the hero to six real world
+ *   4. GP1-C4 -- the sword in his hand FOLLOWS the equipped item. Equipping the Wildwood Blade puts
+ *      the actual Wildwood mesh in the fist and takes the Ironwood out, in the Hero screen and in
+ *      ordinary gameplay, with exactly one sword visible in every rendered frame of the transition.
+ *   5. GP1-C3 -- the showcase is LOCATION-INDEPENDENT. Phase 3 walks the hero to six real world
  *      positions, aims the world camera THROUGH the nearest large geometry at each so that geometry
  *      is between the camera and the hero, opens Hero, and captures portrait and landscape at every
  *      one. This is the failure class that motivated the pass: measured against the old dolly the
@@ -47,6 +50,9 @@ import { fileURLToPath } from 'node:url';
 import { STARTER_SWORD_ID, WILDWOOD_BLADE_ID } from '../../public/src/progression/items.js';
 import { swatchFor } from '../../public/src/progression/heroScreen.js';
 import { DEFAULT_DISTANCE, MIN_DISTANCE } from '../../public/src/camera/follow.js';
+import { PREVIEW_ORBIT_YAW_RADIANS } from '../../public/src/render/heroPreview.js';
+import { SWING_SECONDS } from '../../public/src/combat/encounter.js';
+import { SHIPPING_SWORD_MESH_ID, WILDWOOD_BLADE_CANDIDATE_ID } from '../../public/src/character/weaponLoadout.js';
 import { LANDMARKS, PROPS, VILLAGERS, WORKSHOP_PROP } from '../../public/src/world/zones/village.js';
 import { headingToward } from '../../public/src/world/zoneLoader.js';
 import { openRewardStore } from '../../net/rewardStore.mjs';
@@ -391,6 +397,36 @@ const suspended = await page.eval(`JSON.stringify({
 check('closing the screen un-suspends the movement stick and attack button',
   suspended.stick !== 'true' && suspended.attack !== 'true', JSON.stringify(suspended));
 
+// AND THE THUMBS ARE ACTUALLY REACHABLE. The attribute check above is not the same claim, and the
+// difference was a live bug: a closed Hero screen kept `pointer-events: auto` on its own chrome
+// (a descendant can re-enable hit-testing under a `pointer-events: none` ancestor), and in portrait
+// #hero-item-card spans the full width at the bottom -- directly over both thumbs. data-suspended
+// read "false" the whole time while every tap on ATTACK landed on an invisible item card instead.
+// Found because a swing capture in phase 4 produced 0.002 m of hand movement; document
+// .elementFromPoint at the button's own centre answered `hero-item-name`.
+//
+// So this asks the DOM the question a thumb asks: at the exact pixel this control lives, who
+// actually gets the touch?
+async function topmostAt(selector) {
+  return page.eval(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return 'MISSING';
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    if (!hit) return 'NOTHING';
+    return el === hit || el.contains(hit) ? 'ITSELF' : (hit.id || hit.className || hit.tagName);
+  })()`);
+}
+async function checkThumbsReachable(where) {
+  for (const [label, selector] of [['ATTACK button', '#attack-button'], ['movement stick', '#touch-stick']]) {
+    // eslint-disable-next-line no-await-in-loop
+    const topmost = await topmostAt(selector);
+    check(`${where}: the ${label} actually receives its own taps, not something invisible on top of it`,
+      topmost === 'ITSELF', `elementFromPoint at its centre -> ${topmost}`);
+  }
+}
+await checkThumbsReachable('with the Hero screen closed');
+
 // ── landscape pass ───────────────────────────────────────────────────────────────────────────────
 // AGENTS.md: "Any new UI... is checked in both." A second full open/compare pass, not just a
 // screenshot, because the CSS layout actually SWAPS (orientation media queries) rather than merely
@@ -422,6 +458,228 @@ check('GP1-C3: the accent reverts to the starter swatch too, in landscape',
   revertedToStarter.preview.accentHex === swatchFor(STARTER_SWORD_ID), JSON.stringify(revertedToStarter.preview));
 
 await clickSelector('#hero-screen-close');
+
+// ── phase 4: THE SWORD IN HIS HAND ───────────────────────────────────────────────────────────────
+//
+// GP1-C4. The Hero screen has said WILDWOOD BLADE / EQUIPPED / DAMAGE 2 since GP1 while the boy went
+// on holding the Ironwood sword. GP1-C3 made the character legible from anywhere, which turned a
+// survivable inconsistency into the first thing you notice. This phase proves the mesh now follows
+// the equipped item, in the Hero screen AND in ordinary gameplay, without ever showing two swords or
+// none.
+//
+// The transform itself is NOT re-solved here and must not be: it was solved by
+// tools/runtime-test/fit-wildwood-blade.mjs against Character Studio and baked into gear.js. What is
+// checked here is only WHICH already-solved anchor is visible. Whether the blade sits in the fist is
+// accepted by opening the captures below, the same rule everything gear-shaped in this repo follows.
+
+await page.send('Emulation.setDeviceMetricsOverride', PORTRAIT);
+await sleep(200);
+
+async function weaponMeshState() {
+  return page.eval('JSON.stringify(window.__galaQuestRuntime.equippedWeaponMeshState())').then(JSON.parse);
+}
+
+// A sampler that runs INSIDE the page, on rAF, so it observes every FRAME rather than every CDP
+// round trip. "No double sword for even one stable rendered frame" is a per-frame claim, and a
+// node-side poll at 30 ms cannot make it -- it would miss exactly the one-frame overlap it is
+// supposed to catch. Reads the same published accessor a harness reads; touches nothing.
+async function startWeaponFrameSampler() {
+  await page.eval(`(() => {
+    window.__gqWeaponSamples = [];
+    const tick = () => {
+      if (!window.__gqWeaponSampling) return;
+      window.__gqWeaponSamples.push(window.__galaQuestRuntime.equippedWeaponMeshState().visibleSwords);
+      requestAnimationFrame(tick);
+    };
+    window.__gqWeaponSampling = true;
+    requestAnimationFrame(tick);
+  })()`);
+}
+async function stopWeaponFrameSampler() {
+  return page.eval(`(() => {
+    window.__gqWeaponSampling = false;
+    const s = window.__gqWeaponSamples ?? [];
+    const counts = {};
+    for (const n of s) counts[n] = (counts[n] ?? 0) + 1;
+    return JSON.stringify({ frames: s.length, counts });
+  })()`).then(JSON.parse);
+}
+
+await startWeaponFrameSampler();
+
+// ── the starter state ──
+const starterMesh = await pollUntil(weaponMeshState, (s) => s.shipping.mounted, { timeoutMs: 5000 });
+check('GP1-C4: with the Starter Sword equipped the hero holds the shipping Ironwood sword, and only it',
+  starterMesh.equippedItemId === STARTER_SWORD_ID
+  && starterMesh.wantedMeshId === SHIPPING_SWORD_MESH_ID
+  && starterMesh.shipping.visible === true
+  && starterMesh.candidate.visible === false
+  && starterMesh.visibleSwords === 1,
+  JSON.stringify(starterMesh));
+
+await clickSelector('#hero-button');
+await sleep(400);
+await shot('weapon-starter-portrait');
+await page.send('Emulation.setDeviceMetricsOverride', LANDSCAPE);
+await sleep(500);
+await shot('weapon-starter-landscape');
+await page.send('Emulation.setDeviceMetricsOverride', PORTRAIT);
+await sleep(300);
+
+// ── equip the Blade and watch the hand ──
+await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
+await sleep(100);
+await clickSelector('#hero-equip-button');
+// Waits on the MESH, not on the equip mirror: the server round trip that flips `equipped`, the GLB
+// download and the frame that first draws the new anchor are three separate async events, and only
+// the last one is what a child sees.
+const bladeMesh = await pollUntil(weaponMeshState,
+  (s) => s.candidate.mounted && s.candidate.visible, { timeoutMs: 15000 });
+check('GP1-C4: equipping the Wildwood Blade puts the ACTUAL Wildwood mesh in his hand',
+  bladeMesh.equippedItemId === WILDWOOD_BLADE_ID
+  && bladeMesh.wantedMeshId === WILDWOOD_BLADE_CANDIDATE_ID
+  && bladeMesh.candidate.visible === true,
+  JSON.stringify(bladeMesh));
+check('GP1-C4: and the Ironwood sword is gone -- exactly one sword, not two in one fist',
+  bladeMesh.shipping.visible === false && bladeMesh.visibleSwords === 1, JSON.stringify(bladeMesh));
+
+await sleep(400);
+await shot('weapon-wildwood-portrait');
+await page.send('Emulation.setDeviceMetricsOverride', LANDSCAPE);
+await sleep(500);
+await shot('weapon-wildwood-landscape');
+await page.send('Emulation.setDeviceMetricsOverride', PORTRAIT);
+await sleep(300);
+
+// ── the same swap, in ordinary gameplay rather than in the menu ──
+// Closed screen, world camera pulled in to a real inspection distance and aimed at the hero's own
+// front-three-quarter using the SAME authored angle the Hero preview uses (imported, not restated),
+// so this capture and the showcase are looking at the blade from the same side.
+await clickSelector('#hero-screen-close');
+await sleep(300);
+const gameplayBefore = await worldState();
+const heroHeading = await page.eval('window.__galaQuestRuntime.hero.rotation.y');
+// The follow camera stands OPPOSITE its heading, so a heading of (hero facing + preview yaw + PI)
+// parks it in front of the hero on the sword side. Derived rather than tuned -- see camera/follow.js.
+await page.eval(`window.__galaQuestRuntime.follow.setHeading(${heroHeading + PREVIEW_ORBIT_YAW_RADIANS + Math.PI})`);
+await page.eval('window.__galaQuestRuntime.follow.setDistance(5)');
+await sleep(500);
+await shot('weapon-wildwood-gameplay-idle');
+const gameplayMesh = await weaponMeshState();
+check('GP1-C4: ordinary gameplay shows the same sword the Hero screen just showed -- one equipped weapon, not two answers',
+  gameplayMesh.candidate.visible === true && gameplayMesh.shipping.visible === false
+  && gameplayMesh.visibleSwords === 1, JSON.stringify(gameplayMesh));
+
+// A swing, so the blade is judged in MOTION as well as at rest. The mount was solved against the
+// idle pose (character/gear.js's own header is explicit that the idle silhouette is what it is
+// optimised for), and a mount can look correct standing still and pass straight through the leg
+// mid-arc -- which is exactly the thing a capture has to be able to show.
+//
+// Timed off THE HERO'S OWN HAND, not off wall time and not off the encounter clock. Three earlier
+// versions of this captured a hero standing still and were nearly published as "the swing":
+//
+//   1. 0.18 s after the tap -- a number lifted from a neighbouring harness's comment about the wolf's
+//      hit flash. combat/encounter.js says contact is at 0.5167 s of a 1.5 s swing.
+//   2. SWING_CONTACT_SECONDS after the tap -- still idle-looking. A per-frame recorder over the
+//      RightHand bone showed why: the swing clock does not start until ~50 ms after the tap, and at
+//      contact the hand is at the BOTTOM of its arc (y 0.76 against an idle 0.73). Contact is the
+//      strike, and the strike is a low pose; the loud frame is the recovery, where the hand reaches
+//      y 1.20.
+//   3. polling runtime.encounterState().hero.swingSeconds -- which is -1 forever in THIS harness.
+//      That accessor publishes the OFFLINE simulation, and online main.js deliberately never steps it
+//      ("No local stepEncounter/requestAttack/separateFromWolf here at all"); the real swing clock
+//      lives in the server mirror, which is not published. Worth knowing before writing any other
+//      online harness against it -- see this file's own report at the end.
+//
+// So the trigger is the thing being photographed: the sword hand's own world height. It needs no
+// accessor that does not already exist, it is true online and offline alike, and "the hand moved
+// 0.5 m" is a stronger statement about a swing than any clock reading.
+const attackRect = await rectOf('#attack-button');
+const swordHandY = () => page.eval(`(() => {
+  const hand = window.__galaQuestRuntime.hero.getObjectByName('RightHand');
+  if (!hand) return null;
+  const p = new (window.__galaQuestRuntime.hero.position.constructor)();
+  hand.getWorldPosition(p);
+  return +p.y.toFixed(4);
+})()`);
+
+const idleHandY = await swordHandY();
+// Reported alongside the arc measurement below, because when this check failed the first time the
+// interesting question was immediately "did the button even receive the tap" -- and a bare
+// travelled-0.003m is not enough to answer it.
+const attackDiagnostics = await page.eval(`JSON.stringify({
+  netStatus: window.__galaQuestRuntime.netState().status,
+  selfId: window.__galaQuestRuntime.netState().selfId,
+  ready: document.querySelector('#attack-button').dataset.ready,
+  suspended: document.querySelector('#attack-button').dataset.suspended,
+  heroScreenOpen: window.__galaQuestRuntime.heroScreenOpen(),
+  villageBoardOpen: window.__galaQuestRuntime.villageBoardOpen(),
+  gameSurface: document.querySelector('#game').dataset.heroScreenOpen,
+  topmostAtButton: (() => {
+    const r = document.querySelector('#attack-button').getBoundingClientRect();
+    const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return el ? (el.id || el.className || el.tagName) : null;
+  })(),
+})`).then(JSON.parse);
+await page.send('Input.dispatchTouchEvent', {
+  type: 'touchStart', touchPoints: [{ x: attackRect.x, y: attackRect.y, id: 0 }],
+});
+await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+// THE STRIKE. The hand's lowest point, and the pose where a badly-seated blade would sweep through
+// the leg -- which is the whole reason a swing capture is worth taking at all.
+const struckY = await pollUntil(swordHandY, (y) => y !== null && y <= idleHandY - 0.02,
+  { intervalMs: 16, timeoutMs: Math.round(SWING_SECONDS * 1000) });
+await shot('weapon-wildwood-swing-strike');
+let swingMesh = await weaponMeshState();
+check('GP1-C4: the swap survives the strike -- still exactly one sword at the bottom of the arc',
+  swingMesh.visibleSwords === 1 && swingMesh.candidate.visible === true, JSON.stringify(swingMesh));
+
+// THE RECOVERY PEAK. Blade high and clear of the body: the frame where its silhouette is actually
+// legible in motion.
+const peakY = await pollUntil(swordHandY, (y) => y !== null && y >= idleHandY + 0.30,
+  { intervalMs: 16, timeoutMs: Math.round(SWING_SECONDS * 1000) });
+await shot('weapon-wildwood-swing-peak');
+swingMesh = await weaponMeshState();
+check('GP1-C4: the swap survives the recovery -- still exactly one sword at the top of the arc',
+  swingMesh.visibleSwords === 1 && swingMesh.candidate.visible === true, JSON.stringify(swingMesh));
+
+// Proves the two captures above are of a MOVING hero rather than two photographs of the same idle,
+// which is exactly the mistake the three earlier versions of this block made.
+check('GP1-C4: the attack really swung -- the sword hand travelled a real arc, so the frames above are not two photographs of an idle',
+  struckY <= idleHandY - 0.02 && peakY >= idleHandY + 0.30,
+  `idle y ${idleHandY}, strike y ${struckY}, peak y ${peakY} (travel ${(peakY - struckY).toFixed(3)} m)`
+  + ` -- at the tap: ${JSON.stringify(attackDiagnostics)}`);
+
+await pollUntil(swordHandY, (y) => y !== null && Math.abs(y - idleHandY) < 0.03,
+  { intervalMs: 50, timeoutMs: Math.round(SWING_SECONDS * 1000) + 800 });
+await sleep(200);
+await page.eval(`window.__galaQuestRuntime.follow.setHeading(${gameplayBefore.heading})`);
+await page.eval(`window.__galaQuestRuntime.follow.setDistance(${gameplayBefore.distance})`);
+await sleep(200);
+
+// ── switching back ──
+await clickSelector('#hero-button');
+await sleep(200);
+await clickSelector(`[data-item-id="${STARTER_SWORD_ID}"]`);
+await sleep(100);
+await clickSelector('#hero-equip-button');
+const revertedMesh = await pollUntil(weaponMeshState,
+  (s) => s.equippedItemId === STARTER_SWORD_ID && s.shipping.visible, { timeoutMs: 8000 });
+check('GP1-C4: switching back to the Starter Sword restores the Ironwood and puts the Blade away',
+  revertedMesh.shipping.visible === true && revertedMesh.candidate.visible === false
+  && revertedMesh.visibleSwords === 1, JSON.stringify(revertedMesh));
+check('GP1-C4: the Blade mesh stays MOUNTED after being unequipped -- hidden, not re-downloaded next time',
+  revertedMesh.candidate.mounted === true, JSON.stringify(revertedMesh.candidate));
+await shot('weapon-reverted-to-starter-portrait');
+await clickSelector('#hero-screen-close');
+await sleep(200);
+
+// ── the per-frame invariant, over the whole phase ──
+const samples = await stopWeaponFrameSampler();
+check(`GP1-C4: across all ${samples.frames} RENDERED frames of this phase -- two equips, a swing and an unequip -- the hero held exactly one sword in every single one`,
+  samples.frames > 100 && Object.keys(samples.counts).length === 1 && samples.counts['1'] === samples.frames,
+  JSON.stringify(samples));
 
 // ── phase 3: the same screen, opened from six HOSTILE world positions ────────────────────────────
 //

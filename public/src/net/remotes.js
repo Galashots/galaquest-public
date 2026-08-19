@@ -6,6 +6,7 @@
 
 import { clone as cloneSkinned } from '../../vendor/utils/SkeletonUtils.js';
 import { CHARACTER, setLayer } from '../render/layers.js';
+import { forceShippingWeaponOnClone } from '../character/weaponLoadout.js';
 import { createLocomotionController } from '../character/locomotion.js';
 import { locomotionModeForSpeed } from '../character/speed.js';
 
@@ -23,6 +24,13 @@ export function createRemotePlayers(scene, template) {
     root.rotation.set(0, sample.heading, 0);
     root.scale.copy(template.root.scale);
     setLayer(root, CHARACTER);
+    // GP1-C4: a clone inherits whatever sword the LOCAL hero happened to be holding when it was
+    // taken, so without this a sibling who joined after you equipped the Blade would appear carrying
+    // YOUR blade while one who joined before carried the Ironwood -- the same player drawn two ways
+    // depending on join order. The wire has no per-player equipment field, so every remote gets the
+    // shipping sword: consistent, and never a lie about a specific item. See
+    // character/weaponLoadout.js's own comment.
+    forceShippingWeaponOnClone(root);
     root.traverse((object) => {
       if (object.isMesh) {
         object.castShadow = false;

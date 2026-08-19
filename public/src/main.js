@@ -25,7 +25,14 @@ import {
   WORKSHOP_BUILD_RECIPE_NAME,
   soundForEvent,
 } from './audio/recipes.js';
-import { attachBeltLantern, BELT_LANTERN_URL } from './character/gear.js';
+import {
+  attachBeltLantern,
+  attachWildwoodBladeCandidate,
+  BELT_LANTERN_URL,
+  WILDWOOD_BLADE_CANDIDATE_URL,
+} from './character/gear.js';
+import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
+  from './character/weaponLoadout.js';
 import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
 import { DEFAULT_EQUIPPED_WEAPON_ID } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
@@ -721,6 +728,60 @@ async function bootstrap() {
   let lanternMounted = false;
   let lanternMountInFlight = false;
   let lanternAssetMissingLogged = false;
+  // GP1-C4: WHICH SWORD IS IN HIS HAND. Same three-variable lazy-mount shape as the belt lantern
+  // directly below, and for the same reasons -- `wildwoodBladeMount` only latches after a REAL attach
+  // succeeds, `inFlight` stops a second load racing the first, and the missing-asset warning latches
+  // so a candidate that has not shipped is asked for ONCE. That last latch is load-bearing, not
+  // cosmetic: without it a 404 leaves `inFlight` cleared and the mount still null, so the retry
+  // re-fires on the very next frame and the game spends the rest of the session issuing a failing
+  // fetch at 60 Hz. Warning once while refetching forever would be the worst of both.
+  //
+  // The shipping sword's own mount record comes straight off loadHero()'s attachRigidTier2Gear return
+  // (studio/scene.js finds it the identical way for its own loadout swap) rather than being re-derived
+  // from the scene graph -- one place decides what an anchor is called, and it is not this file.
+  let shippingSwordMount = null;
+  let wildwoodBladeMount = null;
+  let wildwoodMountInFlight = false;
+  let wildwoodAssetMissing = false;
+  // The id this rule LAST ACTED ON, recorded rather than re-derived. equippedWeaponMeshState() below
+  // needs it, and the frame loop's own `ownRewards`/`currentEquippedWeaponId` are loop-locals it
+  // cannot see -- but a second copy of "online ? server rewards : offline id" living in the accessor
+  // would be a second answer to the same question, free to drift from the one that actually decided
+  // which anchor is visible. A harness reading a DIFFERENT id than the game used is worse than no
+  // accessor at all: it would report agreement between a card and a sword that never agreed.
+  let equippedWeaponIdThisFrame = DEFAULT_EQUIPPED_WEAPON_ID;
+  function ensureEquippedWeaponMesh(equippedItemId) {
+    equippedWeaponIdThisFrame = equippedItemId;
+    if (!runtime.hero) return;
+    if (weaponMeshIdFor(equippedItemId) === WILDWOOD_BLADE_CANDIDATE_ID
+      && wildwoodBladeMount === null && !wildwoodMountInFlight && !wildwoodAssetMissing) {
+      wildwoodMountInFlight = true;
+      loadGLB(WILDWOOD_BLADE_CANDIDATE_URL).then((gltf) => {
+        wildwoodMountInFlight = false;
+        if (gltf.userData?.loadError) {
+          if (!wildwoodAssetMissing) {
+            wildwoodAssetMissing = true;
+            console.warn(
+              `[progression] ${WILDWOOD_BLADE_CANDIDATE_URL} is missing -- equipping the Blade still `
+              + 'works and still reads DAMAGE 2; he keeps holding the Ironwood sword until the asset lands.',
+            );
+          }
+          return;
+        }
+        // Mounted hidden. Which anchor is visible is decided ONLY by weaponVisibility below, every
+        // frame, so there is no path where an arriving asset shows itself before the rule agrees.
+        wildwoodBladeMount = attachWildwoodBladeCandidate(runtime.hero, gltf.scene);
+        wildwoodBladeMount.anchor.visible = false;
+      }).catch((error) => {
+        wildwoodMountInFlight = false;
+        console.warn('[progression] failed to mount the Wildwood Blade:', error);
+      });
+    }
+    const visible = weaponVisibility({ equippedItemId, candidateMounted: wildwoodBladeMount !== null });
+    if (shippingSwordMount) shippingSwordMount.anchor.visible = visible.shipping;
+    if (wildwoodBladeMount) wildwoodBladeMount.anchor.visible = visible.candidate;
+  }
+
   function ensureLanternMounted(shouldBeUnlocked) {
     if (!shouldBeUnlocked || lanternMounted || lanternMountInFlight || !runtime.hero) return;
     lanternMountInFlight = true;
@@ -941,6 +1002,29 @@ async function bootstrap() {
     // never use it to accept one. Accepting a character showcase is a thing you do by looking at the
     // capture (AGENTS.md, "Playtests are mandatory").
     heroPreviewState: () => heroPreview.debugState(),
+    // GP1-C4: which sword is actually in his hand, and which one the equipped item ASKED for. Both,
+    // separately, on the same read -- if they ever disagree a harness sees a hero holding one weapon
+    // while the card promises another, which is the exact defect this closes. Same "observable
+    // without seeing it" pattern as every other accessor here; the mesh itself is still judged by
+    // opening the capture.
+    equippedWeaponMeshState: () => {
+      const equippedItemId = equippedWeaponIdThisFrame;
+      const anchorState = (mount) => (mount
+        ? { mounted: true, visible: mount.anchor.visible === true }
+        : { mounted: false, visible: false });
+      const shipping = anchorState(shippingSwordMount);
+      const candidate = anchorState(wildwoodBladeMount);
+      return {
+        equippedItemId,
+        wantedMeshId: weaponMeshIdFor(equippedItemId),
+        shipping,
+        candidate,
+        // The invariant, computed here so a harness sampling this every rendered frame can assert on
+        // one number: it must be 1, always. Two swords in one fist, or an empty hand mid-download,
+        // are the two ways this can go wrong and they are the same check.
+        visibleSwords: Number(shipping.visible) + Number(candidate.visible),
+      };
+    },
     // GP2: the server's own loot block, read the identical way the frame loop itself reads it --
     // "observable without seeing it" once more, so a harness can assert spawned/collected directly
     // rather than inferring the world state from a screenshot.
@@ -1098,6 +1182,11 @@ async function bootstrap() {
     // being left behind on CHARACTER. The accent is the equipped weapon's OWN swatch -- the same
     // number the item card and the owned strip paint with -- which is what makes tapping EQUIP a
     // visible change in 3D and not only in the DOM.
+    // GP1-C4: the sword he is actually holding, decided from the SAME equipped id the Hero screen's
+    // card and the preview's accent read, so the DOM, the showcase and the world can never disagree
+    // about which weapon this is. Runs whether the screen is open or closed -- the swap has to be
+    // true in ordinary gameplay too, not only while a child is looking at the menu.
+    ensureEquippedWeaponMesh(currentEquippedWeaponId);
     heroPreview.update({
       heroRoot: runtime.hero,
       accentColorHex: swatchHexFor(currentEquippedWeaponId),
@@ -1865,6 +1954,10 @@ async function bootstrap() {
   loadingLabel = null;
   scene.add(hero.root);
   runtime.hero = hero.root;
+  // GP1-C4: the shipping sword's anchor, so ensureEquippedWeaponMesh can hide it when the Blade is
+  // the equipped weapon. Nullable on purpose -- a failed hero load leaves rigidGear empty, and a
+  // missing sword must not throw on a frame loop that is otherwise still playable.
+  shippingSwordMount = hero.rigidGear?.find((item) => item.id === SHIPPING_SWORD_MESH_ID) ?? null;
   // AP2-A shipped raw Idle_11 with the settle off (createLocomotionController's own doc comment).
   // window.__DEBUG_FORCE_IDLE_SETTLE__ exists only so a future idle-candidate review can reuse
   // review-hero-idle11.mjs's raw-vs-settled A/B without editing this file -- deliberately opt-IN
