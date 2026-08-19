@@ -1,24 +1,55 @@
 // public/src/world/workshop.js
 //
-// GP3: the Workshop's own Level 0 -> Level 1 transformation -- an EXISTING village prop (preferably
-// the longhouse, world/zones/village.js's own WORKSHOP_PROP at [-7.5, -9.8]) additively dressed the
-// instant Workshop I is bought, never replaced or rebuilt. Sibling of world/lootPickups.js's
-// createCartReaction, same shape (trigger()/update(deltaSeconds)), same reasoning for why: this is a
-// one-shot physical acknowledgement of a server-authoritative edge (the wire's own
-// village.workshopOwned flipping true), not a per-frame simulation.
+// THE WORKSHOP, as a building the child owns rather than a pile of props beside one.
 //
-// TEMP BY DESIGN, not just by name: the goal is proving the causal contract
-// "buy Workshop I -> the Village visibly changes", not shipping art. (GP1-C2's own temporary proof
-// marker on the Hero screen took the same posture and has since been deleted outright, replaced by
-// render/heroPreview.js's real showcase -- which is what retiring one of these looks like.) Every mesh this file builds is
-// named with a -TEMPORARY suffix, isolated inside its own named group, and built from primitive
-// geometry rather than a new asset -- delete/replace the group's contents the moment a real Workshop
-// model ships. No hero rigging, gear-fit system, Character Studio, or production mesh is touched --
-// this file only ever adds children under an ALREADY-PLACED village prop.
+// What this replaces, and why. The first version of this file was TEMP BY DESIGN: a workbench box, a
+// thumbnail anvil and a glow sprite, parked 1.4 m off the longhouse's east wall, built only to prove
+// the causal contract "buy Workshop I -> the Village visibly changes". It proved it. Then it was
+// looked at from where a child actually stands (.local/workshop-probe/baseline-*.png, follow distance
+// 16, four approach bearings) and the verdict was that at gameplay distance it reads as A CRATE LEFT
+// ON THE GRASS: detached from the building, about a third of an NPC's height, changing the village's
+// silhouette not at all. Worse, the Lantern Mark payoff now floods the whole village with warm gold,
+// so the one cue the old version leaned on -- a warm forge glow -- is the one cue that cannot carry
+// anything out here. Glow confirms this building up close. It cannot announce it.
+//
+// THE CONVENTION, extracted from reference before any number below was chosen (AGENTS.md's "look
+// before you derive"): a village smithy is read as an ORDINARY BUILDING WEARING THREE ATTACHED PARTS
+// -- a bay breaking the roofline, a chimney standing above it, and a hearth-and-anvil pair at ground
+// level -- never as a building of its own design. Checked against WoW's own starter settlements first
+// as this repository requires (Goldshire, Kharanos, Razor Hill: in all three the forge and the anvil
+// are discrete objects placed against a building in that settlement's ordinary vernacular, and Razor
+// Hill's is literally named the Heated Forge), then against Minecraft's village smithy (a standard
+// house footprint; players are told to identify it by the furnace and the small lava pool beside it,
+// nothing else), and against the low-poly smithy asset packs this game's art is a cousin of (Synty
+// POLYGON Fantasy Kingdom, polymech's Stylized Low Poly Forge), every one of which sells the smithy
+// as a PROP KIT for a generic shell: anvil, furnace, chimney. Two things that convention says NOT to
+// do, and that this file therefore does not do: no painted or lettered hanging sign (WoW, Minecraft
+// and Stardew all skip signage entirely -- shape, prop and light carry it), and no hand-tool detail,
+// which spends geometry saying something only a close-up can hear.
+//
+// Where that convention had to bend for THIS building, and the measurement that forced it: the
+// longhouse GLB is nearly all roof. Its walls stop at y=1.00 and its eave on the east face is at
+// y=0.965 -- shoulder height on a 1.48 m hero -- with the ridge at 2.141. A lean-to that politely
+// tucks under that eave is a doghouse. So the bay is built TALLER than the eave and overlaps the
+// house's own roof, with a solid timber back panel closing the junction so no gap is ever visible
+// from outside. That is what a real outshot looks like from the street, and it is the only form that
+// reads at distance without touching the house model.
+//
+// And the part that actually does the work at sixteen metres: THE CHIMNEY. It stands 3.21 m against
+// a 2.141 m house -- half again the building's height -- and it is the one element that cannot be
+// foreshortened away, which is the failure this village has already been bitten by once (see the Y
+// phase's own exit note: a canopy silhouette that read from one bearing and vanished from another).
+// A roofline break can hide behind a bearing. A stack against the sky cannot.
+//
+// ONE MESH PER MATERIAL, not one per plank -- the same trade wildwoodGate.js makes and for the same
+// reason: this is an iPad. The whole Workshop is five meshes and four sprites.
 
 import * as THREE from '../../vendor/three.module.min.js';
+import { mergeGeometries } from '../../vendor/utils/BufferGeometryUtils.js';
 import { createGlowSprite, setGlowStrength } from '../render/glow.js';
+import { prefersReducedMotion } from '../render/motionPreference.js';
 import { WORLD, setLayer } from '../render/layers.js';
+import { GATE_WOOD_COLOR } from './wildwoodGate.js';
 
 /**
  * Pure. Mirrors zoneLoader.js's treeLitTransition exactly -- same idempotent-via-comparison shape,
@@ -30,97 +61,397 @@ export function workshopTransition(currentlyBuilt, nextBuilt) {
   return { changed: resolved !== (currentlyBuilt === true), built: resolved };
 }
 
-const WORKBENCH_COLOR = 0x6b4a30;
-const ANVIL_COLOR = 0x2b2b2e;
+// ── the ceremony's clock ─────────────────────────────────────────────────────────────────────────
+//
+// Five overlapping stages rather than one pop, because what is being asked for here is a readable
+// silhouette build beat AND the forge then coming alive -- which is two different events and has to
+// be watchable as two. They OVERLAP on purpose: cut end to end they read as four separate pops, and
+// a building does not assemble itself in instalments.
+//
+// The ORDER is the point. Frame, then roof, then the stack rises THROUGH that roof, then the tools
+// land, and only then does it light. Every silhouette-changing part is finished and still before the
+// forge ignites, so a child is never asked to look at a shape arriving and a light arriving at once.
+const BUILD_STAGES = Object.freeze({
+  frame: Object.freeze({ start: 0, seconds: 0.55 }),
+  roof: Object.freeze({ start: 0.4, seconds: 0.6 }),
+  stack: Object.freeze({ start: 0.85, seconds: 0.65 }),
+  tools: Object.freeze({ start: 1.35, seconds: 0.35 }),
+  ignite: Object.freeze({ start: 1.45, seconds: 0.6 }),
+});
+
+// The whole ceremony, in seconds: 2.05. DERIVED from the stages rather than typed beside them, so
+// retuning any one of them cannot leave this claiming the ceremony ends before it does -- the exact
+// drift GQ-007 exists to stop. Inside the "roughly 1-2 seconds of concentrated transformation
+// feedback" this game's own section 7 asks for. tools/runtime-test/drive-village-board.mjs derives
+// its own ceremony budget FROM this number (CEREMONY_BUDGET_MS), so lengthening the ceremony is a
+// decision somebody makes here, on purpose, and the gate follows.
+export const WORKSHOP_BUILD_SECONDS = Object.values(BUILD_STAGES)
+  .reduce((latest, stage) => Math.max(latest, stage.start + stage.seconds), 0);
+
+/**
+ * Pure. How far through each stage the ceremony is at `elapsedSeconds`, every value clamped to 0..1.
+ *
+ * Split out from the meshes so the ORDER can be asserted without a GPU: what makes this ceremony
+ * work is that the silhouette is complete before the forge lights, and that is a claim about five
+ * numbers, not about pixels.
+ */
+export function buildStageProgress(elapsedSeconds) {
+  // Compared against the stage's own clock rather than against the ratio, so a stage that has
+  // genuinely finished reports exactly 1 instead of 0.9999999999999998 -- which is what the honest
+  // division returns here, and which would leave a hydrating client's forge a hair short of lit
+  // forever.
+  const at = (stage) => {
+    if (!(elapsedSeconds > stage.start)) return 0;
+    if (elapsedSeconds >= stage.start + stage.seconds) return 1;
+    return (elapsedSeconds - stage.start) / stage.seconds;
+  };
+  return {
+    frame: at(BUILD_STAGES.frame),
+    roof: at(BUILD_STAGES.roof),
+    stack: at(BUILD_STAGES.stack),
+    tools: at(BUILD_STAGES.tools),
+    ignite: at(BUILD_STAGES.ignite),
+  };
+}
+
+// ── the ceremony waits for its audience ──────────────────────────────────────────────────────────
+//
+// The Village Board is a HUD button. It opens from anywhere, and the moment a child can first afford
+// Workshop I is the moment they pick up the last coin at the cart -- 42 m up the trail, with the
+// village nowhere on screen. Played that way (.local/workshop-play/p2cart-*.png), the purchase fired
+// the whole 2.05 s ceremony into an empty room: frame, roof, chimney and ignition all came and went
+// while the camera looked at a fence, and the child walked home to a building that had simply always
+// been there. The one-time payoff they paid for was spent with nobody watching.
+//
+// So the ceremony is not started on the purchase. It is ARMED on the purchase and started the first
+// frame the Workshop is actually in front of the player: on screen, and near enough to read -- the
+// same way the building would wait if a crew were doing it. A child standing at the door sees it
+// begin the instant the Board clears, exactly as before; a child who bought it from the cart sees it
+// go up as they come round the Lantern Tree. Reload or reconnect before ever looking at it and the
+// ordinary late-join path hands over the finished building -- the ceremony is never owed twice.
+//
+// Ten metres, not the follow distance: at sixteen the bay is the width of a thumb behind the tree
+// and a chimney rising there is a flicker, not an event (p2cart-06b: the village from 12 m north of
+// spawn, Workshop at the frame's top-left corner, 23 m off). Filmed walking home from the cart
+// (p2cartB/C-06w-home-*), 12 m fired with the bay still tucked behind the Lantern Tree's canopy;
+// ten fires a few strides later, where the roof and the rising stack clear it. The horizontal band
+// is the narrow one -- 0.7 of the half-width means "you are facing it", not "it is somewhere in the
+// corner of your eye" -- while the vertical band only keeps it off the very top and bottom edges,
+// because a follow camera looking down at the hero puts everything beyond the hero in the UPPER
+// part of the screen by construction (default pitch: a building 4-10 m ahead sits at roughly
+// 0.25-0.4 of the half-height), and the HUD owns the last strip at the top.
+export const CEREMONY_AUDIENCE_METERS = 10;
+export const CEREMONY_ON_SCREEN_NDC_X = 0.7;
+export const CEREMONY_ON_SCREEN_NDC_Y = 0.9;
+// Where on the building the audience test looks: the bay's anchor on the east face, lifted to the
+// height the chimney and roof arrive at, so "on screen" means the part that moves, not the grass.
+const CEREMONY_SIGHT_HEIGHT_METERS = 1.4;
+
+/**
+ * Pure. Is a Workshop at these screen coordinates and this range something the player can be said
+ * to be LOOKING AT? `ndc*` are normalised device coordinates straight out of Vector3.project: x and
+ * y in -1..1 across the screen, z in -1..1 between the near and far planes; a point behind the
+ * camera projects outside that z range. Split out so the decision can be asserted against a real
+ * PerspectiveCamera in node without a GPU, the same way buildStageProgress is asserted without one.
+ */
+export function audienceCanSee({ metersFromHero, ndcX, ndcY, ndcZ }) {
+  if (!(metersFromHero <= CEREMONY_AUDIENCE_METERS)) return false;
+  if (!(ndcZ > -1 && ndcZ < 1)) return false;
+  return Math.abs(ndcX) <= CEREMONY_ON_SCREEN_NDC_X && Math.abs(ndcY) <= CEREMONY_ON_SCREEN_NDC_Y;
+}
+
+/** Decelerating -- the shape a raised thing settles with. */
+function easeOut(t) { return 1 - (1 - t) ** 3; }
+
+// ── the palette ──────────────────────────────────────────────────────────────────────────────────
+//
+// The timber is the village fence's and the Wildwood Gate's own, imported rather than re-picked so
+// retuning that one tone cannot leave the Workshop built out of different wood from everything else
+// in the village (GQ-007: a value two modules use lives in one importable module).
+//
+// The roof gets a darker tone of that same wood, so it reads as a roof and not as one brown mass,
+// and it is deliberately neither of the two roof colours already on this street -- the captures show
+// teal and red -- so the Workshop is a third flavour at a glance rather than another of something.
+const WORKSHOP_ROOF_COLOR = 0x7d4f34;
+// Dark warm stone. The first pass made this a pale cool grey on the reasoning that being the one
+// cold-toned mass on a warm street would help it read -- and the capture killed that outright: a
+// pale grey stack against this game's pale sky is nearly invisible above the roofline, which is the
+// exact place the stack has to do its whole job, and at ground level it matched the boulders and
+// read as an appliance rather than as a forge. Dark is the correct answer for a silhouette against
+// a light sky, and warm keeps it inside the village's palette instead of next to it.
+const MASONRY_COLOR = 0x6e6560;
+const ANVIL_COLOR = 0x33363b;
+// The mouth of the forge -- near-black when cold, lit from inside by emissive rather than by a real
+// light, so it costs no shader recompile and needs no shadow work.
+const FORGE_MOUTH_COLOR = 0x1a1210;
+const FORGE_MOUTH_EMISSIVE = 0xff6a1a;
+// 1.5, not the 2.6 of the first pass: at 2.6 the mouth clipped to white in the capture and stopped
+// being a fire at all -- a bright rectangle on a box, which is what made the hearth read as a
+// household appliance. A forge mouth has to stay ORANGE to be a forge mouth.
+const FORGE_MOUTH_INTENSITY = 1.5;
 const FORGE_GLOW_COLOR = 0xff8a3d;
-const FORGE_GLOW_SIZE_METERS = 0.9;
-const SPARK_COLOR = 0xffcf7a;
-const SPARK_SIZE_METERS = 0.16;
-const SPARK_COUNT = 3;
-const SPARK_ORBIT_METERS = 0.35;
-const SPARK_RADIANS_PER_SECOND = 2.4;
-// Section 7's own target: "roughly 1-2 seconds of concentrated transformation feedback". 1.4s pop-in,
-// well inside that window, with the sparks/glow's own idle animation continuing forever after --
-// the pop is the CEREMONY, the glow/sparks are the lasting "this place is different now" signal.
-const POP_IN_SECONDS = 1.4;
+const FORGE_GLOW_SIZE_METERS = 0.95;
+// The moment the forge LIGHTS is the reveal, and a fade-in is not a moment. Played from the plaza
+// (.local/workshop-play/p2a-05-buy-06), ignition read as a glow quietly appearing at somebody's
+// feet -- the one beat of the ceremony a child paid to see, and the one easiest to miss. So the
+// hearth flares when it catches: the glow swells to this multiple of its resting size and the mouth
+// overshoots its resting intensity, both following one bump that rises and settles INSIDE the ignite
+// stage, so the ceremony still ends in exactly the resting pose hydration starts from. The mouth is
+// allowed to clip toward white for that one beat -- the same clip the resting 2.6 was rejected for
+// (see FORGE_MOUTH_INTENSITY) is what a forge catching looks like, as long as it does not stay.
+const FORGE_FLARE_SCALE = 2.3;
+const FORGE_MOUTH_FLARE_INTENSITY = 3.0;
+const EMBER_COLOR = 0xffcf7a;
+const EMBER_SIZE_METERS = 0.13;
+const EMBER_COUNT = 3;
+const EMBER_RISES_PER_SECOND = 0.42;
+const EMBER_RISE_METERS = 0.95;
+
+// ── the building, in metres ──────────────────────────────────────────────────────────────────────
+//
+// All of it in the bay's own frame: x runs OUT from the house's east face, y up from the ground, z
+// along that face with 0 at the building's middle. That frame's origin is measured off the prop at
+// build time and never typed in, so moving the longhouse in village.js moves the Workshop with it.
+//
+// Sized against things already in this world rather than against taste: the hero is 1.48 m, the
+// house is 2.141 m to the ridge over a 0.965 m eave and 2.0 m deep by 4.1 m long, the street
+// lanterns are 1.56 m and the Wildwood Gate is 3.54 m. The stack tops out at 3.21 m, above the house
+// and below the gate -- the gate is still the way out of the village, and the Workshop is now the
+// second tallest thing in it that a child owns.
+//
+// Every one of the three numbers below came DOWN after the first capture, and this is the note for
+// whoever is tempted to put them back up. The bay was first built 2.80 m along the wall, 1.66 m
+// deep, with a roof 3.30 m across -- and photographed from the east it covered four fifths of the
+// house's wall and reached further out than the house is deep, so what the child had bought read as
+// A BIG BROWN SHED PARKED IN FRONT OF THE HOUSE. The convention this file is built on says the
+// smithy is an ordinary building WEARING attached parts; a part that is bigger than the thing it is
+// attached to is not a part. So: 2.15 m along a 4.1 m wall (a bit over half), 1.42 m out from a 2.0
+// m deep house, and a 1.92 m back panel under a 2.141 m ridge. Subordinate on all three axes, on
+// purpose. The chimney is what makes it unmissable; the bay is what makes it a workshop.
+const BAY_DEPTH_METERS = 1.42;
+const BAY_LENGTH_METERS = 2.15;
+const BACK_PANEL_HEIGHT_METERS = 1.92;
+const FRONT_EAVE_METERS = 1.42;
+const CHIMNEY_TOTAL_METERS = 3.21;
+
+// The roof plane's pitch, derived from the two heights it has to connect rather than chosen: it
+// leaves the back panel's top at 1.92 and lands on the front beam at 1.42 over a 1.42 m run, which
+// is 19.4 degrees. The first pass was 14.8 and from this game's elevated camera that photographed as
+// a flat lid on posts -- a carport, not a roof. Pitch is not decoration here: a shallower roof also
+// presents MORE of its area to a camera looking down at it, which is the second reason the first bay
+// hid the house behind it.
+const ROOF_PITCH_RADIANS = Math.atan((BACK_PANEL_HEIGHT_METERS - FRONT_EAVE_METERS) / BAY_DEPTH_METERS);
+
+/** A box of `size` centred at `at`, optionally rolled about Z, baked into the bay's own space so a
+ *  whole material's worth of parts merges into one geometry. Same helper and same reasoning as
+ *  wildwoodGate.js's own slab(). */
+function slab([width, height, depth], [x, y, z], rollRadians = 0) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const matrix = new THREE.Matrix4();
+  if (rollRadians !== 0) matrix.makeRotationZ(rollRadians);
+  matrix.setPosition(x, y, z);
+  geometry.applyMatrix4(matrix);
+  return geometry;
+}
+
+// The frame: two posts, the beam they carry, and the back panel that closes the junction against the
+// house. The anvil's stump is timber too, so it merges here rather than costing its own draw call.
+const TIMBER_PARTS = [
+  {
+    name: 'back-panel',
+    size: [0.16, BACK_PANEL_HEIGHT_METERS, BAY_LENGTH_METERS],
+    at: [0.12, BACK_PANEL_HEIGHT_METERS / 2, 0],
+  },
+  { name: 'post-north', size: [0.17, 1.22, 0.17], at: [BAY_DEPTH_METERS, 0.61, -1.02] },
+  { name: 'post-south', size: [0.17, 1.22, 0.17], at: [BAY_DEPTH_METERS, 0.61, 1.02] },
+  { name: 'front-beam', size: [0.2, 0.2, 2.3], at: [BAY_DEPTH_METERS, 1.32, 0] },
+  { name: 'anvil-stump', size: [0.3, 0.36, 0.3], at: [1.1, 0.18, -0.62] },
+];
+
+// One plane, overhanging the beam it lands on and buried at its high end inside the house's own roof
+// so the two never show a seam. 2.55 m along the wall against a 2.30 m beam: that overhang is what
+// makes a roof read as a roof rather than as a lid.
+const ROOF_PARTS = [
+  { name: 'bay-roof', size: [1.8, 0.15, 2.55], at: [0.81, 1.67, 0], roll: -ROOF_PITCH_RADIANS },
+];
+
+// Chimney, cap and hearth are one masonry mass and overlap on purpose -- a stack meeting its own
+// hearth at a visible joint reads as two objects. The stack stands hard against the back panel and
+// pierces the bay roof at 1.81 m, so 1.40 m of it is above that roof and 1.07 m above the house.
+const MASONRY_PARTS = [
+  { name: 'chimney', size: [0.46, 3.05, 0.46], at: [0.4, 1.525, 0.5] },
+  { name: 'chimney-cap', size: [0.66, 0.16, 0.66], at: [0.4, CHIMNEY_TOTAL_METERS - 0.08, 0.5] },
+  { name: 'hearth', size: [0.86, 0.76, 0.78], at: [0.92, 0.38, 0.5] },
+];
+
+// A waist and an overhanging body. Not an anvil in any detail sense, and deliberately not: at
+// gameplay distance the entire job of this shape is to be a dark, top-heavy blob at knee height,
+// which is the one anvil-ish thing that survives being eight pixels tall.
+const ANVIL_PARTS = [
+  { name: 'anvil-waist', size: [0.18, 0.15, 0.15], at: [1.1, 0.435, -0.62] },
+  { name: 'anvil-body', size: [0.5, 0.13, 0.2], at: [1.12, 0.575, -0.62] },
+];
+
+const FORGE_MOUTH_PART = { name: 'forge-mouth', size: [0.1, 0.32, 0.44], at: [1.35, 0.46, 0.5] };
+const FORGE_GLOW_AT = [1.48, 0.48, 0.5];
+const EMBER_ORIGIN = [1.32, 0.56, 0.5];
+
+function mergedMesh(parts, material, name) {
+  const mesh = new THREE.Mesh(
+    mergeGeometries(parts.map((part) => slab(part.size, part.at, part.roll ?? 0)), false),
+    material,
+  );
+  mesh.name = name;
+  setLayer(mesh, WORLD);
+  return mesh;
+}
 
 /**
  * @param workshopMesh  the existing prop's own THREE.Object3D (main.js:
  *   `scene.getObjectByName('prop-' + VILLAGE.WORKSHOP_PROP.model)`), or null -- a missing mesh
- *   degrades to "dressing has no home to attach to, added at the scene root instead" rather than
- *   throwing, the same defensiveness createCartReaction already shows a missing cart mesh.
+ *   degrades to "the Workshop has no building to attach to, added at the scene root instead" rather
+ *   than throwing, the same defensiveness createCartReaction already shows a missing cart mesh.
  */
 export function createWorkshopReaction(scene, workshopMesh) {
   const group = new THREE.Group();
-  group.name = 'workshop-level1-TEMP';
+  group.name = 'workshop-level1';
   group.visible = false;
 
   if (workshopMesh) {
-    // Measured once, from the mesh's own real footprint, so the dressing sits beside the actual
-    // structure regardless of that prop's own model dimensions -- the same "measure, do not guess"
-    // technique createCartReaction's own dust-puff placement already uses.
+    // Measured off the prop's own real footprint, in the prop's own local frame, so the bay lands
+    // against the actual east face whatever that model's dimensions are and wherever village.js
+    // moves it -- "measure, do not guess", the same technique createCartReaction's dust puff uses.
+    // setFromObject answers in world space; the inverse of the prop's own world matrix brings that
+    // answer back into the frame the group is about to be parented into.
     workshopMesh.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(workshopMesh);
-    const width = box.max.x - box.min.x;
-    // Offset toward +local-X, clear of the structure's own footprint. Parented to workshopMesh (not
-    // placed at an absolute world position), so it inherits that prop's own position/rotation for
-    // free and never needs updating if the prop is ever moved in village.js.
-    //
-    // WHICH side reads cleanest against nearby clutter is a "look at a capture" question
-    // (AGENTS.md's own "look before you derive" rule) this file cannot answer without one -- flagged
-    // here as the one placement number a runtime capture is expected to correct, not a measurement.
-    group.position.set(width / 2 + 0.9, 0, 0);
+    const local = new THREE.Box3()
+      .setFromObject(workshopMesh)
+      .applyMatrix4(new THREE.Matrix4().copy(workshopMesh.matrixWorld).invert());
+    group.position.set(local.max.x, local.min.y, (local.min.z + local.max.z) / 2);
     workshopMesh.add(group);
   } else {
     scene.add(group);
   }
 
-  const workbench = new THREE.Mesh(
-    new THREE.BoxGeometry(0.9, 0.55, 0.5),
-    new THREE.MeshStandardMaterial({ color: WORKBENCH_COLOR, roughness: 0.85, metalness: 0.05 }),
-  );
-  workbench.name = 'workshop-workbench-TEMPORARY';
-  workbench.position.set(0, 0.275, 0);
-  group.add(workbench);
+  const timberMaterial = new THREE.MeshStandardMaterial({
+    color: GATE_WOOD_COLOR, roughness: 1, metalness: 0, flatShading: true,
+  });
+  const roofMaterial = new THREE.MeshStandardMaterial({
+    color: WORKSHOP_ROOF_COLOR, roughness: 1, metalness: 0, flatShading: true,
+  });
+  const masonryMaterial = new THREE.MeshStandardMaterial({
+    color: MASONRY_COLOR, roughness: 0.95, metalness: 0, flatShading: true,
+  });
+  const anvilMaterial = new THREE.MeshStandardMaterial({
+    color: ANVIL_COLOR, roughness: 0.35, metalness: 0.55, flatShading: true,
+  });
+  const mouthMaterial = new THREE.MeshStandardMaterial({
+    color: FORGE_MOUTH_COLOR,
+    emissive: new THREE.Color(FORGE_MOUTH_EMISSIVE),
+    emissiveIntensity: 0,
+    roughness: 1,
+    metalness: 0,
+  });
 
-  const anvil = new THREE.Mesh(
-    new THREE.BoxGeometry(0.28, 0.22, 0.16),
-    new THREE.MeshStandardMaterial({ color: ANVIL_COLOR, roughness: 0.4, metalness: 0.6 }),
-  );
-  anvil.name = 'workshop-anvil-silhouette-TEMPORARY';
-  anvil.position.set(0, 0.55 + 0.11, 0.05);
-  group.add(anvil);
+  const frame = mergedMesh(TIMBER_PARTS, timberMaterial, 'workshop-frame');
+  const roof = mergedMesh(ROOF_PARTS, roofMaterial, 'workshop-bay-roof');
+  const masonry = mergedMesh(MASONRY_PARTS, masonryMaterial, 'workshop-forge-masonry');
+  const anvil = mergedMesh(ANVIL_PARTS, anvilMaterial, 'workshop-anvil');
+  const mouth = mergedMesh([FORGE_MOUTH_PART], mouthMaterial, 'workshop-forge-mouth');
+  group.add(frame, roof, masonry, anvil, mouth);
 
-  // The "warm doorway/window/forge glow" ingredient (brief section 6) -- a sprite, not a
-  // THREE.PointLight, the same trade render/glow.js's own header explains for the street lanterns:
-  // one more real light per Workshop is the wrong cost on an iPad for something felt from ten metres.
+  // A sprite, not a THREE.PointLight -- the same trade render/glow.js's own header explains for the
+  // street lanterns: one more real light per Workshop is the wrong cost on an iPad for something felt
+  // from ten metres. It sits at the hearth's mouth, low and inside the bay, where the bay's own shade
+  // gives an additive sprite something to be brighter THAN. Which is exactly why this is no longer
+  // the cue the upgrade leads with: out on the open grass, in a village the Lantern Mark payoff has
+  // already flooded with warm gold, it had nothing to be brighter than.
   const forgeGlow = createGlowSprite(FORGE_GLOW_COLOR, FORGE_GLOW_SIZE_METERS);
-  forgeGlow.name = 'workshop-forge-glow-TEMPORARY';
-  forgeGlow.position.set(0, 0.75, 0);
+  forgeGlow.name = 'workshop-forge-glow';
+  forgeGlow.position.set(FORGE_GLOW_AT[0], FORGE_GLOW_AT[1], FORGE_GLOW_AT[2]);
   setLayer(forgeGlow, WORLD);
   group.add(forgeGlow);
 
-  // "Subtle sparks/smoke/working ambience" -- three small glow sprites orbiting the anvil, the
-  // cheapest possible "something is happening here" signal, same additive-sprite trade as the glow.
-  const sparks = [];
-  for (let i = 0; i < SPARK_COUNT; i += 1) {
-    const spark = createGlowSprite(SPARK_COLOR, SPARK_SIZE_METERS);
-    spark.name = 'workshop-spark-TEMPORARY';
-    setLayer(spark, WORLD);
-    group.add(spark);
-    sparks.push(spark);
+  // Three embers rising out of the hearth and going out. The one moving thing on the finished
+  // building, and kept to three on purpose: every low-poly forge in the reference sweep treats sparks
+  // as a small designed effect rather than as a simulation, and this village is already busy.
+  const embers = [];
+  for (let i = 0; i < EMBER_COUNT; i += 1) {
+    const ember = createGlowSprite(EMBER_COLOR, EMBER_SIZE_METERS, 'mote');
+    ember.name = 'workshop-ember';
+    setLayer(ember, WORLD);
+    group.add(ember);
+    embers.push(ember);
   }
 
   let built = false;
-  // -1 means "not currently popping in" -- the same sentinel-clock convention createCartReaction's
-  // own joltSeconds already uses.
-  let popSeconds = -1;
+  // How hard the hearth is flaring right now, 0..1 -- set by poseAt, read by update for the glow.
+  let flare = 0;
+  // One vector, reused every frame the ceremony is armed: no per-frame allocation, the same rule
+  // update() below already keeps.
+  const sightProbe = new THREE.Vector3();
+  // -1 means "not currently building" -- the same sentinel-clock convention createCartReaction's own
+  // joltSeconds already uses.
+  let buildSeconds = -1;
   let ambientClock = 0;
+  let quiet = false;
+
+  /** The ENTIRE pose of the Workshop, from one number, returning how lit the forge is at that
+   *  moment. Instant hydration is this called at the end of the clock rather than a second code
+   *  path, so there is exactly one description of what a finished Workshop looks like and a late
+   *  joiner cannot drift from what the buyer watched being built. */
+  function poseAt(elapsedSeconds) {
+    const stage = buildStageProgress(elapsedSeconds);
+    // Every part is HIDDEN until its own stage opens, not merely scaled to nothing. A mesh flattened
+    // to 2% of its height is not invisible -- it is a dark slab lying on the grass, which is exactly
+    // what the masonry photographed as in .local/workshop-probe/v2-build-02.png: a shadow puddle
+    // under the bay for the first second of the ceremony, before the chimney had any business
+    // existing. Scale alone is not a way to hide something.
+    frame.visible = stage.frame > 0;
+    // Up out of the ground. Every part of this geometry is baked from y=0 upward, so scaling Y raises
+    // it off the grass rather than inflating it about its middle -- posts, beam and back panel rise
+    // together like a frame being stood up, which is the readable half of "a building is going up".
+    frame.scale.y = Math.max(0.02, easeOut(stage.frame));
+    // The roof is a rolled plane, so scaling it would shear it. It comes down instead, from a metre
+    // up, and settles onto the frame that just finished rising.
+    roof.visible = stage.roof > 0;
+    roof.position.y = (1 - easeOut(stage.roof)) * 1;
+    // The money beat: the stack climbs out of its own hearth, through the roof that has just landed,
+    // and past the house's ridge. This is the frame of the ceremony that changes the skyline.
+    masonry.visible = stage.stack > 0;
+    masonry.scale.y = Math.max(0.02, easeOut(stage.stack));
+    anvil.visible = stage.tools > 0;
+    anvil.position.y = (1 - easeOut(stage.tools)) * 1.1;
+    // The mouth is a hole in the hearth's front face and has nowhere to be until that hearth is
+    // built -- it does not scale with the masonry, so shown early it would hang in the air.
+    mouth.visible = stage.ignite > 0;
+    // One bump across the ignite stage: 0 at the first spark, peak halfway, 0 again as it settles --
+    // so a finished pose (ignite = 1) is the resting forge, never a frozen flash.
+    flare = Math.sin(Math.PI * stage.ignite);
+    mouthMaterial.emissiveIntensity = stage.ignite * FORGE_MOUTH_INTENSITY
+      + flare * (FORGE_MOUTH_FLARE_INTENSITY - FORGE_MOUTH_INTENSITY);
+    forgeGlow.scale.setScalar(FORGE_GLOW_SIZE_METERS * (1 + (FORGE_FLARE_SCALE - 1) * flare));
+    return stage.ignite;
+  }
 
   return {
-    // `instant`: skips the pop-in tween entirely -- for a client whose FIRST known observation of
-    // this Workshop is already built (a late joiner, or a page reload after someone else bought it),
-    // the same "already unlocked, no ceremony" rule zoneLoader.js's own tree-relight logic applies via
+    /** Is the Workshop in front of this player right now -- on screen and within reading range? The
+     *  gate main.js holds the LOCAL ceremony behind (see "the ceremony waits for its audience"
+     *  above). `camera` is the renderer's own camera, whose matrices are current as of the last
+     *  rendered frame, which is current enough for a question answered every frame. A Workshop with
+     *  no building to attach to has nothing to watch -- it reports an audience immediately rather
+     *  than holding the purchase's own sound hostage to geometry that does not exist. */
+    hasAudience(camera, heroPosition) {
+      if (!workshopMesh) return true;
+      group.getWorldPosition(sightProbe);
+      sightProbe.y += CEREMONY_SIGHT_HEIGHT_METERS;
+      const metersFromHero = Math.hypot(sightProbe.x - heroPosition.x, sightProbe.z - heroPosition.z);
+      sightProbe.project(camera);
+      return audienceCanSee({ metersFromHero, ndcX: sightProbe.x, ndcY: sightProbe.y, ndcZ: sightProbe.z });
+    },
+    // `instant`: skips the ceremony entirely -- for a client whose FIRST known observation of this
+    // Workshop is already built (a late joiner, or a page reload after someone else bought it), the
+    // same "already unlocked, no ceremony" rule zoneLoader.js's own tree-relight logic applies via
     // setTreeLit(true) rather than beginRelight(). Without this, group.visible only ever flips true
     // from inside a locally-witnessed false->true edge (main.js's own sawWorkshopUnowned gate), so a
     // client that never watched that edge would see the UNBUILT shell forever despite
@@ -132,46 +463,57 @@ export function createWorkshopReaction(scene, workshopMesh) {
       if (!transition.changed) return;
       built = transition.built;
       group.visible = true;
-      setGlowStrength(forgeGlow, 1);
-      if (instant) {
-        group.scale.setScalar(1);
-        popSeconds = -1;
+      // A player who has asked for less motion gets the BUILDING, immediately and permanently, and
+      // does not get the thing that moves. Never the other way round: the payoff is what they paid
+      // for, the ceremony is only how it arrives.
+      quiet = prefersReducedMotion();
+      if (instant || quiet) {
+        poseAt(WORKSHOP_BUILD_SECONDS);
+        setGlowStrength(forgeGlow, 0.85);
+        buildSeconds = -1;
       } else {
-        group.scale.setScalar(0.6);
-        popSeconds = 0;
+        poseAt(0);
+        setGlowStrength(forgeGlow, 0);
+        buildSeconds = 0;
       }
     },
     update(deltaSeconds) {
       if (!built) return;
       ambientClock += deltaSeconds;
-      // A slow forge-breathing flicker, always running once built -- the "lasting" half of the
-      // ceremony, distinct from the one-shot pop-in below.
-      setGlowStrength(forgeGlow, 0.85 + Math.sin(ambientClock * 3) * 0.12);
-      sparks.forEach((spark, index) => {
-        const angle = ambientClock * SPARK_RADIANS_PER_SECOND + (index / SPARK_COUNT) * Math.PI * 2;
-        spark.position.set(
-          Math.cos(angle) * SPARK_ORBIT_METERS,
-          0.7 + Math.sin(ambientClock * 2 + index) * 0.08,
-          0.15 + Math.sin(angle) * SPARK_ORBIT_METERS * 0.4,
+
+      let lit = 1;
+      if (buildSeconds >= 0) {
+        buildSeconds += deltaSeconds;
+        lit = poseAt(buildSeconds);
+        if (buildSeconds >= WORKSHOP_BUILD_SECONDS) buildSeconds = -1;
+      }
+
+      // A slow forge breath, always running once lit. Bounded on purpose: one sine, one opacity, no
+      // allocation, and nothing whose cost grows with how long the page has been open.
+      const breath = quiet ? 0.85 : 0.82 + Math.sin(ambientClock * 2.6) * 0.11;
+      // The flare adds on top of the ramp, so the catch goes straight to full rather than waiting
+      // for the emissive ramp to get there; setGlowStrength clamps at 1.
+      setGlowStrength(forgeGlow, breath * lit + flare);
+
+      for (let i = 0; i < embers.length; i += 1) {
+        // Each ember owns its own slice of one shared cycle, so the three leave the hearth staggered
+        // rather than as a burst. Frozen at a resting height when motion is unwelcome.
+        const phase = i / EMBER_COUNT;
+        const rise = quiet ? phase * 0.5 : (ambientClock * EMBER_RISES_PER_SECOND + phase) % 1;
+        embers[i].position.set(
+          EMBER_ORIGIN[0] + Math.sin(rise * 5.4 + i) * 0.09,
+          EMBER_ORIGIN[1] + rise * EMBER_RISE_METERS,
+          EMBER_ORIGIN[2] + Math.cos(rise * 4.1 + i) * 0.11,
         );
-        setGlowStrength(spark, 0.5 + Math.sin(ambientClock * 5 + index * 2) * 0.4);
-      });
-      if (popSeconds >= 0) {
-        popSeconds += deltaSeconds;
-        const t = Math.min(1, popSeconds / POP_IN_SECONDS);
-        // Overshoot-and-settle -- the same "arrives with a little energy" shape
-        // world/lootPickups.js's own flightBeat hop already uses, not a flat linear scale-in.
-        const eased = 1 - (1 - t) ** 3;
-        const overshoot = t < 1 ? Math.sin(t * Math.PI) * 0.08 : 0;
-        group.scale.setScalar(0.6 + 0.4 * eased + overshoot);
-        if (t >= 1) { popSeconds = -1; group.scale.setScalar(1); }
+        setGlowStrength(embers[i], Math.sin(rise * Math.PI) * 0.9 * lit);
       }
     },
     isBuilt() { return built; },
-    // GP3-C1: gates the deliberate Workshop interaction until the pop-in ceremony has actually
-    // finished playing, so "UPGRADE -> Board clears -> transformation is visibly enjoyed -> control
-    // returns" is a real sequence rather than a guessed delay -- see main.js's own interact-gate
-    // comment. True only during the one-shot tween itself, never during the ambient glow/spark loop.
-    isTransforming() { return popSeconds >= 0; },
+    // GP3-C1: gates the deliberate Workshop interaction until the ceremony has actually finished
+    // playing, so "UPGRADE -> Board clears -> transformation is visibly enjoyed -> control returns"
+    // is a real sequence rather than a guessed delay -- see main.js's own interact-gate comment. True
+    // only during the one-shot build itself, never during the ambient forge loop, and never at all
+    // for a hydrating client or for one that has asked for less motion.
+    isTransforming() { return buildSeconds >= 0; },
   };
 }

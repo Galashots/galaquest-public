@@ -408,3 +408,62 @@ schema. Fixed with `tools/sol-review/reviewCheckout.mjs`, a trusted adjacent sch
 server/import paths, explicit SHA attribution, and `test/sol-review-checkout.test.mjs` plus the shared
 protocol tests.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A capture is only evidence if the subject is actually in the frame.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+**Rule:** Before a capture is filed as the acceptance seam for how something LOOKS, point the camera
+at it deliberately and open the file. A follow camera lands wherever the last leg of a walk left the
+hero facing; that bearing is chosen by pathfinding, not by what the shot is for. Sibling of "Green
+checks are not a look at the game" above, and a distinct failure from it: there the assertion and the
+photograph were of different moments, here the photograph was of the right moment pointed at the
+wrong thing.
+**Incidents:** `village-board-workshop-before-3d-portrait.png`, committed as the evidence of how the
+Workshop reads before a purchase, contained no Workshop — it was a photograph of the Lantern Tree,
+which stands 3.4 m due north of the building with a canopy wider than that gap, directly on the one
+bearing the follow camera always lands on after the walk down from the camp. Every Workshop capture
+in `drive-village-board.mjs` had been taken from that bearing since the harness was written. Fixed by
+`aimAtWorkshop()`, which points the camera down the plaza-side approach before each Workshop capture.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A wall-clock budget waiting on simulated time must account for the frame clamp.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+**Rule:** `main.js` clamps `deltaSeconds` to 0.1 s so a hitch cannot teleport the hero. The
+consequence is that below 10 fps every timed animation advances SLOWER THAN WALL CLOCK, by the ratio
+of frame time to the clamp. A harness waiting N milliseconds for an M-second animation is really
+asserting a frame rate. Derive such a budget from the animation's own exported length with headroom
+for that ratio; never type a round number beside it. Sibling of "Automation timeouts are wall-clock
+budgets, not sample counts" above, and the mirror of it: there a budget was converted into samples,
+here a budget in real time was measuring work counted in simulated time.
+**Incidents:** The Workshop build ceremony grew from 1.4 s to 2.05 s. `drive-village-board.mjs`'s
+flat 4000 ms ceremony poll had been comfortable for the old length and went red on hosted CI at the
+new one, at roughly 5 fps, while passing 53/53 locally — nothing was broken, the budget simply did
+not know what it was waiting for. A unit test asserting the ceremony fitted inside that same 4000 ms
+passed throughout, because it shared the false premise. Fixed by deriving `CEREMONY_BUDGET_MS` from
+the exported `WORKSHOP_BUILD_SECONDS`, and by deleting the unit test's claim about another file's
+number rather than adjusting it. The first headroom multiplier (4x) was itself a guess and was also
+too small — hosted CI measured the ceremony completing at ~4.8x wall clock, roughly 2 fps — so the
+multiplier is now 10x and the comment records the measurement it came from. A liveness check earns
+nothing from a tight budget.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A one-time ceremony fired off a server edge plays to whoever happens to be looking.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+**Rule:** A one-shot world payoff (a build, a relight, a burst) that is triggered the instant a
+shared flag flips is correct about WHEN it happened and says nothing about WHO SAW IT. If the control
+that causes the flag lives in the HUD, or the flag can flip while the player is anywhere, the ceremony
+must be ARMED on the edge and STARTED on the first frame its subject is actually in front of the
+local player -- on screen and within reading range -- or it spends itself on an empty room. Hydration
+("already done, show the finished state") is the other path and must stay immediate; the audience
+test is only for the ceremony that was paid for. Sibling of "Hydration restores state; it must not
+replay the ceremony" above: that one keeps a ceremony from playing twice, this one keeps it from
+playing zero times.
+**Incidents:** The Village Board is a HUD button, and the moment a child can first afford Workshop I
+is at the cart, 42 m up the trail. Bought there, the 2.05 s build ceremony ran to completion with the
+camera looking at a fence (`.local/workshop-play/p2cart-05-buy-*`), and the child walked home to a
+building that had simply always been there. Every harness and probe had bought it standing at the
+door, so nothing red ever said so; it was found by PLAYING the purchase from where the money is
+actually earned. Fixed by arming the ceremony on the edge in `main.js` and firing it from
+`workshop.js`'s `hasAudience(camera, heroPosition)` (range plus a projected on-screen band); pinned
+by the follow-camera-driven tests in `test/workshop.test.mjs` and a `drive-village-board.mjs` check
+that a cart-clearing buyer's Workshop is still armed, not built, a beat after the purchase.
+**Foreknowledge helped:** not yet recorded.

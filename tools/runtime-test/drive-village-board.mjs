@@ -41,14 +41,40 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { sanitizeGuestId } from '../../public/src/net/guestId.js';
-import { CAMP, CART_SEARCH, ROWAN, WORKSHOP_INTERACT } from '../../public/src/world/zones/village.js';
+import { CAMP, CART_SEARCH, ROWAN, WORKSHOP_INTERACT, WORKSHOP_PROP } from '../../public/src/world/zones/village.js';
+import { headingToward } from '../../public/src/world/zoneLoader.js';
 import { CART_LOOT_TABLE, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
 import { WORKSHOP_I_ID, remainingVillageSupplies } from '../../public/src/village/economy.js';
+import { WORKSHOP_BUILD_SECONDS } from '../../public/src/world/workshop.js';
 import { movementPulseMillis } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
+
+// How long to wait for the Workshop's build ceremony to finish, DERIVED from the ceremony rather
+// than typed as a round number beside it.
+//
+// It used to be a flat 4000 ms, which was comfortable for a 1.4 s ceremony and became a red gate on
+// hosted CI the moment that ceremony grew to 2.05 s. The mechanism is main.js's own frame clamp:
+// `deltaSeconds = Math.min(realDelta, 0.1)`, which exists so a hitch cannot teleport the hero and
+// which means that below 10 fps the ceremony advances SLOWER THAN WALL CLOCK. On a loaded hosted
+// runner at ~5 fps a 2.05 s ceremony takes ~4.1 s of wall clock, and a 4000 ms budget calls that
+// hung. Nothing was broken; the budget simply did not know what it was waiting for.
+//
+// The multiplier is MEASURED, not chosen. 4x was the first guess and hosted CI rejected it: in run
+// 32258891974 the landscape phase's ceremony completed 9.9 s after the purchase -- about 4.8x wall
+// clock, so roughly 2 fps -- and the very next check, taken 1.4 s later, passed. The ceremony was
+// never hung; the budget was 1.7 s short. 10x covers a sustained 1 fps floor with room under it.
+//
+// This is a liveness check ("did the ceremony ever finish"), not a performance assertion, so a
+// generous budget costs nothing and a tight one buys nothing. Frame rate is measured by the quality
+// ladder, which is the thing that actually owns that question.
+//
+// Same lesson the ledger already carries as "Automation timeouts are wall-clock budgets, not sample
+// counts", applied to the other end of it: a wall-clock budget still has to be derived from the
+// work, not from a habit.
+const CEREMONY_BUDGET_MS = Math.ceil(WORKSHOP_BUILD_SECONDS * 1000 * 10);
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
 const STICK_PX = 56;
@@ -345,6 +371,36 @@ async function shot(tab, name) {
   console.log(`  captured village-board-${name}.png`);
 }
 
+// Where to stand to LOOK at the Workshop: the plaza side, up and to the east of it -- which is the
+// bearing a child arrives on, walking down from the tree toward the building.
+//
+// It is also the one nearby bearing that is not looking straight through the Lantern Tree. The tree
+// stands at [-6.5, -6.5], 3.4 m due north of the Workshop with a canopy wider than that gap, so a
+// camera placed anywhere north of the building photographs the tree and nothing else. Which is
+// exactly where the follow camera lands by default: the hero walks down from the camp, stops north
+// of the building facing south, and the camera sits 16 m behind him -- north -- with the tree
+// filling the frame.
+//
+// That is not a framing quibble. It is why the committed `workshop-before-3d-portrait` capture,
+// offered as the evidence of how the Workshop reads before a purchase, is a photograph of a tree
+// with no Workshop in it at all. A capture that does not contain its subject cannot be the
+// acceptance seam for how that subject reads.
+const WORKSHOP_VIEW_OFFSET_METERS = Object.freeze([2.9, 2.4]);
+
+/** Aim the follow camera down the plaza-side approach at the Workshop. Camera only -- it moves
+ *  nothing, changes no state, and every check around it is asserted off the runtime's own published
+ *  state rather than off pixels. */
+async function aimAtWorkshop(tab) {
+  const heading = headingToward(
+    WORKSHOP_PROP.at[0] + WORKSHOP_VIEW_OFFSET_METERS[0],
+    WORKSHOP_PROP.at[1] + WORKSHOP_VIEW_OFFSET_METERS[1],
+    WORKSHOP_PROP.at[0],
+    WORKSHOP_PROP.at[1],
+  );
+  await tab.page.eval(`window.__galaQuestRuntime.follow.setHeading(${heading})`);
+  await sleep(450);
+}
+
 async function rectOf(tab, selector) {
   return tab.page.eval(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
@@ -552,6 +608,7 @@ async function runPurchasePhase(viewport, label) {
       JSON.stringify(beforeWorkshop.heroPos));
     check(`${label}: before any purchase, the Workshop is still the unbuilt shell`, beforeWorkshop.workshop?.built === false,
       JSON.stringify(beforeWorkshop.workshop));
+    await aimAtWorkshop(tab);
     await shot(tab, `workshop-before-3d-${label}`);
 
     await openWorkshopDetail(tab);
@@ -567,14 +624,19 @@ async function runPurchasePhase(viewport, label) {
     // workshopOwned flips, colliding with the Board's own still-visible BUILT confirmation and the
     // pop-in that has barely started") cannot recur, by construction, not by timing luck. The hero
     // never leaves WORKSHOP_INTERACT's radius during this whole window.
+    // Eight frames at 260 ms spans WORKSHOP_BUILD_SECONDS end to end. Four at 150 ms covered only
+    // the first 0.6 s of it, which was the whole ceremony when the ceremony was a 1.4 s pop of a
+    // finished object -- it is not any more. The build is staged now (frame, roof, stack, tools,
+    // ignite) and a window that closes before the chimney has risen cannot show whether the build
+    // beat is legible, which is the one thing these frames exist to let somebody judge.
     const ceremonyFrames = [];
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 8; i += 1) {
       // eslint-disable-next-line no-await-in-loop
       await shot(tab, `workshop-transition-frame${i}-${label}`);
       // eslint-disable-next-line no-await-in-loop
       ceremonyFrames.push(await state(tab));
       // eslint-disable-next-line no-await-in-loop
-      await sleep(150);
+      await sleep(260);
     }
     check(`${label}: the Hero screen never auto-opens during the ceremony/Board-close window, even while standing in Workshop range`,
       ceremonyFrames.every((s) => s.heroScreenOpen === false),
@@ -589,6 +651,7 @@ async function runPurchasePhase(viewport, label) {
       JSON.stringify(afterWorkshop.workshop));
     check(`${label}: the workshop-build sound was scheduled`, (afterWorkshop.audio.triggered['workshop-build'] ?? 0) >= 1,
       JSON.stringify(afterWorkshop.audio.triggered));
+    await aimAtWorkshop(tab);
     await shot(tab, `workshop-after-3d-${label}`);
 
     const expectedRemaining = remainingVillageSupplies(afterWorkshop.village.coins, afterWorkshop.village.shards, true);
@@ -602,7 +665,7 @@ async function runPurchasePhase(viewport, label) {
     // -> mere proximity STILL has not opened anything -> a deliberate tap opens it -> closing and
     // interacting again reopens it (reusable, not once-ever).
     const ceremonyDone = await pollUntil(tab, (s) => s.workshop?.transforming === false && s.workshopInteractAvailable === true,
-      { timeoutMs: 4000 });
+      { timeoutMs: CEREMONY_BUDGET_MS });
     check(`${label}: once the ceremony finishes, the deliberate interact prompt becomes available`,
       ceremonyDone.workshop?.transforming === false && ceremonyDone.workshopInteractAvailable === true,
       JSON.stringify({ workshop: ceremonyDone.workshop, workshopInteractAvailable: ceremonyDone.workshopInteractAvailable }));
@@ -695,7 +758,7 @@ async function runWorkshopInteractLandscapePhase() {
       bought.village.workshopOwned === true, JSON.stringify(bought.village));
 
     const ceremonyDone = await pollUntil(tab,
-      (s) => s.workshop?.built === true && s.workshop?.transforming === false, { timeoutMs: 4000 });
+      (s) => s.workshop?.built === true && s.workshop?.transforming === false, { timeoutMs: CEREMONY_BUDGET_MS });
     check('landscape (direct): the Workshop finishes building and its ceremony completes',
       ceremonyDone.workshop?.built === true && ceremonyDone.workshop?.transforming === false,
       JSON.stringify(ceremonyDone.workshop));
@@ -830,6 +893,16 @@ async function runRestartPhase() {
     const bought = await pollUntil(tab, (s) => s.village.workshopOwned === true, { timeoutMs: 4000 });
     check('restart: Workshop I is bought before the restart', bought.village.workshopOwned === true,
       JSON.stringify(bought.village));
+    // This buyer tapped UPGRADE up at the cart, 42 m from the village, with the Workshop nowhere on
+    // screen. The one-time ceremony must be ARMED for them, not spent on an empty room -- the
+    // building stays unbuilt on their screen until they walk home and actually look at it
+    // (workshop.js: "the ceremony waits for its audience"). Read a beat after the purchase settles,
+    // so a gate that merely delayed the trigger by a frame could not pass this by accident.
+    await sleep(600);
+    const armed = await state(tab);
+    check('restart: bought from the cart clearing, the ceremony is armed and waiting, not played to nobody',
+      armed.workshop?.built === false && armed.workshop?.ceremonyPending === true,
+      JSON.stringify({ workshop: armed.workshop, heroPos: armed.heroPos }));
     collectedBefore = bought.loot.collected;
     check('restart: all 5 pickups are recorded collected before the restart',
       Object.keys(collectedBefore).length === CART_LOOT_TABLE.length, JSON.stringify(collectedBefore));
@@ -880,6 +953,13 @@ async function runRestartPhase() {
     // originally existing and going red -- it did not exist before this closeout.
     check('restart: the 3D Workshop dressing is visible for a guest who never watched the purchase happen',
       afterRestart.workshop?.built === true, JSON.stringify(afterRestart.workshop));
+    // ...and it is the FINISHED Workshop, not a replayed build. Asserted on the very poll result
+    // that first observed built === true, so a client mistakenly running the staged 2.05 s ceremony
+    // instead of trigger(true)'s instant pose is caught mid-build rather than after it has quietly
+    // finished and become indistinguishable. A ceremony is a reward for spending; replaying it for
+    // somebody who merely reloaded is a lie about what just happened.
+    check('restart: the late joiner is handed the FINISHED Workshop, with no build ceremony replayed',
+      afterRestart.workshop?.transforming === false, JSON.stringify(afterRestart.workshop));
 
     // GP3-0's own fix: the cart must NOT reappear as an unspawned, fresh pickup opportunity -- every
     // pickup id from before the restart is still present as collected (the collector is now the
@@ -890,6 +970,32 @@ async function runRestartPhase() {
     const stillCollected = Object.keys(collectedBefore).every((id) => afterRestart.loot.collected[id] != null);
     check('restart: every pickup collected before the restart is still recorded collected after it -- the cart never reappears fresh',
       stillCollected, JSON.stringify(afterRestart.loot.collected));
+
+    // What the late joiner actually SEES. Every check above proves the presenter reports "built";
+    // this walks that guest to the building and photographs it, which is the only thing that proves
+    // what "built" looks like to somebody who was not there for it.
+    await walkToward(tab, WORKSHOP_INTERACT.at[0], WORKSHOP_INTERACT.at[1], WORKSHOP_INTERACT.radiusMeters * 0.5, 120000);
+    await aimAtWorkshop(tab);
+    await shot(tab, 'restart-late-join-workshop');
+    // Polled, not read once: arriving and the prompt appearing are two different frames, and on a
+    // hosted runner they can be a long way apart. The failure detail carries the hero's actual
+    // distance from the interact point, so a red gate here says whether the walk fell short or the
+    // gate itself refused -- rather than needing another run to find out which.
+    const lateJoin = await pollUntil(tab, (s) => s.workshopInteractAvailable === true,
+      { timeoutMs: CEREMONY_BUDGET_MS });
+    const lateJoinDistance = Math.hypot(
+      lateJoin.heroPos[0] - WORKSHOP_INTERACT.at[0], lateJoin.heroPos[1] - WORKSHOP_INTERACT.at[1],
+    );
+    check('restart: the late joiner walks up to a finished Workshop that is immediately interactable',
+      lateJoin.workshop?.built === true && lateJoin.workshop?.transforming === false
+        && lateJoin.workshopInteractAvailable === true,
+      JSON.stringify({
+        workshop: lateJoin.workshop,
+        interact: lateJoin.workshopInteractAvailable,
+        heroPos: lateJoin.heroPos,
+        metresFromInteractPoint: +lateJoinDistance.toFixed(2),
+        interactRadius: WORKSHOP_INTERACT.radiusMeters,
+      }));
 
     await openWorkshopDetail(tab);
     await shot(tab, 'restart-board-still-built');

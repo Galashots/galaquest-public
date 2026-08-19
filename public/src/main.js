@@ -296,6 +296,10 @@ async function bootstrap() {
   // read off, the same two-variable shape loot.spawned's own trigger below already uses.
   let sawWorkshopUnowned = false;
   let workshopWasOwned = false;
+  // The purchase ARMS the local ceremony; the first frame the Workshop is actually on this player's
+  // screen fires it -- see workshop.js's "the ceremony waits for its audience". Bought from the cart
+  // clearing, 42 m up the trail, the build otherwise played to nobody.
+  let workshopCeremonyPending = false;
   // GP3-C1 replaces the old once-ever proximity auto-open (see git history) with a deliberate,
   // reusable interaction -- #workshop-interact only becomes tappable, never opens anything itself.
   // Tracked here (not just read off the DOM) so renderWorkshopInteract can skip touching the element
@@ -1185,7 +1189,7 @@ async function bootstrap() {
     // GP3: same pattern again, for the Workshop -- a harness can confirm the transformation actually
     // fired directly instead of only inferring it from a screenshot's pixel colours.
     zoneWorkshopState: () => (zoneWorkshop
-      ? { built: zoneWorkshop.isBuilt(), transforming: zoneWorkshop.isTransforming() }
+      ? { built: zoneWorkshop.isBuilt(), transforming: zoneWorkshop.isTransforming(), ceremonyPending: workshopCeremonyPending }
       : null),
     // GP3-C1: "observable without seeing it" once more -- a harness can assert the deliberate
     // interaction prompt is actually tappable (or actually hidden) directly, rather than inferring it
@@ -1928,8 +1932,11 @@ async function bootstrap() {
           sawWorkshopUnowned = true;
         } else if (!workshopWasOwned) {
           if (sawWorkshopUnowned) {
-            zoneWorkshop?.trigger();
-            audio.play(WORKSHOP_BUILD_RECIPE_NAME);
+            // Armed here, fired below, the first frame the Workshop is in front of this player. A
+            // child standing at the door sees it start the instant the Board clears, exactly as when
+            // this line triggered it directly; a child who tapped UPGRADE up at the cart sees it go
+            // up as they walk back into the village, instead of arriving to find it already there.
+            workshopCeremonyPending = true;
             // If this client's own Board happens to be open right now (the buyer's own screen, or a
             // sibling's Board that was open on some other node when the purchase landed), it dismisses
             // itself a beat later so the transforming Workshop is the very next thing this child sees
@@ -1946,6 +1953,11 @@ async function bootstrap() {
         }
         workshopWasOwned = village.workshopOwned;
       }
+      if (workshopCeremonyPending && zoneWorkshop != null && zoneWorkshop.hasAudience(camera, player.position)) {
+        workshopCeremonyPending = false;
+        zoneWorkshop.trigger();
+        audio.play(WORKSHOP_BUILD_RECIPE_NAME);
+      }
       zoneWorkshop?.update(deltaSeconds);
 
       // GP3-C1 (replaces GP3-4's old once-ever proximity auto-open, per Sol's closeout review): the
@@ -1956,8 +1968,11 @@ async function bootstrap() {
       // WORKSHOP_INTERACT range, and neither full-screen overlay already owns the input. Gating on
       // isTransforming() rather than time is what actually removes the reported Board/Hero crossfade
       // at the root: the Board already auto-closes at WORKSHOP_BOARD_AUTOCLOSE_MS (900ms), well before
-      // the pop-in's own POP_IN_SECONDS (1.4s) finishes, so by the time this ever reads true the Board
-      // is already gone -- no overlap is possible by construction, not by timing luck.
+      // the build's own WORKSHOP_BUILD_SECONDS (2.05s) finishes, so by the time this ever reads true
+      // the Board is already gone -- no overlap is possible by construction, not by timing luck.
+      // (Was POP_IN_SECONDS, 1.4s, when the ceremony was a single pop of an already-finished object.
+      // The margin only grew when it became a staged build, but the number here was a stale claim
+      // about another file either way -- GQ-002.)
       const workshopInteractAvailable = village.workshopOwned && zoneWorkshop != null
         && zoneWorkshop.isBuilt() && !zoneWorkshop.isTransforming()
         && !heroScreen.isOpen() && !villageBoard.isOpen()
