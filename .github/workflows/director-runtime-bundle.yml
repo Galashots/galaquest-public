@@ -18,8 +18,25 @@ permissions:
 jobs:
   bundle:
     runs-on: ubuntu-latest
+    # On pull_request, github.sha is GitHub's temporary merge commit. The Director reviews the PR
+    # HEAD, so both checkout and provenance must bind to pull_request.head.sha instead. Push/main and
+    # manual runs fall back to the event's own github.sha.
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Prove checkout identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$SOURCE_SHA" || {
+            echo "checkout identity mismatch: expected $SOURCE_SHA, got $actual" >&2
+            exit 1
+          }
 
       - name: Package exact-SHA runtime
         shell: bash
@@ -31,7 +48,7 @@ jobs:
           cp -R public "$bundle/public"
           cp -R net "$bundle/net"
           cp server.mjs "$bundle/server.mjs"
-          printf '%s\n' "$GITHUB_SHA" > "$bundle/SOURCE_SHA"
+          printf '%s\n' "$SOURCE_SHA" > "$bundle/SOURCE_SHA"
 
           # Fail closed if the runnable surface is incomplete.
           test -f "$bundle/public/index.html"
@@ -55,7 +72,7 @@ jobs:
       - name: Upload Director runtime
         uses: actions/upload-artifact@v4
         with:
-          name: director-runtime-${{ github.sha }}
+          name: director-runtime-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/director-runtime
           if-no-files-found: error
           retention-days: 14
