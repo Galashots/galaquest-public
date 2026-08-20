@@ -8,7 +8,8 @@
 // Usage:
 //   node tools/meshy/animate_character.mjs <rig-task-id> <action-id> <outdir> [--name attack] [--go]
 //
-// DRY RUN is the default. --go is the only path that creates a paid task.
+// DRY RUN is the default and is fully offline. --go is the only path that reads credentials or
+// creates a paid task.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -25,6 +26,13 @@ if (!rigTaskId || !outDir || !Number.isInteger(actionId) || actionId < 0 || !lab
 if (!/^[a-zA-Z0-9._-]+$/.test(label)) {
   console.error('--name may contain only letters, numbers, dot, underscore, and dash');
   process.exit(2);
+}
+
+const body = { rig_task_id: rigTaskId, action_id: actionId };
+console.log(`request: ${JSON.stringify(body, null, 2)}`);
+if (!go) {
+  console.log('\nDRY RUN — no credentials read, no network calls, no credits spent. Re-run with --go to send.');
+  process.exit(0);
 }
 
 let key;
@@ -52,15 +60,8 @@ async function api(path, init = {}) {
 }
 const balance = () => api('/v1/balance').then((result) => result.balance);
 
-const body = { rig_task_id: rigTaskId, action_id: actionId };
 const before = await balance();
 console.log(`balance before: ${before}`);
-console.log(`request: ${JSON.stringify(body, null, 2)}`);
-if (!go) {
-  console.log('\nDRY RUN — no credits spent. Re-run with --go to send.');
-  process.exit(0);
-}
-
 const { result: taskId } = await api('/v1/animations', { method: 'POST', body: JSON.stringify(body) });
 console.log(`task: ${taskId}`);
 let task;
