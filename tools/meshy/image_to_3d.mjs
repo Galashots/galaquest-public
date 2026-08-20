@@ -2,7 +2,7 @@
 //
 // Safe-ported from the historical private pipeline. Public changes are intentionally small:
 // - key path is repository-relative and gitignored;
-// - dry-run is the default; only --go can spend credits;
+// - dry-run is the default and is fully offline; only --go reads credentials or calls Meshy;
 // - no credential or full data URI is ever printed.
 //
 // Usage:
@@ -23,33 +23,6 @@ if (!imagePath || !outDir || !Number.isFinite(polycount) || polycount <= 0) {
   process.exit(2);
 }
 
-const keyUrl = new URL('../../.local/meshy/api-key.txt', import.meta.url);
-let key;
-try {
-  key = readFileSync(keyUrl, 'utf8').trim();
-} catch {
-  console.error('Meshy API key not found at .local/meshy/api-key.txt');
-  process.exit(2);
-}
-if (!key) {
-  console.error('Meshy API key file is empty');
-  process.exit(2);
-}
-
-const API = 'https://api.meshy.ai/openapi';
-const auth = { Authorization: `Bearer ${key}` };
-
-async function api(path, init = {}) {
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: { ...auth, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${path} -> ${res.status} ${text.slice(0, 400)}`);
-  return JSON.parse(text);
-}
-
-const balance = () => api('/v1/balance').then((result) => result.balance);
 const imageBytes = readFileSync(imagePath);
 const body = {
   image_url: `data:image/png;base64,${imageBytes.toString('base64')}`,
@@ -61,16 +34,40 @@ const body = {
   texture_resolution: '2k',
 };
 
-const before = await balance();
-console.log(`balance before: ${before}`);
 console.log(`image: ${basename(imagePath)} (${(imageBytes.length / 1024).toFixed(0)} KiB)`);
 console.log(`request: ${JSON.stringify({ ...body, image_url: `<data uri, ${body.image_url.length} chars>` }, null, 2)}`);
-
 if (!go) {
-  console.log('\nDRY RUN — no credits spent. Re-run with --go to send.');
+  console.log('\nDRY RUN — no credentials read, no network calls, no credits spent. Re-run with --go to send.');
   process.exit(0);
 }
 
+let key;
+try {
+  key = readFileSync(new URL('../../.local/meshy/api-key.txt', import.meta.url), 'utf8').trim();
+} catch {
+  console.error('Meshy API key not found at .local/meshy/api-key.txt');
+  process.exit(2);
+}
+if (!key) {
+  console.error('Meshy API key file is empty');
+  process.exit(2);
+}
+
+const API = 'https://api.meshy.ai/openapi';
+const auth = { Authorization: `Bearer ${key}` };
+async function api(path, init = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: { ...auth, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${path} -> ${res.status} ${text.slice(0, 400)}`);
+  return JSON.parse(text);
+}
+const balance = () => api('/v1/balance').then((result) => result.balance);
+
+const before = await balance();
+console.log(`balance before: ${before}`);
 const { result: taskId } = await api('/v1/image-to-3d', { method: 'POST', body: JSON.stringify(body) });
 console.log(`task: ${taskId}`);
 
