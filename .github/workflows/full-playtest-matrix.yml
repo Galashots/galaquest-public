@@ -54,6 +54,7 @@ jobs:
           - drive-village-board
           - drive-old-beacon
           - drive-beacon-siege
+          - drive-ranger
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
