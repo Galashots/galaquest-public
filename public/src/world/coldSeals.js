@@ -70,17 +70,23 @@ export function strikeColdSeals(broken, specs, isStruck) {
 }
 
 function colored(geometry, colorHex) {
+  // Three's primitive builders do not agree on index layout: Box/Cylinder are indexed while the
+  // Octahedron used for the icy core is not. BufferGeometryUtils quite correctly refuses to merge
+  // unlike attribute/index shapes. Normalize every primitive to the simple non-indexed shape before
+  // adding the one attribute this merged material needs. This is load-time geometry work for three
+  // tiny meshes; it does not add a runtime draw call or a second material.
+  const normalized = geometry.index ? geometry.toNonIndexed() : geometry;
   const color = new THREE.Color(colorHex);
-  const count = geometry.getAttribute('position').count;
+  const count = normalized.getAttribute('position').count;
   const colors = new Float32Array(count * 3);
   for (let i = 0; i < count; i += 1) {
     colors[i * 3] = color.r;
     colors[i * 3 + 1] = color.g;
     colors[i * 3 + 2] = color.b;
   }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.deleteAttribute('uv');
-  return geometry;
+  normalized.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  normalized.deleteAttribute('uv');
+  return normalized;
 }
 
 function moved(geometry, x, y, z, scaleX = 1, scaleY = 1, scaleZ = 1, roll = 0) {
