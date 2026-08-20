@@ -18,25 +18,26 @@ permissions:
 jobs:
   bundle:
     runs-on: ubuntu-latest
-    # On pull_request, github.sha is GitHub's temporary merge commit. The Director reviews the PR
-    # HEAD, so both checkout and provenance must bind to pull_request.head.sha instead. Push/main and
-    # manual runs fall back to the event's own github.sha.
     env:
-      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          # On pull_request, github.sha is GitHub's temporary merge commit. The Director must review
+          # the contributor's actual PR head, so checkout and provenance use the same explicit SHA.
           ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Prove checkout identity
         shell: bash
         run: |
           set -euo pipefail
           actual="$(git rev-parse HEAD)"
-          test "$actual" = "$SOURCE_SHA" || {
-            echo "checkout identity mismatch: expected $SOURCE_SHA, got $actual" >&2
+          if [ "$actual" != "$SOURCE_SHA" ]; then
+            echo "checkout SHA $actual does not match intended source $SOURCE_SHA" >&2
             exit 1
-          }
+          fi
 
       - name: Package exact-SHA runtime
         shell: bash
