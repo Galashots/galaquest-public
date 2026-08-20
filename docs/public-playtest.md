@@ -34,12 +34,15 @@ from Render's `RENDER_GIT_COMMIT`. If it reads `"unknown"`, the instance did not
 variable and the run is *not* evidence for any particular commit -- say so rather than guessing
 from timing. If the path 404s entirely, the running service predates this mechanism; redeploy.
 
-It is stamped by `startCommand`, deliberately not by `buildCommand`. This repo has no `package.json`
-and no compile step, so Render's Node runtime has nothing to build and does not run a build command
-here -- the first deployment stamped at build time came up healthy with no `/source-sha.json` on it
-at all.
+It is stamped by `startCommand` deliberately. The first deployment tried to stamp the file during
+`buildCommand`, yet the live service came up healthy while `/source-sha.json` returned 404. Render's
+current documentation describes `buildCommand` as a real build phase for native web services, so do
+not convert that observation into the unproven claim that the build command was skipped. The property
+we actually need is simpler and stronger: **every running process writes its own provenance file into
+the filesystem it is about to serve.** `startCommand` does exactly that immediately before
+`exec node server.mjs "$PORT"`.
 
-Note the file is generated at deploy time and is deliberately not in the repository, so a local
+Note the file is generated at deploy/start time and is deliberately not in the repository, so a local
 `node server.mjs 5201` has no `/source-sha.json`. Locally, the checkout itself is the provenance.
 
 ## Per-PR preview instances
