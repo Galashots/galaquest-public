@@ -1,0 +1,78 @@
+name: director-runtime-bundle
+
+# Produce one self-contained, exact-SHA runtime artifact that an independent Director can download,
+# boot on localhost, and drive in a real browser. This is not a scripted acceptance test: it creates
+# the execution surface for exploratory playtesting outside the GitHub runner.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# Read-only by design. The job packages the checked-out tree and uploads an Actions artifact; it does
+# not write to the repository, mutate saves, or call any paid provider.
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    # On pull_request, github.sha is GitHub's temporary merge commit. The Director reviews the PR
+    # HEAD, so both checkout and provenance must bind to pull_request.head.sha instead. Push/main and
+    # manual runs fall back to the event's own github.sha.
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Prove checkout identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$SOURCE_SHA" || {
+            echo "checkout identity mismatch: expected $SOURCE_SHA, got $actual" >&2
+            exit 1
+          }
+
+      - name: Package exact-SHA runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/director-runtime"
+          mkdir -p "$bundle"
+
+          cp -R public "$bundle/public"
+          cp -R net "$bundle/net"
+          cp server.mjs "$bundle/server.mjs"
+          printf '%s\n' "$SOURCE_SHA" > "$bundle/SOURCE_SHA"
+
+          # Fail closed if the runnable surface is incomplete.
+          test -f "$bundle/public/index.html"
+          test -f "$bundle/net/gameServer.mjs"
+          test -f "$bundle/server.mjs"
+          test -s "$bundle/SOURCE_SHA"
+
+          # The Director runtime must never carry a real or test save database. The server can be
+          # pointed at a disposable store with GALAQUEST_REWARD_STORE_PATH when it is booted.
+          if find "$bundle" -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' \) -print -quit | grep -q .; then
+            echo 'runtime bundle unexpectedly contains a SQLite save file' >&2
+            exit 1
+          fi
+
+          # Nor should checkout-local review state leak into the portable execution surface.
+          if find "$bundle" -path '*/.local/*' -print -quit | grep -q .; then
+            echo 'runtime bundle unexpectedly contains .local state' >&2
+            exit 1
+          fi
+
+      - name: Upload Director runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: director-runtime-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/director-runtime
+          if-no-files-found: error
+          retention-days: 14
