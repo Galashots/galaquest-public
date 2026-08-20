@@ -43,6 +43,36 @@ const CHROME_PORT = 9224;
 const OUT = '.local/runtime-test/';
 mkdirSync(OUT, { recursive: true });
 
+// ── THIS HARNESS HAS TO FIT INSIDE ITS OWN JOB ─────────────────────────────────────────────────
+//
+// .github/workflows/full-playtest-matrix.yml caps every harness job at `timeout-minutes: 18`, and
+// the first version of this file ignored that: a 300 s walk plus fourteen swings a seal plus a
+// 900 s fight adds to about twenty-five minutes of worst case. It was killed by the runner at
+// exactly eighteen, twice, with NO summary line -- so the one question it exists to answer ("can
+// the arc actually be played?") came back not as a fail but as silence, which is worse.
+//
+// So the budgets below are chosen to sum UNDER the ceiling with room to spare, and RUN_DEADLINE_MS
+// is the backstop: this harness reports its own verdict before the runner takes the decision away
+// from it. A budget is a liveness bound, never a performance claim -- see drive-old-beacon.mjs's
+// own header on why a software-rendered runner says nothing about an iPad.
+//
+//   boot/navigate ~20s + walk 210s + seals 3x8 swings ~150s + wake/bar polls ~45s
+//   + fight 420s + payoff polls ~40s  ~=  885s, against a 1080s ceiling.
+const JOB_CEILING_MS = 18 * 60 * 1000;
+const RUN_DEADLINE_MS = JOB_CEILING_MS - 150_000;
+const WALK_BUDGET_MS = 210_000;
+const FIGHT_BUDGET_MS = 420_000;
+const MAX_SWINGS_PER_SEAL = 8;
+const startedAt = Date.now();
+const msLeft = () => RUN_DEADLINE_MS - (Date.now() - startedAt);
+/** Throw with a verdict the log can actually show, rather than letting the runner kill us mute. */
+function assertBudget(where) {
+  if (msLeft() > 0) return;
+  throw new Error(`out of run budget at ${where} -- this harness must finish inside the job's own `
+    + `${JOB_CEILING_MS / 60000}-minute ceiling, and did not. That is a real result: either the arc `
+    + `got slower or a step is not converging. Do NOT fix it by raising the ceiling.`);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const deadlineAfter = (ms) => Date.now() + ms;
 const STICK_PX = 46;
@@ -280,7 +310,7 @@ async function run() {
 
     // ── to the Beacon ────────────────────────────────────────────────────────────────────────────
     console.log('── walking to the Old Beacon ──');
-    await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1] - 3, 2.2, 300000);
+    await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1] - 3, 2.2, WALK_BUDGET_MS);
     const arrived = await pollUntil(tab, (s) => s.beaconFound === true, 30000);
     check(arrived.beaconFound === true, 'the child reaches the Old Beacon', `at ${JSON.stringify(arrived.heroPos.map((n) => +n.toFixed(1)))}`);
     check(arrived.siege?.sealsBuilt === 3, 'three cold seals stand around its base', `built ${arrived.siege?.sealsBuilt}`);
@@ -297,11 +327,12 @@ async function run() {
       // HERO's heading, and the hero's heading is set by walking -- aimAt() below turns the follow
       // CAMERA and nothing else (see its own comment). Approaching an offset point leaves him facing
       // that point rather than the stone, which is a miss the harness would report as a game defect.
-      await walkToward(tab, sx, sz, 1.25, 90000);
+      assertBudget(`approaching seal ${index + 1}`);
+      await walkToward(tab, sx, sz, 1.25, Math.min(70000, Math.max(15000, msLeft())));
       const before = await state(tab);
       const wasBurst = before.siege.seals.filter((s) => s.burst).length;
       let cracked = null;
-      for (let swing = 0; swing < 14; swing += 1) {
+      for (let swing = 0; swing < MAX_SWINGS_PER_SEAL; swing += 1) {
         await tapAttack(tab);
         // 3 s, not 9. This poll's ONLY job is "did that swing land", and a swing takes 1.5 s
         // (SWING_SECONDS) plus a snapshot's own 10 Hz -- so anything past about three seconds is a
@@ -344,7 +375,10 @@ async function run() {
       JSON.stringify(bossBar.bossBarText.trim().slice(0, 40)));
     await shot(tab, 'portrait-04-the-warden-is-up');
 
-    const fightDeadline = deadlineAfter(900000);
+    // The fight gets whatever is left, capped -- so a slow walk shortens the fight rather than
+    // pushing the whole run past the ceiling and losing the verdict entirely.
+    assertBudget('starting the fight');
+    const fightDeadline = deadlineAfter(Math.min(FIGHT_BUDGET_MS, Math.max(30000, msLeft())));
     let shotPhase2 = false;
     let last = bossBar;
     while (Date.now() < fightDeadline && !last.siege.beaconLit) {
