@@ -51,8 +51,13 @@ async function bootstrap() {
   const playPause = document.querySelector('#play-pause');
   function refreshControls() {
     const state = api.getState();
-    reviewTarget.textContent = `${state.reviewTarget} (${state.loadoutClassification})`;
-    panel.dataset.classification = state.loadoutClassification ?? '';
+    // Says the provenance in words a reviewer can act on rather than printing the raw enum: the
+    // one thing that must never be ambiguous on screen is whether an unshipped asset is in frame.
+    const provenance = state.loadoutGearProvenance === 'contains-candidate'
+      ? 'CANDIDATE — not shipped'
+      : 'shipped gear';
+    reviewTarget.textContent = `${state.reviewTarget} — ${provenance}`;
+    panel.dataset.provenance = state.loadoutGearProvenance ?? '';
     loadoutSelect.value = state.loadout;
     overlaySelect.value = state.overlay;
     if (state.clipName) clipSelect.value = state.clipName;

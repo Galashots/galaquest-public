@@ -14,8 +14,14 @@
  *   - exactly one sword is ever visible in the weapon hand, in every loadout;
  *   - an unknown loadout fails closed (throws, state unchanged);
  *   - switching loadout preserves the selected view; the camera lands exactly where
- *     cameraPositionFor says for every bearing (determinism, computed independently in Node);
+ *     cameraPositionFor says for every bearing AND actually looks at the subject (position alone
+ *     would pass a camera aimed at the sky);
  *   - the closeup scale genuinely frames the current review target at CLOSEUP_DISTANCE;
+ *   - switching loadout actually changes the RENDERED PIXELS (a scene graph can claim a candidate
+ *     is visible while the frame is unchanged), with a same-state control proving the probe can
+ *     return zero;
+ *   - the two provenance fields stay distinct: loadoutIsShipping means "the baseline state", not
+ *     "no candidate mounted";
  *   - the on-screen loadout menu drives the same state the API reads back;
  *   - the control panel leaves the inspection surface usable at portrait AND landscape
  *     tablet viewports, and collapses down to its header row on demand.
@@ -154,8 +160,15 @@ function checkGearMatchesDescriptor(s, id) {
     visibleInWeaponHand.map((item) => item.id).join(', ') || 'EMPTY HAND');
   check(`[${id}] reviewTarget is published and mounted`, s.reviewTarget === descriptor.reviewTarget
     && Boolean(live.get(s.reviewTarget)?.visible), `reviewTarget=${s.reviewTarget}`);
-  check(`[${id}] classification is published`, s.loadoutClassification === descriptor.classification,
-    `${s.loadoutClassification} vs ${descriptor.classification}`);
+  check(`[${id}] gear provenance is published`, s.loadoutGearProvenance === descriptor.gearProvenance,
+    `${s.loadoutGearProvenance} vs ${descriptor.gearProvenance}`);
+  // The two fields that must never be treated as synonyms (loadoutDescriptors.js's header): the
+  // baseline boolean is true ONLY for `shipping`, while provenance answers the different question
+  // of whether any unshipped mesh is in frame. Checked live, against the running Studio, because a
+  // capture consumer reads exactly these two fields to decide what a screenshot may be used for.
+  check(`[${id}] loadoutIsShipping means "the baseline state", not "no candidate mounted"`,
+    s.loadoutIsShipping === (id === 'shipping'),
+    `loadoutIsShipping=${s.loadoutIsShipping} provenance=${s.loadoutGearProvenance}`);
 }
 
 // ── portrait: the full behavioural pass ───────────────────────────────────────────────────────
@@ -218,6 +231,20 @@ for (const [bearing] of BEARINGS) {
   const expected = cameraPositionFor('inspection', bearing, 0.9, [0, 0, 0]);
   const drift = Math.hypot(...actual.map((v, i) => v - expected[i]));
   check(`camera lands deterministically at inspection/${bearing}`, drift < 1e-6, `drift ${drift}`);
+  // Position alone is only half of a framing: a camera standing in exactly the right place while
+  // aimed somewhere else photographs the sky and still passes the check above. The expected look
+  // direction is computed here from plain vector maths against the subject the Studio claims to be
+  // framing (hero at the origin, eye height 0.9), then compared with the camera's own forward axis.
+  const forward = await page.eval(`(() => {
+    const c = window.__galaQuestStudioScene.camera;
+    const v = new (c.position.constructor)(0, 0, -1).applyQuaternion(c.quaternion);
+    return v.toArray();
+  })()`);
+  const toSubject = [0 - expected[0], 0.9 - expected[1], 0 - expected[2]];
+  const length = Math.hypot(...toSubject);
+  const alignment = forward.reduce((sum, v, i) => sum + v * (toSubject[i] / length), 0);
+  check(`camera actually looks at the subject at inspection/${bearing}`, alignment > 0.9999,
+    `cos(angle) = ${alignment.toFixed(6)}`);
   await sleep(120);
   await shot(page, `portrait-shipping-inspection-${bearing}`);
 }
@@ -258,9 +285,92 @@ check('the loadout menu follows API-driven changes', menuAfterApi.loadout === 'c
 check('the view menus follow API-driven changes',
   menuAfterApi.scale === 'closeup' && menuAfterApi.bearing === 'opposite-side',
   `${menuAfterApi.scale}/${menuAfterApi.bearing}`);
-check('the review line follows API-driven changes',
-  menuAfterApi.review.includes('sword_wildwood_w1a') && menuAfterApi.review.includes('candidate'),
+// Asserts the MEANING the line has to carry -- it names the review target and says out loud that
+// an unshipped asset is in frame -- rather than one exact spelling, so rewording the label stays
+// free while dropping the candidate warning fails.
+check('the review line follows API-driven changes and flags the candidate',
+  menuAfterApi.review.includes('sword_wildwood_w1a') && /candidate/i.test(menuAfterApi.review)
+  && /not shipped/i.test(menuAfterApi.review),
   menuAfterApi.review);
+
+// ── does switching loadout actually change the PICTURE? ────────────────────────────────────────
+// Every check above reads the scene graph, and a scene graph can say "the candidate blade is
+// visible" while nothing about the rendered frame changes (wrong anchor, zero scale, mesh inside
+// the body). This probe reads the actual rendered pixels: it downsamples the live canvas into a 2D
+// canvas inside the page and counts pixels that differ between two captured states.
+//
+// The CONTROL matters as much as the comparisons. Capturing the same state twice must return
+// ~zero, which is what proves the probe is measuring the render at all rather than returning a
+// large number for everything -- and it doubles as a determinism check on the frozen pose.
+await page.eval(`(() => {
+  window.__gqPixels = {
+    snaps: {},
+    async grab(slot) {
+      const canvas = document.querySelector('#studio-canvas');
+      // Read inside a rAF callback, which runs after the Studio's own render for this frame, so the
+      // WebGL drawing buffer still holds the rendered image (it is cleared at composite time).
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      const off = document.createElement('canvas');
+      off.width = 192; off.height = 256;
+      const ctx = off.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, off.width, off.height);
+      this.snaps[slot] = ctx.getImageData(0, 0, off.width, off.height).data;
+      return this.snaps[slot].length;
+    },
+    diff(a, b) {
+      const x = this.snaps[a]; const y = this.snaps[b];
+      if (!x || !y || x.length !== y.length) return null;
+      let differing = 0;
+      for (let i = 0; i < x.length; i += 4) {
+        if (Math.abs(x[i] - y[i]) > 8 || Math.abs(x[i + 1] - y[i + 1]) > 8 || Math.abs(x[i + 2] - y[i + 2]) > 8) differing += 1;
+      }
+      return differing / (x.length / 4);
+    },
+  };
+  return true;
+})()`);
+
+async function pixelsOf(loadoutId, scale, bearing, slot) {
+  await page.eval(`window.__galaQuestStudio.setLoadout(${JSON.stringify(loadoutId)})`);
+  await page.eval(`window.__galaQuestStudio.setView(${JSON.stringify(scale)}, ${JSON.stringify(bearing)})`);
+  await sleep(250);
+  const length = await page.eval(`window.__gqPixels.grab(${JSON.stringify(slot)})`);
+  if (!length) throw new Error(`pixel probe returned nothing for ${slot}`);
+}
+const pixelDiff = (a, b) => page.eval(`window.__gqPixels.diff(${JSON.stringify(a)}, ${JSON.stringify(b)})`);
+
+await pixelsOf('shipping', 'inspection', 'opposite-side', 'control-1');
+await pixelsOf('shipping', 'inspection', 'opposite-side', 'control-2');
+const controlDiff = await pixelDiff('control-1', 'control-2');
+check('the pixel probe reads the render: an unchanged state renders identically',
+  controlDiff !== null && controlDiff < 0.001, `${(controlDiff * 100).toFixed(3)}% of pixels differ`);
+
+await pixelsOf('candidate-wildwood-blade', 'inspection', 'opposite-side', 'wildwood-side');
+const swordSwapDiff = await pixelDiff('control-1', 'wildwood-side');
+check('swapping in the candidate blade visibly changes the render at the sword-side view',
+  swordSwapDiff !== null && swordSwapDiff > 0.004,
+  `${(swordSwapDiff * 100).toFixed(3)}% of pixels differ vs shipping`);
+
+await pixelsOf('shipping', 'inspection', 'three-quarter', 'shipping-3q');
+await pixelsOf('shipping-sword-only', 'inspection', 'three-quarter', 'sword-only-3q');
+const shieldHiddenDiff = await pixelDiff('shipping-3q', 'sword-only-3q');
+check('hiding the shield visibly changes the render at the default view',
+  shieldHiddenDiff !== null && shieldHiddenDiff > 0.004,
+  `${(shieldHiddenDiff * 100).toFixed(3)}% of pixels differ vs shipping`);
+
+// NOT a gate, and deliberately so: this measures how much the candidate sword swap shows at the
+// DEFAULT three-quarter bearing, which looks at the shield arm and largely hides the sword hand
+// behind the body. The number is published so a reviewer knows to use the sword-side or closeup
+// path for weapon review rather than discovering the occlusion by eye. A threshold here would be
+// inventing an appearance verdict this harness has no authority to make.
+await pixelsOf('candidate-wildwood-blade', 'inspection', 'three-quarter', 'wildwood-3q');
+const defaultViewDiff = await pixelDiff('shipping-3q', 'wildwood-3q');
+console.log(`NOTE  the candidate sword swap changes ${(defaultViewDiff * 100).toFixed(3)}% of pixels at the`
+  + ' DEFAULT inspection/three-quarter bearing, versus'
+  + ` ${(swordSwapDiff * 100).toFixed(3)}% at inspection/opposite-side -- weapon review belongs on the`
+  + ' sword-side or closeup path.');
+results.push({ name: 'candidate visibility by bearing (not a gate)', passed: null, detail: { defaultViewDiff, swordSwapDiff } });
+await shot(page, 'portrait-candidate-wildwood-blade-inspection-three-quarter-occluded');
 
 // The on-screen menu drives the same state the API reads back -- the UI is not a second truth.
 await page.eval(`(() => {

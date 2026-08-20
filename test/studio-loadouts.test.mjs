@@ -1,6 +1,6 @@
 // A1 Studio convergence: the loadout vocabulary (public/src/studio/loadoutDescriptors.js) is the
 // semantic review-state seam the A2 Owner Fit work will consume. These tests protect the properties
-// that make it trustworthy: fail-closed lookup, truthful shipping/candidate classification, the
+// that make it trustworthy: fail-closed lookup, truthful shipped/candidate provenance, the
 // one-sword rule, and the cross-boundary syncs (scene execution list, sol-review protocol enum)
 // that would otherwise drift silently. Wherever possible the expected value comes from a DIFFERENT
 // module than the one under test, so a bad implementation can actually disagree.
@@ -11,7 +11,9 @@ import { readFileSync, existsSync } from 'node:fs';
 
 import {
   ALL_STUDIO_GEAR,
+  CONTAINS_CANDIDATE,
   LOADOUT_IDS,
+  SHIPPING_ONLY,
   STUDIO_LOADOUTS,
   loadoutDescriptor,
 } from '../public/src/studio/loadoutDescriptors.js';
@@ -73,22 +75,49 @@ test('exactly one sword per loadout: never two blades in the weapon hand, never 
   }
 });
 
-test('classification is derived and truthful: candidate iff a candidate item is mounted', () => {
+test('provenance is derived and truthful: contains-candidate iff a candidate item is mounted', () => {
   for (const descriptor of STUDIO_LOADOUTS) {
-    const mountsCandidate = descriptor.gear.some((item) => item.classification === 'candidate');
+    const mountsCandidate = descriptor.gear.some((item) => item.provenance === 'candidate');
     assert.equal(
-      descriptor.classification, mountsCandidate ? 'candidate' : 'shipping',
-      `"${descriptor.id}" claims ${descriptor.classification} but mountsCandidate=${mountsCandidate}`,
+      descriptor.gearProvenance, mountsCandidate ? CONTAINS_CANDIDATE : SHIPPING_ONLY,
+      `"${descriptor.id}" claims ${descriptor.gearProvenance} but mountsCandidate=${mountsCandidate}`,
     );
   }
 });
 
-test('the candidate/shipping labels match where the assets actually live on disk', () => {
+// The distinction the Studio API publishes as two separate fields, pinned here so they can never
+// quietly collapse into one meaning. `loadoutIsShipping` answers "is this the baseline state the
+// game itself produces"; `gearProvenance` answers "does this state mount any unshipped asset".
+// These two states are exactly where the answers diverge -- if a future edit made provenance a
+// restatement of the baseline boolean, this fails.
+test('baseline-ness and gear provenance are different questions with different answers', () => {
+  const diverging = ['shipping-sword-only', 'candidate-with-lantern'];
+  for (const id of diverging) {
+    const descriptor = loadoutDescriptor(id);
+    assert.equal(descriptor.gearProvenance, SHIPPING_ONLY, `${id} mounts only shipped meshes`);
+    assert.notEqual(id, 'shipping', `${id} is not the baseline loadout`);
+  }
+  // ...and the baseline agrees with both, which is why the two fields look like synonyms until
+  // exactly these states are considered.
+  assert.equal(loadoutDescriptor('shipping').gearProvenance, SHIPPING_ONLY);
+  assert.equal(loadoutDescriptor('candidate-wildwood-blade').gearProvenance, CONTAINS_CANDIDATE);
+});
+
+test('the provenance vocabulary never uses a bare "shipping" that could read as the baseline', () => {
+  // The wording itself is the safeguard against the two fields being mistaken for synonyms.
+  assert.equal(SHIPPING_ONLY, 'shipping-only');
+  assert.equal(CONTAINS_CANDIDATE, 'contains-candidate');
+  for (const descriptor of STUDIO_LOADOUTS) {
+    assert.notEqual(descriptor.gearProvenance, 'shipping');
+  }
+});
+
+test('the candidate/shipped labels match where the assets actually live on disk', () => {
   // The one candidate item is the Wildwood Blade, and its GLB genuinely sits in the quarantined
-  // candidates/ directory -- while everything classified shipping either ships in the hero atlas
+  // candidates/ directory -- while every item marked shipped either ships inside the hero atlas
   // (no separate file) or sits directly in assets/gear/. Checked against the real files so a
-  // reclassification (or a sneaky asset move) fails here rather than reading as an aesthetic call.
-  const candidates = ALL_STUDIO_GEAR.filter((item) => item.classification === 'candidate');
+  // relabelling (or a sneaky asset move) fails here rather than reading as an aesthetic call.
+  const candidates = ALL_STUDIO_GEAR.filter((item) => item.provenance === 'candidate');
   assert.deepEqual(candidates.map((item) => item.id), [WILDWOOD_BLADE_CANDIDATE_ID]);
   assert.match(WILDWOOD_BLADE_CANDIDATE_URL, /^assets\/gear\/candidates\//);
   assert.ok(existsSync(`public/${WILDWOOD_BLADE_CANDIDATE_URL}`), 'candidate GLB missing from candidates/');
@@ -111,15 +140,15 @@ test('gear identities come from the shipping mount records, not restated strings
   assert.equal(lanternLoadout.reviewTarget, RIGID_BELT_LANTERN.id);
 });
 
-test('the lantern loadout is honestly shipping despite its historical candidate- id', () => {
+test('the lantern loadout is honestly shipped gear despite its historical candidate- id', () => {
   const descriptor = loadoutDescriptor('candidate-with-lantern');
-  assert.equal(descriptor.classification, 'shipping');
+  assert.equal(descriptor.gearProvenance, SHIPPING_ONLY);
   assert.ok(descriptor.note?.length > 0, 'the id/label mismatch needs its explanation recorded');
 });
 
 test('shipping-sword-only mounts only shipped gear and only the sword', () => {
   const descriptor = loadoutDescriptor('shipping-sword-only');
-  assert.equal(descriptor.classification, 'shipping');
+  assert.equal(descriptor.gearProvenance, SHIPPING_ONLY);
   assert.deepEqual(descriptor.gear.map((item) => item.id), [descriptor.reviewTarget]);
   assert.equal(descriptor.reviewTarget, loadoutDescriptor('shipping').reviewTarget);
 });
@@ -132,10 +161,10 @@ test('the wildwood loadout keeps the shield -- the locked comparison varies only
   assert.equal(wildwood.reviewTarget, WILDWOOD_BLADE_CANDIDATE_ID);
 });
 
-test('descriptors are deeply frozen data -- a consumer cannot quietly reclassify a candidate', () => {
+test('descriptors are deeply frozen data -- a consumer cannot quietly relabel a candidate', () => {
   const descriptor = loadoutDescriptor('candidate-wildwood-blade');
-  assert.throws(() => { descriptor.classification = 'shipping'; }, TypeError);
-  assert.throws(() => { descriptor.gear[0].classification = 'shipping'; }, TypeError);
+  assert.throws(() => { descriptor.gearProvenance = SHIPPING_ONLY; }, TypeError);
+  assert.throws(() => { descriptor.gear[0].provenance = 'shipped'; }, TypeError);
   assert.throws(() => { STUDIO_LOADOUTS.push({}); }, TypeError);
 });
 

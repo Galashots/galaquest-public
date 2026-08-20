@@ -25,7 +25,8 @@ export function installStudioApi(studioScene) {
   // and can never go stale relative to what actually rendered -- the same defect class the lighting
   // label already guards against (a worker driving this API bypasses every click handler; before
   // this, a worker's setLoadout('candidate-wildwood-blade') left the on-screen menu claiming
-  // "shipping", which is exactly the candidate-masquerading-as-shipping outcome doctrine 5.1 bans).
+  // "shipping" while an unshipped candidate was actually mounted, which is exactly the
+  // candidate-masquerading-as-shipped-gear outcome the whole review vocabulary exists to prevent).
   // Caught by looking at the review-studio.mjs captures, not assumed safe.
   const stateListeners = new Set();
   function notifyStateChange() {
@@ -153,11 +154,20 @@ export function installStudioApi(studioScene) {
         // left to guessing -- a candidate must never masquerade as shipping (armour-progression-
         // doctrine.md section 5.1). `loadoutIsShipping` is the load-bearing boolean a caller checks.
         loadout: studioScene.loadout,
+        // IS THIS THE BASELINE STATE THE GAME ITSELF PRODUCES? True only for the exact `shipping`
+        // loadout. This is NOT a synonym for `loadoutGearProvenance` below, and the two genuinely
+        // disagree: `shipping-sword-only` and `candidate-with-lantern` mount nothing but shipped
+        // meshes (provenance `shipping-only`) while being false here, because neither is the
+        // baseline. A caller asking "may I treat this capture as the shipping game's own look?"
+        // wants THIS field; a caller asking "is any unshipped asset in this frame?" wants the
+        // other one. test/studio-loadouts.test.mjs pins the divergence.
         loadoutIsShipping: studioScene.loadout === 'shipping',
-        // A1 semantic review state (see the comment above): stable identifiers for the next task's
-        // Owner Fit and for capture metadata -- never file paths, never label text.
+        // A1 semantic review state (see the comment above getState): stable identifiers for the
+        // next task's Owner Fit and for capture metadata -- never file paths, never label text.
         loadoutLabel: descriptor?.label ?? null,
-        loadoutClassification: descriptor?.classification ?? null,
+        // DOES THIS STATE MOUNT ANY UNSHIPPED ASSET? 'shipping-only' | 'contains-candidate',
+        // derived from the mounted gear rather than authored, so it cannot flatter a candidate.
+        loadoutGearProvenance: descriptor?.gearProvenance ?? null,
         reviewTarget: descriptor?.reviewTarget ?? null,
         gear: studioScene.gearVisibility(),
         // SR5: which inspector overlay (if any) is currently drawn in the scene, so a capture's

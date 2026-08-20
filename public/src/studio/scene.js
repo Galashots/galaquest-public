@@ -57,7 +57,7 @@ export { OVERLAY_MODES };
  * parameter -- that generalization remains explicitly out of scope (api.js's own header comment).
  *
  * A1 Studio convergence: the loadout VOCABULARY now lives in loadoutDescriptors.js (semantic ids,
- * truthful shipping/candidate classification, review targets), so callers -- and the next task's
+ * truthful shipped/candidate provenance, review targets), so callers -- and the next task's
  * Owner Fit -- learn what is being reviewed from data rather than from this file's mount plumbing.
  * This module executes exactly that list; an id present in one place and not the other is a bug the
  * studio-loadout tests catch, not a feature. 'shipping-sword-only' (added with the vocabulary) is a
@@ -185,12 +185,12 @@ export async function createStudioScene(canvas) {
    * mounted: false until their first selection actually lands the GLB.
    */
   function gearVisibility() {
-    return ALL_STUDIO_GEAR.map(({ id, bone, classification }) => {
+    return ALL_STUDIO_GEAR.map(({ id, bone, provenance }) => {
       const anchor = hero.root.getObjectByName(rigidAnchorName(id, bone));
       return {
         id,
         bone,
-        classification,
+        provenance,
         mounted: Boolean(anchor),
         visible: Boolean(anchor && anchor.visible),
       };
