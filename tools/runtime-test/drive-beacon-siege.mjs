@@ -37,7 +37,8 @@ import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
-import { WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
+import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
+import { ATTACK_REACH, isWithinStrike } from '../../public/src/combat/encounter.js';
 
 const CHROME_PORT = 9224;
 const OUT = '.local/runtime-test/';
@@ -63,6 +64,31 @@ const RUN_DEADLINE_MS = JOB_CEILING_MS - 150_000;
 const WALK_BUDGET_MS = 210_000;
 const FIGHT_BUDGET_MS = 420_000;
 const MAX_SWINGS_PER_SEAL = 8;
+// The two reaches the GAME uses, imported rather than restated (GQ-007). A seal is a fixture you
+// chop at and carries SEAL_EXTRA_REACH_METERS of slack; the Warden is a body you close on and does
+// not. The harness needs both because it now asks the game's own isWithinStrike() whether the hero
+// is lined up BEFORE it swings -- see faceHero.
+const SEAL_REACH = ATTACK_REACH + SEAL_EXTRA_REACH_METERS;
+// Six pulses is far more than a correct turn needs (one, usually two) and few enough that a hero
+// who genuinely cannot be turned is reported as such inside a couple of seconds instead of
+// silently eating the whole swing budget.
+const FACE_ATTEMPTS = 6;
+const FACE_PULSE_MS = 150;
+// ── STAND BACK FROM THE STONE ──────────────────────────────────────────────────────────────────
+//
+// walkToward aims the hero AT a point and stops when it is inside its stop radius, and momentum
+// carries him further -- run locally, walking at seal 2 put him 0.00 m from it, standing IN the
+// stone. At that separation there is no direction to face: every re-aim pulse shot him through the
+// seal and out the far side, so all eight swings were logged at "180deg off, 0.01 m out" and the
+// seal that needed one more blow never got it. A distance of zero is the one distance from which
+// nothing can be struck.
+//
+// So the walk now targets a point SEAL_STANDOFF_M short of the stone along the hero's own line of
+// approach -- which is where a child stops anyway, because they can see the thing they are about to
+// hit -- and faceHero backs out of anything closer than MIN_FACE_METERS before trying to turn. Both
+// numbers sit far inside SEAL_REACH (2.6 m), so standing back costs nothing but a workable angle.
+const SEAL_STANDOFF_M = 1.3;
+const MIN_FACE_METERS = 0.6;
 const startedAt = Date.now();
 const msLeft = () => RUN_DEADLINE_MS - (Date.now() - startedAt);
 /** Throw with a verdict the log can actually show, rather than letting the runner kill us mute. */
@@ -174,6 +200,12 @@ const STATE_EXPR = `JSON.stringify((() => {
     ready: true,
     heroPos: [r.player.position.x, r.player.position.z],
     heading: r.follow.heading,
+    // THE HERO'S OWN HEADING, which is a different number from the camera's above and is the one
+    // that decides whether a swing lands. Leaving it out of this probe is what let this harness
+    // swing at a seal it was standing beside and report the miss as a game defect: the field named
+    // 'heading' just above looks
+    // like the answer, reads plausibly, and is the camera.
+    heroHeading: r.player.heading,
     netStatus: r.netState().status,
     zone: r.zoneDebug(),
     guestId: r.guestId(),
@@ -258,30 +290,74 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
  * and every hero clock idle, and missed all eight -- because the hero stood at [6.85, 50.34] facing
  * the way he had been travelling while the seal sat at [6, 49.9], behind his shoulder.
  *
- * That is the GAME being right: you must face what you hit. So this issues one short stick pulse in
- * the target's direction, which costs a few centimetres of movement and buys a correct heading.
+ * That is the GAME being right: you must face what you hit. So this issues short stick pulses in
+ * the target's direction -- each costs a few centimetres of movement and buys a heading -- and it
+ * keeps pulsing until the GAME'S OWN isWithinStrike() agrees the target is in front of the hero,
+ * judged against `heroHeading` rather than the follow camera's.
+ *
+ * That last distinction is the whole point. The probe's `heading` is the CAMERA's, and the second
+ * CI run of this file spent its entire swing budget re-facing off that number, landing roughly one
+ * blow in six and reporting the other five as the seals refusing to break. A harness that cannot
+ * tell "I did not aim" from "the game did not hit" cannot be trusted about either, so a miss now
+ * only ever gets logged from a stance the game itself called strikeable.
  */
-async function faceHero(tab, targetX, targetZ) {
-  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
-  const here = await state(tab);
+function lookingAt(here, targetX, targetZ, reach) {
+  if (!Number.isFinite(here?.heroHeading)) return false;
+  return isWithinStrike(
+    { x: here.heroPos[0], z: here.heroPos[1] },
+    here.heroHeading,
+    { x: targetX, z: targetZ },
+    reach,
+  );
+}
+
+/** How far off the hero is pointing, in degrees, for a log line a human can read. */
+function offBy(here, targetX, targetZ) {
   const dx = targetX - here.heroPos[0];
   const dz = targetZ - here.heroPos[1];
-  const distance = Math.hypot(dx, dz) || 1;
-  const nx = dx / distance;
-  const nz = dz / distance;
-  const cos = Math.cos(here.heading);
-  const sin = Math.sin(here.heading);
-  const sx = -cos * nx + sin * nz;
-  const sy = sin * nx + cos * nz;
-  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
-  try {
-    await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
-    await sleep(160);
-  } finally {
-    await touch(tab, 'touchEnd', []);
+  // Below a few centimetres there is no direction to be off BY, and reporting one (it flaps between
+  // +180 and -180 as the hero jitters) reads as a facing bug rather than as a standing-inside-it bug.
+  if (Math.hypot(dx, dz) < 0.05) return 'no angle (standing in it)';
+  const to = Math.atan2(dx, dz);
+  let delta = to - here.heroHeading;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return `${Math.round((delta * 180) / Math.PI)}deg`;
+}
+
+async function faceHero(tab, targetX, targetZ, reach) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  let here = await state(tab);
+  for (let attempt = 0; attempt < FACE_ATTEMPTS; attempt += 1) {
+    // ASK THE GAME, don't assume the pulse worked. One pulse is usually enough and occasionally is
+    // not: the stick has a dead zone, the hero has turn inertia, and a pulse that also closes the
+    // last few centimetres can carry him PAST the stone so that the correct turn he just made is
+    // now the wrong one. Re-reading and re-pulsing costs a few hundred milliseconds and removes an
+    // entire class of phantom "the sword does not work" result from this file.
+    if (lookingAt(here, targetX, targetZ, reach)) return here;
+    const dx = targetX - here.heroPos[0];
+    const dz = targetZ - here.heroPos[1];
+    const distance = Math.hypot(dx, dz) || 1;
+    // TOO CLOSE TO HAVE A DIRECTION. Pulse AWAY instead, and let the next pass turn him: a hero
+    // standing inside the thing he is swinging at cannot be aimed, only backed out of.
+    const sign = distance < MIN_FACE_METERS ? -1 : 1;
+    const nx = (dx / distance) * sign;
+    const nz = (dz / distance) * sign;
+    const cos = Math.cos(here.heading);
+    const sin = Math.sin(here.heading);
+    const sx = -cos * nx + sin * nz;
+    const sy = sin * nx + cos * nz;
+    await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+    try {
+      await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+      await sleep(FACE_PULSE_MS);
+    } finally {
+      await touch(tab, 'touchEnd', []);
+    }
+    await sleep(200);
+    here = await state(tab);
   }
-  await sleep(220);
-  return state(tab);
+  return here;
 }
 
 /** Face a world point with the CAMERA, so a capture has its subject in frame. Does not turn the
@@ -397,12 +473,22 @@ async function run() {
     console.log('── breaking the seals ──');
     for (let index = 0; index < COLD_SEALS.length; index += 1) {
       const [sx, sz] = COLD_SEALS[index];
-      // WALK AT THE SEAL ITSELF, not at a point beside it. The server judges a swing against the
-      // HERO's heading, and the hero's heading is set by walking -- aimAt() below turns the follow
-      // CAMERA and nothing else (see its own comment). Approaching an offset point leaves him facing
-      // that point rather than the stone, which is a miss the harness would report as a game defect.
+      // WALK ALONG THE LINE OF APPROACH AND STOP SHORT, which is both what a child does and the only
+      // way the turn below has an angle to work with (see SEAL_STANDOFF_M). The stand-off point is
+      // computed from where the hero actually IS, not from a fixed compass offset: a point "east of
+      // the seal" would send him round it, and the arriving heading is what the swing is judged on.
       assertBudget(`approaching seal ${index + 1}`);
-      await walkToward(tab, sx, sz, 1.25, Math.min(70000, Math.max(15000, msLeft())));
+      const from = await state(tab);
+      const ax = sx - from.heroPos[0];
+      const az = sz - from.heroPos[1];
+      const alen = Math.hypot(ax, az) || 1;
+      await walkToward(
+        tab,
+        sx - (ax / alen) * SEAL_STANDOFF_M,
+        sz - (az / alen) * SEAL_STANDOFF_M,
+        0.7,
+        Math.min(70000, Math.max(15000, msLeft())),
+      );
       const before = await state(tab);
       if (index === 0) {
         console.log(`  DIAG  at seal 1: heroPos ${JSON.stringify(before.heroPos.map((n) => +n.toFixed(2)))}, `
@@ -419,7 +505,15 @@ async function run() {
       for (let swing = 0; swing < MAX_SWINGS_PER_SEAL; swing += 1) {
         // Re-faced before EVERY swing, not once: a walk that stopped past the stone leaves it behind
         // the hero, and a miss can drift him further.
-        await faceHero(tab, sx, sz);
+        const aimed = await faceHero(tab, sx, sz, SEAL_REACH);
+        // A stance the game itself will not call strikeable is not a swing worth spending, and a
+        // miss from it says nothing about the game. Report it as the harness's own failure to aim.
+        if (!lookingAt(aimed, sx, sz, SEAL_REACH)) {
+          console.log(`  AIM   could not line the hero up on seal ${index + 1} after ${FACE_ATTEMPTS} `
+            + `pulses: hero ${JSON.stringify(aimed.heroPos.map((n) => +n.toFixed(2)))} facing `
+            + `${offBy(aimed, sx, sz)} off, ${Math.hypot(sx - aimed.heroPos[0], sz - aimed.heroPos[1]).toFixed(2)} m out `
+            + `of a ${SEAL_REACH.toFixed(2)} m reach`);
+        }
         // ...and paced to the swing clock, so a tap becomes a SWING rather than being refused.
         await waitUntilSwingReady(tab);
         await tapAttack(tab);
@@ -434,6 +528,7 @@ async function run() {
             || s.siege.seals.some((x, i) => x.blows > priorBlows[i]),
           3000,
         );
+        const priorBefore = priorBlows;
         priorBlows = after.siege.seals.map((seal) => seal.blows);
         if (cracked === null && after.siege.seals.some((x) => x.blows > 0)) {
           cracked = after;
@@ -444,6 +539,14 @@ async function run() {
           }
         }
         if (after.siege.seals.filter((x) => x.burst).length > wasBurst) break;
+        // A swing that changed nothing, from a stance the game called strikeable, is the one shape
+        // of miss that is worth a log line -- it is the game saying no to a fair blow.
+        if (after.siege.seals.every((x, i) => x.blows === priorBefore[i])) {
+          console.log(`  MISS  swing ${swing + 1} at seal ${index + 1} changed nothing: hero `
+            + `${JSON.stringify(after.heroPos.map((n) => +n.toFixed(2)))} facing ${offBy(after, sx, sz)} off, `
+            + `${Math.hypot(sx - after.heroPos[0], sz - after.heroPos[1]).toFixed(2)} m out, `
+            + `blows ${JSON.stringify(after.siege.seals.map((x) => x.blows))}`);
+        }
         await sleep(300);
       }
       const done = await state(tab);
@@ -476,7 +579,7 @@ async function run() {
       if (Math.hypot(last.heroPos[0] - w.x, last.heroPos[1] - w.z) > 1.6) {
         await walkToward(tab, w.x, w.z, 1.5, 12000);
       }
-      await faceHero(tab, w.x, w.z);
+      await faceHero(tab, w.x, w.z, ATTACK_REACH);
       await waitUntilSwingReady(tab);
       await tapAttack(tab);
       await sleep(250);
