@@ -668,7 +668,7 @@ export const PROPS = Object.freeze([
 // the clearing, so moving that lamp moves the trigger with it and the two can never disagree.
 //
 // SPLIT IN TWO on 2026-08-20 (G1), and this is the one edit in this file that could have gone wrong
-// silently. The Old Beacon road adds three more dormant lamps, and the obvious thing -- letting them
+// silently. The Old Beacon road adds two more dormant lamps, and the obvious thing -- letting them
 // fall into TRAIL_LIGHTS with the other six -- would have moved CAMP.at (the LAST dormant lamp) and
 // ROWAN.facing (the second-to-last) eighteen metres up the new road, so the camp's "you got here"
 // trigger would have fired at the Beacon and Rowan would have spent the game staring past the child

@@ -119,13 +119,17 @@ export function questObjectiveFor(rewards, treeLit, gateFound = false, questGive
     // game pointing past the problem; it takes the chip only while the tangle is actually there, and
     // hands it straight back the moment it falls.
     if (trail?.atBramble === true) return OBJECTIVE_CUT_THE_BRAMBLE;
+    // ARRIVING BEATS COLLECTING, one more time and OUTSIDE the camp branch: a child who has stood at
+    // the Old Beacon has done something bigger than anything the trail can still ask of them. The
+    // same rule the bramble interrupt and the missed-lamp case above are both written from.
+    //
+    // Outside, because campFound is a 4.5 m radius and the road only passes 2.5 m from its centre.
+    // Walking wide around the clearing and straight on up the road reaches the Beacon with campFound
+    // still false -- and this check living INSIDE the branch let that fall all the way through to the
+    // lamp counter, so the game told a child who had just found a dead Beacon to go and light lamps.
+    // rowanSpeech.js already gives beaconFound unconditional top priority; this now agrees with it.
+    if (trail?.beaconFound === true) return OBJECTIVE_BEACON_IS_COLD;
     if (trail?.campFound === true) {
-      // ARRIVING BEATS COLLECTING, one more time and at the top of the branch: a child who has stood
-      // at the Old Beacon has done something bigger than anything the camp can still ask of them, and
-      // sending them back down the road to be introduced to Rowan would be the game arguing with them
-      // about a thing it never made them do. The same rule the bramble interrupt and the missed-lamp
-      // case above are both written from.
-      if (trail?.beaconFound === true) return OBJECTIVE_BEACON_IS_COLD;
       // ROWAN, THEN THE CART, THEN THE ROAD NORTH -- each only claims the chip once its own
       // precondition is real, so a camp with no Rowan spoken to yet still asks the mystery.
       if (trail?.rowanMet !== true) return OBJECTIVE_THE_CAMP;
