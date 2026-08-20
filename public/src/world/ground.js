@@ -1,6 +1,9 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import { WORLD } from '../render/layers.js';
+import { FOG_FAR } from '../render/sky.js';
+import { DEFAULT_DISTANCE, DEFAULT_PITCH } from '../camera/follow.js';
 import { ROAD, ZONE } from './zones/village.js';
+import { WORLD_LIMIT, WORLD_LIMIT_NORTH } from './bounds.js';
 
 // Phase Y/Task C: the flat single-colour ground plane read as props scattered on a test pad -- see
 // the brief's own "Replace the flat green test-pad read with one integrated ground + road". This is
@@ -39,10 +42,9 @@ const CELL_METERS = 0.5;
 // quantisation was doing half the softening; on the 0.5 m grid the two compounded and the lane to
 // the wolf photographed as a fuzzy mud patch rather than a path with sides.
 const ROAD_EDGE_SOFTEN_METERS = 0.35;
-// Wide enough that its own edge is past render/sky.js's FOG_FAR from anywhere a player can stand:
-// the walkable world is +/-13 and the camera sits up to 18 m further out, so 70 m of half-width
-// leaves ~39 m of fully fogged grass beyond the furthest thing a child can look at.
-const GROUND_SKIRT_METERS = 140;
+// Slack beyond the point where the skirt's edge is exactly at FOG_FAR, so the horizon is not sitting
+// on the threshold. Two metres of scenery past the fog costs nothing -- the skirt is two triangles.
+const SKIRT_FOG_MARGIN_METERS = 2;
 
 // ── pure helpers (unit-testable with no three.js, no DOM) ──────────────────────────────────────
 
@@ -113,6 +115,45 @@ export function meadowBlend(x, z) {
 export function groundBounds(zone) {
   const half = zone.size / 2;
   return { minX: -half, maxX: half, minZ: -half, maxZ: half + (zone.northMeters ?? 0) };
+}
+
+/** The rectangle a hero can actually STAND on, which is a metre inside the ground on every side. */
+export const WALKABLE_BOUNDS = Object.freeze({
+  minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT_NORTH,
+});
+
+/**
+ * How wide the distance skirt has to be so that, from the furthest point a player can stand and
+ * looking straight out, its own edge is still at or past the fog's far plane and therefore fully
+ * dissolved into FOG_COLOR.
+ *
+ * DERIVED, not typed (docs/MISTAKES.md GQ-007). It was a hand-written 140 with a comment reading
+ * "the walkable world is +/-13 and the camera sits up to 18 m further out" -- true when the world
+ * was square, and quietly false from the moment it grew north (ZONE.northMeters 22 -> 44 for the
+ * Old Beacon road). Worse, it broke BOTH ends: the skirt is centred on the ground, so growing one
+ * end drags the far edge of the OTHER end inward by half the growth. The south horizon regressed
+ * from a place that edit never touched, and the only thing asserting the invariant was prose.
+ *
+ * Two things make this a lower bound rather than an estimate:
+ *   - `walkable` is the clamp rectangle (bounds.js), not the ground's extent. Where the hero can
+ *     STAND is what decides what they can look at; they stop a metre short of the mesh.
+ *   - the camera trails the hero by DEFAULT_DISTANCE * cos(pitch), so it stands that much further
+ *     from the edge being faced. That BUYS reach, and leaving it out would over-build the skirt.
+ *
+ * three.js linear fog is view-space depth, so a horizontal distance H reads as H * cos(pitch) plus
+ * a strictly positive term for the camera's height above the skirt. Dropping that height term keeps
+ * this conservative without needing to know the camera's target height.
+ */
+export function skirtHalfWidthMeters(bounds, walkable, marginMeters = SKIRT_FOG_MARGIN_METERS) {
+  const centreX = (bounds.minX + bounds.maxX) / 2;
+  const centreZ = (bounds.minZ + bounds.maxZ) / 2;
+  // How far the walkable world sticks out from the skirt's own centre, in its worst direction.
+  const reach = Math.max(
+    walkable.maxZ - centreZ, centreZ - walkable.minZ,
+    walkable.maxX - centreX, centreX - walkable.minX,
+  );
+  const cosPitch = Math.cos(DEFAULT_PITCH);
+  return FOG_FAR / cosPitch + reach - DEFAULT_DISTANCE * cosPitch + marginMeters;
 }
 
 /** Builds the ONE ground BufferGeometry over `bounds` ({minX,maxX,minZ,maxZ}, from groundBounds())
@@ -197,8 +238,9 @@ export function createGround() {
   //
   // Same material family and the same GRASS_COLOR the detailed mesh's own edge vertices carry, so
   // the seam between them is invisible; 0.01 m below, so there is no z-fighting to tune.
+  const skirtMeters = 2 * skirtHalfWidthMeters(bounds, WALKABLE_BOUNDS);
   const skirt = new THREE.Mesh(
-    new THREE.PlaneGeometry(GROUND_SKIRT_METERS, GROUND_SKIRT_METERS),
+    new THREE.PlaneGeometry(skirtMeters, skirtMeters),
     new THREE.MeshStandardMaterial({ color: GRASS_COLOR, roughness: 0.9, metalness: 0 }),
   );
   skirt.name = 'ground-skirt';
