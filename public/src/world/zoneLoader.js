@@ -22,6 +22,7 @@ import { buildWarden } from '../enemies/warden.js';
 import { buildBlackthornBarrier, buildHollowPocket } from './blackthornHollow.js';
 import { buildVillagers } from './villagers.js';
 import { buildRowan } from './rowan.js';
+import { buildRanger } from './ranger.js';
 import { loadGLB } from './assets.js';
 
 const ASSET_PREFIX = 'assets/';
@@ -993,6 +994,10 @@ async function loadKeeper(scene, zoneData, counts) {
   // Rowan too, cloned off this SAME load before the Keeper's own root is scaled and moved -- the
   // same ordering reason villagers.js's own comment gives.
   const rowan = zoneData.ROWAN ? buildRowan(scene, gltf, zoneData.ROWAN) : null;
+  // ...and Wren, off the SAME load and for the same ordering reason -- she is built here and hidden,
+  // not built later when the Beacon lights. world/ranger.js's header has the whole argument: a clone
+  // taken after the Keeper's root is scaled and moved would inherit all three of those things.
+  const ranger = zoneData.RANGER ? buildRanger(scene, gltf, zoneData.RANGER) : null;
   const root = setLayer(gltf.scene, CHARACTER);
   root.name = 'keeper';
   root.traverse((object) => {
@@ -1012,7 +1017,7 @@ async function loadKeeper(scene, zoneData, counts) {
   const restingHeading = headingToward(keeperX, keeperZ, heroX, heroZ);
   root.rotation.y = restingHeading;
   scene.add(root);
-  return { ...createKeeperPresenter(root, gltf.animations ?? [], restingHeading, scene), villagers, rowan };
+  return { ...createKeeperPresenter(root, gltf.animations ?? [], restingHeading, scene), villagers, rowan, ranger };
 }
 
 /**
@@ -1106,8 +1111,9 @@ export function loadZone(scene, zoneData) {
     // Same shape again: Rowan rides in on the keeper's own load, so a keeper model that failed to
     // load leaves them null rather than throwing, the same degrade-to-nothing rule villagers follow.
     const rowan = keeper?.rowan ?? null;
+    const ranger = keeper?.ranger ?? null;
     return {
-      keeper, tree, lanterns, gate, villagers, rowan, trailLights, brambles, wildwoodBlade,
+      keeper, tree, lanterns, gate, villagers, rowan, ranger, trailLights, brambles, wildwoodBlade,
       beaconRoadLights, oldBeacon, beaconWaystones, coldSeals, warden, blackthorn, hollow,
     };
   })();

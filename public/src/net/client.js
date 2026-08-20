@@ -16,6 +16,8 @@ import {
   joinMessage,
   claimBladeMessage,
   claimHollowMessage,
+  claimSatchelMessage,
+  claimCharmMessage,
   searchCartMessage,
   villageUpgradePurchaseMessage,
 } from './protocol.js';
@@ -265,6 +267,19 @@ export function createNetClient(options = {}) {
     return send(claimHollowMessage());
   }
 
+  /** ARC 2. Both the same throttled-ask shape sendClaimBlade documents: position is re-checked
+   *  server-side and both awards are idempotent latches per guest, so a resend costs one row either
+   *  way and a refused claim is a clean silence rather than a disconnect. */
+  function sendClaimSatchel() {
+    if (status !== 'online') return false;
+    return send(claimSatchelMessage());
+  }
+
+  function sendClaimCharm() {
+    if (status !== 'online') return false;
+    return send(claimCharmMessage());
+  }
+
   /** GP3: ask the server to purchase a village upgrade (Workshop I today). Same online-only guard
    *  and no-sequence-number reasoning as sendSearchCart/sendCollectLoot -- Village Supplies is
    *  shared, server-authoritative state with no offline fallback (there is nothing local to spend
@@ -313,6 +328,8 @@ export function createNetClient(options = {}) {
     sendEquip,
     sendSearchCart,
     sendClaimBlade,
+    sendClaimSatchel,
+    sendClaimCharm,
     sendClaimHollow,
     sendCollectLoot,
     sendVillageUpgradePurchase,

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 import {
+  HERO_MAX_HP,
   addHero,
   createPartyEncounterState,
   removeHero,
@@ -45,9 +46,11 @@ import {
   transferSiegeHeroBody,
 } from '../public/src/world/beaconSiege.js';
 import {
-  BEACON_ARENA, BEACON_WARDEN, CART_SEARCH, COLD_SEALS, HOLLOW, ROWAN_CLAIM, WOLF_SPAWN, WOLF_SPAWNS,
+  BEACON_ARENA, BEACON_WARDEN, CART_SEARCH, COLD_SEALS, HOLLOW, RANGER_CLAIM, ROWAN_CLAIM, WOLF_SPAWN,
+  WOLF_SPAWNS,
 } from '../public/src/world/zones/village.js';
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
+import { rangerOwesCharm } from '../public/src/world/rangerSpeech.js';
 import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import { WORLD_LIMIT, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ } from '../public/src/world/bounds.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
@@ -58,6 +61,15 @@ import { attachWebSocketServer } from './wsServer.mjs';
 // -- enough to feel like a find next to the cart's own haul, not so much that skipping the arc's
 // authored rewards in favour of hunting caches would ever be the better play.
 export const HOLLOW_CACHE_SHARDS = 3;
+
+// ARC 2: what Ranger Wren's charm is worth, in hearts.
+//
+// ONE, and the number is the design. Three hearts is three mistakes; four is four, which is roughly
+// a third more room and is exactly the note the child playtesters gave when they called the wolves
+// "a little strong". Two would be a different game -- the Warden's own comment prices itself at
+// "three mistakes, not one" and a six-heart child walks through that fight without learning its
+// rhythm. A reward that removes the lesson is not a reward.
+export const CHARM_BONUS_HEARTS = 1;
 
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
@@ -182,6 +194,40 @@ export function createRewardCoordinator(options = {}) {
       type: 'gear-owned',
       eventId: `own:${guestId}:${WILDWOOD_BLADE_ID}`,
       value: WILDWOOD_BLADE_ID,
+    });
+    return { granted: result.applied };
+  }
+
+  /**
+   * ARC 2: the fallen ranger's satchel, lifted off the floor of Blackthorn Hollow. Once per guest,
+   * ever, and per guest rather than per world for the same reason the Blade is: two brothers each
+   * pick it up for themselves. A satchel that only one child could ever carry would mean the other
+   * one never gets to be the person who brings it back.
+   */
+  function claimSatchel(playerId) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId) return { granted: false };
+    const result = store.apply({
+      guestId, heroId: playerId, type: 'satchel-taken',
+      eventId: `satchel:${guestId}`, value: null,
+    });
+    return { granted: result.applied };
+  }
+
+  /**
+   * ARC 2: Wren's charm -- the fourth heart, and the first reward in this game that changes what a
+   * hero IS rather than what they are holding.
+   *
+   * The row is the durable fact; combat/encounter.js's reconcileMaxHp is what makes it a heart, fed
+   * from maxHpFor below. Nothing here writes hearts directly, which is the whole point of the seam:
+   * a heart granted by the store rather than by the rules would be a number nobody's fight agreed to.
+   */
+  function claimCharm(playerId) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId) return { granted: false };
+    const result = store.apply({
+      guestId, heroId: playerId, type: 'charm-earned',
+      eventId: `charm:${guestId}`, value: null,
     });
     return { granted: result.applied };
   }
@@ -453,6 +499,8 @@ export function createRewardCoordinator(options = {}) {
           ownedItemIds: ownedItemIdsFor(heroId),
           coins: store.coinsFor(guestId),
           shards: store.shardsFor(guestId),
+          satchelCarried: store.satchelTakenFor(guestId),
+          charmOwned: store.charmEarnedFor(guestId),
         };
       } else {
         const state = ephemeral.get(heroId);
@@ -464,6 +512,10 @@ export function createRewardCoordinator(options = {}) {
           ownedItemIds: ownedItemIdsFor(heroId),
           coins: lootState?.coins ?? 0,
           shards: lootState?.shards ?? 0,
+          // An equip-only connection has no durable identity, so it can never have picked anything
+          // up or been given anything -- false is the truth for it, not a fallback.
+          satchelCarried: false,
+          charmOwned: false,
         };
       }
     }
@@ -478,7 +530,20 @@ export function createRewardCoordinator(options = {}) {
     applyEquip,
     grantOwnership,
     claimWildwoodBlade,
+    claimSatchel,
+    claimCharm,
     applyHollowCache,
+    /** Is this child carrying the satchel, and have they been given the charm. Read by the claim
+     *  handlers (which re-check the same conditions the client asked on) and by the tick, which
+     *  needs the charm every frame to tell the fight how many hearts this body has. */
+    satchelTakenFor(heroId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      return guestId ? store.satchelTakenFor(guestId) : false;
+    },
+    charmEarnedFor(heroId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      return guestId ? store.charmEarnedFor(guestId) : false;
+    },
     recordBeaconLit,
     beaconLit,
     ownedItemIdsFor,
@@ -520,6 +585,10 @@ export function createSimulation(options = {}) {
   // on: encounter.js resolves an unnamed weapon to the starter sword, so an unwired simulation
   // fights exactly as it did before any of this existed.
   const weaponIdFor = options.weaponIdFor ?? (() => null);
+  // The same shape and the same reasoning for hearts: the simulation does not own who has earned a
+  // charm, so it asks. Defaults to the constant every fight has always used, which is what keeps an
+  // unwired createSimulation() -- every test in this repo that drives it directly -- unchanged.
+  const maxHpFor = options.maxHpFor ?? (() => HERO_MAX_HP);
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -812,6 +881,10 @@ export function createSimulation(options = {}) {
         // already knows both. swingDamageFor never returns null, so a swing always lands for
         // something even when nobody has said what is equipped.
         weaponDamage: swingDamageFor(weaponIdFor(player.id)),
+        // ...and how many hearts this body has. Asked every tick for the same reason the weapon is:
+        // a child can be handed Wren's charm mid-session, and a value copied at join would mean the
+        // fourth heart only appeared after a reconnect.
+        maxHp: maxHpFor(player.id),
       };
     }
     // The handoff runs BEFORE either engine steps, so a hero is never simulated for a tick by the
@@ -881,6 +954,9 @@ export function createSimulation(options = {}) {
       const source = (arenaOf(heroId) === SIEGE_ARENA && siegeState.heroes[heroId]) || hero;
       heroes[heroId] = {
         hp: source.hp,
+        // Published beside hp because a heart count is only meaningful against its own ceiling:
+        // Wren's charm makes 3 a different number for two children standing side by side.
+        maxHp: source.maxHp ?? HERO_MAX_HP,
         swingSeconds: roundToWire(source.swingSeconds),
         cooldown: roundToWire(source.cooldown),
         downSeconds: roundToWire(source.downSeconds),
@@ -981,6 +1057,25 @@ export function createSimulation(options = {}) {
     return Math.hypot(player.x - HOLLOW.chestAt[0], player.z - HOLLOW.chestAt[1]) <= HOLLOW.radiusMeters;
   }
 
+  /** ARC 2: the position half of the satchel claim -- the same shape atHollowChest already is, and
+   *  aimed at the CLUE rather than the chest. They are 2.2 m apart in the same pocket, and a child
+   *  who opened the chest has not necessarily crossed to the marker stone where the satchel lies. */
+  function atHollowClue(id) {
+    const player = players.get(id);
+    if (!player) return false;
+    return Math.hypot(player.x - HOLLOW.clueAt[0], player.z - HOLLOW.clueAt[1]) <= HOLLOW.radiusMeters;
+  }
+
+  /** ARC 2: and the position half of the charm claim -- standing in front of Wren. Paired with the
+   *  world fact the way rowanClaimState is, so the caller re-checks exactly what the client asked
+   *  on (world/rangerSpeech.js's rangerOwesCharm) rather than a hand-copied opinion of it. */
+  function rangerClaimState(id) {
+    const player = players.get(id);
+    if (!player) return { inRange: false, beaconLit: siegeState.beaconLit };
+    const distance = Math.hypot(player.x - RANGER_CLAIM.at[0], player.z - RANGER_CLAIM.at[1]);
+    return { inRange: distance <= RANGER_CLAIM.radiusMeters, beaconLit: siegeState.beaconLit };
+  }
+
   return {
     players,
     addPlayer,
@@ -997,6 +1092,8 @@ export function createSimulation(options = {}) {
     beaconIsLit,
     rowanClaimState,
     atHollowChest,
+    atHollowClue,
+    rangerClaimState,
     drainEvents,
     get tick() {
       return tick;
@@ -1027,6 +1124,9 @@ export function attachGameServer(httpServer, options = {}) {
     // Hero screen in the middle of a fight -- and a value copied at construction would mean the
     // sword you equipped only started working after a reconnect.
     weaponIdFor: (playerId) => rewards.equippedWeaponIdFor(playerId),
+    // ARC 2, and the whole reason maxHp became a per-hero number: Wren's charm is a durable row, and
+    // this is where a row becomes a heart.
+    maxHpFor: (playerId) => (rewards.charmEarnedFor(playerId) ? HERO_MAX_HP + CHARM_BONUS_HEARTS : HERO_MAX_HP),
   });
   // Whether the durable row has been written for the victory this process is currently watching.
   // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that
@@ -1145,6 +1245,39 @@ export function attachGameServer(httpServer, options = {}) {
         if (!rewards.hasDurableIdentity(playerId)) return;
         if (!simulation.atHollowChest(playerId)) return;
         rewards.applyHollowCache(playerId);
+        return;
+      }
+
+      // ARC 2. Both re-check server-side, and both re-check through the SAME pure function the
+      // client asked on -- world/rangerSpeech.js's rangerOwesCharm -- rather than a hand-copied
+      // opinion of it, the exact discipline claim-blade already follows for rowanOwesBlade. A
+      // refused claim is a clean silence: a child walking toward Wren can legitimately produce one a
+      // beat early, and disconnecting them for arriving fast is not a rule anybody wants.
+      if (message.type === 'claim-satchel') {
+        if (!client.data.playerId) throw new ProtocolError('claim-satchel before join');
+        const playerId = client.data.playerId;
+        if (!rewards.hasDurableIdentity(playerId)) return;
+        // Standing over the marker stone where it fell. Position alone, exactly like 'claim-hollow'
+        // directly above: the blackthorn is client-side presentation and the server does not model
+        // it, so the chest and the satchel are guarded the same way rather than one of them pretending
+        // to a check the server cannot actually make.
+        if (!simulation.atHollowClue(playerId)) return;
+        rewards.claimSatchel(playerId);
+        return;
+      }
+
+      if (message.type === 'claim-charm') {
+        if (!client.data.playerId) throw new ProtocolError('claim-charm before join');
+        const playerId = client.data.playerId;
+        if (!rewards.hasDurableIdentity(playerId)) return;
+        const { inRange, beaconLit: lit } = simulation.rangerClaimState(playerId);
+        if (!rangerOwesCharm({
+          inRange,
+          beaconLit: lit,
+          satchelCarried: rewards.satchelTakenFor(playerId),
+          charmOwned: rewards.charmEarnedFor(playerId),
+        })) return;
+        rewards.claimCharm(playerId);
         return;
       }
 

@@ -66,6 +66,7 @@ export const HARNESSES = {
   // never about how any of it looks. Its captures are the human evidence; its exit code is not a
   // claim that anybody has looked at them.
   'drive-beacon-siege': { gate: true, why: 'the whole Beacon arc played end to end: seals, Warden, ignition, and the objective chain' },
+  'drive-ranger': { gate: true, why: 'the Beacon is answered: Wren is standing in the village because of it, takes her brother\'s satchel, and the charm puts a fourth heart on the bar that survives a reload' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -81,6 +82,6 @@ export const SUITES = {
     'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
-    'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege',
+    'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
   ],
 };

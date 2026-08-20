@@ -12,6 +12,7 @@ import test from 'node:test';
 
 import {
   HERO_MAX_HP,
+  RESPAWN_SECONDS,
   WOLF_DAMAGE_PER_HIT,
   WOLF_MAX_HP,
   WOLF_BITE_SECONDS,
@@ -327,4 +328,105 @@ test('a fight nobody told about equipment is exactly the fight it has always bee
     state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
   }
   assert.equal(state.wolf.hp, WOLF_MAX_HP - WOLF_DAMAGE_PER_HIT);
+});
+
+// --- a body can gain a heart ---------------------------------------------------------------------
+//
+// Ranger Wren's charm is the first thing in this game that changes what a hero IS rather than what
+// they are holding. HERO_MAX_HP was a constant read in five places, so "hearts" quietly meant "three"
+// to the respawn, to the heal-on-kill and to the UI alike. These pin the new rule at the layer that
+// owns it.
+
+test('a heart granted mid-fight is felt in the same tick, not at the next respawn', () => {
+  // The payoff moment: a child standing in front of the person who just handed them the charm
+  // watches a fourth heart fill. Granting the ceiling without the heart would be a number changing
+  // where nobody is looking -- docs/MISTAKES.md GQ-013 exactly.
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const far = { A: { position: { x: 0, z: -12 }, heading: 0 } };
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP);
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP);
+
+  state = stepParty(state, { deltaSeconds: STEP, heroes: { A: { ...far.A, maxHp: HERO_MAX_HP + 1 } } }).state;
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1, 'the ceiling moved');
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP + 1, 'and the heart came with it');
+});
+
+test('the fourth heart persists without the command repeating itself forever', () => {
+  // Granting must be an EDGE, not a per-tick top-up: a hero who takes a bite and keeps walking
+  // around with the charm must stay hurt, or the charm is invulnerability.
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + 1 } };
+  state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
+
+  const hurt = { ...state.heroes.A, hp: 1 };
+  state = { ...state, heroes: { ...state.heroes, A: hurt } };
+  for (let i = 0; i < 20; i += 1) {
+    state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
+  }
+  assert.equal(state.heroes.A.hp, 1, 'the charm raises the ceiling, it does not refill the hero');
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1);
+});
+
+test('a hero on the ground does not stand up because their ceiling went up', () => {
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const down = { ...state.heroes.A, hp: 0, downSeconds: 0 };
+  state = { ...state, heroes: { ...state.heroes, A: down } };
+  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + 1 } };
+
+  state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1, 'the ceiling still moves while they are down');
+  assert.equal(state.heroes.A.hp, 0, 'but a hero stands up when RESPAWN_SECONDS says so, not when a charm does');
+});
+
+test('and when they do stand up, they stand up on ALL of their hearts', () => {
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const down = { ...state.heroes.A, hp: 0, downSeconds: 0 };
+  state = { ...state, heroes: { ...state.heroes, A: down } };
+  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + 1 } };
+
+  for (let elapsed = 0; elapsed <= RESPAWN_SECONDS + STEP * 2; elapsed += STEP) {
+    state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
+  }
+  assert.equal(state.heroes.A.downSeconds, -1, 'they got up');
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP + 1, 'on four, not on three');
+});
+
+test('two brothers with different hearts are healed to their OWN ceilings', () => {
+  // The co-op half, and the reason maxHp is per hero rather than a constant: the older brother has
+  // walked the Hollow and carries the charm, the younger has not. A kill must not stop healing the
+  // older one at three because the younger one's body ends there.
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A', 'B'] });
+  const heroes = {
+    A: { position: { x: -0.3, z: -1 }, heading: 0, maxHp: HERO_MAX_HP + 1 },
+    B: { position: { x: 0.3, z: -1 }, heading: 0 },
+  };
+  state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
+  // Wound both, then let a kill heal them.
+  state = {
+    ...state,
+    heroes: {
+      A: { ...state.heroes.A, hp: 1 },
+      B: { ...state.heroes.B, hp: 1 },
+    },
+    wolf: { ...state.wolf, hp: 1 },
+  };
+  state = requestPartyAttack(state, 'A', 'kill-1').state;
+  for (let elapsed = 0; elapsed < 0.6; elapsed += STEP) {
+    state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
+  }
+  assert.equal(state.wolf.mode, 'dying', 'the kill has to land for the heal to fire');
+  assert.equal(state.heroes.A.hp, 2, 'one heart back, toward a ceiling of four');
+  assert.equal(state.heroes.B.hp, 2, 'one heart back, toward a ceiling of three');
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1);
+  assert.equal(state.heroes.B.maxHp, HERO_MAX_HP);
+});
+
+test('a fight nobody told about hearts is exactly the fight it has always been', () => {
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const heroes = { A: { position: { x: 0, z: -12 }, heading: 0 } };
+  for (let i = 0; i < 20; i += 1) {
+    state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
+  }
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP);
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP);
 });

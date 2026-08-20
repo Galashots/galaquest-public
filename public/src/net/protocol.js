@@ -34,7 +34,7 @@ export const PROTOCOL_VERSION = 3;
 
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
-  'village-upgrade-purchase', 'claim-blade', 'claim-hollow',
+  'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
 ];
 
 // Mirrors requireString's own default cap. Item ids are short snake_case tokens
@@ -211,6 +211,16 @@ export function decode(text) {
     case 'claim-hollow':
       return { v: PROTOCOL_VERSION, type: 'claim-hollow' };
 
+    // ARC 2. Two more of the same no-payload shape, and the same reasoning a third and fourth time:
+    // 'claim-satchel' says "I am standing over the fallen ranger's satchel in the hollow" and
+    // 'claim-charm' says "I am standing in front of Wren holding it". Both are claims about WHERE A
+    // HERO IS, which is the server's fact and never the client's, and both are naturally idempotent
+    // because the rows behind them are latches (net/rewardStore.mjs's satchelTakenFor/charmEarnedFor).
+    case 'claim-satchel':
+      return { v: PROTOCOL_VERSION, type: 'claim-satchel' };
+    case 'claim-charm':
+      return { v: PROTOCOL_VERSION, type: 'claim-charm' };
+
     // Client -> server only, same direction as 'attack'/'equip'. Shape validation only -- whether
     // pickupId names a real, unclaimed, in-reach pickup is world/cartLoot.js's own business rule,
     // the same boundary 'equip' draws against isKnownWeapon/ownership.
@@ -340,6 +350,16 @@ function decodeHeroes(heroes) {
       cooldown: requireFiniteNumber(hero.cooldown, `encounter.heroes[${id}].cooldown`),
       downSeconds: requireFiniteNumber(hero.downSeconds, `encounter.heroes[${id}].downSeconds`),
     };
+    // maxHp rides OPTIONALLY, the same additive shape wolf.modeSeconds uses above and for the same
+    // reason: every pre-charm fixture and caller decodes byte-identically, so this is additive
+    // validation rather than a version bump. It exists because hearts stopped being a constant --
+    // Ranger Wren's charm gives a fourth, and a client rendering three pips for a four-heart hero
+    // would show a child full health at 3 of 4 and no health at 0 of 4 on the same bar.
+    if (hero.maxHp !== undefined) {
+      const maxHp = requireInteger(hero.maxHp, `encounter.heroes[${id}].maxHp`);
+      if (maxHp < 1) fail(`encounter.heroes[${id}].maxHp must be >= 1, got ${maxHp}`);
+      result[id].maxHp = maxHp;
+    }
   }
   return result;
 }
@@ -396,6 +416,13 @@ function decodeRewards(rewards) {
       if (shards < 0) fail(`encounter.rewards[${id}].shards must be >= 0, got ${shards}`);
       decoded.shards = shards;
     }
+    // ARC 2: two more latches, same additive/optional treatment and the same "absent falls back to
+    // false" discipline as every field above. Both ride here rather than as world state because both
+    // are PER GUEST -- two brothers can be carrying different things and owe each other nothing.
+    // Booleans coerced rather than validated, the same way lanternUnlocked already is: there is no
+    // malformed shape for a flag, only a truthy one and a falsy one.
+    if (reward.satchelCarried !== undefined) decoded.satchelCarried = Boolean(reward.satchelCarried);
+    if (reward.charmOwned !== undefined) decoded.charmOwned = Boolean(reward.charmOwned);
     result[id] = decoded;
   }
   return result;
@@ -593,6 +620,14 @@ export function equipMessage(itemId) {
 
 export function searchCartMessage() {
   return { v: PROTOCOL_VERSION, type: 'search-cart' };
+}
+
+export function claimSatchelMessage() {
+  return { v: PROTOCOL_VERSION, type: 'claim-satchel' };
+}
+
+export function claimCharmMessage() {
+  return { v: PROTOCOL_VERSION, type: 'claim-charm' };
 }
 
 export function claimBladeMessage() {

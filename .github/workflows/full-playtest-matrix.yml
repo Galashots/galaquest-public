@@ -54,6 +54,7 @@ jobs:
           - drive-village-board
           - drive-old-beacon
           - drive-beacon-siege
+          - drive-ranger
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -64,19 +65,50 @@ jobs:
         with:
           node-version: '24'
       - name: Launch isolated Chrome
+        # TWO ATTEMPTS, AND A LONGER WAIT, because this step has been the single largest source of
+        # red in this matrix and none of it was ever about the diff.
+        #
+        # It launched Chrome once and waited 25 s. Measured across three consecutive runs of this
+        # workflow it failed in a DIFFERENT job each time -- review-studio, then fit-carry, then
+        # fit-wildwood-blade -- each time at exactly 25.0 s, with the harness step skipped and no
+        # artifacts uploaded, so the check reported a red harness that had never executed a line.
+        # Twenty-six jobs start at once on hosted runners and cold-start a browser; the one that
+        # loses that race is not the one with a bug in it.
+        #
+        # A red that means "the browser did not start" and a red that means "the game is broken" are
+        # the same colour on the PR page, which is what makes this expensive: every occurrence costs
+        # somebody a log read to find out it was nothing. So: wait 60 s rather than 25, and if that
+        # genuinely fails, kill the corpse and try ONCE more from clean.
+        #
+        # Deliberately not an unbounded retry loop. Two attempts distinguishes contention from a
+        # broken image; a browser that cannot start twice in two minutes is a real failure and this
+        # step must still go red for it, or the harnesses fail open (see the Run step's own comment).
         run: |
-          google-chrome \
-            --remote-debugging-port=9224 \
-            --user-data-dir="$RUNNER_TEMP/gq-chrome" \
-            --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu \
-            --hide-scrollbars --no-first-run --no-default-browser-check about:blank \
-            >"$RUNNER_TEMP/chrome.log" 2>&1 &
-          echo $! > "$RUNNER_TEMP/gq-chrome.pid"
-          for i in $(seq 1 50); do
-            if curl -fsS http://127.0.0.1:9224/json/version >/dev/null; then exit 0; fi
-            sleep 0.5
+          start_chrome() {
+            rm -rf "$RUNNER_TEMP/gq-chrome"
+            google-chrome \
+              --remote-debugging-port=9224 \
+              --user-data-dir="$RUNNER_TEMP/gq-chrome" \
+              --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu \
+              --hide-scrollbars --no-first-run --no-default-browser-check about:blank \
+              >"$RUNNER_TEMP/chrome.log" 2>&1 &
+            echo $! > "$RUNNER_TEMP/gq-chrome.pid"
+            for i in $(seq 1 120); do
+              if curl -fsS http://127.0.0.1:9224/json/version >/dev/null; then return 0; fi
+              sleep 0.5
+            done
+            return 1
+          }
+          for attempt in 1 2; do
+            if start_chrome; then
+              echo "chrome up on attempt ${attempt}"
+              exit 0
+            fi
+            echo "chrome did not answer on 9224 within 60s (attempt ${attempt})"
+            cat "$RUNNER_TEMP/chrome.log" || true
+            kill "$(cat "$RUNNER_TEMP/gq-chrome.pid")" 2>/dev/null || true
+            sleep 2
           done
-          cat "$RUNNER_TEMP/chrome.log"
           exit 1
       - name: Run ${{ matrix.name }}
         # A measuring instrument expresses "no automated verdict" by exiting 0 and publishing its

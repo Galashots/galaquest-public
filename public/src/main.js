@@ -56,6 +56,7 @@ import { createReactionAnimator } from './character/reactClips.js';
 import {
   ATTACK_REACH,
   HERO_MAX_HP,
+  HERO_MAX_HP_CEILING,
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
   isWithinStrike,
@@ -87,6 +88,9 @@ import {
 } from './world/zoneLoader.js';
 import { KEEPER_NAME, keeperSpeechState, speakKeeperLine } from './world/keeperSpeech.js';
 import { ROWAN_NAME, rowanOwesBlade, rowanSpeechState } from './world/rowanSpeech.js';
+import {
+  RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSpeechState,
+} from './world/rangerSpeech.js';
 import { questObjectiveFor } from './world/quest.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
@@ -242,6 +246,7 @@ async function bootstrap() {
   // Rowan, at the camp -- same "null until the keeper's rig lands" shape as the villagers, since
   // they are cloned off the same load.
   let zoneRowan = null;
+  let zoneRanger = null;
   // GP2: the cart's own physical-acknowledgement presenter, null until its mesh exists. Not part of
   // loadZone()'s own `result` (only the keeper/tree/villagers/trailLights/brambles/rowan are handed
   // back there) -- found instead by NAME, the same way every prop instance is already addressable
@@ -266,6 +271,7 @@ async function bootstrap() {
     zoneBlackthorn = result.blackthorn ?? null;
     zoneHollow = result.hollow ?? null;
     zoneRowan = result.rowan;
+    zoneRanger = result.ranger;
     const cartMesh = scene.getObjectByName(`prop-${VILLAGE.CART_PROP.model}`) ?? null;
     if (!cartMesh) {
       console.warn('[runtime] GP2: the cart prop was not found by name -- the jolt reaction is dust-only');
@@ -281,6 +287,7 @@ async function bootstrap() {
   });
   const [KEEPER_X, KEEPER_Z] = VILLAGE.SPAWNS.keeper;
   const [ROWAN_X, ROWAN_Z] = VILLAGE.ROWAN.at;
+  const [RANGER_X, RANGER_Z] = VILLAGE.RANGER.at;
   const [TREE_X, TREE_Z] = VILLAGE.LANDMARKS.find(isTreeLandmark)?.at ?? VILLAGE.SPAWNS.keeper;
   // The relight is a one-shot per session, and which of its two paths runs depends on whether this
   // client ever saw the tree dark -- see the frame loop's own comment where these are read.
@@ -376,6 +383,14 @@ async function bootstrap() {
   let wardenModeSeen = 'dormant';
   let beaconLitSeen = false;
   let bladeOwnedSeen = null;
+  // ARC 2, and the same null-means-not-known-yet shape bladeOwnedSeen uses above and for the same
+  // reason: a returning child who already brought Wren the satchel yesterday adopts that answer
+  // silently on their first frame rather than being handed the moment again on every page load.
+  let satchelCarriedSeen = null;
+  let charmOwnedSeen = null;
+  // Both asks throttled rather than one-shot, exactly like bladeRequestedAt/hollowRequestedAt.
+  let satchelRequestedAt = 0;
+  let charmRequestedAt = 0;
   // Whether this client has ever seen the Beacon cold. Same `sawTreeDark`/`sawWorkshopUnowned` edge
   // guard, for the identical reason: a child who connects to a world where the Beacon is already
   // burning must not be shown the ignition ceremony for a victory they never watched.
@@ -700,9 +715,25 @@ async function bootstrap() {
   // onto three fixed spans is not.
   const heartElements = Array.from(document.querySelectorAll('#hero-health .heart'));
   const heartsElement = document.querySelector('#hero-health');
-  function renderHearts(hp) {
-    const filled = heartsForHp(hp, HERO_MAX_HP);
-    heartElements.forEach((heart, index) => { heart.dataset.filled = String(filled[index] ?? false); });
+  // How many hearts THIS body has, remembered between renders. Every renderHearts caller in the
+  // frame loop knows an hp and most of them do not know a ceiling (a 'hero-healed' event carries
+  // `remaining` and nothing else), so the ceiling is latched here from the one place that does know
+  // it -- the published hero -- rather than threaded through every call site.
+  let heartCeiling = HERO_MAX_HP;
+  // What the bar is currently SHOWING, so the per-frame read in the loop repaints on a change rather
+  // than rewriting four dataset attributes sixty times a second.
+  let heartsShown = { hp: HERO_MAX_HP, maxHp: HERO_MAX_HP };
+  function renderHearts(hp, maxHp = heartCeiling) {
+    heartCeiling = Math.max(1, Math.min(HERO_MAX_HP_CEILING, Math.round(maxHp)));
+    const filled = heartsForHp(hp, heartCeiling);
+    heartElements.forEach((heart, index) => {
+      // Pips this body has not earned are HIDDEN rather than drawn empty. An empty pip is this HUD's
+      // word for "you have lost a heart", so painting a fourth empty one on a three-heart child
+      // would tell them they are hurt at full health -- and the fourth simply appearing is exactly
+      // how Wren's charm announces itself.
+      heart.hidden = index >= heartCeiling;
+      heart.dataset.filled = String(filled[index] ?? false);
+    });
   }
 
   // The heal's own signal -- see the #hero-health[data-healing] rule in index.html. Same
@@ -1118,7 +1149,7 @@ async function bootstrap() {
     'bite-missed'() {},
     // The banner says it; the veil and the filling bar are what a child who is not reading gets.
     'hero-down'() { showHeroDown(true); banner('You went down…', 1600); },
-    'hero-respawned'() { showHeroDown(false); renderHearts(HERO_MAX_HP); banner('Back on your feet', 1200); },
+    'hero-respawned'() { showHeroDown(false); renderHearts(heartCeiling); banner('Back on your feet', 1200); },
     // Beating a wolf gives a heart back. No banner: wolf-defeated's "The wolf is beaten!" is already
     // on screen from the same frame, and a second banner would replace it mid-read. The hearts row
     // popping IS the message, and it points at exactly the thing that changed.
@@ -1390,6 +1421,18 @@ async function bootstrap() {
     // are reported separately for the same reason zoneTrailState reports `lit` and `loaded` apart:
     // if the two ever disagree, a harness sees a Beacon the rules think is burning standing over a
     // cold cresset.
+    // ARC 2: is Wren in the world, is she carrying anything of ours yet, and how many hearts does
+    // this body actually have. Reported as OBSERVABLE facts rather than as the flags behind them --
+    // `rangerHere` is whether the mesh is drawn, not whether the Beacon is lit, which is the
+    // distinction docs/MISTAKES.md GQ-013 is about.
+    zoneRangerState: () => ({
+      rangerHere: zoneRanger?.isHere() === true,
+      rangerBuilt: zoneRanger !== null,
+      satchelCarried: satchelCarriedSeen === true,
+      charmOwned: charmOwnedSeen === true,
+      hearts: heartsShown.hp,
+      heartCeiling: heartsShown.maxHp,
+    }),
     zoneSiegeState: () => ({
       seals: siegeState.seals.map((seal) => ({ blows: seal.blows, burst: seal.burst })),
       sealsBuilt: zoneColdSeals.length,
@@ -1586,6 +1629,22 @@ async function bootstrap() {
       };
     }
 
+    // HEARTS FROM THE BODY, diffed, once per frame, online and off.
+    //
+    // Every other renderHearts call in this file is EVENT-driven, which was correct while a hero's
+    // ceiling was a constant: 'hero-healed' carries `remaining` and nothing else, and nothing else
+    // was needed. Wren's charm moves the ceiling with no combat event at all -- it is a durable row
+    // arriving on the next snapshot's rewards block -- so a fourth heart would otherwise appear only
+    // on the child's next heal, kill or death. Reading the published body and repainting when either
+    // number moves costs one comparison a frame and makes the bar unconditionally honest; the event
+    // handlers keep their real jobs, which are the POP and the flash, not the truth.
+    const heartsNow = encounterState.hero;
+    const heartsMax = heartsNow.maxHp ?? HERO_MAX_HP;
+    if (heartsNow.hp !== heartsShown.hp || heartsMax !== heartsShown.maxHp) {
+      heartsShown = { hp: heartsNow.hp, maxHp: heartsMax };
+      renderHearts(heartsShown.hp, heartsShown.maxHp);
+    }
+
     // Stop the hero walking through the wolf. Applied after movement and reconciliation so it is the
     // last word on where the hero stands, and before the hero is drawn, so no frame ever shows the
     // two bodies overlapping. Online, the server already does this (Design ruling 6, Task B3's
@@ -1775,6 +1834,34 @@ async function bootstrap() {
         audio.play('blade-unlock');
       }
 
+      // ── ARC 2: THE SATCHEL AND THE CHARM, adopted the same way ──────────────────────────────
+      //
+      // Both diffed off the published rewards rather than off events, for the identical reason the
+      // Blade is: they are durable per-guest latches, so "does this hero have it now when they did
+      // not a frame ago" is the honest question, and it stays true across a reconnect without
+      // replaying anything.
+      const carriesSatchelNow = ownRewards?.satchelCarried === true;
+      if (satchelCarriedSeen === null) {
+        satchelCarriedSeen = carriesSatchelNow;
+      } else if (carriesSatchelNow && !satchelCarriedSeen) {
+        satchelCarriedSeen = true;
+        // No unlock card. A satchel is not gear and this is not a reward -- it is a thing you picked
+        // up off the ground that belongs to somebody else. The banner says exactly that much and no
+        // more, and leaves the child to work out who (see world/rangerSpeech.js on why the beat only
+        // works unassembled).
+        banner('You lift a ranger’s satchel.', 2800);
+      }
+      const holdsCharmNow = ownRewards?.charmOwned === true;
+      if (charmOwnedSeen === null) {
+        charmOwnedSeen = holdsCharmNow;
+      } else if (holdsCharmNow && !charmOwnedSeen) {
+        charmOwnedSeen = true;
+        // The fourth heart paints ITSELF: the new ceiling rides the same snapshot and the per-frame
+        // hearts read above repaints the bar. This is only the sentence and the flourish.
+        banner('Wren gives you her charm.', 3000);
+        popHearts();
+      }
+
       // GP2/GP3: seed the displayed HUD totals from the authoritative value ONCE, the first frame it
       // is known -- a returning guest's own past haul (or a fresh guest's honest zero) has to appear
       // immediately, with nothing to fly in and watch arrive. Every count AFTER this seed only ever
@@ -1870,6 +1957,7 @@ async function bootstrap() {
       // Rowan watches the same way, no occlusion fade -- they stand alone in a clearing, not on the
       // road the follow camera has to swing through.
       zoneRowan?.update(deltaSeconds, heroPositions);
+      zoneRanger?.update(deltaSeconds, heroPositions);
     }
     // The villagers breathe and look around whether or not anyone is near them -- that is the whole
     // point of them, and a village that only comes alive once you are standing in it is a village
@@ -2010,11 +2098,34 @@ async function bootstrap() {
     // ONE bubble, shared: they stand tens of metres apart (the village plaza and the trail's own
     // camp) and can never both be in range at once, so there is no real priority decision here, only
     // a way to pick one shape when neither is visible.
+    // ── ARC 2: WREN, WHO CAME BECAUSE OF THE FIRE ────────────────────────────────────────────
+    //
+    // Read every frame off the PUBLISHED world fact rather than latched on an edge. That is what
+    // makes her right for a late joiner: a brother who connects an hour after the Beacon was lit
+    // gets `beaconLit` true on his very first snapshot, and arrive() is idempotent, so he simply
+    // finds a stranger already standing in his village -- no ceremony replayed for something that
+    // happened before he was there.
+    if (rangerIsHere(siegeState.beaconLit)) zoneRanger?.arrive();
+    const rangerSpeech = rangerSpeechState({
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      rangerX: RANGER_X,
+      rangerZ: RANGER_Z,
+      radiusMeters: KEEPER_WAVE_RADIUS_METERS,
+      satchelCarried: satchelCarriedSeen === true,
+      charmOwned: charmOwnedSeen === true,
+    });
     const npcSpeech = keeperSpeech.visible
       ? { visible: true, line: keeperSpeech.line, name: KEEPER_NAME }
       : rowanSpeech.visible
         ? { visible: true, line: rowanSpeech.line, name: ROWAN_NAME }
-        : { visible: false, line: null, name: null };
+        // Wren joins the same chain, and the same "can never both be in range" argument holds for a
+        // third speaker: she stands five metres from the hero spawn and eleven from the Keeper,
+        // which is outside both radii. Gated on isHere() as well as on the speech state so a
+        // hidden woman can never talk out of an empty patch of grass.
+        : rangerSpeech.visible && zoneRanger?.isHere() === true
+          ? { visible: true, line: rangerSpeech.line, name: RANGER_NAME }
+          : { visible: false, line: null, name: null };
     renderNpcSpeech(npcSpeech);
     // AP2-A: the Keeper talks while his OWN line is on screen (setTalking gracefully no-ops on a rig
     // shipped without a 'talk' clip -- same optional-clip contract as wave/turn). Keyed on
@@ -2405,7 +2516,7 @@ async function bootstrap() {
       else if (event.type === 'warden-defeated') banner('The Beacon Warden falls!', 3000);
       else if (event.type === 'warden-hurt-hero') { flashHeroHurt(); renderHearts(event.remaining); }
       else if (event.type === 'hero-down') { showHeroDown(true); banner('You went down…', 1600); }
-      else if (event.type === 'hero-respawned') { showHeroDown(false); renderHearts(HERO_MAX_HP); }
+      else if (event.type === 'hero-respawned') { showHeroDown(false); renderHearts(heartCeiling); }
       else if (event.type === 'hero-healed') { renderHearts(event.remaining); popHearts(); }
       else if (event.type === 'siege-swing-missed') pulseMiss();
     }
@@ -2539,6 +2650,20 @@ async function bootstrap() {
       }
     }
 
+    // ── ARC 2: THE SATCHEL, LIFTED ──────────────────────────────────────────────────────────
+    //
+    // The CLUE, not the chest. They are 2.2 m apart in the same pocket, and picking the satchel up
+    // has to be its own crossing of its own ground rather than something that happens for free
+    // because a lid opened nearby -- the satchel is the beat, and a beat you get without walking to
+    // it is not a beat. Throttled rather than one-shot, exactly like the chest above and for the
+    // same reason: the first ask can legitimately race the server's own view of where this hero is.
+    if (hollowFound && satchelCarriedSeen === false && netStatus === 'online'
+      && reachedCamp({ at: VILLAGE.HOLLOW.clueAt, radiusMeters: 1.8 }, player.position.x, player.position.z)
+      && frameStart - satchelRequestedAt >= LOOT_REQUEST_RETRY_MS) {
+      satchelRequestedAt = frameStart;
+      net.sendClaimSatchel();
+    }
+
     // ── G4: "THE BLADE IS YOURS" ────────────────────────────────────────────────────────────
     //
     // Rowan's oldest promise, collected. The CONDITION is world/rowanSpeech.js's own
@@ -2557,6 +2682,24 @@ async function bootstrap() {
       && frameStart - bladeRequestedAt >= BLADE_REQUEST_RETRY_MS) {
       bladeRequestedAt = frameStart;
       net.sendClaimBlade();
+    }
+
+    // ── ARC 2: "TAKE THIS" ──────────────────────────────────────────────────────────────────
+    //
+    // Wren's own claim, and the CONDITION is world/rangerSpeech.js's rangerOwesCharm -- the
+    // identical function net/gameServer.mjs re-checks before granting anything, so this client can
+    // never offer something the server would refuse. Same throttle, same reasoning and the same
+    // shape as the Blade directly above; only what is being asked for is different.
+    if (netStatus === 'online' && charmOwnedSeen === false
+      && rangerOwesCharm({
+        inRange: reachedCamp(VILLAGE.RANGER_CLAIM, player.position.x, player.position.z),
+        beaconLit: siegeState.beaconLit,
+        satchelCarried: satchelCarriedSeen === true,
+        charmOwned: charmOwnedSeen === true,
+      })
+      && frameStart - charmRequestedAt >= LOOT_REQUEST_RETRY_MS) {
+      charmRequestedAt = frameStart;
+      net.sendClaimCharm();
     }
 
 

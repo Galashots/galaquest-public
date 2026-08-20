@@ -16,6 +16,20 @@
 // working rather than churn.
 export const WOLF_MAX_HP = 3;
 export const HERO_MAX_HP = 3;
+// THE MOST HEARTS ANY BODY IN THIS GAME CAN HAVE.
+//
+// HERO_MAX_HP is what a hero STARTS with; this is where the count stops. They were the same number
+// until Ranger Wren's charm, and index.html hardcodes one <span class="heart"> per pip because it
+// has never had to draw a variable number of them -- so something has to say, in one place, how many
+// pips the markup owes. That is a fact about the fight (what a body can be) rather than about the
+// charm (what one reward happens to give), which is why it lives here beside HERO_MAX_HP and not
+// beside CHARM_BONUS_HEARTS in net/gameServer.mjs.
+//
+// Four rather than open-ended on purpose. A HUD that grows without bound is a HUD nobody designed,
+// and every extra heart is a fight the Warden gets easier at -- its own comment prices it at "three
+// mistakes, not one". test/feedback.test.mjs pins the markup to this, and test/game-server.test.mjs
+// pins the charm to never exceed it, so the two can never drift apart silently.
+export const HERO_MAX_HP_CEILING = 4;
 // ── WHAT A SWING IS WORTH, AND WHOSE SWING IT IS ───────────────────────────────────────────────
 //
 // This was a bare `1`, then a named `1`, and for two chapters the comment under it promised that
@@ -266,7 +280,10 @@ export function createEncounterState({ wolfSpawn = { x: 0, z: -4 }, wolfSpawns, 
       biteCooldown: WOLF_ARRIVAL_GRACE_SECONDS,
       biteLanded: false,
     },
-    hero: { hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, swingLanded: false, downSeconds: -1 },
+    hero: {
+      hp: HERO_MAX_HP, maxHp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0,
+      swingLanded: false, downSeconds: -1,
+    },
   });
 }
 
@@ -314,7 +331,49 @@ function withHeroId(event, heroId) {
 }
 
 function freshHero() {
-  return { hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, swingLanded: false, downSeconds: -1, lastCommandId: null };
+  return {
+    hp: HERO_MAX_HP,
+    // A BODY FACT, stored rather than passed per tick -- unlike weaponDamage, which is whatever the
+    // caller says this instant. How many hearts you have is part of what you ARE: it decides what a
+    // respawn restores and what a heal is allowed to reach, and the rules have to know it about a
+    // hero nobody sent a command for this frame. The caller still owns the NUMBER (see the
+    // reconciliation in advancePartyFight); this is where the fight remembers it.
+    maxHp: HERO_MAX_HP,
+    swingSeconds: -1,
+    cooldown: 0,
+    swingLanded: false,
+    downSeconds: -1,
+    lastCommandId: null,
+  };
+}
+
+/**
+ * A body gains or loses a heart, because something outside the fight said so.
+ *
+ * Ranger Wren's charm is the first thing in this game that changes what a hero IS rather than what
+ * they are holding, so it needed a rule the fight could not fudge: the caller states a max on the
+ * command, and here is the one place that becomes true.
+ *
+ * GAINING TOPS YOU UP, and that is the whole payoff. A child handed a fourth heart watches a fourth
+ * heart fill, in the same second, standing in front of the person who gave it to them. Granting the
+ * max without the heart would be a number changing in a place nobody is looking -- exactly the
+ * defect docs/MISTAKES.md GQ-013 is about. But NOT while they are down: a hero on the ground does
+ * not stand up because their maximum went up, they stand up when RESPAWN_SECONDS says so, and then
+ * they get all of it.
+ *
+ * LOSING CLAMPS, and cannot happen today (nothing revokes a charm). It is two lines and it means a
+ * future that takes something away can never leave a hero holding hearts they no longer have.
+ */
+function reconcileMaxHp(hero, wanted) {
+  const maxHp = Number.isFinite(wanted) ? Math.max(1, Math.round(wanted)) : HERO_MAX_HP;
+  const had = Number.isFinite(hero.maxHp) ? hero.maxHp : HERO_MAX_HP;
+  if (maxHp === had) { hero.maxHp = had; return; }
+  hero.maxHp = maxHp;
+  if (maxHp > had) {
+    if (hero.downSeconds < 0) hero.hp += maxHp - had;
+    return;
+  }
+  hero.hp = Math.min(hero.hp, maxHp);
 }
 
 function freshWolf(wolfSpawn) {
@@ -515,7 +574,9 @@ function healTheStanding(heroes, heroIds, events) {
   for (const heroId of heroIds) {
     const hero = heroes[heroId];
     if (hero.downSeconds >= 0) continue;
-    if (hero.hp >= HERO_MAX_HP) continue;
+    // Each hero's OWN ceiling: a brother carrying Wren's charm has four, and a kill must not stop
+    // healing him at three just because his younger brother's body ends there.
+    if (hero.hp >= (hero.maxHp ?? HERO_MAX_HP)) continue;
     hero.hp += 1;
     // A literal, like every other event in this file -- feedback.test.mjs reads this source with a
     // regex rather than running it, so a computed `type` would break the guard. See withHeroId.
@@ -547,13 +608,17 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
     const position = cmd?.position ?? { x: 0, z: 0 };
     const heading = cmd?.heading ?? 0;
 
+    // Before anything else this tick: how many hearts is this body supposed to have. See
+    // reconcileMaxHp -- a heart gained is felt on the frame it is given, not on the next respawn.
+    reconcileMaxHp(hero, cmd?.maxHp);
+
     hero.cooldown = Math.max(0, hero.cooldown - deltaSeconds);
 
     if (hero.downSeconds >= 0) {
       hero.downSeconds += deltaSeconds;
       if (hero.downSeconds >= RESPAWN_SECONDS) {
         hero.downSeconds = -1;
-        hero.hp = HERO_MAX_HP;
+        hero.hp = hero.maxHp;
         events.push(withHeroId({ type: 'hero-respawned' }, heroId));
         respawnedIds.push(heroId);
       }

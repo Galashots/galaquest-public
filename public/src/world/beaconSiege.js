@@ -191,7 +191,34 @@ export function wardenPhaseFor(hp) {
 function freshSiegeHero() {
   // The same five clocks the wolf engine's freshHero carries plus the same per-hero replay guard --
   // a hero is a hero, whichever fight he is standing in.
-  return { hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, swingLanded: false, downSeconds: -1, lastCommandId: null };
+  return {
+    hp: HERO_MAX_HP,
+    // ...plus the ceiling, for the same reason encounter.js's own freshHero carries one: how many
+    // hearts a body has is part of what it IS, and this fight has to know it about a hero nobody
+    // sent a command for this frame. Wren's charm is the only thing that moves it today.
+    maxHp: HERO_MAX_HP,
+    swingSeconds: -1,
+    cooldown: 0,
+    swingLanded: false,
+    downSeconds: -1,
+    lastCommandId: null,
+  };
+}
+
+/** The siege's copy of encounter.js's reconcileMaxHp -- see that function for the whole argument.
+ *  Duplicated rather than imported because it writes a DRAFT of this file's own hero shape, and the
+ *  two engines deliberately keep their own hero bookkeeping (GQ-011); the RULE, not the code, is the
+ *  thing that has to match, and test/beacon-siege.test.mjs pins it on both sides. */
+function reconcileSiegeMaxHp(hero, wanted) {
+  const maxHp = Number.isFinite(wanted) ? Math.max(1, Math.round(wanted)) : HERO_MAX_HP;
+  const had = Number.isFinite(hero.maxHp) ? hero.maxHp : HERO_MAX_HP;
+  if (maxHp === had) { hero.maxHp = had; return; }
+  hero.maxHp = maxHp;
+  if (maxHp > had) {
+    if (hero.downSeconds < 0) hero.hp += maxHp - had;
+    return;
+  }
+  hero.hp = Math.min(hero.hp, maxHp);
 }
 
 function freshWarden(wardenAt) {
@@ -459,13 +486,15 @@ function advanceSiege(draft, commandHeroes, events, deltaSeconds) {
     const position = cmd?.position ?? { x: 0, z: 0 };
     const heading = cmd?.heading ?? 0;
 
+    reconcileSiegeMaxHp(hero, cmd?.maxHp);
+
     hero.cooldown = Math.max(0, hero.cooldown - deltaSeconds);
 
     if (hero.downSeconds >= 0) {
       hero.downSeconds += deltaSeconds;
       if (hero.downSeconds >= RESPAWN_SECONDS) {
         hero.downSeconds = -1;
-        hero.hp = HERO_MAX_HP;
+        hero.hp = hero.maxHp;
         events.push({ type: 'hero-respawned', heroId });
       }
     }
@@ -615,8 +644,11 @@ function strikeWarden(draft, heroId, events, damage) {
     for (const otherId of heroIds) {
       const other = heroes[otherId];
       if (other.downSeconds >= 0) continue;
-      if (other.hp >= HERO_MAX_HP) continue;
-      other.hp = HERO_MAX_HP;
+      // Each hero's OWN ceiling -- a brother carrying Wren's charm is restored to four hearts, not
+      // to whatever the shortest body in the party happens to hold.
+      const ceiling = other.maxHp ?? HERO_MAX_HP;
+      if (other.hp >= ceiling) continue;
+      other.hp = ceiling;
       events.push({ type: 'hero-healed', remaining: other.hp, heroId: otherId });
     }
     return;
