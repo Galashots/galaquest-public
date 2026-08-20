@@ -13,6 +13,9 @@ this runbook for mounting and running-game acceptance.
 - Use the live bone transform/approved mounting convention; do not trust importer-synthesized bone
   tails as anatomical authority.
 - Runtime gear transforms are produced from measured fit work, never typed from aesthetic guesswork.
+- For an approved hand-seated sword, preserve proximal hand seating when changing length: extend the
+  change toward the tip. Never recenter through the mesh/bounding-box center, world-min, or length
+  compensation.
 - Before solving any mount, use the visual-reference-first procedure and state the carry convention in
   words. Geometry can produce a perfectly consistent wrong convention.
 
