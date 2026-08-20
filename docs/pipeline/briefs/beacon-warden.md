@@ -189,15 +189,47 @@ Recorded rather than deleted so that anything produced against either version st
 
 ## 9. Phase 3–4 — Meshy execution order
 
-1. Flatten/verify the reference is a single clean view; save as `tmp/warden-flat.png`.
-2. **Image-to-3D + texture (15 credits).** Read the balance before and after and record both.
-3. **Rig (5 credits)** — `input_task_id` = the step-2 task id.
-4. **Animate (3 credits each)** — `idle`, `walk`, `attack`, then `hit`, `death` if the first three pass.
-   Measure each with `pose_anatomy.mjs` before buying the next.
+The clients live in `tools/meshy/` and their own `README.md` is the canonical command reference —
+the commands below match it and exist here so the asset's numbers travel with the asset. All three
+**dry-run by default** and only spend on `--go`, so every step below is run once without `--go`
+first, and the printed request body is read before it is sent.
+
+> **Two defaults do not match this asset. Pass them explicitly, every time.**
+> `image_to_3d.mjs` defaults to `--polycount 300`, and this brief caps the shipped mesh at 8,000 triangles
+> (the Keeper shipped at 5,258), so the request value is **7,000** — matching
+> `tools/meshy/README.md`, which is the command authority. `rig_character.mjs` defaults to `--height 1.7`, and the Warden is
+> **2.2 m** (§4). Relying on either default spends real credits on the wrong asset — 15 credits on a
+> near-untextured blob, or 5 credits on a rig fitted to the wrong stature.
+
+1. **Stage the reference.** Save the approved PNG as `tmp/warden_ref.png` and log it in §10.
+2. **Image-to-3D + texture — 15 credits.**
+   ```bash
+   node tools/meshy/image_to_3d.mjs tmp/warden_ref.png tmp/warden --polycount 7000        # DRY RUN
+   node tools/meshy/image_to_3d.mjs tmp/warden_ref.png tmp/warden --polycount 7000 --go
+   ```
+   Record `consumed_credits` (authoritative) and the balance delta. Note the tool's own triangle/mesh
+   readout — that is the first honest signal about whether the reference produced usable geometry.
+3. **Rig — 5 credits.** `input_task_id` is the step-2 task id from `tmp/warden/task.json`.
+   ```bash
+   node tools/meshy/rig_character.mjs <image-to-3d-task-id> tmp/warden --height 2.2        # DRY RUN
+   node tools/meshy/rig_character.mjs <image-to-3d-task-id> tmp/warden --height 2.2 --go
+   ```
+4. **Animate — 3 credits per motion.** `idle`, `walk`, `attack` first; `hit`, `death` only if those
+   three pass. Measure with `pose_anatomy.mjs` **before** buying the next one — the clip library's
+   names do not describe their anatomy.
+   ```bash
+   node tools/meshy/animate_character.mjs <rig-task-id> <action-id> tmp/warden --name idle --go
+   ```
 5. `verify_native_clip.mjs --body ... --clip ...` in **strict** mode on every arriving clip.
 6. `merge_clips.mjs` into the pristine body; recompress to 1024; `glb_budget.mjs` must PASS.
 7. Artist's review pass (iron rule 8) — searched references beside running-game captures at gameplay
    **and** inspection scale, front/back/three-quarter, before integration is considered done.
+
+**Unverified in the client, worth one free probe:** `image_to_3d.mjs` sends
+`ai_model: 'meshy-t2'`. That identifier has not been exercised from this session (no egress), and a
+wrong model id is exactly the kind of thing iron rule 3 says to discover by sending the request and
+reading the 400 — **a malformed request costs nothing**. Confirm it returns a task rather than a
+validation error before assuming step 2 works.
 
 ## 10. Credit ledger
 
@@ -260,11 +292,12 @@ and the agent proxy's own runbook says an egress denial must be reported rather 
    proxy, so this is a per-host egress policy denial, not a broken network.
 2. **`api.meshy.ai` is not reachable** — identical `ERR_TUNNEL_CONNECTION_FAILED`. No credit can be
    spent even with a key.
-3. **No Meshy client exists in this repository, and no key is present.** `docs/pipeline/README.md` and
-   `characters-npcs.md` both invoke `tools/meshy/gen_prop.mjs`; that path **does not exist in the
-   public repo** (every other tool they cite — `verify_native_clip.mjs`, `merge_clips.mjs`,
-   `pose_anatomy.mjs`, `recompress_glb.py`, `glb_budget.mjs` — does). The key is documented to live at
-   `.local/meshy/api-key.txt`, which is gitignored and absent here.
+3. ~~**No Meshy client exists in this repository.**~~ **RESOLVED 2026-08-20** — guarded clients were
+   ported into `tools/meshy/` (`image_to_3d.mjs`, `rig_character.mjs`, `animate_character.mjs`,
+   commits `a410097`…`f304677`). All three dry-run by default, read the key from the gitignored
+   `.local/meshy/api-key.txt`, never print it, and bracket every paid task with balance reads plus the
+   task's own `consumed_credits`. **The key itself is still absent from this session**, so the tools
+   exit 2 rather than running.
 
 **Blocker 3 is a real public-repo defect** independent of this session: the pipeline docs are the
 operator runbook for "any competent operator", and they route the only credit-spending step through a
