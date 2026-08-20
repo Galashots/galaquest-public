@@ -35,14 +35,16 @@ three tests restating their own formula; `WOLF_SPAWN` duplicated across `net/gam
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-008 — A harness that navigates to the game must start from a known guest.
-**Status:** ENFORCED · **Hits:** 2 · **First:** 2026-08-14 · **Last:** 2026-08-15
+**Status:** ENFORCED · **Hits:** 3 · **First:** 2026-08-14 · **Last:** 2026-08-20
 **Enforced by:** `test/harness-fresh-guest.test.mjs`
 **Rule:** The automation Chrome on 9224 uses a persistent profile, so `gq-guest-id` survives between
 runs. Any harness that navigates to the game clears `localStorage` for the origin **before its first
 navigation** — not after, by which point the guest has already been minted. The rule is deliberately
 "every navigating harness", not "every harness that can award a mark": that judgement goes stale the
 moment somebody adds an attack tap, and it is fragile in exactly the way that caused hit 2's
-misdiagnosis.
+misdiagnosis. **Hit 3's addition: clearing is half of it. A harness that PINS a specific guest must
+CONFIRM the identity it is playing as**, from the running game's own accessor, before it trusts a
+single assertion — and confirm the state it seeded arrived with it.
 **Incidents:** (1) Phase Y, 2026-08-14 — `play-fight.mjs` landed three reward rows on
 `drive-relight.mjs`'s RESERVED fixture identity `relight-probe-guest-0001`; Phase Z1's R1-A fixed
 that one file. (2) Phase R3a, 2026-08-15 — `drive-two-clients.mjs` was still doing it and nobody had
@@ -52,8 +54,28 @@ because it runs two tabs and both inherited the same stale id, which then failed
 relighting. Phase H1 turned this from occasional to reproducible: every harness now draws a server
 port from one shared pool, so they all share one origin and therefore one `localStorage`, and the
 isolation that used to come by accident from different ports is now something each harness must do
-for itself. Six files violated the rule at `b9238e0`.
-**Foreknowledge helped:** not yet recorded.
+for itself. Six files violated the rule at `b9238e0`. (3) 2026-08-20, G1's `drive-old-beacon.mjs`.
+`public/src/net/guestId.js` caps a guest id at 64 characters and, past that, `sanitizeGuestId`
+returns **null silently** — so the page mints itself a fresh UUID and plays as somebody else. This
+harness built its ids as `g1-old-beacon-${label}-${randomUUID()}`, which is 59 characters for
+`portrait` and 60 for `landscape` and **65 for `reduced-motion`**. Exactly one phase was therefore
+unseeded, every time, on two different machines: it walked the whole game with zero marks, a dark
+Lantern Tree, a Chapter 2 that never opens (`campFound` is gated on the tree) and an objective chip
+still reading "Talk to Keeper Aldric" forty metres up the trail. Four checks went red for a reason
+none of them was about, and the harness's own error named the camp trigger. The first theory was a
+timing race on the `localStorage` write, which was WRONG — the write succeeded; the client rejected
+the value. Fixed by minting ids through the game's own `sanitizeGuestId` (GQ-007: import the rule,
+do not hope to satisfy it), and by confirming after navigation that
+`__galaQuestRuntime.guestId()` is the seeded id and that its marks actually arrived. That second
+check is what turned a four-red-checks mystery into a one-line diagnosis. **Measured while fixing it,
+and worth acting on before it bites again: the other harnesses that mint ids this way are correct
+today but close to the cap** — `drive-cart-loot`'s longest is 61 characters and
+`drive-village-board`'s is 59, against a limit of 64. A one-word longer phase label breaks either of
+them the same silent way. Not enforced by a scan here because the length depends on a substituted
+label a text scan cannot know; the durable fix is for each of them to mint through `sanitizeGuestId`
+as `drive-old-beacon.mjs` now does.
+**Foreknowledge helped:** 2026-08-20 — the entry is why the first move was "which guest is this page
+playing as" rather than "why is the camp trigger broken", which is where the error message pointed.
 
 ### GQ-009 — A diagnostic that partitions events by harness timestamp measures the harness, not the system.
 **Status:** ENFORCED · **Hits:** 1 · **First:** 2026-08-19 · **Last:** 2026-08-19
@@ -409,21 +431,37 @@ server/import paths, explicit SHA attribution, and `test/sol-review-checkout.tes
 protocol tests.
 **Foreknowledge helped:** not yet recorded.
 
-### OBSERVED — A capture is only evidence if the subject is actually in the frame.
-**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
+### GQ-010 — A capture is only evidence if the subject is actually in the frame. So is a measurement.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-19 · **Last:** 2026-08-20
+**Not enforced because:** the check would have to know what each capture is FOR — the defect is a
+correct camera pointed at the wrong subject, and no scanner can re-derive a shot's intended subject
+from the code that takes it without re-deriving the review it was taken for.
 **Rule:** Before a capture is filed as the acceptance seam for how something LOOKS, point the camera
 at it deliberately and open the file. A follow camera lands wherever the last leg of a walk left the
 hero facing; that bearing is chosen by pathfinding, not by what the shot is for. Sibling of "Green
 checks are not a look at the game" above, and a distinct failure from it: there the assertion and the
 photograph were of different moments, here the photograph was of the right moment pointed at the
-wrong thing.
-**Incidents:** `village-board-workshop-before-3d-portrait.png`, committed as the evidence of how the
-Workshop reads before a purchase, contained no Workshop — it was a photograph of the Lantern Tree,
-which stands 3.4 m due north of the building with a canopy wider than that gap, directly on the one
-bearing the follow camera always lands on after the walk down from the camp. Every Workshop capture
-in `drive-village-board.mjs` had been taken from that bearing since the harness was written. Fixed by
-`aimAtWorkshop()`, which points the camera down the plaza-side approach before each Workshop capture.
-**Foreknowledge helped:** not yet recorded.
+wrong thing. **Hit 2's generalisation: this is not only about photographs.** Any measurement read off
+the live camera — a projection, an on-screen test, a visibility check — inherits the same accidental
+bearing, and then reports a fact about where the harness happened to be looking while sounding like a
+fact about the game.
+**Incidents:** (1) 2026-08-19. `village-board-workshop-before-3d-portrait.png`, committed as the
+evidence of how the Workshop reads before a purchase, contained no Workshop — it was a photograph of
+the Lantern Tree, which stands 3.4 m due north of the building with a canopy wider than that gap,
+directly on the one bearing the follow camera always lands on after the walk down from the camp.
+Every Workshop capture in `drive-village-board.mjs` had been taken from that bearing since the harness
+was written. Fixed by `aimAtWorkshop()`, which points the camera down the plaza-side approach before
+each Workshop capture. (2) 2026-08-20, G1's `drive-old-beacon.mjs` first run. Three of nine captures
+were useless in the same way — the "way out of the camp" shot faced east because the last leg of the
+walk came from the cart, and the arrival shot photographed the Old Beacon from BEHIND with the hero
+hidden by its own tower. Worse, the run's headline CHECK ("the Beacon is on screen from the camp
+before the walk") read `beaconSight` off that same accidental bearing and reported `ndcX -9.82`: a
+loud red result that said nothing whatsoever about whether a child can see where to go, because
+nobody was facing that way. Fixed the same way, with the same tool — an `aimAt()` built on
+`follow.setHeading`, called before every capture AND before every sight measurement.
+**Foreknowledge helped:** 2026-08-20 — the entry did not stop hit 2 happening, but it named it within
+a minute of the captures being opened, and its recorded fix (`aimAtWorkshop`) was copied directly
+instead of being re-invented.
 
 ### OBSERVED — A wall-clock budget waiting on simulated time must account for the frame clamp.
 **Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-19
@@ -466,4 +504,26 @@ actually earned. Fixed by arming the ceremony on the edge in `main.js` and firin
 `workshop.js`'s `hasAudience(camera, heroPosition)` (range plus a projected on-screen band); pinned
 by the follow-camera-driven tests in `test/workshop.test.mjs` and a `drive-village-board.mjs` check
 that a cart-clearing buyer's Workshop is still armed, not built, a beat after the purchase.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Two one-shot payoffs whose triggers overlap in space fire on the same frame, and cancel each other.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-20
+**Rule:** A one-time beat is paid for in attention, and attention does not stack. When a new
+collectable, lamp, pickup or trigger is placed near an existing "you got here" radius, check the
+DISTANCE BETWEEN THEIR TRIGGERS, not just that each one works. Two payoffs on one frame is not two
+payoffs; it is one confused frame with two sounds in it, and the second one is the one that gets
+spent. The layout fix (move one out of the other's radius) is almost always better than the
+presentation fix (queue them), because the gap between them is itself readable — a chain of lights
+that deliberately stops short of the thing it leads to says something a chain that reaches it cannot.
+Sibling of "a one-time ceremony fired off a server edge plays to whoever happens to be looking" above:
+that one is about a beat with no audience, this one is about two beats with one audience between them.
+**Incidents:** G1's Old Beacon road was authored with three approach lanterns on the Dark Trail's own
+6-to-7-metre spacing. On an 18 m road that puts the third at about z 49 — inside the Beacon's own
+4.6 m arrival radius — so waking it and arriving fired on the same frame: the relight chime, the
+arrival sound and the arrival banner all at once, with nothing at all between the last thing a child
+collects and the thing they walked there for. Every unit check passed (the spacing was right, the
+lamp lit, the arrival latched); it was found by walking the road in the running game and reading the
+harness's own log, where "still not arrived at the road's end" was already `beaconFound true`. Fixed
+by dropping to two lamps and ending the warm chain 6.1 m short, and pinned by a check in
+`test/old-beacon.test.mjs` that no road lamp may stand inside the arrival radius.
 **Foreknowledge helped:** not yet recorded.

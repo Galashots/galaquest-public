@@ -52,6 +52,7 @@ jobs:
           - drive-hero-screen
           - drive-cart-loot
           - drive-village-board
+          - drive-old-beacon
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

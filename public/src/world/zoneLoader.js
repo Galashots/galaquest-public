@@ -16,6 +16,7 @@ import { relightBeats } from './relight.js';
 import { buildBramble } from './bramble.js';
 import { buildWildwoodGate } from './wildwoodGate.js';
 import { buildWildwoodBlade } from './wildwoodBlade.js';
+import { buildBeaconWaystones, buildOldBeacon } from './oldBeacon.js';
 import { buildVillagers } from './villagers.js';
 import { buildRowan } from './rowan.js';
 import { loadGLB } from './assets.js';
@@ -1041,11 +1042,20 @@ export function loadZone(scene, zoneData) {
     const propResults = rest.slice(landmarkCount);
     const lanterns = [];
     const trailLights = [];
+    // G1: a THIRD bucket, split off the same `dormant` marker by the same `road: 'beacon'` field
+    // zones/village.js uses to keep BEACON_ROAD_LIGHTS out of TRAIL_LIGHTS. Two lists rather than one
+    // because each has to stay index-aligned with its OWN coordinate list -- world/trail.js addresses
+    // a woken light by index, so a single interleaved array would light the wrong lamp the moment
+    // anybody added a prop between the two blocks.
+    const beaconRoadLights = [];
     for (let i = 0; i < propResults.length; i += 1) {
       if (!propResults[i]) continue;
-      (zoneData.PROPS[i]?.dormant === true ? trailLights : lanterns).push(propResults[i]);
+      const placement = zoneData.PROPS[i];
+      if (placement?.dormant !== true) lanterns.push(propResults[i]);
+      else if (placement.road === 'beacon') beaconRoadLights.push(propResults[i]);
+      else trailLights.push(propResults[i]);
     }
-    for (const light of trailLights) light.setLit(false);
+    for (const light of [...trailLights, ...beaconRoadLights]) light.setLit(false);
     // The Wildwood Gate's own hanging lamp joins that list as just another light. It is the furthest
     // thing in the zone from the tree, so the sort below makes it the LAST one to catch: the
     // ceremony ends by lighting the way out of the village. Built rather than loaded, so it costs
@@ -1062,6 +1072,13 @@ export function loadZone(scene, zoneData) {
     const wildwoodBlade = zoneData.WILDWOOD_BLADE
       ? buildWildwoodBlade(scene, zoneData.WILDWOOD_BLADE)
       : null;
+    // G1: the Old Beacon and its two waystones. Built, not loaded, for the fourth time and the same
+    // reason -- so they cost nothing in `counts` and cannot fail a fetch. Deliberately NOT pushed
+    // into `lanterns`: the gate's lamp joins the relight chain because lighting the way out of the
+    // village is the ceremony's own last beat, and the whole point of this one is that it does NOT
+    // light.
+    const oldBeacon = zoneData.OLD_BEACON ? buildOldBeacon(scene, zoneData.OLD_BEACON) : null;
+    const beaconWaystones = buildBeaconWaystones(scene, zoneData.BEACON_WAYSTONES);
     if (tree) {
       const [treeX, treeZ] = zoneData.LANDMARKS.find(isTreeLandmark)?.at ?? [0, 0];
       lanterns.sort((a, b) => distance(treeX, treeZ, a.at[0], a.at[1])
@@ -1075,7 +1092,10 @@ export function loadZone(scene, zoneData) {
     // Same shape again: Rowan rides in on the keeper's own load, so a keeper model that failed to
     // load leaves them null rather than throwing, the same degrade-to-nothing rule villagers follow.
     const rowan = keeper?.rowan ?? null;
-    return { keeper, tree, lanterns, gate, villagers, rowan, trailLights, brambles, wildwoodBlade };
+    return {
+      keeper, tree, lanterns, gate, villagers, rowan, trailLights, brambles, wildwoodBlade,
+      beaconRoadLights, oldBeacon, beaconWaystones,
+    };
   })();
   return { counts, ready };
 }

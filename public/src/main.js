@@ -27,6 +27,7 @@ import {
   RELIGHT_RECIPE_NAME,
   SHARD_PICKUP_RECIPE_NAME,
   WORKSHOP_BUILD_RECIPE_NAME,
+  BEACON_ARRIVAL_RECIPE_NAME,
   soundForEvent,
 } from './audio/recipes.js';
 import {
@@ -199,6 +200,12 @@ async function bootstrap() {
   // from world/trail.js addresses the right one. Empty until the props settle, which is why the
   // trail tick below checks its length rather than assuming.
   let zoneTrailLights = [];
+  // G1: the Old Beacon road's own lamps, in the order VILLAGE.BEACON_ROAD_LIGHTS lists them, and the
+  // Beacon's own presenter -- both null/empty until the zone settles, the same degrade-to-nothing
+  // shape every presenter above uses.
+  let zoneBeaconRoadLights = [];
+  let zoneOldBeacon = null;
+  let zoneBeaconWaystones = null;
   let zoneBrambles = [];
   // Rowan, at the camp -- same "null until the keeper's rig lands" shape as the villagers, since
   // they are cloned off the same load.
@@ -218,7 +225,10 @@ async function bootstrap() {
     zoneTree = result.tree;
     zoneVillagers = result.villagers;
     zoneTrailLights = result.trailLights ?? [];
+    zoneBeaconRoadLights = result.beaconRoadLights ?? [];
     zoneBrambles = result.brambles ?? [];
+    zoneOldBeacon = result.oldBeacon ?? null;
+    zoneBeaconWaystones = result.beaconWaystones ?? null;
     zoneRowan = result.rowan;
     const cartMesh = scene.getObjectByName(`prop-${VILLAGE.CART_PROP.model}`) ?? null;
     if (!cartMesh) {
@@ -267,6 +277,12 @@ async function bootstrap() {
   // protocol change to say so. What they share is the world they are standing in, which is the part
   // that makes "come and see this" work.
   let trailLit = noTrailLightsLit(VILLAGE.TRAIL_LIGHTS.length);
+  // G1: the Old Beacon road's own lamps, kept as a SECOND array against a SECOND coordinate
+  // list rather than appended to trailLit -- see zones/village.js's TRAIL_LIGHTS/BEACON_ROAD_LIGHTS
+  // split for why the two chains cannot share one list, and zoneLoader.js for the matching split on
+  // the scene side. Same rule, same wake radius, same pure wakeTrailLights(): a second stretch of
+  // the same road, not a second mechanic.
+  let beaconRoadLit = noTrailLightsLit(VILLAGE.BEACON_ROAD_LIGHTS.length);
   let trailWoken = false;
   let campFound = false;
   // Rowan answers "who left this camp?" -- session-only, the same reasoning campFound above gives:
@@ -276,6 +292,14 @@ async function bootstrap() {
   // The cart Rowan sends a child to search. Gated on rowanMet at the trigger site (not here) so the
   // beats land in the order Rowan's own line puts them: meet Rowan, THEN search the cart.
   let cartSearched = false;
+  // G1: has this player stood at the Old Beacon. SESSION-LOCAL AND PER CLIENT, exactly like
+  // gateFound, campFound, rowanMet and trailLit above it, and the choice is deliberate rather than
+  // inherited: this is a "you did this" discovery beat, not a possession. Two brothers each get to
+  // find it for themselves, a child who comes back tomorrow gets the arrival again, and it needs no
+  // protocol change to say so. The one thing in this chain that IS server-authoritative -- the cart's
+  // physical loot -- is server-authoritative because it can only be taken once; arriving somewhere
+  // can be done by everybody.
+  let beaconFound = false;
   // GP2: whether the server has told this client the cart's own loot burst already happened, and the
   // local, DELIBERATELY LAGGED HUD totals -- see the frame loop's own comment on why these are not
   // simply `ownRewards.coins`/`.shards` read live. Seeded once from the authoritative value the first
@@ -1207,9 +1231,29 @@ async function bootstrap() {
     zoneTrailState: () => ({
       loaded: zoneTrailLights.length,
       lit: [...trailLit],
+      // G1: the second chain, reported the same way and for the same reason -- `beaconRoadLoaded` is
+      // how many lamps the SCENE built and `beaconRoadLit` is what the rules layer believes, so a
+      // harness can see the two disagree instead of only seeing one of them.
+      beaconRoadLoaded: zoneBeaconRoadLights.length,
+      beaconRoadLit: [...beaconRoadLit],
       campFound,
       rowanMet,
       cartSearched,
+      beaconFound,
+      // Whether the Beacon's own presenter exists at all, and whether its arrival stir is running --
+      // "observable without seeing it", the same pattern zoneWorkshopState gives the Workshop.
+      beaconBuilt: zoneOldBeacon !== null,
+      // The marker stones on the way up, counted rather than assumed: they are the one part of the
+      // route with no state of its own, so "did they get built at all" is the only question about
+      // them a harness can ask without reading pixels.
+      waystonesBuilt: zoneBeaconWaystones?.count ?? 0,
+      beaconStirring: zoneOldBeacon?.isStirring() ?? false,
+      beaconGlow: zoneOldBeacon?.glowStrength() ?? null,
+      // "Is it on screen RIGHT NOW", from the live camera -- the seam that makes "a child can see the
+      // Beacon before they touch it" something a harness can disagree with, instead of something a
+      // screenshot has to be squinted at for. The predicate itself lives in world/oldBeacon.js so it
+      // is also testable with no browser at all.
+      beaconSight: zoneOldBeacon?.sight(camera, player.position) ?? null,
       brambleBlows: [...brambleBlows],
       bramblesCut: bramblesCut(brambleBlows),
       // Whether the SCENE agrees the tangle is gone, reported separately from the rules layer's
@@ -1759,6 +1803,7 @@ async function bootstrap() {
       rowanZ: ROWAN_Z,
       radiusMeters: KEEPER_WAVE_RADIUS_METERS,
       cartSearched,
+      beaconFound,
     });
     // ONE bubble, shared: they stand tens of metres apart (the village plaza and the trail's own
     // camp) and can never both be in range at once, so there is no real priority decision here, only
@@ -1883,10 +1928,47 @@ async function bootstrap() {
       }
       for (const bramble of zoneBrambles) bramble.update(deltaSeconds);
 
+      // G1: THE OLD BEACON ROAD'S OWN LAMPS. The same pure rule against the second list -- the
+      // lantern goes on being the tool for the whole of the new stretch instead of expiring at the
+      // camp. No banner: `trailWoken` above already spent the one-time "your lantern wakes the old
+      // lights" beat, and saying it twice would turn a discovery into a notification.
+      if (zoneBeaconRoadLights.length > 0) {
+        const beaconStep = wakeTrailLights(
+          beaconRoadLit, VILLAGE.BEACON_ROAD_LIGHTS, player.position.x, player.position.z,
+          lanternUnlockedFromRewards(rewardsForRelight),
+        );
+        if (beaconStep.lit !== beaconRoadLit) {
+          beaconRoadLit = beaconStep.lit;
+          for (const index of beaconStep.woken) zoneBeaconRoadLights[index]?.setLit(true);
+          audio.play(RELIGHT_RECIPE_NAME);
+        }
+      }
+
       if (!campFound && reachedCamp(VILLAGE.CAMP, player.position.x, player.position.z)) {
         campFound = true;
         banner('Somebody left here in a hurry…', 4000);
       }
+
+      // G1: ARRIVING AT THE OLD BEACON. reachedCamp() is the generic "is the hero inside this
+      // `{ at, radiusMeters }`" read (world/trail.js), the same one CART_SEARCH and
+      // WORKSHOP_INTERACT already borrow -- one definition of "you got here", four users.
+      //
+      // Deliberately NOT gated on cartSearched, unlike the cart's own trigger being gated on
+      // rowanMet. The cart is an object Rowan tells you about, so its beat only makes sense in their
+      // order; the Beacon is a PLACE, and a child who walked all the way to it has found it whatever
+      // else they skipped. The objective chip agrees (world/quest.js reads beaconFound first).
+      if (!beaconFound && reachedCamp(VILLAGE.OLD_BEACON, player.position.x, player.position.z)) {
+        beaconFound = true;
+        // Says what the place IS, and stops. Not "you woke it", not "defend it" -- nothing here can
+        // be woken or defended yet, and the chip underneath carries the "something is wrong" half.
+        banner('You found the Old Beacon!', 3400);
+        audio.play(BEACON_ARRIVAL_RECIPE_NAME);
+        // The world's own answer: the dead cresset stirs once and falls back. No audience check
+        // needed (world/oldBeacon.js explains why) -- the trigger IS this player standing in front
+        // of it.
+        zoneOldBeacon?.stir();
+      }
+      zoneOldBeacon?.update(deltaSeconds);
 
       // THE CART ROWAN SENDS YOU TO. Gated on rowanMet, not just proximity -- reachedCamp is
       // generic (world/trail.js) and CART_SEARCH is just another `{ at, radiusMeters }` to it, but
@@ -2068,6 +2150,7 @@ async function bootstrap() {
         campFound,
         rowanMet,
         cartSearched,
+        beaconFound,
         atBramble: nearStandingBramble(brambleBlows, VILLAGE.BRAMBLES, player.position.x, player.position.z),
       },
     ));

@@ -36,7 +36,19 @@
 //
 // It grows in ONE direction only. A bigger square would have added 700 m2 of empty meadow south and
 // west that no child has any reason to walk into, and quadrupled the ground mesh to do it.
-export const ZONE = Object.freeze({ name: 'lantern-village', size: 28, northMeters: 22 });
+//
+// G1, 2026-08-20: 22 -> 44, for exactly the same reason and against exactly the same defect one
+// stage further on. The trail's own camp had become what the gate used to be -- a place the game
+// congratulates you for reaching, with nothing whatsoever in front of it and an objective chip
+// ("Guard the camp for Rowan") naming a verb the world does not implement. The ground now continues
+// past the camp to carry the Old Beacon road (see the road's own G1 section below and
+// world/oldBeacon.js), which is the place Rowan has been talking about since they were built.
+//
+// STILL only north, and still sized to the content rather than rounded up: the Beacon stands at
+// z = 51, its own wood closes behind it at z = 54.4-56.6, and the ground's edge at z = 58 leaves
+// exactly the metre of margin world/bounds.js's WORLD_EDGE_MARGIN_METERS already assumes everywhere
+// else. There is no acreage here a child has no reason to walk into.
+export const ZONE = Object.freeze({ name: 'lantern-village', size: 28, northMeters: 44 });
 
 // WHERE THE WOLVES ARE. Three spots, walked in order, one wolf alive at a time.
 //
@@ -210,6 +222,37 @@ export const ROAD = Object.freeze({
     Object.freeze([0.2, 27.8]),
     Object.freeze([0.1, 30.6]),
     Object.freeze([1.0, 33.4]),
+
+    // ── the Old Beacon road (G1) ────────────────────────────────────────────────────────────────
+    //
+    // THE STRONGEST DIRECTION SIGNAL THIS GAME OWNS, and it costs nothing: the road is painted into
+    // the ground mesh's own vertex colours (world/ground.js), so continuing it out of the camp is
+    // one draw call's worth of nothing and a child has already spent forty metres learning that the
+    // brown means "this way". Before this, the road ended in an amoeba-shaped blot under the camp,
+    // which reads as a stain rather than as a route -- the exact defect the Dark Trail section above
+    // records having fixed once already at the gate.
+    //
+    // It BENDS ONCE, west, at [0.7, 43.4], and the bend is the point. From the camp the Beacon's
+    // cresset already breaks the treeline eighteen metres off (world/oldBeacon.js explains the height
+    // arithmetic that guarantees it), so the job of the route is not to hide the destination -- it is
+    // to make the walk a walk. The bend is the decision point the reference sweep says a landmark
+    // belongs at, which is why a waystone stands on its outside shoulder, and it is where the flanking
+    // wood opens and the whole tower comes into view instead of just its top.
+    //
+    // It stays within about 3 degrees of the beacon's own bearing the whole way, which is not a
+    // stylistic choice: PORTRAIT'S HORIZONTAL FOV IS ONLY 32 DEGREES (42 vertical against a 0.75
+    // aspect), so anything more than a gentle S-curve steers the destination off the side of a
+    // 768x1024 screen. Landscape's 54 degrees would have forgiven far more; portrait is the one that
+    // decides.
+    Object.freeze([1.9, 35.9]),
+    Object.freeze([3.2, 38.4]),
+    Object.freeze([2.5, 41.0]),
+    Object.freeze([0.7, 43.4]),
+    Object.freeze([0.9, 46.0]),
+    Object.freeze([2.0, 48.2]),
+    // Into the Beacon's own step. 1.4 m short of OLD_BEACON.at, so the road arrives AT the stone
+    // rather than stopping in front of it or vanishing under it.
+    Object.freeze([2.6, 49.6]),
   ]),
 });
 
@@ -534,13 +577,113 @@ export const PROPS = Object.freeze([
   Object.freeze({ model: 'props/village/fence-broken.glb', at: Object.freeze([-4.6, 31.4]), rotY: 0 }),
   Object.freeze({ model: 'props/village/fence-broken.glb', at: Object.freeze([-4.6, 32.4]), rotY: 0 }),
   Object.freeze({ model: 'props/village/rock-wide.glb', at: Object.freeze([6.6, 32.4]), rotY: 0.4 }),
+
+  // ── THE OLD BEACON ROAD, north of the camp (G1) ─────────────────────────────────────────────
+  //
+  // Everything from here down was SOLVED against the real measured footprints and the real extended
+  // road rather than placed by eye -- the same discipline (and the same FOOTPRINT_RADIUS_METERS
+  // table) test/zone-data.test.mjs enforces and the Wildwood block above already used. Placement
+  // order was deliberate and is worth keeping if these are ever re-solved: the WAYFINDING furniture
+  // first (lamps, then the funnel boulders), then the wood filled in around it. Solved the other way
+  // round, the trees ate every spot a lamp needed and the solver quietly returned a beautiful empty
+  // forest with no route through it.
+
+  // THE TWO APPROACH LAMPS. Dormant, so the lantern earned in Chapter 1 is still the thing that
+  // wakes them: the reward stays a tool for the whole of the new stretch instead of expiring at the
+  // camp. `road: 'beacon'` is the ONLY thing separating them from the six Dark Trail lamps above --
+  // see TRAIL_LIGHTS and BEACON_ROAD_LIGHTS below for why that split has to exist (CAMP and ROWAN
+  // are both derived from the trail's own last two lamps, so appending to that list would have
+  // silently moved the camp trigger eighteen metres up the road).
+  //
+  // Spaced 6.2-6.8 m apart and 2.3 m off the road's centreline, which are the Dark Trail's own
+  // numbers rather than new ones, and alternating sides for the same reason it does: a lit corridor
+  // rather than a fence. The chain continues unbroken from the camp lamp at [3.5, 33.1] -- reference
+  // rule 4, beacons come in chains.
+  //
+  // TWO AND NOT THREE, and the third one is worth recording because it was BUILT and then taken out
+  // after walking the road. On this route's own spacing a third lamp lands at about z 49, which is
+  // inside the Beacon's own 4.6 m arrival radius -- so waking it and arriving fired on the same
+  // frame, stacking the relight chime, the arrival sound and the banner on top of each other, and
+  // leaving nothing between the last thing a child collects and the thing they came for. Ending the
+  // warm chain 6.1 m short is better than a tidier spacing: THE OLD LIGHTS DO NOT REACH THE BEACON,
+  // and the last stretch of the walk is lit by the cold thing at the end of it instead.
+  Object.freeze({ model: 'props/village/lantern.glb', at: Object.freeze([0.6, 39.2]), rotY: 1.9, dormant: true, road: 'beacon' }),
+  Object.freeze({ model: 'props/village/lantern.glb', at: Object.freeze([3.1, 44.9]), rotY: 4.2, dormant: true, road: 'beacon' }),
+
+  // THE FUNNEL. Two boulders where the road leaves the camp and two more at the bend: a natural
+  // gateway made of things this world is already made of, rather than a second built arch. They are
+  // the reason the way out of the camp reads as a way out and not as a gap the trees happen to leave.
+  Object.freeze({ model: 'props/village/rock-large.glb', at: Object.freeze([-1.4, 36.9]), rotY: 0.9 }),
+  Object.freeze({ model: 'props/village/rock-wide.glb', at: Object.freeze([6.2, 34.9]), rotY: 2.5 }),
+  Object.freeze({ model: 'props/village/rock-small.glb', at: Object.freeze([4.6, 44.5]), rotY: 1.3 }),
+  Object.freeze({ model: 'props/village/rock-wide.glb', at: Object.freeze([-2.5, 44.7]), rotY: 0.4 }),
+
+  // THE FLANKING WOOD. Two rows a side again (about 4.7 m and 8.8 m off the centreline, with the
+  // same fixed non-random wobble the Wildwood block above documents), so the child walks a corridor
+  // and sees trees behind trees rather than a stage flat. Deliberately DENSER per metre than the
+  // Dark Trail's: this is a shorter stretch and the brief for it is "a short dense path with
+  // changing beats", not a long run.
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([6.7, 40.3]), rotY: 1.53, scale: 1.35 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([6.7, 44.9]), rotY: -0.03, scale: 1.2 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([7.6, 47]), rotY: -0.84, scale: 0.95 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-3.6, 49.5]), rotY: -0.9, scale: 0.95 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([10.5, 34.3]), rotY: 0.62, scale: 1.45 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([11.9, 41.7]), rotY: 1.39, scale: 1 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([9.5, 43]), rotY: 1.37, scale: 1.15 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([9.2, 45.3]), rotY: -0.19, scale: 1.3 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-7.7, 38.2]), rotY: -0.21, scale: 1.2 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-5.5, 39.9]), rotY: 0.56, scale: 1.45 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-3.9, 41.8]), rotY: -1, scale: 1.25 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-5.7, 37]), rotY: -0.23, scale: 1.1 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-7.6, 44.3]), rotY: -0.25, scale: 1.3 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-7.1, 46.5]), rotY: 1.29, scale: 1.35 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-6.7, 51.1]), rotY: -1.04, scale: 0.9 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-5.3, 52.5]), rotY: 0.5, scale: 1.45 }),
+
+  // THE WOOD CLOSING BEHIND THE BEACON. Two rows across the whole width at z 54-56.6, so a child who
+  // walks past the Beacon walks into forest rather than into the visible end of the ground -- the
+  // one thing the north edge of this world has never had. The gap directly behind the tower is on
+  // purpose: nothing stands within 4.5 m of it, so the silhouette a child is meant to read stays
+  // clean, and the second row closes that hole from 5.4 m back.
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-11.2, 54.7]), rotY: -1.55, scale: 1.35 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-8.3, 54]), rotY: -0.94, scale: 0.9 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-6.4, 54.5]), rotY: -0.33, scale: 1.2 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-3.5, 54.9]), rotY: 0.28, scale: 1.45 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-1.5, 54.2]), rotY: 0.89, scale: 1 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([9, 54.8]), rotY: 0.23, scale: 1.15 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([10.9, 54.4]), rotY: 0.84, scale: 0.95 }),
+  // The rear row sits PAST the walkable clamp at z = 57 rather than short of it -- found by a check
+  // that failed: at z 56.0-56.6 a child could walk to the clamp and stand in open grass with the
+  // whole wood behind them, which is the one thing this row exists to prevent. Scales are capped at
+  // 1.2 here so that each trunk's own measured body still clears the ground mesh's edge at z = 58.
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([-8, 57]), rotY: -1.04, scale: 1.05 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-5.4, 57.2]), rotY: -0.43, scale: 1.15 }),
+  Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([0.2, 57.1]), rotY: 0.79, scale: 1.2 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([5.9, 57.0]), rotY: -1.09, scale: 1 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([12.4, 57.2]), rotY: 0.13, scale: 1.1 }),
 ]);
 
 // Where the trail's story beats happen, as pure coordinates. Derived from PROPS rather than written
 // out again (GQ-007): the camp trigger is the LAST trail light, because that is the one standing in
 // the clearing, so moving that lamp moves the trigger with it and the two can never disagree.
+//
+// SPLIT IN TWO on 2026-08-20 (G1), and this is the one edit in this file that could have gone wrong
+// silently. The Old Beacon road adds three more dormant lamps, and the obvious thing -- letting them
+// fall into TRAIL_LIGHTS with the other six -- would have moved CAMP.at (the LAST dormant lamp) and
+// ROWAN.facing (the second-to-last) eighteen metres up the new road, so the camp's "you got here"
+// trigger would have fired at the Beacon and Rowan would have spent the game staring past the child
+// at a lamp post. Nothing in the types would have said so. `road: 'beacon'` is the marker that keeps
+// the two chains apart; both halves stay derived from PROPS rather than retyped (GQ-007).
+const DORMANT_LIGHTS = PROPS.filter((prop) => prop.dormant === true);
 export const TRAIL_LIGHTS = Object.freeze(
-  PROPS.filter((prop) => prop.dormant === true).map((prop) => prop.at),
+  DORMANT_LIGHTS.filter((prop) => prop.road !== 'beacon').map((prop) => prop.at),
+);
+/** The lamps on the Old Beacon road, in the order a child walks past them. Same dormant rule and
+ *  the same world/trail.js wake radius as TRAIL_LIGHTS -- a separate list, not a separate mechanic.
+ *  There are two, and the count is a DESIGN decision rather than an accident of spacing: see the
+ *  `road: 'beacon'` block in PROPS for why a third one had to come out. */
+export const BEACON_ROAD_LIGHTS = Object.freeze(
+  DORMANT_LIGHTS.filter((prop) => prop.road === 'beacon').map((prop) => prop.at),
 );
 // THE BLACK BRAMBLE, across the trail between the third and fourth lights.
 //
@@ -612,6 +755,53 @@ export const WILDWOOD_BLADE = Object.freeze({
   at: Object.freeze([2.6, 31.0]),
   rotY: 0.4,
 });
+
+// ── THE OLD BEACON (G1) ─────────────────────────────────────────────────────────────────────────
+//
+// Where the new road goes, and the place Rowan has been naming since they were built ("The old
+// Beacon has gone cold too"). world/oldBeacon.js builds it -- see that file's header for the
+// reference sweep the form came out of and for the camera arithmetic that fixes its height.
+//
+// [2.6, 51.0] is 17.9 m from the camp's own centre and 1.4 m past the road's new end. That distance
+// was chosen against the two things that actually constrain it, not by feel:
+//
+//   NEAR ENOUGH that the whole stretch is 18 m of walking -- about 7 s at a full run, 16 s at the
+//   half-deflection push a young player actually holds (character/speed.js's own measured case).
+//   The Dark Trail from the gate to the camp is 22 m, so this is a comparable leg rather than a new
+//   expedition, and it is dressed at a higher prop density than that trail rather than a lower one.
+//
+//   FAR ENOUGH that at the camp it sits 33.7 m from the follow camera, where render/sky.js's fog is
+//   about 14% -- present, hazed, and unmistakably somewhere else. A Beacon a child could touch from
+//   the cart would be a prop; this one is a destination.
+//
+// `rotY` is DERIVED from the road's own last-but-one point rather than typed, the same rule
+// WILDWOOD_GATE.arch.rotY follows: the step and the brace face back down the way the child comes in,
+// and they cannot drift off the road if the road is ever re-routed.
+const BEACON_AT = Object.freeze([2.6, 51.0]);
+const BEACON_ROAD_APPROACH = ROAD.points[ROAD.points.length - 2];
+export const OLD_BEACON = Object.freeze({
+  at: BEACON_AT,
+  rotY: Math.atan2(BEACON_ROAD_APPROACH[0] - BEACON_AT[0], BEACON_ROAD_APPROACH[1] - BEACON_AT[1]),
+  // Generous, the same reasoning CAMP and WILDWOOD_GATE give their own radii: a "you got here"
+  // trigger for a thumb, not a keyhole. Wider than CAMP's 4.5 because the plinth is 4.1 m across and
+  // the arrival has to fire while the child is still far enough back to see the whole tower --
+  // 4.6 m from the centre is 2.5 m clear of the stone, which is where it reads best.
+  radiusMeters: 4.6,
+});
+
+// The two marker stones on the way up. Not props (nothing in the Kenney kit is a standing stone and
+// we are not commissioning one) -- world/oldBeacon.js builds both out of the Beacon's own slate as a
+// single merged mesh, the same trade the gate, the bramble and the blade all already make.
+//
+// WHERE, and why exactly two: the first stands where the road leaves Rowan's camp, so the way out
+// reads as a MADE way rather than as a gap between two trees; the second stands on the outside
+// shoulder of the bend, which is the only place on this route where a child has a choice to make and
+// therefore the only place the reference sweep says a small landmark earns its keep. Both are 2.5 m
+// or more clear of the road surface and at least 0.9 m clear of every prop body.
+export const BEACON_WAYSTONES = Object.freeze([
+  Object.freeze({ at: Object.freeze([5.2, 36.8]), rotY: 0.7, leanRadians: 0.07 }),
+  Object.freeze({ at: Object.freeze([-1.6, 42.0]), rotY: 2.4, leanRadians: -0.09 }),
+]);
 
 // THE PEOPLE WHO LIVE HERE.
 //

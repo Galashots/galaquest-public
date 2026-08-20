@@ -30,14 +30,17 @@ import {
   OBJECTIVE_CUT_THE_BRAMBLE,
   OBJECTIVE_FIND_THE_GATE,
   OBJECTIVE_FOLLOW_THE_DARK_TRAIL,
-  OBJECTIVE_GUARD_THE_CAMP,
+  OBJECTIVE_BEACON_IS_COLD,
+  OBJECTIVE_FIND_THE_BEACON,
   OBJECTIVE_KEEP_THE_VILLAGE_SAFE,
   OBJECTIVE_SEARCH_THE_CART,
   OBJECTIVE_THE_CAMP,
   objectiveWakeLights,
   questObjectiveFor,
 } from '../public/src/world/quest.js';
-import { BRAMBLES, CAMP, PROPS, ROAD, TRAIL_LIGHTS } from '../public/src/world/zones/village.js';
+import {
+  BEACON_ROAD_LIGHTS, BRAMBLES, CAMP, PROPS, ROAD, ROWAN, TRAIL_LIGHTS,
+} from '../public/src/world/zones/village.js';
 
 const LIT = { marks: 3, lanternUnlocked: true };
 
@@ -91,12 +94,40 @@ test('reachedCamp is a place, not a checklist -- it does not care how many light
 
 // ── the layout the rule is played on ────────────────────────────────────────────────────────────
 
-test('the zone really places dormant lights, and TRAIL_LIGHTS is derived from them rather than retyped', () => {
+test('the zone really places dormant lights, and both chains are derived from them rather than retyped', () => {
   const dormant = PROPS.filter((prop) => prop.dormant === true);
   assert.ok(dormant.length >= 4, `a trail needs several lights, found ${dormant.length}`);
-  assert.deepEqual(TRAIL_LIGHTS.map((at) => [...at]), dormant.map((prop) => [...prop.at]));
+  // The two chains PARTITION the dormant lamps: every one belongs to exactly one of them, in PROPS
+  // order. Asserted as a partition rather than as two literal lists so it keeps meaning something
+  // when a lamp is added to either.
+  assert.deepEqual(
+    [...TRAIL_LIGHTS, ...BEACON_ROAD_LIGHTS].map((at) => [...at]),
+    dormant.map((prop) => [...prop.at]),
+  );
+  assert.equal(
+    TRAIL_LIGHTS.length + BEACON_ROAD_LIGHTS.length, dormant.length,
+    'a lamp in both chains, or in neither, would wake twice or never',
+  );
+  assert.ok(BEACON_ROAD_LIGHTS.length > 0, 'the Beacon road is lit by the same lamps the trail is');
   for (const prop of dormant) {
     assert.match(prop.model, /lantern/, 'a dormant prop that is not a lantern would never get a glow');
+  }
+});
+
+// THE REASON THE SPLIT EXISTS, pinned as the failure it prevents. CAMP.at is "the last dormant lamp"
+// and ROWAN.facing is "the one before it". Letting the Beacon road's own lamps fall into
+// TRAIL_LIGHTS moves both of them eighteen metres up the new road -- the camp's own "you got here"
+// banner would fire at the Beacon and Rowan would spend the game staring past the child at a lamp
+// post. Nothing in the data's shape says so; only this does.
+test('the camp trigger and Rowan still hang off the DARK TRAIL\'s last lamps, not the Beacon road\'s', () => {
+  assert.deepEqual([...CAMP.at], [...TRAIL_LIGHTS[TRAIL_LIGHTS.length - 1]]);
+  assert.deepEqual([...ROWAN.facing], [...TRAIL_LIGHTS[TRAIL_LIGHTS.length - 2]]);
+  for (const at of BEACON_ROAD_LIGHTS) {
+    assert.notDeepEqual([...CAMP.at], [...at], 'the camp trigger has drifted onto the Beacon road');
+    assert.ok(
+      Math.hypot(at[0] - CAMP.at[0], at[1] - CAMP.at[1]) > CAMP.radiusMeters,
+      'a Beacon road lamp inside the camp trigger would blur the two places into one',
+    );
   }
 });
 
@@ -184,7 +215,11 @@ test('reaching the camp ends the stretch even with a light still dark', () => {
 // Rowan answers "Who left this camp?" -- the objective has to follow the story forward rather than
 // stay parked on a question that has been answered, the same defect the finished-quest chip had
 // before Chapter 2 existed at all.
-test('meeting Rowan sends the chip from the mystery to the cart, then to nothing further built yet', () => {
+//
+// G1 changed the last rung of this ladder and it is the rung worth guarding: the chip used to end on
+// "Guard the camp for Rowan", which was honest only while there was nowhere to go, and became a lie
+// about a verb the game does not implement the moment the road north existed.
+test('meeting Rowan sends the chip from the mystery to the cart, then up the Beacon road', () => {
   const trail = (rowanMet, cartSearched) => ({ lights: 6, lit: 6, campFound: true, rowanMet, cartSearched });
   assert.equal(
     questObjectiveFor(LIT, true, true, true, trail(false, false)), OBJECTIVE_THE_CAMP,
@@ -195,8 +230,46 @@ test('meeting Rowan sends the chip from the mystery to the cart, then to nothing
     'Rowan has spoken -- the mystery is answered, the cart is the new instruction',
   );
   assert.equal(
-    questObjectiveFor(LIT, true, true, true, trail(true, true)), OBJECTIVE_GUARD_THE_CAMP,
-    'cart searched -- no Beacon route exists yet, so the chip must not promise one',
+    questObjectiveFor(LIT, true, true, true, trail(true, true)), OBJECTIVE_FIND_THE_BEACON,
+    'cart searched -- the road north is built, so the chip names where it goes',
+  );
+});
+
+// The G1 precondition, stated as the property rather than as the mechanism: the chip may not send a
+// child up the Beacon road until the camp beats it is the payoff for have actually happened.
+test('the Beacon objective is unreachable until BOTH Rowan and the cart are really done', () => {
+  const at = (rowanMet, cartSearched, beaconFound = false) => questObjectiveFor(
+    LIT, true, true, true, { lights: 6, lit: 6, campFound: true, rowanMet, cartSearched, beaconFound },
+  );
+  assert.notEqual(at(false, false), OBJECTIVE_FIND_THE_BEACON);
+  assert.notEqual(at(true, false), OBJECTIVE_FIND_THE_BEACON);
+  assert.notEqual(at(false, true), OBJECTIVE_FIND_THE_BEACON, 'a cart searched without Rowan is not a route north');
+  assert.equal(at(true, true), OBJECTIVE_FIND_THE_BEACON);
+});
+
+// The honest end of G1. Nothing at the Beacon can be lit, repaired or fought in this slice, so the
+// chip has to stop at a question -- and it must not still be telling a child who is STANDING at the
+// Beacon to go and find it.
+test('reaching the Beacon replaces "find it" with an objective that promises nothing', () => {
+  const arrived = questObjectiveFor(LIT, true, true, true, {
+    lights: 6, lit: 6, campFound: true, rowanMet: true, cartSearched: true, beaconFound: true,
+  });
+  assert.equal(arrived, OBJECTIVE_BEACON_IS_COLD);
+  assert.notEqual(arrived, OBJECTIVE_FIND_THE_BEACON, 'do not tell someone standing on it to find it');
+  assert.doesNotMatch(
+    arrived, /light|wake|fix|repair|defend|fight|guard/i,
+    'G2 is not built: the chip may not name an action that does not exist',
+  );
+});
+
+// ARRIVING BEATS COLLECTING, at the top of the camp branch. A child who ran the whole road without
+// stopping to talk has still found the Beacon, and must not be sent back to be introduced to Rowan.
+test('the Beacon, once found, outranks every camp beat that was skipped to get there', () => {
+  assert.equal(
+    questObjectiveFor(LIT, true, true, true, {
+      lights: 6, lit: 3, campFound: true, rowanMet: false, cartSearched: false, beaconFound: true,
+    }),
+    OBJECTIVE_BEACON_IS_COLD,
   );
 });
 
