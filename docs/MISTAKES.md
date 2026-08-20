@@ -25,13 +25,23 @@ names a test file that actually exists, every `GQ-NNN` ID is unique and never re
 ---
 
 ### GQ-007 — Never restate a constant. Import it.
-**Status:** ENFORCED · **Hits:** 5 · **First:** 2026-08-11 · **Last:** 2026-08-13
+**Status:** ENFORCED · **Hits:** 6 · **First:** 2026-08-11 · **Last:** 2026-08-20
 **Enforced by:** `test/shared-constants.test.mjs`
 **Rule:** A value used by two modules lives in one importable module. If a module cannot import it,
-that is the thing to fix.
+that is the thing to fix. **Hit 6's addition: a constant DERIVED from other modules' numbers is the
+same defect wearing a hat.** A literal that only happens to satisfy a relationship is not satisfying
+it -- it is a snapshot of a relationship that held on the day it was typed, and nothing tells you
+when it stops holding. Derive it, or pin the relationship in a test. Prose in a comment is neither.
 **Incidents:** play-fight's `wolf.hp < 3`; the fixed 500 ms hit poll; three fixed swing offsets;
 three tests restating their own formula; `WOLF_SPAWN` duplicated across `net/gameServer.mjs:35` and
-`public/src/main.js:54` plus three test files (2026-08-14 audit P0.2).
+`public/src/main.js:54` plus three test files (2026-08-14 audit P0.2); (6) 2026-08-20, G1 -- the
+ground skirt's `GROUND_SKIRT_METERS = 140` was a hand-typed number that had to stay wider than
+`FOG_FAR` from the walkable clamp, with the clamp in `bounds.js`, the fog in `render/sky.js`, and the
+literal in `world/ground.js`. Growing the world north for the Beacon road (`ZONE.northMeters` 22 ->
+44) broke it at BOTH ends -- the skirt is centred on the ground, so extending one end drags the other
+end's edge inward by half the growth, and the SOUTH horizon regressed from an edit that never went
+near it. The world ended on a hard line of 29.8% grass against open sky, in the shipped capture the
+visual gate had already passed. Three separate comments asserted the invariant; nothing checked it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-008 — A harness that navigates to the game must start from a known guest.
