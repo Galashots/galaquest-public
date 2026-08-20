@@ -208,17 +208,20 @@ export function questObjectiveFor(
     // game pointing past the problem; it takes the chip only while the tangle is actually there, and
     // hands it straight back the moment it falls.
     if (trail?.atBramble === true) return OBJECTIVE_CUT_THE_BRAMBLE;
-    // ARRIVING BEATS COLLECTING, one more time and AT THE TOP RATHER THAN INSIDE THE CAMP BRANCH.
+    // ARRIVING BEATS COLLECTING, one more time and OUTSIDE the camp branch: a child who has stood at
+    // the Old Beacon has done something bigger than anything the trail can still ask of them. The
+    // same rule the bramble interrupt and the missed-lamp case above are both written from.
     //
-    // This check used to live one level down, under `campFound`, and that nesting was a real defect
-    // rather than a tidiness question: CAMP's trigger is a 4.5 m radius and the road passes about
-    // 2.5 m from its centre, so a child who walks wide around the clearing reaches the Old Beacon
-    // with `campFound` still false. The chip then fell all the way through to the lamp counter --
-    // the game told a child standing at a dead Beacon to go and light lamps.
+    // Outside, because campFound is a 4.5 m radius and the road only passes 2.5 m from its centre.
+    // Walking wide around the clearing and straight on up the road reaches the Beacon with campFound
+    // still false -- and this check living INSIDE the branch let that fall all the way through to the
+    // lamp counter, so the game told a child who had just found a dead Beacon to go and light lamps.
+    // rowanSpeech.js already gives beaconFound unconditional top priority; this now agrees with it.
     //
-    // world/rowanSpeech.js always gave `beaconFound` unconditional top priority; the two disagreed
-    // and only the speech was right. Found by an independent review of the G1 merge; the fix is to
-    // agree with the speech.
+    // (Found independently by the review of the G1 merge and by this branch's own G2 work, which is
+    // a fair sign it was real. The hoist is that review's; what it delegates to is this branch's --
+    // G1's single honest question has become the whole Beacon arc, so the answer moved into
+    // beaconObjectiveFor and OBJECTIVE_BEACON_IS_COLD is now that function's own floor.)
     if (trail?.beaconFound === true) return beaconObjectiveFor(siege);
     if (trail?.campFound === true) {
       // ROWAN, THEN THE CART, THEN THE ROAD NORTH -- each only claims the chip once its own

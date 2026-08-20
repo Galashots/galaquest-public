@@ -131,7 +131,7 @@ test('the grass varies across the field instead of being one flat colour', () =>
   assert.ok(max - min < 0.15, `${(max - min).toFixed(4)} of green is a patchwork, not a meadow`);
 });
 
-// The seam this could open: the 140m distance skirt is one flat GRASS_COLOR quad, and the playable
+// The seam this could open: the distance skirt is one flat GRASS_COLOR quad, and the playable
 // ground's own edge now varies. If the two tones do not average to GRASS_COLOR, that join shows.
 test('the meadow averages out to the flat colour the distance skirt is painted', async () => {
   const { createGround } = await import('../public/src/world/ground.js');
@@ -191,4 +191,79 @@ test('the road lives on exactly ONE surface, and no two ground surfaces are copl
   const heights = meshes.map((mesh) => mesh.position.y);
   assert.equal(new Set(heights).size, heights.length,
     `two ground surfaces share a plane (${heights.join(', ')}); that is a z-fight waiting to happen`);
+});
+
+
+// THE INVARIANT THE HAND-WRITTEN 140 QUIETLY BROKE.
+//
+// ground.js builds the skirt so the world does not end on a hard line, and render/sky.js's own
+// tuning note claims 58 m "still fully dissolves the skirt". Both were prose. The number that had
+// to satisfy them lived in a third file as a literal, so when the world grew north for the Old
+// Beacon road (ZONE.northMeters 22 -> 44) the horizon opened at BOTH ends -- the skirt is centred
+// on the ground, so growing one end drags the other end's edge inward -- and every existing test
+// still passed.
+//
+// Measured through the REAL follow camera and the REAL skirt mesh. Nothing here restates a width, a
+// pitch or a fog plane, so this test cannot agree with itself while the running game disagrees.
+test('the distance skirt is still past the fog from every walkable edge, looking out', async () => {
+  const THREE = await import('../public/vendor/three.module.min.js');
+  const { createGround, WALKABLE_BOUNDS } = await import('../public/src/world/ground.js');
+  const { createFollowCamera } = await import('../public/src/camera/follow.js');
+  const { FOG_FAR } = await import('../public/src/render/sky.js');
+
+  const world = createGround();
+  let skirt = null;
+  world.traverse((object) => { if (object.isMesh && object.name === 'ground-skirt') skirt = object; });
+  assert.ok(skirt, 'no ground-skirt mesh -- this test is checking a horizon that no longer exists');
+  const half = skirt.geometry.parameters.width / 2;
+  const { x: cx, z: cz } = skirt.position;
+
+  const camera = new THREE.PerspectiveCamera(42, 768 / 1024, 0.1, 100);
+  const follow = createFollowCamera(camera, {});
+
+  // Stand on each clamp in turn and look straight out of the world. Heading 0 puts the camera south
+  // of the hero, so the hero faces +z.
+  const edges = [
+    ['north', 0, WALKABLE_BOUNDS.maxZ, 0, cx, cz + half],
+    ['south', Math.PI, WALKABLE_BOUNDS.minZ, 0, cx, cz - half],
+    ['east', Math.PI / 2, 0, WALKABLE_BOUNDS.maxX, cx + half, cz],
+    ['west', -Math.PI / 2, 0, WALKABLE_BOUNDS.minX, cx - half, cz],
+  ];
+
+  for (const [name, heading, heroZ, heroX, edgeX, edgeZ] of edges) {
+    follow.setHeading(heading);
+    follow.update(new THREE.Vector3(heroX, 0, heroZ));
+    camera.updateMatrixWorld(true);
+    const depth = -new THREE.Vector3(edgeX, skirt.position.y, edgeZ)
+      .applyMatrix4(camera.matrixWorldInverse).z;
+    assert.ok(depth >= FOG_FAR,
+      `standing on the ${name} clamp and facing out, the skirt's edge is ${depth.toFixed(2)} m deep `
+      + `against a fog far plane of ${FOG_FAR} -- the grass stops in open sky`);
+  }
+});
+
+// The check above is only worth having if it would have caught the real regression. It is run here
+// against the exact half-width that shipped the defect.
+test('sabotage: the old 70 m skirt half-width fails that same check from the north clamp', async () => {
+  const THREE = await import('../public/vendor/three.module.min.js');
+  const { createGround, WALKABLE_BOUNDS } = await import('../public/src/world/ground.js');
+  const { createFollowCamera } = await import('../public/src/camera/follow.js');
+  const { FOG_FAR } = await import('../public/src/render/sky.js');
+
+  const world = createGround();
+  let skirt = null;
+  world.traverse((object) => { if (object.isMesh && object.name === 'ground-skirt') skirt = object; });
+  const camera = new THREE.PerspectiveCamera(42, 768 / 1024, 0.1, 100);
+  const follow = createFollowCamera(camera, {});
+  follow.update(new THREE.Vector3(0, 0, WALKABLE_BOUNDS.maxZ));
+  camera.updateMatrixWorld(true);
+
+  const depthAt = (halfWidth) => -new THREE.Vector3(skirt.position.x, skirt.position.y,
+    skirt.position.z + halfWidth).applyMatrix4(camera.matrixWorldInverse).z;
+
+  assert.ok(depthAt(70) < FOG_FAR,
+    `70 m of half-width reaches ${depthAt(70).toFixed(2)} m of fog depth, which is already past `
+    + `${FOG_FAR} -- this sabotage proves nothing and the real check above is vacuous`);
+  assert.ok(depthAt(skirt.geometry.parameters.width / 2) >= FOG_FAR,
+    'the shipped width does not clear the fog plane the sabotage case fails on');
 });
