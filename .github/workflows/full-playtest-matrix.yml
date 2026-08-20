@@ -47,6 +47,7 @@ jobs:
           - review-hero-idle11
           - review-shipping-assets
           - review-rowan-camp-composite
+          - review-studio
           - drive-hero-screen
           - drive-cart-loot
           - drive-village-board

@@ -28,6 +28,11 @@ export const HARNESSES = {
   // Wave 1A (CSB): Character-Studio-only, not the running game -- drives public/studio.html rather
   // than main.js, but is otherwise the same measuring-instrument contract as its fit-* neighbours.
   'fit-wildwood-blade': { gate: false, why: 'Wildwood Blade candidate mount measurement; always exits 0 by design' },
+  // A1 Studio convergence: Character-Studio-only behavioural gate -- loadout switching matches the
+  // descriptors, one-sword rule, deterministic views, fail-closed unknown states, panel occlusion
+  // bounds at both orientations. Its captures are evidence for a person; its exit code judges only
+  // the behavioural invariants, never appearance.
+  'review-studio': { gate: true, why: 'Character Studio review states, deterministic views, and responsive panel invariants, portrait and landscape' },
   // AP1's two artist-review cameras. Both are instruments, not gates: their product is the captures
   // and a per-frame record, and a person decides what those show. A green exit code from either
   // would be a claim that somebody has LOOKED, which is exactly the thing a script cannot assert.
@@ -57,12 +62,12 @@ export const HARNESSES = {
  */
 export const SUITES = {
   keeper: ['drive-village', 'drive-relight', 'review-keeper-idle', 'review-keeper-material', 'review-keeper-turn', 'review-shipping-assets'],
-  hero: ['fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern', 'fit-wildwood-blade', 'play-fight', 'review-hero-attack', 'review-hero-idle11', 'review-shipping-assets', 'drive-hero-screen'],
+  hero: ['fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern', 'fit-wildwood-blade', 'play-fight', 'review-hero-attack', 'review-hero-idle11', 'review-shipping-assets', 'review-studio', 'drive-hero-screen'],
   full: [
     'drive-village', 'drive-relight', 'drive-lifecycle', 'drive-marks', 'drive-touch',
     'drive-two-clients', 'play-fight', 'fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern',
     'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
-    'drive-hero-screen', 'drive-cart-loot', 'drive-village-board',
+    'review-studio', 'drive-hero-screen', 'drive-cart-loot', 'drive-village-board',
   ],
 };
