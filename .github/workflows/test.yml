@@ -7,8 +7,9 @@ on:
   push:
   pull_request:
 
-# Least privilege. The ordinary unit job reads the checkout and writes nothing back. The temporary
-# PR26 ratchet job below overrides this permission only for its one self-reverting commit.
+# Least privilege. The suite reads the checkout and writes nothing back. Fork pull requests get a
+# read-only token regardless; stating it here means the job cannot quietly gain write scope if the
+# repository default ever changes.
 permissions:
   contents: read
 
@@ -27,65 +28,3 @@ jobs:
       # Scoped on purpose. A bare `node --test` also sweeps tools/teardown/test/, which needs
       # Vitest and fails -- pre-existing and unrelated to the runtime.
       - run: node --test test/*.test.mjs
-
-  # PR26 one-shot bridge: the connector cannot patch an existing file in-place. This job uses the
-  # already-trusted workflow on main to make one exact quarantine edit, then restores this workflow
-  # from main in the same commit. It is absent from the resulting PR tree.
-  pr26-candidate-quarantine:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 26 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'feat/ranger-lodge-expansion' &&
-      github.event.sender.login == github.repository_owner
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 1
-      - name: Patch exact dormant-candidate list
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('test/glb-materials.test.mjs')
-          text = path.read_text()
-          marker = "  ['public/assets/hero/hero_lod1_6800.glb', { emissiveFlooded: true, pbrDefaulted: true }],\n]);"
-          assert marker in text, 'dormant-defect marker moved; refuse blind edit'
-          assert 'wren-ranger-v1.glb' not in text, 'candidate quarantine already registered'
-          block = """  ['public/assets/hero/hero_lod1_6800.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  // PR #26 raw Meshy candidates. These are intentionally quarantined under candidates/ and are
-  // unreachable from the running game. Character Studio may load selected gear candidates only
-  // after applying normaliseCharacterMaterial() for truthful review pixels. Promotion out of
-  // candidates/ requires re-export/cleanup plus normal runtime material and payload gates.
-  ['public/assets/characters/candidates/wren-ranger-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/characters/candidates/wren-ranger-v1-walk.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/characters/candidates/wren-ranger-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/enemies/candidates/bramble-stalker-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/enemies/candidates/bramble-stalker-v1-walk.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/enemies/candidates/bramble-stalker-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/gear/candidates/dawnwarden-sword-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-  ['public/assets/gear/candidates/dawnwarden-helmet-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
-]);"""
-          path.write_text(text.replace(marker, block))
-          PY
-      - name: Commit durable ratchet and restore trusted workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main --depth=1
-          git checkout FETCH_HEAD -- .github/workflows/test.yml
-          if test -f .github/workflows/pr26-quarantine-meshy-materials.yml; then
-            git rm .github/workflows/pr26-quarantine-meshy-materials.yml
-          fi
-          git add test/glb-materials.test.mjs .github/workflows/test.yml
-          git config user.name 'GalaQuest PR26 Ratchet'
-          git config user.email 'actions@users.noreply.github.com'
-          git commit -m 'test: quarantine raw Meshy candidate materials'
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
