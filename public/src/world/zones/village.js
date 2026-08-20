@@ -1021,3 +1021,41 @@ export const ROWAN_CLAIM = Object.freeze({
   at: ROWAN.at,
   radiusMeters: 3.0,
 });
+
+// ── ARC 2: SOMEBODY ANSWERED THE SIGNAL ─────────────────────────────────────────────────────────
+//
+// The Beacon is a signal fire. A child spends a whole chapter lighting it and, until now, nothing
+// ever answered -- a signal nobody sees is not a signal, it is a bonfire. Wren is the answer, and
+// she is the payoff of the Beacon arc expressed as a PERSON rather than as a flag: she is simply
+// not in the world until the fire is burning, and then she is (world/rangerSpeech.js's rangerIsHere,
+// read off the durable world fact so a brother who joins late walks into a village that already has
+// a stranger in it).
+//
+// WHERE SHE STANDS, decided by where a child will be walking when they meet her. They are coming
+// home down the north road from a Beacon they just lit, so she is on the village end of that walk:
+// five metres north of the hero spawn and a little west of the lane, in the open. That puts her in
+// frame from the spawn camera without standing on the spawn itself, and it keeps her 4.8 m clear of
+// WOLF_PATROL[0] -- a stranger who materialises inside a wolf spawn is a different story beat.
+//
+// WHICH WAY SHE FACES is the one piece of staging doing story work. Her resting heading is the
+// HOLLOW, north-east, which is where her brother went and where the marker stone in that hollow
+// points. Nobody says this. A child who has stood at that stone and then finds a stranger in their
+// village staring down the same line has been told something, and told it without a line of text --
+// the same rule world/blackthornHollow.js's own marker follows.
+export const RANGER = Object.freeze({
+  // Aldric's rig again, cloned and tinted -- the same honest trade ROWAN documents above. We do not
+  // own a fourth NPC model and this is story scaffolding, not Wren's eventual rigging.
+  model: KEEPER.model,
+  at: Object.freeze([-1.2, 5.0]),
+  facing: HOLLOW.at,
+});
+
+// How close a child has to be standing for Wren to take the satchel and give the charm. The same
+// number and the same reasoning as ROWAN_CLAIM: wider than the 2 m speech radius so the grant has
+// already happened by the time they are close enough to read her line, and living HERE in the pure
+// zone data because net/gameServer.mjs re-checks this exact distance server-side and can never
+// import world/zoneLoader.js.
+export const RANGER_CLAIM = Object.freeze({
+  at: RANGER.at,
+  radiusMeters: 3.0,
+});

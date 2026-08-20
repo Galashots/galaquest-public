@@ -151,6 +151,19 @@ export function openRewardStore(path) {
   const unlockedStmt = db.prepare(
     "SELECT COUNT(*) AS c FROM reward_events WHERE guest_id = ? AND type = 'lantern-unlocked'",
   );
+  // ── ARC 2: THE SATCHEL AND THE CHARM ──────────────────────────────────────────────────────────
+  //
+  // Both PER GUEST and both latches, so both are existence checks rather than counts -- unlike marks
+  // and coins, which are events you can have more of, these are things that are either true about a
+  // child or are not. Two brothers each pick the satchel up for themselves and each earn their own
+  // charm, exactly the way the Wildwood Blade already works: a co-op game where one child's progress
+  // silently completes another child's is a game where the younger one never gets to do anything.
+  const satchelStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE guest_id = ? AND type = 'satchel-taken' LIMIT 1",
+  );
+  const charmStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE guest_id = ? AND type = 'charm-earned' LIMIT 1",
+  );
   // Latest INSERT wins, unlike marks/unlocked which are counted: equipping is a CHOICE, not an
   // accumulation, so the current state is "whatever was equipped most recently". rowid is SQLite's
   // own insertion order for this ordinary table, and therefore remains correct across process
@@ -207,7 +220,7 @@ export function openRewardStore(path) {
 
   const KNOWN_AWARD_TYPES = new Set([
     'mark-earned', 'lantern-unlocked', 'weapon-equipped', 'gear-owned', 'coin-earned', 'shard-earned',
-    'village-upgrade', 'beacon-lit',
+    'village-upgrade', 'beacon-lit', 'satchel-taken', 'charm-earned',
   ]);
 
   /**
@@ -256,6 +269,16 @@ export function openRewardStore(path) {
     return unlockedStmt.get(guestId).c > 0;
   }
 
+  /** Is this child carrying the fallen ranger's satchel out of Blackthorn Hollow. */
+  function satchelTakenFor(guestId) {
+    return satchelStmt.get(guestId) !== undefined;
+  }
+
+  /** Has Wren already given this child her charm -- the fourth heart. */
+  function charmEarnedFor(guestId) {
+    return charmStmt.get(guestId) !== undefined;
+  }
+
   /** The most recently equipped weapon id for this guest, or null if they have never equipped one --
    *  the caller (progression/state.js, mirrored through net/gameServer.mjs) is what knows the
    *  default to fall back to; this store only ever reports what actually happened. */
@@ -302,6 +325,8 @@ export function openRewardStore(path) {
     apply,
     marksFor,
     unlockedFor,
+    satchelTakenFor,
+    charmEarnedFor,
     equippedWeaponFor,
     ownedItemIdsFor,
     coinsFor,
