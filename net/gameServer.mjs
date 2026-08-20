@@ -29,11 +29,31 @@ import {
   restoreCartLootState,
 } from '../public/src/world/cartLoot.js';
 import { WORKSHOP_I_COST, WORKSHOP_I_ID } from '../public/src/village/economy.js';
-import { CART_SEARCH, WOLF_SPAWN, WOLF_SPAWNS } from '../public/src/world/zones/village.js';
+// G2/G3: the Beacon siege's rules, imported exactly the way the wolf's are -- the server owns the
+// fight because the fight is SHARED (one boss, one health bar, two children hitting it), and
+// world/beaconSiege.js is framework-free for precisely this reason.
+import {
+  addSiegeHero,
+  createSiegeState,
+  removeSiegeHero,
+  requestSiegeAttack,
+  restoreLitSiege,
+  stepSiege,
+} from '../public/src/world/beaconSiege.js';
+import {
+  BEACON_ARENA, BEACON_WARDEN, CART_SEARCH, COLD_SEALS, HOLLOW, ROWAN_CLAIM, WOLF_SPAWN, WOLF_SPAWNS,
+} from '../public/src/world/zones/village.js';
+import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
+import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import { WORLD_LIMIT, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ } from '../public/src/world/bounds.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
 import { openRewardStore } from './rewardStore.mjs';
 import { attachWebSocketServer } from './wsServer.mjs';
+
+// G5: what the Blackthorn Hollow's chest pays. Three, because it is a SECRET and not a quest reward
+// -- enough to feel like a find next to the cart's own haul, not so much that skipping the arc's
+// authored rewards in favour of hunting caches would ever be the better play.
+export const HOLLOW_CACHE_SHARDS = 3;
 
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
@@ -133,6 +153,79 @@ export function createRewardCoordinator(options = {}) {
     if (!guestId) return;
     const eventId = `own:${guestId}:${itemId}`;
     store.apply({ guestId, heroId: playerId, type: 'gear-owned', eventId, value: itemId });
+  }
+
+  /**
+   * G4: Rowan keeps his word. Grants the Wildwood Blade durably to whoever asked, ONCE, and reports
+   * whether this call is the one that actually did it -- the caller uses that to decide whether to
+   * fire the unlock ceremony, so a resend (or a second child claiming their own) never replays
+   * somebody else's fanfare.
+   *
+   * Ownership is PER GUEST and the eventId carries the guestId, which is the whole co-op rule from
+   * the design brief made mechanical: one brother claiming his Blade cannot consume the other's.
+   * Deliberately reuses grantOwnership's own `own:` id shape, so claiming twice is one row.
+   *
+   * An ephemeral (guestId-less) connection gets `granted: false` and no error: it has no durable
+   * identity to own anything with, the same posture ownedItemIdsFor already takes -- and the
+   * ceremony is silently skipped rather than played for a possession that will not survive the tab.
+   */
+  function claimWildwoodBlade(playerId) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId) return { granted: false };
+    const result = store.apply({
+      guestId,
+      heroId: playerId,
+      type: 'gear-owned',
+      eventId: `own:${guestId}:${WILDWOOD_BLADE_ID}`,
+      value: WILDWOOD_BLADE_ID,
+    });
+    return { granted: result.applied };
+  }
+
+  /**
+   * G5: the hollow's cache -- three Wildwood Shards, once per guest, ever.
+   *
+   * Deliberately reuses the ordinary `shard-earned` row rather than inventing a hollow-specific
+   * award type: what a child owns at the end of it is shards, and the Village's shared supply should
+   * grow from a secret exactly the way it grows from the cart. The eventIds are fixed and
+   * guest-scoped, so a resend is a no-op and two brothers each get their own three.
+   *
+   * Returns how many rows this call actually wrote, so a caller could tell a first claim from a
+   * replay. Nothing reads it today; it costs nothing and beats returning undefined.
+   */
+  function applyHollowCache(playerId) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId) return { granted: 0 };
+    let granted = 0;
+    for (let index = 1; index <= HOLLOW_CACHE_SHARDS; index += 1) {
+      const result = store.apply({
+        guestId,
+        heroId: playerId,
+        type: 'shard-earned',
+        eventId: `hollow-cache:${guestId}:${index}`,
+        value: null,
+      });
+      if (result.applied) granted += 1;
+    }
+    return { granted };
+  }
+
+  /** G3: write down that the Old Beacon is burning. A WORLD fact, so the row is not what makes it
+   *  true for one guest -- net/rewardStore.mjs's beaconLit() reads it for everybody (see its own
+   *  comment). Idempotent on a fixed eventId: the Beacon lights once, ever. The guestId on the row
+   *  is provenance only ("who was standing there when it happened"), never a scope. */
+  function recordBeaconLit(playerId) {
+    const guestId = guestIdByPlayer.get(playerId) ?? null;
+    if (!guestId) return { applied: false };
+    return store.apply({
+      guestId, heroId: playerId, type: 'beacon-lit', eventId: 'beacon-lit:old-beacon', value: null,
+    });
+  }
+
+  /** Whether the Old Beacon is already burning according to the durable store -- read once at boot
+   *  (see attachGameServer) so a restart does not put the fire out. */
+  function beaconLit() {
+    return store.beaconLit();
   }
 
   /** Every item this player's guest owns, starter sword included -- the one place that constant is
@@ -380,6 +473,10 @@ export function createRewardCoordinator(options = {}) {
     processTick,
     applyEquip,
     grantOwnership,
+    claimWildwoodBlade,
+    applyHollowCache,
+    recordBeaconLit,
+    beaconLit,
     ownedItemIdsFor,
     applyLootAward,
     creditedLootIds,
@@ -430,6 +527,28 @@ export function createSimulation(options = {}) {
     ? restoreCartLootState(options.creditedLootIds)
     : createCartLootState();
 
+  // G2/G3: THE BEACON SIEGE, one for the whole simulation -- the same "one party, one wolf" shape
+  // encounterState above already is, for the same reason: there is one Old Beacon and every joined
+  // player is standing at the same one. This is what makes "we beat it" true rather than two
+  // children each privately beating their own copy of a boss.
+  //
+  // Seeded straight from the zone data both sides already import (GQ-007) rather than from constants
+  // restated here, exactly as the wolf's own patrol is.
+  //
+  // `beaconLit` is restored from the durable store on boot when the caller supplies it
+  // (attachGameServer reads rewards.beaconLit() before this runs, the same sequencing GP3-0 uses for
+  // creditedLootIds) -- a server restart must not put the fire out. A restored siege comes back with
+  // its seals broken and its Warden dead, because a world where the Beacon burns is a world where
+  // both of those already happened; anything else would offer a second child a boss fight whose
+  // outcome is already painted on the sky.
+  let siegeState = createSiegeState({
+    arena: BEACON_ARENA,
+    sealsAt: COLD_SEALS,
+    wardenAt: BEACON_WARDEN.at,
+    heroIds: [],
+  });
+  if (options.beaconLit === true) siegeState = restoreLitSiege(siegeState);
+
   function addPlayer(name, at = { x: 0, z: 0 }) {
     const id = `p${nextPlayerNumber += 1}`;
     const player = {
@@ -444,6 +563,10 @@ export function createSimulation(options = {}) {
     };
     players.set(id, player);
     encounterState = addHero(encounterState, id);
+    // Every joined player is in BOTH fights at once, and that is not a contradiction: they are
+    // twenty-two metres apart. A hero's swing is resolved against whichever of the two is actually
+    // in front of them (see applyAttack), and the one they are nowhere near simply never matches.
+    siegeState = addSiegeHero(siegeState, id);
     return player;
   }
 
@@ -451,6 +574,9 @@ export function createSimulation(options = {}) {
     const removed = players.delete(id);
     lastAttackSeq.delete(id);
     encounterState = removeHero(encounterState, id);
+    // Clears wolf.targetId's siege equivalent too (world/beaconSiege.js's removeSiegeHero), so a
+    // Warden mid-swing at somebody who just closed their iPad does not resolve against a ghost.
+    siegeState = removeSiegeHero(siegeState, id);
     return removed;
   }
 
@@ -467,10 +593,33 @@ export function createSimulation(options = {}) {
     const last = lastAttackSeq.get(id) ?? -1;
     if (seq <= last) return false;
     lastAttackSeq.set(id, seq);
+    // ONE BUTTON, TWO FIGHTS, and the routing is by DISTANCE rather than by a mode flag the client
+    // would have to send and could get wrong. A hero standing in the Beacon clearing is 20 m from
+    // the wolf's patrol and a hero hunting wolves is 20 m from the Beacon, so the two can never both
+    // be plausible -- the arena's own radius is the whole test, and it comes from the zone data both
+    // sides already share.
+    //
+    // A swing that reaches neither is still ASKED FOR against the wolf engine, deliberately: that is
+    // the engine that owns the hero's swing clock and raises `swing`/`swing-missed`, so a child
+    // swinging at nothing in the middle of a field still gets an arm that moves and a button that
+    // goes on cooldown. The siege only ever takes the swing when the child is standing in it.
+    if (inBeaconArena(player)) {
+      const siegeResult = requestSiegeAttack(siegeState, id, `${id}:${seq}`);
+      siegeState = siegeResult.state;
+      if (siegeResult.events.length > 0) pendingEvents.push(...siegeResult.events);
+      return siegeResult.accepted;
+    }
     const result = requestPartyAttack(encounterState, id, `${id}:${seq}`);
     encounterState = result.state;
     if (result.events.length > 0) pendingEvents.push(...result.events);
     return result.accepted;
+  }
+
+  /** Is this player standing in the Beacon's own fight? One definition, three callers (applyAttack,
+   *  step, and the claim handlers below), so "which fight am I in" can never be answered two ways. */
+  function inBeaconArena(player) {
+    return Math.hypot(player.x - BEACON_ARENA.at[0], player.z - BEACON_ARENA.at[1])
+      <= BEACON_ARENA.radiusMeters;
   }
 
   /** A decoded `search-cart` message, applied instantly like applyAttack. Idempotent (see
@@ -550,6 +699,14 @@ export function createSimulation(options = {}) {
     encounterState = partyResult.state;
     if (partyResult.events.length > 0) pendingEvents.push(...partyResult.events);
 
+    // The siege runs on the SAME tick and the same command shape, every tick, whether or not anybody
+    // is standing in it -- a Warden mid-death-animation with nobody watching still has to finish
+    // dying, and a dormant one costs a handful of comparisons. Its events join the same pending list
+    // the wolf's do, so they ride the same snapshot and arrive in the order they happened.
+    const siegeResult = stepSiege(siegeState, { deltaSeconds, heroes: commandHeroes });
+    siegeState = siegeResult.state;
+    if (siegeResult.events.length > 0) pendingEvents.push(...siegeResult.events);
+
     for (const player of players.values()) {
       const separated = separateFromWolf({ x: player.x, z: player.z }, encounterState.wolf);
       player.x = clampToWorldX(separated.x);
@@ -583,11 +740,21 @@ export function createSimulation(options = {}) {
     const wolf = encounterState.wolf;
     const heroes = {};
     for (const [heroId, hero] of Object.entries(encounterState.heroes)) {
+      // ONE HERO, ONE SET OF HEARTS -- published from whichever fight this hero is actually IN.
+      //
+      // Both engines keep hero clocks, because both have to resolve their own swings and their own
+      // damage. But a hero has one body, and the wire carries one hero block; publishing the wolf
+      // engine's copy unconditionally would mean the Warden could knock a child down while their
+      // hearts stayed full and the "you went down" veil never appeared. The two can never disagree
+      // about a hero who matters, because a hero cannot be in both places -- the fights are twenty
+      // metres apart, which is the same fact applyAttack routes a swing on. Same test, one answer.
+      const player = players.get(heroId);
+      const source = (player && inBeaconArena(player) && siegeState.heroes[heroId]) || hero;
       heroes[heroId] = {
-        hp: hero.hp,
-        swingSeconds: roundToWire(hero.swingSeconds),
-        cooldown: roundToWire(hero.cooldown),
-        downSeconds: roundToWire(hero.downSeconds),
+        hp: source.hp,
+        swingSeconds: roundToWire(source.swingSeconds),
+        cooldown: roundToWire(source.cooldown),
+        downSeconds: roundToWire(source.downSeconds),
       };
     }
     return {
@@ -612,10 +779,77 @@ export function createSimulation(options = {}) {
     return { spawned: lootState.spawned, collected: { ...lootState.collected } };
   }
 
+  /**
+   * G2/G3's wire block (protocol.js's decodeSiege): the shared boss, rounded like every other
+   * numeric field and carrying ONLY what a presenter needs.
+   *
+   * The seals ride as `{ blows, burst }` index-aligned with the zone's own COLD_SEALS -- their
+   * coordinates are not restated here for the same reason a pickup's position is not (lootSnapshot's
+   * own comment): both sides import the same zone data, and a second copy on the wire is a second
+   * copy free to disagree.
+   *
+   * The heroes' own clocks deliberately do NOT ride here a second time. A hero has one set of hearts
+   * and one swing whichever fight they are standing in, and the encounter block already carries
+   * them -- publishing a second copy would give a client two answers to "how much health do I have"
+   * and no rule for which wins. world/beaconSiege.js keeps its own hero clocks for the same reason
+   * the wolf engine does (it has to resolve its own swings), but the WIRE has one hero.
+   */
+  function siegeSnapshot() {
+    const warden = siegeState.warden;
+    return {
+      seals: siegeState.seals.map((seal) => ({ blows: seal.blows, burst: seal.burst })),
+      warden: {
+        x: roundToWire(warden.x),
+        z: roundToWire(warden.z),
+        heading: roundToWire(warden.heading),
+        hp: warden.hp,
+        mode: warden.mode,
+        modeSeconds: roundToWire(warden.modeSeconds),
+        phase: warden.phase,
+        targetId: warden.targetId,
+      },
+      beaconLit: siegeState.beaconLit,
+    };
+  }
+
+  /** Whether the Beacon has just been lit and not yet been written down. attachGameServer polls this
+   *  once per tick to turn a one-time in-memory victory into a durable world fact -- see its own
+   *  call site for why the simulation does not reach into the reward store itself. */
+  function beaconIsLit() {
+    return siegeState.beaconLit === true;
+  }
+
   // Drains events accumulated since the last drain (from applyAttack and step alike) so a caller
   // can fold them into exactly one outgoing snapshot's `events` array, per Design ruling 7.
   function drainEvents() {
     return pendingEvents.splice(0, pendingEvents.length);
+  }
+
+  /**
+   * G4: is this player standing close enough to Rowan, under a lit Beacon, to be owed the Wildwood
+   * Blade right now?
+   *
+   * The simulation answers the POSITION half (only it knows where a hero actually is -- a client
+   * saying "I am at Rowan" is exactly the claim a server must never take on trust); the reward
+   * coordinator answers the OWNERSHIP half, because only it can see the durable store. Neither half
+   * is enough alone, which is why this returns a question rather than granting anything.
+   *
+   * The condition itself is world/rowanSpeech.js's own rowanOwesBlade -- the same function the
+   * client calls to decide whether to ask at all, so the ask and the allow are literally one rule.
+   */
+  function rowanClaimState(id) {
+    const player = players.get(id);
+    if (!player) return { inRange: false, beaconLit: siegeState.beaconLit };
+    const distance = Math.hypot(player.x - ROWAN_CLAIM.at[0], player.z - ROWAN_CLAIM.at[1]);
+    return { inRange: distance <= ROWAN_CLAIM.radiusMeters, beaconLit: siegeState.beaconLit };
+  }
+
+  /** G5: the same position half for the hollow's chest -- the reward coordinator owns whether this
+   *  guest has already been paid for it, exactly as it does for a cart pickup. */
+  function atHollowChest(id) {
+    const player = players.get(id);
+    if (!player) return false;
+    return Math.hypot(player.x - HOLLOW.chestAt[0], player.z - HOLLOW.chestAt[1]) <= HOLLOW.radiusMeters;
   }
 
   return {
@@ -630,6 +864,10 @@ export function createSimulation(options = {}) {
     snapshot,
     encounterSnapshot,
     lootSnapshot,
+    siegeSnapshot,
+    beaconIsLit,
+    rowanClaimState,
+    atHollowChest,
     drainEvents,
     get tick() {
       return tick;
@@ -646,7 +884,20 @@ export function attachGameServer(httpServer, options = {}) {
   // own in-memory cart lootState is constructed, so an already-awarded pickup from a previous
   // process can be seeded in as already-collected rather than reappearing as fresh loot.
   const rewards = createRewardCoordinator({ rewardStorePath: options.rewardStorePath });
-  const simulation = createSimulation({ ...options, creditedLootIds: rewards.creditedLootIds() });
+  // G3: the same before-the-simulation-exists read GP3-0 does for creditedLootIds, and for the
+  // identical reason -- a fresh in-memory siege has no way to ask the store itself, so the one
+  // durable world fact it needs is handed in at construction. Without this a server restart puts the
+  // Old Beacon out, which is the exact "reload should not pretend the player never won" failure the
+  // whole payoff is built against.
+  const simulation = createSimulation({
+    ...options,
+    creditedLootIds: rewards.creditedLootIds(),
+    beaconLit: rewards.beaconLit(),
+  });
+  // Whether the durable row has been written for the victory this process is currently watching.
+  // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that
+  // sees the siege turn it on -- see the tick loop below.
+  let beaconLitRecorded = rewards.beaconLit();
   const now = options.now ?? (() => Date.now());
   const snapshotEveryTicks = Math.max(1, Math.round(TICK_HZ / (options.snapshotHz ?? SNAPSHOT_HZ)));
   let lastStepAt = now();
@@ -662,6 +913,7 @@ export function attachGameServer(httpServer, options = {}) {
       rewards: rewards.rewardsFor(Object.keys(encounter.heroes)),
       loot: simulation.lootSnapshot(),
       village: rewards.villageSnapshot(),
+      siege: simulation.siegeSnapshot(),
     };
   }
 
@@ -725,6 +977,43 @@ export function attachGameServer(httpServer, options = {}) {
         return;
       }
 
+      // G4: "you promised me a sword." Every fact that decides whether that is true is checked HERE,
+      // server-side, because none of them are the client's to assert: where the hero is standing
+      // (the simulation owns position), whether the Beacon is actually burning (shared world state),
+      // and whether this guest already owns it (the durable store). The client sends no payload at
+      // all -- there is nothing for it to lie about.
+      //
+      // A refused claim is a clean silence, not a disconnect: a child walking toward Rowan while the
+      // Warden is still falling can legitimately produce one of these a beat early, the same way a
+      // collect-loot can legitimately race a sibling. Same posture, same non-answer.
+      if (message.type === 'claim-blade') {
+        if (!client.data.playerId) throw new ProtocolError('claim-blade before join');
+        const playerId = client.data.playerId;
+        const { inRange, beaconLit } = simulation.rowanClaimState(playerId);
+        const bladeOwned = rewards.ownedItemIdsFor(playerId).includes(WILDWOOD_BLADE_ID);
+        // The client's own ask and this allow are the SAME function (world/rowanSpeech.js), so the
+        // two can never drift into "the game offered it and the server refused".
+        if (!rowanOwesBlade({ inRange, beaconLit, bladeOwned })) return;
+        rewards.claimWildwoodBlade(playerId);
+        return;
+      }
+
+      // G5: the hollow's chest. Same posture as claim-blade: position re-checked here, the award is
+      // idempotent per guest, and a refusal is a clean silence rather than a disconnect.
+      //
+      // Paid in Wildwood Shards through the SAME durable path cart loot uses -- a shard is a shard
+      // wherever it was found, and routing it here means the Village's shared supply grows from the
+      // hollow too (net/rewardStore.mjs counts shard-earned rows regardless of guest). The eventId is
+      // per guest, so each child earns their own cache without consuming the other's.
+      if (message.type === 'claim-hollow') {
+        if (!client.data.playerId) throw new ProtocolError('claim-hollow before join');
+        const playerId = client.data.playerId;
+        if (!rewards.hasDurableIdentity(playerId)) return;
+        if (!simulation.atHollowChest(playerId)) return;
+        rewards.applyHollowCache(playerId);
+        return;
+      }
+
       if (message.type === 'collect-loot') {
         if (!client.data.playerId) throw new ProtocolError('collect-loot before join');
         // A guestId-less connection cannot create a durable pickup award. Letting it mutate the
@@ -781,6 +1070,25 @@ export function attachGameServer(httpServer, options = {}) {
     const deltaSeconds = Math.min((nowMs - lastStepAt) / 1000, MAX_PREDICTION_STEP_SECONDS);
     lastStepAt = nowMs;
     const tick = simulation.step(deltaSeconds, nowMs);
+
+    // G3: THE ONE TICK THE BEACON CATCHES FIRE ON, written down before anybody is told about it.
+    //
+    // Polled off the simulation's own flag rather than driven by the `beacon-ignited` event, and the
+    // difference matters: events are drained only on snapshot ticks, so an event-driven write would
+    // sit unwritten for up to a tenth of a second -- and a crash inside that window would light the
+    // Beacon on every client's screen and forget it forever. This runs every tick, and the flag is a
+    // latch, so the row lands on the first tick it is true. `recordBeaconLit` is itself idempotent on
+    // a fixed eventId, making this belt and braces rather than the only guard.
+    if (!beaconLitRecorded && simulation.beaconIsLit()) {
+      // Provenance only: whoever happens to be connected when the world changed. The row is a WORLD
+      // fact and is read for everybody (net/rewardStore.mjs's beaconLit), so any joined guest will
+      // do -- and a siege won entirely by ephemeral players simply leaves no row, which is honest:
+      // nothing about that session was durable in the first place.
+      for (const player of simulation.players.values()) {
+        if (rewards.recordBeaconLit(player.id).applied) break;
+      }
+      beaconLitRecorded = true;
+    }
 
     ticksSinceSnapshot += 1;
     if (ticksSinceSnapshot >= snapshotEveryTicks) {

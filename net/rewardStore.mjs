@@ -192,10 +192,22 @@ export function openRewardStore(path) {
   const villageUpgradeOwnedStmt = db.prepare(
     "SELECT 1 AS found FROM reward_events WHERE id = ? AND type = 'village-upgrade' LIMIT 1",
   );
+  // G3: THE OLD BEACON IS LIT, and it is a WORLD fact rather than a personal one -- so this read is
+  // not guest-scoped, exactly like villageUpgradeOwned just above and for the same reason the GP3
+  // economy ruling gives: what one child physically did stays personal provenance (the `gear-owned`
+  // Blade below is per guest), but what happened to the WORLD is communal. Two brothers who beat the
+  // Warden together are standing under one lit Beacon, not two, and a brother who was not there when
+  // it happened must not arrive to find it cold again.
+  //
+  // An existence check on a single well-known row rather than a count: the Beacon lights once, ever,
+  // and "how many times was it lit" is not a question anything can ask.
+  const beaconLitStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE type = 'beacon-lit' LIMIT 1",
+  );
 
   const KNOWN_AWARD_TYPES = new Set([
     'mark-earned', 'lantern-unlocked', 'weapon-equipped', 'gear-owned', 'coin-earned', 'shard-earned',
-    'village-upgrade',
+    'village-upgrade', 'beacon-lit',
   ]);
 
   /**
@@ -280,6 +292,12 @@ export function openRewardStore(path) {
     return villageUpgradeOwnedStmt.get(upgradeId) !== undefined;
   }
 
+  /** G3: whether the Old Beacon has ever been lit, by anyone. See beaconLitStmt's own comment for
+   *  why this is a world fact and not a per-guest one. */
+  function beaconLit() {
+    return beaconLitStmt.get() !== undefined;
+  }
+
   return {
     apply,
     marksFor,
@@ -292,6 +310,7 @@ export function openRewardStore(path) {
     totalCoinsEarned,
     totalShardsEarned,
     villageUpgradeOwned,
+    beaconLit,
     // Exposed for the harness/tests that want to assert a backup landed, and for a server boot log
     // line -- never read back by this module itself.
     backupPath,

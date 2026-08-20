@@ -9,6 +9,8 @@ import {
   soundForEvent,
 } from '../public/src/audio/recipes.js';
 import { REWARD_RECIPE_MAP } from '../public/src/rewards/feedback.js';
+import { DIRECTLY_PLAYED_SIEGE_RECIPES, SIEGE_EVENT_RECIPE_MAP, SIEGE_RECIPES }
+  from '../public/src/audio/siegeRecipes.js';
 
 // Ruling 3: the table must DECIDE every event feedback.js can raise -- mapped to a recipe name, or
 // explicitly null. A missing key (as opposed to a key whose value is null) means the table has not
@@ -117,6 +119,13 @@ test('every recipe is reachable by SOME route -- no sound nothing can play', () 
     ...Object.values(EVENT_RECIPE_MAP),
     ...Object.values(REWARD_RECIPE_MAP),
     ...DIRECTLY_PLAYED_RECIPES,
+    // G2/G3/G5: two more routes, named explicitly for the same reason the first three are -- the
+    // Beacon arc's events are raised by world/beaconSiege.js and world/blackthornHollow.js, not by
+    // combat/encounter.js, so they cannot enter EVENT_RECIPE_MAP without making the "no stray
+    // entries" test above wrong. Adding the routes here keeps this a real check instead of one
+    // weakened to ignore a whole family of sounds.
+    ...Object.values(SIEGE_EVENT_RECIPE_MAP),
+    ...DIRECTLY_PLAYED_SIEGE_RECIPES,
   ].filter((name) => name !== null));
   const unreachable = Object.keys(RECIPES).filter((name) => !reachable.has(name));
   assert.deepEqual(unreachable, [], `RECIPES defines recipes nothing plays: ${unreachable.join(', ')}`);

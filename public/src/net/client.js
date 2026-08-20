@@ -14,6 +14,8 @@ import {
   equipMessage,
   inputMessage,
   joinMessage,
+  claimBladeMessage,
+  claimHollowMessage,
   searchCartMessage,
   villageUpgradePurchaseMessage,
 } from './protocol.js';
@@ -246,6 +248,23 @@ export function createNetClient(options = {}) {
     return send(collectLootMessage(pickupId));
   }
 
+  /** G4: ask Rowan for the Wildwood Blade. NO PAYLOAD AT ALL -- every fact that decides whether the
+   *  promise is owed (where this hero is standing, whether the Beacon is burning, whether this guest
+   *  already owns it) is server-side world state, so there is nothing here for a client to assert or
+   *  get wrong. Same online-only guard as sendSearchCart: offline there is no durable identity to
+   *  own anything with. A resend is naturally idempotent -- ownership is a SET server-side. */
+  function sendClaimBlade() {
+    if (status !== 'online') return false;
+    return send(claimBladeMessage());
+  }
+
+  /** G5: tell the server this hero opened the hollow's chest. Same shape and the same reasoning as
+   *  sendClaimBlade -- position is re-checked server-side and the award is idempotent per guest. */
+  function sendClaimHollow() {
+    if (status !== 'online') return false;
+    return send(claimHollowMessage());
+  }
+
   /** GP3: ask the server to purchase a village upgrade (Workshop I today). Same online-only guard
    *  and no-sequence-number reasoning as sendSearchCart/sendCollectLoot -- Village Supplies is
    *  shared, server-authoritative state with no offline fallback (there is nothing local to spend
@@ -293,6 +312,8 @@ export function createNetClient(options = {}) {
     sendAttack,
     sendEquip,
     sendSearchCart,
+    sendClaimBlade,
+    sendClaimHollow,
     sendCollectLoot,
     sendVillageUpgradePurchase,
     reconcile,

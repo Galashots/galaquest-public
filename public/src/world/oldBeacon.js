@@ -164,6 +164,23 @@ export const BEACON_GLOW_REST = 0.26;
 export const BEACON_GLOW_STIR_PEAK = 0.62;
 /** How long the stir takes, in seconds. One breath: up fast, down slow, and finished. */
 export const BEACON_STIR_SECONDS = 1.6;
+// ── G3: the Beacon alight ───────────────────────────────────────────────────────────────────────
+//
+// The warm half of this object's whole life. Every colour here is the deliberate opposite of the
+// cold one it replaces, because the single sentence this payoff has to say -- across a clearing, to
+// a child who may be looking at the ground -- is "it is WARM now".
+//
+// The ember colour is the lanterns' own warm gold rather than a new orange: the Beacon is the last
+// and largest link in the chain of lights the child has been waking since Chapter 2 (this file's own
+// reference rule 4), so when it finally catches it must look like the same fire.
+export const BEACON_EMBER_WARM_COLOR = 0xffb347;
+export const BEACON_GLOW_WARM_COLOR = 0xffc477;
+/** What a lit Beacon holds, forever. Above the gate lamp's own 0.9 -- this is the biggest light in
+ *  the world now, and it is the one thing in the zone allowed to outshine the Lantern Tree's road. */
+export const BEACON_GLOW_LIT = 1.15;
+/** How long the catch takes. Longer than the stir (1.6 s) on purpose: a stir is a shiver and this is
+ *  an event, and the extra second is what a child needs to stop moving and look up. */
+export const BEACON_IGNITE_SECONDS = 2.4;
 const STIR_RISE_FRACTION = 0.25;
 
 /**
@@ -394,6 +411,28 @@ function stoneMaterial() {
  * @param seconds  how far into the stir, in seconds. Negative or past the end means "at rest".
  * @returns the glow strength to hold this frame.
  */
+/**
+ * The ignition's own curve: a fast catch and then a long steady climb to a light that stays.
+ *
+ * Written as the OPPOSITE of beaconStirStrength below, deliberately, because those are the two
+ * things this object can do and a child has to be able to tell them apart instantly. The stir goes
+ * up fast and sags back to nothing -- something failing. This goes up and NEVER COMES DOWN.
+ *
+ * Pure, for the same reason the stir's curve is: the shape can be asserted under plain `node --test`
+ * while the wiring is proven in the running game.
+ *
+ * @param seconds  how far into the ignition. Past the end holds BEACON_GLOW_LIT forever.
+ */
+export function beaconIgniteStrength(seconds) {
+  if (!(seconds >= 0)) return BEACON_GLOW_REST;
+  if (seconds >= BEACON_IGNITE_SECONDS) return BEACON_GLOW_LIT;
+  const t = seconds / BEACON_IGNITE_SECONDS;
+  // Catches hard in the first fifth (the moment the fire takes), then eases the rest of the way, so
+  // the beat lands immediately and the swell afterwards is the part that feels big.
+  const shape = t < 0.2 ? (t / 0.2) * 0.7 : 0.7 + ((t - 0.2) / 0.8) * 0.3;
+  return BEACON_GLOW_REST + (BEACON_GLOW_LIT - BEACON_GLOW_REST) * shape;
+}
+
 export function beaconStirStrength(seconds) {
   if (!(seconds >= 0) || seconds >= BEACON_STIR_SECONDS) return BEACON_GLOW_REST;
   const t = seconds / BEACON_STIR_SECONDS;
@@ -456,7 +495,23 @@ export function beaconSight(camera, beaconAt, heroPosition) {
  */
 export function buildOldBeacon(scene, beacon) {
   const { parts, cressetAt } = beaconParts();
-  const mesh = new THREE.Mesh(mergeGeometries(parts.map(bakedPart), false), stoneMaterial());
+  const baked = parts.map(bakedPart);
+  // WHERE THE DEAD FIRE LIVES INSIDE ONE MERGED GEOMETRY.
+  //
+  // The whole tower is a single mesh carrying its colours as a vertex attribute (this file's own
+  // header explains why: this is an iPad). That is still the right trade after G3 -- but exactly one
+  // part of it has to change colour when the Beacon catches, so the ignition needs to know which
+  // slice of the merged buffer those vertices are. Computed from the same `parts` list in the same
+  // order mergeGeometries consumes it, rather than by hunting for grey-blue vertices afterwards:
+  // one source of truth, and it stays correct if a part is ever added above the embers.
+  let emberVertexStart = 0;
+  let emberVertexCount = 0;
+  for (let index = 0; index < parts.length; index += 1) {
+    const count = baked[index].getAttribute('position').count;
+    if (parts[index].name === 'embers') { emberVertexCount = count; break; }
+    emberVertexStart += count;
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(baked, false), stoneMaterial());
   mesh.name = 'old-beacon';
   setLayer(mesh, WORLD);
   mesh.position.set(beacon.at[0], 0, beacon.at[1]);
@@ -472,6 +527,9 @@ export function buildOldBeacon(scene, beacon) {
 
   let stirSeconds = -1;
   let strength = BEACON_GLOW_REST;
+  // G3: the payoff. `litSeconds` runs the ignition once and then stays at its end, because unlike
+  // the stir this is not a thing that falls back -- the world REMEMBERS. -1 means cold.
+  let litSeconds = -1;
   return {
     at: beacon.at,
     sight: (camera, heroPosition) => beaconSight(camera, beacon.at, heroPosition),
@@ -482,7 +540,51 @@ export function buildOldBeacon(scene, beacon) {
       if (prefersReducedMotion()) return;
       stirSeconds = 0;
     },
+    /**
+     * THE OLD BEACON CATCHES. Cold, dead grey-blue -> warm, alive, and it STAYS.
+     *
+     * Idempotent: a client that learns the Beacon is already lit (a late joiner, a reload, a
+     * restarted server -- see net/gameServer.mjs's own restore path) calls this exactly the same way
+     * the child who just won calls it, and gets a burning Beacon either way. Whether a CEREMONY is
+     * played is main.js's decision, not this presenter's, for the same reason the Lantern Tree's own
+     * relight splits those two questions: only the client knows whether it watched the Beacon be
+     * cold. Under reduced motion the transition is instant rather than absent -- the world state is
+     * never withheld, only the movement.
+     */
+    ignite() {
+      if (litSeconds >= 0) return;
+      litSeconds = prefersReducedMotion() ? BEACON_IGNITE_SECONDS : 0;
+      // The dead ash becomes fire, in the one place the whole object has been pointing at since G1.
+      // Repainted in place on the merged buffer -- one draw call in, one draw call out.
+      const colors = mesh.geometry.getAttribute('color');
+      const warm = new THREE.Color(BEACON_EMBER_WARM_COLOR);
+      for (let i = emberVertexStart; i < emberVertexStart + emberVertexCount; i += 1) {
+        colors.setXYZ(i, warm.r, warm.g, warm.b);
+      }
+      colors.needsUpdate = true;
+      // Stops any stir mid-flight: the cresset does not get to shiver while it is catching.
+      stirSeconds = -1;
+      if (litSeconds >= BEACON_IGNITE_SECONDS) {
+        strength = BEACON_GLOW_LIT;
+        sprite.material.color.setHex(BEACON_GLOW_WARM_COLOR);
+        setGlowStrength(sprite, strength);
+      }
+    },
     update(deltaSeconds) {
+      // The ignition owns the glow while it runs -- it is the bigger event, and two curves writing
+      // one sprite is the kind of thing that reads as a flicker.
+      if (litSeconds >= 0) {
+        if (litSeconds < BEACON_IGNITE_SECONDS) {
+          litSeconds += deltaSeconds;
+          const t = Math.min(1, litSeconds / BEACON_IGNITE_SECONDS);
+          strength = beaconIgniteStrength(litSeconds);
+          // Crossfades the halo from the cold pale-cyan to the lanterns' own warm gold, so the
+          // Beacon visibly JOINS the chain of lights it has been the dead end of.
+          sprite.material.color.setHex(t >= 0.5 ? BEACON_GLOW_WARM_COLOR : BEACON_GLOW_COLOR);
+          setGlowStrength(sprite, strength);
+        }
+        return;
+      }
       if (stirSeconds < 0) return;
       stirSeconds += deltaSeconds;
       strength = beaconStirStrength(stirSeconds);
@@ -490,6 +592,7 @@ export function buildOldBeacon(scene, beacon) {
       if (stirSeconds >= BEACON_STIR_SECONDS) stirSeconds = -1;
     },
     isStirring: () => stirSeconds >= 0,
+    isLit: () => litSeconds >= 0,
     glowStrength: () => strength,
   };
 }

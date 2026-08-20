@@ -17,6 +17,9 @@ import { buildBramble } from './bramble.js';
 import { buildWildwoodGate } from './wildwoodGate.js';
 import { buildWildwoodBlade } from './wildwoodBlade.js';
 import { buildBeaconWaystones, buildOldBeacon } from './oldBeacon.js';
+import { buildColdSeals } from './coldSeals.js';
+import { buildWarden } from '../enemies/warden.js';
+import { buildBlackthornBarrier, buildHollowPocket } from './blackthornHollow.js';
 import { buildVillagers } from './villagers.js';
 import { buildRowan } from './rowan.js';
 import { loadGLB } from './assets.js';
@@ -1079,6 +1082,17 @@ export function loadZone(scene, zoneData) {
     // light.
     const oldBeacon = zoneData.OLD_BEACON ? buildOldBeacon(scene, zoneData.OLD_BEACON) : null;
     const beaconWaystones = buildBeaconWaystones(scene, zoneData.BEACON_WAYSTONES);
+    // G2..G5: the three cold seals, the Warden kneeling beside them, and the blackthorn wall with
+    // its pocket behind it. Built and not loaded for the same reason everything above is -- no
+    // fetch to fail, nothing in `counts`, and the Warden in particular is deliberately procedural
+    // (enemies/warden.js) so the encounter ships without waiting on a generated asset.
+    const coldSeals = buildColdSeals(scene, zoneData.COLD_SEALS ?? []);
+    const warden = zoneData.BEACON_WARDEN ? buildWarden(scene, zoneData.BEACON_WARDEN.at) : null;
+    if (warden && zoneData.BEACON_WARDEN.rotY != null) warden.setHeading(zoneData.BEACON_WARDEN.rotY);
+    const blackthorn = zoneData.BLACKTHORN ? buildBlackthornBarrier(scene, zoneData.BLACKTHORN) : null;
+    const hollow = zoneData.HOLLOW
+      ? buildHollowPocket(scene, { at: zoneData.HOLLOW.at, rotY: zoneData.HOLLOW.rotY ?? 0 })
+      : null;
     if (tree) {
       const [treeX, treeZ] = zoneData.LANDMARKS.find(isTreeLandmark)?.at ?? [0, 0];
       lanterns.sort((a, b) => distance(treeX, treeZ, a.at[0], a.at[1])
@@ -1094,7 +1108,7 @@ export function loadZone(scene, zoneData) {
     const rowan = keeper?.rowan ?? null;
     return {
       keeper, tree, lanterns, gate, villagers, rowan, trailLights, brambles, wildwoodBlade,
-      beaconRoadLights, oldBeacon, beaconWaystones,
+      beaconRoadLights, oldBeacon, beaconWaystones, coldSeals, warden, blackthorn, hollow,
     };
   })();
   return { counts, ready };

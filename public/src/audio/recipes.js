@@ -16,6 +16,14 @@
 // is the owner's call on a real iPad. Kept short per the brief: 0.05-0.6s, except the victory sting, which
 // is allowed to run to about a second because it is the one moment worth lingering on.
 
+// G2/G3/G5: the Beacon arc's own sixteen live in audio/siegeRecipes.js and are SPREAD IN below
+// rather than written out here. They are a coherent family authored against each other (the ignition
+// is written note-for-note as the answer to `beacon-cold`'s refusal to resolve), and keeping them in
+// one file keeps that argument readable -- while this table stays the single place the engine and
+// every test look a recipe up by name. Their own event route is SIEGE_EVENT_RECIPE_MAP, for the
+// reason that table's comment gives.
+import { SIEGE_RECIPES } from './siegeRecipes.js';
+
 export const RECIPES = Object.freeze({
   // swing: a quick, breathy pass of noise -- the sound of the blade cutting air, not hitting anything.
   whoosh: Object.freeze([
@@ -256,6 +264,8 @@ export const RECIPES = Object.freeze({
       type: 'tone', startSeconds: 0.55, durationSeconds: 0.85, frequencyStart: 587.33, frequencyEnd: 587.33, gainPeak: 0.2,
     }),
   ]),
+
+  ...SIEGE_RECIPES,
 });
 
 /** Recipes played directly by a presenter rather than by an encounter or reward EVENT. There is one:
