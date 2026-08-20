@@ -3,37 +3,17 @@
  *
  * One descriptor per selectable loadout: which gear it mounts, on which bone, whether each piece is
  * SHIPPED or an unshipped CANDIDATE, and which single item the loadout exists to review
- * (`reviewTarget`). This is the seam the next task (Owner Fit) consumes -- a caller learns what is
- * being reviewed from these identifiers and from api.js's getState(), never by scraping DOM text or
+ * (`reviewTarget`). This is the seam review tooling consumes -- a caller learns what is being
+ * reviewed from these identifiers and from api.js's getState(), never by scraping DOM text or
  * guessing from a file path.
  *
  * Deliberately DATA, not scene code: no three.js objects, no DOM, no loading. scene.js owns how a
- * mesh actually gets mounted; this file only names the states. Every gear id and bone name is
- * imported from character/gear.js rather than restated (GQ-007), so a renamed gear id fails here
- * at import time instead of silently drifting.
+ * mesh actually gets mounted; this file only names the states. Every gear id and bone name comes
+ * from the module that owns the corresponding mount rather than being hand-typed here.
  *
- * TRUTHFULNESS RULE, and it is the reason this file exists at all: a candidate must never
- * masquerade as shipped gear. So provenance is DERIVED from the gear list, never authored per
- * loadout -- a state is `contains-candidate` if and only if it mounts at least one candidate item,
- * which makes "the label says shipping but a candidate is mounted" unrepresentable rather than
- * merely discouraged.
- *
- * TWO DIFFERENT QUESTIONS, DELIBERATELY NOT SPELLED THE SAME WAY. getState() answers both, and they
- * are not synonyms:
- *   - `loadoutIsShipping` (pre-existing, protocol field): is this EXACTLY the `shipping` baseline
- *     state -- the one the game itself produces by default?
- *   - `loadoutGearProvenance` (this file): does this state mount any UNSHIPPED asset?
- * `shipping-sword-only` and `candidate-with-lantern` are the two states where the answers differ:
- * every mounted mesh is shipped gear (`shipping-only`), yet neither is the baseline
- * (`loadoutIsShipping === false`). The values are worded `shipping-only`/`contains-candidate` --
- * never a bare "shipping" -- precisely so neither field can be read as a restatement of the other.
- * test/studio-loadouts.test.mjs pins that divergence so the two can never quietly collapse into one
- * meaning.
- *
- * Loadout IDS are protocol vocabulary (tools/sol-review/request.schema.json pins them; renaming one
- * breaks every recorded review request), so 'candidate-with-lantern' keeps its historical id even
- * though everything it mounts is shipped gear. Its label and provenance tell the truth; the id is
- * compatibility.
+ * TRUTHFULNESS RULE: a candidate must never masquerade as shipped gear. Provenance is DERIVED from
+ * the gear list, never authored per loadout -- a state is `contains-candidate` if and only if it
+ * mounts at least one candidate item.
  */
 import {
   RIGID_TIER2_GEAR,
@@ -41,9 +21,13 @@ import {
   WILDWOOD_BLADE_CANDIDATE_BONE_NAME,
   WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../character/gear.js';
+import {
+  DAWNWARDEN_HELMET_CANDIDATE,
+  DAWNWARDEN_SWORD_CANDIDATE,
+} from './candidateGear.js';
 
-// Derived, not restated (the same invariant character/weaponLoadout.js documents): the shipping
-// sword is whichever Tier 2 item shares the candidate blade's hand; the shield is the other one.
+// Derived, not restated: the shipping sword is whichever Tier 2 item shares the candidate blade's
+// hand; the shield is the other one.
 const SHIPPING_SWORD = RIGID_TIER2_GEAR.find((item) => item.boneName === WILDWOOD_BLADE_CANDIDATE_BONE_NAME);
 const SHIPPING_SHIELD = RIGID_TIER2_GEAR.find((item) => item.boneName !== WILDWOOD_BLADE_CANDIDATE_BONE_NAME);
 
@@ -51,8 +35,7 @@ const SHIPPING_SHIELD = RIGID_TIER2_GEAR.find((item) => item.boneName !== WILDWO
 const SHIPPED = 'shipped';
 const CANDIDATE = 'candidate';
 
-/** Per-LOADOUT provenance, aggregated from the items. Worded so it can never be mistaken for
- *  `loadoutIsShipping` -- see this file's header. */
+/** Per-LOADOUT provenance, aggregated from the items. */
 export const SHIPPING_ONLY = 'shipping-only';
 export const CONTAINS_CANDIDATE = 'contains-candidate';
 
@@ -64,6 +47,16 @@ const sword = gearEntry(SHIPPING_SWORD.id, SHIPPING_SWORD.boneName, SHIPPED);
 const shield = gearEntry(SHIPPING_SHIELD.id, SHIPPING_SHIELD.boneName, SHIPPED);
 const lantern = gearEntry(RIGID_BELT_LANTERN.id, RIGID_BELT_LANTERN.boneName, SHIPPED);
 const wildwoodBlade = gearEntry(WILDWOOD_BLADE_CANDIDATE_ID, WILDWOOD_BLADE_CANDIDATE_BONE_NAME, CANDIDATE);
+const dawnwardenSword = gearEntry(
+  DAWNWARDEN_SWORD_CANDIDATE.id,
+  DAWNWARDEN_SWORD_CANDIDATE.boneName,
+  CANDIDATE,
+);
+const dawnwardenHelmet = gearEntry(
+  DAWNWARDEN_HELMET_CANDIDATE.id,
+  DAWNWARDEN_HELMET_CANDIDATE.boneName,
+  CANDIDATE,
+);
 
 function descriptor({ id, label, reviewTarget, gear, note = null }) {
   if (!gear.some((item) => item.id === reviewTarget)) {
@@ -74,8 +67,6 @@ function descriptor({ id, label, reviewTarget, gear, note = null }) {
     label,
     reviewTarget,
     gear: Object.freeze([...gear]),
-    // Derived, never authored: one candidate item makes the whole state a candidate review, so a
-    // label and its contents cannot disagree about what is being looked at.
     gearProvenance: gear.some((item) => item.provenance === CANDIDATE) ? CONTAINS_CANDIDATE : SHIPPING_ONLY,
     note,
   });
@@ -83,9 +74,8 @@ function descriptor({ id, label, reviewTarget, gear, note = null }) {
 
 /**
  * Every review state the public Studio can select. Order is presentation order in studio.html's
- * loadout menu. scene.js's setLoadout executes exactly these ids and nothing else (it derives its
- * own LOADOUTS list from here), and the sol-review request schema's loadout enum is pinned to this
- * list by test/studio-loadouts.test.mjs.
+ * loadout menu. scene.js executes exactly this vocabulary and the Sol-review schema is pinned to it
+ * by test/studio-loadouts.test.mjs.
  */
 export const STUDIO_LOADOUTS = Object.freeze([
   descriptor({
@@ -115,21 +105,32 @@ export const STUDIO_LOADOUTS = Object.freeze([
     gear: [wildwoodBlade, shield],
     note: 'W1-A candidate under assets/gear/candidates/. Unshipped and unproven; shown instead of the shipping sword, never alongside it.',
   }),
+  descriptor({
+    id: 'candidate-dawnwarden-sword',
+    label: 'Dawnwarden Sword CANDIDATE — replaces shipping sword',
+    reviewTarget: DAWNWARDEN_SWORD_CANDIDATE.id,
+    gear: [dawnwardenSword, shield],
+    note: 'PR #26 Tier-4 candidate. The Studio mount is an inspection baseline only until multi-angle, animation, and gameplay review accept the fit.',
+  }),
+  descriptor({
+    id: 'candidate-dawnwarden-helmet',
+    label: 'Dawnwarden Helmet CANDIDATE — over shipping loadout',
+    reviewTarget: DAWNWARDEN_HELMET_CANDIDATE.id,
+    gear: [sword, shield, dawnwardenHelmet],
+    note: 'PR #26 Tier-4 candidate. Keeps the shipping weapon/shield constant so the helmet is the only visual variable.',
+  }),
 ]);
 
 export const LOADOUT_IDS = Object.freeze(STUDIO_LOADOUTS.map((entry) => entry.id));
 
 const BY_ID = new Map(STUDIO_LOADOUTS.map((entry) => [entry.id, entry]));
 
-/** Fail-closed lookup: an unknown id is null, never a guessed default. Callers decide whether
- *  null is a throw (scene.js's setLoadout) or a revert-to-shipping (studio.html's menu). */
+/** Fail-closed lookup: an unknown id is null, never a guessed default. */
 export function loadoutDescriptor(id) {
   return BY_ID.get(id) ?? null;
 }
 
-/** Every distinct gear item any loadout can mount -- the list scene.js's gearVisibility() reports
- *  against, so "what is mounted right now" always covers the full vocabulary, not just the current
- *  selection. */
+/** Every distinct gear item any loadout can mount. */
 export const ALL_STUDIO_GEAR = Object.freeze([
   ...new Map(
     STUDIO_LOADOUTS.flatMap((entry) => entry.gear).map((item) => [item.id, item]),
