@@ -28,38 +28,40 @@ enemy"** in under a second, and must never confuse it with the wolf or with the 
 
 ## 2. Silhouette — the load-bearing decision
 
-**Superseded 2026-08-20 by the production director's asset request (§8a).** The earlier direction —
-an iron-and-ash industrial guardian whose silhouette was carried by an asymmetrical shoulder beacon
-housing and a two-handed maul — is recorded in §8c. The director's direction is now:
+Restored 2026-08-20 by `GQ-DIRECTOR-CORRECTION / A1`. The antlers / cloak / semi-realistic /
+moss-green direction came from an infographic that was an **image-generation failure**, not approved
+art direction; it is void and recorded in §8c.
 
-A silent guardian of the Old Beacon: weathered by time, bound to the light, clad in nature-worn
-armour. Stoic and noble rather than monstrous.
+Silhouette first, detail last. The Warden must be identifiable as a black shape.
 
-- **Ancient guardian read.** Armour fused with stone, wood and aged metal — grown into, not forged.
-- **The head carries the silhouette.** A hooded or helm-like headpiece with **antler growths**. This
-  is now the strongest silhouette element and the thing that must survive being 40 px tall.
-- **A tattered cloak or tabard** with nature motifs, breaking the outline.
-- **No weapon in the character mesh** (§8a negative prompts) — see the open question in §11 about
-  what that means for the `attack` clip.
-- Silhouette must read clearly at thumbnail scale.
+- **Humanoid, but wrong.** Upright, two arms, two legs — so a child reads "it can fight me" — with
+  proportions pushed away from human: **broad shoulders and chest, short neck, long arms, narrow
+  legs**, planted stance, weight low.
+- **One dominant shape.** A **chunky asymmetrical shoulder-mounted beacon/brazier housing** with
+  thick, readable forms — cold and unlit. This is the thing that must survive being 40 px tall.
+- **Explicitly excluded:** no antlers, no cape or cloak, no chains, no floating debris, and **no
+  ornate thin geometry** of any kind.
+- **The body reference carries NO weapon.** This is deliberate pipeline separation (§7, §11), not a
+  gameplay decision — the maul still exists in the G3 silhouette, just not in this mesh.
 
-Readability requirement, unchanged and still outranking every aesthetic choice: at gameplay camera
-distance (`GAMEPLAY_DISTANCE = 16`, `public/src/review/cameraPresets.js`) a child must read
-**"important enemy"** in under a second, and must never confuse it with the wolf or the Keeper.
+Readability requirement, which outranks every aesthetic choice: at gameplay camera distance
+(`GAMEPLAY_DISTANCE = 16`, `public/src/review/cameraPresets.js`) a child must read **"important
+enemy"** in under a second, and must never confuse it with the wolf or with the Keeper.
 
 ## 3. Palette and material language
 
-**Superseded 2026-08-20 by §8a.** Previously a cold industrial palette (dark iron / ash stone / aged
-timber, one pale-cyan accent, explicitly no warm colours). The director's palette is:
+Restored 2026-08-20 by the director's correction — **stylized low-poly, consistent with the shipped
+GalaQuest cast**, not semi-realistic.
 
-- **Earth tones:** moss green, slate, weathered bronze, deep brown.
-- **Inner light:** a subtle **blue-green** glow from the chest, the eyes, and crystal accents.
-- **Glowing moss / crystal veins** running through the armour seams — this is what now carries the
-  Beacon connection, in place of a physical beacon housing.
+- **Base:** weathered dark iron and ash-grey stone, low saturation.
+- **Secondary:** aged timber (ties it to the Wildwood and the Ironwood gear family).
+- **Accent — exactly one:** cold pale-cyan / blue-white, used **only** in the beacon housing and the
+  seams that read as the cold fire inside it. This is the colour that says *Beacon*.
+- No second accent, and no warm accent — warm light is the game's vocabulary for friendly things
+  (hearth, lantern) and the Warden must not borrow it.
 
-Style: **stylized semi-realistic fantasy**, even neutral studio lighting. Not photoreal — the
-director's own negative prompts exclude "overly realistic / photoreal". See §11 for the open question
-about how this sits beside the shipped low-poly cast.
+Texture complexity: moderate. Flat stylized blocking with painted edge wear, matching the existing
+low-poly cast rather than a PBR showpiece.
 
 ## 4. Scale in game
 
@@ -131,6 +133,7 @@ Measured lane costs (`docs/pipeline/characters-npcs.md`):
 | **Nominal total** | **35** | |
 | Retry allowance | +25 | one re-gen (15) + up to 3 re-picked clips (9) |
 | **Ceiling before stopping to report** | **60** | 12% of the 500 authorized |
+| *Sealing maul prop, CONDITIONAL* | *+15* | *only after the body passes — see §11; not part of the 35* |
 
 The 500-credit cap is **not** the binding constraint — the whole asset is ~7% of it. Discipline rule:
 if the model is still wrong after **one** re-generation, stop and fix the *reference image* rather than
@@ -141,64 +144,48 @@ them and reading the 400.
 
 ## 8. Phase 2 — the reference request
 
-### 8a. CANONICAL — production director's asset request (received 2026-08-20)
+### 8a. CANONICAL — production-first body reference (director correction, 2026-08-20)
 
-This supersedes every earlier wording in this file. Transcribed from the director's brief
-"ASSET REQUEST: BEACON WARDEN (2D CONCEPT REFERENCE)".
+**The director is generating this PNG.** Until it arrives: no Meshy credits are spent and no further
+art-direction edits are made. On arrival it is logged as the next provenance row (R3) and the lane
+proceeds immediately to body image-to-3D → texture → rig → required clips → in-game fit/review.
 
-**Objective.** A cleaned-up, front-facing concept reference image of the Beacon Warden for 2D/3D
-production, to be used as the canonical visual reference for Meshy 3D generation.
+Required format for the modelling basis — **one** generated PNG:
 
-**Key requirements**
-- Full body, front-facing view
-- Transparent or pure white background
-- Stylized semi-realistic fantasy style, consistent with GalaQuest
-- Clean silhouette, clearly readable at small sizes
-- No text, no UI, no props or weapons
+- ONE single full-body character
+- **strict front-facing A-pose**, arms separated from the torso, legs slightly apart
+- plain light-grey background, neutral lighting
+- no text, no multiple angles, no inset panels
 
-**Character.** A silent guardian of the Old Beacon — weathered by time, bound to the light, clad in
-nature-worn armour.
-- Ancient guardian vibe; stoic, noble presence
-- Armour fused with stone, wood and aged metal
-- Glowing moss / crystal veins through the armour seams
-- Hooded or helm-like headpiece with antler growths
-- Tattered cloak or tabard with nature motifs
-- Earth tones: moss green, slate, weathered bronze, deep brown
-- Subtle blue-green inner light from chest, eyes and crystal accents
-- Silhouette reads clearly at thumbnail scale
+Body direction:
 
-**Style & output.** Stylized semi-realistic fantasy; even neutral studio lighting; full body,
-front-facing; transparent or pure white background; high resolution.
+- stylized **low-poly**, consistent with the shipped GalaQuest cast
+- humanoid corrupted guardian — broad shoulders and chest, short neck, long arms, narrow legs,
+  planted stance
+- weathered dark iron + ash-grey stone + aged timber
+- exactly **one** cold pale-cyan / blue-white accent
+- chunky asymmetrical **shoulder-mounted beacon/brazier housing**, thick readable forms
+- NO antlers, NO cape/cloak, NO chains, NO floating debris, NO ornate thin geometry
+- **NO WEAPON in the body reference** — deliberate pipeline separation, not a gameplay decision
 
-**Negative prompts.** No text, logos, watermarks or UI elements. No weapons (swords, staffs, etc.).
-No other characters or creatures. No backgrounds, scenery or props. No modern or sci-fi elements. No
-overly realistic / photoreal style. No blur, low detail, distortion or extra limbs.
+### 8b. Why the A-pose is non-negotiable
 
-**Deliverable.** One (1) high-quality PNG, front-facing full body, transparent background preferred.
+Now stated by the director as well, and worth keeping the reason on record: Meshy's auto-rigger fits a
+skeleton to the figure in the image. Arms held against the torso make the shoulder/elbow chain
+ambiguous, and a bad auto-rig costs a **re-generation**, not a re-render. "Arms separated from the
+torso" is the cheap insurance.
 
-> The example image in the director's brief is labelled **"EXAMPLE REFERENCE (NOT FINAL)"** and is
-> therefore *not* the modelling basis. The deliverable PNG still has to be produced.
+### 8c. Void and superseded wording, kept for the evidence chain
 
-### 8b. One requirement this lane adds back: strict A-pose
+Recorded rather than deleted so that anything produced against either version stays identifiable.
 
-The director's brief specifies "full body, front-facing" but does not state a pose. **The A-pose is
-retained as a hard requirement**, for two reasons that are not aesthetic:
-
-1. The task brief that opened this lane names it as required reference format.
-2. Meshy's auto-rigger fits a skeleton to the figure in the image. Arms held against the body make
-   the shoulder/elbow chain ambiguous and are the usual cause of a bad auto-rig — which would cost a
-   re-generation, not a re-render.
-
-So the request sent must add: *strict front-facing A-pose — arms straight, angled down and away from
-the body, legs straight and slightly apart, palms facing the viewer.*
-
-### 8c. Superseded wording, kept for the evidence chain
-
-The earlier canonical request (director wording of 2026-08-20, adopted in commit `f099ce5`) specified
-a two-handed sealing maul, an asymmetrical shoulder-mounted lantern-cage beacon housing, a cold
-iron/ash palette with a single pale-cyan accent and explicitly no cloak, in a stylized **low-poly**
-style. It is superseded in full by §8a. Recorded rather than deleted so that a capture or model made
-against it can still be identified later.
+1. **VOID — the "ASSET REQUEST" infographic (antlers, tattered cloak, semi-realistic, moss-green
+   earth tones, blue-green light).** Confirmed by the director as an image-generation failure, never
+   approved art direction. Nothing was generated against it; it reached this brief for one commit
+   (`d69f312`) and is reverted here.
+2. **Superseded — the earlier maul-in-hand wording.** Same body direction as §8a, but it put a
+   two-handed sealing maul in the reference image. The weapon is now excluded from the body pass by
+   design (§11).
 
 ## 9. Phase 3–4 — Meshy execution order
 
@@ -229,37 +216,38 @@ Every image used as a Meshy image-to-3D input is logged here before it is spent 
 | Ref | Date | Source | Request used | File | Status |
 |---|---|---|---|---|---|
 | R1 | 2026-08-20 | production director, relayed by the owner | earlier §8a wording (now §8c) | *not generated* | **superseded** before any image existed |
-| R2 | 2026-08-20 | production director asset request, relayed by the owner | §8a + the §8b A-pose line | *not yet generated* | current canonical request; image not produced — see blockers |
+| R2 | 2026-08-20 | "ASSET REQUEST" infographic, relayed by the owner | infographic art direction | *none* | **VOID** — confirmed by the director as an image-generation failure, not approved direction. Nothing generated against it. |
+| R3 | 2026-08-20 | production director — **generating now** | §8a production-first body reference | *awaited* | pending: log on arrival, then proceed straight to image-to-3D |
 
 No image has been generated, so nothing has been accepted as a modelling basis yet.
 
 ---
 
-## 11. Open questions for the production director
+## 11. Settled decisions (director correction, 2026-08-20)
 
-Three consequences of the 2026-08-20 asset request that are cheaper to settle now than after credits
-are spent. None blocks generating the reference image; all three affect what happens after it.
+The three consequences raised as open questions are now answered. Recorded as decisions, not
+discussion, because each one governs what gets bought and in what order.
 
-**1. No weapon in the mesh — confirmed good, but the `attack` clip needs a decision.**
-Excluding the weapon actually matches how this repo already ships gear: the hero's sword, shield and
-belt lantern are separate GLBs mounted on bones (`attachRigidTier2Gear`, `attachBeltLantern`), never
-baked into the body. So a weaponless Warden is the *correct* pipeline shape, not a compromise. The
-open part is the G3 encounter: either the `attack` clip reads as an unarmed strike (free), or a maul
-ships as a separate mounted prop — **+15 credits and a fit pass** on top of the 35-credit nominal.
-Recommend deciding before step 4, because the animation choice depends on it.
+**1. Weapon — body first, maul only after the body passes.**
+The body reference carries no weapon, and this is *pipeline separation, not a gameplay choice*: a
+two-handed prop in the source image poisons both image-to-3D and the auto-rigger, which is exactly
+the expensive failure mode. Sequence:
 
-**2. "Stylized semi-realistic" beside a low-poly cast.**
-The shipped characters are stylized low-poly — the pipeline runbook calls the hero "Toon-Link-class",
-the Keeper shipped at 5,258 tri, and iron rule 4 requires judging new work against that established
-look. A semi-realistic Warden may read as belonging to a different game when standing next to the
-hero. This is the director's call and is adopted as written; flagging it because the cheapest place to
-catch a style clash is the reference image, and the most expensive is after rig and animation.
-The first hero-and-Warden side-by-side capture is the moment to confirm it.
+> build and qualify the Warden **body** → it passes body / rig / in-game readability → **then**
+> produce the sealing maul as a separate mounted prop in this same A1 lane.
 
-**3. Antlers, cloak and thumbnail readability.**
-Antler growths and a tattered cloak are strong silhouette elements, which is good — but both are also
-thin geometry, which is what a 512/1024 recompress and a 40 px gameplay read punish first. Worth
-watching specifically at `glb_budget.mjs` time and in the first gameplay-distance capture.
+**No maul credits are spent before the body passes.** The G3 weapon silhouette is preserved, just
+purchased second. This also matches how the repo already ships every held item — the hero's sword,
+shield and lantern are separate GLBs mounted on bones (`attachRigidTier2Gear`, `attachBeltLantern`),
+never baked into the body.
+
+**2. Style — stylized low-poly, consistent with the shipped cast.** The semi-realistic direction is
+void. No further action; §§2–3 are restored.
+
+**3. Thin geometry — excluded at the source.** "NO ornate thin geometry" is now part of the request
+itself, which is the cheapest place to enforce it: thin forms are what a 512/1024 recompress and a
+40 px gameplay read punish first, and excluding them from the reference beats discovering them at
+`glb_budget.mjs` time.
 
 ## Execution status — why no asset exists yet
 
