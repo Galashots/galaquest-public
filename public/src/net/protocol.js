@@ -340,6 +340,16 @@ function decodeHeroes(heroes) {
       cooldown: requireFiniteNumber(hero.cooldown, `encounter.heroes[${id}].cooldown`),
       downSeconds: requireFiniteNumber(hero.downSeconds, `encounter.heroes[${id}].downSeconds`),
     };
+    // maxHp rides OPTIONALLY, the same additive shape wolf.modeSeconds uses above and for the same
+    // reason: every pre-charm fixture and caller decodes byte-identically, so this is additive
+    // validation rather than a version bump. It exists because hearts stopped being a constant --
+    // Ranger Wren's charm gives a fourth, and a client rendering three pips for a four-heart hero
+    // would show a child full health at 3 of 4 and no health at 0 of 4 on the same bar.
+    if (hero.maxHp !== undefined) {
+      const maxHp = requireInteger(hero.maxHp, `encounter.heroes[${id}].maxHp`);
+      if (maxHp < 1) fail(`encounter.heroes[${id}].maxHp must be >= 1, got ${maxHp}`);
+      result[id].maxHp = maxHp;
+    }
   }
   return result;
 }

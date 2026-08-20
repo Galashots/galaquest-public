@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 import {
+  HERO_MAX_HP,
   addHero,
   createPartyEncounterState,
   removeHero,
@@ -881,6 +882,9 @@ export function createSimulation(options = {}) {
       const source = (arenaOf(heroId) === SIEGE_ARENA && siegeState.heroes[heroId]) || hero;
       heroes[heroId] = {
         hp: source.hp,
+        // Published beside hp because a heart count is only meaningful against its own ceiling:
+        // Wren's charm makes 3 a different number for two children standing side by side.
+        maxHp: source.maxHp ?? HERO_MAX_HP,
         swingSeconds: roundToWire(source.swingSeconds),
         cooldown: roundToWire(source.cooldown),
         downSeconds: roundToWire(source.downSeconds),
