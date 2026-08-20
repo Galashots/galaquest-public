@@ -35,14 +35,16 @@ three tests restating their own formula; `WOLF_SPAWN` duplicated across `net/gam
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-008 — A harness that navigates to the game must start from a known guest.
-**Status:** ENFORCED · **Hits:** 2 · **First:** 2026-08-14 · **Last:** 2026-08-15
+**Status:** ENFORCED · **Hits:** 3 · **First:** 2026-08-14 · **Last:** 2026-08-20
 **Enforced by:** `test/harness-fresh-guest.test.mjs`
 **Rule:** The automation Chrome on 9224 uses a persistent profile, so `gq-guest-id` survives between
 runs. Any harness that navigates to the game clears `localStorage` for the origin **before its first
 navigation** — not after, by which point the guest has already been minted. The rule is deliberately
 "every navigating harness", not "every harness that can award a mark": that judgement goes stale the
 moment somebody adds an attack tap, and it is fragile in exactly the way that caused hit 2's
-misdiagnosis.
+misdiagnosis. **Hit 3's addition: clearing is half of it. A harness that PINS a specific guest must
+CONFIRM the identity it is playing as**, from the running game's own accessor, before it trusts a
+single assertion — and confirm the state it seeded arrived with it.
 **Incidents:** (1) Phase Y, 2026-08-14 — `play-fight.mjs` landed three reward rows on
 `drive-relight.mjs`'s RESERVED fixture identity `relight-probe-guest-0001`; Phase Z1's R1-A fixed
 that one file. (2) Phase R3a, 2026-08-15 — `drive-two-clients.mjs` was still doing it and nobody had
@@ -52,8 +54,28 @@ because it runs two tabs and both inherited the same stale id, which then failed
 relighting. Phase H1 turned this from occasional to reproducible: every harness now draws a server
 port from one shared pool, so they all share one origin and therefore one `localStorage`, and the
 isolation that used to come by accident from different ports is now something each harness must do
-for itself. Six files violated the rule at `b9238e0`.
-**Foreknowledge helped:** not yet recorded.
+for itself. Six files violated the rule at `b9238e0`. (3) 2026-08-20, G1's `drive-old-beacon.mjs`.
+`public/src/net/guestId.js` caps a guest id at 64 characters and, past that, `sanitizeGuestId`
+returns **null silently** — so the page mints itself a fresh UUID and plays as somebody else. This
+harness built its ids as `g1-old-beacon-${label}-${randomUUID()}`, which is 59 characters for
+`portrait` and 60 for `landscape` and **65 for `reduced-motion`**. Exactly one phase was therefore
+unseeded, every time, on two different machines: it walked the whole game with zero marks, a dark
+Lantern Tree, a Chapter 2 that never opens (`campFound` is gated on the tree) and an objective chip
+still reading "Talk to Keeper Aldric" forty metres up the trail. Four checks went red for a reason
+none of them was about, and the harness's own error named the camp trigger. The first theory was a
+timing race on the `localStorage` write, which was WRONG — the write succeeded; the client rejected
+the value. Fixed by minting ids through the game's own `sanitizeGuestId` (GQ-007: import the rule,
+do not hope to satisfy it), and by confirming after navigation that
+`__galaQuestRuntime.guestId()` is the seeded id and that its marks actually arrived. That second
+check is what turned a four-red-checks mystery into a one-line diagnosis. **Measured while fixing it,
+and worth acting on before it bites again: the other harnesses that mint ids this way are correct
+today but close to the cap** — `drive-cart-loot`'s longest is 61 characters and
+`drive-village-board`'s is 59, against a limit of 64. A one-word longer phase label breaks either of
+them the same silent way. Not enforced by a scan here because the length depends on a substituted
+label a text scan cannot know; the durable fix is for each of them to mint through `sanitizeGuestId`
+as `drive-old-beacon.mjs` now does.
+**Foreknowledge helped:** 2026-08-20 — the entry is why the first move was "which guest is this page
+playing as" rather than "why is the camp trigger broken", which is where the error message pointed.
 
 ### GQ-009 — A diagnostic that partitions events by harness timestamp measures the harness, not the system.
 **Status:** ENFORCED · **Hits:** 1 · **First:** 2026-08-19 · **Last:** 2026-08-19

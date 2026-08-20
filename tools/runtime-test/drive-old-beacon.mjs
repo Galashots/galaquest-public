@@ -35,6 +35,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
+import { sanitizeGuestId } from '../../public/src/net/guestId.js';
 import {
   BEACON_ROAD_LIGHTS, CAMP, CART_SEARCH, OLD_BEACON, ROWAN,
 } from '../../public/src/world/zones/village.js';
@@ -77,7 +78,17 @@ function freshStorePath(label) {
  *  play-fight.mjs already proves; this seeds a returning guest instead, exactly as drive-cart-loot.mjs
  *  does. A brand-new randomUUID guest every phase, never reused. */
 function seedUnlockedGuest(storePath, label) {
-  const guestId = `g1-old-beacon-${label}-${randomUUID()}`;
+  const guestId = `g1-beacon-${label}-${randomUUID()}`;
+  // MINTED THROUGH THE CLIENT'S OWN RULE, not merely hoped to satisfy it (GQ-007: import the
+  // definition, do not restate it). public/src/net/guestId.js caps a guest id at 64 characters and
+  // SILENTLY returns null past that, at which point the page mints itself a fresh UUID and quietly
+  // plays as somebody else. The first version of this file prefixed `g1-old-beacon-`, which made the
+  // reduced-motion phase's id exactly 65 characters -- so that one phase, and only that one, walked
+  // the whole game with zero marks, a dark Lantern Tree and a Chapter 2 that never opened. Nothing
+  // anywhere said "your id was rejected"; it was a name being four characters too long.
+  if (sanitizeGuestId(guestId) !== guestId) {
+    throw new Error(`'${guestId}' (${guestId.length} chars) is not an id the client will keep`);
+  }
   const store = openRewardStore(storePath);
   for (let i = 1; i <= 3; i += 1) {
     store.apply({ guestId, type: 'mark-earned', eventId: `g1-fixture:mark:${guestId}:${i}` });
@@ -177,10 +188,44 @@ async function navigateFresh(tab, origin, url, viewport, guestId) {
   // then navigate for real.
   await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
   await tab.page.send('Page.navigate', { url: `${origin}/favicon.ico` });
-  await sleep(300);
-  await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+
+  // THE PIN IS POLLED AND READ BACK, not written after a fixed sleep, and this is a repair rather
+  // than a flourish. The 300 ms wait this replaces is a coin flip on whether the 404 has COMMITTED
+  // its origin yet: lose it and `localStorage.setItem` runs against about:blank's opaque origin,
+  // the write goes nowhere, the real navigation mints a brand-new guest, and the run plays the
+  // whole game as somebody with zero marks. Observed exactly that way -- a phase that walked the
+  // entire road with a dark Lantern Tree and an objective chip still reading "Talk to Keeper
+  // Aldric", failing four checks for a reason that had nothing to do with what any of them test.
+  // GQ-008's own lesson, one step further on: it is not enough to clear before the first
+  // navigation, the identity you intended has to be CONFIRMED before the run trusts it.
+  const pinDeadline = deadlineAfter(15000);
+  let pinned = null;
+  while (Date.now() < pinDeadline && pinned !== guestId) {
+    await sleep(150);
+    try {
+      pinned = await tab.page.eval(`(() => {
+        try {
+          localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)});
+          return localStorage.getItem('gq-guest-id');
+        } catch (err) { return null; }
+      })()`);
+    } catch { pinned = null; }
+  }
+  if (pinned !== guestId) throw new Error(`could not pin gq-guest-id on ${origin} (got ${pinned})`);
+
   await tab.page.send('Page.navigate', { url });
   await waitForZone(tab);
+
+  // And confirm the RUNNING GAME agrees, against its own accessor rather than against the write we
+  // just made -- two independent reads, so a pin that stuck and then got overwritten still fails
+  // here instead of quietly producing an unseeded playthrough.
+  const live = await tab.page.eval('window.__galaQuestRuntime.guestId()');
+  if (live !== guestId) throw new Error(`the page is playing as ${live}, not the seeded ${guestId}`);
+  const seeded = await pollUntil(tab, (s) => s.marks === 3 && s.lanternUnlocked === true, 15000);
+  if (seeded.marks !== 3 || seeded.lanternUnlocked !== true) {
+    throw new Error(`the seeded guest arrived with marks ${seeded.marks}, `
+      + `lanternUnlocked ${seeded.lanternUnlocked} -- the whole of Chapter 2 is gated on those`);
+  }
 }
 
 async function waitForZone(tab) {
@@ -211,6 +256,9 @@ async function state(tab) {
       serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(3), +net.serverSelf.z.toFixed(3)] : null,
       heading: r.follow.heading,
       netStatus: net.status,
+      guestId: r.guestId(),
+      marks: net.selfId !== null ? (r.rewards()[net.selfId]?.marks ?? null) : null,
+      lanternUnlocked: net.selfId !== null ? (r.rewards()[net.selfId]?.lanternUnlocked ?? null) : null,
       treeLit: r.zoneTreeState()?.lit ?? false,
       campFound: trail.campFound,
       rowanMet: trail.rowanMet,
@@ -321,8 +369,14 @@ async function shot(tab, name) {
  *  walked near them would sail on and prove nothing about the gate. */
 async function reachTheCartBeat(tab) {
   await walkToward(tab, CAMP.at[0], CAMP.at[1], CAMP.radiusMeters * 0.6, 180000);
-  const camp = await pollUntil(tab, (s) => s.campFound === true, 6000);
-  if (!camp.campFound) throw new Error(`campFound never latched at ${JSON.stringify(camp.heroPos)}`);
+  const camp = await pollUntil(tab, (s) => s.campFound === true, 20000);
+  // The whole of Chapter 2 is gated on the Lantern Tree actually being lit (main.js), so a camp that
+  // does not latch is almost never about the camp -- report the gate, not just the position, or the
+  // next reader spends an hour on the wrong end of the chain.
+  if (!camp.campFound) {
+    throw new Error(`campFound never latched at ${JSON.stringify(camp.heroPos)} `
+      + `(treeLit ${camp.treeLit}, net ${camp.netStatus}, lamps loaded ${camp.beaconRoadLoaded})`);
+  }
 
   await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 60000);
   const rowan = await pollUntil(tab, (s) => s.rowanMet === true, 6000);
@@ -355,8 +409,22 @@ async function walkTheBeaconRoad(tab, label) {
   return seen;
 }
 
-async function runPhase({ label, viewport, reducedMotion = false }) {
-  console.log(`\n── phase ${label} (${viewport.width}x${viewport.height}${reducedMotion ? ', reduced motion' : ''}) ──`);
+/**
+ * One playthrough of the G1 path.
+ *
+ * `full` is the canonical proof and runs once, in portrait: it plays the camp beats first, so the
+ * objective ladder and Rowan's own lines are asserted where a child meets them, and it walks out to
+ * the world's edge and back afterwards.
+ *
+ * The other two phases are LEAN, and this is a real constraint rather than a shortcut: the hosted
+ * playtest matrix gives each harness 18 minutes, and a 3D scene on a software renderer walks at a
+ * few frames a second. Landscape exists to prove the route reads in the OTHER orientation and
+ * reduced motion exists to prove one branch; neither needs to re-walk the camp to do it. Everything
+ * they skip is proven in the full phase, on the same code, in the same run.
+ */
+async function runPhase({ label, viewport, reducedMotion = false, full = false }) {
+  console.log(`\n── phase ${label} (${viewport.width}x${viewport.height}`
+    + `${reducedMotion ? ', reduced motion' : ''}${full ? ', full chain' : ', lean'}) ──`);
   const storePath = freshStorePath(label);
   const guestId = seedUnlockedGuest(storePath, label);
   const server = await startOwnedServer({ rewardStorePath: storePath });
@@ -369,18 +437,26 @@ async function runPhase({ label, viewport, reducedMotion = false }) {
     }
     await navigateFresh(tab, server.origin, server.url, viewport, guestId);
 
-    const arrivedAtCart = await reachTheCartBeat(tab);
-    check(`${label}: the Old Beacon is built into the zone`, arrivedAtCart.beaconBuilt === true,
-      `beaconBuilt ${arrivedAtCart.beaconBuilt}`);
-    check(`${label}: the Beacon road's three lamps all loaded`,
-      arrivedAtCart.beaconRoadLoaded === BEACON_ROAD_LIGHTS.length,
-      `${arrivedAtCart.beaconRoadLoaded} of ${BEACON_ROAD_LIGHTS.length}`);
-    check(`${label}: finishing the cart points the objective at the Beacon`,
-      arrivedAtCart.objective === OBJECTIVE_FIND_THE_BEACON,
-      `chip reads ${JSON.stringify(arrivedAtCart.objective)}`);
-    check(`${label}: Rowan's directions name the road rather than saying the Beacon must wait`,
-      (arrivedAtCart.npcLine ?? '').includes(ROWAN_LINE_CART_SEARCHED),
-      `line ${JSON.stringify(arrivedAtCart.npcLine)}`);
+    let atCamp;
+    if (full) {
+      atCamp = await reachTheCartBeat(tab);
+      check(`${label}: finishing the cart points the objective at the Beacon`,
+        atCamp.objective === OBJECTIVE_FIND_THE_BEACON,
+        `chip reads ${JSON.stringify(atCamp.objective)}`);
+      check(`${label}: Rowan's directions name the road rather than saying the Beacon must wait`,
+        (atCamp.npcLine ?? '').includes(ROWAN_LINE_CART_SEARCHED),
+        `line ${JSON.stringify(atCamp.npcLine)}`);
+    } else {
+      await walkToward(tab, CAMP.at[0], CAMP.at[1], CAMP.radiusMeters * 0.6, 180000);
+      atCamp = await pollUntil(tab, (s) => s.campFound === true, 20000);
+      check(`${label}: the camp is reached on foot`, atCamp.campFound === true,
+        `hero ${JSON.stringify(atCamp.heroPos)}, treeLit ${atCamp.treeLit}, net ${atCamp.netStatus}`);
+    }
+    check(`${label}: the Old Beacon is built into the zone`, atCamp.beaconBuilt === true,
+      `beaconBuilt ${atCamp.beaconBuilt}`);
+    check(`${label}: every Beacon road lamp loaded`,
+      atCamp.beaconRoadLoaded === BEACON_ROAD_LIGHTS.length,
+      `${atCamp.beaconRoadLoaded} of ${BEACON_ROAD_LIGHTS.length}`);
     await shot(tab, `${label}-01-camp-after-cart`);
 
     // THE WAY OUT. Stand where a child actually stands when they finish with the cart, then look the
@@ -466,36 +542,47 @@ async function runPhase({ label, viewport, reducedMotion = false }) {
     check(`${label}: the Beacon's own frame does not blow the draw-call budget`,
       atBeacon.drawCalls <= 90, `${atBeacon.drawCalls} draw calls`);
 
-    // ARRIVING FIRES ONCE. Leave the radius and come back; the banner must not be re-served.
-    await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1] - 9, 1.0, 45000);
-    await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1], OLD_BEACON.radiusMeters * 0.6, 45000);
-    const again = await pollUntil(tab, (s) => s.beaconStirring === true, 3000);
-    check(`${label}: walking back in does not fire the arrival a second time`,
-      again.beaconStirring === false && again.beaconFound === true,
-      `beaconStirring ${again.beaconStirring}`);
+    if (full) {
+      // THE EDGE OF THE WORLD. Push north past the Beacon until the clamp stops the hero, and
+      // confirm it is the clamp that stops them rather than the ground running out under their feet.
+      // This leg doubles as the "leave the radius" half of the fires-once check below, rather than
+      // spending a separate out-and-back on it: one walk, both properties, and a shorter run.
+      //
+      // OFFSET SIX METRES WEST of the Beacon's own line, and that is about the CAPTURE rather than
+      // the walk: the follow camera trails 15.3 m behind, so a hero due north of the Beacon looking
+      // north has the tower standing squarely between the camera and themselves. The first version
+      // of this leg photographed a wall of masonry with no hero and no world edge in it -- GQ-010,
+      // twice in one file. Six metres west clears it and puts the closing wood in frame, which is
+      // the thing this leg exists to show.
+      await walkToward(tab, OLD_BEACON.at[0] - 6, WORLD_LIMIT_NORTH + 8, 0.4, 90000);
+      const edge = await state(tab);
+      check(`${label}: the world still clamps north of the Beacon, on the ground`,
+        edge.heroPos[1] <= WORLD_LIMIT_NORTH + 0.05 && edge.heroPos[1] > OLD_BEACON.at[1],
+        `hero z ${edge.heroPos[1]} against a north limit of ${WORLD_LIMIT_NORTH}`);
+      check(`${label}: and there is real world left between the Beacon and that edge`,
+        WORLD_LIMIT_NORTH - OLD_BEACON.at[1] >= 3,
+        `${(WORLD_LIMIT_NORTH - OLD_BEACON.at[1]).toFixed(1)} m past the Beacon`);
+      check(`${label}: the hero really did leave the arrival radius`,
+        (edge.beaconSight?.metersFromHero ?? 0) > OLD_BEACON.radiusMeters,
+        `${edge.beaconSight?.metersFromHero?.toFixed(1)} m from the Beacon`);
+      await aimAt(tab, edge.heroPos[0], edge.heroPos[1] + 20);
+      await shot(tab, `${label}-09-north-edge-the-wood-closes`);
 
-    // THE EDGE OF THE WORLD. Push north past the Beacon until the clamp stops the hero, and confirm
-    // it is the clamp that stops them rather than the ground running out under their feet.
-    await walkToward(tab, OLD_BEACON.at[0], WORLD_LIMIT_NORTH + 8, 0.4, 60000);
-    const edge = await state(tab);
-    check(`${label}: the world still clamps north of the Beacon, on the ground`,
-      edge.heroPos[1] <= WORLD_LIMIT_NORTH + 0.05 && edge.heroPos[1] > OLD_BEACON.at[1],
-      `hero z ${edge.heroPos[1]} against a north limit of ${WORLD_LIMIT_NORTH}`);
-    check(`${label}: and there is real world left between the Beacon and that edge`,
-      WORLD_LIMIT_NORTH - OLD_BEACON.at[1] >= 3,
-      `${(WORLD_LIMIT_NORTH - OLD_BEACON.at[1]).toFixed(1)} m past the Beacon`);
-    await aimAt(tab, OLD_BEACON.at[0], OLD_BEACON.at[1] + 20);
-    await shot(tab, `${label}-09-north-edge`);
-
-    // WALK BACK AND TELL ROWAN. The one thing in this slice that answers the arrival with a person.
-    await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 180000);
-    const told = await pollUntil(tab, (s) => (s.npcLine ?? '').includes(ROWAN_LINE_BEACON_FOUND), 6000);
-    check(`${label}: Rowan has a new line for a child who has been, and does not hand over the blade`,
-      (told.npcLine ?? '').includes(ROWAN_LINE_BEACON_FOUND)
-      && !/blade is yours/i.test(told.npcLine ?? ''),
-      `line ${JSON.stringify(told.npcLine)}`);
-    await aimAtBeacon(tab);
-    await shot(tab, `${label}-10-back-at-camp`);
+      // BACK PAST THE BEACON AND ON TO ROWAN. Re-entering the radius must not re-serve the arrival,
+      // and Rowan is the one thing in this slice that answers the arrival with a person.
+      await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 240000);
+      const again = await state(tab);
+      check(`${label}: walking back through does not fire the arrival a second time`,
+        again.beaconStirring === false && again.beaconFound === true,
+        `beaconStirring ${again.beaconStirring}, beaconFound ${again.beaconFound}`);
+      const told = await pollUntil(tab, (s) => (s.npcLine ?? '').includes(ROWAN_LINE_BEACON_FOUND), 6000);
+      check(`${label}: Rowan has a new line for a child who has been, and does not hand over the blade`,
+        (told.npcLine ?? '').includes(ROWAN_LINE_BEACON_FOUND)
+        && !/blade is yours/i.test(told.npcLine ?? ''),
+        `line ${JSON.stringify(told.npcLine)}`);
+      await aimAtBeacon(tab);
+      await shot(tab, `${label}-10-back-at-camp`);
+    }
 
     check(`${label}: no console errors across the whole walk`, tab.consoleErrors.length === 0,
       tab.consoleErrors.slice(0, 3).join(' | '));
@@ -551,7 +638,7 @@ async function runReloadPhase() {
 const only = process.argv.slice(2);
 const wanted = (label) => only.length === 0 || only.includes(label);
 
-if (wanted('portrait')) await runPhase({ label: 'portrait', viewport: PORTRAIT });
+if (wanted('portrait')) await runPhase({ label: 'portrait', viewport: PORTRAIT, full: true });
 if (wanted('landscape')) await runPhase({ label: 'landscape', viewport: LANDSCAPE });
 if (wanted('reduced-motion')) await runPhase({ label: 'reduced-motion', viewport: PORTRAIT, reducedMotion: true });
 if (wanted('reload')) await runReloadPhase();
