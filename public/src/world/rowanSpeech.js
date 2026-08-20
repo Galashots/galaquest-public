@@ -26,13 +26,31 @@ export const ROWAN_LINE_INTRO =
   + 'Wake the Beacon. This Wildwood Blade is yours. '
   + 'First, search the broken cart for clues.';
 
-// After the cart: honest about what is NOT built yet (there is no walkable Beacon in this slice)
-// rather than repeating an instruction already done, the same reasoning the Keeper's own
-// KEEPER_LINE_GATE_FOUND follows once a finished step has nothing further to send the child to.
-export const ROWAN_LINE_CART_SEARCHED = 'Thank you. The Beacon must wait for now.';
+// After the cart. This read 'Thank you. The Beacon must wait for now.' until 2026-08-20, and that
+// sentence was the honest one exactly as long as the world stopped at this camp. G1 built the road
+// north, so the old line became the one thing a quest-giver must never be: WRONG about the world the
+// child is standing in (docs/MISTAKES.md GQ-002 -- rewrite the claim in the same commit that stops
+// it being true). ROWAN_LINE_INTRO above is untouched locked prose; only the directions moved.
+//
+// It gives a BEARING and a landmark, not a nudge: "north out of this camp" is the one fact a child
+// needs, and "the stones" names the waystones they will walk past thirty seconds later so that
+// seeing one confirms they went the right way.
+export const ROWAN_LINE_CART_SEARCHED =
+  'That map is the old Beacon road. '
+  + 'It runs north out of this camp. '
+  + 'Follow the stones. I will hold things here.';
 
-/** The line for Rowan's own state: only two, because he has one job in this slice. */
-export function rowanLineFor(cartSearched) {
+// After the Beacon. Honest in the one way that matters: Rowan does NOT hand over the Wildwood Blade,
+// because finding a cold Beacon is not waking it and nothing in this slice can wake it. What they do
+// is confirm what the child just saw, which is the whole payoff for walking back.
+export const ROWAN_LINE_BEACON_FOUND =
+  'So it really has gone out. '
+  + 'You saw it. That is more than I had. '
+  + 'Rest here. We will need more than this.';
+
+/** The line for Rowan's own state: three now, in the order the child earns them. */
+export function rowanLineFor(cartSearched, beaconFound = false) {
+  if (beaconFound === true) return ROWAN_LINE_BEACON_FOUND;
   return cartSearched === true ? ROWAN_LINE_CART_SEARCHED : ROWAN_LINE_INTRO;
 }
 
@@ -41,8 +59,10 @@ export function rowanLineFor(cartSearched) {
  * reused rather than re-derived because main.js shares ONE speech bubble between the two NPCs (they
  * stand tens of metres apart and can never both be in range at once).
  */
-export function rowanSpeechState({ heroX, heroZ, rowanX, rowanZ, radiusMeters, cartSearched }) {
+export function rowanSpeechState({
+  heroX, heroZ, rowanX, rowanZ, radiusMeters, cartSearched, beaconFound = false,
+}) {
   const distance = Math.hypot(heroX - rowanX, heroZ - rowanZ);
   if (distance > radiusMeters) return { visible: false, line: null };
-  return { visible: true, line: rowanLineFor(cartSearched) };
+  return { visible: true, line: rowanLineFor(cartSearched, beaconFound) };
 }

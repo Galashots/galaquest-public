@@ -60,11 +60,25 @@ export const OBJECTIVE_THE_CAMP = '❓ Who left this camp?';
 // a fresh coat of paint on it. Now Rowan tells the story and hands the child something physical to
 // do, which is what turns "who left this camp?" from a mood into a beat.
 export const OBJECTIVE_SEARCH_THE_CART = '🔎 Search the broken cart';
-// AFTER THE CART, and deliberately not "Reach the old Beacon": the world does not extend past the
-// camp yet (the road ends, the terrain does not), and this project has already shipped "the game
-// promised somewhere it could not walk to" as a real defect once. Honest and a verb, the same
-// reasoning OBJECTIVE_KEEP_THE_VILLAGE_SAFE follows for the same kind of not-built-yet ending.
-export const OBJECTIVE_GUARD_THE_CAMP = '🏕️ Guard the camp for Rowan';
+// AFTER THE CART. This used to read "🏕️ Guard the camp for Rowan", and the comment above it said,
+// honestly, that the world did not extend past the camp so the chip must not promise the Beacon.
+// That was true and it was still a dead end: guarding is not a verb this game implements, so the
+// last thing a finished child was told to do was nothing at all, in a frame with nothing in it.
+//
+// G1 built the road, so the chip can now say where it goes. NAMES THE DESTINATION, for the same
+// reason OBJECTIVE_LIGHT_THE_TREE had to stop saying "home": "the old Beacon" is a thing Rowan has
+// already said out loud and a thing a child can now see from where they are standing.
+export const OBJECTIVE_FIND_THE_BEACON = '🗼 Find the old Beacon';
+// AND THE HONEST END OF G1. The child has arrived; nothing here can be lit, repaired or fought yet,
+// and the chip must not say otherwise -- "the game promised somewhere it could not walk to" is a
+// defect this project has shipped once already and is not going to ship as "the game promised a
+// thing it could not do".
+//
+// So it asks rather than instructs, which is the same shape OBJECTIVE_THE_CAMP uses and for the same
+// reason: a question is the one form of objective that is still true when the answer is not built.
+// It uses ROWAN'S OWN WORD -- they say the Beacon "has gone cold", and the chip agreeing with the
+// person who sent you is what makes it read as the story continuing rather than as the game shrugging.
+export const OBJECTIVE_BEACON_IS_COLD = '❄️ Why is the Beacon cold?';
 // The fallback for a zone with no trail at all. It is honest and it is a verb -- wolves really do
 // keep coming back on their patrol -- and it is what the village said between the gate landing and
 // the Dark Trail landing. Kept so that a zone which places no dormant lights still says something.
@@ -82,7 +96,8 @@ export function objectiveFindMarks(remaining) {
  * @param treeLit      whether the Lantern Tree is already burning
  * @param gateFound    whether this player has already walked to the Wildwood Gate
  * @param questGiven   whether the Keeper has actually said his piece to this player yet
- * @param trail        `{ lights, lit, campFound }` -- how many trail lights exist, how many this
+ * @param trail        `{ lights, lit, campFound, rowanMet, cartSearched, atBramble, beaconFound }`
+ *                     -- how many trail lights exist, how many this
  *                     player has woken, and whether they have reached the camp. Optional and
  *                     defaulted, so every existing caller and test keeps the pre-Chapter-2 answers.
  * @returns the objective line, or null when there is nothing to show
@@ -104,12 +119,17 @@ export function questObjectiveFor(rewards, treeLit, gateFound = false, questGive
     // hands it straight back the moment it falls.
     if (trail?.atBramble === true) return OBJECTIVE_CUT_THE_BRAMBLE;
     if (trail?.campFound === true) {
-      // ROWAN, THEN THE CART, THEN NOTHING BUILT YET -- the same "arriving beats collecting"
-      // reasoning as the bramble interrupt above: each of these only claims the chip once its own
+      // ARRIVING BEATS COLLECTING, one more time and at the top of the branch: a child who has stood
+      // at the Old Beacon has done something bigger than anything the camp can still ask of them, and
+      // sending them back down the road to be introduced to Rowan would be the game arguing with them
+      // about a thing it never made them do. The same rule the bramble interrupt and the missed-lamp
+      // case above are both written from.
+      if (trail?.beaconFound === true) return OBJECTIVE_BEACON_IS_COLD;
+      // ROWAN, THEN THE CART, THEN THE ROAD NORTH -- each only claims the chip once its own
       // precondition is real, so a camp with no Rowan spoken to yet still asks the mystery.
       if (trail?.rowanMet !== true) return OBJECTIVE_THE_CAMP;
       if (trail?.cartSearched !== true) return OBJECTIVE_SEARCH_THE_CART;
-      return OBJECTIVE_GUARD_THE_CAMP;
+      return OBJECTIVE_FIND_THE_BEACON;
     }
     const lights = trail?.lights ?? 0;
     if (lights <= 0) return OBJECTIVE_KEEP_THE_VILLAGE_SAFE;

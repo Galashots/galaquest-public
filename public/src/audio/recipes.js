@@ -229,6 +229,33 @@ export const RECIPES = Object.freeze({
     }),
     Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.08, gainPeak: 0.22 }),
   ]),
+
+  // G1: arriving at the Old Beacon. Also not an encounter event -- main.js plays it the frame the
+  // hero crosses OLD_BEACON's own radius, the same "diff the state, do not chase an event" discipline
+  // cart-jolt documents.
+  //
+  // WRITTEN AGAINST `victory-sting` AS ITS OPPOSITE, deliberately, because those are the two sounds
+  // this moment could be confused between and it must never be the first. The sting is three notes
+  // RISING to a major triad and resolving; this is a hollow low tone that swells and a bare open
+  // fifth above it that simply STOPS without ever landing on a third -- the interval a listener
+  // cannot tell major from minor by, which is exactly the "I found the place and something is wrong
+  // here" this arrival is allowed to say and no more. The breath of noise under it is wind through
+  // stone, the same tone-plus-noise layering shard-resonance uses to give a pure tone a body.
+  //
+  // Long, at about 1.4 s, for the same reason relight-bloom is: this is the end of a walk, not a
+  // pickup. Quieter than either currency chime, because it is not a reward.
+  'beacon-cold': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.55, gainPeak: 0.14 }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0, durationSeconds: 1.1, frequencyStart: 98, frequencyEnd: 87.31, gainPeak: 0.3,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.35, durationSeconds: 0.95, frequencyStart: 293.66, frequencyEnd: 293.66, gainPeak: 0.24,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.55, durationSeconds: 0.85, frequencyStart: 587.33, frequencyEnd: 587.33, gainPeak: 0.2,
+    }),
+  ]),
 });
 
 /** Recipes played directly by a presenter rather than by an encounter or reward EVENT. There is one:
@@ -247,6 +274,8 @@ export const SHARD_PICKUP_RECIPE_NAME = 'shard-resonance';
 // GP3: the Workshop's own transformation ceremony -- driven by main.js diffing
 // village.workshopOwned, same as the three GP2 entries just above, so it belongs in this group too.
 export const WORKSHOP_BUILD_RECIPE_NAME = 'workshop-build';
+// G1: reaching the Old Beacon -- proximity, not an event, same group as everything above it here.
+export const BEACON_ARRIVAL_RECIPE_NAME = 'beacon-cold';
 export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   RELIGHT_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
@@ -254,6 +283,7 @@ export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   COIN_PICKUP_RECIPE_NAME,
   SHARD_PICKUP_RECIPE_NAME,
   WORKSHOP_BUILD_RECIPE_NAME,
+  BEACON_ARRIVAL_RECIPE_NAME,
 ]);
 
 /**
