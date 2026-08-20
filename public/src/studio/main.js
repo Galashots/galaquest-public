@@ -1,6 +1,7 @@
 import { createStudioScene, OVERLAY_MODES } from './scene.js';
 import { installStudioApi } from './api.js';
 import { installReviewAnnotations } from './reviewAnnotations.js';
+import { installReviewImageDownload } from './reviewImageDownload.js';
 import { STUDIO_LOADOUTS } from './loadoutDescriptors.js';
 import { BEARINGS, SCALE_DISTANCES } from '../review/cameraPresets.js';
 
@@ -133,7 +134,8 @@ async function bootstrap() {
   // annotations and exports one .gqreview.json packet for the existing ChatGPT subscription. It
   // does not call OpenAI or require an API key. The packet can later be normalized into
   // docs/review-guides/ so the same owner intent is reproducible by every future asset-review agent.
-  installReviewAnnotations({ api, studioCanvas: canvas });
+  const reviewApi = installReviewAnnotations({ api, studioCanvas: canvas });
+  installReviewImageDownload(reviewApi);
 
   window.addEventListener('resize', () => {
     studioScene.resize(canvas.clientWidth, canvas.clientHeight);

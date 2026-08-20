@@ -82,7 +82,7 @@
       }
       #review-source-link { color: #b9d9ff; word-break: break-all; }
       #review-status { color: #d7e3ef; min-height: 2.1em; }
-      #review-export { width: 100%; font-weight: 800; border-color: var(--studio-accent); }
+      #review-export, #review-export-image { width: 100%; font-weight: 800; border-color: var(--studio-accent); }
       #review-help { color: #aebdcb; font-size: 0.72rem; }
 
       @media (max-width: 900px) {
@@ -171,11 +171,13 @@
           </div>
         </div>
         <div id="review-status" class="row">context locks when Review Mode opens</div>
-        <button id="review-export">export for ChatGPT</button>
+        <button id="review-export-image">download annotated PNG</button>
+        <button id="review-export">export review packet</button>
         <div id="review-help" class="row">
-          No OpenAI API call. This downloads one <code>.gqreview.json</code> with the exact Studio state,
-          your annotation vectors, note, repo/SHA binding, and an annotated capture when available.
-          Upload that file in the GalaQuest ChatGPT project and say <strong>“ingest this review”</strong>.
+          No OpenAI API call. Download the annotated PNG plus the <code>.gqreview.json</code> packet,
+          then upload both in the GalaQuest ChatGPT project and say <strong>“ingest this review”</strong>.
+          The packet preserves the exact Studio state, annotation vectors, note, and repo/SHA binding;
+          the PNG gives ChatGPT a direct visual surface to inspect.
         </div>
       </section>
     </div>
