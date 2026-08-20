@@ -195,6 +195,18 @@ const KNOWN_DORMANT_DEFECTS = new Map([
   // which sums triangle/primitive/byte counts and never constructs a material. No renderer
   // reaches this file today.
   ['public/assets/hero/hero_lod1_6800.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  // PR #26 raw Meshy candidates. These are intentionally quarantined under candidates/ and are
+  // unreachable from the running game. Character Studio may load selected gear candidates only
+  // after applying normaliseCharacterMaterial() for truthful review pixels. Promotion out of
+  // candidates/ requires re-export/cleanup plus normal runtime material and payload gates.
+  ['public/assets/characters/candidates/wren-ranger-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/characters/candidates/wren-ranger-v1-walk.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/characters/candidates/wren-ranger-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/bramble-stalker-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/bramble-stalker-v1-walk.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/bramble-stalker-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/gear/candidates/dawnwarden-sword-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/gear/candidates/dawnwarden-helmet-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
 ]);
 
 test('every actively-loaded character GLB has its material defect, if any, either absent or fully neutralised by normaliseCharacterMaterial', () => {
