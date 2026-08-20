@@ -281,6 +281,49 @@ export const ROAD = Object.freeze({
     // rather than stopping in front of it or vanishing under it.
     Object.freeze([2.6, 49.6]),
   ]),
+
+  // ── ARC 2: THE OLD RANGER ROAD ──────────────────────────────────────────────────────────────
+  //
+  // A FORK, and it is the piece that makes four things that already shipped click together.
+  //
+  // The blackthorn stands at [8.5, 51.4], turned broadside to anyone walking east, and its own note
+  // says it exists to produce the sentence "there's a way over here". Wren says her brother "got as
+  // far as the blackthorn. That is further than I did." The marker stone in the pocket behind it
+  // carves one groove aiming north-east. Every one of those was written before this road existed and
+  // every one of them is about this road: THE BLACKTHORN IS WHAT CLOSED IT. That is why a ranger got
+  // that far and no further, why the pocket behind it has a satchel in it, and why the Wildwood
+  // Blade -- the thing that cuts what steel will not -- is the key to a place rather than a stat.
+  //
+  // So the tangle is painted ACROSS the road rather than standing in a field beside it. A barrier on
+  // a road reads as a road that is blocked; the same barrier on grass reads as scenery. Nothing here
+  // collides, so what stops a child is the game refusing the swing, not the geometry -- which makes
+  // it all the more important that the picture agrees with the rule.
+  //
+  // IT FORKS AT THE BEACON, not before it. A beacon on a ranger road IS a junction -- that is what
+  // the things were for -- so the tower stops being the end of a road and becomes the place two
+  // roads meet, which is a promotion rather than a demotion. It also means a child who walks up to a
+  // cold Beacon in Chapter 3 can already see the way east and be stopped by the tangle, which is the
+  // wanting-it-before-you-can-have-it beat BLACKTHORN's own comment asks for.
+  branches: Object.freeze([
+    Object.freeze({
+      points: Object.freeze([
+        // Shares the main road's last point exactly, so the fork is a fork and not two roads that
+        // happen to nearly touch. Restated as the same literal on purpose: a computed reference here
+        // would make the join silently follow the Beacon if the Beacon ever moved, which is the one
+        // thing that must NOT happen -- the junction is a place, not an offset.
+        Object.freeze([2.6, 49.6]),
+        Object.freeze([5.4, 50.5]),
+        // Straight under the tangle's own centre.
+        Object.freeze([8.5, 51.4]),
+        // ...and out the far side, through the pocket the satchel is lying in.
+        Object.freeze([11.2, 51.4]),
+        Object.freeze([14.6, 51.9]),
+        Object.freeze([18.0, 52.8]),
+        // Into the Lodge's own step, the same way the main road arrives at the Beacon's.
+        Object.freeze([20.8, 53.6]),
+      ]),
+    }),
+  ]),
 });
 
 // `model` is a path relative to public/assets/, matching the convention hero.js/wolf.js's own
@@ -927,10 +970,17 @@ export const BLACKTHORN = Object.freeze({
   radiusMeters: 3.2,
 });
 
-// The pocket itself, between the barrier and the world's own eastern edge at x = 13. Deliberately
-// SMALL -- about four metres across -- because the brief is "a ten-metre pocket with a great reveal
-// beats a huge empty zone", and because everything in it has to be readable in one frame from the
-// moment the tangle comes down.
+// The pocket itself, just east of the barrier. Deliberately SMALL -- about four metres across --
+// because the brief is "a ten-metre pocket with a great reveal beats a huge empty zone", and because
+// everything in it has to be readable in one frame from the moment the tangle comes down.
+//
+// This used to read "between the barrier and the world's own eastern edge at x = 13", and that was
+// true for exactly one chapter. Arc 2 moved the edge to 25 and ran the old ranger road straight
+// through here, so the pocket is no longer a DEAD END -- it is a place on the way to the Lodge, and
+// the satchel lying in it is lying where its owner dropped it rather than in the last cul-de-sac
+// before the map ran out. The stale half of that sentence is rewritten in the same commit that
+// stopped it being true (docs/MISTAKES.md GQ-002); the size argument is untouched because it is
+// still the reason the pocket is four metres and not forty.
 export const HOLLOW = Object.freeze({
   at: Object.freeze([11.2, 51.4]),
   // What is in there, in the order a child's eye should find it: the chest first (it is the reward),
