@@ -7,23 +7,50 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>">
     <style>
       :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+      * { box-sizing: border-box; }
       html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #182331; }
+      /* Touch usability (A1): controls respond on first tap (no double-tap zoom), and the canvas
+         never pans/zooms the page out from under an inspection. */
+      button, select { touch-action: manipulation; }
       #studio { position: relative; width: 100%; height: 100%; }
-      #studio-canvas { display: block; width: 100%; height: 100%; }
+      #studio-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
       #studio-panel {
-        position: absolute; top: 0.5rem; left: 0.5rem; padding: 0.6rem 0.75rem;
-        background: rgb(12 20 31 / 85%); color: #fff; border-radius: 0.4rem;
-        font: 0.8rem/1.4 system-ui, sans-serif; max-width: 20rem;
+        position: absolute;
+        top: max(0.5rem, env(safe-area-inset-top));
+        left: max(0.5rem, env(safe-area-inset-left));
+        padding: 0.55rem 0.7rem;
+        background: rgb(12 20 31 / 88%); color: #fff; border-radius: 0.55rem;
+        font: 0.8rem/1.4 system-ui, sans-serif; max-width: 21rem;
+        max-height: calc(100% - 1rem); overflow-y: auto;
       }
       #studio-panel select, #studio-panel button {
-        font: inherit; margin: 0.15rem 0.25rem 0.15rem 0; padding: 0.15rem 0.4rem;
+        font: inherit; margin: 0.15rem 0.25rem 0.15rem 0; padding: 0.25rem 0.45rem;
+        min-height: 1.9rem; max-width: 100%;
       }
       #studio-panel .row { margin-bottom: 0.3rem; }
+      /* The one control that must survive collapsing: the character is the point of the page, so
+         the whole panel folds down to its header row and stops covering the inspection surface. */
+      #studio-panel.collapsed .row:not(.head) { display: none; }
+      #panel-toggle { float: right; margin-left: 0.5rem; }
+      /* The semantic "what am I actually looking at" line -- populated from getState(), never
+         hand-written, so the label on screen is the same identifier a capture's metadata carries. */
+      #review-target { font-weight: 700; }
+      #studio-panel[data-classification="candidate"] #review-target { color: #ffb400; }
       /* Diagnostic lighting must never be visually mistaken for the game-authoritative default --
          a bright border is a cheap, unmissable "this is not what Sol judges against" flag whenever
          it's active. See public/src/studio/scene.js's LIGHTING_MODES. */
       body[data-lighting-mode="diagnostic"] #studio-panel { border: 2px solid #ffb400; }
       #lighting-label { font-weight: 700; }
+
+      /* Tablet/phone-minded widths: tighter type, bigger touch targets, and a panel that can never
+         swallow the character. 900px on purpose, not a phone-only 720: at iPad portrait (768) the
+         centred hero's head sat behind a 21rem panel in the first review-studio captures, so every
+         portrait-tablet width gets the narrow panel that clears him. */
+      @media (max-width: 900px) {
+        #studio-panel { max-width: min(15rem, calc(100vw - 1rem)); font-size: 0.72rem; padding: 0.45rem 0.55rem; }
+        #studio-panel select, #studio-panel button { min-height: 2.2rem; }
+        #studio-panel { max-height: 55%; }
+      }
     </style>
   </head>
   <body>
@@ -31,10 +58,14 @@
       <canvas id="studio-canvas"></canvas>
       <!-- Human-usable controls (owner-plan.md section 43). The same actions are available
            programmatically via window.__galaQuestStudio -- src/studio/api.js -- for the Sol bridge
-           worker; this panel exists so the owner can drive the same Studio by hand. -->
+           worker; this panel exists so the owner can drive the same Studio by hand. Every select is
+           populated by src/studio/main.js from the module that actually executes the value
+           (loadoutDescriptors.js, cameraPresets.js, scene.js's OVERLAY_MODES), so the menu can never
+           offer a state the Studio would refuse. -->
       <div id="studio-panel">
-        <div class="row">
+        <div class="row head">
           <strong>GalaQuest Character Studio</strong> — <span id="studio-status">loading…</span>
+          <button id="panel-toggle" aria-expanded="true">hide</button>
         </div>
         <div class="row">
           character
@@ -43,21 +74,25 @@
           </select>
         </div>
         <div class="row">
+          loadout
+          <select id="loadout-select"></select>
+        </div>
+        <div class="row">
+          reviewing: <span id="review-target">…</span>
+        </div>
+        <div class="row">
           clip
           <select id="clip-select"></select>
           <button id="play-pause">pause</button>
         </div>
         <div class="row">
           view
-          <select id="scale-select">
-            <option value="inspection">inspection</option>
-            <option value="gameplay">gameplay</option>
-          </select>
-          <select id="bearing-select">
-            <option value="front">front</option>
-            <option value="three-quarter" selected>three-quarter</option>
-            <option value="back">back</option>
-          </select>
+          <select id="scale-select"></select>
+          <select id="bearing-select"></select>
+        </div>
+        <div class="row">
+          overlay
+          <select id="overlay-select"></select>
         </div>
         <div class="row">
           lighting: <span id="lighting-label">game (authoritative)</span>
