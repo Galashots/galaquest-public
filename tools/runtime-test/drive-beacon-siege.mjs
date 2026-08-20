@@ -294,6 +294,23 @@ async function aimAt(tab, targetX, targetZ) {
   return state(tab);
 }
 
+/**
+ * Wait until the hero can actually SWING again, then report.
+ *
+ * Without this the harness taps far faster than the game can accept. A swing is SWING_SECONDS long
+ * and `canAttack` refuses a new one while the last is still running, so a loop that taps every half
+ * second throws most of its taps away -- the client is right to drop them, and the log reads like a
+ * sword that does not work. Measured in CI: eight taps at a cracked seal produced nowhere near eight
+ * swings, and a seal one blow from bursting never got that blow.
+ */
+async function waitUntilSwingReady(tab, maxMillis = 6000) {
+  return pollUntil(tab, (s) => {
+    const c = s.heroClocks;
+    return s.attackReady === true && c != null
+      && c.swingSeconds < 0 && c.cooldown <= 0 && c.downSeconds < 0;
+  }, maxMillis);
+}
+
 /** One real tap on the ATTACK button. */
 async function tapAttack(tab) {
   const box = await tab.page.eval(`JSON.stringify((() => {
@@ -395,10 +412,16 @@ async function run() {
       }
       const wasBurst = before.siege.seals.filter((s) => s.burst).length;
       let cracked = null;
+      // Compared against the state before THIS swing, not before the whole seal: diffing against the
+      // initial reading makes the predicate permanently true the moment the first blow lands, so
+      // every later poll returns instantly and the loop stops pacing itself to the swing at all.
+      let priorBlows = before.siege.seals.map((seal) => seal.blows);
       for (let swing = 0; swing < MAX_SWINGS_PER_SEAL; swing += 1) {
         // Re-faced before EVERY swing, not once: a walk that stopped past the stone leaves it behind
         // the hero, and a miss can drift him further.
         await faceHero(tab, sx, sz);
+        // ...and paced to the swing clock, so a tap becomes a SWING rather than being refused.
+        await waitUntilSwingReady(tab);
         await tapAttack(tab);
         // 3 s, not 9. This poll's ONLY job is "did that swing land", and a swing takes 1.5 s
         // (SWING_SECONDS) plus a snapshot's own 10 Hz -- so anything past about three seconds is a
@@ -408,10 +431,11 @@ async function run() {
         const after = await pollUntil(
           tab,
           (s) => s.siege.seals.filter((x) => x.burst).length > wasBurst
-            || s.siege.seals.some((x, i) => x.blows > before.siege.seals[i].blows),
+            || s.siege.seals.some((x, i) => x.blows > priorBlows[i]),
           3000,
         );
-        if (cracked === null && after.siege.seals.some((x, i) => x.blows > before.siege.seals[i].blows)) {
+        priorBlows = after.siege.seals.map((seal) => seal.blows);
+        if (cracked === null && after.siege.seals.some((x) => x.blows > 0)) {
           cracked = after;
           if (index === 0) {
             check(true, 'the first blow visibly CRACKS a seal rather than doing nothing',
@@ -453,8 +477,9 @@ async function run() {
         await walkToward(tab, w.x, w.z, 1.5, 12000);
       }
       await faceHero(tab, w.x, w.z);
+      await waitUntilSwingReady(tab);
       await tapAttack(tab);
-      await sleep(650);
+      await sleep(250);
       last = await state(tab);
       if (!shotPhase2 && last.siege.warden.phase >= 2) {
         shotPhase2 = true;
