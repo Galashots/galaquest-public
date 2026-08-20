@@ -4,19 +4,30 @@
 # public URL running the actual game -- client, authoritative server, and WebSocket co-op on one
 # origin -- without any local network access. See docs/public-playtest.md.
 #
-# This deploys server.mjs exactly as a contributor runs it. There is no build step and there are no
-# npm dependencies, by repository design.
+# This deploys server.mjs exactly as a contributor runs it. There are no npm dependencies and no
+# compile step, by repository design; the build command below only stamps provenance.
 services:
   - type: web
     name: galaquest-playtest
     runtime: node
     plan: free
-    # The repo has no build step; Render requires the field.
-    buildCommand: 'echo "no build step (see README): plain ES modules, vendored deps"'
+    # The repo has no compile step. This writes the one thing a remote playtester cannot otherwise
+    # learn from the running site: which commit it is actually playing. AGENTS.md requires every
+    # observation to name the exact SHA it proves, and an agent handed only a URL has no other
+    # independent seam -- the Render dashboard is not reachable from a browser-driving agent.
+    # RENDER_GIT_COMMIT is supplied by Render at build time; falls back to "unknown" rather than
+    # failing the deploy, so a missing variable degrades the evidence instead of the service.
+    buildCommand: |
+      printf '{"sourceSha":"%s"}\n' "${RENDER_GIT_COMMIT:-unknown}" > public/source-sha.json
     # server.mjs takes its port as argv[2]; Render supplies $PORT (never 5199, which server.mjs
     # reserves for the decision lab and refuses).
     startCommand: node server.mjs "$PORT"
     healthCheckPath: /
+    # Per-PR preview instances are opt-in, not automatic: they consume the same free instance hours
+    # as the main service, and most PRs here (CI and docs work) have nothing to play. "manual" is
+    # one of the two values Render accepts at service level, the other being "automatic".
+    previews:
+      generation: manual
     envVars:
       # node:sqlite (rewardStore) needs Node 22+; match CI's Node 24.
       - key: NODE_VERSION
