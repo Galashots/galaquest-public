@@ -38,7 +38,9 @@ import {
   removeSiegeHero,
   requestSiegeAttack,
   restoreLitSiege,
+  siegeHeroBody,
   stepSiege,
+  transferSiegeHeroBody,
 } from '../public/src/world/beaconSiege.js';
 import {
   BEACON_ARENA, BEACON_WARDEN, CART_SEARCH, COLD_SEALS, HOLLOW, ROWAN_CLAIM, WOLF_SPAWN, WOLF_SPAWNS,
@@ -549,6 +551,91 @@ export function createSimulation(options = {}) {
   });
   if (options.beaconLit === true) siegeState = restoreLitSiege(siegeState);
 
+  // ── WHICH FIGHT EACH CHILD'S BODY IS CURRENTLY IN ──────────────────────────────────────────────
+  //
+  // playerId -> 'wolf' | 'siege'. This is the whole answer to "a child has one body": the two
+  // engines each keep their own hero clocks because each has to resolve its own swings, but exactly
+  // ONE of them is authoritative for a given hero at a given moment, and crossing the arena boundary
+  // is an explicit HANDOFF rather than a change of which copy gets published.
+  //
+  // Publishing by selection alone was the first version of this and it was wrong in a way that only
+  // shows up in play: take wolf damage, walk to the Beacon, and the siege's untouched copy publishes
+  // full hearts; walk back and the wolf's copy resurrects the old state. Down and cooldown jump the
+  // same way. Selection is not continuity.
+  const arenaByPlayer = new Map();
+
+  const WOLF_ARENA = 'wolf';
+  const SIEGE_ARENA = 'siege';
+
+  /** The persistent half of a hero's body inside the wolf engine -- the mirror of
+   *  beaconSiege.js's own siegeHeroBody, written here rather than there because public/src/combat/
+   *  is a guarded directory this repo does not edit (see AGENTS.md). Same three fields, same
+   *  reasoning: hearts, being down, and the cooldown travel; the swing does not. */
+  function wolfHeroBody(heroId) {
+    const hero = encounterState.heroes[heroId];
+    return hero ? { hp: hero.hp, downSeconds: hero.downSeconds, cooldown: hero.cooldown } : null;
+  }
+
+  /** Write a body into the wolf engine's hero and cancel any swing it was mid-way through. Rebuilt
+   *  by spreading published state rather than through a setter, for the guarded-directory reason
+   *  above -- the same "construct a valid state object by hand" move main.js already makes for its
+   *  own offline mirror. */
+  function transferWolfHeroBody(heroId, body) {
+    const existing = encounterState.heroes[heroId];
+    if (!existing) return;
+    const hero = Object.freeze({
+      ...existing,
+      hp: Number.isFinite(body?.hp) ? body.hp : existing.hp,
+      downSeconds: Number.isFinite(body?.downSeconds) ? body.downSeconds : existing.downSeconds,
+      cooldown: Number.isFinite(body?.cooldown) ? body.cooldown : existing.cooldown,
+      swingSeconds: -1,
+      swingLanded: false,
+    });
+    const heroes = Object.freeze({ ...encounterState.heroes, [heroId]: hero });
+    encounterState = Object.freeze({ ...encounterState, heroes });
+  }
+
+  /** Move every player whose arena changed since the last tick, carrying their body with them. Run
+   *  BEFORE the two engines step, so a hero never spends a tick being simulated by the fight they
+   *  have just left. */
+  function settleArenas() {
+    for (const player of players.values()) {
+      const next = inBeaconArena(player) ? SIEGE_ARENA : WOLF_ARENA;
+      const previous = arenaByPlayer.get(player.id) ?? WOLF_ARENA;
+      if (next === previous) continue;
+      arenaByPlayer.set(player.id, next);
+      if (next === SIEGE_ARENA) {
+        siegeState = transferSiegeHeroBody(siegeState, player.id, wolfHeroBody(player.id));
+      } else {
+        transferWolfHeroBody(player.id, siegeHeroBody(siegeState, player.id));
+      }
+    }
+  }
+
+  /** Which engine owns this hero's body right now. Defaults to the wolf's, which is where every
+   *  player starts (the village) and where an unknown id harmlessly lands. */
+  function arenaOf(heroId) {
+    return arenaByPlayer.get(heroId) ?? WOLF_ARENA;
+  }
+
+  // Events that describe A HERO'S OWN BODY rather than the world. Only the engine currently holding
+  // that body may speak for it -- otherwise the idle engine's copy narrates hearts nobody lost and
+  // swings nobody threw. World events (a wolf dying, a seal bursting, the Beacon catching) carry no
+  // such restriction: everyone present should hear those, whichever fight they are standing in.
+  const WOLF_BODY_EVENTS = new Set([
+    'swing', 'swing-missed', 'swing-dropped', 'hero-hurt', 'hero-down', 'hero-respawned', 'hero-healed',
+  ]);
+  const SIEGE_BODY_EVENTS = new Set([
+    'siege-swing', 'siege-swing-missed', 'siege-swing-dropped', 'warden-hurt-hero',
+    'hero-down', 'hero-respawned', 'hero-healed',
+  ]);
+
+  function keepEvent(event, bodyEvents, arena) {
+    if (event.heroId == null) return true;
+    if (!bodyEvents.has(event.type)) return true;
+    return arenaOf(event.heroId) === arena;
+  }
+
   function addPlayer(name, at = { x: 0, z: 0 }) {
     const id = `p${nextPlayerNumber += 1}`;
     const player = {
@@ -574,6 +661,7 @@ export function createSimulation(options = {}) {
     const removed = players.delete(id);
     lastAttackSeq.delete(id);
     encounterState = removeHero(encounterState, id);
+    arenaByPlayer.delete(id);
     // Clears wolf.targetId's siege equivalent too (world/beaconSiege.js's removeSiegeHero), so a
     // Warden mid-swing at somebody who just closed their iPad does not resolve against a ghost.
     siegeState = removeSiegeHero(siegeState, id);
@@ -603,7 +691,7 @@ export function createSimulation(options = {}) {
     // the engine that owns the hero's swing clock and raises `swing`/`swing-missed`, so a child
     // swinging at nothing in the middle of a field still gets an arm that moves and a button that
     // goes on cooldown. The siege only ever takes the swing when the child is standing in it.
-    if (inBeaconArena(player)) {
+    if (arenaOf(id) === SIEGE_ARENA || inBeaconArena(player)) {
       const siegeResult = requestSiegeAttack(siegeState, id, `${id}:${seq}`);
       siegeState = siegeResult.state;
       if (siegeResult.events.length > 0) pendingEvents.push(...siegeResult.events);
@@ -695,9 +783,15 @@ export function createSimulation(options = {}) {
     for (const player of players.values()) {
       commandHeroes[player.id] = { position: { x: player.x, z: player.z }, heading: player.heading };
     }
+    // The handoff runs BEFORE either engine steps, so a hero is never simulated for a tick by the
+    // fight they have just walked out of.
+    settleArenas();
+
     const partyResult = stepParty(encounterState, { deltaSeconds, heroes: commandHeroes });
     encounterState = partyResult.state;
-    if (partyResult.events.length > 0) pendingEvents.push(...partyResult.events);
+    for (const event of partyResult.events) {
+      if (keepEvent(event, WOLF_BODY_EVENTS, WOLF_ARENA)) pendingEvents.push(event);
+    }
 
     // The siege runs on the SAME tick and the same command shape, every tick, whether or not anybody
     // is standing in it -- a Warden mid-death-animation with nobody watching still has to finish
@@ -705,7 +799,9 @@ export function createSimulation(options = {}) {
     // the wolf's do, so they ride the same snapshot and arrive in the order they happened.
     const siegeResult = stepSiege(siegeState, { deltaSeconds, heroes: commandHeroes });
     siegeState = siegeResult.state;
-    if (siegeResult.events.length > 0) pendingEvents.push(...siegeResult.events);
+    for (const event of siegeResult.events) {
+      if (keepEvent(event, SIEGE_BODY_EVENTS, SIEGE_ARENA)) pendingEvents.push(event);
+    }
 
     for (const player of players.values()) {
       const separated = separateFromWolf({ x: player.x, z: player.z }, encounterState.wolf);
@@ -748,8 +844,10 @@ export function createSimulation(options = {}) {
       // hearts stayed full and the "you went down" veil never appeared. The two can never disagree
       // about a hero who matters, because a hero cannot be in both places -- the fights are twenty
       // metres apart, which is the same fact applyAttack routes a swing on. Same test, one answer.
-      const player = players.get(heroId);
-      const source = (player && inBeaconArena(player) && siegeState.heroes[heroId]) || hero;
+      // Published from whichever engine currently HOLDS this body (settleArenas above moved it
+      // there), not from a fresh distance test: the handoff is the fact, and re-deriving it here
+      // would put the publish one boundary-crossing out of step with the transfer.
+      const source = (arenaOf(heroId) === SIEGE_ARENA && siegeState.heroes[heroId]) || hero;
       heroes[heroId] = {
         hp: source.hp,
         swingSeconds: roundToWire(source.swingSeconds),
@@ -1082,12 +1180,25 @@ export function attachGameServer(httpServer, options = {}) {
     if (!beaconLitRecorded && simulation.beaconIsLit()) {
       // Provenance only: whoever happens to be connected when the world changed. The row is a WORLD
       // fact and is read for everybody (net/rewardStore.mjs's beaconLit), so any joined guest will
-      // do -- and a siege won entirely by ephemeral players simply leaves no row, which is honest:
-      // nothing about that session was durable in the first place.
+      // do.
+      //
+      // THE LATCH ONLY CLOSES ON A REAL WRITE, and that distinction is the whole bug this shape
+      // fixes. It used to latch unconditionally after trying every connected player -- so a victory
+      // won entirely by guestId-less (ephemeral) clients marked itself recorded, having written
+      // nothing, and then stopped trying. A durable child joining a minute later would find the
+      // Beacon burning on screen with no row behind it, and the next restart would put it out.
+      //
+      // Leaving the latch open is exactly right for that case: there is nothing to write yet, and
+      // this runs every tick, so the moment a player with a durable identity is connected the row
+      // lands by itself. `applied: false` from an ALREADY-WRITTEN row cannot stall it either --
+      // beaconLitRecorded is seeded from the store at boot, so a world that is already recorded
+      // never enters this branch at all.
       for (const player of simulation.players.values()) {
-        if (rewards.recordBeaconLit(player.id).applied) break;
+        if (rewards.recordBeaconLit(player.id).applied) {
+          beaconLitRecorded = true;
+          break;
+        }
       }
-      beaconLitRecorded = true;
     }
 
     ticksSinceSnapshot += 1;

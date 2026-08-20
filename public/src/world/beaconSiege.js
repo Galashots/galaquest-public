@@ -342,6 +342,47 @@ export function addSiegeHero(state, heroId) {
   return publishSiege(state, draft);
 }
 
+/**
+ * Carry a hero's BODY into this fight from the one they just left.
+ *
+ * ── why this exists ─────────────────────────────────────────────────────────────────────────────
+ *
+ * A child has one body. Two engines each keeping their own `hp`/`downSeconds`/`cooldown` for the
+ * same hero is fine only while nobody crosses between them -- and the moment somebody does, merely
+ * CHOOSING which copy to publish is not continuity, it is a coin flip with a stale side. Take wolf
+ * damage, walk to the Beacon, and the Warden's untouched copy publishes full hearts; walk back and
+ * the wolf's copy resurrects the old state. Down and cooldown jump the same way.
+ *
+ * So the arena boundary is an explicit HANDOFF, and this is the receiving half: the persistent parts
+ * of the body (hearts, being down, the attack cooldown) move across intact.
+ *
+ * THE SWING IS DELIBERATELY NOT CARRIED. A swing belongs to the fight it was thrown in -- it was
+ * aimed at something in that engine and its contact frame would resolve against a different world
+ * here -- so it is cancelled at the boundary rather than teleported. Cancelled silently: the arm has
+ * already moved on the child's screen, and `swing-dropped` means "you were knocked out of it", which
+ * is not what happened.
+ *
+ * @param body `{ hp, downSeconds, cooldown }` read out of the engine the hero is leaving.
+ */
+export function transferSiegeHeroBody(state, heroId, body) {
+  if (!Object.prototype.hasOwnProperty.call(state.heroes, heroId)) return state;
+  const draft = draftOf(state);
+  const hero = draft.heroes[heroId];
+  if (Number.isFinite(body?.hp)) hero.hp = body.hp;
+  if (Number.isFinite(body?.downSeconds)) hero.downSeconds = body.downSeconds;
+  if (Number.isFinite(body?.cooldown)) hero.cooldown = body.cooldown;
+  hero.swingSeconds = -1;
+  hero.swingLanded = false;
+  return publishSiege(state, draft);
+}
+
+/** The persistent half of a hero's body, for handing to the other engine. See
+ *  transferSiegeHeroBody for why these three fields and not the swing. */
+export function siegeHeroBody(state, heroId) {
+  const hero = state.heroes[heroId];
+  return hero ? { hp: hero.hp, downSeconds: hero.downSeconds, cooldown: hero.cooldown } : null;
+}
+
 /** No-op if the hero was never here, for the same reason addSiegeHero is. Clears the Warden's
  *  targetId when it pointed at the hero leaving, so a stale id never gets looked up in stepSiege. */
 export function removeSiegeHero(state, heroId) {

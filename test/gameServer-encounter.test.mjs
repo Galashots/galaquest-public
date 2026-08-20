@@ -6,7 +6,8 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
 import { WOLF_SPAWN, createSimulation } from '../net/gameServer.mjs';
-import { MIN_BODY_SEPARATION, SWING_CONTACT_SECONDS } from '../public/src/combat/encounter.js';
+import { HERO_MAX_HP, MIN_BODY_SEPARATION, SWING_CONTACT_SECONDS } from '../public/src/combat/encounter.js';
+import { BEACON_ARENA } from '../public/src/world/zones/village.js';
 import { attackMessage, decode, encode } from '../public/src/net/protocol.js';
 
 // A spot within ATTACK_REACH (1.7) of the wolf, straight along +Z from it, so a hero standing here
@@ -167,4 +168,65 @@ test('the encounter snapshot carries wolf.modeSeconds, rounded to 3 decimals, an
     `modeSeconds should advance across 3 stepped ticks, got ${before.wolf.modeSeconds} -> ${after.wolf.modeSeconds}`);
   assert.equal(Math.round(after.wolf.modeSeconds * 1000) / 1000, after.wolf.modeSeconds,
     'modeSeconds should already be rounded to 3 decimals like the rest of the wolf block');
+});
+
+// ── the arena handoff (Director gate, PR #14) ───────────────────────────────────────────────────
+//
+// A CHILD HAS ONE BODY. Both engines keep hero clocks because both resolve their own swings, but
+// exactly one is authoritative for a given hero at a time, and crossing the Beacon arena's edge is
+// an explicit transfer rather than a change of which copy gets published.
+//
+// The first version of this published by distance test alone -- selection, not continuity -- and
+// these are the two cases that exposed it: hearts lost to a wolf came back on arrival at the Beacon,
+// and walking home resurrected the pre-Warden body.
+
+/** Walk a player to a point without going through input, then let the tick settle their arena. */
+function placeAndSettle(sim, id, x, z) {
+  const player = sim.players.get(id);
+  player.x = x;
+  player.z = z;
+  sim.step(0.05, 1000);
+  return sim;
+}
+
+test('hearts lost to the wolf survive walking into the Beacon arena', () => {
+  const sim = createSimulation();
+  const player = sim.addPlayer('kid');
+  // Hurt this hero in the wolf fight by standing in the wolf's jaws until it bites.
+  let bitten = false;
+  for (let i = 0; i < 400 && !bitten; i += 1) {
+    const wolf = sim.encounterSnapshot().wolf;
+    player.x = wolf.x;
+    player.z = wolf.z;
+    sim.step(0.05, 1000 + i * 50);
+    bitten = sim.encounterSnapshot().heroes[player.id].hp < HERO_MAX_HP;
+  }
+  const hurtHp = sim.encounterSnapshot().heroes[player.id].hp;
+  assert.ok(hurtHp < HERO_MAX_HP, 'setup: the wolf has to actually land a bite');
+
+  placeAndSettle(sim, player.id, BEACON_ARENA.at[0], BEACON_ARENA.at[1]);
+  assert.equal(
+    sim.encounterSnapshot().heroes[player.id].hp, hurtHp,
+    'the Beacon must not hand a wounded child full hearts for crossing a line',
+  );
+
+  // ...and walking back must not resurrect the body they had before the Beacon either.
+  placeAndSettle(sim, player.id, WOLF_SPAWN.x, WOLF_SPAWN.z + 6);
+  assert.equal(
+    sim.encounterSnapshot().heroes[player.id].hp, hurtHp,
+    'and going home must not resurrect a stale copy',
+  );
+});
+
+test('an in-flight swing is cancelled at the arena boundary rather than carried across', () => {
+  const sim = createSimulation();
+  const player = sim.addPlayer('kid');
+  sim.applyAttack(player.id, decode(encode(attackMessage(1))));
+  assert.ok(sim.encounterSnapshot().heroes[player.id].swingSeconds >= 0, 'setup: mid-swing');
+
+  placeAndSettle(sim, player.id, BEACON_ARENA.at[0], BEACON_ARENA.at[1]);
+  assert.equal(
+    sim.encounterSnapshot().heroes[player.id].swingSeconds, -1,
+    'a swing belongs to the fight it was thrown in',
+  );
 });

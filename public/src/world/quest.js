@@ -149,15 +149,22 @@ export function beaconObjectiveFor(siege) {
   // sword is not told to do a thing the starter sword cannot do. Before they own it, the chip is
   // still pointing them at Rowan, which is where the Blade actually comes from.
   if (siege?.bladeOwned === true) return OBJECTIVE_CUT_THE_BLACKTHORN;
-  if (siege?.beaconLit === true) return OBJECTIVE_RETURN_TO_ROWAN;
   const mode = siege?.wardenMode;
+  // LET THE VICTORY BREATHE. `beaconLit` latches on the FINISHING BLOW, but the Warden then spends
+  // 2.6 s falling and the Beacon takes 2.4 s to catch -- so checking the flag before the mode sent
+  // the child off to Rowan while the boss was still collapsing in front of them and the fire had not
+  // yet taken. The biggest moment in the game, interrupted by an errand.
+  //
+  // So the errand waits for the body to finish falling. 'dying' holds the dread beat; only once the
+  // Warden is actually gone does the chip turn the child around and point them home.
+  if (siege?.beaconLit === true) return mode === 'dying' ? OBJECTIVE_SOMETHING_ANSWERED : OBJECTIVE_RETURN_TO_ROWAN;
   // 'waking' is the one beat that must NOT name the Warden -- it is still standing up and a child
   // who has not seen it yet cannot be told to beat it. Every mode after that is a fight in progress.
   if (mode === 'waking') return OBJECTIVE_SOMETHING_ANSWERED;
   if (mode != null && mode !== 'dormant' && mode !== 'dead') return OBJECTIVE_FIGHT_THE_WARDEN;
-  // 'dead' with the Beacon not yet lit is the half-second between the last blow and the ignition;
-  // the fight is over and the payoff has not landed, so this holds the dread beat rather than
-  // flickering "Return to Rowan" for three frames.
+  // 'dead' with the Beacon somehow NOT lit is not a state the rules can produce (the ignition
+  // latches in the same step as the defeat), but a client mirroring a snapshot can observe the two
+  // fields a frame apart. Holding the dread beat is the honest answer for that frame.
   if (mode === 'dead') return OBJECTIVE_SOMETHING_ANSWERED;
   const sealsLeft = siege?.sealsLeft;
   if (Number.isFinite(sealsLeft) && sealsLeft > 0) return objectiveBreakSeals(sealsLeft);

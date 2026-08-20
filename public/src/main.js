@@ -351,10 +351,21 @@ async function bootstrap() {
     heroIds: [OFFLINE_HERO_ID],
   });
   let nextSiegeCommandId = 1;
-  // The blackthorn and its chest, per client and session-only -- the same reasoning `beaconFound`
-  // above gives. Cutting it open is a "you did this" beat, and a brother who arrives later gets to
-  // cut his own way in rather than finding the job done. (The CHEST's reward is durable and
-  // server-side; only the physical lid is local.)
+  // ── THE BLACKTHORN AND ITS CHEST, and exactly how permanent each half is ──────────────────────
+  //
+  // Session-local and per client, DELIBERATELY, and the distinction is worth stating plainly because
+  // "permanently open" is easy to claim and easy to get wrong:
+  //
+  //   the ROUTE is a "you did this" beat. Cutting the way in with a sword you earned is the whole
+  //   point of the reward, and a brother who arrives tomorrow should get to cut his own way in
+  //   rather than walking through a hole somebody else made. Within a session it never closes --
+  //   which is the sense in which it is permanent, the same sense the trail's own bramble is.
+  //
+  //   the REWARD is durable and server-side (net/rewardStore.mjs's per-guest hollow cache). What a
+  //   child OWNS survives everything; what a child DID is theirs to do.
+  //
+  // The chest's lid here is only the physical acknowledgement of that durable award, which is why
+  // re-opening it after a reload costs nothing and pays nothing -- the shards are already banked.
   let hollowState = createHollowState();
   let hollowFound = false;
   // Presentation edges, all diffed rather than chased -- the same "diff the published state, do not
@@ -2042,6 +2053,20 @@ async function bootstrap() {
     // THE DARK TRAIL. Carrying the lantern earned in Chapter 1 is what wakes the old lights -- see
     // world/trail.js. Gated on the tree being lit as well as the unlock, so the whole of Chapter 2
     // cannot start while a child is still being told to take the light home.
+    // THE FRAME THE BLADE LANDS, computed once for everything the sword can hit.
+    //
+    // Hoisted above the Dark Trail's own gate because it now feeds THREE consumers -- the bramble
+    // (inside that gate), the cold seals and the blackthorn (outside it, at the Beacon, which a
+    // child can be standing at with a zone whose trail lamps never loaded). Detected by watching
+    // the published swing clock CROSS contact rather than by hooking the attack button: online the
+    // swing is the SERVER's, and this client only ever learns about it through
+    // `encounterState.hero.swingSeconds`. Reading the same field in every mode is what stops any of
+    // these becoming things that only work offline.
+    const swingNow = encounterState.hero?.swingSeconds ?? -1;
+    const bladeLanded = swingPrevious >= 0 && swingPrevious < SWING_CONTACT_SECONDS
+      && swingNow >= SWING_CONTACT_SECONDS;
+    swingPrevious = swingNow;
+
     if (treeLitNow && zoneTrailLights.length > 0) {
       const step = wakeTrailLights(
         trailLit, VILLAGE.TRAIL_LIGHTS, player.position.x, player.position.z,
@@ -2068,10 +2093,6 @@ async function bootstrap() {
       // attack button: online, the swing is the SERVER's, and this client only ever learns about it
       // through `encounterState.hero.swingSeconds`. Reading the same field in both modes means the
       // bramble cannot become a thing that only cuts offline.
-      const swingNow = encounterState.hero?.swingSeconds ?? -1;
-      const bladeLanded = swingPrevious >= 0 && swingPrevious < SWING_CONTACT_SECONDS
-        && swingNow >= SWING_CONTACT_SECONDS;
-      swingPrevious = swingNow;
       if (bladeLanded && zoneBrambles.length > 0) {
         const strike = strikeBrambles(brambleBlows, VILLAGE.BRAMBLES, (bramble) => {
           // Aimed at the nearest point ON the tangle, not at its centre. A five-metre hedge is
@@ -2129,222 +2150,6 @@ async function bootstrap() {
       // rowanMet. The cart is an object Rowan tells you about, so its beat only makes sense in their
       // order; the Beacon is a PLACE, and a child who walked all the way to it has found it whatever
       // else they skipped. The objective chip agrees (world/quest.js reads beaconFound first).
-      // ── G2/G3: THE SIEGE ────────────────────────────────────────────────────────────────────
-      //
-      // Online the server owns it and this mirrors the published block; offline the same pure rules
-      // run locally. Identical shape to the wolf's own mirror-or-step above, and for the identical
-      // reason: everything downstream (the seals, the Warden's pose, the boss bar, the objective)
-      // reads ONE object and never asks which mode produced it.
-      //
-      // `siegeSwingLanded` is the same published-clock read the bramble above uses (see its comment
-      // on why this is watched rather than hooked off the button): the frame the hero's swing clock
-      // CROSSES contact is the frame a seal or the Warden is struck, online and offline alike.
-      // Online, these were separated out of the snapshot drain above; offline they are produced
-      // right here by the local rules. Either way the dispatch below is the same code.
-      const siegeEvents = pendingSiegeEvents;
-      pendingSiegeEvents = [];
-      const siegeSwingLanded = bladeLanded;
-      if (netStatus === 'online') {
-        const published = serverEncounter?.siege ?? null;
-        if (published) {
-          // Only the shared truth is taken from the wire. The hero clocks stay whatever the local
-          // copy holds -- there is one hero with one set of hearts and the encounter block already
-          // carries them (see net/gameServer.mjs's siegeSnapshot for the same rule stated there).
-          siegeState = {
-            ...siegeState,
-            seals: published.seals,
-            warden: { ...siegeState.warden, ...published.warden },
-            beaconLit: published.beaconLit,
-          };
-        }
-      } else {
-        // The offline fight. Its events are dispatched HERE rather than joining the encounter's own
-        // `events` array: that array is scoped to the `if (runtime.hero)` block further up, and this
-        // whole trail section deliberately runs outside it so the world keeps working while the hero
-        // mesh is still loading.
-        const ownSiegeHeroId = OFFLINE_HERO_ID;
-        if (siegeSwingLanded) {
-          const asked = requestSiegeAttack(siegeState, ownSiegeHeroId, nextSiegeCommandId++);
-          siegeState = asked.state;
-          siegeEvents.push(...asked.events);
-        }
-        const steppedSiege = stepSiege(siegeState, {
-          deltaSeconds,
-          heroes: {
-            [ownSiegeHeroId]: {
-              position: { x: player.position.x, z: player.position.z }, heading: player.heading,
-            },
-          },
-        });
-        siegeState = steppedSiege.state;
-        siegeEvents.push(...steppedSiege.events);
-      }
-
-      // Online, the siege's events ride the same snapshots the wolf's do and are drained into
-      // `pendingServerEvents` -- but that drain happens inside the `if (runtime.hero)` block above
-      // and is filtered against combat/feedback.js's table, which knows nothing about seals. So the
-      // siege's own events are separated out there and handed here, where their table lives.
-      for (const event of siegeEvents) {
-        const recipeName = soundForSiegeEvent(event.type);
-        if (recipeName) audio.play(recipeName);
-        if (event.type === 'warden-woke') banner('Something is standing up.', 3000);
-        else if (event.type === 'warden-defeated') banner('The Beacon Warden falls!', 3000);
-        else if (event.type === 'warden-hurt-hero') { flashHeroHurt(); renderHearts(event.remaining); }
-        else if (event.type === 'hero-down') { showHeroDown(true); banner('You went down…', 1600); }
-        else if (event.type === 'hero-respawned') { showHeroDown(false); renderHearts(HERO_MAX_HP); }
-        else if (event.type === 'hero-healed') { renderHearts(event.remaining); popHearts(); }
-        else if (event.type === 'siege-swing-missed') pulseMiss();
-      }
-
-      // THE SEALS, diffed. A presenter is told what it looks like now, never what happened -- so a
-      // client that missed a snapshot still catches up, and a reload lands on the right silhouette.
-      for (let index = 0; index < zoneColdSeals.length; index += 1) {
-        const seal = siegeState.seals[index];
-        if (!seal) continue;
-        const seen = sealsSeen[index];
-        if (seal.blows === seen.blows && seal.burst === seen.burst) continue;
-        // The burst's own sound escalates across the three (audio/siegeRecipes.js): first, second,
-        // third, where the third carries the low answer. Indexed by HOW MANY ARE NOW GONE rather
-        // than by which seal it was, so breaking them in any order still escalates.
-        if (seal.burst && !seen.burst) {
-          const goneNow = siegeState.seals.filter((candidate) => candidate.burst).length;
-          audio.play(`seal-burst-${Math.min(3, Math.max(1, goneNow))}`);
-        } else if (seal.blows > seen.blows) {
-          audio.play('seal-crack');
-        }
-        sealsSeen[index] = { blows: seal.blows, burst: seal.burst };
-        zoneColdSeals[index]?.setBlows(seal.blows, seal.burst);
-      }
-      for (const seal of zoneColdSeals) seal.update(deltaSeconds);
-
-      // THE WARDEN. Its pose is driven entirely by (mode, modeSeconds, phase) -- see
-      // enemies/warden.js -- so this hands over three numbers and lets the presenter draw.
-      const warden = siegeState.warden;
-      zoneWarden?.setPosition(warden.x, warden.z);
-      zoneWarden?.setHeading(warden.heading);
-      zoneWarden?.setMode(warden.mode, warden.modeSeconds, warden.phase);
-      zoneWarden?.update(deltaSeconds);
-      // The attacks announce themselves on the MODE EDGE rather than off a drained event: a wind-up
-      // whose sound arrived with the next snapshot would land after the arms had already moved.
-      if (warden.mode !== wardenModeSeen) {
-        if (warden.mode === 'overhead') audio.play('maul-windup');
-        else if (warden.mode === 'sweep') audio.play('warden-sweep');
-        else if (warden.mode === 'pulse') audio.play('cold-pulse');
-        wardenModeSeen = warden.mode;
-      }
-      bossBar.update(bossBarState({
-        mode: warden.mode, hp: warden.hp, maxHp: WARDEN_MAX_HP, phase: warden.phase,
-      }));
-
-      // ── G3 PAYOFF: THE BEACON LIGHTS ────────────────────────────────────────────────────────
-      //
-      // The world remembers. Gated on having SEEN it cold, the same rule the Lantern Tree's own
-      // relight and the Workshop's build already follow -- a child who joins a world where the
-      // Beacon is already burning gets a lit Beacon, not somebody else's ceremony.
-      if (!siegeState.beaconLit) sawBeaconCold = true;
-      if (siegeState.beaconLit && !beaconLitSeen) {
-        beaconLitSeen = true;
-        zoneOldBeacon?.ignite();
-        if (sawBeaconCold) {
-          audio.play('beacon-ignite');
-          banner('The Old Beacon is burning!', 3600);
-        }
-      }
-
-      if (!beaconFound && reachedCamp(VILLAGE.OLD_BEACON, player.position.x, player.position.z)) {
-        beaconFound = true;
-        // Says what the place IS, and stops. Not "you woke it", not "defend it" -- nothing here can
-        // be woken or defended yet, and the chip underneath carries the "something is wrong" half.
-        banner('You found the Old Beacon!', 3400);
-        audio.play(BEACON_ARRIVAL_RECIPE_NAME);
-        // The world's own answer: the dead cresset stirs once and falls back. No audience check
-        // needed (world/oldBeacon.js explains why) -- the trigger IS this player standing in front
-        // of it.
-        zoneOldBeacon?.stir();
-      }
-      zoneOldBeacon?.update(deltaSeconds);
-
-      // ── G5: THE BLACKTHORN, AND WHAT THE BLADE IS FOR ───────────────────────────────────────
-      //
-      // The one place in the game where WHICH WEAPON YOU ARE HOLDING changes what the world does.
-      // Same contact discipline as the bramble above -- nearest point on the span, the bramble's own
-      // extra reach -- because it is the same verb; the only difference is that the wall answers
-      // differently depending on the sword, and that difference is the entire point of the reward.
-      if (siegeSwingLanded && zoneBlackthorn && !hollowState.barrierTorn) {
-        const [barrierX, barrierZ] = nearestPointOnBarrier(
-          VILLAGE.BLACKTHORN, player.position.x, player.position.z,
-        );
-        const inReach = isWithinStrike(
-          { x: player.position.x, z: player.position.z },
-          player.heading,
-          { x: barrierX, z: barrierZ },
-          ATTACK_REACH + BRAMBLE_EXTRA_REACH_METERS,
-        );
-        if (inReach) {
-          const struck = strikeBarrier(hollowState, equippedWeaponIdThisFrame);
-          hollowState = struck.state;
-          for (const event of struck.events) {
-            const recipeName = soundForSiegeEvent(event.type);
-            if (recipeName) audio.play(recipeName);
-            if (event.type === 'blackthorn-tough') {
-              zoneBlackthorn.shudder();
-              // Says WHY, once it is worth saying. Not a failure message -- nothing was lost and
-              // nothing is broken; the wall is simply not something this sword can answer.
-              banner('Too tough for this blade.', 2200);
-            } else if (event.type === 'blackthorn-torn') {
-              zoneBlackthorn.tear();
-              banner('The blackthorn tears open!', 3000);
-            }
-          }
-        }
-      }
-      zoneBlackthorn?.update(deltaSeconds);
-      zoneHollow?.update(deltaSeconds);
-
-      // INSIDE. A discovery beat, per client and session-only like every other arrival in this file.
-      if (!hollowFound && zoneBlackthorn?.isGone() === true
-        && reachedCamp(VILLAGE.HOLLOW, player.position.x, player.position.z)) {
-        hollowFound = true;
-        banner('Blackthorn Hollow', 2600);
-      }
-      // The chest. Its lid is local presentation; its contents are a durable, server-authoritative
-      // award, so the ask is throttled exactly the way a loot pickup's is (see lootRequestedAt).
-      if (hollowFound && !hollowState.chestOpened
-        && reachedCamp({ at: VILLAGE.HOLLOW.chestAt, radiusMeters: 1.8 }, player.position.x, player.position.z)) {
-        const opened = openChest(hollowState);
-        hollowState = opened.state;
-        for (const event of opened.events) {
-          const recipeName = soundForSiegeEvent(event.type);
-          if (recipeName) audio.play(recipeName);
-        }
-        zoneHollow?.open();
-        banner('A ranger left something here.', 3200);
-        if (netStatus === 'online' && frameStart - hollowRequestedAt >= LOOT_REQUEST_RETRY_MS) {
-          hollowRequestedAt = frameStart;
-          net.sendClaimHollow();
-        }
-      }
-
-      // ── G4: "THE BLADE IS YOURS" ────────────────────────────────────────────────────────────
-      //
-      // Rowan's oldest promise, collected. The CONDITION is world/rowanSpeech.js's own
-      // rowanOwesBlade -- the identical function net/gameServer.mjs re-checks before granting
-      // anything, so this client can never offer something the server would refuse.
-      //
-      // Asked for rather than granted: ownership is durable and per guest, and only the server can
-      // write it. Throttled, not one-shot, for the same reason the loot requests are -- the first
-      // ask can legitimately race the server's own view of where this hero is standing.
-      if (netStatus === 'online' && bladeOwnedSeen === false
-        && rowanOwesBlade({
-          inRange: reachedCamp(VILLAGE.ROWAN_CLAIM, player.position.x, player.position.z),
-          beaconLit: siegeState.beaconLit,
-          bladeOwned: false,
-        })
-        && frameStart - bladeRequestedAt >= BLADE_REQUEST_RETRY_MS) {
-        bladeRequestedAt = frameStart;
-        net.sendClaimBlade();
-      }
-
       // THE CART ROWAN SENDS YOU TO. Gated on rowanMet, not just proximity -- reachedCamp is
       // generic (world/trail.js) and CART_SEARCH is just another `{ at, radiusMeters }` to it, but
       // the beat only makes sense in the order Rowan's own line puts it: meet them, THEN search.
@@ -2516,6 +2321,223 @@ async function bootstrap() {
         }
       }
     }
+
+    // ── G2/G3: THE SIEGE ────────────────────────────────────────────────────────────────────
+    //
+    // Online the server owns it and this mirrors the published block; offline the same pure rules
+    // run locally. Identical shape to the wolf's own mirror-or-step above, and for the identical
+    // reason: everything downstream (the seals, the Warden's pose, the boss bar, the objective)
+    // reads ONE object and never asks which mode produced it.
+    //
+    // `siegeSwingLanded` is the same published-clock read the bramble above uses (see its comment
+    // on why this is watched rather than hooked off the button): the frame the hero's swing clock
+    // CROSSES contact is the frame a seal or the Warden is struck, online and offline alike.
+    // Online, these were separated out of the snapshot drain above; offline they are produced
+    // right here by the local rules. Either way the dispatch below is the same code.
+    const siegeEvents = pendingSiegeEvents;
+    pendingSiegeEvents = [];
+    const siegeSwingLanded = bladeLanded;
+    if (netStatus === 'online') {
+      const published = serverEncounter?.siege ?? null;
+      if (published) {
+        // Only the shared truth is taken from the wire. The hero clocks stay whatever the local
+        // copy holds -- there is one hero with one set of hearts and the encounter block already
+        // carries them (see net/gameServer.mjs's siegeSnapshot for the same rule stated there).
+        siegeState = {
+          ...siegeState,
+          seals: published.seals,
+          warden: { ...siegeState.warden, ...published.warden },
+          beaconLit: published.beaconLit,
+        };
+      }
+    } else {
+      // The offline fight. Its events are dispatched HERE rather than joining the encounter's own
+      // `events` array: that array is scoped to the `if (runtime.hero)` block further up, and this
+      // whole trail section deliberately runs outside it so the world keeps working while the hero
+      // mesh is still loading.
+      const ownSiegeHeroId = OFFLINE_HERO_ID;
+      if (siegeSwingLanded) {
+        const asked = requestSiegeAttack(siegeState, ownSiegeHeroId, nextSiegeCommandId++);
+        siegeState = asked.state;
+        siegeEvents.push(...asked.events);
+      }
+      const steppedSiege = stepSiege(siegeState, {
+        deltaSeconds,
+        heroes: {
+          [ownSiegeHeroId]: {
+            position: { x: player.position.x, z: player.position.z }, heading: player.heading,
+          },
+        },
+      });
+      siegeState = steppedSiege.state;
+      siegeEvents.push(...steppedSiege.events);
+    }
+
+    // Online, the siege's events ride the same snapshots the wolf's do and are drained into
+    // `pendingServerEvents` -- but that drain happens inside the `if (runtime.hero)` block above
+    // and is filtered against combat/feedback.js's table, which knows nothing about seals. So the
+    // siege's own events are separated out there and handed here, where their table lives.
+    for (const event of siegeEvents) {
+      const recipeName = soundForSiegeEvent(event.type);
+      if (recipeName) audio.play(recipeName);
+      if (event.type === 'warden-woke') banner('Something is standing up.', 3000);
+      else if (event.type === 'warden-defeated') banner('The Beacon Warden falls!', 3000);
+      else if (event.type === 'warden-hurt-hero') { flashHeroHurt(); renderHearts(event.remaining); }
+      else if (event.type === 'hero-down') { showHeroDown(true); banner('You went down…', 1600); }
+      else if (event.type === 'hero-respawned') { showHeroDown(false); renderHearts(HERO_MAX_HP); }
+      else if (event.type === 'hero-healed') { renderHearts(event.remaining); popHearts(); }
+      else if (event.type === 'siege-swing-missed') pulseMiss();
+    }
+
+    // THE SEALS, diffed. A presenter is told what it looks like now, never what happened -- so a
+    // client that missed a snapshot still catches up, and a reload lands on the right silhouette.
+    for (let index = 0; index < zoneColdSeals.length; index += 1) {
+      const seal = siegeState.seals[index];
+      if (!seal) continue;
+      const seen = sealsSeen[index];
+      if (seal.blows === seen.blows && seal.burst === seen.burst) continue;
+      // The burst's own sound escalates across the three (audio/siegeRecipes.js): first, second,
+      // third, where the third carries the low answer. Indexed by HOW MANY ARE NOW GONE rather
+      // than by which seal it was, so breaking them in any order still escalates.
+      if (seal.burst && !seen.burst) {
+        const goneNow = siegeState.seals.filter((candidate) => candidate.burst).length;
+        audio.play(`seal-burst-${Math.min(3, Math.max(1, goneNow))}`);
+      } else if (seal.blows > seen.blows) {
+        audio.play('seal-crack');
+      }
+      sealsSeen[index] = { blows: seal.blows, burst: seal.burst };
+      zoneColdSeals[index]?.setBlows(seal.blows, seal.burst);
+    }
+    for (const seal of zoneColdSeals) seal.update(deltaSeconds);
+
+    // THE WARDEN. Its pose is driven entirely by (mode, modeSeconds, phase) -- see
+    // enemies/warden.js -- so this hands over three numbers and lets the presenter draw.
+    const warden = siegeState.warden;
+    zoneWarden?.setPosition(warden.x, warden.z);
+    zoneWarden?.setHeading(warden.heading);
+    zoneWarden?.setMode(warden.mode, warden.modeSeconds, warden.phase);
+    zoneWarden?.update(deltaSeconds);
+    // The attacks announce themselves on the MODE EDGE rather than off a drained event: a wind-up
+    // whose sound arrived with the next snapshot would land after the arms had already moved.
+    if (warden.mode !== wardenModeSeen) {
+      if (warden.mode === 'overhead') audio.play('maul-windup');
+      else if (warden.mode === 'sweep') audio.play('warden-sweep');
+      else if (warden.mode === 'pulse') audio.play('cold-pulse');
+      wardenModeSeen = warden.mode;
+    }
+    bossBar.update(bossBarState({
+      mode: warden.mode, hp: warden.hp, maxHp: WARDEN_MAX_HP, phase: warden.phase,
+    }));
+
+    // ── G3 PAYOFF: THE BEACON LIGHTS ────────────────────────────────────────────────────────
+    //
+    // The world remembers. Gated on having SEEN it cold, the same rule the Lantern Tree's own
+    // relight and the Workshop's build already follow -- a child who joins a world where the
+    // Beacon is already burning gets a lit Beacon, not somebody else's ceremony.
+    if (!siegeState.beaconLit) sawBeaconCold = true;
+    if (siegeState.beaconLit && !beaconLitSeen) {
+      beaconLitSeen = true;
+      zoneOldBeacon?.ignite();
+      if (sawBeaconCold) {
+        audio.play('beacon-ignite');
+        banner('The Old Beacon is burning!', 3600);
+      }
+    }
+
+    if (!beaconFound && reachedCamp(VILLAGE.OLD_BEACON, player.position.x, player.position.z)) {
+      beaconFound = true;
+      // Says what the place IS, and stops. Not "you woke it", not "defend it" -- nothing here can
+      // be woken or defended yet, and the chip underneath carries the "something is wrong" half.
+      banner('You found the Old Beacon!', 3400);
+      audio.play(BEACON_ARRIVAL_RECIPE_NAME);
+      // The world's own answer: the dead cresset stirs once and falls back. No audience check
+      // needed (world/oldBeacon.js explains why) -- the trigger IS this player standing in front
+      // of it.
+      zoneOldBeacon?.stir();
+    }
+    zoneOldBeacon?.update(deltaSeconds);
+
+    // ── G5: THE BLACKTHORN, AND WHAT THE BLADE IS FOR ───────────────────────────────────────
+    //
+    // The one place in the game where WHICH WEAPON YOU ARE HOLDING changes what the world does.
+    // Same contact discipline as the bramble above -- nearest point on the span, the bramble's own
+    // extra reach -- because it is the same verb; the only difference is that the wall answers
+    // differently depending on the sword, and that difference is the entire point of the reward.
+    if (siegeSwingLanded && zoneBlackthorn && !hollowState.barrierTorn) {
+      const [barrierX, barrierZ] = nearestPointOnBarrier(
+        VILLAGE.BLACKTHORN, player.position.x, player.position.z,
+      );
+      const inReach = isWithinStrike(
+        { x: player.position.x, z: player.position.z },
+        player.heading,
+        { x: barrierX, z: barrierZ },
+        ATTACK_REACH + BRAMBLE_EXTRA_REACH_METERS,
+      );
+      if (inReach) {
+        const struck = strikeBarrier(hollowState, equippedWeaponIdThisFrame);
+        hollowState = struck.state;
+        for (const event of struck.events) {
+          const recipeName = soundForSiegeEvent(event.type);
+          if (recipeName) audio.play(recipeName);
+          if (event.type === 'blackthorn-tough') {
+            zoneBlackthorn.shudder();
+            // Says WHY, once it is worth saying. Not a failure message -- nothing was lost and
+            // nothing is broken; the wall is simply not something this sword can answer.
+            banner('Too tough for this blade.', 2200);
+          } else if (event.type === 'blackthorn-torn') {
+            zoneBlackthorn.tear();
+            banner('The blackthorn tears open!', 3000);
+          }
+        }
+      }
+    }
+    zoneBlackthorn?.update(deltaSeconds);
+    zoneHollow?.update(deltaSeconds);
+
+    // INSIDE. A discovery beat, per client and session-only like every other arrival in this file.
+    if (!hollowFound && zoneBlackthorn?.isGone() === true
+      && reachedCamp(VILLAGE.HOLLOW, player.position.x, player.position.z)) {
+      hollowFound = true;
+      banner('Blackthorn Hollow', 2600);
+    }
+    // The chest. Its lid is local presentation; its contents are a durable, server-authoritative
+    // award, so the ask is throttled exactly the way a loot pickup's is (see lootRequestedAt).
+    if (hollowFound && !hollowState.chestOpened
+      && reachedCamp({ at: VILLAGE.HOLLOW.chestAt, radiusMeters: 1.8 }, player.position.x, player.position.z)) {
+      const opened = openChest(hollowState);
+      hollowState = opened.state;
+      for (const event of opened.events) {
+        const recipeName = soundForSiegeEvent(event.type);
+        if (recipeName) audio.play(recipeName);
+      }
+      zoneHollow?.open();
+      banner('A ranger left something here.', 3200);
+      if (netStatus === 'online' && frameStart - hollowRequestedAt >= LOOT_REQUEST_RETRY_MS) {
+        hollowRequestedAt = frameStart;
+        net.sendClaimHollow();
+      }
+    }
+
+    // ── G4: "THE BLADE IS YOURS" ────────────────────────────────────────────────────────────
+    //
+    // Rowan's oldest promise, collected. The CONDITION is world/rowanSpeech.js's own
+    // rowanOwesBlade -- the identical function net/gameServer.mjs re-checks before granting
+    // anything, so this client can never offer something the server would refuse.
+    //
+    // Asked for rather than granted: ownership is durable and per guest, and only the server can
+    // write it. Throttled, not one-shot, for the same reason the loot requests are -- the first
+    // ask can legitimately race the server's own view of where this hero is standing.
+    if (netStatus === 'online' && bladeOwnedSeen === false
+      && rowanOwesBlade({
+        inRange: reachedCamp(VILLAGE.ROWAN_CLAIM, player.position.x, player.position.z),
+        beaconLit: siegeState.beaconLit,
+        bladeOwned: false,
+      })
+      && frameStart - bladeRequestedAt >= BLADE_REQUEST_RETRY_MS) {
+      bladeRequestedAt = frameStart;
+      net.sendClaimBlade();
+    }
+
 
     renderQuestObjective(questObjectiveFor(
       rewardsKnown ? rewardsForRelight : null, treeLitNow, gateFound, questGiven,
