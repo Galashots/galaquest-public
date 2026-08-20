@@ -248,7 +248,44 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   return last;
 }
 
-/** Face a world point, so a swing's own arc test has a chance and a capture has its subject. */
+/**
+ * TURN THE HERO to face a world point -- not the camera, the HERO.
+ *
+ * The server judges a swing against `player.heading`, and heading is only ever written on a frame
+ * the hero is actually MOVING (net/gameServer.mjs's applyInput). walkToward stops as soon as it is
+ * inside its stop radius, which routinely leaves the hero a step PAST the thing it walked to: the
+ * first CI run of this file swung eight times at a seal 0.96 m away, with the attack button ready
+ * and every hero clock idle, and missed all eight -- because the hero stood at [6.85, 50.34] facing
+ * the way he had been travelling while the seal sat at [6, 49.9], behind his shoulder.
+ *
+ * That is the GAME being right: you must face what you hit. So this issues one short stick pulse in
+ * the target's direction, which costs a few centimetres of movement and buys a correct heading.
+ */
+async function faceHero(tab, targetX, targetZ) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  const here = await state(tab);
+  const dx = targetX - here.heroPos[0];
+  const dz = targetZ - here.heroPos[1];
+  const distance = Math.hypot(dx, dz) || 1;
+  const nx = dx / distance;
+  const nz = dz / distance;
+  const cos = Math.cos(here.heading);
+  const sin = Math.sin(here.heading);
+  const sx = -cos * nx + sin * nz;
+  const sy = sin * nx + cos * nz;
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  try {
+    await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+    await sleep(160);
+  } finally {
+    await touch(tab, 'touchEnd', []);
+  }
+  await sleep(220);
+  return state(tab);
+}
+
+/** Face a world point with the CAMERA, so a capture has its subject in frame. Does not turn the
+ *  hero -- see faceHero above for the difference, which cost this file a whole CI round trip. */
 async function aimAt(tab, targetX, targetZ) {
   const here = await state(tab);
   const heading = Math.atan2(targetX - here.heroPos[0], targetZ - here.heroPos[1]);
@@ -359,6 +396,9 @@ async function run() {
       const wasBurst = before.siege.seals.filter((s) => s.burst).length;
       let cracked = null;
       for (let swing = 0; swing < MAX_SWINGS_PER_SEAL; swing += 1) {
+        // Re-faced before EVERY swing, not once: a walk that stopped past the stone leaves it behind
+        // the hero, and a miss can drift him further.
+        await faceHero(tab, sx, sz);
         await tapAttack(tab);
         // 3 s, not 9. This poll's ONLY job is "did that swing land", and a swing takes 1.5 s
         // (SWING_SECONDS) plus a snapshot's own 10 Hz -- so anything past about three seconds is a
@@ -412,7 +452,7 @@ async function run() {
       if (Math.hypot(last.heroPos[0] - w.x, last.heroPos[1] - w.z) > 1.6) {
         await walkToward(tab, w.x, w.z, 1.5, 12000);
       }
-      await aimAt(tab, w.x, w.z);
+      await faceHero(tab, w.x, w.z);
       await tapAttack(tab);
       await sleep(650);
       last = await state(tab);
