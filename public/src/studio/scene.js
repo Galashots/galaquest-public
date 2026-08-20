@@ -9,7 +9,7 @@ import { applySky } from '../render/sky.js';
 import { createRenderer } from '../render/renderer.js';
 import { createGround } from '../world/ground.js';
 import { createRimLight } from '../render/rimLight.js';
-import { loadHero } from '../character/hero.js';
+import { loadHero, normaliseCharacterMaterial } from '../character/hero.js';
 import {
   attachBeltLantern, BELT_LANTERN_URL,
   attachWildwoodBladeCandidate, WILDWOOD_BLADE_CANDIDATE_URL, WILDWOOD_BLADE_CANDIDATE_ID,
@@ -106,6 +106,14 @@ export async function createStudioScene(canvas) {
   async function loadStudioCandidate(spec) {
     const gltf = await loadGLB(spec.url);
     if (gltf.userData?.loadError) throw new Error(`Studio candidate asset missing: ${spec.url}`);
+    // Raw Meshy outputs can carry the same emissive/metalness export defect already documented for
+    // generated characters. Studio must judge the candidate's real painted texture, not a flooded
+    // provider-export artefact. This is review-only normalization; accepted shipping assets still
+    // have to be cleaned/re-exported before leaving candidates/.
+    gltf.scene.traverse((object) => {
+      if (!object.isMesh) return;
+      for (const material of [].concat(object.material)) normaliseCharacterMaterial(material);
+    });
     return attachStudioCandidate(hero.root, spec, gltf.scene);
   }
 
