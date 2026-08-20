@@ -69,18 +69,27 @@ function createBeaconAnswerGlow(scene) {
 function createSealHud() {
   const game = document.querySelector('#game');
   const objective = document.querySelector('#quest-objective');
-  if (!game || !objective) return { paint() {}, announce() {}, observe() {} };
+  if (!game || !objective) {
+    return { paint() {}, announce() {}, observe() {}, refreshObjective() {} };
+  }
 
   const strip = document.createElement('div');
   strip.id = 'cold-seal-progress';
   strip.setAttribute('aria-hidden', 'true');
   strip.style.cssText = [
     'position:absolute', 'left:50%', 'top:4.35rem', 'transform:translateX(-50%)',
-    'display:flex', 'gap:.38rem', 'padding:.32rem .55rem', 'border-radius:999px',
-    'background:rgb(12 20 31 / 76%)', 'border:1px solid rgb(169 232 255 / 32%)',
-    'box-shadow:0 0 1.2rem rgb(110 202 235 / 12%)', 'pointer-events:none',
-    'opacity:0', 'transition:opacity 160ms ease-out', 'z-index:8',
+    'display:flex', 'align-items:center', 'gap:.48rem', 'padding:.38rem .62rem',
+    'border-radius:999px', 'background:rgb(12 20 31 / 82%)',
+    'border:1px solid rgb(169 232 255 / 38%)', 'box-shadow:0 0 1.2rem rgb(110 202 235 / 14%)',
+    'pointer-events:none', 'opacity:0', 'transition:opacity 160ms ease-out', 'z-index:8',
   ].join(';');
+  const label = document.createElement('span');
+  label.textContent = 'BREAK THE COLD SEALS';
+  label.style.cssText = [
+    'color:#e8f8ff', 'font:900 .67rem/1 system-ui,sans-serif', 'letter-spacing:.08em',
+    'white-space:nowrap', 'text-shadow:0 0 .6rem rgb(169 232 255 / 38%)',
+  ].join(';');
+  strip.appendChild(label);
   const pips = [];
   for (let i = 0; i < COLD_SEAL_COUNT; i += 1) {
     const pip = document.createElement('span');
@@ -108,6 +117,24 @@ function createSealHud() {
   ].join(';');
   game.appendChild(toast);
   let toastTimer = 0;
+  let readState = null;
+  let paintingObjective = false;
+
+  function refreshObjective() {
+    if (!readState || paintingObjective) return;
+    const state = readState();
+    // The arrival itself keeps G1's honest question. The G2 HUD directly underneath it says what to
+    // TRY. Once the child proves the idea by breaking one seal, the ordinary quest chip can promote
+    // that discovered verb and count the rest down. This also preserves G1's old arrival harness as
+    // a true test of the pre-action state instead of rewriting history to make the new feature pass.
+    if (!state.active || state.brokenCount === 0) return;
+    const wanted = coldSealObjective(state.brokenCount);
+    if (objective.textContent === wanted) return;
+    paintingObjective = true;
+    objective.textContent = wanted;
+    objective.dataset.shown = 'true';
+    paintingObjective = false;
+  }
 
   function paint(brokenCount, active) {
     strip.style.opacity = active ? '1' : '0';
@@ -117,6 +144,7 @@ function createSealHud() {
       pips[i].style.filter = broken ? 'grayscale(1)' : 'none';
       pips[i].style.transform = broken ? 'scale(.72) rotate(45deg)' : 'scale(1)';
     }
+    refreshObjective();
   }
 
   function announce(text, final = false) {
@@ -131,29 +159,13 @@ function createSealHud() {
     }, final ? 2200 : 1300);
   }
 
-  // main.js quite correctly owns the ordinary quest chip and repaints it every frame. G2 is kept
-  // isolated in this module so the big orchestration file does not absorb another one-off branch;
-  // a MutationObserver changes ONLY the post-arrival Beacon line, immediately after main paints it.
-  // Nothing before beaconFound is touched, and disconnecting this module returns the old G1 ending.
-  function observe(readState) {
-    let painting = false;
-    const repaint = () => {
-      if (painting) return;
-      const state = readState();
-      if (!state.active) return;
-      const wanted = coldSealObjective(state.brokenCount);
-      if (objective.textContent === wanted) return;
-      painting = true;
-      objective.textContent = wanted;
-      objective.dataset.shown = 'true';
-      painting = false;
-    };
-    const observer = new MutationObserver(repaint);
+  function observe(reader) {
+    readState = reader;
+    const observer = new MutationObserver(refreshObjective);
     observer.observe(objective, { childList: true, subtree: true, characterData: true });
-    repaint();
   }
 
-  return { paint, announce, observe };
+  return { paint, announce, observe, refreshObjective };
 }
 
 function runtimeHeroSwing(runtime) {
@@ -230,6 +242,7 @@ export async function installColdSealsRuntime() {
         presenter.break(index);
         const count = coldSealsBroken(broken);
         answer.react(count);
+        hud.refreshObjective();
         if (count === presenter.count) hud.announce('SOMETHING ANSWERED', true);
         else hud.announce(`COLD SEAL SHATTERED  ${count} / ${presenter.count}`);
       }
