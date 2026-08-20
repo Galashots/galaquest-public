@@ -8,6 +8,7 @@ name: director-playtest
 #   /director-playtest lodge
 #   /director-playtest combat
 #   /director-playtest co-op
+#   /director-playtest studio
 #
 # The playtest job checks out the PR's real HEAD (never the issue_comment event's default-branch SHA),
 # launches the same isolated Chrome contract used by full-playtest-matrix, runs one existing
@@ -49,10 +50,10 @@ jobs:
           first_line="$(printf '%s\n' "$COMMENT_BODY" | head -n 1)"
           scenario="$(printf '%s\n' "$first_line" | awk '{print $2}')"
           case "$scenario" in
-            village|touch|combat|marks|old-beacon|beacon|ranger|lodge|hero|board|co-op) ;;
+            village|touch|combat|marks|old-beacon|beacon|ranger|lodge|hero|board|co-op|studio) ;;
             *)
               echo "unsupported Director playtest scenario: '$scenario'" >&2
-              echo "allowed: village touch combat marks old-beacon beacon ranger lodge hero board co-op" >&2
+              echo "allowed: village touch combat marks old-beacon beacon ranger lodge hero board co-op studio" >&2
               exit 1
               ;;
           esac
@@ -132,6 +133,7 @@ jobs:
             hero)       command=(node tools/runtime-test/drive-hero-screen.mjs) ;;
             board)      command=(node tools/runtime-test/drive-village-board.mjs) ;;
             co-op)      command=(node tools/runtime-test/drive-two-clients.mjs) ;;
+            studio)     command=(node tools/runtime-test/review-studio.mjs) ;;
           esac
           printf 'running:'
           printf ' %q' "${command[@]}"
