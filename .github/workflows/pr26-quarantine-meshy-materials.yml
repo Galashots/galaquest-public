@@ -1,3 +1,4 @@
+# Second PR-head push intentionally triggers this already-present one-shot workflow.
 name: pr26-quarantine-meshy-materials
 
 on:
