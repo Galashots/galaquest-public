@@ -12,6 +12,7 @@ import { WORLD, setLayer } from '../render/layers.js';
 import { beaconParts, BEACON_GLOW_COLOR } from './oldBeacon.js';
 import { OLD_BEACON } from './zones/village.js';
 import {
+  COLD_SEAL_BREAK_SECONDS,
   COLD_SEAL_COUNT,
   buildColdSeals,
   coldSealsBroken,
