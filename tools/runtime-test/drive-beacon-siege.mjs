@@ -63,7 +63,13 @@ function seedUnlockedGuest(storePath, label) {
     store.apply({ guestId, type: 'mark-earned', eventId: `siege-fixture:mark:${guestId}:${i}` });
   }
   store.apply({ guestId, type: 'lantern-unlocked', eventId: `siege-fixture:unlock:${guestId}` });
+  // VERIFIED, not hoped for. A fixture that silently fails to seed does not fail the run -- it makes
+  // the run play the whole game as a fresh stranger and then report a pile of confusing product
+  // failures that are really one setup failure. drive-old-beacon.mjs's own seeder checks this for
+  // exactly that reason.
+  const seeded = store.marksFor(guestId) === 3 && store.unlockedFor(guestId);
   store.close();
+  if (!seeded) throw new Error(`seeding ${guestId} did not take`);
   return guestId;
 }
 
@@ -140,6 +146,12 @@ const STATE_EXPR = `JSON.stringify((() => {
     heading: r.follow.heading,
     netStatus: r.netState().status,
     zone: r.zoneDebug(),
+    guestId: r.guestId(),
+    rewards: (() => {
+      const all = r.rewards();
+      const id = r.netState().selfId;
+      return (id != null ? all[id] : null) ?? Object.values(all)[0] ?? null;
+    })(),
     treeLit: r.zoneTreeState()?.lit ?? false,
     beaconFound: trail.beaconFound,
     objective: document.querySelector('#quest-objective')?.textContent ?? '',
@@ -253,6 +265,17 @@ async function run() {
     await tab.page.send('Page.navigate', { url: `http://127.0.0.1:${port}/` });
     const ready = await pollUntil(tab, (s) => s.ready && s.zone?.loaded >= s.zone?.requested, 60000);
     if (!ready.ready) throw new Error('runtime never came up');
+    // THE FIXTURE HAS TO ACTUALLY BE THIS PLAYER. Checked at the seam rather than inferred from a
+    // downstream product failure: if the guest id did not survive the navigation, or the server is
+    // reading a different store, every check after this point reports a game defect that is really
+    // a setup defect (this file has already made that mistake once -- see the storage key above).
+    const seededGuest = await pollUntil(
+      tab, (s) => (s.rewards?.marks ?? 0) >= 3, 20000,
+    );
+    if ((seededGuest.rewards?.marks ?? 0) < 3) {
+      throw new Error(`the seeded guest did not take: guestId ${JSON.stringify(seededGuest.guestId)}, `
+        + `net ${seededGuest.netStatus}, rewards ${JSON.stringify(seededGuest.rewards)}`);
+    }
     await sleep(1500);
 
     // ── to the Beacon ────────────────────────────────────────────────────────────────────────────
@@ -270,18 +293,26 @@ async function run() {
     console.log('── breaking the seals ──');
     for (let index = 0; index < COLD_SEALS.length; index += 1) {
       const [sx, sz] = COLD_SEALS[index];
-      await walkToward(tab, sx, sz - 1.1, 1.5, 90000);
-      await aimAt(tab, sx, sz);
+      // WALK AT THE SEAL ITSELF, not at a point beside it. The server judges a swing against the
+      // HERO's heading, and the hero's heading is set by walking -- aimAt() below turns the follow
+      // CAMERA and nothing else (see its own comment). Approaching an offset point leaves him facing
+      // that point rather than the stone, which is a miss the harness would report as a game defect.
+      await walkToward(tab, sx, sz, 1.25, 90000);
       const before = await state(tab);
       const wasBurst = before.siege.seals.filter((s) => s.burst).length;
       let cracked = null;
       for (let swing = 0; swing < 14; swing += 1) {
         await tapAttack(tab);
+        // 3 s, not 9. This poll's ONLY job is "did that swing land", and a swing takes 1.5 s
+        // (SWING_SECONDS) plus a snapshot's own 10 Hz -- so anything past about three seconds is a
+        // miss, not a slow hit. At 9 s a seal that legitimately needed a few re-aims spent two
+        // minutes of wall clock discovering it, which is how a run that was merely slow got
+        // mistaken for a run that was broken.
         const after = await pollUntil(
           tab,
           (s) => s.siege.seals.filter((x) => x.burst).length > wasBurst
             || s.siege.seals.some((x, i) => x.blows > before.siege.seals[i].blows),
-          9000,
+          3000,
         );
         if (cracked === null && after.siege.seals.some((x, i) => x.blows > before.siege.seals[i].blows)) {
           cracked = after;
