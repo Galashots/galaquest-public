@@ -16,6 +16,20 @@
 // working rather than churn.
 export const WOLF_MAX_HP = 3;
 export const HERO_MAX_HP = 3;
+// THE MOST HEARTS ANY BODY IN THIS GAME CAN HAVE.
+//
+// HERO_MAX_HP is what a hero STARTS with; this is where the count stops. They were the same number
+// until Ranger Wren's charm, and index.html hardcodes one <span class="heart"> per pip because it
+// has never had to draw a variable number of them -- so something has to say, in one place, how many
+// pips the markup owes. That is a fact about the fight (what a body can be) rather than about the
+// charm (what one reward happens to give), which is why it lives here beside HERO_MAX_HP and not
+// beside CHARM_BONUS_HEARTS in net/gameServer.mjs.
+//
+// Four rather than open-ended on purpose. A HUD that grows without bound is a HUD nobody designed,
+// and every extra heart is a fight the Warden gets easier at -- its own comment prices it at "three
+// mistakes, not one". test/feedback.test.mjs pins the markup to this, and test/game-server.test.mjs
+// pins the charm to never exceed it, so the two can never drift apart silently.
+export const HERO_MAX_HP_CEILING = 4;
 // ── WHAT A SWING IS WORTH, AND WHOSE SWING IT IS ───────────────────────────────────────────────
 //
 // This was a bare `1`, then a named `1`, and for two chapters the comment under it promised that

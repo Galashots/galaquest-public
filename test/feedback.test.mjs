@@ -13,7 +13,7 @@ import {
   WOLF_DEFEAT_FLASH_SECONDS,
   WOLF_HIT_FLASH_SECONDS,
 } from '../public/src/combat/feedback.js';
-import { HERO_MAX_HP } from '../public/src/combat/encounter.js';
+import { HERO_MAX_HP, HERO_MAX_HP_CEILING } from '../public/src/combat/encounter.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -32,13 +32,18 @@ test('ENCOUNTER_EVENT_TYPES matches every event type encounter.js actually raise
   );
 });
 
-// index.html hardcodes three <span class="heart"> elements rather than generating them, because
-// HERO_MAX_HP has been 3 since the combat slice landed -- see the comment beside them. This is the
-// test that makes that coupling safe instead of merely commented.
-test('index.html draws exactly HERO_MAX_HP hearts', () => {
+// index.html hardcodes <span class="heart"> elements rather than generating them -- see the comment
+// beside them. This is the test that makes that coupling safe instead of merely commented.
+//
+// It pins the CEILING, not the starting count. Those were the same number until Ranger Wren's charm
+// gave a fourth heart; pinning HERO_MAX_HP would have passed while a four-heart child watched a
+// three-pip bar show them at full health on 3 of 4 and dead on 0 of 4.
+test('index.html draws exactly HERO_MAX_HP_CEILING hearts', () => {
   const source = readFileSync(resolve(repoRoot, 'public/index.html'), 'utf8');
   const hearts = source.match(/class="heart"/g) ?? [];
-  assert.equal(hearts.length, HERO_MAX_HP, 'the markup must be updated by hand if HERO_MAX_HP changes');
+  assert.equal(hearts.length, HERO_MAX_HP_CEILING,
+    'the markup must be updated by hand if HERO_MAX_HP_CEILING changes');
+  assert.ok(HERO_MAX_HP_CEILING >= HERO_MAX_HP, 'a hero cannot start with more hearts than exist');
 });
 
 test('createEncounterFeedback refuses to build with a missing handler', () => {

@@ -684,10 +684,14 @@
       <!-- Three spans: matches HERO_MAX_HP in combat/encounter.js. feedback.test.mjs asserts that,
            so this drifting out of sync with a future HERO_MAX_HP change fails loudly rather than
            quietly under- or over-drawing hearts. -->
+      <!-- HERO_MAX_HP_CEILING spans, not HERO_MAX_HP. A hero STARTS with three hearts and can be
+           given a fourth (Ranger Wren's charm), so the markup carries the ceiling and main.js hides
+           the pips this particular body has not earned. test/feedback.test.mjs pins the count. -->
       <div id="hero-health" role="status" aria-live="polite" aria-label="Hero health">
         <span class="heart" data-filled="true"></span>
         <span class="heart" data-filled="true"></span>
         <span class="heart" data-filled="true"></span>
+        <span class="heart" data-filled="true" hidden></span>
       </div>
       <!-- Three spans: matches MARKS_TO_UNLOCK in rewards/marks.js. test/rewards-hud.test.mjs
            asserts that, the same guard feedback.test.mjs already runs for the hearts above. -->
