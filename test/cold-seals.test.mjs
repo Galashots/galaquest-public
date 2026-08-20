@@ -8,6 +8,7 @@ import {
   noColdSealsBroken,
   strikeColdSeals,
 } from '../public/src/world/coldSeals.js';
+import { COLD_SEAL_OBJECTIVE_DONE, coldSealObjective } from '../public/src/world/coldSealsRuntime.js';
 import { OLD_BEACON } from '../public/src/world/zones/village.js';
 
 test('the Old Beacon has three derived Cold Seals just outside its plinth', () => {
@@ -46,6 +47,14 @@ test('one sword contact breaks at most one standing seal and does not mutate the
   const miss = strikeColdSeals(second.broken, specs, () => false);
   assert.equal(miss.broken, second.broken, 'a miss returns the same state object');
   assert.deepEqual(miss.struck, []);
+});
+
+test('the Cold Seal objective counts down to the Warden hook without pretending the boss exists', () => {
+  assert.equal(coldSealObjective(0), '❄️ Break 3 Cold Seals');
+  assert.equal(coldSealObjective(1), '❄️ Break 2 Cold Seals');
+  assert.equal(coldSealObjective(2), '❄️ Break the last Cold Seal');
+  assert.equal(coldSealObjective(3), COLD_SEAL_OBJECTIVE_DONE);
+  assert.doesNotMatch(COLD_SEAL_OBJECTIVE_DONE, /(fight|warden|boss|defeat|kill)/i);
 });
 
 test('the procedural Cold Seal is real geometry with vertex colours', () => {
