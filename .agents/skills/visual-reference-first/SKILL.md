@@ -26,21 +26,22 @@ Not for: file-format questions, budgets, topology, or anything with a measurable
 
 ## Where to look
 
-**World of Warcraft first, by default.** Not because GalaQuest should look like WoW — it is a
-stylised kid-MMO and should not — but because WoW has twenty years of screenshots of every item on
-every body type, and it solved third-person presentation decades ago. The image supply is
-effectively unlimited, which is the whole point: the answer is always two minutes away.
+Start with the current public GalaQuest visual authorities and shipped runtime. When external examples
+are needed, search several comparable third-person games rather than copying one screenshot. World of
+Warcraft is often useful because it has abundant examples of carry, armour, and silhouette conventions;
+Zelda, RuneScape, Fortnite, Genshin and other stylised third-person games can provide independent checks.
+
+**GalaQuest's own accepted public direction outranks external examples.** Read
+`docs/GALAQUEST_VISUAL_AUTHORITY.md` and inspect the current shipped assets/captures that actually exist.
+Do not invent a missing concept-art prerequisite or go hunting through a private archive by default.
 
 Search in plain player words:
 
 ```
 wow character holding a shield
-wow warrior sword and board idle
-wow bow on back
+stylized adventure game sword idle pose
+third person game bow on back
 ```
-
-Secondary: Runescape, Zelda, Fortnite, Genshin. **the owner's own reference art outranks all of them**
-when it exists — check `docs/foundry/identity/` and `docs/GALAQUEST_VISUAL_AUTHORITY.md` first.
 
 ## The procedure
 
@@ -49,8 +50,8 @@ when it exists — check `docs/foundry/identity/` and `docs/GALAQUEST_VISUAL_AUT
 2. **Look at three or more examples**, from different angles where possible.
 3. **Write the convention down in one sentence** before touching any numbers.
 4. **Build to that convention.**
-5. **Verify in the running game**, never from a render — see "Playtests are mandatory" in
-   `AGENTS.md`.
+5. **Verify in the running game**, never from an isolated render alone; follow the visual/product
+   acceptance rules in `AGENTS.md` and `docs/WORKFLOW.md`.
 6. **Comment the convention next to the values**, so the next agent inherits the reasoning rather
    than a block of magic numbers.
 
@@ -73,7 +74,7 @@ constructed, a degenerate basis diagnosed and fixed, quaternions carried to twel
 bind-pose bake verified to 0.00002 rig units against the known-good sword.
 
 The geometry was correct throughout. The answer was wrong: **a shield is strapped to the outside of
-the forearm, not gripped in the fist.** Six World of Warcraft screenshots settled in seconds what an
+the forearm, not gripped in the fist.** A handful of reference screenshots settled in seconds what an
 hour of basis vectors could not.
 
 Three internally consistent wrong fits went past review first. Each satisfied every constraint that

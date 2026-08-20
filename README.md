@@ -16,13 +16,14 @@ dependencies. Players join by URL.
 | `server.mjs` | The static + WebSocket host. |
 | `test/` | The unit suite. Plain `node --test`, no framework. |
 | `tools/runtime-test/` | Chrome DevTools Protocol harnesses that drive the real game in a real browser. |
-| `docs/` | Pipeline, gear and asset-authority documentation. |
-| `AGENTS.md` | Conventions and guardrails for anyone — human or agent — working in this repo. |
+| `docs/` | Workflow, guidance, pipeline, visual-authority, and asset documentation. |
+| `AGENTS.md` | Hard conventions and guardrails for anyone — human or agent — working in this repo. |
 
 ## Running it
 
-The repo has **no npm dependencies and no install step**. You need Node 22+, and Chrome for the
-browser harnesses.
+The repo has **no npm dependencies and no install step**. Use Node 24+; the hosted required unit gate
+also runs on Node 24, including persistence code that relies on the built-in `node:sqlite` surface.
+Chrome is required for the browser harnesses.
 
 ```bash
 node server.mjs
@@ -34,7 +35,7 @@ Serves the game at `http://localhost:5201/` and prints the LAN URL for testing o
 node --test test/*.test.mjs
 ```
 
-Runs the full unit suite.
+Runs the full unit suite, including guidance-integrity checks.
 
 ## Browser harnesses
 
@@ -58,6 +59,9 @@ had actually tested.
 `play-fight.mjs` writes captures to gitignored `.local/runtime-test/` and **refuses to run with more
 than one client connected** — every extra client draws its own hero, so one stale tab silently puts a
 second hero in the frame. Open the captures and look at them; that is the entire point of it.
+
+For the full public development and evidence flow, read `docs/WORKFLOW.md`. For how the Markdown
+guidance itself is maintained and linted, read `docs/GUIDANCE.md`.
 
 ## Design notes
 

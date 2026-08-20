@@ -1,49 +1,57 @@
-# Prop lane — reference image to shipped GLB, 15 credits, ~15 minutes
+# Prop lane — reference image to shipped GLB
 
-Proven runs: the belt lantern (838 tri, 135 KB shipped) and the dark Lantern Tree (~3k tri,
-386 KB shipped), both 2026-08-13.
+Historical measured runs include the belt lantern (838 tri, 135 KB shipped) and the dark Lantern Tree
+(~3k tri, 386 KB shipped), both produced in 2026-08. Treat those costs as planning evidence, not spend
+authority.
 
 ## Steps
 
-1. **Reference.** Follow [references.md](references.md). Output: `tmp/<name>.png`, vetted and
-   flattened to `tmp/<name>-flat.png` by `tools/meshy/flatten_bg.py`.
+1. **Reference.** Follow [references.md](references.md). Output a clean PNG such as `tmp/<name>.png` and
+   inspect it before any paid call.
 
-2. **Generate.**
+2. **Preflight generation — free and offline.** Use the guarded public client:
    ```bash
-   node tools/meshy/gen_prop.mjs tmp/<name>-flat.png tmp/<name>.glb <target_polycount>
+   node tools/meshy/image_to_3d.mjs tmp/<name>.png tmp/<name>-meshy --polycount <target>
    ```
-   Polycount guide, from shipped results: small worn prop 800; landmark 3000; complete building
-   would be ~2500 (untested — Kenney covers buildings today). The tool brackets the balance,
-   polls synchronously (~90 s), and downloads the GLB. `consumed_credits` should read 15.
+   The command prints the request shape and exits without credentials/network/spend. Polycount guides
+   from historical shipped results: small worn prop ~800; landmark ~3000. They are starting points,
+   not universal gates.
 
-3. **Recompress.** `--size 512` for hand-scale props, `--size 1024` for landmarks:
+3. **Generate only after explicit authorization for this specific work.** Re-run the same inspected
+   request with `--go`:
    ```bash
-   python tools/budget/recompress_glb.py tmp/<name>.glb tmp/<name>-512.glb --size 512 --quality 85
+   node tools/meshy/image_to_3d.mjs tmp/<name>.png tmp/<name>-meshy --polycount <target> --go
    ```
-   Expect ~4–10% of the raw size. If the material needs real cutout alpha, STOP — jpeg is the
-   wrong container and nothing shipped so far needed it.
+   The tool records `task.json`, the raw GLB, returned textures, balance before/after, and the task's
+   authoritative `consumed_credits`. Raw Meshy output does not ship.
 
-4. **Score.** `node tools/budget/glb_budget.mjs tmp/<name>-512.glb` — all PASS, or write down why.
-
-5. **Look.** Render a turntable and open every image:
+4. **Recompress.** `--size 512` for hand-scale props, `--size 1024` for landmarks:
    ```bash
-   blender --background --factory-startup --python tools/blender/render_prop.py -- tmp/<name>-512.glb tmp/<name>-renders
+   python tools/budget/recompress_glb.py tmp/<name>-meshy/<name>.glb tmp/<name>-ship.glb --size 512 --quality 85
    ```
-   (Blender lives at `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`.) For animated
-   characters use `tools/blender/render_npc.py -- <char.glb> <outdir> <clip:frame> ...` instead —
-   a static render cannot catch a torn clip. What you are checking: did holes/rings survive (the lantern's carry ring did), did
-   painted lines become geometry channels (they will if the reference broke the flat-value rule),
-   does the silhouette read at gameplay scale (~90 CSS px — squint or downscale the render).
+   If the material requires true cutout alpha, stop and choose an alpha-preserving texture path rather
+   than blindly converting it to JPEG.
 
-6. **Ship.** Copy to `public/assets/<world|props|gear>/<name>.glb`, wire the consumer, and let
-   the zone/asset test that pins byte ceilings catch bloat. Scale is set AT LOAD by measuring the
-   import (the wolf and the Lantern Tree both do this) — Meshy normalizes exports to a unit-ish
-   bound, so never hardcode a magic scale from the file.
+5. **Score.** Run `node tools/budget/glb_budget.mjs tmp/<name>-ship.glb`. Every applicable gate should
+   pass or have an explicit, reviewable ruling.
+
+6. **Look.** Render/inspect the whole asset and then integrate it into the running game. A current
+   Blender executable may be supplied by the local environment; do not encode one machine's absolute
+   executable path in this runbook. Example render command when Blender is available on PATH:
+   ```bash
+   blender --background --factory-startup --python tools/blender/render_prop.py -- tmp/<name>-ship.glb tmp/<name>-renders
+   ```
+   Check intended openings, accidental channels, silhouette at gameplay scale, material response, and
+   whether the object still reads after integration. The running game is final appearance authority.
+
+7. **Ship.** Place the accepted asset under the consumer's existing `public/assets/` family, wire the
+   consumer, and run the relevant asset/runtime tests. Scale is set at load from measured bounds where
+   the consumer supports that pattern; do not copy a magic scale merely because Meshy normalized a file.
 
 ## Known traps
 
-- Meshy reconstructs painted seams as real channels; the reference rules exist for this.
-- The ×N badge / retries in the browser are free retries of the SAME generation; the API has no
-  equivalent — a bad result means fixing the reference, not re-rolling.
-- `should_texture: false` saves nothing on this route; texturing is included in the 15.
-- The task id is worth recording in your ledger line — it is the only handle for re-downloading.
+- Image-to-3D reconstructs painted seams and accidental gaps; reference quality is part of production.
+- A bad generation is a reason to fix the reference/brief before paying for another task.
+- Provider cost and model behavior can change. Measure each paid task; do not turn historical credit
+  numbers into durable permission or guarantees.
+- Record the task id with the asset evidence so a result can be traced without relying on chat history.
