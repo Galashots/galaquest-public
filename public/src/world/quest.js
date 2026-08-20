@@ -17,6 +17,16 @@
 
 import { MARKS_TO_UNLOCK } from '../rewards/marks.js';
 
+// G2 is deliberately isolated from main.js's already-large frame loop: the browser installs the
+// three physical Cold Seals after main publishes its runtime surface; node imports stay pure because
+// there is no window here in tests. If the optional slice fails to load, G1's existing honest
+// "Why is the Beacon cold?" ending remains playable rather than taking the whole quest down.
+if (typeof window !== 'undefined') {
+  void import('./coldSealsRuntime.js')
+    .then(({ installColdSealsRuntime }) => installColdSealsRuntime())
+    .catch((error) => console.warn('[runtime] Cold Seals failed to install', error));
+}
+
 // THE FIRST OBJECTIVE, and the reason it exists: the chip used to read "3 more Lantern Marks" on
 // the very first frame, before the child had met anybody. The game announced the quest and then the
 // quest-giver announced it again, which makes the old man decoration -- a child who already knows
