@@ -28,34 +28,38 @@ enemy"** in under a second, and must never confuse it with the wolf or with the 
 
 ## 2. Silhouette — the load-bearing decision
 
-Silhouette first, detail last. The Warden must be identifiable as a black shape.
+**Superseded 2026-08-20 by the production director's asset request (§8a).** The earlier direction —
+an iron-and-ash industrial guardian whose silhouette was carried by an asymmetrical shoulder beacon
+housing and a two-handed maul — is recorded in §8c. The director's direction is now:
 
-- **Humanoid, but wrong.** Upright, two arms, two legs — so a child reads "it can fight me" — with
-  proportions pushed away from human: heavy shoulders and chest, short neck, long arms, narrow legs.
-- **One dominant shape, not a pile.** A single tall asymmetric mass: a **brazier/lantern-cage head or
-  shoulder-mounted beacon housing**, cold and unlit. This is the thing that must survive being 40 px
-  tall on a tablet.
-- **One weapon.** A single long haft (maul or sealing-rod), carried, not dual-wielded. No shield, no
-  cape, no chains, no floating debris — every one of those muddies the read at distance.
-- **Grounded stance.** Feet apart, weight low. It should look planted, not agile.
+A silent guardian of the Old Beacon: weathered by time, bound to the light, clad in nature-worn
+armour. Stoic and noble rather than monstrous.
 
-Anti-goals, stated so they are not rediscovered in review: no hyper-realism, no skull faces, no
-generic demon, no ornate filigree, no clutter that reads as noise at 16 m, and nothing that resembles
-protected third-party character IP.
+- **Ancient guardian read.** Armour fused with stone, wood and aged metal — grown into, not forged.
+- **The head carries the silhouette.** A hooded or helm-like headpiece with **antler growths**. This
+  is now the strongest silhouette element and the thing that must survive being 40 px tall.
+- **A tattered cloak or tabard** with nature motifs, breaking the outline.
+- **No weapon in the character mesh** (§8a negative prompts) — see the open question in §11 about
+  what that means for the `attack` clip.
+- Silhouette must read clearly at thumbnail scale.
+
+Readability requirement, unchanged and still outranking every aesthetic choice: at gameplay camera
+distance (`GAMEPLAY_DISTANCE = 16`, `public/src/review/cameraPresets.js`) a child must read
+**"important enemy"** in under a second, and must never confuse it with the wolf or the Keeper.
 
 ## 3. Palette and material language
 
-Restrained, with the cold-Beacon connection doing the work:
+**Superseded 2026-08-20 by §8a.** Previously a cold industrial palette (dark iron / ash stone / aged
+timber, one pale-cyan accent, explicitly no warm colours). The director's palette is:
 
-- **Base:** weathered dark iron and ash-grey stone, low saturation.
-- **Secondary:** aged timber (ties it to the Wildwood and to the Ironwood gear family).
-- **Accent — exactly one:** cold beacon-light, pale cyan/blue-white, used **only** in the beacon
-  housing and any seams that read as "the cold fire inside it". This is the colour that says *Beacon*.
-- No second accent. No warm accent — warm light belongs to the lantern/hearth vocabulary the game
-  already uses for friendly things, and the Warden must not borrow it.
+- **Earth tones:** moss green, slate, weathered bronze, deep brown.
+- **Inner light:** a subtle **blue-green** glow from the chest, the eyes, and crystal accents.
+- **Glowing moss / crystal veins** running through the armour seams — this is what now carries the
+  Beacon connection, in place of a physical beacon housing.
 
-Texture complexity: moderate. Flat stylized blocking with painted edge wear, matching the existing
-low-poly cast rather than a PBR showpiece.
+Style: **stylized semi-realistic fantasy**, even neutral studio lighting. Not photoreal — the
+director's own negative prompts exclude "overly realistic / photoreal". See §11 for the open question
+about how this sits beside the shipped low-poly cast.
 
 ## 4. Scale in game
 
@@ -137,59 +141,64 @@ them and reading the 400.
 
 ## 8. Phase 2 — the reference request
 
-### 8a. CANONICAL request — production-director wording (use this one)
+### 8a. CANONICAL — production director's asset request (received 2026-08-20)
 
-Distilled and tightened by the production director (ChatGPT) on 2026-08-20 from the expanded brief in
-§8b, and **this is the version to send**. It pins three things §8b left open: the beacon housing is
-**asymmetrical and on the shoulder** (not "head or shoulder"), the weapon is specifically a
-**two-handed sealing maul**, and the exclusion list adds logos and inset panels.
+This supersedes every earlier wording in this file. Transcribed from the director's brief
+"ASSET REQUEST: BEACON WARDEN (2D CONCEPT REFERENCE)".
 
-> Create **one single full-body "Beacon Warden" character reference image** for Meshy image-to-3D:
-> strict front-facing A-pose, arms straight angled down and away, legs slightly apart, palms forward,
-> centered on a plain light-grey background. Stylized low-poly corrupted guardian: broad
-> iron-and-ash-stone torso, short neck, long arms, narrow legs, one long two-handed sealing maul, one
-> asymmetrical lantern-cage/beacon housing on the shoulder, weathered dark iron + ash-grey stone +
-> aged timber, exactly one cold pale-cyan/blue-white accent inside the beacon housing/seams; no warm
-> colors, no cape, no shield, no chains, no scenery, no text, no logos, no multiple views or inset
-> panels.
+**Objective.** A cleaned-up, front-facing concept reference image of the Beacon Warden for 2D/3D
+production, to be used as the canonical visual reference for Meshy 3D generation.
 
-### 8b. Expanded form — design rationale and the same constraints spelled out
+**Key requirements**
+- Full body, front-facing view
+- Transparent or pure white background
+- Stylized semi-realistic fantasy style, consistent with GalaQuest
+- Clean silhouette, clearly readable at small sizes
+- No text, no UI, no props or weapons
 
-Kept because it explains *why* each constraint exists, which is what an operator needs when judging a
-returned image or asking for a revision. It satisfies the same required format: single character,
-A-pose, no text, no multiple angles, clean background, suitable as a Meshy image-to-3D input.
+**Character.** A silent guardian of the Old Beacon — weathered by time, bound to the light, clad in
+nature-worn armour.
+- Ancient guardian vibe; stoic, noble presence
+- Armour fused with stone, wood and aged metal
+- Glowing moss / crystal veins through the armour seams
+- Hooded or helm-like headpiece with antler growths
+- Tattered cloak or tabard with nature motifs
+- Earth tones: moss green, slate, weathered bronze, deep brown
+- Subtle blue-green inner light from chest, eyes and crystal accents
+- Silhouette reads clearly at thumbnail scale
 
-> Generate one character reference image for a stylized low-poly game.
->
-> **Subject:** "Beacon Warden" — a corrupted humanoid guardian bound to a cold, dormant signal beacon.
->
-> **Required format — all of these are hard requirements:**
-> - ONE single full-body character, centred, filling most of the frame
-> - strict **A-pose**: standing, facing directly forward, arms straight and angled down and away from
->   the body, legs straight and slightly apart, palms facing the viewer
-> - **no text, no letters, no numbers, no watermark, no logo, no signature**
-> - **one view only** — no turnaround, no multiple angles, no side or back view, no inset panels
-> - plain flat neutral background (light grey), no scenery, no ground shadow beyond a soft contact shadow
-> - even, neutral lighting; no dramatic rim light, no lens flare, no motion blur, no depth of field
->
-> **Design:** humanoid but heavier than human — broad shoulders and chest, short neck, long arms,
-> narrower legs; planted stance. It carries ONE long two-handed haft weapon (a heavy maul or sealing
-> rod). Its head or shoulder carries a lantern-cage / brazier housing that reads as a small beacon,
-> currently cold and unlit. No shield, no cape, no chains, no floating debris.
->
-> **Materials:** weathered dark iron, ash-grey stone, aged timber. Exactly ONE accent colour — a cold
-> pale cyan / blue-white — used only inside the beacon housing and a few seams, as if cold fire lives
-> in it. No warm colours.
->
-> **Style:** stylized low-poly game character, clean readable shapes, moderate texture detail, chunky
-> proportions. Silhouette must stay readable when small. Not photorealistic, not horror-realistic, not
-> ornate. Must not resemble any existing franchise character.
+**Style & output.** Stylized semi-realistic fantasy; even neutral studio lighting; full body,
+front-facing; transparent or pure white background; high resolution.
 
-Iterate by asking for **one** replacement image with a specific change (e.g. "same character, but the
-beacon housing moves to the left shoulder and the head is a plain iron helm"). Never ask for a sheet or
-a turnaround — Meshy image-to-3D takes a single view.
+**Negative prompts.** No text, logos, watermarks or UI elements. No weapons (swords, staffs, etc.).
+No other characters or creatures. No backgrounds, scenery or props. No modern or sci-fi elements. No
+overly realistic / photoreal style. No blur, low detail, distortion or extra limbs.
 
-Record the resulting image under `tmp/` (gitignored) and log its provenance in the ledger below.
+**Deliverable.** One (1) high-quality PNG, front-facing full body, transparent background preferred.
+
+> The example image in the director's brief is labelled **"EXAMPLE REFERENCE (NOT FINAL)"** and is
+> therefore *not* the modelling basis. The deliverable PNG still has to be produced.
+
+### 8b. One requirement this lane adds back: strict A-pose
+
+The director's brief specifies "full body, front-facing" but does not state a pose. **The A-pose is
+retained as a hard requirement**, for two reasons that are not aesthetic:
+
+1. The task brief that opened this lane names it as required reference format.
+2. Meshy's auto-rigger fits a skeleton to the figure in the image. Arms held against the body make
+   the shoulder/elbow chain ambiguous and are the usual cause of a bad auto-rig — which would cost a
+   re-generation, not a re-render.
+
+So the request sent must add: *strict front-facing A-pose — arms straight, angled down and away from
+the body, legs straight and slightly apart, palms facing the viewer.*
+
+### 8c. Superseded wording, kept for the evidence chain
+
+The earlier canonical request (director wording of 2026-08-20, adopted in commit `f099ce5`) specified
+a two-handed sealing maul, an asymmetrical shoulder-mounted lantern-cage beacon housing, a cold
+iron/ash palette with a single pale-cyan accent and explicitly no cloak, in a stylized **low-poly**
+style. It is superseded in full by §8a. Recorded rather than deleted so that a capture or model made
+against it can still be identified later.
 
 ## 9. Phase 3–4 — Meshy execution order
 
@@ -219,11 +228,38 @@ Every image used as a Meshy image-to-3D input is logged here before it is spent 
 
 | Ref | Date | Source | Request used | File | Status |
 |---|---|---|---|---|---|
-| R1 | 2026-08-20 | production director (ChatGPT), relayed by the owner | §8a canonical wording | *not yet generated* | request finalized; image not produced — see blockers |
+| R1 | 2026-08-20 | production director, relayed by the owner | earlier §8a wording (now §8c) | *not generated* | **superseded** before any image existed |
+| R2 | 2026-08-20 | production director asset request, relayed by the owner | §8a + the §8b A-pose line | *not yet generated* | current canonical request; image not produced — see blockers |
 
 No image has been generated, so nothing has been accepted as a modelling basis yet.
 
 ---
+
+## 11. Open questions for the production director
+
+Three consequences of the 2026-08-20 asset request that are cheaper to settle now than after credits
+are spent. None blocks generating the reference image; all three affect what happens after it.
+
+**1. No weapon in the mesh — confirmed good, but the `attack` clip needs a decision.**
+Excluding the weapon actually matches how this repo already ships gear: the hero's sword, shield and
+belt lantern are separate GLBs mounted on bones (`attachRigidTier2Gear`, `attachBeltLantern`), never
+baked into the body. So a weaponless Warden is the *correct* pipeline shape, not a compromise. The
+open part is the G3 encounter: either the `attack` clip reads as an unarmed strike (free), or a maul
+ships as a separate mounted prop — **+15 credits and a fit pass** on top of the 35-credit nominal.
+Recommend deciding before step 4, because the animation choice depends on it.
+
+**2. "Stylized semi-realistic" beside a low-poly cast.**
+The shipped characters are stylized low-poly — the pipeline runbook calls the hero "Toon-Link-class",
+the Keeper shipped at 5,258 tri, and iron rule 4 requires judging new work against that established
+look. A semi-realistic Warden may read as belonging to a different game when standing next to the
+hero. This is the director's call and is adopted as written; flagging it because the cheapest place to
+catch a style clash is the reference image, and the most expensive is after rig and animation.
+The first hero-and-Warden side-by-side capture is the moment to confirm it.
+
+**3. Antlers, cloak and thumbnail readability.**
+Antler growths and a tattered cloak are strong silhouette elements, which is good — but both are also
+thin geometry, which is what a 512/1024 recompress and a 40 px gameplay read punish first. Worth
+watching specifically at `glb_budget.mjs` time and in the first gameplay-distance capture.
 
 ## Execution status — why no asset exists yet
 
