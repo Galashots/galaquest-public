@@ -42,11 +42,15 @@ Preview generation is declared in `render.yaml` as `previews.generation: manual`
 opt-in per PR rather than booted for every push. That is deliberate: previews draw on the same free
 instance hours as the main service, and most PRs here touch CI or docs and have nothing to play.
 
-Create one on demand from the Render dashboard for the pull request you want to play. Render's own
-reference notes the manual trigger is a dashboard/workflow action whose exact UX varies by Git
-integration, so treat the dashboard as the reliable route and read the preview's URL there. A
-preview stamps its own `/source-sha.json` from the PR head, so the same provenance rule applies
-unchanged.
+To request one, include `[render preview]` in the pull request's title. Render then boots a preview
+instance for that PR's head.
+
+On GitHub the preview is surfaced as a **deployment** attached to the pull request -- open it with
+**View deployment**. Render posts the preview URL as a PR *comment* only on GitLab and Bitbucket, so
+do not sit waiting for a comment on a GitHub PR that is never coming.
+
+A preview stamps its own `/source-sha.json` from the PR head, so the provenance rule above applies
+to previews unchanged: fetch it first, and quote what it returns.
 
 ## Handing it to a playtester
 
