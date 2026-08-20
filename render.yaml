@@ -5,24 +5,30 @@
 # origin -- without any local network access. See docs/public-playtest.md.
 #
 # This deploys server.mjs exactly as a contributor runs it. There are no npm dependencies and no
-# compile step, by repository design; the build command below only stamps provenance.
+# compile step, by repository design; the build command is intentionally a no-op and provenance is
+# stamped immediately before the runtime server starts.
 services:
   - type: web
     name: galaquest-playtest
     runtime: node
     plan: free
-    # This repo has no package.json and no compile step, so Render's Node runtime has nothing to
-    # install or build and the build phase does not run a buildCommand here. The provenance stamp
-    # therefore happens at START, not at build -- proven the hard way: stamping it in buildCommand
-    # deployed a healthy service with no /source-sha.json on it at all.
+    # Render documents buildCommand as the build phase for native web services, even for a repo that
+    # has no package.json or compile step, so keep the command honest and harmless rather than inventing
+    # work for it to do. The first live deployment attempted to stamp provenance here yet the running
+    # service served 404 for /source-sha.json. That observation proves the build-time stamp was not a
+    # reliable runtime evidence seam; it does NOT prove the build command itself was skipped.
     buildCommand: 'echo "no build step (see README): plain ES modules, vendored deps"'
-    # Two things, in order: stamp the commit this instance is running, then become the server.
+    # Two things, in order: stamp the commit this RUNNING instance is serving, then become the server.
+    # Doing this at process start makes the required property direct: every boot writes the evidence
+    # file into the same filesystem server.mjs immediately serves, without depending on an unproven
+    # theory about why the first build-time stamp was absent from the live instance.
     #
     # The stamp is the one thing a remote playtester cannot otherwise learn from the running site.
     # AGENTS.md requires every observation to name the exact SHA it proves, and an agent handed only
     # a URL has no other independent seam -- the Render dashboard is not reachable from a
-    # browser-driving agent. RENDER_GIT_COMMIT is present at runtime; it falls back to "unknown"
-    # rather than aborting the boot, so a missing variable degrades the evidence, not the service.
+    # browser-driving agent. RENDER_GIT_COMMIT is a Render default environment variable available to
+    # the service; it falls back to "unknown" rather than aborting boot, so a missing variable degrades
+    # the evidence, not the service.
     #
     # exec matters: it replaces the shell with node so signals still reach the server and Render can
     # stop/restart the instance cleanly. server.mjs takes its port as argv[2]; Render supplies $PORT
