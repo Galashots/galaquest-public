@@ -29,9 +29,15 @@ provenance so a remote agent can establish this without dashboard access:
 
     GET <service-url>/source-sha.json   ->   {"sourceSha":"<the deployed commit>"}
 
-**Fetch this first, before playing, and quote it in the report.** The build command writes it from
-Render's `RENDER_GIT_COMMIT`. If it reads `"unknown"`, the deploy did not receive that variable and
-the run is *not* evidence for any particular commit -- say so rather than guessing from timing.
+**Fetch this first, before playing, and quote it in the report.** The service writes it at start
+from Render's `RENDER_GIT_COMMIT`. If it reads `"unknown"`, the instance did not receive that
+variable and the run is *not* evidence for any particular commit -- say so rather than guessing
+from timing. If the path 404s entirely, the running service predates this mechanism; redeploy.
+
+It is stamped by `startCommand`, deliberately not by `buildCommand`. This repo has no `package.json`
+and no compile step, so Render's Node runtime has nothing to build and does not run a build command
+here -- the first deployment stamped at build time came up healthy with no `/source-sha.json` on it
+at all.
 
 Note the file is generated at deploy time and is deliberately not in the repository, so a local
 `node server.mjs 5201` has no `/source-sha.json`. Locally, the checkout itself is the provenance.
