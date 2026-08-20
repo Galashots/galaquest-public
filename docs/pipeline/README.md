@@ -16,6 +16,14 @@ already burned learning it.
 | Background village/world dressing (CC0) | [cc0-background.md](cc0-background.md) | 0 credits | ~30 min |
 | The reference image any of the above starts from | [references.md](references.md) | 0 credits | ~10 min |
 
+> **Public-repo gap (found 2026-08-20, A1 asset lane).** The generation tools these runbooks invoke
+> — `tools/meshy/gen_prop.mjs` and its siblings — are **not present in the public repository**. Every
+> *post*-generation tool cited below does exist here (`verify_native_clip.mjs`, `merge_clips.mjs`,
+> `pose_anatomy.mjs`, `recompress_glb.py`, `glb_budget.mjs`). Until a Meshy client is ported into
+> `tools/meshy/`, the credit-spending steps of every lane are executable only where that client and
+> `.local/meshy/api-key.txt` exist. Treat those steps as private-only rather than assuming a missing
+> file. See `docs/pipeline/briefs/beacon-warden.md`.
+
 ## Iron rules — read before any lane
 
 1. **The API key is never printed, logged, committed, screenshotted, or put in a URL.** It lives

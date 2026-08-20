@@ -84,6 +84,7 @@ through the API with zero browser steps.
 2. **Generate** — same tool as props:
    ```bash
    node tools/meshy/gen_prop.mjs tmp/<name>-flat.png tmp/<name>.glb 5000     # 15 credits
+   # NOTE: tools/meshy/ is not in the public repo -- see README.md's public-repo gap note.
    ```
    ~5,000 tri is the proven character budget (hero 7.4k, keeper 5.3k, wolf 3.1k).
 
