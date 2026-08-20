@@ -318,9 +318,15 @@ export const ROAD = Object.freeze({
         // ...and out the far side, through the pocket the satchel is lying in.
         Object.freeze([11.2, 51.4]),
         Object.freeze([14.6, 51.9]),
-        Object.freeze([18.0, 52.8]),
-        // Into the Lodge's own step, the same way the main road arrives at the Beacon's.
-        Object.freeze([20.8, 53.6]),
+        Object.freeze([17.6, 51.6]),
+        // STOPS SHORT OF THE DOOR, and the number is the difference between arriving at a house and
+        // walking into a wall. The Lodge is 3.6 m tall, which scales its 4.10 m authored length to
+        // 6.90 m and puts its south wall at z = 53.40. The first version of this road ended at
+        // [20.8, 53.6] -- two tenths of a metre INSIDE that wall -- so a child following it arrived
+        // with the camera jammed against timber and the building filling the entire frame. Ending at
+        // 51.8 leaves a metre and a half of forecourt, which is what the follow camera needs to see
+        // the whole roof from behind the hero's shoulder.
+        Object.freeze([20.4, 51.8]),
       ]),
     }),
   ]),
@@ -339,7 +345,44 @@ export const ROAD = Object.freeze({
 // back so the plaza breathes between it and the keeper.
 export const LANDMARKS = Object.freeze([
   Object.freeze({ model: 'world/lantern_tree.glb', at: Object.freeze([-6.5, -6.5]), rotY: 0.4, height: 5.5 }),
+
+  // ── THE RANGER LODGE (Arc 2) ────────────────────────────────────────────────────────────────
+  //
+  // BUILT FROM WHAT WE OWN. The Beacon and the Wildwood Gate are authored merged meshes because
+  // nothing in the Kenney kit is a standing stone or a timber arch; a LODGE is a building, and the
+  // kit has a longhouse. Authoring a second hall by hand to sit twenty metres from three cottages
+  // built from that kit would read as a different art pack, not as a landmark.
+  //
+  // A LANDMARK, NOT A PROP, and that distinction is load-bearing rather than tidy: PROPS are guarded
+  // against standing on the road (test/old-beacon.test.mjs, "a tree in the road is a tree a child
+  // walks through") and this building is deliberately AT the end of one, the same way the Beacon
+  // stands at the end of its own. The road arrives at its step; it does not run through its wall.
+  //
+  // SCALED TO 3.6 m, which is the one number here doing real work. At its authored 2.14 m it is
+  // shorter than the 2.41 m pines around it and would vanish into the treeline from any distance --
+  // the exact failure world/oldBeacon.js's height arithmetic exists to avoid. At 3.6 it clears the
+  // wood by more than a metre, so from the blackthorn nine metres back a child sees a roof over the
+  // trees and knows there is something there before they can see what it is.
+  //
+  // TURNED BROADSIDE (rotY PI/2) so the road meets its long wall rather than its gable end: a child
+  // walking east arrives at a HOUSE, not at a triangle. Its long axis then runs x = 18.1..24.7, well
+  // inside the ground's own new eastern edge at 26.
+  Object.freeze({
+    model: 'props/village/house-longhouse.glb',
+    at: Object.freeze([21.4, 55.2]),
+    rotY: Math.PI / 2,
+    height: 3.6,
+  }),
 ]);
+
+// Where a child has ARRIVED at the Lodge, generous like every other arrival circle in this file --
+// a trigger for a thumb, not a keyhole. It sits on the FORECOURT rather than on the building: the
+// hall's south wall is at z = 53.40 and this is at 52.0, so the beat fires while the Lodge is still
+// in front of the child instead of on top of them.
+export const LODGE = Object.freeze({
+  at: Object.freeze([20.4, 52.0]),
+  radiusMeters: 3.2,
+});
 
 // The arrival trigger, built from the two lantern posts declared above ROAD -- so the gate the game
 // congratulates you for finding can never drift away from the lanterns that mark it (GQ-007).
@@ -451,6 +494,69 @@ export const PROPS = Object.freeze([
   Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-9, 9]), rotY: 1.0, scale: 0.9 }),
   Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([-12, -11]), rotY: 2.4, scale: 1.3 }),
   Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([6, -10]), rotY: 0.7, scale: 1.0 }),
+
+  // ── THE WOOD CLOSES THE NEW EAST (Arc 2) ────────────────────────────────────────────────────
+  //
+  // The world grew twelve metres east so the old ranger road could reach the Lodge. Only the
+  // northern end of that strip is content; the rest, alongside the village, is meadow nobody built
+  // and nobody has a reason to enter. ZONE's own note argues this is the price of a rectangular
+  // ground mesh and that the wood closes over the remainder -- this is the wood.
+  //
+  // A TREELINE ALONG THE OLD EDGE, from the southern boundary up to z = 46, which is four metres
+  // short of where the ranger road crosses x = 14.5. So the village looks EXACTLY as it always has
+  // -- the world still visually ends where it ended yesterday -- and the single gap in that wall is
+  // the road the story hands you. A child cannot stumble east; they can only be sent.
+  //
+  // Nothing in this game collides (world/bramble.js's header says so plainly), so this is a thing a
+  // child READS rather than a wall they hit. That is the same bargain every other edge of this world
+  // already makes, and it is why the trees are staggered on x and varied in scale and rotation: an
+  // even row at one size reads as a fence, which is a thing you look for a gate in.
+  //
+  // Hand-placed rather than generated, because zone data is pure and this file may not draw a random
+  // number -- the same rule that keeps Math.random out of the rules layer keeps it out of here.
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.4, -12.0]), rotY: 0.3, scale: 1.15 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.1, -8.6]), rotY: 1.4, scale: 0.95 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.2, -5.4]), rotY: 2.6, scale: 1.3 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.4, -2.0]), rotY: 0.9, scale: 1.05 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.6, 1.2]), rotY: 2.1, scale: 1.2 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.2, 4.6]), rotY: 1.7, scale: 0.9 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.3, 8.0]), rotY: 0.5, scale: 1.25 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.5, 11.4]), rotY: 2.9, scale: 1.1 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.8, 15.0]), rotY: 1.1, scale: 0.95 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.0, 18.4]), rotY: 2.3, scale: 1.35 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.4, 22.0]), rotY: 0.7, scale: 1.0 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.3, 25.4]), rotY: 1.9, scale: 1.2 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.7, 29.0]), rotY: 2.5, scale: 0.9 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.1, 32.4]), rotY: 0.4, scale: 1.15 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.2, 36.0]), rotY: 1.6, scale: 1.28 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.4, 39.4]), rotY: 2.8, scale: 1.02 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([14.9, 43.0]), rotY: 1.2, scale: 1.18 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([15.2, 46.2]), rotY: 2.0, scale: 0.96 }),
+
+  // ── THE LODGE'S OWN CLEARING (Arc 2) ────────────────────────────────────────────────────────
+  //
+  // Four trees around the building rather than a wall of them: the Lodge has to sit in a CLEARING,
+  // because a house with wood pressed against every side reads as abandoned scenery and this one is
+  // supposed to read as somebody's home. They frame it instead -- two behind, one at each shoulder --
+  // so the roof still breaks the treeline from the west, which is the whole reason it is 3.6 m tall.
+  //
+  // AND A LANTERN AT THE GABLE, COLD. Every lantern in this game is lit or is waiting to be, and a
+  // lit one is this world's word for "alive" -- world/blackthornHollow.js says exactly that about the
+  // broken lantern in the pocket ("a lit lantern is this game's word for alive, and this pocket's
+  // word is left"). So the one thing a child sees before they reach the door is the house's own lamp
+  // not burning, which says nobody has come home to light it. Nothing has to explain that.
+  //
+  // Every placement here is checked against the road network rather than eyeballed -- the nearest is
+  // 2.97 m from a centreline with a half-width of 2, and the tightest pair clears its neighbour by
+  // 0.75 m -- because a rock in the road is a rock a child
+  // walks through, and the road they walk in on is the one this clearing is at the end of.
+  Object.freeze({ model: 'props/village/lantern.glb', at: Object.freeze([18.6, 56.2]), rotY: 0.4 }),
+  Object.freeze({ model: 'props/village/rock-wide.glb', at: Object.freeze([23.6, 52.6]), rotY: 1.1 }),
+  Object.freeze({ model: 'props/village/rock-small.glb', at: Object.freeze([23.0, 48.2]), rotY: 2.2 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([24.4, 50.4]), rotY: 0.8, scale: 1.1 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([16.4, 57.0]), rotY: 2.4, scale: 1.25 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([24.6, 57.0]), rotY: 1.5, scale: 1.05 }),
+  Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([13.8, 55.6]), rotY: 0.6, scale: 1.15 }),
   Object.freeze({ model: 'props/village/tree.glb', at: Object.freeze([9, -6]), rotY: 3.4, scale: 1.15 }),
   Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([8, 12]), rotY: 0.5 }),
   Object.freeze({ model: 'props/village/tree-crooked.glb', at: Object.freeze([12, 3]), rotY: 2.8 }),

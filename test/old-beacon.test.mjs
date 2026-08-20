@@ -97,10 +97,23 @@ function distanceToSegment(px, pz, [ax, az], [bx, bz]) {
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / lengthSquared));
   return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
 }
+// EVERY POLYLINE THE ROAD IS MADE OF, not just its spine.
+//
+// This walked ROAD.points alone, which was the whole road for three chapters and stopped being it
+// the moment Arc 2 forked east to the Ranger Lodge (ROAD.branches). A guard that only knows the
+// spine cannot see a rock standing in the middle of the new road -- and did not: moving the Lodge's
+// forecourt south put one squarely on it and this file reported no offenders at all.
+//
+// Kept as a local walk rather than calling ground.js's distanceToRoadNetwork on purpose. This is a
+// guard, and a guard that shares its implementation with the thing it guards proves only that they
+// agree. The segment maths below is the independent second opinion; what it now shares with the
+// game is the DATA, which is the part that must not drift.
 function distanceToRoad(x, z) {
   let min = Infinity;
-  for (let i = 0; i < ROAD.points.length - 1; i += 1) {
-    min = Math.min(min, distanceToSegment(x, z, ROAD.points[i], ROAD.points[i + 1]));
+  for (const line of [ROAD.points, ...(ROAD.branches ?? []).map((branch) => branch.points)]) {
+    for (let i = 0; i < line.length - 1; i += 1) {
+      min = Math.min(min, distanceToSegment(x, z, line[i], line[i + 1]));
+    }
   }
   return min;
 }

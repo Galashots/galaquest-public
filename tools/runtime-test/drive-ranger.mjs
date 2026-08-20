@@ -36,7 +36,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
-import { RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
+import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
 import { RANGER_LINE_INTRO, RANGER_LINE_SATCHEL_GIVEN }
   from '../../public/src/world/rangerSpeech.js';
@@ -211,6 +211,8 @@ const STATE_EXPR = `JSON.stringify((() => {
       return (id != null ? all[id] : null) ?? Object.values(all)[0] ?? null;
     })(),
     beaconLit: r.zoneSiegeState ? r.zoneSiegeState().beaconLit : null,
+    lodgeFound: r.zoneSiegeState ? r.zoneSiegeState().lodgeFound : null,
+    objective: document.querySelector('#quest-objective')?.textContent ?? '',
     ranger,
     // WHAT THE BAR IS ACTUALLY DRAWING, counted off the DOM rather than taken from the state that
     // was supposed to have painted it. A ceiling that moved and a bar that did not is exactly the
@@ -425,7 +427,40 @@ async function phaseCharm() {
   }
 }
 
-const PHASES = { arrival: phaseArrival, charm: phaseCharm };
+/** THE OLD ROAD. A child who has been in the hollow is told to follow it east, and it ends at a
+ *  house rather than in a field -- which is the defect this project has shipped three times and the
+ *  reason the world grew twelve metres to carry it. */
+async function phaseLodge() {
+  console.log('\n── phase lodge (the old road ends at a door) ──');
+  const { tab, server } = await boot('lodge', { withSatchel: true });
+  try {
+    // Straight out east along the ranger road. The seeded guest has never been in the hollow, so
+    // this leg is about the GROUND being there at all -- the chip and the arrival are checked once
+    // the hero is standing in it.
+    await walkToward(tab, LODGE.at[0], LODGE.at[1], 2.0, 240_000);
+    const there = await pollUntil(tab, (s) => s.lodgeFound === true, 20000);
+    check(there.lodgeFound === true, 'the road east ends somewhere a child can arrive AT',
+      `hero ${JSON.stringify(there.heroPos.map((n) => +n.toFixed(1)))}, lodge ${JSON.stringify(LODGE.at)}`);
+    check(/Ranger Lodge/i.test(there.banner ?? ''), 'and the banner names the place',
+      JSON.stringify((there.banner ?? '').trim()));
+    // THE WORLD REALLY DID GROW. Standing here at all is the assertion: x = 20.8 was two metres
+    // outside the walkable world until this change, and the clamp would have pinned the hero at 13.
+    check(there.heroPos[0] > 13, 'and the hero is standing east of where the world used to end',
+      `x ${there.heroPos[0].toFixed(2)} against an old limit of 13`);
+    // Let the arrival banner expire before photographing the place it names. It is a wide dark box
+    // at almost exactly hero height, so a capture taken on the arrival frame is a picture of a
+    // building with the child hidden behind a caption -- GQ-010's own "photograph the subject",
+    // caused this time by the game's own UI rather than by the camera.
+    await sleep(3400);
+    await shot(tab, 'lodge-01-the-old-road-ends');
+    check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
+  } finally {
+    await tab.close().catch(() => {});
+    try { process.kill(-server.pid); } catch { /* already gone */ }
+  }
+}
+
+const PHASES = { arrival: phaseArrival, charm: phaseCharm, lodge: phaseLodge };
 
 async function run() {
   const asked = process.argv.slice(2).filter((name) => name in PHASES);
