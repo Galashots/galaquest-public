@@ -5,6 +5,7 @@ import {
   PROTOCOL_VERSION,
   ProtocolError,
   attackMessage,
+  claimBladeMessage,
   collectLootMessage,
   decode,
   encode,
@@ -42,6 +43,14 @@ const ENCOUNTER_FIXTURE = {
   // nothing earned yet, Workshop I not bought. See "an encounter block with no village key at all
   // still decodes" below for the pre-GP3 backward-compatibility case this fixture used to cover.
   village: { coins: 0, shards: 0, workshopOwned: false },
+  // G2/G3: same reasoning a fourth time -- three whole seals and a Warden that has not stirred, which
+  // is what every real snapshot carries until a child swings at one. See "an encounter block with no
+  // siege key at all still decodes" below for the pre-G2 backward-compatibility case.
+  siege: {
+    seals: [{ blows: 0, burst: false }, { blows: 0, burst: false }, { blows: 0, burst: false }],
+    warden: { x: 5.2, z: 52.6, heading: -2.9, hp: 12, mode: 'dormant', modeSeconds: 0, phase: 1, targetId: null },
+    beaconLit: false,
+  },
 };
 
 const EVENTS_FIXTURE = [
@@ -459,6 +468,84 @@ test('village rides the wire and round-trips intact -- shared totals plus Worksh
 
   const welcome = welcomeMessage('p1', 3, [], withVillage);
   assert.deepEqual(roundTrip(welcome).encounter, withVillage);
+});
+
+// ── G2/G3: the siege block ──────────────────────────────────────────────────────────────────────
+
+test('an encounter block with no siege key at all still decodes, defaulting to whole seals and a dormant Warden', () => {
+  const preG2Shape = {
+    revision: 5,
+    wolf: { x: 2.5, z: 8, heading: 0.1, hp: 2, mode: 'walk', targetId: null },
+    heroes: { p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 } },
+  };
+  const decoded = decode(encode(welcomeMessage('p1', 3, [], preG2Shape)));
+  assert.deepEqual(decoded.encounter.siege, {
+    seals: [],
+    warden: { x: 0, z: 0, heading: 0, hp: 0, mode: 'dormant', modeSeconds: 0, phase: 1, targetId: null },
+    beaconLit: false,
+  });
+});
+
+test('siege rides the wire and round-trips intact -- the shared boss two children have to agree on', () => {
+  const midFight = {
+    ...ENCOUNTER_FIXTURE,
+    siege: {
+      seals: [{ blows: 2, burst: true }, { blows: 1, burst: false }, { blows: 0, burst: false }],
+      warden: { x: 4.1, z: 52, heading: 1.2, hp: 7, mode: 'overhead', modeSeconds: 0.75, phase: 2, targetId: 'p2' },
+      beaconLit: false,
+    },
+  };
+  assert.deepEqual(roundTrip(snapshotMessage(9, [], midFight, [])).encounter, midFight);
+  assert.deepEqual(roundTrip(welcomeMessage('p1', 3, [], midFight)).encounter, midFight);
+});
+
+test('a lit Beacon rides the wire, so a late joiner never arrives to find it cold again', () => {
+  const won = {
+    ...ENCOUNTER_FIXTURE,
+    siege: {
+      seals: [{ blows: 2, burst: true }, { blows: 2, burst: true }, { blows: 2, burst: true }],
+      warden: { x: 5.2, z: 52.6, heading: 0, hp: 0, mode: 'dead', modeSeconds: 12, phase: 3, targetId: null },
+      beaconLit: true,
+    },
+  };
+  assert.equal(roundTrip(snapshotMessage(9, [], won, [])).encounter.siege.beaconLit, true);
+});
+
+test('the siege block refuses shapes a presenter could not draw', () => {
+  const withSiege = (siege) => snapshotMessage(9, [], { ...ENCOUNTER_FIXTURE, siege }, []);
+  const goodWarden = {
+    x: 5.2, z: 52.6, heading: 0, hp: 12, mode: 'dormant', modeSeconds: 0, phase: 1, targetId: null,
+  };
+  assert.throws(
+    () => decode(encode(withSiege({ seals: [], warden: { ...goodWarden, mode: 'lurking' }, beaconLit: false }))),
+    ProtocolError,
+    'a mode enemies/warden.js has no pose for is not a mode',
+  );
+  assert.throws(
+    () => decode(encode(withSiege({ seals: [], warden: { ...goodWarden, phase: 4 }, beaconLit: false }))),
+    ProtocolError,
+    'there are three phases, and a fourth would drive the boss bar off its own scale',
+  );
+  assert.throws(
+    () => decode(encode(withSiege({ seals: [], warden: { ...goodWarden, modeSeconds: -1 }, beaconLit: false }))),
+    ProtocolError,
+    'a negative clock would restart a one-shot clip forever, the same reason wolf.modeSeconds is checked',
+  );
+  assert.throws(
+    () => decode(encode(withSiege({ seals: [{ blows: -1, burst: false }], warden: goodWarden, beaconLit: false }))),
+    ProtocolError,
+    'a seal cannot have taken fewer than no blows',
+  );
+  assert.throws(
+    () => decode(encode(withSiege({ seals: {}, warden: goodWarden, beaconLit: false }))),
+    ProtocolError,
+    'the seals are index-aligned with the zone list, so they have to be an array',
+  );
+});
+
+test('claim-blade carries no payload, the same shape search-cart already uses', () => {
+  const decoded = decode(encode(claimBladeMessage()));
+  assert.deepEqual(decoded, { v: PROTOCOL_VERSION, type: 'claim-blade' });
 });
 
 test('village.coins and village.shards must be non-negative integers', () => {

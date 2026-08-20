@@ -537,3 +537,49 @@ harness's own log, where "still not arrived at the road's end" was already `beac
 by dropping to two lamps and ending the warm chain 6.1 m short, and pinned by a check in
 `test/old-beacon.test.mjs` that no road lamp may stand inside the arrival radius.
 **Foreknowledge helped:** not yet recorded.
+
+### GQ-011 — Two simulations of the same thing are not one thing, however carefully you pick between them.
+**Status:** RULE · **Hits:** 1 · **First:** 2026-08-20 · **Last:** 2026-08-20
+**Not enforced because:** the defect is a missing CONCEPT (which simulation currently owns this
+entity), not a missing line. A scanner that could spot it would have to already know the answer.
+**Rule:** When two engines each keep state for the same real thing -- a hero's hearts, an item's
+ownership, a door's open/shut -- exactly one of them is authoritative at any moment, and moving
+between them is an explicit HANDOFF that carries the state across. Publishing whichever copy looks
+right for the current position is SELECTION, not continuity: it silently resurrects whatever the
+idle copy was last left holding. If a handoff feels like too much machinery, that is the signal the
+second copy should not exist -- but if both engines genuinely need their own clocks to resolve their
+own actions, then transfer on the boundary, cancel anything mid-flight that belonged to the fight
+being left, and let only the owning engine speak for that entity's own events.
+**Incidents:** 2026-08-20, the Beacon arc. `createSimulation()` put every player in BOTH the wolf
+party engine and the Beacon siege engine, each owning its own `hp`/`downSeconds`/`cooldown`, and the
+snapshot chose which copy to publish by testing whether the player stood inside the Beacon arena.
+Take wolf damage, walk twenty metres north, and the siege's untouched copy published full hearts;
+walk back and the wolf's copy resurrected the old state. Down and cooldown jumped the same way, and
+each engine's hero events leaked out of the fight the child was not in. Every unit test passed,
+because every unit test drove ONE engine. Found by an independent review reading the seam rather than
+the behaviour. Fixed with an explicit arena handoff -- an owning-engine map, a body transfer on
+crossing, the in-flight swing cancelled at the seam (a swing belongs to the fight it was thrown in),
+and hero-body events published only from the owning engine. Pinned by a regression that injures a
+hero in one fight, walks them across the boundary and back, and asserts the hearts never reset.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-012 — A presenter that ticks inside someone else's gate is invisible for reasons its own file cannot explain.
+**Status:** RULE · **Hits:** 1 · **First:** 2026-08-20 · **Last:** 2026-08-20
+**Not enforced because:** the wiring is correct JavaScript that reads correctly in isolation; only
+the frame loop's own nesting makes it wrong, and only for states a fresh session can reach.
+**Rule:** A presenter's update must be reachable on every frame its object can be ON SCREEN, not
+only on the frames some earlier chapter's condition happens to hold. Objects are visible as soon as
+they are built; if their pose, glow or animation is driven from inside an unrelated gate, they are
+drawn in whatever state they were constructed in -- which is not a state anybody designed, and which
+no test that drives the presenter directly will ever see.
+**Incidents:** 2026-08-20, the Beacon arc. The cold seals, the Warden, the blackthorn and the hollow
+were all ticked from inside the Dark Trail's `treeLitNow && zoneTrailLights.length > 0` gate, because
+that is where the trail's own beats already lived. Their MESHES were built by the zone loader
+regardless, so on a fresh session a child could walk to the Beacon and find a Warden that had never
+been posed -- kneeling never applied, and its shoulder brazier, the single cold accent that makes it
+read as a creature rather than as scaffolding, hidden outright. Invisible to the unit suite (which
+drives the presenter directly and therefore always ticks it) and invisible to the seeded harness
+(whose fixture lights the tree before it walks). Found by querying the live scene graph in a real
+browser -- `warden-brazier-glow visible=false` -- rather than by reading pixels. Fixed by ticking the
+arc's presenters unconditionally.
+**Foreknowledge helped:** not yet recorded.

@@ -668,7 +668,7 @@ export const PROPS = Object.freeze([
 // the clearing, so moving that lamp moves the trigger with it and the two can never disagree.
 //
 // SPLIT IN TWO on 2026-08-20 (G1), and this is the one edit in this file that could have gone wrong
-// silently. The Old Beacon road adds two more dormant lamps, and the obvious thing -- letting them
+// silently. The Old Beacon road adds three more dormant lamps, and the obvious thing -- letting them
 // fall into TRAIL_LIGHTS with the other six -- would have moved CAMP.at (the LAST dormant lamp) and
 // ROWAN.facing (the second-to-last) eighteen metres up the new road, so the camp's "you got here"
 // trigger would have fired at the Beacon and Rowan would have spent the game staring past the child
@@ -803,6 +803,117 @@ export const BEACON_WAYSTONES = Object.freeze([
   Object.freeze({ at: Object.freeze([-1.6, 42.0]), rotY: 2.4, leanRadians: -0.09 }),
 ]);
 
+// ── THE COLD SEALS (G2) ─────────────────────────────────────────────────────────────────────────
+//
+// G1 answered "where does the road go" and deliberately left "why is the Beacon cold" hanging. These
+// three are the answer, and they are the first thing in this game a child BREAKS on purpose.
+//
+// WHY THREE, AND WHY THEY ARE NOT IN A ROW. Two would be a formality and four is a chore; three is
+// the smallest count that can escalate (world/beaconSiege.js gives each break a bigger response than
+// the last). Their arrangement is the actual design decision here: TWO ARE VISIBLE ON ARRIVAL and
+// THE THIRD IS BEHIND THE TOWER. A child who breaks the two in front of them and reads
+// "Break the cold seals: 2/3" has to walk AROUND the Beacon to find the last one -- which is the
+// cheapest possible way to make a child look at the object from every side, and the only moment in
+// the arc where a sibling saying "there's another one back here" is worth saying.
+//
+// SOLVED, not eyeballed, against the three things that actually constrain them:
+//   - the plinth is 2.05 m in radius, so nothing may sit inside about 2.8 m or a seal grows out of
+//     the stone the tower stands on;
+//   - the fallen kerb (world/oldBeacon.js's `fallen` parts, baked into the tower's own rotation)
+//     lands at roughly [0.1, 50.5], [4.9, 51.4], [0.1, 48.3], [3.3, 46.2] and [5.0, 48.3] in world
+//     space -- every seal below clears the nearest by 1.5 m or more, so a burst never sprays debris
+//     through a boulder that was already lying there;
+//   - every prop body in the clearing (measured footprints, the same table test/zone-data.test.mjs
+//     uses) stays 2 m or more away.
+// All three are inside OLD_BEACON's own 4.6 m arrival radius plus a stride, so a child who has
+// triggered the arrival is already standing among them -- the seals are not a second journey.
+export const COLD_SEALS = Object.freeze([
+  // ON THE RIGHT AS YOU ARRIVE, and the first one most children will meet: the road comes in at
+  // x 2.6 and this stands three metres off it on the open side, with nothing behind it to read it
+  // against except grass.
+  Object.freeze([6.0, 49.9]),
+  // ON THE LEFT, deliberately not mirrored -- a matched pair reads as architecture, and these are
+  // supposed to read as a wrongness that grew here. Nearer the treeline, so it is the one found
+  // second by a child sweeping their eyes across the clearing.
+  Object.freeze([-1.0, 49.4]),
+  // BEHIND THE TOWER. See this block's own header: this is the seal that makes a child walk around
+  // the Beacon, and the reason the wood closing behind the Beacon leaves its 4.5 m gap.
+  Object.freeze([2.9, 54.3]),
+]);
+
+// How close a child has to be for a seal to notice them (the Lantern/Beacon accent reacts) and for
+// a swing to be judged against it. Deliberately larger than the swing's own reach: the reaction is
+// atmosphere, not a hitbox -- world/beaconSiege.js owns what actually counts as a blow.
+export const COLD_SEAL_NOTICE_RADIUS_METERS = 5.5;
+
+// ── THE BEACON WARDEN (G3) ──────────────────────────────────────────────────────────────────────
+//
+// Where the Warden is KNEELING before the third seal breaks, and where it fights.
+//
+// It is placed in the open north-east of the tower rather than hidden behind it, and that is a
+// deliberate reversal of the obvious staging. A boss that materialises out of nothing when a counter
+// hits three is a jump scare; a huge iron shape already kneeling in the clearing is a QUESTION a
+// child asks on arrival ("what IS that?") and then answers themselves by breaking the seals. It is
+// the same trick the Wildwood Blade already plays at Rowan's camp -- the thing is standing there,
+// visible, before anybody explains it.
+//
+// 3.9 m from the Beacon's centre: outside the plinth, inside the clearing, and clear of the nearest
+// tree body by more than 4 m so the fight has room without the child fighting a trunk.
+export const BEACON_WARDEN = Object.freeze({
+  at: Object.freeze([5.2, 52.6]),
+  // Facing back down the road, so the kneeling silhouette is seen three-quarters-on during the
+  // approach (the angle that reads a shape best) and it is already looking AT the child when it
+  // stands up. Derived from the Beacon's own approach point rather than typed, the same rule
+  // OLD_BEACON.rotY follows.
+  rotY: Math.atan2(BEACON_ROAD_APPROACH[0] - 5.2, BEACON_ROAD_APPROACH[1] - 52.6),
+});
+
+// The fight's own floor: where the Warden will chase, and the circle world/beaconSiege.js treats as
+// "the siege is here". Centred between the tower and the Warden's kneel so neither edge of the fight
+// pushes a child into the treeline, and wide enough that backing off from a wind-up is a real option
+// -- a boss you cannot retreat from is not readable, it is just damage.
+export const BEACON_ARENA = Object.freeze({
+  at: Object.freeze([3.7, 51.8]),
+  radiusMeters: 7.5,
+});
+
+// ── BLACKTHORN HOLLOW (G5) ──────────────────────────────────────────────────────────────────────
+//
+// The barrier the Wildwood Blade opens, and the pocket behind it.
+//
+// EAST, AND THAT IS THE WHOLE POINT. Every metre of content in this game so far has been NORTH: the
+// gate, the trail, the camp, the Beacon road. This is the first time the world offers a child
+// something SIDEWAYS, which is the difference between a corridor and a place -- and the sentence it
+// exists to produce is "there's a way over here", said by one brother to the other.
+//
+// Visible from the Beacon clearing (8.5 m east of the arena centre, no tree between them) so a child
+// can SEE the barrier while they still have the starter sword and cannot open it. Wanting it before
+// you can have it is the job; the Blade turning up later is the payoff.
+export const BLACKTHORN = Object.freeze({
+  at: Object.freeze([8.5, 51.4]),
+  // Runs north-south so a child walking east meets it broadside -- the tangle's own long axis is its
+  // local X (world/blackthornHollow.js), so this turns it across the way in.
+  rotY: Math.PI / 2,
+  spanMeters: 4.2,
+  // Wider than the trail bramble's own notice radius: this one is taller than a hero and a child
+  // needs to be told "too tough" from far enough back to see the whole thing shudder.
+  radiusMeters: 3.2,
+});
+
+// The pocket itself, between the barrier and the world's own eastern edge at x = 13. Deliberately
+// SMALL -- about four metres across -- because the brief is "a ten-metre pocket with a great reveal
+// beats a huge empty zone", and because everything in it has to be readable in one frame from the
+// moment the tangle comes down.
+export const HOLLOW = Object.freeze({
+  at: Object.freeze([11.2, 51.4]),
+  // What is in there, in the order a child's eye should find it: the chest first (it is the reward),
+  // then the ranger's satchel and the carved marker that tease Arc 2, then the dressing.
+  chestAt: Object.freeze([11.4, 52.4]),
+  clueAt: Object.freeze([10.6, 50.2]),
+  // The "you found it" trigger, generous like every other arrival circle in this file.
+  radiusMeters: 3.0,
+});
+
 // THE PEOPLE WHO LIVE HERE.
 //
 // Placed after walking up the road and looking: the village was a set of very good buildings with
@@ -894,4 +1005,19 @@ export const ROWAN = Object.freeze({
   model: KEEPER.model,
   at: Object.freeze([0.8, 31.6]),
   facing: TRAIL_LIGHTS[TRAIL_LIGHTS.length - 2],
+});
+
+// G4: how close a child has to be standing for Rowan to hand over the Wildwood Blade.
+//
+// It lives HERE, in the pure zone data, rather than beside the speech radius in world/zoneLoader.js,
+// for one hard reason: net/gameServer.mjs re-checks this exact distance server-side before granting
+// anything durable, and zoneLoader.js imports three.js, so a server can never read it. Same shape as
+// CAMP/CART_SEARCH/OLD_BEACON, and generous for the same reason all of those are.
+//
+// Deliberately a little WIDER than the 2 m speech radius the bubble uses: the grant should already
+// have happened by the time a child has walked close enough to read Rowan's line, so the ceremony
+// and the words land together instead of the child having to shuffle forward to trigger it.
+export const ROWAN_CLAIM = Object.freeze({
+  at: ROWAN.at,
+  radiusMeters: 3.0,
 });

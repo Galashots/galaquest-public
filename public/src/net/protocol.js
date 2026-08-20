@@ -34,7 +34,7 @@ export const PROTOCOL_VERSION = 3;
 
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
-  'village-upgrade-purchase',
+  'village-upgrade-purchase', 'claim-blade', 'claim-hollow',
 ];
 
 // Mirrors requireString's own default cap. Item ids are short snake_case tokens
@@ -196,6 +196,20 @@ export function decode(text) {
     // every later one, from any client, a clean no-op rather than a second batch.
     case 'search-cart':
       return { v: PROTOCOL_VERSION, type: 'search-cart' };
+
+    // G4. Client -> server only, no payload, exactly like 'search-cart' above and for the same
+    // reason: the message says "I am standing in front of Rowan asking for what I was promised", and
+    // every fact that decides whether that is TRUE (is the Beacon lit, is this hero actually near
+    // Rowan, do they already own it) is server-side world state the client cannot be trusted to
+    // assert. A resend is naturally idempotent -- net/rewardStore.mjs's 'gear-owned' rows are a SET,
+    // so granting the same item twice is one row either way.
+    case 'claim-blade':
+      return { v: PROTOCOL_VERSION, type: 'claim-blade' };
+
+    // G5. Same no-payload shape and the same reasoning as 'claim-blade' directly above: the hollow's
+    // chest is a place, and where a hero is standing is the server's fact, not the client's.
+    case 'claim-hollow':
+      return { v: PROTOCOL_VERSION, type: 'claim-hollow' };
 
     // Client -> server only, same direction as 'attack'/'equip'. Shape validation only -- whether
     // pickupId names a real, unclaimed, in-reach pickup is world/cartLoot.js's own business rule,
@@ -424,6 +438,87 @@ function decodeVillage(village) {
   return { coins, shards, workshopOwned: Boolean(village.workshopOwned) };
 }
 
+// ── G2/G3: THE BEACON SIEGE ─────────────────────────────────────────────────────────────────────
+//
+// The one piece of this arc that genuinely has to ride the wire, and the reason is the co-op rule
+// the design brief states plainly: two children must see ONE boss with ONE health bar, both land
+// blows on it, and both watch it fall. Everything else in the Beacon arc is either a per-client
+// discovery latch (arriving, finding the hollow -- main.js keeps those local, the same way
+// beaconFound already is) or a durable per-guest possession (the Blade, which rides `rewards`).
+// Shared, live, contested state is exactly what a snapshot is for.
+//
+// Optional/additive, the same shape decodeLoot and decodeVillage already use -- absent entirely for
+// every pre-G2 fixture and caller, decoding to "the seals are whole and nothing has woken" rather
+// than failing. That is what lets an old server and a new client meet without a version bump.
+//
+// Only what a PRESENTER needs rides here. world/beaconSiege.js's own internal bookkeeping
+// (attackCount, staggerBlows, per-hero lastCommandId) stays server-side, the identical boundary
+// decodeWolf already draws against biteCooldown/biteLanded -- and `modeSeconds` is carried for the
+// identical reason it is carried for the wolf: enemies/warden.js drives every pose procedurally off
+// (mode, modeSeconds), so without it the Warden cannot animate at all on a remote client.
+const WARDEN_MODES = [
+  'dormant', 'waking', 'idle', 'walk', 'overhead', 'sweep', 'pulse', 'hit', 'dying', 'dead',
+];
+
+function decodeSiegeWarden(warden) {
+  if (warden === null || typeof warden !== 'object') fail('encounter.siege.warden must be an object');
+  if (!WARDEN_MODES.includes(warden.mode)) {
+    fail(`encounter.siege.warden.mode must be one of ${WARDEN_MODES.join(', ')}, got ${JSON.stringify(warden.mode)}`);
+  }
+  const phase = requireInteger(warden.phase, 'encounter.siege.warden.phase');
+  if (phase < 1 || phase > 3) fail(`encounter.siege.warden.phase must be 1..3, got ${phase}`);
+  const modeSeconds = requireFiniteNumber(warden.modeSeconds, 'encounter.siege.warden.modeSeconds');
+  if (modeSeconds < 0) fail(`encounter.siege.warden.modeSeconds must be >= 0, got ${modeSeconds}`);
+  return {
+    x: requireFiniteNumber(warden.x, 'encounter.siege.warden.x'),
+    z: requireFiniteNumber(warden.z, 'encounter.siege.warden.z'),
+    heading: requireFiniteNumber(warden.heading, 'encounter.siege.warden.heading'),
+    hp: requireInteger(warden.hp, 'encounter.siege.warden.hp'),
+    mode: warden.mode,
+    modeSeconds,
+    phase,
+    targetId: warden.targetId === null || warden.targetId === undefined
+      ? null
+      : requireString(warden.targetId, 'encounter.siege.warden.targetId'),
+  };
+}
+
+// The seals as a plain array of `{ blows, burst }`, INDEX-ALIGNED with the zone's own COLD_SEALS
+// list -- their coordinates never ride the wire for the same reason a pickup's kind/position never
+// does (decodeLoot's own comment): both sides already import the same zone data, so restating it on
+// the wire would be a second copy free to disagree with the first.
+function decodeSiegeSeals(seals) {
+  if (!Array.isArray(seals)) fail('encounter.siege.seals must be an array');
+  return seals.map((seal, index) => {
+    if (seal === null || typeof seal !== 'object' || Array.isArray(seal)) {
+      fail(`encounter.siege.seals[${index}] must be an object`);
+    }
+    const blows = requireInteger(seal.blows, `encounter.siege.seals[${index}].blows`);
+    if (blows < 0) fail(`encounter.siege.seals[${index}].blows must be >= 0, got ${blows}`);
+    return { blows, burst: Boolean(seal.burst) };
+  });
+}
+
+const EMPTY_SIEGE = Object.freeze({
+  seals: Object.freeze([]),
+  warden: Object.freeze({
+    x: 0, z: 0, heading: 0, hp: 0, mode: 'dormant', modeSeconds: 0, phase: 1, targetId: null,
+  }),
+  beaconLit: false,
+});
+
+function decodeSiege(siege) {
+  if (siege === undefined) return EMPTY_SIEGE;
+  if (siege === null || typeof siege !== 'object' || Array.isArray(siege)) {
+    fail('encounter.siege must be an object');
+  }
+  return {
+    seals: decodeSiegeSeals(siege.seals),
+    warden: decodeSiegeWarden(siege.warden),
+    beaconLit: Boolean(siege.beaconLit),
+  };
+}
+
 function decodeEncounter(encounter) {
   if (encounter === null || typeof encounter !== 'object') fail('encounter must be an object');
   return {
@@ -433,6 +528,7 @@ function decodeEncounter(encounter) {
     rewards: decodeRewards(encounter.rewards),
     loot: decodeLoot(encounter.loot),
     village: decodeVillage(encounter.village),
+    siege: decodeSiege(encounter.siege),
   };
 }
 
@@ -464,6 +560,7 @@ const EMPTY_ENCOUNTER = Object.freeze({
   rewards: Object.freeze({}),
   loot: Object.freeze({ spawned: false, collected: Object.freeze({}) }),
   village: Object.freeze({ coins: 0, shards: 0, workshopOwned: false }),
+  siege: EMPTY_SIEGE,
 });
 const NO_EVENTS = Object.freeze([]);
 
@@ -496,6 +593,14 @@ export function equipMessage(itemId) {
 
 export function searchCartMessage() {
   return { v: PROTOCOL_VERSION, type: 'search-cart' };
+}
+
+export function claimBladeMessage() {
+  return { v: PROTOCOL_VERSION, type: 'claim-blade' };
+}
+
+export function claimHollowMessage() {
+  return { v: PROTOCOL_VERSION, type: 'claim-hollow' };
 }
 
 export function collectLootMessage(pickupId) {

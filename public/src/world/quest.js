@@ -79,6 +79,41 @@ export const OBJECTIVE_FIND_THE_BEACON = '🗼 Find the old Beacon';
 // It uses ROWAN'S OWN WORD -- they say the Beacon "has gone cold", and the chip agreeing with the
 // person who sent you is what makes it read as the story continuing rather than as the game shrugging.
 export const OBJECTIVE_BEACON_IS_COLD = '❄️ Why is the Beacon cold?';
+// ── G2/G3/G4: THE BEACON ANSWERS ────────────────────────────────────────────────────────────────
+//
+// G1 shipped a question, on the honest grounds that a question is the one form of objective still
+// true when the answer is not built. The answer is built now, so the chip stops asking and starts
+// instructing -- and OBJECTIVE_BEACON_IS_COLD above is deliberately KEPT rather than deleted: it is
+// still what a child sees in the gap between arriving and getting close enough to see the seals,
+// which is a real second or two of standing there wondering.
+//
+// COUNTS DOWN THE SAME WAY objectiveWakeLights AND objectiveFindMarks DO, for the third time and the
+// same reason: "one more" is the question a child is actually asking, and it turns three identical
+// objects into a target. The verb is the one they are already holding -- they have been cutting
+// bramble with it since Chapter 2 -- so nothing here has to teach a new word.
+export function objectiveBreakSeals(remaining) {
+  return remaining === 1 ? '🗡️ 1 more cold seal' : `🗡️ ${remaining} cold seals left`;
+}
+// THE "UH OH" BEAT, and it is deliberately not an instruction. Between the third seal bursting and
+// the Warden finishing standing up there is a beat where the game must not say "fight the Warden" --
+// the child has not seen it yet, and naming a thing before it exists on screen is the same defect as
+// promising a place you cannot walk to. So this says only that something happened, in the fewest
+// words that carry dread.
+export const OBJECTIVE_SOMETHING_ANSWERED = '⚠️ Something answered';
+// AND NOW IT IS ON SCREEN, so it can be named. This is the only objective in the game that names an
+// enemy, because it is the only enemy in the game with a name.
+export const OBJECTIVE_FIGHT_THE_WARDEN = '🗡️ Beat the Beacon Warden';
+// THE PAYOFF POINTS HOME. Rowan's own promise ("Wake the Beacon. This Wildwood Blade is yours.") is
+// the oldest unkept promise in the game; the moment the Beacon is lit, the chip goes and collects
+// on it. NAMES THE PERSON, not "go back" -- the same rule OBJECTIVE_LIGHT_THE_TREE follows.
+export const OBJECTIVE_RETURN_TO_ROWAN = '🏕️ Return to Rowan';
+// G5. Only ever shown to a child who actually OWNS the Blade, because it is the only objective in
+// the game that is impossible with the wrong weapon in your hand -- and a chip telling a child to do
+// something their sword cannot do is the game lying to them.
+export const OBJECTIVE_CUT_THE_BLACKTHORN = '🌿 Cut the blackthorn open';
+// THE END OF THE ARC, and it points at the one thing left in it rather than going blank -- the same
+// dead-end rule this whole file is written from. It stops being shown once they are inside.
+export const OBJECTIVE_SEARCH_THE_HOLLOW = '🔦 Search the hollow';
 // The fallback for a zone with no trail at all. It is honest and it is a verb -- wolves really do
 // keep coming back on their patrol -- and it is what the village said between the gate landing and
 // the Dark Trail landing. Kept so that a zone which places no dormant lights still says something.
@@ -88,6 +123,54 @@ export const OBJECTIVE_KEEP_THE_VILLAGE_SAFE = '🐺 Keep the wolves away';
  *  question a child is actually asking, and it turns the three pips from a score into a target. */
 export function objectiveFindMarks(remaining) {
   return remaining === 1 ? '🐺 1 more Lantern Mark' : `🐺 ${remaining} more Lantern Marks`;
+}
+
+/**
+ * WHAT THE BEACON IS ASKING OF YOU RIGHT NOW -- the whole G2..G5 arc as one ordered read, split out
+ * of questObjectiveFor's own branch so the arc's ordering can be tested (and argued about) on its
+ * own rather than through five arguments of trail state it does not care about.
+ *
+ * ORDERED BACKWARDS, newest beat first, which is the same shape the camp branch above already uses
+ * and for the same reason: every one of these states is a LATCH, so a child who has got further must
+ * never be sent back to be told about a thing they finished. Read top to bottom, this is the arc:
+ * the hollow, the blackthorn, the walk home for the Blade, the fight, the answer, the seals -- and
+ * G1's own unanswered question underneath all of it as the floor.
+ *
+ * @param siege `{ sealsLeft, wardenMode, beaconLit, bladeOwned, blackthornTorn, hollowFound }`,
+ *              or null before any of it is known (a zone with no seals placed).
+ */
+export function beaconObjectiveFor(siege) {
+  // NOTHING LEFT TO SAY, and saying so honestly. Once a child has been inside the hollow the arc is
+  // finished; the chip goes quiet rather than inventing a chore, and the NEXT desire is carried by
+  // the things they can SEE in there (the ranger's marker) rather than by a line of text.
+  if (siege?.hollowFound === true) return null;
+  if (siege?.blackthornTorn === true) return OBJECTIVE_SEARCH_THE_HOLLOW;
+  // ONLY WITH THE BLADE. See OBJECTIVE_CUT_THE_BLACKTHORN's own comment: a child holding the starter
+  // sword is not told to do a thing the starter sword cannot do. Before they own it, the chip is
+  // still pointing them at Rowan, which is where the Blade actually comes from.
+  if (siege?.bladeOwned === true) return OBJECTIVE_CUT_THE_BLACKTHORN;
+  const mode = siege?.wardenMode;
+  // LET THE VICTORY BREATHE. `beaconLit` latches on the FINISHING BLOW, but the Warden then spends
+  // 2.6 s falling and the Beacon takes 2.4 s to catch -- so checking the flag before the mode sent
+  // the child off to Rowan while the boss was still collapsing in front of them and the fire had not
+  // yet taken. The biggest moment in the game, interrupted by an errand.
+  //
+  // So the errand waits for the body to finish falling. 'dying' holds the dread beat; only once the
+  // Warden is actually gone does the chip turn the child around and point them home.
+  if (siege?.beaconLit === true) return mode === 'dying' ? OBJECTIVE_SOMETHING_ANSWERED : OBJECTIVE_RETURN_TO_ROWAN;
+  // 'waking' is the one beat that must NOT name the Warden -- it is still standing up and a child
+  // who has not seen it yet cannot be told to beat it. Every mode after that is a fight in progress.
+  if (mode === 'waking') return OBJECTIVE_SOMETHING_ANSWERED;
+  if (mode != null && mode !== 'dormant' && mode !== 'dead') return OBJECTIVE_FIGHT_THE_WARDEN;
+  // 'dead' with the Beacon somehow NOT lit is not a state the rules can produce (the ignition
+  // latches in the same step as the defeat), but a client mirroring a snapshot can observe the two
+  // fields a frame apart. Holding the dread beat is the honest answer for that frame.
+  if (mode === 'dead') return OBJECTIVE_SOMETHING_ANSWERED;
+  const sealsLeft = siege?.sealsLeft;
+  if (Number.isFinite(sealsLeft) && sealsLeft > 0) return objectiveBreakSeals(sealsLeft);
+  // G1's own ending, kept: before a child is close enough for the seals to have been noticed at all
+  // (and for any zone that places none), the Beacon is still just cold and the chip still just asks.
+  return OBJECTIVE_BEACON_IS_COLD;
 }
 
 /**
@@ -101,13 +184,19 @@ export function objectiveFindMarks(remaining) {
  *                     Chapter 2's places and beats they have reached: the camp, a standing bramble,
  *                     Rowan, the cart, and the Old Beacon at the end of the road. Optional and
  *                     defaulted, so every existing caller and test keeps the pre-Chapter-2 answers.
+ * @param siege        the Beacon arc's own state, `{ sealsLeft, wardenMode, beaconLit, bladeOwned,
+ *                     blackthornTorn, hollowFound }`. Optional and defaulted to null for the same
+ *                     reason `trail` is: every pre-G2 caller and test keeps the answers it had, and
+ *                     a zone that places no seals at all still ends on G1's honest question.
  * @returns the objective line, or null when there is nothing to show
  *
  * Keyed on `treeLit` and not on `lanternUnlocked` for the finished case, because between earning the
  * third mark and walking home those two disagree on purpose -- and the whole point of the second
  * objective is that window.
  */
-export function questObjectiveFor(rewards, treeLit, gateFound = false, questGiven = true, trail = null) {
+export function questObjectiveFor(
+  rewards, treeLit, gateFound = false, questGiven = true, trail = null, siege = null,
+) {
   if (rewards == null) return null;
   if (treeLit === true) {
     if (gateFound !== true) return OBJECTIVE_FIND_THE_GATE;
@@ -128,7 +217,12 @@ export function questObjectiveFor(rewards, treeLit, gateFound = false, questGive
     // still false -- and this check living INSIDE the branch let that fall all the way through to the
     // lamp counter, so the game told a child who had just found a dead Beacon to go and light lamps.
     // rowanSpeech.js already gives beaconFound unconditional top priority; this now agrees with it.
-    if (trail?.beaconFound === true) return OBJECTIVE_BEACON_IS_COLD;
+    //
+    // (Found independently by the review of the G1 merge and by this branch's own G2 work, which is
+    // a fair sign it was real. The hoist is that review's; what it delegates to is this branch's --
+    // G1's single honest question has become the whole Beacon arc, so the answer moved into
+    // beaconObjectiveFor and OBJECTIVE_BEACON_IS_COLD is now that function's own floor.)
+    if (trail?.beaconFound === true) return beaconObjectiveFor(siege);
     if (trail?.campFound === true) {
       // ROWAN, THEN THE CART, THEN THE ROAD NORTH -- each only claims the chip once its own
       // precondition is real, so a camp with no Rowan spoken to yet still asks the mystery.

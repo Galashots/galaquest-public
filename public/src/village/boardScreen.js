@@ -36,7 +36,9 @@ export const VILLAGE_BOARD_NODES = Object.freeze([
  *   "current restored state" rather than inventing a second truth for whether it is lit.
  * @param selectedNodeId   which node (if any) is drilled into -- null/undefined for "board only".
  */
-export function villageBoardViewModel({ village, lanternUnlocked, selectedNodeId }) {
+export function villageBoardViewModel({
+  village, lanternUnlocked, selectedNodeId, beaconLit = false,
+}) {
   const nodes = VILLAGE_BOARD_NODES.map((node) => {
     const selected = node.id === selectedNodeId;
     if (node.id === 'lantern-tree') {
@@ -44,6 +46,21 @@ export function villageBoardViewModel({ village, lanternUnlocked, selectedNodeId
     }
     if (node.id === 'workshop') {
       return { ...node, status: village.workshopOwned ? 'Built' : 'Available', selected };
+    }
+    // G6: THE BOARD IS A DESIRE ENGINE, and this is the one line that makes it one.
+    //
+    // Every future node reads "Not yet" forever, which is honest and is also the reason a child
+    // stops opening this screen: nothing on it has ever changed in response to anything they did.
+    // Lighting the Old Beacon changes exactly ONE of them, and deliberately only one -- the
+    // directive's own "show one or two things that make a child ask how do I get that", never forty.
+    //
+    // The Ranger Lodge is the right one to wake because the Blackthorn Hollow the Beacon arc ends in
+    // already points at it: a fallen ranger's satchel and a carved marker aiming north-east
+    // (world/blackthornHollow.js). A child who found that secret meets the same promise again here,
+    // in the village, from a different direction -- which is how a place starts to feel real before
+    // it has been built.
+    if (node.id === 'ranger-lodge' && beaconLit) {
+      return { ...node, kind: 'next', status: 'The light is seen', selected };
     }
     return { ...node, status: 'Not yet', selected };
   });
@@ -67,9 +84,25 @@ export function villageBoardViewModel({ village, lanternUnlocked, selectedNodeId
       affordable: canAffordWorkshopI(village.coins, village.shards, village.workshopOwned),
     };
   } else if (selectedNodeId != null) {
-    const node = VILLAGE_BOARD_NODES.find((candidate) => candidate.id === selectedNodeId);
+    // Read off the COMPUTED nodes, not the static table: a node's kind is now a function of what
+    // the player has done (see the ranger-lodge branch above), and looking it up in the frozen
+    // definition would forever report the kind it was born with -- the detail would stay the empty
+    // "future" card even while the board itself showed the node awake.
+    const node = nodes.find((candidate) => candidate.id === selectedNodeId);
     if (node && node.kind === 'future') {
       detail = { nodeId: node.id, title: node.label.toUpperCase(), future: true };
+    } else if (node && node.kind === 'next') {
+      // The one node that has something to SAY. Still not buildable -- it promises a place and a
+      // reward class and stops there (the Board's own rule), because promising a thing a child can
+      // walk to before it exists is the defect G1 spent a whole slice not shipping.
+      detail = {
+        nodeId: node.id,
+        title: node.label.toUpperCase(),
+        future: true,
+        // A PLACE, a FANTASY and a REWARD CLASS, in the fewest words that carry all three.
+        whatIsIt: 'Rangers hunt the rare beasts.',
+        whatChanges: 'They saw the Beacon light. Someone is coming.',
+      };
     }
     // A selectedNodeId naming the 'current' Lantern Tree, or an id this table does not define at
     // all, opens no detail state -- the board's own node already shows everything the Lantern Tree

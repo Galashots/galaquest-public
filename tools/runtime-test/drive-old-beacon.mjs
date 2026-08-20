@@ -8,7 +8,7 @@
  *   finish the camp (Rowan, then the cart) -> the objective names the Beacon -> the Beacon is
  *   ALREADY ON SCREEN from the camp -> walk the new road, waking its lamps on the way -> a stretch
  *   where it is in plain sight and not yet reached -> arrive -> one banner, one arrival, the world
- *   answers -> the post-arrival objective promises nothing that is not built.
+ *   answers -> the post-arrival objective names the seals that are really standing there.
  *
  * THE NEW STRETCH IS WALKED, not teleported. The setup half (spawn to the camp, which is Chapter 1's
  * fight seeded away and Chapter 2's trail proven elsewhere by drive-cart-loot.mjs) is one bulk walk
@@ -41,7 +41,9 @@ import {
 } from '../../public/src/world/zones/village.js';
 import { WORLD_LIMIT_NORTH } from '../../public/src/world/bounds.js';
 import { BEACON_GLOW_REST } from '../../public/src/world/oldBeacon.js';
-import { OBJECTIVE_BEACON_IS_COLD, OBJECTIVE_FIND_THE_BEACON } from '../../public/src/world/quest.js';
+import {
+  OBJECTIVE_BEACON_IS_COLD, OBJECTIVE_FIND_THE_BEACON, objectiveBreakSeals,
+} from '../../public/src/world/quest.js';
 import { ROWAN_LINE_BEACON_FOUND, ROWAN_LINE_CART_SEARCHED } from '../../public/src/world/rowanSpeech.js';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
@@ -271,6 +273,14 @@ async function state(tab) {
       beaconSight: trail.beaconSight,
       beaconRoadLoaded: trail.beaconRoadLoaded,
       beaconRoadLit: trail.beaconRoadLit,
+      sealsLeft: (() => {
+        const siege = r.zoneSiegeState?.();
+        return siege ? siege.seals.filter((seal) => seal.burst !== true).length : null;
+      })(),
+      sealsStanding: (() => {
+        const siege = r.zoneSiegeState?.();
+        return siege ? siege.sealsBuilt - siege.sealsGone : null;
+      })(),
       objective: document.querySelector('#quest-objective')?.textContent ?? null,
       objectiveShown: document.querySelector('#quest-objective')?.dataset.shown ?? null,
       banner: document.querySelector('#banner')?.textContent ?? null,
@@ -530,14 +540,33 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
       settled.beaconStirring === false && Math.abs((settled.beaconGlow ?? 0) - BEACON_GLOW_REST) < 1e-6,
       `glow ${settled.beaconGlow} against a rest of ${BEACON_GLOW_REST}`);
 
-    // THE HONEST END.
-    const after = await pollUntil(tab, (s) => s.objective === OBJECTIVE_BEACON_IS_COLD, 5000);
+    // THE HONEST END -- and what "honest" means here CHANGED the day G2 landed.
+    //
+    // G1 shipped a QUESTION here ("❄️ Why is the Beacon cold?") on the explicit grounds, written
+    // into OBJECTIVE_BEACON_IS_COLD's own comment, that a question is the one form of objective
+    // still true when the answer is not built. Its sibling check enforced that with a regex banning
+    // light/wake/fix/repair/defend/fight/guard, because every one of those words would have been a
+    // promise the world could not keep.
+    //
+    // The answer is built now. Three cold seals stand at the Beacon's foot and a child who has just
+    // arrived can see them, so the chip counts them down instead of asking. Pinning the question
+    // past that point would be this harness insisting the game stay unfinished -- and the verb ban
+    // would fire on the one verb that finally became real.
+    //
+    // So the guard is kept and MOVED OFF the word list onto the world: the chip may name seals only
+    // if that many seals are physically standing in the zone. A chip that counted three while two
+    // stood there would still fail here, which is the property the regex was reaching for and could
+    // never actually check. OBJECTIVE_BEACON_IS_COLD stays imported and asserted in the reload phase
+    // below, where it is still the floor for a child who has not walked up yet.
+    const after = await pollUntil(
+      tab, (s) => s.sealsLeft > 0 && s.objective === objectiveBreakSeals(s.sealsLeft), 5000,
+    );
     check(`${label}: the post-arrival objective is the honest one`,
-      after.objective === OBJECTIVE_BEACON_IS_COLD,
-      `chip reads ${JSON.stringify(after.objective)}`);
-    check(`${label}: and it does not promise a G2 action that is not built`,
-      !/(light|wake|fix|repair|defend|fight|guard)/i.test(after.objective ?? ''),
-      `chip reads ${JSON.stringify(after.objective)}`);
+      after.sealsLeft > 0 && after.objective === objectiveBreakSeals(after.sealsLeft),
+      `chip reads ${JSON.stringify(after.objective)} with ${after.sealsLeft} seal(s) unbroken`);
+    check(`${label}: and every seal it names is really standing there`,
+      after.sealsLeft === after.sealsStanding,
+      `${after.sealsLeft} named, ${after.sealsStanding} standing in the scene`);
     await aimAtBeacon(tab);
     await shot(tab, `${label}-08-post-arrival`);
     const atBeacon = await perf(tab, `${label} standing at the Beacon`);

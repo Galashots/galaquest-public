@@ -11,6 +11,7 @@ import {
   WORLD_LIMIT_NORTH,
   attachGameServer,
   clampToWorldX,
+  createRewardCoordinator,
   createSimulation,
 } from '../net/gameServer.mjs';
 import { RUN_SPEED, WALK_SPEED, groundSpeedForInput } from '../public/src/character/speed.js';
@@ -929,5 +930,47 @@ test('GP3: Village Supplies and Workshop I both survive a real server restart, a
     await new Promise((resolve) => httpServer2.close(resolve));
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+// ── the Beacon's durable row is only latched by a REAL write (Director gate, PR #14) ────────────
+//
+// A victory won entirely by guestId-less (ephemeral) clients has nothing durable to write. The bug
+// this pins: the tick loop used to mark the world "recorded" after merely TRYING every connected
+// player, so an all-ephemeral win latched having written nothing and then stopped trying. A durable
+// child joining a minute later found the Beacon burning with no row behind it -- and the next
+// restart put it out.
+test('an ephemeral-only Beacon victory is written down as soon as a durable guest is present', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'galaquest-beacon-durable-'));
+  const rewardStorePath = join(dir, 'rewards.db');
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath });
+    try {
+      // An ephemeral connection: joined with no guestId at all.
+      rewards.join('p1', undefined);
+      assert.equal(rewards.recordBeaconLit('p1').applied, false, 'nothing durable to write yet');
+      assert.equal(rewards.beaconLit(), false, 'and nothing was written');
+
+      // A durable child joins later. The row must land now, not never.
+      rewards.join('p2', 'guest-durable-1');
+      assert.equal(rewards.recordBeaconLit('p2').applied, true, 'the write finally happens');
+      assert.equal(rewards.beaconLit(), true);
+
+      // Idempotent on a fixed eventId: the Beacon lights once, ever.
+      assert.equal(rewards.recordBeaconLit('p2').applied, false, 'a second win writes no second row');
+    } finally {
+      rewards.close();
+    }
+
+    // RESTART: a fresh coordinator over the same file still knows the Beacon is burning, which is
+    // the whole point of writing it down.
+    const restarted = createRewardCoordinator({ rewardStorePath });
+    try {
+      assert.equal(restarted.beaconLit(), true, 'reload must not pretend the player never won');
+    } finally {
+      restarted.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

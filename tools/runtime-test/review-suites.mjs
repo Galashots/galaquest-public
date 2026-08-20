@@ -59,6 +59,13 @@ export const HARNESSES = {
   // captures whole-camp current-vs-candidate, both orientations. Same instrument contract -- a
   // person reads the captures and Sol's own visual ruling, not this harness's exit code.
   'review-rowan-camp-composite': { gate: false, why: 'rowan camp whole-camp current-vs-candidate composite; always exits 0 by design' },
+  // G2..G5's own end-to-end play-through: walk to the Beacon, break all three cold seals with real
+  // taps on ATTACK, fight the Warden to the death, watch the Beacon catch. A GATE, and firmly so --
+  // every check in it is a question about BEHAVIOUR that a script can answer honestly (did the seal
+  // burst, did the boss bar name the thing, did the fire latch, did the chip finally point home),
+  // never about how any of it looks. Its captures are the human evidence; its exit code is not a
+  // claim that anybody has looked at them.
+  'drive-beacon-siege': { gate: true, why: 'the whole Beacon arc played end to end: seals, Warden, ignition, and the objective chain' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -74,6 +81,6 @@ export const SUITES = {
     'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
-    'drive-village-board', 'drive-old-beacon',
+    'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege',
   ],
 };
