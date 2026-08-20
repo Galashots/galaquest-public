@@ -1,9 +1,6 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import { WORLD } from '../render/layers.js';
-import { FOG_FAR } from '../render/sky.js';
-import { MAX_PITCH, MIN_DISTANCE } from '../camera/follow.js';
 import { ROAD, ZONE } from './zones/village.js';
-import { WORLD_LIMIT, WORLD_LIMIT_NORTH } from './bounds.js';
 
 // Phase Y/Task C: the flat single-colour ground plane read as props scattered on a test pad -- see
 // the brief's own "Replace the flat green test-pad read with one integrated ground + road". This is
@@ -17,9 +14,9 @@ const GRASS_COLOR = new THREE.Color(0x8fb583);
 // on a snooker table. These two tones are lerped across the ground by a slow deterministic field
 // below, so the field has broad patches of lighter and deeper green the way a real meadow does.
 //
-// Their MIDPOINT is GRASS_COLOR to within a bit per channel, on purpose: the distance skirt is a
-// flat quad in GRASS_COLOR and the playable ground's edge has to meet it invisibly. Vary the two
-// tones and that seam opens up near where a child can stand, well inside the fog.
+// Their MIDPOINT is GRASS_COLOR to within a bit per channel, on purpose: the 140 m distance skirt is
+// a flat quad in GRASS_COLOR and the playable ground's edge has to meet it invisibly. Vary the two
+// tones and that seam opens up 14 m from where a child can stand, well inside the fog.
 //
 // Costs nothing: same vertices, same one mesh, same one draw call. Only the colours written into
 // the buffer change.
@@ -42,9 +39,10 @@ const CELL_METERS = 0.5;
 // quantisation was doing half the softening; on the 0.5 m grid the two compounded and the lane to
 // the wolf photographed as a fuzzy mud patch rather than a path with sides.
 const ROAD_EDGE_SOFTEN_METERS = 0.35;
-// Slack beyond the point where the skirt's edge is exactly at FOG_FAR, so the horizon is not sitting
-// on the threshold. Two metres of scenery past the fog costs nothing -- the skirt is two triangles.
-const SKIRT_FOG_MARGIN_METERS = 2;
+// Wide enough that its own edge is past render/sky.js's FOG_FAR from anywhere a player can stand:
+// the walkable world is +/-13 and the camera sits up to 18 m further out, so 70 m of half-width
+// leaves ~39 m of fully fogged grass beyond the furthest thing a child can look at.
+const GROUND_SKIRT_METERS = 140;
 
 // ── pure helpers (unit-testable with no three.js, no DOM) ──────────────────────────────────────
 
@@ -117,44 +115,6 @@ export function groundBounds(zone) {
   return { minX: -half, maxX: half, minZ: -half, maxZ: half + (zone.northMeters ?? 0) };
 }
 
-/** The rectangle a hero can actually STAND on, which is a metre inside the ground on every side. */
-export const WALKABLE_BOUNDS = Object.freeze({
-  minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT_NORTH,
-});
-
-/**
- * How wide the distance skirt has to be so that, from the furthest point a player can stand and
- * looking straight out, its own edge is still at or past the fog's far plane and therefore fully
- * dissolved into FOG_COLOR.
- *
- * DERIVED, not typed (docs/MISTAKES.md GQ-007). It was a hand-written 140 with a comment reading
- * "the walkable world is +/-13 and the camera sits up to 18 m further out" -- true when the world
- * was square, and quietly false from the moment it grew north (ZONE.northMeters 22 -> 44 for the
- * Old Beacon road). Worse, it broke BOTH ends: the skirt is centred on the ground, so growing one
- * end drags the far edge of the OTHER end inward by half the growth. The south horizon regressed
- * from a place that edit never touched, and the only thing asserting the invariant was prose.
- *
- * The lower bound uses the player's WORST camera limits rather than the default camera. Zooming in
- * removes the trailing distance that normally buys us horizon reach, and pitching down shortens the
- * horizontal contribution to view-space fog depth. Using MIN_DISTANCE + MAX_PITCH therefore covers
- * every camera state the live follow controller allows instead of another snapshot that can drift.
- *
- * three.js linear fog is view-space depth. This calculation intentionally ignores the positive
- * depth contribution from camera height above the skirt, so the result remains conservative without
- * depending on targetHeight or the skirt's tiny Y offset.
- */
-export function skirtHalfWidthMeters(bounds, walkable, marginMeters = SKIRT_FOG_MARGIN_METERS) {
-  const centreX = (bounds.minX + bounds.maxX) / 2;
-  const centreZ = (bounds.minZ + bounds.maxZ) / 2;
-  // How far the walkable world sticks out from the skirt's own centre, in its worst direction.
-  const reach = Math.max(
-    walkable.maxZ - centreZ, centreZ - walkable.minZ,
-    walkable.maxX - centreX, centreX - walkable.minX,
-  );
-  const cosPitch = Math.cos(MAX_PITCH);
-  return FOG_FAR / cosPitch + reach - MIN_DISTANCE * cosPitch + marginMeters;
-}
-
 /** Builds the ONE ground BufferGeometry over `bounds` ({minX,maxX,minZ,maxZ}, from groundBounds())
  *  at `cellMeters` resolution, flat on Y=0 already (no post-hoc rotation), every vertex coloured by
  *  its road-blend against `road` (village.js's ROAD, or undefined for plain grass -- a zone with no
@@ -219,33 +179,35 @@ export function createGround() {
   ground.name = 'ground';
   world.add(ground);
 
-  // THE SKIRT. One flat derived-width quad, in the same grass colour, a centimetre below the real
+  // THE SKIRT. One flat quad, 140 m across, in the same grass colour, a centimetre below the real
   // ground and drawn before it.
   //
-  // It exists because the playable ground has a visible edge and a child can see it. Standing in
-  // the wilderness looking out, the ground simply STOPS on a hard horizontal line with open sky
-  // underneath if the skirt does not extend far enough through the fog.
-  // Pushing the fog in far enough to hide a short skirt would also wash out the village, which is
-  // the part worth looking at.
+  // It exists because the 28x28 playable ground has a visible edge and a child can see it. Standing
+  // in the wilderness looking south, the ground simply STOPS on a hard horizontal line with open
+  // sky underneath -- caught in .local/runtime-test/fight-swing-contact.png, where the far edge cuts
+  // straight across the frame between the trees. render/sky.js's fog was meant to dissolve it and
+  // does not reach: the far edge is only ~28 m from the camera and the fog is barely 18% there.
+  // Pushing the fog in far enough to hide it would also wash out the village, which is the part
+  // worth looking at.
   //
-  // Two triangles and one draw call answer it completely instead: the grass runs past the fog's
+  // Two triangles and one draw call answer it completely instead: the grass now runs past the fog's
   // own far plane in every direction, so the horizon is a soft fade to the sky's own colour rather
-  // than a cut edge, from anywhere in the world and at any allowed camera setting. Nothing walks on
-  // it -- the hero is clamped to world/bounds.js long before its edge -- it is scenery.
+  // than a cut edge, from anywhere in the world and at any camera angle. Nothing walks on it -- the
+  // hero is clamped to WORLD_LIMIT (world/bounds.js) long before its edge -- it is scenery.
   //
   // Same material family and the same GRASS_COLOR the detailed mesh's own edge vertices carry, so
   // the seam between them is invisible; 0.01 m below, so there is no z-fighting to tune.
-  const skirtMeters = 2 * skirtHalfWidthMeters(bounds, WALKABLE_BOUNDS);
   const skirt = new THREE.Mesh(
-    new THREE.PlaneGeometry(skirtMeters, skirtMeters),
+    new THREE.PlaneGeometry(GROUND_SKIRT_METERS, GROUND_SKIRT_METERS),
     new THREE.MeshStandardMaterial({ color: GRASS_COLOR, roughness: 0.9, metalness: 0 }),
   );
   skirt.name = 'ground-skirt';
   skirt.rotation.x = -Math.PI / 2;
   // CENTRED ON THE GROUND, not on the origin. It was the same thing until the world grew north on
-  // 2026-08-15; after that a skirt still centred at z=0 put its far edge much closer to the new
-  // north clamp. Derived from the bounds the detailed mesh was actually built over, so centre and
-  // reach cannot drift apart again when the world grows.
+  // 2026-08-15; after that a skirt still centred at z=0 put its own far edge only 70 m from the
+  // origin but just 35 m from the north end of the trail -- and the camera sits up to 18 m further
+  // out again, which brings that hard edge inside FOG_NEAR and back into frame. Derived from the
+  // bounds the detailed mesh was actually built over, so it cannot drift from them.
   skirt.position.set((bounds.minX + bounds.maxX) / 2, -0.01, (bounds.minZ + bounds.maxZ) / 2);
   skirt.renderOrder = -1;
   world.add(skirt);

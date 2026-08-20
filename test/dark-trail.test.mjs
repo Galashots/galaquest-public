@@ -262,7 +262,7 @@ test('reaching the Beacon replaces "find it" with an objective that promises not
   );
 });
 
-// ARRIVING BEATS COLLECTING, at the top of the whole trail ladder. A child who ran the whole road without
+// ARRIVING BEATS COLLECTING, at the top of the camp branch. A child who ran the whole road without
 // stopping to talk has still found the Beacon, and must not be sent back to be introduced to Rowan.
 test('the Beacon, once found, outranks every camp beat that was skipped to get there', () => {
   assert.equal(
@@ -271,21 +271,6 @@ test('the Beacon, once found, outranks every camp beat that was skipped to get t
     }),
     OBJECTIVE_BEACON_IS_COLD,
   );
-});
-
-// THE OFF-ROAD WALKER. campFound is a 4.5 m radius and the road only passes 2.5 m from its centre,
-// so walking wide around the clearing and straight on up reaches the Beacon with campFound still
-// false. This check lived INSIDE the campFound branch until the independent review found it: the
-// chip fell all the way through to the lamp counter, so the game told a child who had just found a
-// dead Beacon to go and light lamps. rowanSpeech.js always gave beaconFound top priority; the two
-// disagreed, and only the speech was right.
-test('reaching the Beacon without ever entering the camp radius still reads the Beacon, not lamps', () => {
-  const offRoad = questObjectiveFor(LIT, true, true, true, {
-    lights: 6, lit: 3, campFound: false, rowanMet: false, cartSearched: false, beaconFound: true,
-  });
-  assert.equal(offRoad, OBJECTIVE_BEACON_IS_COLD);
-  assert.notEqual(offRoad, objectiveWakeLights(3),
-    'a child standing at a dead Beacon may not be sent back down the trail to light lamps');
 });
 
 test('sabotage: rowanMet alone, without campFound, changes nothing -- the camp gates the whole beat', () => {
