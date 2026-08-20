@@ -36,7 +36,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
-import { COLD_SEALS, OLD_BEACON } from '../../public/src/world/zones/village.js';
+import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
 import { WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
 
 const CHROME_PORT = 9224;
@@ -184,6 +184,15 @@ const STATE_EXPR = `JSON.stringify((() => {
     })(),
     treeLit: r.zoneTreeState()?.lit ?? false,
     beaconFound: trail.beaconFound,
+    gateFound: trail.gateFound ?? null,
+    // WHY A SWING DID OR DID NOT HAPPEN, reported rather than guessed. The first CI run swung
+    // twenty-four times at three seals and moved none of them, and nothing in the log could say
+    // whether the client refused to send, the server refused to accept, or the blow simply missed.
+    attackReady: document.querySelector('#attack-button')?.dataset.ready !== 'false',
+    heroClocks: (() => {
+      const e = r.encounterState?.();
+      return e?.hero ? { hp: e.hero.hp, swingSeconds: e.hero.swingSeconds, cooldown: e.hero.cooldown, downSeconds: e.hero.downSeconds } : null;
+    })(),
     objective: document.querySelector('#quest-objective')?.textContent ?? '',
     objectiveShown: document.querySelector('#quest-objective')?.dataset.shown === 'true',
     bossBarShown: document.querySelector('#boss-bar')?.dataset.shown === 'true',
@@ -310,7 +319,18 @@ async function run() {
 
     // ── to the Beacon ────────────────────────────────────────────────────────────────────────────
     console.log('── walking to the Old Beacon ──');
-    await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1] - 3, 2.2, WALK_BUDGET_MS);
+    // THROUGH THE GATE, not past it. The first CI run walked the shortest line to the Beacon and
+    // then reported that the chip said "Follow the lit path north" -- which was the CHIP being
+    // right and this harness being wrong: `gateFound` only latches inside WILDWOOD_GATE's own
+    // radius (main.js), and a hero who never passes under the arch has genuinely not found it.
+    // A harness must walk the route a child walks, or its objective assertions are fiction.
+    await walkToward(tab, WILDWOOD_GATE.at[0], WILDWOOD_GATE.at[1],
+      Math.max(1.2, (WILDWOOD_GATE.radiusMeters ?? 3) * 0.6), Math.floor(WALK_BUDGET_MS * 0.45));
+    const gated = await pollUntil(tab, (s) => s.gateFound === true, 8000);
+    check(gated.gateFound === true, 'the child passes under the Wildwood Gate on the way',
+      `at ${JSON.stringify(gated.heroPos.map((n) => +n.toFixed(1)))}`);
+    await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1] - 3, 2.2,
+      Math.max(30000, Math.min(WALK_BUDGET_MS, msLeft() - 400000)));
     const arrived = await pollUntil(tab, (s) => s.beaconFound === true, 30000);
     check(arrived.beaconFound === true, 'the child reaches the Old Beacon', `at ${JSON.stringify(arrived.heroPos.map((n) => +n.toFixed(1)))}`);
     check(arrived.siege?.sealsBuilt === 3, 'three cold seals stand around its base', `built ${arrived.siege?.sealsBuilt}`);
@@ -330,6 +350,12 @@ async function run() {
       assertBudget(`approaching seal ${index + 1}`);
       await walkToward(tab, sx, sz, 1.25, Math.min(70000, Math.max(15000, msLeft())));
       const before = await state(tab);
+      if (index === 0) {
+        console.log(`  DIAG  at seal 1: heroPos ${JSON.stringify(before.heroPos.map((n) => +n.toFixed(2)))}, `
+          + `seal ${JSON.stringify(COLD_SEALS[0])}, attackReady ${before.attackReady}, `
+          + `clocks ${JSON.stringify(before.heroClocks)}, net ${before.netStatus}, `
+          + `warden ${before.siege.warden.mode}`);
+      }
       const wasBurst = before.siege.seals.filter((s) => s.burst).length;
       let cracked = null;
       for (let swing = 0; swing < MAX_SWINGS_PER_SEAL; swing += 1) {

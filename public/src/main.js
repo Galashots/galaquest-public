@@ -1354,6 +1354,11 @@ async function bootstrap() {
       // harness can see the two disagree instead of only seeing one of them.
       beaconRoadLoaded: zoneBeaconRoadLights.length,
       beaconRoadLit: [...beaconRoadLit],
+      // The Wildwood Gate's own latch, reported beside the rest of the chain rather than left as the
+      // one beat a harness cannot see. It gates the objective chip ahead of everything Chapter 2
+      // says (world/quest.js checks it before the trail at all), so a run that walks PAST the arch
+      // reads a perfectly correct "follow the lit path north" and has no way to discover why.
+      gateFound,
       campFound,
       rowanMet,
       cartSearched,
