@@ -1,0 +1,28 @@
+# Render Blueprint: a public playtest instance of GalaQuest.
+#
+# Purpose: give browser-driving agents (e.g. ChatGPT agent mode) and remote human testers a real,
+# public URL running the actual game -- client, authoritative server, and WebSocket co-op on one
+# origin -- without any local network access. See docs/public-playtest.md.
+#
+# This deploys server.mjs exactly as a contributor runs it. There is no build step and there are no
+# npm dependencies, by repository design.
+services:
+  - type: web
+    name: galaquest-playtest
+    runtime: node
+    plan: free
+    # The repo has no build step; Render requires the field.
+    buildCommand: 'echo "no build step (see README): plain ES modules, vendored deps"'
+    # server.mjs takes its port as argv[2]; Render supplies $PORT (never 5199, which server.mjs
+    # reserves for the decision lab and refuses).
+    startCommand: node server.mjs "$PORT"
+    healthCheckPath: /
+    envVars:
+      # node:sqlite (rewardStore) needs Node 22+; match CI's Node 24.
+      - key: NODE_VERSION
+        value: "24"
+      # The hosted instance must never write the tracked data/rewards.db. Point the reward store at
+      # a disposable path on the instance's ephemeral disk; it resets on every deploy/restart, which
+      # is exactly right for a playtest surface.
+      - key: GALAQUEST_REWARD_STORE_PATH
+        value: /tmp/galaquest-playtest-rewards.db
