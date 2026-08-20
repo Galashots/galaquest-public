@@ -55,6 +55,9 @@ jobs:
           # refs/pull/N/head is the immutable question the Director asked about.
           ref: refs/pull/${{ env.PR_NUMBER }}/head
           fetch-depth: 1
+          # This workflow deliberately executes code from the PR head. Never persist the write-capable
+          # job token into .git/config where that untrusted checkout could read it.
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -149,7 +152,8 @@ jobs:
           set -euo pipefail
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           artifact="director-playtest-${SCENARIO}-${SOURCE_SHA}"
-          body="Director playtest **${SCENARIO}**: **${PLAY_OUTCOME}**\n\nHead: \`${SOURCE_SHA}\`\nRun: ${run_url}\nArtifact: \`${artifact}\`"
+          body="$(printf 'Director playtest **%s**: **%s**\n\nHead: `%s`\nRun: %s\nArtifact: `%s`' \
+            "$SCENARIO" "$PLAY_OUTCOME" "$SOURCE_SHA" "$run_url" "$artifact")"
           gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
 
       - name: Clean owned review processes
