@@ -6,62 +6,104 @@
     <title>GalaQuest Character Studio</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>">
     <style>
-      :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+        --studio-panel: rgb(12 20 31 / 88%);
+        --studio-panel-strong: rgb(12 20 31 / 96%);
+        --studio-border: rgb(255 255 255 / 18%);
+        --studio-accent: #ffd45c;
+        --studio-danger: #ffb400;
+      }
       * { box-sizing: border-box; }
       html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #182331; }
-      /* Touch usability (A1): controls respond on first tap (no double-tap zoom), and the canvas
-         never pans/zooms the page out from under an inspection. */
-      button, select { touch-action: manipulation; }
+      button, select, input, textarea { touch-action: manipulation; }
       #studio { position: relative; width: 100%; height: 100%; }
       #studio-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+      #annotation-canvas {
+        position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%;
+        pointer-events: none; touch-action: none;
+      }
+      body.review-mode #annotation-canvas { pointer-events: auto; cursor: crosshair; }
+
       #studio-panel {
-        position: absolute;
+        position: absolute; z-index: 4;
         top: max(0.5rem, env(safe-area-inset-top));
         left: max(0.5rem, env(safe-area-inset-left));
         padding: 0.55rem 0.7rem;
-        background: rgb(12 20 31 / 88%); color: #fff; border-radius: 0.55rem;
+        background: var(--studio-panel); color: #fff; border-radius: 0.55rem;
         font: 0.8rem/1.4 system-ui, sans-serif; max-width: 21rem;
         max-height: calc(100% - 1rem); overflow-y: auto;
       }
-      #studio-panel select, #studio-panel button {
+      #studio-panel select, #studio-panel button,
+      #review-panel select, #review-panel button,
+      #review-panel input, #review-panel textarea {
         font: inherit; margin: 0.15rem 0.25rem 0.15rem 0; padding: 0.25rem 0.45rem;
         min-height: 1.9rem; max-width: 100%;
       }
-      #studio-panel .row { margin-bottom: 0.3rem; }
-      /* The one control that must survive collapsing: the character is the point of the page, so
-         the whole panel folds down to its header row and stops covering the inspection surface. */
+      #studio-panel .row, #review-panel .row { margin-bottom: 0.3rem; }
       #studio-panel.collapsed .row:not(.head) { display: none; }
       #panel-toggle { float: right; margin-left: 0.5rem; }
-      /* The semantic "what am I actually looking at" line -- populated from getState(), never
-         hand-written, so the label on screen is the same identifier a capture's metadata carries. */
       #review-target { font-weight: 700; }
-      #studio-panel[data-provenance="contains-candidate"] #review-target { color: #ffb400; }
-      /* Diagnostic lighting must never be visually mistaken for the game-authoritative default --
-         a bright border is a cheap, unmissable "this is not what Sol judges against" flag whenever
-         it's active. See public/src/studio/scene.js's LIGHTING_MODES. */
-      body[data-lighting-mode="diagnostic"] #studio-panel { border: 2px solid #ffb400; }
+      #studio-panel[data-provenance="contains-candidate"] #review-target { color: var(--studio-danger); }
+      body[data-lighting-mode="diagnostic"] #studio-panel { border: 2px solid var(--studio-danger); }
       #lighting-label { font-weight: 700; }
+      #review-open { border-color: var(--studio-accent); }
 
-      /* Tablet/phone-minded widths: tighter type, bigger touch targets, and a panel that can never
-         swallow the character. 900px on purpose, not a phone-only 720: at iPad portrait (768) the
-         centred hero's head sat behind a 21rem panel in the first review-studio captures, so every
-         portrait-tablet width gets the narrow panel that clears him. */
+      /* While an owner is drawing, the captured camera/pose is a contract. The normal Studio
+         controls remain visible as context but cannot silently mutate underneath the annotations. */
+      body.review-mode #studio-panel .row:not(.head):not(.review-launch-row) {
+        pointer-events: none;
+        opacity: 0.48;
+      }
+
+      #review-panel {
+        position: absolute; z-index: 5;
+        top: max(0.5rem, env(safe-area-inset-top));
+        right: max(0.5rem, env(safe-area-inset-right));
+        width: min(21rem, calc(100vw - 1rem));
+        max-height: calc(100% - 1rem); overflow-y: auto;
+        padding: 0.65rem 0.75rem;
+        color: #fff; background: var(--studio-panel-strong);
+        border: 1px solid var(--studio-border); border-radius: 0.6rem;
+        font: 0.78rem/1.4 system-ui, sans-serif;
+      }
+      #review-panel[hidden] { display: none; }
+      #review-panel .head { display: flex; align-items: center; gap: 0.5rem; }
+      #review-panel .head strong { flex: 1; }
+      #review-panel label { display: block; font-weight: 700; margin-top: 0.35rem; }
+      #review-panel input, #review-panel textarea, #review-panel select {
+        width: 100%; background: #263341; color: #fff; border: 1px solid var(--studio-border); border-radius: 0.35rem;
+      }
+      #review-panel textarea { min-height: 5rem; resize: vertical; }
+      #review-panel .tools { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+      #review-panel [data-review-tool][aria-pressed="true"] {
+        outline: 2px solid var(--studio-accent); color: var(--studio-accent);
+      }
+      #review-source-link { color: #b9d9ff; word-break: break-all; }
+      #review-status { color: #d7e3ef; min-height: 2.1em; }
+      #review-export { width: 100%; font-weight: 800; border-color: var(--studio-accent); }
+      #review-help { color: #aebdcb; font-size: 0.72rem; }
+
       @media (max-width: 900px) {
         #studio-panel { max-width: min(15rem, calc(100vw - 1rem)); font-size: 0.72rem; padding: 0.45rem 0.55rem; }
-        #studio-panel select, #studio-panel button { min-height: 2.2rem; }
+        #studio-panel select, #studio-panel button, #review-panel button { min-height: 2.2rem; }
         #studio-panel { max-height: 55%; }
+        #review-panel {
+          top: auto;
+          bottom: max(0.5rem, env(safe-area-inset-bottom));
+          width: min(20rem, calc(100vw - 1rem));
+          max-height: 46%;
+          font-size: 0.72rem;
+        }
       }
     </style>
   </head>
   <body>
     <div id="studio">
       <canvas id="studio-canvas"></canvas>
-      <!-- Human-usable controls (owner-plan.md section 43). The same actions are available
-           programmatically via window.__galaQuestStudio -- src/studio/api.js -- for the Sol bridge
-           worker; this panel exists so the owner can drive the same Studio by hand. Every select is
-           populated by src/studio/main.js from the module that actually executes the value
-           (loadoutDescriptors.js, cameraPresets.js, scene.js's OVERLAY_MODES), so the menu can never
-           offer a state the Studio would refuse. -->
+      <canvas id="annotation-canvas" aria-hidden="true"></canvas>
+
       <div id="studio-panel">
         <div class="row head">
           <strong>GalaQuest Character Studio</strong> — <span id="studio-status">loading…</span>
@@ -98,7 +140,44 @@
           lighting: <span id="lighting-label">game (authoritative)</span>
           <button id="lighting-toggle">switch to diagnostic</button>
         </div>
+        <div class="row review-launch-row">
+          owner review
+          <button id="review-open">review / annotate</button>
+        </div>
       </div>
+
+      <section id="review-panel" hidden aria-label="Owner review annotation">
+        <div class="row head">
+          <strong>Owner Review</strong>
+          <button id="review-close">close</button>
+        </div>
+        <div class="row">
+          exact source: <a id="review-source-link" href="#" target="_blank" rel="noreferrer">resolving…</a>
+        </div>
+        <label for="review-type">what is this?</label>
+        <select id="review-type"></select>
+        <label for="review-title">short title</label>
+        <input id="review-title" type="text" maxlength="120" placeholder="e.g. palm seating — opposite side">
+        <label for="review-note">owner note</label>
+        <textarea id="review-note" maxlength="3000" placeholder="Explain what matters, what to check, and what must not be changed to make it pass."></textarea>
+        <div class="row">
+          <strong>mark the view</strong>
+          <div class="tools">
+            <button data-review-tool="pen" aria-pressed="false">pen</button>
+            <button data-review-tool="circle" aria-pressed="true">circle</button>
+            <button data-review-tool="arrow" aria-pressed="false">arrow</button>
+            <button id="review-undo">undo</button>
+            <button id="review-clear">clear</button>
+          </div>
+        </div>
+        <div id="review-status" class="row">context locks when Review Mode opens</div>
+        <button id="review-export">export for ChatGPT</button>
+        <div id="review-help" class="row">
+          No OpenAI API call. This downloads one <code>.gqreview.json</code> with the exact Studio state,
+          your annotation vectors, note, repo/SHA binding, and an annotated capture when available.
+          Upload that file in the GalaQuest ChatGPT project and say <strong>“ingest this review”</strong>.
+        </div>
+      </section>
     </div>
     <script type="module" src="./src/studio/main.js"></script>
   </body>

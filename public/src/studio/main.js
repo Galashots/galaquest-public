@@ -1,5 +1,6 @@
 import { createStudioScene, OVERLAY_MODES } from './scene.js';
 import { installStudioApi } from './api.js';
+import { installReviewAnnotations } from './reviewAnnotations.js';
 import { STUDIO_LOADOUTS } from './loadoutDescriptors.js';
 import { BEARINGS, SCALE_DISTANCES } from '../review/cameraPresets.js';
 
@@ -127,6 +128,12 @@ async function bootstrap() {
   lightingToggle.addEventListener('click', () => {
     api.setLightingMode(studioScene.lightingMode === 'game' ? 'diagnostic' : 'game');
   });
+
+  // Review Mode is deliberately client-only: it records the exact Studio state plus owner-drawn
+  // annotations and exports one .gqreview.json packet for the existing ChatGPT subscription. It
+  // does not call OpenAI or require an API key. The packet can later be normalized into
+  // docs/review-guides/ so the same owner intent is reproducible by every future asset-review agent.
+  installReviewAnnotations({ api, studioCanvas: canvas });
 
   window.addEventListener('resize', () => {
     studioScene.resize(canvas.clientWidth, canvas.clientHeight);
