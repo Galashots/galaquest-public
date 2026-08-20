@@ -205,6 +205,7 @@ async function bootstrap() {
   // shape every presenter above uses.
   let zoneBeaconRoadLights = [];
   let zoneOldBeacon = null;
+  let zoneBeaconWaystones = null;
   let zoneBrambles = [];
   // Rowan, at the camp -- same "null until the keeper's rig lands" shape as the villagers, since
   // they are cloned off the same load.
@@ -227,6 +228,7 @@ async function bootstrap() {
     zoneBeaconRoadLights = result.beaconRoadLights ?? [];
     zoneBrambles = result.brambles ?? [];
     zoneOldBeacon = result.oldBeacon ?? null;
+    zoneBeaconWaystones = result.beaconWaystones ?? null;
     zoneRowan = result.rowan;
     const cartMesh = scene.getObjectByName(`prop-${VILLAGE.CART_PROP.model}`) ?? null;
     if (!cartMesh) {
@@ -1241,6 +1243,10 @@ async function bootstrap() {
       // Whether the Beacon's own presenter exists at all, and whether its arrival stir is running --
       // "observable without seeing it", the same pattern zoneWorkshopState gives the Workshop.
       beaconBuilt: zoneOldBeacon !== null,
+      // The marker stones on the way up, counted rather than assumed: they are the one part of the
+      // route with no state of its own, so "did they get built at all" is the only question about
+      // them a harness can ask without reading pixels.
+      waystonesBuilt: zoneBeaconWaystones?.count ?? 0,
       beaconStirring: zoneOldBeacon?.isStirring() ?? false,
       beaconGlow: zoneOldBeacon?.glowStrength() ?? null,
       // "Is it on screen RIGHT NOW", from the live camera -- the seam that makes "a child can see the

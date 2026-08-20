@@ -110,8 +110,18 @@ export const BEACON_EMBER_COLD_COLOR = 0x5b6b7a;
 // The stack, bottom to top. Every band is expressed against the one above and below it rather than
 // as an absolute y, so changing one height cannot silently leave a gap.
 const PLINTH_RADIUS_METERS = 2.05;
-const PLINTH_HEIGHT_METERS = 0.5;
-const SHAFT_HEIGHT_METERS = 4.25;
+// KNEE-HIGH IS TOO HIGH, and the number is the difference between a built place and a bug. Nothing
+// in this game collides -- world/bramble.js's header says so plainly, and a child already walks
+// through houses and trees -- but a broad flat octagon reads as a FLOOR in a way a tree trunk never
+// does, so a hero standing on it is not "clipping scenery", they are sunk into the ground. At 0.5 m
+// the arrival capture showed the hero buried to just below the knee with their boots gone and half
+// the shield inside the stone, at exactly the moment this whole slice is built for. At 0.22 m the
+// same step is ankle-deep and invisible at gameplay distance, and the octagon still does all the
+// "somebody built this" work -- that read comes from its SHAPE, not from its height.
+// The 0.28 m came off the plinth and went back into the shaft, so the tower's total height and its
+// portrait framing budget are untouched.
+const PLINTH_HEIGHT_METERS = 0.22;
+const SHAFT_HEIGHT_METERS = 4.53;
 const SHAFT_BOTTOM_RADIUS_METERS = 0.92;
 const SHAFT_TOP_RADIUS_METERS = 0.56;
 const COLLAR_HEIGHT_METERS = 0.28;
@@ -183,8 +193,8 @@ export function beaconParts() {
   parts.push({
     name: 'step',
     kind: 'box',
-    size: [2.4, 0.26, 0.9],
-    at: [0, 0.13, PLINTH_RADIUS_METERS + 0.3],
+    size: [2.4, 0.16, 0.9],
+    at: [0, 0.08, PLINTH_RADIUS_METERS + 0.3],
     color: BEACON_STONE_COLOR,
   });
   parts.push({

@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { sanitizeGuestId } from '../../public/src/net/guestId.js';
 import {
-  BEACON_ROAD_LIGHTS, CAMP, CART_SEARCH, OLD_BEACON, ROWAN,
+  BEACON_ROAD_LIGHTS, BEACON_WAYSTONES, CAMP, CART_SEARCH, OLD_BEACON, ROWAN,
 } from '../../public/src/world/zones/village.js';
 import { WORLD_LIMIT_NORTH } from '../../public/src/world/bounds.js';
 import { BEACON_GLOW_REST } from '../../public/src/world/oldBeacon.js';
@@ -265,6 +265,7 @@ async function state(tab) {
       cartSearched: trail.cartSearched,
       beaconFound: trail.beaconFound,
       beaconBuilt: trail.beaconBuilt,
+      waystonesBuilt: trail.waystonesBuilt,
       beaconStirring: trail.beaconStirring,
       beaconGlow: trail.beaconGlow,
       beaconSight: trail.beaconSight,
@@ -457,6 +458,9 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     check(`${label}: every Beacon road lamp loaded`,
       atCamp.beaconRoadLoaded === BEACON_ROAD_LIGHTS.length,
       `${atCamp.beaconRoadLoaded} of ${BEACON_ROAD_LIGHTS.length}`);
+    check(`${label}: both waystones stand on the road up`,
+      atCamp.waystonesBuilt === BEACON_WAYSTONES.length,
+      `${atCamp.waystonesBuilt} of ${BEACON_WAYSTONES.length}`);
     await shot(tab, `${label}-01-camp-after-cart`);
 
     // THE WAY OUT. Stand where a child actually stands when they finish with the cart, then look the

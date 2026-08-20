@@ -96,9 +96,10 @@ export function objectiveFindMarks(remaining) {
  * @param treeLit      whether the Lantern Tree is already burning
  * @param gateFound    whether this player has already walked to the Wildwood Gate
  * @param questGiven   whether the Keeper has actually said his piece to this player yet
- * @param trail        `{ lights, lit, campFound, rowanMet, cartSearched, atBramble, beaconFound }`
- *                     -- how many trail lights exist, how many this
- *                     player has woken, and whether they have reached the camp. Optional and
+ * @param trail        `{ lights, lit, campFound, atBramble, rowanMet, cartSearched, beaconFound }`
+ *                     -- how many trail lights exist, how many this player has woken, and which of
+ *                     Chapter 2's places and beats they have reached: the camp, a standing bramble,
+ *                     Rowan, the cart, and the Old Beacon at the end of the road. Optional and
  *                     defaulted, so every existing caller and test keeps the pre-Chapter-2 answers.
  * @returns the objective line, or null when there is nothing to show
  *
