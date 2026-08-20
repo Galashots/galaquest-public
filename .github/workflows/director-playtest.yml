@@ -9,22 +9,19 @@ name: director-playtest
 #   /director-playtest combat
 #   /director-playtest co-op
 #
-# The job checks out the PR's real HEAD (never the issue_comment event's default-branch SHA), launches
-# the same isolated Chrome contract used by full-playtest-matrix, runs one existing player-facing
-# harness, uploads the pixels/logs, and comments the exact run + head back onto the PR.
+# The playtest job checks out the PR's real HEAD (never the issue_comment event's default-branch SHA),
+# launches the same isolated Chrome contract used by full-playtest-matrix, runs one existing
+# player-facing harness, and uploads pixels/logs. A SEPARATE reporter job comments the exact run + head
+# back onto the PR. The split is a security boundary: PR-head code never runs in the job that receives
+# write permissions.
 on:
   issue_comment:
     types: [created]
 
+# Default every job to read-only. The reporter opts into its narrow write permissions below; the job
+# that executes PR-head code never receives them.
 permissions:
   contents: read
-  # Commenting on a PULL REQUEST needs pull-requests: write, even though the REST path is
-  # /issues/{n}/comments. Pull requests are issues in that API but not in the permission model, so
-  # issues: write alone returns 403 "Resource not accessible by integration" and fails the report
-  # step -- turning every successful playtest into a red run. Both are kept: issues: write would
-  # still be required if this ever reported onto a plain issue.
-  issues: write
-  pull-requests: write
 
 jobs:
   playtest:
@@ -34,9 +31,15 @@ jobs:
       startsWith(github.event.comment.body, '/director-playtest ')
     runs-on: ubuntu-latest
     timeout-minutes: 18
+    permissions:
+      contents: read
     env:
       PR_NUMBER: ${{ github.event.issue.number }}
       COMMENT_BODY: ${{ github.event.comment.body }}
+    outputs:
+      scenario: ${{ steps.scenario.outputs.scenario }}
+      source_sha: ${{ steps.source.outputs.sha }}
+      play_outcome: ${{ steps.play.outcome }}
     steps:
       - name: Parse and whitelist scenario
         id: scenario
@@ -61,8 +64,8 @@ jobs:
           # refs/pull/N/head is the immutable question the Director asked about.
           ref: refs/pull/${{ env.PR_NUMBER }}/head
           fetch-depth: 1
-          # This workflow deliberately executes code from the PR head. Never persist the write-capable
-          # job token into .git/config where that untrusted checkout could read it.
+          # This workflow deliberately executes code from the PR head. Never persist even the
+          # read-only checkout token into .git/config where that checkout could read it.
           persist-credentials: false
 
       - uses: actions/setup-node@v4
@@ -146,22 +149,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Report run back to PR
-        if: always() && steps.source.outputs.sha != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SCENARIO: ${{ steps.scenario.outputs.scenario }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          PLAY_OUTCOME: ${{ steps.play.outcome }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          artifact="director-playtest-${SCENARIO}-${SOURCE_SHA}"
-          body="$(printf 'Director playtest **%s**: **%s**\n\nHead: `%s`\nRun: %s\nArtifact: `%s`' \
-            "$SCENARIO" "$PLAY_OUTCOME" "$SOURCE_SHA" "$run_url" "$artifact")"
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
-
       - name: Clean owned review processes
         if: always()
         shell: bash
@@ -170,3 +157,30 @@ jobs:
             kill "$(cat "$RUNNER_TEMP/gq-chrome.pid")" 2>/dev/null || true
           fi
           pkill -f 'node server.mjs' 2>/dev/null || true
+
+  report:
+    # The playtest can fail and still have useful evidence to report. Only require that it reached the
+    # exact-head binding step; if checkout/source binding failed, there is no trustworthy SHA to name.
+    needs: playtest
+    if: always() && needs.playtest.outputs.source_sha != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Report run back to PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          SCENARIO: ${{ needs.playtest.outputs.scenario }}
+          SOURCE_SHA: ${{ needs.playtest.outputs.source_sha }}
+          PLAY_OUTCOME: ${{ needs.playtest.outputs.play_outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          artifact="director-playtest-${SCENARIO}-${SOURCE_SHA}"
+          body="$(printf 'Director playtest **%s**: **%s**\n\nHead: `%s`\nRun: %s\nArtifact: `%s`' \
+            "$SCENARIO" "$PLAY_OUTCOME" "$SOURCE_SHA" "$run_url" "$artifact")"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
