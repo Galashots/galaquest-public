@@ -39,7 +39,7 @@ import {
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
   from './character/weaponLoadout.js';
 import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID } from './progression/items.js';
+import { DEFAULT_EQUIPPED_WEAPON_ID, swingDamageFor } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
 import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
@@ -1404,6 +1404,11 @@ async function bootstrap() {
       wardenBuilt: zoneWarden !== null,
       beaconLit: siegeState.beaconLit,
       beaconLitInScene: zoneOldBeacon?.isLit() ?? false,
+      // NOT THE SAME QUESTION as beaconLitInScene, and the difference cost a shipped payoff: the
+      // Beacon reported itself lit for a whole release while the fire was hidden inside the basket.
+      // This is how tall the flame actually stands right now, in metres, so a harness can ask
+      // whether there is anything to SEE rather than whether a flag is set.
+      beaconFireHeight: zoneOldBeacon?.fireHeightMeters() ?? 0,
       bladeOwned: bladeOwnedSeen === true,
       blackthornBlows: hollowState.barrierBlows,
       blackthornTorn: hollowState.barrierTorn,
@@ -1704,6 +1709,12 @@ async function bootstrap() {
           deltaSeconds,
           heroPosition: player.position,
           heroHeading: player.heading,
+          // The same id the barrier and the mounted mesh are already decided by, so a child who
+          // loses the socket keeps the sword they earned -- online and off, one answer to "what am
+          // I holding" (see equippedWeaponIdThisFrame's own comment on why it is recorded, not
+          // re-derived). Resolved to a number on this side of the seam, exactly as
+          // net/gameServer.mjs does for the online fight.
+          heroWeaponDamage: swingDamageFor(equippedWeaponIdThisFrame),
         });
         encounterState = stepped.state;
         events.push(...stepped.events);
@@ -2373,7 +2384,9 @@ async function bootstrap() {
         deltaSeconds,
         heroes: {
           [ownSiegeHeroId]: {
-            position: { x: player.position.x, z: player.position.z }, heading: player.heading,
+            position: { x: player.position.x, z: player.position.z },
+            heading: player.heading,
+            weaponDamage: swingDamageFor(equippedWeaponIdThisFrame),
           },
         },
       });

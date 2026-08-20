@@ -183,6 +183,147 @@ export const BEACON_GLOW_LIT = 1.15;
 export const BEACON_IGNITE_SECONDS = 2.4;
 const STIR_RISE_FRACTION = 0.25;
 
+// ── THE FIRE YOU CAN ACTUALLY SEE ──────────────────────────────────────────────────────────────
+//
+// The Beacon "lit" and, from the ground, nothing happened.
+//
+// That is not a figure of speech: the ignition repaints the EMBERS, and the embers are packed inside
+// an openEnded cresset whose top radius (1.14 m) is the widest point of the whole tower and whose
+// ash stops 0.17 m BELOW the rim -- deliberately, so the flare that makes the silhouette is never
+// broken. Every one of those decisions is right, and together they mean the fire sits in a bowl a
+// child standing at the foot of a six-metre tower is looking at from underneath. The post-win
+// screenshot is a black basket against a blue sky with a banner underneath it reading "The Old
+// Beacon is burning!". The largest payoff in the game, and the game was the only one who could see
+// it.
+//
+// So the fire has to LEAVE THE BASKET. These three tongues start inside the ash and rise past the
+// rim, which is the one place a flame can be and still be a flame.
+//
+// THREE CONES, NOT A PARTICLE SYSTEM. This is an iPad, and the whole object has spent its life
+// paying for one draw call; a flame that cost twenty would be a strange place to stop caring. Three
+// nested cones merged into one geometry give exactly what
+// docs/GALAQUEST_VISUAL_AUTHORITY.md asks a major piece for -- "two or three broad value planes" --
+// and the shape does the rest: a cone IS the silhouette of a flame, at every distance this is
+// looked at, which a sprite billboard is not once you walk around it.
+const FLAME_ROOT_SINK_METERS = 0.14;
+const FLAME_BODY_HEIGHT_METERS = 1.24;
+const FLAME_HEART_HEIGHT_METERS = 1.62;
+const FLAME_TIP_HEIGHT_METERS = 1.94;
+const FLAME_BODY_RADIUS_METERS = 0.84;
+const FLAME_HEART_RADIUS_METERS = 0.5;
+const FLAME_TIP_RADIUS_METERS = 0.24;
+// Amber at the base, the lanterns' own gold through the middle, near-white at the tip -- the same
+// hot-core reading render/glow.js's 'lamp' profile is built on, said in geometry instead of pixels.
+// The base colour is BEACON_EMBER_WARM_COLOR itself, imported from the ash it grows out of, so the
+// flame and the coals can never drift apart into two different fires (GQ-007).
+const FLAME_HEART_COLOR = 0xffd489;
+const FLAME_TIP_COLOR = 0xfff3d2;
+/** How far the flame's own tip stands above the cresset rim. Not a tuning knob -- it is the entire
+ *  reason this geometry exists, and test/old-beacon.test.mjs asserts it stays positive. */
+export const FLAME_TIP_ABOVE_RIM_METERS = FLAME_TIP_HEIGHT_METERS - FLAME_ROOT_SINK_METERS
+  - (CRESSET_HEIGHT_METERS - EMBER_RISE_METERS - EMBER_HEIGHT_METERS);
+// A second, larger halo for the lit Beacon, hung at the flame's own middle rather than at the
+// cresset. The existing sprite is 1.6 m across and sits at the basket: perfect for "that thing is
+// not just scenery" at eighteen metres, far too small to be a bonfire on a tower. This one is the
+// light a child sees from the camp without looking up.
+//
+// 2.8 m AND 0.7, NOT 4.2 m AND FULL, and the difference was visible the first time it was
+// photographed. An additive quad's contribution is area times opacity, so the first pass -- big
+// enough to cover a third of a portrait frame at nine metres, at the same strength as the small one
+// -- did not read as a Beacon lighting its clearing. It read as an orange filter over the whole
+// picture: the sky washed, the grass went warm to the horizon, and the pines on the frame edge came
+// out MAGENTA. The fire was drowning the world it was supposed to be a landmark in.
+//
+// The geometry is what says "it is burning" now (that is what beaconFlameParts is for). The halo
+// only has to say "and it throws light", which is a much smaller claim and wants a much smaller
+// quad. Kept above the gate lamp's own reach so the Beacon is still unmistakably the biggest light
+// in the world -- it is 1.75x the cold sprite's size and sits six metres up, where nothing else is.
+export const BEACON_FIRE_GLOW_SIZE_METERS = 2.8;
+/** What the fire halo peaks at, as a fraction of the ignition curve the cresset sprite follows. See
+ *  the size constant above: a bigger quad at the same opacity is not a brighter light, it is a
+ *  filter. Scaled rather than given its own curve so the two halos always rise together. */
+export const BEACON_FIRE_GLOW_SCALE = 0.7;
+/** Slow, and deliberately not a flicker. A flame that strobes reads as a broken light; a flame that
+ *  BREATHES reads as alive, and the difference at gameplay distance is entirely the frequency. Two
+ *  incommensurable sines so the loop never visibly repeats -- no Math.random anywhere near it, for
+ *  the same reason the rules modules refuse it: a thing that cannot be reproduced cannot be tested. */
+const FLAME_BREATH_A_HZ = 0.63;
+const FLAME_BREATH_B_HZ = 1.47;
+const FLAME_BREATH_RISE = 0.075;
+const FLAME_BREATH_WIDTH = 0.035;
+
+/**
+ * The flame in the Beacon's own local space, in the shape bakedPart() consumes.
+ *
+ * Exported and pure for the same reason beaconParts() is: the thing most likely to go wrong here is
+ * a number -- specifically, a tip that fails to clear the rim, which is the ONLY property this
+ * geometry exists to have and the one a screenshot proved was missing.
+ */
+export function beaconFlameParts() {
+  const cressetBase = PLINTH_HEIGHT_METERS + SHAFT_HEIGHT_METERS + COLLAR_HEIGHT_METERS;
+  const root = cressetBase + EMBER_RISE_METERS + EMBER_HEIGHT_METERS - FLAME_ROOT_SINK_METERS;
+  // Each tongue is yawed off its neighbours so three eight-sided cones do not line their facets up
+  // into one smooth cone with stripes on it.
+  return [
+    {
+      name: 'flame-body',
+      kind: 'cylinder',
+      radiusBottom: FLAME_BODY_RADIUS_METERS,
+      radiusTop: 0,
+      height: FLAME_BODY_HEIGHT_METERS,
+      at: [0, root + FLAME_BODY_HEIGHT_METERS / 2, 0],
+      color: BEACON_EMBER_WARM_COLOR,
+    },
+    {
+      name: 'flame-heart',
+      kind: 'cylinder',
+      radiusBottom: FLAME_HEART_RADIUS_METERS,
+      radiusTop: 0,
+      height: FLAME_HEART_HEIGHT_METERS,
+      at: [0, root + FLAME_HEART_HEIGHT_METERS / 2, 0],
+      color: FLAME_HEART_COLOR,
+      yaw: Math.PI / 8,
+    },
+    {
+      name: 'flame-tip',
+      kind: 'cylinder',
+      radiusBottom: FLAME_TIP_RADIUS_METERS,
+      radiusTop: 0,
+      height: FLAME_TIP_HEIGHT_METERS,
+      at: [0, root + FLAME_TIP_HEIGHT_METERS / 2, 0],
+      color: FLAME_TIP_COLOR,
+      yaw: Math.PI / 16,
+    },
+  ];
+}
+
+/** The flame's own top, in metres above the Beacon's ground. Above BEACON_TOTAL_HEIGHT_METERS by
+ *  construction -- see FLAME_TIP_ABOVE_RIM_METERS. */
+export const BEACON_FIRE_TOP_METERS = PLINTH_HEIGHT_METERS + SHAFT_HEIGHT_METERS
+  + COLLAR_HEIGHT_METERS + EMBER_RISE_METERS + EMBER_HEIGHT_METERS
+  - FLAME_ROOT_SINK_METERS + FLAME_TIP_HEIGHT_METERS;
+
+/**
+ * How tall the flame stands at `seconds` into the ignition, as a fraction of full.
+ *
+ * Starts at nothing and overshoots slightly before settling, which is what a fire that CATCHES does
+ * -- it flares as it takes hold and then finds its height. Pure, so the curve is testable.
+ */
+export function beaconFlameScale(seconds) {
+  if (!(seconds >= 0)) return 0;
+  if (seconds >= BEACON_IGNITE_SECONDS) return 1;
+  const t = seconds / BEACON_IGNITE_SECONDS;
+  return Math.sin(t * Math.PI * 0.5) * (1 + 0.18 * Math.sin(t * Math.PI));
+}
+
+/** The breathing multiplier for a settled flame, at `seconds` since it took hold. */
+export function beaconFlameBreath(seconds) {
+  const a = Math.sin(seconds * Math.PI * 2 * FLAME_BREATH_A_HZ);
+  const b = Math.sin(seconds * Math.PI * 2 * FLAME_BREATH_B_HZ);
+  const wave = (a * 0.65 + b * 0.35);
+  return { rise: 1 + wave * FLAME_BREATH_RISE, width: 1 - wave * FLAME_BREATH_WIDTH };
+}
+
 /**
  * Every part of the Beacon in its own local space: y = 0 is the ground, local +Z points back down
  * the road the child arrives along, and each part carries the colour it is built from.
@@ -525,8 +666,49 @@ export function buildOldBeacon(scene, beacon) {
   setGlowStrength(sprite, BEACON_GLOW_REST);
   scene.add(sprite);
 
+  // THE FIRE, BUILT COLD. It exists from the first frame and is simply not drawn -- a hidden mesh
+  // costs nothing per frame, and building it on ignition instead would mean compiling geometry
+  // during the one event in the game nobody is allowed to see stutter. Its own group carries the
+  // scale, so breathing never touches the tower it sits on.
+  const flame = new THREE.Group();
+  flame.name = 'old-beacon-flame';
+  const flameMesh = new THREE.Mesh(
+    mergeGeometries(beaconFlameParts().map(bakedPart), false),
+    // UNLIT, on purpose. Fire is not a surface being lit by something else; a MeshStandardMaterial
+    // here would take its value from the scene's own lighting and go dim at dusk, which is exactly
+    // backwards for the brightest thing in the world. Basic + vertex colours holds the three value
+    // planes beaconFlameParts() built at whatever hour the child is playing.
+    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
+  );
+  flame.add(flameMesh);
+  setLayer(flame, WORLD);
+  flame.position.set(beacon.at[0], 0, beacon.at[1]);
+  flame.rotation.y = beacon.rotY ?? 0;
+  flame.visible = false;
+  flame.scale.set(0, 0, 0);
+  scene.add(flame);
+
+  // ...and the halo that carries it across the clearing. Hung at the flame's middle rather than at
+  // the basket, and two and a half times the cold sprite's size: the small one says "not scenery"
+  // from the camp, this one says "it is BURNING" from the same place without looking up.
+  const fireGlow = createGlowSprite(BEACON_GLOW_WARM_COLOR, BEACON_FIRE_GLOW_SIZE_METERS);
+  fireGlow.name = 'old-beacon-fire-glow';
+  setLayer(fireGlow, WORLD);
+  fireGlow.position.set(beacon.at[0], BEACON_FIRE_TOP_METERS - FLAME_TIP_HEIGHT_METERS * 0.45, beacon.at[1]);
+  setGlowStrength(fireGlow, 0);
+  scene.add(fireGlow);
+
   let stirSeconds = -1;
   let strength = BEACON_GLOW_REST;
+  // Seconds since the flame finished taking hold, which is what the breathing runs off. Separate
+  // from litSeconds so a restored-lit client (which starts past the ignition) breathes from zero
+  // rather than from wherever its clock happened to be.
+  let burnSeconds = 0;
+  const applyFlame = (scale, breath) => {
+    const rise = breath?.rise ?? 1;
+    const width = breath?.width ?? 1;
+    flame.scale.set(scale * width, scale * rise, scale * width);
+  };
   // G3: the payoff. `litSeconds` runs the ignition once and then stays at its end, because unlike
   // the stir this is not a thing that falls back -- the world REMEMBERS. -1 means cold.
   let litSeconds = -1;
@@ -564,10 +746,15 @@ export function buildOldBeacon(scene, beacon) {
       colors.needsUpdate = true;
       // Stops any stir mid-flight: the cresset does not get to shiver while it is catching.
       stirSeconds = -1;
+      flame.visible = true;
       if (litSeconds >= BEACON_IGNITE_SECONDS) {
         strength = BEACON_GLOW_LIT;
         sprite.material.color.setHex(BEACON_GLOW_WARM_COLOR);
         setGlowStrength(sprite, strength);
+        applyFlame(1);
+        setGlowStrength(fireGlow, BEACON_GLOW_LIT * BEACON_FIRE_GLOW_SCALE);
+      } else {
+        applyFlame(beaconFlameScale(0));
       }
     },
     update(deltaSeconds) {
@@ -582,6 +769,16 @@ export function buildOldBeacon(scene, beacon) {
           // Beacon visibly JOINS the chain of lights it has been the dead end of.
           sprite.material.color.setHex(t >= 0.5 ? BEACON_GLOW_WARM_COLOR : BEACON_GLOW_COLOR);
           setGlowStrength(sprite, strength);
+          applyFlame(beaconFlameScale(litSeconds));
+          setGlowStrength(fireGlow, strength * BEACON_FIRE_GLOW_SCALE);
+          return;
+        }
+        // SETTLED, AND STILL ALIVE. The Beacon burns for the rest of the session, so this is the one
+        // animation in the file with no end: everything else here is an event that finishes.
+        burnSeconds += deltaSeconds;
+        if (!prefersReducedMotion()) {
+          const breath = beaconFlameBreath(burnSeconds);
+          applyFlame(1, breath);
         }
         return;
       }
@@ -594,6 +791,11 @@ export function buildOldBeacon(scene, beacon) {
     isStirring: () => stirSeconds >= 0,
     isLit: () => litSeconds >= 0,
     glowStrength: () => strength,
+    /** What a screenshot would show: the flame is drawn, and how tall it currently stands. A
+     *  harness that can only read `isLit` can be told the Beacon is burning by an object with no
+     *  fire on it, which is precisely the failure this whole section exists to close. */
+    fireHeightMeters: () => (flame.visible ? BEACON_FIRE_TOP_METERS * flame.scale.y : 0),
+    fireTopMeters: () => BEACON_FIRE_TOP_METERS,
   };
 }
 

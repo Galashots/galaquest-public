@@ -482,7 +482,7 @@ function advanceSiege(draft, commandHeroes, events, deltaSeconds) {
       const contactReached = !droppedIt && hero.swingSeconds >= SWING_CONTACT_SECONDS;
       if (contactReached && !hero.swingLanded) {
         hero.swingLanded = true;
-        resolveSiegeSwing(draft, position, heading, heroId, events);
+        resolveSiegeSwing(draft, position, heading, heroId, events, cmd?.weaponDamage);
       }
       if (hero.swingSeconds >= SWING_SECONDS) {
         hero.swingSeconds = -1;
@@ -521,7 +521,13 @@ function wardenFightable(warden) {
 // Warden. While the Warden is dormant it is not a candidate at all -- it is not yet a thing that
 // can be fought -- so swings beside it pass to seals or miss; same while it wakes (invulnerable by
 // design, see WARDEN_WAKE_SECONDS) and once it is dying or dead.
-function resolveSiegeSwing(draft, position, heading, heroId, events) {
+//
+// `damage` is what the swinging hero's own weapon is worth (encounter.js's swingDamageFor). Note
+// that it reaches the WARDEN and not the seals: a seal is not a health bar, it is two blows and
+// then it bursts, and a sharper sword does not make a stone crack in one. That asymmetry is
+// deliberate -- it keeps the arc's opening beat the same for every child regardless of what they
+// walked in carrying, and it means the Blade's reward is felt where a fight is, not where a lock is.
+function resolveSiegeSwing(draft, position, heading, heroId, events, damage) {
   const { seals, sealsAt, warden } = draft;
 
   let bestKind = null;
@@ -553,7 +559,7 @@ function resolveSiegeSwing(draft, position, heading, heroId, events) {
     return;
   }
   if (bestKind === 'warden') {
-    strikeWarden(draft, heroId, events);
+    strikeWarden(draft, heroId, events, damage);
     return;
   }
   // Named distinctly from encounter.js's swing-missed so a listener wired to both fights can never
@@ -581,13 +587,14 @@ function strikeSeal(draft, index, heroId, events) {
   }
 }
 
-function strikeWarden(draft, heroId, events) {
+function strikeWarden(draft, heroId, events, damage) {
   const { warden, heroes, heroIds } = draft;
-  // WOLF_DAMAGE_PER_HIT wears the wolf's name but IS the hero's swing damage today -- its own
-  // comment in encounter.js says so ("today's placeholder, not a stat"). Imported under that name
-  // rather than restated as a second hardcoded 1 (GQ-007); renaming it to what it really is
-  // belongs to the stat system that will replace it, not to this file.
-  warden.hp -= WOLF_DAMAGE_PER_HIT;
+  // WHAT THE HERO IS ACTUALLY CARRYING, passed down from the swing that threw it. This used to be a
+  // flat WOLF_DAMAGE_PER_HIT, which was honest while nothing in the game could hit harder and became
+  // a lie the day the Wildwood Blade shipped. WOLF_DAMAGE_PER_HIT survives as the floor for a caller
+  // that named no weapon -- see encounter.js's swingDamageFor for why a swing never resolves to
+  // nothing just because equipment went unmentioned.
+  warden.hp -= Number.isFinite(damage) ? damage : WOLF_DAMAGE_PER_HIT;
   warden.blowsTaken += 1;
 
   if (warden.hp <= 0) {

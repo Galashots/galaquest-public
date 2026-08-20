@@ -16,9 +16,30 @@
 // working rather than churn.
 export const WOLF_MAX_HP = 3;
 export const HERO_MAX_HP = 3;
-// Named rather than left as the bare `1` it always was, so a floating damage number can read it off
-// wolf-hit's own event instead of a second hardcoded "1" living in the presenter. Still exactly what
-// the comment below says it is: today's placeholder, not a stat -- see FUTURE.
+// ── WHAT A SWING IS WORTH, AND WHOSE SWING IT IS ───────────────────────────────────────────────
+//
+// This was a bare `1`, then a named `1`, and for two chapters the comment under it promised that
+// wiring equipment up was somebody else's job. Meanwhile G4 shipped: Rowan keeps the oldest promise
+// in the game, an unlock card turns over, the Hero screen prints the Wildwood Blade's "2 DAMAGE"
+// straight off progression/items.js -- and the sword swung exactly like the one the child started
+// with, because nothing anywhere read that number. The game told a child they were stronger and
+// then made them hit the wolf three times again.
+//
+// So a blow is now worth what the WEAPON IN THE HAND THAT THREW IT is worth. This constant keeps
+// its name and its value -- every importer still gets 1 -- but it is now the FLOOR rather than the
+// whole rule: what a hero does with nothing better, and what a caller that names no weapon gets.
+//
+// THE DAMAGE RIDES IN ON THE PER-HERO COMMAND, beside position and heading, as a NUMBER. Not an
+// item id, and this file does not import progression/items.js to turn one into the other -- that
+// would reach outside combat/, which test/combat-purity.test.mjs forbids in as many words: "route
+// the randomness or time through the command/event seam instead of weakening this list". The item
+// catalogue is exactly the kind of thing the seam exists to keep out. progression/items.js owns the
+// id -> damage question (swingDamageFor there), every caller already knows what is equipped, and
+// these rules stay a thing you can reason about with no idea that gear exists.
+//
+// Carried per tick rather than stored on the hero for the same reason position is: equipment
+// changes outside the fight, through a screen this file knows nothing about, and a copy kept here
+// would be one more thing that can go stale. What the caller says this tick is the truth this tick.
 export const WOLF_DAMAGE_PER_HIT = 1;
 
 // FUTURE, and deliberately not built now -- the owner's direction, 2026-08-13:
@@ -554,7 +575,11 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
         hero.swingLanded = true;
         const alive = wolf.mode !== 'dead' && wolf.mode !== 'dying';
         if (alive && isWithinStrike(position, heading, wolf)) {
-          wolf.hp -= WOLF_DAMAGE_PER_HIT;
+          // Read at CONTACT rather than at the start of the swing. Nobody will ever equip mid-swing,
+          // but "a blow is worth what the hand holds when it lands" is the version of this rule that
+          // needs no further explaining, and it is one line either way.
+          const damage = Number.isFinite(cmd?.weaponDamage) ? cmd.weaponDamage : WOLF_DAMAGE_PER_HIT;
+          wolf.hp -= damage;
           wolf.modeSeconds = 0;
           if (wolf.hp <= 0) {
             wolf.mode = 'dying';
@@ -562,7 +587,7 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
             healTheStanding(heroes, heroIds, events);
           } else {
             wolf.mode = 'hit';
-            events.push(withHeroId({ type: 'wolf-hit', remaining: wolf.hp, damage: WOLF_DAMAGE_PER_HIT }, heroId));
+            events.push(withHeroId({ type: 'wolf-hit', remaining: wolf.hp, damage }, heroId));
           }
         } else {
           events.push(withHeroId({ type: 'swing-missed' }, heroId));
@@ -797,6 +822,11 @@ export function stepEncounter(state, command = {}) {
     deltaSeconds = 0,
     heroPosition = { x: 0, z: 0 },
     heroHeading = 0,
+    // The solo wrapper carries what a blow is worth the same way it carries position and heading:
+    // as one more thing the caller knows and the rules do not. Omitted falls to
+    // WOLF_DAMAGE_PER_HIT, so every caller written before equipment existed keeps the fight it has
+    // always had.
+    heroWeaponDamage = null,
     attack = false,
   } = command;
 
@@ -813,7 +843,11 @@ export function stepEncounter(state, command = {}) {
 
   const stepped = stepParty(partyState, {
     deltaSeconds,
-    heroes: { [SOLO_HERO_ID]: { position: heroPosition, heading: heroHeading } },
+    heroes: {
+      [SOLO_HERO_ID]: {
+        position: heroPosition, heading: heroHeading, weaponDamage: heroWeaponDamage,
+      },
+    },
   });
   events.push(...stepped.events.map(stripHeroId));
 

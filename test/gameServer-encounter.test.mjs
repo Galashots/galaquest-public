@@ -9,6 +9,7 @@ import { WOLF_SPAWN, createSimulation } from '../net/gameServer.mjs';
 import { HERO_MAX_HP, MIN_BODY_SEPARATION, SWING_CONTACT_SECONDS } from '../public/src/combat/encounter.js';
 import { BEACON_ARENA } from '../public/src/world/zones/village.js';
 import { attackMessage, decode, encode } from '../public/src/net/protocol.js';
+import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 
 // A spot within ATTACK_REACH (1.7) of the wolf, straight along +Z from it, so a hero standing here
 // with the default heading (0, meaning "facing +Z") is both in range and in the strike arc.
@@ -229,4 +230,61 @@ test('an in-flight swing is cancelled at the arena boundary rather than carried 
     sim.encounterSnapshot().heroes[player.id].swingSeconds, -1,
     'a swing belongs to the fight it was thrown in',
   );
+});
+
+// ── THE EQUIPPED WEAPON REACHES THE FIGHT ──────────────────────────────────────────────────────
+//
+// createSimulation() does not own equipment and must not: what a guest owns and has equipped is
+// durable, per-guest reward-store truth, and guestId is a CONNECTION fact this factory has no
+// business knowing. So the owner of that truth hands in a lookup. These pin the two ends of that
+// wire -- the default (nobody said anything) and the wired case (the Blade actually cuts) --
+// because between them sits the exact seam where a shipped reward quietly did nothing for two
+// chapters.
+
+test('a simulation nobody told about equipment fights exactly as it always has', () => {
+  const sim = createSimulation();
+  const player = sim.addPlayer('kid', meleeSpot());
+  const before = sim.encounterSnapshot().wolf.hp;
+  attack(sim, player.id, 1);
+  stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
+  assert.equal(sim.encounterSnapshot().wolf.hp, before - 1,
+    'the starter sword is one heart a blow, and an unwired simulation swings it');
+});
+
+test('a hero holding the Wildwood Blade takes two hearts off the wolf, not one', () => {
+  const sim = createSimulation({ weaponIdFor: () => WILDWOOD_BLADE_ID });
+  const player = sim.addPlayer('kid', meleeSpot());
+  const before = sim.encounterSnapshot().wolf.hp;
+  attack(sim, player.id, 1);
+  stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
+  assert.equal(sim.encounterSnapshot().wolf.hp, before - 2,
+    'the reward at the end of the longest promise in the game has to be felt in the fight');
+});
+
+test('the lookup is asked every tick, so equipping mid-fight works without a reconnect', () => {
+  // A value copied at construction would mean the sword you just equipped on the Hero screen only
+  // started working after the socket dropped and came back -- which is the shape of bug nobody
+  // reports and every child notices.
+  let held = null;
+  const sim = createSimulation({ weaponIdFor: () => held });
+  const player = sim.addPlayer('kid', meleeSpot());
+
+  const start = sim.encounterSnapshot().wolf.hp;
+  attack(sim, player.id, 1);
+  stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
+  const afterFirst = sim.encounterSnapshot().wolf.hp;
+  assert.equal(afterFirst, start - 1, 'the first blow was thrown bare-handed of any named weapon');
+
+  held = WILDWOOD_BLADE_ID;
+  let seq = 2;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (attack(sim, player.id, seq)) break;
+    seq += 1;
+    stepTicks(sim, 1);
+  }
+  stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
+  const wolf = sim.encounterSnapshot().wolf;
+  // 3 HP, one blow at 1 and then one at 2: the wolf is down, and it took two blows rather than three.
+  assert.ok(wolf.hp <= 0 || wolf.mode === 'dying' || wolf.mode === 'dead',
+    `the second blow should have finished it, wolf reads ${JSON.stringify(wolf)}`);
 });

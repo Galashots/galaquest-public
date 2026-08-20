@@ -13,6 +13,7 @@ import {
   isKnownItem,
   isKnownWeapon,
   itemDef,
+  swingDamageFor,
 } from '../public/src/progression/items.js';
 
 test('starter sword and Wildwood Blade are both defined weapons with the plan-specified damage', () => {
@@ -57,4 +58,32 @@ test('the Wildwood Blade damage is a meaningful, non-breaking upgrade against th
   assert.equal(starterHits, 3);
   assert.equal(bladeHits, 2);
   assert.ok(bladeHits < starterHits && bladeHits > 0);
+});
+
+// ── THE SEAM BETWEEN THE CATALOGUE AND THE FIGHT ───────────────────────────────────────────────
+//
+// swingDamageFor exists here, and not in combat/, because test/combat-purity.test.mjs forbids the
+// rules layer from importing anything outside itself and says what to do instead: "route ... through
+// the command/event seam". So the fight is handed a NUMBER, and this is the only function allowed to
+// turn an item id into one.
+
+test('swingDamageFor reads the catalogue, and never answers "nothing"', () => {
+  assert.equal(swingDamageFor(STARTER_SWORD_ID), damageFor(STARTER_SWORD_ID));
+  assert.equal(swingDamageFor(WILDWOOD_BLADE_ID), damageFor(WILDWOOD_BLADE_ID));
+  assert.ok(swingDamageFor(WILDWOOD_BLADE_ID) > swingDamageFor(STARTER_SWORD_ID),
+    'the reward at the end of the longest promise in the game has to be worth more than the start');
+  // damageFor returns null for "no such item" -- a true answer to a different question. A SWING,
+  // though, always lands for something: a hero always has a weapon, and a bookkeeping gap must
+  // never become a sword that stopped working.
+  for (const nothing of [null, undefined, '', 'no_such_item', 42]) {
+    assert.equal(swingDamageFor(nothing), damageFor(DEFAULT_EQUIPPED_WEAPON_ID),
+      `an unnamed weapon is the starter sword, not zero damage (got it for ${JSON.stringify(nothing)})`);
+  }
+});
+
+test('the Wildwood Blade turns a three-blow wolf into a two-blow wolf', () => {
+  // The number that makes the reward mean something, stated where a reader can check it against
+  // WOLF_MAX_HP without running a fight. encounter-party.test.mjs proves the rules actually do it.
+  assert.equal(Math.ceil(WOLF_MAX_HP / swingDamageFor(STARTER_SWORD_ID)), 3);
+  assert.equal(Math.ceil(WOLF_MAX_HP / swingDamageFor(WILDWOOD_BLADE_ID)), 2);
 });

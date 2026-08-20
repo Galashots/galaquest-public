@@ -70,3 +70,24 @@ export function isKnownWeapon(itemId) {
 export function damageFor(itemId) {
   return itemDef(itemId)?.damage ?? null;
 }
+
+/**
+ * What one landed blow from `itemId` is worth, with the starter sword as the floor.
+ *
+ * THIS IS THE SEAM. combat/encounter.js and world/beaconSiege.js resolve a swing against a NUMBER
+ * handed in on the per-hero command; they never see an item id and never import this file.
+ * test/combat-purity.test.mjs enforces that in as many words -- "route the randomness or time
+ * through the command/event seam instead of weakening this list" -- and an item catalogue is
+ * exactly what the pure rules layer exists not to know about. So the translation lives here, with
+ * the catalogue, and every caller that already knows what a hero has equipped (net/gameServer.mjs
+ * for the online fight, main.js for the offline fallback) calls this on the way in.
+ *
+ * Never null. `damageFor` returning null means "no such item, or an item with no damage" -- a real
+ * answer to a different question. A swing, though, always lands for SOMETHING: a hero always has a
+ * weapon, and a bookkeeping gap must never turn into a sword that stopped working. So an unknown or
+ * absent id resolves to the starter sword, which is what every caller written before equipment was
+ * wired up was already getting.
+ */
+export function swingDamageFor(itemId) {
+  return damageFor(itemId) ?? damageFor(DEFAULT_EQUIPPED_WEAPON_ID);
+}

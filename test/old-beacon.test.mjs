@@ -31,9 +31,15 @@ import {
   BEACON_SIGHT_HEIGHT_METERS,
   BEACON_STIR_SECONDS,
   BEACON_STONE_COLOR,
+  BEACON_FIRE_TOP_METERS,
+  BEACON_IGNITE_SECONDS,
   BEACON_TOTAL_HEIGHT_METERS,
   BEACON_TRIM_COLOR,
+  FLAME_TIP_ABOVE_RIM_METERS,
   WAYSTONE_HEIGHT_METERS,
+  beaconFlameBreath,
+  beaconFlameParts,
+  beaconFlameScale,
   beaconInFrame,
   beaconParts,
   beaconSight,
@@ -580,4 +586,60 @@ test('growing the world north left the village\'s own limits alone', () => {
   assert.equal(WORLD_LIMIT, ZONE.size / 2 - 1);
   assert.ok(WORLD_LIMIT_NORTH > WORLD_LIMIT);
   assert.deepEqual([...CAMP.at], [3.5, 33.1], 'the camp did not move');
+});
+
+
+// ── THE FIRE HAS TO CLEAR THE BASKET ───────────────────────────────────────────────────────────
+//
+// These exist because the Beacon shipped "lit" and a screenshot of the winning moment showed a black
+// bowl. Everything the code said was true -- isLit(), the warm ember colour, the halo at 1.15 -- and
+// none of it was visible, because the ash sits 0.17 m below a rim 1.14 m wide and the child is
+// underneath it. That is the whole class of defect this file's own header calls "a number, not a
+// matrix", so it is pinned as a number here rather than re-discovered in another capture.
+
+test('the flame clears the cresset rim, which is the only reason it exists', () => {
+  assert.ok(FLAME_TIP_ABOVE_RIM_METERS > 0.5,
+    `the flame's tip must stand clear of the rim a child is looking up at, not peek over it; `
+    + `it stands ${FLAME_TIP_ABOVE_RIM_METERS.toFixed(2)} m above`);
+  assert.ok(BEACON_FIRE_TOP_METERS > BEACON_TOTAL_HEIGHT_METERS,
+    'a lit Beacon must be TALLER than a cold one -- the fire is part of the silhouette');
+});
+
+test('the flame is three broad value planes, not one cone with stripes', () => {
+  const parts = beaconFlameParts();
+  assert.equal(parts.length, 3);
+  const colours = new Set(parts.map((part) => part.color));
+  assert.equal(colours.size, 3, 'amber, gold and near-white -- see GALAQUEST_VISUAL_AUTHORITY');
+  // Every tongue is a cone (radiusTop 0): a flame that ends flat reads as a chimney.
+  for (const part of parts) assert.equal(part.radiusTop, 0, `${part.name} must taper to a point`);
+  // ...and each is narrower and taller than the one it grows out of, so the shape reads as a fire
+  // rather than as three lumps.
+  for (let i = 1; i < parts.length; i += 1) {
+    assert.ok(parts[i].radiusBottom < parts[i - 1].radiusBottom, 'each tongue is narrower');
+    assert.ok(parts[i].height > parts[i - 1].height, 'each tongue is taller');
+  }
+});
+
+test('the flame starts at nothing, flares as it catches, and settles at exactly full', () => {
+  assert.equal(beaconFlameScale(-1), 0, 'a cold Beacon has no fire on it at all');
+  assert.equal(beaconFlameScale(0), 0);
+  assert.equal(beaconFlameScale(BEACON_IGNITE_SECONDS), 1);
+  assert.equal(beaconFlameScale(BEACON_IGNITE_SECONDS * 10), 1, 'and it stays -- the world remembers');
+  const peak = Math.max(...Array.from({ length: 97 }, (_, i) => beaconFlameScale((i / 96) * BEACON_IGNITE_SECONDS)));
+  assert.ok(peak > 1.02, 'a fire that CATCHES flares past its resting height on the way up');
+  assert.ok(peak < 1.3, 'flares, does not explode');
+});
+
+test('the flame breathes rather than strobing, and conserves its own volume', () => {
+  const samples = Array.from({ length: 400 }, (_, i) => beaconFlameBreath(i / 40));
+  const rises = samples.map((s) => s.rise);
+  assert.ok(Math.max(...rises) < 1.09 && Math.min(...rises) > 0.91, 'a gentle breath, not a flicker');
+  // Rise and width move in opposite directions: a flame that got taller AND fatter would read as
+  // the whole object being scaled, which is a zoom, not a fire.
+  for (const sample of samples) {
+    assert.ok((sample.rise - 1) * (sample.width - 1) <= 1e-12,
+      'taller means narrower -- the flame is drawn up, not inflated');
+  }
+  // Deterministic, and therefore reproducible in a capture: no Math.random anywhere in it.
+  assert.deepEqual(beaconFlameBreath(3.25), beaconFlameBreath(3.25));
 });

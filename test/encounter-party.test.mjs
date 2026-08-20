@@ -12,6 +12,7 @@ import test from 'node:test';
 
 import {
   HERO_MAX_HP,
+  WOLF_DAMAGE_PER_HIT,
   WOLF_MAX_HP,
   WOLF_BITE_SECONDS,
   addHero,
@@ -255,4 +256,75 @@ test('canHeroAttack reads only the three wire fields, and is false for an unknow
 
   const swung = requestPartyAttack(state, 'A', 'x').state;
   assert.equal(canHeroAttack(swung, 'A'), false, 'mid-swing, the button must grey out');
+});
+
+// --- and a better sword is worth more ----------------------------------------------------------
+//
+// For two chapters every blow anywhere took off a flat WOLF_DAMAGE_PER_HIT, so the Wildwood Blade
+// -- earned at the end of the longest promise in the game, with an unlock card and a "2 DAMAGE"
+// line on the Hero screen -- swung exactly like the sword the child started with. The damage now
+// rides in on the per-hero command as a number (see WOLF_DAMAGE_PER_HIT's own comment on why an
+// item id would reach outside combat/), and these pin both halves of that.
+
+test('a blow is worth what the command says it is worth, and says so in its own event', () => {
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const heroes = { A: { position: { x: 0, z: -1 }, heading: 0, weaponDamage: 2 } };
+
+  const asked = requestPartyAttack(state, 'A', 'a-1');
+  assert.equal(asked.accepted, true);
+  state = asked.state;
+
+  const seen = [];
+  for (let elapsed = 0; elapsed < 0.6; elapsed += STEP) {
+    const result = stepParty(state, { deltaSeconds: STEP, heroes });
+    seen.push(...result.events);
+    state = result.state;
+  }
+
+  assert.equal(state.wolf.hp, WOLF_MAX_HP - 2, 'two damage came off, not one');
+  const hit = seen.find((event) => event.type === 'wolf-hit');
+  assert.equal(hit.damage, 2,
+    'the event reports what actually landed -- a floating damage number reads this, and a "1" '
+    + 'printed over a two-damage blow is the same lie in a different font');
+});
+
+test('two heroes in the same fight are each worth their OWN weapon', () => {
+  // The co-op half, and the reason damage rides per hero rather than per fight: an older brother
+  // carrying the Blade and a younger one still on the starter sword are in the same party, hitting
+  // the same wolf, and each blow has to be worth what THAT child earned.
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A', 'B'] });
+  const heroes = {
+    A: { position: { x: -0.3, z: -1 }, heading: 0, weaponDamage: 2 },
+    B: { position: { x: 0.3, z: -1 }, heading: 0 },
+  };
+
+  state = requestPartyAttack(state, 'A', 'a-1').state;
+  state = requestPartyAttack(state, 'B', 'b-1').state;
+
+  const seen = [];
+  for (let elapsed = 0; elapsed < 0.6; elapsed += STEP) {
+    const result = stepParty(state, { deltaSeconds: STEP, heroes });
+    seen.push(...result.events);
+    state = result.state;
+  }
+
+  const byHero = Object.fromEntries(
+    seen.filter((event) => event.type === 'wolf-hit' || event.type === 'wolf-defeated')
+      .map((event) => [event.heroId, event.damage ?? null]),
+  );
+  // Three HP, a two and a one: the wolf is down, and whichever landed last carries the defeat.
+  assert.equal(state.wolf.mode, 'dying');
+  assert.deepEqual(new Set(Object.keys(byHero)), new Set(['A', 'B']));
+});
+
+test('a fight nobody told about equipment is exactly the fight it has always been', () => {
+  // Every test above this line, the whole offline fallback before it was wired, and any future
+  // caller that forgets: no weaponDamage on the command must mean WOLF_DAMAGE_PER_HIT, not zero.
+  let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
+  const heroes = { A: { position: { x: 0, z: -1 }, heading: 0 } };
+  state = requestPartyAttack(state, 'A', 'a-1').state;
+  for (let elapsed = 0; elapsed < 0.6; elapsed += STEP) {
+    state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
+  }
+  assert.equal(state.wolf.hp, WOLF_MAX_HP - WOLF_DAMAGE_PER_HIT);
 });

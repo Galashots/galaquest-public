@@ -38,6 +38,7 @@ import { openRewardStore } from '../../net/rewardStore.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
 import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
+import { BEACON_TOTAL_HEIGHT_METERS } from '../../public/src/world/oldBeacon.js';
 import { ATTACK_REACH, isWithinStrike } from '../../public/src/combat/encounter.js';
 
 const CHROME_PORT = 9224;
@@ -88,6 +89,11 @@ const FACE_PULSE_MS = 150;
 // hit -- and faceHero backs out of anything closer than MIN_FACE_METERS before trying to turn. Both
 // numbers sit far inside SEAL_REACH (2.6 m), so standing back costs nothing but a workable angle.
 const SEAL_STANDOFF_M = 1.3;
+// How far back down the road the hero walks before the victory capture. Chosen against the tower's
+// own numbers rather than by eye: the follow camera trails 15.3 m and the fire's tip stands at
+// BEACON_FIRE_TOP_METERS, so this is the distance at which the whole lit silhouette -- plinth to
+// flame -- sits inside a portrait frame.
+const BEACON_PORTRAIT_STANDBACK_M = 9;
 const MIN_FACE_METERS = 0.6;
 const startedAt = Date.now();
 const msLeft = () => RUN_DEADLINE_MS - (Date.now() - startedAt);
@@ -595,6 +601,25 @@ async function run() {
 
     const lit = await pollUntil(tab, (s) => s.siege.beaconLitInScene === true, 20000);
     check(lit.siege.beaconLitInScene === true, 'and the scene agrees the fire is burning');
+    // AND THERE IS SOMETHING TO SEE. The previous version of this check stopped at the line above,
+    // and the capture it took next was a black basket against a blue sky: the Beacon was lit, the
+    // banner said so, and the fire was inside a bowl the child was standing underneath. A flame
+    // that clears the tower's own height is the difference between a payoff and a flag.
+    const burning = await pollUntil(
+      tab, (s) => s.siege.beaconFireHeight > BEACON_TOTAL_HEIGHT_METERS, 12000,
+    );
+    check(burning.siege.beaconFireHeight > BEACON_TOTAL_HEIGHT_METERS,
+      'and the flame stands clear of the cresset, where a child can see it',
+      `fire ${burning.siege.beaconFireHeight?.toFixed?.(2)} m against a tower of `
+      + `${BEACON_TOTAL_HEIGHT_METERS.toFixed(2)} m`);
+    // STEP BACK BEFORE PHOTOGRAPHING IT (docs/MISTAKES.md GQ-010: photograph the subject). Standing
+    // at the foot of the tower, aimAt turns the camera at the BASE, and the flame -- which is now a
+    // metre and a half above a six-metre tower -- goes off the top of the frame. The first capture
+    // with the fire in it cropped exactly the thing the fire was added for. So the hero walks back
+    // down the road the way a person does when they want to see the whole of something.
+    const backX = OLD_BEACON.at[0];
+    const backZ = OLD_BEACON.at[1] - BEACON_PORTRAIT_STANDBACK_M;
+    await walkToward(tab, backX, backZ, 1.5, Math.min(30000, Math.max(8000, msLeft())));
     await aimAt(tab, OLD_BEACON.at[0], OLD_BEACON.at[1]);
     await sleep(2500);
     await shot(tab, 'portrait-06-the-beacon-burns');
