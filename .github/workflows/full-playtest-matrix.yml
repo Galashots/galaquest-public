@@ -1,4 +1,4 @@
-﻿name: full-playtest-matrix
+name: full-playtest-matrix
 
 on:
   # `integration/**` is a reviewed convergence lane. It is on the PUSH trigger deliberately, and not
@@ -48,6 +48,7 @@ jobs:
           - review-shipping-assets
           - review-rowan-camp-composite
           - review-studio
+          - review-owner-annotations
           - drive-hero-screen
           - drive-cart-loot
           - drive-village-board

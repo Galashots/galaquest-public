@@ -34,6 +34,10 @@ export const HARNESSES = {
   // bounds at both orientations. Its captures are evidence for a person; its exit code judges only
   // the behavioural invariants, never appearance.
   'review-studio': { gate: true, why: 'Character Studio review states, deterministic views, and responsive panel invariants, portrait and landscape' },
+  // Owner Review Mode: verifies the client-only annotation/export workflow against a real WebGL
+  // Studio frame. It gates mechanics (exact context, pointer marks, PNG capture, invalidation and
+  // responsive panel bounds) but its screenshots remain human evidence rather than appearance PASS.
+  'review-owner-annotations': { gate: true, why: 'Owner Review annotation packet mechanics and exact-state binding, portrait and landscape' },
   // AP1's two artist-review cameras. Both are instruments, not gates: their product is the captures
   // and a per-frame record, and a person decides what those show. A green exit code from either
   // would be a claim that somebody has LOOKED, which is exactly the thing a script cannot assert.
@@ -63,12 +67,13 @@ export const HARNESSES = {
  */
 export const SUITES = {
   keeper: ['drive-village', 'drive-relight', 'review-keeper-idle', 'review-keeper-material', 'review-keeper-turn', 'review-shipping-assets'],
-  hero: ['fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern', 'fit-wildwood-blade', 'play-fight', 'review-hero-attack', 'review-hero-idle11', 'review-shipping-assets', 'review-studio', 'drive-hero-screen'],
+  hero: ['fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern', 'fit-wildwood-blade', 'play-fight', 'review-hero-attack', 'review-hero-idle11', 'review-shipping-assets', 'review-studio', 'review-owner-annotations', 'drive-hero-screen'],
   full: [
     'drive-village', 'drive-relight', 'drive-lifecycle', 'drive-marks', 'drive-touch',
     'drive-two-clients', 'play-fight', 'fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern',
     'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
-    'review-studio', 'drive-hero-screen', 'drive-cart-loot', 'drive-village-board', 'drive-old-beacon',
+    'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
+    'drive-village-board', 'drive-old-beacon',
   ],
 };
