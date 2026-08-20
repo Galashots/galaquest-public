@@ -1,0 +1,162 @@
+name: director-playtest
+
+# On-demand running-game evidence for the Production Director.
+#
+# Once this workflow is on main, the repository owner can comment one of the whitelisted commands on
+# a pull request, for example:
+#
+#   /director-playtest lodge
+#   /director-playtest combat
+#   /director-playtest co-op
+#
+# The job checks out the PR's real HEAD (never the issue_comment event's default-branch SHA), launches
+# the same isolated Chrome contract used by full-playtest-matrix, runs one existing player-facing
+# harness, uploads the pixels/logs, and comments the exact run + head back onto the PR.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  playtest:
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/director-playtest ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+    steps:
+      - name: Parse and whitelist scenario
+        id: scenario
+        shell: bash
+        run: |
+          set -euo pipefail
+          first_line="$(printf '%s\n' "$COMMENT_BODY" | head -n 1)"
+          scenario="$(printf '%s\n' "$first_line" | awk '{print $2}')"
+          case "$scenario" in
+            village|touch|combat|marks|old-beacon|beacon|ranger|lodge|hero|board|co-op) ;;
+            *)
+              echo "unsupported Director playtest scenario: '$scenario'" >&2
+              echo "allowed: village touch combat marks old-beacon beacon ranger lodge hero board co-op" >&2
+              exit 1
+              ;;
+          esac
+          echo "scenario=$scenario" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          # issue_comment workflows execute from main, so github.sha is NOT the PR under review.
+          # refs/pull/N/head is the immutable question the Director asked about.
+          ref: refs/pull/${{ env.PR_NUMBER }}/head
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Bind exact PR head
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          mkdir -p .local/director-meta .local/runtime-test
+          printf '%s\n' "$sha" > .local/director-meta/SOURCE_SHA
+          printf '%s\n' '${{ steps.scenario.outputs.scenario }}' > .local/director-meta/SCENARIO
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Launch isolated Chrome
+        shell: bash
+        run: |
+          start_chrome() {
+            rm -rf "$RUNNER_TEMP/gq-chrome"
+            google-chrome \
+              --remote-debugging-port=9224 \
+              --user-data-dir="$RUNNER_TEMP/gq-chrome" \
+              --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu \
+              --hide-scrollbars --no-first-run --no-default-browser-check about:blank \
+              >"$RUNNER_TEMP/chrome.log" 2>&1 &
+            echo $! > "$RUNNER_TEMP/gq-chrome.pid"
+            for i in $(seq 1 120); do
+              if curl -fsS http://127.0.0.1:9224/json/version >/dev/null; then return 0; fi
+              sleep 0.5
+            done
+            return 1
+          }
+          for attempt in 1 2; do
+            if start_chrome; then
+              echo "chrome up on attempt ${attempt}"
+              exit 0
+            fi
+            echo "chrome did not answer on 9224 within 60s (attempt ${attempt})"
+            cat "$RUNNER_TEMP/chrome.log" || true
+            kill "$(cat "$RUNNER_TEMP/gq-chrome.pid")" 2>/dev/null || true
+            sleep 2
+          done
+          exit 1
+
+      - name: Run Director scenario
+        id: play
+        shell: bash
+        env:
+          SCENARIO: ${{ steps.scenario.outputs.scenario }}
+        run: |
+          set -euo pipefail
+          case "$SCENARIO" in
+            village)    command=(node tools/runtime-test/drive-village.mjs) ;;
+            touch)      command=(node tools/runtime-test/drive-touch.mjs) ;;
+            combat)     command=(node tools/runtime-test/play-fight.mjs) ;;
+            marks)      command=(node tools/runtime-test/drive-marks.mjs) ;;
+            old-beacon) command=(node tools/runtime-test/drive-old-beacon.mjs) ;;
+            beacon)     command=(node tools/runtime-test/drive-beacon-siege.mjs) ;;
+            ranger)     command=(node tools/runtime-test/drive-ranger.mjs) ;;
+            lodge)      command=(node tools/runtime-test/drive-ranger.mjs lodge) ;;
+            hero)       command=(node tools/runtime-test/drive-hero-screen.mjs) ;;
+            board)      command=(node tools/runtime-test/drive-village-board.mjs) ;;
+            co-op)      command=(node tools/runtime-test/drive-two-clients.mjs) ;;
+          esac
+          printf 'running:'
+          printf ' %q' "${command[@]}"
+          printf '\n'
+          "${command[@]}" 2>&1 | tee ".local/runtime-test/director-${SCENARIO}.log"
+
+      - name: Upload Director evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: director-playtest-${{ steps.scenario.outputs.scenario }}-${{ steps.source.outputs.sha }}
+          path: |
+            .local/runtime-test
+            .local/director-meta
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Report run back to PR
+        if: always() && steps.source.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCENARIO: ${{ steps.scenario.outputs.scenario }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          PLAY_OUTCOME: ${{ steps.play.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          artifact="director-playtest-${SCENARIO}-${SOURCE_SHA}"
+          body="Director playtest **${SCENARIO}**: **${PLAY_OUTCOME}**\n\nHead: \`${SOURCE_SHA}\`\nRun: ${run_url}\nArtifact: \`${artifact}\`"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
+
+      - name: Clean owned review processes
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/gq-chrome.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/gq-chrome.pid")" 2>/dev/null || true
+          fi
+          pkill -f 'node server.mjs' 2>/dev/null || true
