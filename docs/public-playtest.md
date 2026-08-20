@@ -28,8 +28,10 @@ minute on the next request. Tell a playtesting agent to wait for the first load.
 ## State and safety boundaries
 
 - The reward store is pointed at a disposable path on ephemeral disk via
-  `GALAQUEST_REWARD_STORE_PATH` (see `render.yaml`). The tracked `data/rewards.db` is never written
-  by the hosted instance, and all hosted progress resets on deploy/restart.
+  `GALAQUEST_REWARD_STORE_PATH` (see `render.yaml`). The children's real save never reaches the
+  host anyway (`data/*.db*` is gitignored, so it is not in a deploy), but the default store path
+  would still create a save under `data/` on the instance; the override keeps hosted play on a
+  throwaway file that resets on every deploy/restart.
 - The URL is public: anyone who has it can join, and extra connected clients draw extra heroes.
   Coordinate playtest sessions, or suspend the service in the dashboard when not in use.
 - Deploys track `main` automatically. A playtest claim should still name the exact SHA it was made

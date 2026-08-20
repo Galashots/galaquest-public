@@ -21,8 +21,9 @@ services:
       # node:sqlite (rewardStore) needs Node 22+; match CI's Node 24.
       - key: NODE_VERSION
         value: "24"
-      # The hosted instance must never write the tracked data/rewards.db. Point the reward store at
-      # a disposable path on the instance's ephemeral disk; it resets on every deploy/restart, which
-      # is exactly right for a playtest surface.
+      # The hosted instance must never write the children's real save (data/rewards.db -- gitignored
+      # by data/*.db*, so it is never in a deploy, but the default path would still create one).
+      # Point the reward store at a disposable path on ephemeral disk instead; it resets on every
+      # deploy/restart, which is exactly right for a playtest surface.
       - key: GALAQUEST_REWARD_STORE_PATH
         value: /tmp/galaquest-playtest-rewards.db
