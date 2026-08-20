@@ -135,11 +135,29 @@ them and reading the 400.
 
 ---
 
-## 8. Phase 2 — the ChatGPT reference request (paste verbatim)
+## 8. Phase 2 — the reference request
 
-Send this to the production-director ChatGPT conversation. It is written to satisfy the required
-format exactly: single character, A-pose, no text, no multiple angles, clean background, and suitable
-as a Meshy image-to-3D input.
+### 8a. CANONICAL request — production-director wording (use this one)
+
+Distilled and tightened by the production director (ChatGPT) on 2026-08-20 from the expanded brief in
+§8b, and **this is the version to send**. It pins three things §8b left open: the beacon housing is
+**asymmetrical and on the shoulder** (not "head or shoulder"), the weapon is specifically a
+**two-handed sealing maul**, and the exclusion list adds logos and inset panels.
+
+> Create **one single full-body "Beacon Warden" character reference image** for Meshy image-to-3D:
+> strict front-facing A-pose, arms straight angled down and away, legs slightly apart, palms forward,
+> centered on a plain light-grey background. Stylized low-poly corrupted guardian: broad
+> iron-and-ash-stone torso, short neck, long arms, narrow legs, one long two-handed sealing maul, one
+> asymmetrical lantern-cage/beacon housing on the shoulder, weathered dark iron + ash-grey stone +
+> aged timber, exactly one cold pale-cyan/blue-white accent inside the beacon housing/seams; no warm
+> colors, no cape, no shield, no chains, no scenery, no text, no logos, no multiple views or inset
+> panels.
+
+### 8b. Expanded form — design rationale and the same constraints spelled out
+
+Kept because it explains *why* each constraint exists, which is what an operator needs when judging a
+returned image or asking for a revision. It satisfies the same required format: single character,
+A-pose, no text, no multiple angles, clean background, suitable as a Meshy image-to-3D input.
 
 > Generate one character reference image for a stylized low-poly game.
 >
@@ -194,6 +212,16 @@ Every attempt gets a row, including failures. Balance is read before and after e
 | — | — | *no attempt has been made* | **0** | — | — | Blocked before any spend — see below |
 
 **Total spent to date: 0 of 500 authorized.**
+
+### Reference image provenance
+
+Every image used as a Meshy image-to-3D input is logged here before it is spent against.
+
+| Ref | Date | Source | Request used | File | Status |
+|---|---|---|---|---|---|
+| R1 | 2026-08-20 | production director (ChatGPT), relayed by the owner | §8a canonical wording | *not yet generated* | request finalized; image not produced — see blockers |
+
+No image has been generated, so nothing has been accepted as a modelling basis yet.
 
 ---
 
