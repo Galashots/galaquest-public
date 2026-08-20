@@ -1404,6 +1404,11 @@ async function bootstrap() {
       wardenBuilt: zoneWarden !== null,
       beaconLit: siegeState.beaconLit,
       beaconLitInScene: zoneOldBeacon?.isLit() ?? false,
+      // NOT THE SAME QUESTION as beaconLitInScene, and the difference cost a shipped payoff: the
+      // Beacon reported itself lit for a whole release while the fire was hidden inside the basket.
+      // This is how tall the flame actually stands right now, in metres, so a harness can ask
+      // whether there is anything to SEE rather than whether a flag is set.
+      beaconFireHeight: zoneOldBeacon?.fireHeightMeters() ?? 0,
       bladeOwned: bladeOwnedSeen === true,
       blackthornBlows: hollowState.barrierBlows,
       blackthornTorn: hollowState.barrierTorn,
