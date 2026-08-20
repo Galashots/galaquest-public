@@ -23,7 +23,9 @@ import { RUN_SPEED, groundSpeedForInput } from '../public/src/character/speed.js
 import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessage, welcomeMessage }
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownWeapon } from '../public/src/progression/items.js';
+import {
+  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownWeapon, swingDamageFor,
+} from '../public/src/progression/items.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
@@ -480,6 +482,16 @@ export function createRewardCoordinator(options = {}) {
     recordBeaconLit,
     beaconLit,
     ownedItemIdsFor,
+    /** What this hero is swinging, for the fight rules -- the same value rewardsFor puts on the
+     *  wire, pulled out on its own because the tick needs it every frame and a whole rewards block
+     *  per player per tick would be a lot of object for one string. Durable guests read the store;
+     *  an equip-only connection reads its ephemeral slot; nobody at all gets null, which
+     *  encounter.js resolves to the starter sword. */
+    equippedWeaponIdFor(heroId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      if (guestId) return store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID;
+      return ephemeralEquipped.get(heroId) ?? DEFAULT_EQUIPPED_WEAPON_ID;
+    },
     applyLootAward,
     creditedLootIds,
     villageSnapshot,
@@ -497,6 +509,17 @@ export function createRewardCoordinator(options = {}) {
  */
 export function createSimulation(options = {}) {
   const staleInputMs = options.staleInputMs ?? STALE_INPUT_MS;
+  // WHICH SWORD IS IN WHICH HAND, asked rather than remembered.
+  //
+  // The simulation does not own equipment and must not start: what a guest owns and has equipped is
+  // durable, per-guest reward-store truth, and guestId is a CONNECTION fact this factory has no
+  // business knowing (see the header on createRewards for the same split, stated at length). So the
+  // owner of that truth hands in a lookup, and the tick asks it once per player.
+  //
+  // Defaults to "nothing to say", which every test that drives createSimulation() directly relies
+  // on: encounter.js resolves an unnamed weapon to the starter sword, so an unwired simulation
+  // fights exactly as it did before any of this existed.
+  const weaponIdFor = options.weaponIdFor ?? (() => null);
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -781,7 +804,15 @@ export function createSimulation(options = {}) {
     // the wolf must not be able to shove a hero back out past WORLD_LIMIT.
     const commandHeroes = {};
     for (const player of players.values()) {
-      commandHeroes[player.id] = { position: { x: player.x, z: player.z }, heading: player.heading };
+      commandHeroes[player.id] = {
+        position: { x: player.x, z: player.z },
+        heading: player.heading,
+        // Resolved to a NUMBER here rather than passed on as an id: the rules layer is not allowed
+        // to know the item catalogue exists (test/combat-purity.test.mjs), and this side of the seam
+        // already knows both. swingDamageFor never returns null, so a swing always lands for
+        // something even when nobody has said what is equipped.
+        weaponDamage: swingDamageFor(weaponIdFor(player.id)),
+      };
     }
     // The handoff runs BEFORE either engine steps, so a hero is never simulated for a tick by the
     // fight they have just walked out of.
@@ -991,6 +1022,11 @@ export function attachGameServer(httpServer, options = {}) {
     ...options,
     creditedLootIds: rewards.creditedLootIds(),
     beaconLit: rewards.beaconLit(),
+    // G4, finally connected: the fight asks the reward store what is in the hand. Handed in as a
+    // function rather than a snapshot because equipment changes mid-session -- a child can open the
+    // Hero screen in the middle of a fight -- and a value copied at construction would mean the
+    // sword you equipped only started working after a reconnect.
+    weaponIdFor: (playerId) => rewards.equippedWeaponIdFor(playerId),
   });
   // Whether the durable row has been written for the victory this process is currently watching.
   // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that

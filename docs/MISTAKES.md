@@ -583,3 +583,25 @@ drives the presenter directly and therefore always ticks it) and invisible to th
 browser -- `warden-brazier-glow visible=false` -- rather than by reading pixels. Fixed by ticking the
 arc's presenters unconditionally.
 **Foreknowledge helped:** not yet recorded.
+
+### GQ-013 — A reward the rules never read is a lie with a ceremony attached.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-20 · **Last:** 2026-08-20
+**Not enforced because:** every layer is individually correct and individually tested. The catalogue
+holds the right number, the screen prints the right number, the ceremony fires at the right moment,
+and nothing in any of their tests asks the one question that spans them: does the number reach the
+thing it is a number ABOUT.
+**Rule:** When a reward names a quantity a child is supposed to feel -- damage, speed, range, light
+-- the test that matters is the one that measures the FEELING, not the plumbing. Assert the fight is
+shorter, the flame is taller, the room is brighter. A test that a value was stored, published or
+rendered proves the value exists; only a test of the effect proves it does anything. Write that test
+in the same change that ships the reward, or the reward ships as a rumour.
+**Incidents:** 2026-08-20, twice in the same arc, found by playing it rather than by reading it.
+(1) `progression/items.js` had said the Wildwood Blade does 2 damage since GP1; `WOLF_DAMAGE_PER_HIT`
+was a flat 1 read by both fights, and nothing anywhere called `damageFor`. G4 shipped the longest
+promise in the game -- Rowan's blade, an unlock card, a Hero screen printing "2 DAMAGE" -- and the
+sword swung exactly like the one the child started with. (2) the Old Beacon's ignition repainted the
+EMBERS, which sit inside an openEnded cresset 0.17 m below a 1.14 m rim; `isLit()` was true, the
+banner said "The Old Beacon is burning!", and the capture of the winning moment is a black basket
+against a blue sky. Both fixed in the same change, and both gates rewritten to measure the effect:
+blows-to-kill for the Blade, metres of visible flame for the Beacon.
+**Foreknowledge helped:** not yet recorded.

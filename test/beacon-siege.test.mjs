@@ -624,3 +624,80 @@ test('the Warden is slower than the wolf, and the scariest move has the longest 
   assert.ok(WARDEN_SWEEP_HALF_ARC_RADIANS < Math.PI * 0.75,
     'and it must leave a real back arc to escape into');
 });
+
+// ── THE BLADE HAS TO CUT DEEPER ────────────────────────────────────────────────────────────────
+//
+// G4 hands a child the Wildwood Blade at the end of the longest promise in the game, an unlock card
+// turns over, and the Hero screen prints "2 DAMAGE" off progression/items.js. For two chapters
+// nothing read that number: every blow anywhere took off a flat WOLF_DAMAGE_PER_HIT, so the reward
+// swung exactly like the sword they started with. These pin the fix at the rules layer, where it is
+// the only place it can be checked without a browser.
+
+test('a sharper sword takes the Warden down in fewer blows', () => {
+  const blows = (weaponDamage) => {
+    // The hero is given more hearts than the fight can take off, so this measures ONE thing --
+    // blows to kill -- rather than incidentally measuring going down, respawning and the
+    // wipe-reset rule, all of which have their own tests above.
+    let state = fightState({ heroes: { A: { hp: 99 } } });
+    const heroes = { A: { position: { x: 0, z: 1.2 }, heading: Math.PI, weaponDamage } };
+    let landed = 0;
+    for (let attempt = 0; attempt < 400 && state.warden.mode !== 'dying'; attempt += 1) {
+      if (!canSiegeHeroAttack(state, 'A')) { state = run(state, STEP, heroes).state; continue; }
+      state = swing(state);
+      const before = state.warden.hp;
+      state = run(state, SWING_SECONDS, heroes).state;
+      if (state.warden.hp < before) landed += 1;
+    }
+    assert.equal(state.warden.mode, 'dying', `the Warden survived the fight at ${weaponDamage} damage`);
+    return landed;
+  };
+  const withStarter = blows(1);
+  const withBlade = blows(2);
+  assert.equal(withStarter, WARDEN_MAX_HP, 'the starter sword is one heart a blow, as it always was');
+  assert.equal(withBlade, Math.ceil(WARDEN_MAX_HP / 2), 'the Blade is worth two');
+  assert.ok(withBlade < withStarter, 'and a child can FEEL the difference, which is the whole point');
+});
+
+test('a swing that names no weapon still lands, for exactly what it always did', () => {
+  // The regression that matters most: every caller written before equipment was wired up -- and
+  // every test in this repo that drives the seam directly -- passes no weaponDamage at all. If that
+  // ever resolved to zero, swords would silently stop working for all of them.
+  const heroes = { A: { position: { x: 0, z: 1.2 }, heading: Math.PI } };
+  let state = fightState();
+  state = swing(state);
+  state = run(state, SWING_SECONDS, heroes).state;
+  assert.equal(state.warden.hp, WARDEN_MAX_HP - 1, 'an unnamed weapon is the starter sword, not nothing');
+});
+
+test('but a sharper sword does NOT crack a cold seal any faster', () => {
+  // Deliberate asymmetry, and it is a design statement rather than an oversight: a seal is not a
+  // health bar, it is two blows and then it bursts. Keeping the arc's opening beat identical for
+  // every child regardless of what they walked in carrying is worth more than the consistency, and
+  // it puts the Blade's reward where a fight is rather than where a lock is.
+  const sealsAt = [[0, 2]];
+  const base = {
+    revision: 0,
+    arena: { at: [0, 0], radiusMeters: 15 },
+    sealsAt,
+    wardenAt: [40, 40],
+    seals: [{ blows: 0, burst: false }],
+    warden: {
+      x: 40, z: 40, heading: 0, hp: WARDEN_MAX_HP, mode: 'dormant', modeSeconds: 0,
+      phase: wardenPhaseFor(WARDEN_MAX_HP), targetId: null,
+      attackCooldown: 0, attackLanded: false,
+      attackCount: 0, meleeCount: 0, pulseQueued: false, blowsTaken: 0,
+    },
+    heroes: {
+      A: {
+        hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, swingLanded: false,
+        downSeconds: -1, lastCommandId: null,
+      },
+    },
+    beaconLit: false,
+  };
+  const heroes = { A: { position: { x: 0, z: 0.9 }, heading: 0, weaponDamage: 99 } };
+  let state = swing(base);
+  state = run(state, SWING_SECONDS, heroes).state;
+  assert.equal(state.seals[0].blows, 1, 'one blow is one blow, however sharp');
+  assert.equal(state.seals[0].burst, false, 'and a seal takes SEAL_BLOWS_TO_BREAK of them, always');
+});
