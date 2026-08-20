@@ -48,7 +48,34 @@
 // z = 51, its own wood closes behind it at z = 54.4-56.6, and the ground's edge at z = 58 leaves
 // exactly the metre of margin world/bounds.js's WORLD_EDGE_MARGIN_METERS already assumes everywhere
 // else. There is no acreage here a child has no reason to walk into.
-export const ZONE = Object.freeze({ name: 'lantern-village', size: 28, northMeters: 44 });
+//
+// ARC 2, 2026-08-20: and now it grows EAST, for the third time against the same defect and the
+// first time along a different axis.
+//
+// Blackthorn Hollow ends the Beacon arc with a marker stone whose single carved groove aims
+// north-east, and world/blackthornHollow.js calls that "ARC 2's SEED" in as many words. It was
+// pointing at nothing, and not figuratively: the Hollow stands at x = 11.2, the walkable world
+// stopped at x = 13, and Wren now stands in the village telling children her brother went that way.
+// A game that says "north-east" and clamps you 1.8 m later has made the marker stone a liar.
+//
+// TWELVE, and sized to the content the same way northMeters was rather than rounded to something
+// comfortable: the Ranger Lodge and its clearing need the ground out to about x = 24, and 12 puts
+// the edge at 26 with the metre of margin WORLD_EDGE_MARGIN_METERS assumes everywhere else.
+//
+// It costs empty meadow, and that is the honest objection to it -- the note above rejects "a bigger
+// square" on exactly those grounds. The answer is the one the north edge already gives: the ground
+// is a rectangle because a rectangle is one mesh and one draw call, and THE WOOD CLOSES over the
+// part of it nobody has a reason to walk into (see how the treeline shuts the world at z = 54.4-56.6
+// behind the Beacon). Nothing in this game collides, so a closed wood is a thing a child reads
+// rather than a wall they hit -- which is the same bargain every edge of this world already makes.
+//
+// MEASURED, not assumed, because this is an iPad. At ground.js's CELL_METERS of 0.5 the ground goes
+// from 8,265 vertices / 16,560 triangles to 11,745 / 23,040 -- about 42% more of a flat, untextured,
+// single-material mesh. DRAW CALLS ARE UNCHANGED AT ONE, which is the number that actually costs
+// anything on a tile-based mobile GPU, and 6,480 extra triangles of vertex-coloured ground is not a
+// figure any device in this project's target range notices. If that stops being true the fix is
+// CELL_METERS, not a smaller world.
+export const ZONE = Object.freeze({ name: 'lantern-village', size: 28, northMeters: 44, eastMeters: 12 });
 
 // WHERE THE WOLVES ARE. Three spots, walked in order, one wolf alive at a time.
 //

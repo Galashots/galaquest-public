@@ -3,7 +3,7 @@ import { WORLD } from '../render/layers.js';
 import { FOG_FAR } from '../render/sky.js';
 import { MAX_PITCH, MIN_DISTANCE } from '../camera/follow.js';
 import { ROAD, ZONE } from './zones/village.js';
-import { WORLD_LIMIT, WORLD_LIMIT_NORTH } from './bounds.js';
+import { WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH } from './bounds.js';
 
 // Phase Y/Task C: the flat single-colour ground plane read as props scattered on a test pad -- see
 // the brief's own "Replace the flat green test-pad read with one integrated ground + road". This is
@@ -114,12 +114,17 @@ export function meadowBlend(x, z) {
  */
 export function groundBounds(zone) {
   const half = zone.size / 2;
-  return { minX: -half, maxX: half, minZ: -half, maxZ: half + (zone.northMeters ?? 0) };
+  return {
+    minX: -half,
+    maxX: half + (zone.eastMeters ?? 0),
+    minZ: -half,
+    maxZ: half + (zone.northMeters ?? 0),
+  };
 }
 
 /** The rectangle a hero can actually STAND on, which is a metre inside the ground on every side. */
 export const WALKABLE_BOUNDS = Object.freeze({
-  minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT_NORTH,
+  minX: -WORLD_LIMIT, maxX: WORLD_LIMIT_EAST, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT_NORTH,
 });
 
 /**
