@@ -10,16 +10,31 @@
 export const GAMEPLAY_DISTANCE = 16;
 // Close enough to judge one character's pose/material without being a macro shot.
 export const INSPECTION_DISTANCE = 3.0;
+// A gear-inspection crop (A1 Studio convergence): close enough that a sword's seating or a
+// shield's cant fills the frame instead of being a few dozen pixels of an inspection shot. Still a
+// deterministic Studio camera, not a gameplay framing and not a visual-acceptance shortcut.
+export const CLOSEUP_DISTANCE = 1.35;
 
 export const TAU = Math.PI * 2;
 
 // Bearings are compass-style around the subject, matching frame()'s own convention in every
 // existing review harness: sin/cos of the bearing against a fixed distance and a slight downward
 // pitch (height + distance * 0.10).
+//
+// The original trio (front / three-quarter / back) keeps its exact angles -- every existing capture
+// sheet and Sol ruling binds to them. The A1 Studio convergence adds the side and rear angles gear
+// review genuinely needs (a sword's pitch only reads from the side; the shield strap only reads
+// from the shield-arm side, which is 'opposite-side' on this rig). Adding a name here is not enough
+// on its own: tools/sol-review/request.schema.json's bearing enum must list it too, or the worker
+// would advertise a bearing it refuses to execute -- test/studio-review-views.test.mjs pins the two
+// lists together.
 export const BEARINGS = Object.freeze([
   Object.freeze(['front', 0]),
   Object.freeze(['three-quarter', TAU * 0.125]),
+  Object.freeze(['side', TAU * 0.25]),
+  Object.freeze(['rear-three-quarter', TAU * 0.375]),
   Object.freeze(['back', TAU * 0.5]),
+  Object.freeze(['opposite-side', TAU * 0.75]),
 ]);
 
 export function bearingRadians(name) {
@@ -28,10 +43,20 @@ export function bearingRadians(name) {
   return found[1];
 }
 
+// One map, exported, so the sol-review worker's supportedViewScales and the request schema's own
+// enum can be pinned against the real vocabulary instead of hand-typed copies of it (GQ-007).
+export const SCALE_DISTANCES = Object.freeze({
+  gameplay: GAMEPLAY_DISTANCE,
+  inspection: INSPECTION_DISTANCE,
+  closeup: CLOSEUP_DISTANCE,
+});
+
 export function distanceForScale(scale) {
-  if (scale === 'gameplay') return GAMEPLAY_DISTANCE;
-  if (scale === 'inspection') return INSPECTION_DISTANCE;
-  throw new Error(`unknown scale "${scale}" -- expected "gameplay" or "inspection"`);
+  const distance = SCALE_DISTANCES[scale];
+  if (distance === undefined) {
+    throw new Error(`unknown scale "${scale}" -- expected one of ${Object.keys(SCALE_DISTANCES).join(', ')}`);
+  }
+  return distance;
 }
 
 /**

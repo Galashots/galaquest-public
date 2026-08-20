@@ -19,7 +19,9 @@ import { loadHero } from '../character/hero.js';
 import {
   attachBeltLantern, BELT_LANTERN_URL,
   attachWildwoodBladeCandidate, WILDWOOD_BLADE_CANDIDATE_URL, WILDWOOD_BLADE_CANDIDATE_ID,
+  rigidAnchorName,
 } from '../character/gear.js';
+import { ALL_STUDIO_GEAR, LOADOUT_IDS, loadoutDescriptor } from './loadoutDescriptors.js';
 import { loadGLB } from '../world/assets.js';
 import { GAMEPLAY_DISTANCE, cameraPositionFor } from '../review/cameraPresets.js';
 import {
@@ -53,8 +55,16 @@ export { OVERLAY_MODES };
  * one candidate Sol explicitly authorized. This is still not a generalized "load any candidate GLB"
  * API: a second candidate weapon would need its own named loadout the same way this one did, not a
  * parameter -- that generalization remains explicitly out of scope (api.js's own header comment).
+ *
+ * A1 Studio convergence: the loadout VOCABULARY now lives in loadoutDescriptors.js (semantic ids,
+ * truthful shipped/candidate provenance, review targets), so callers -- and the next task's
+ * Owner Fit -- learn what is being reviewed from data rather than from this file's mount plumbing.
+ * This module executes exactly that list; an id present in one place and not the other is a bug the
+ * studio-loadout tests catch, not a feature. 'shipping-sword-only' (added with the vocabulary) is a
+ * review-only visibility state: shipped gear only, shield hidden so the sword silhouette reads
+ * unobstructed.
  */
-const LOADOUTS = Object.freeze(['shipping', 'candidate-with-lantern', 'candidate-wildwood-blade']);
+const LOADOUTS = LOADOUT_IDS;
 export { LOADOUTS };
 
 /**
@@ -139,6 +149,7 @@ export async function createStudioScene(canvas) {
   // shipping sword_ironwood/shield_ironwood mount records -- reused here to find the shipping
   // sword's anchor rather than re-deriving it, so the candidate-wildwood-blade swap can hide it.
   const shippingSwordMount = hero.rigidGear?.find((g) => g.id === 'sword_ironwood') ?? null;
+  const shippingShieldMount = hero.rigidGear?.find((g) => g.id === 'shield_ironwood') ?? null;
   async function setLoadout(name) {
     if (!LOADOUTS.includes(name)) throw new Error(`unknown loadout "${name}" -- expected one of ${LOADOUTS.join(', ')}`);
     if (name === 'candidate-with-lantern' && !candidateLanternMount) {
@@ -157,7 +168,33 @@ export async function createStudioScene(canvas) {
     // rule (only the loadout varies), applied to "which sword" the same way loadoutIsShipping applies
     // to "which loadout" for a caller reading studioState.
     if (shippingSwordMount) shippingSwordMount.anchor.visible = name !== 'candidate-wildwood-blade';
+    // 'shipping-sword-only' is the one state that hides the shield -- a review-only visibility
+    // toggle over shipped gear (loadoutDescriptors.js), so a sword silhouette can be judged without
+    // the disc in frame. Every other loadout keeps the shield exactly where the game puts it,
+    // including 'candidate-wildwood-blade': holding the shield constant is what makes that
+    // comparison against 'shipping' locked (only the sword varies).
+    if (shippingShieldMount) shippingShieldMount.anchor.visible = name !== 'shipping-sword-only';
     loadout = name;
+  }
+
+  /**
+   * Live scene-graph truth about every gear item the Studio vocabulary knows (A1): is its anchor
+   * mounted at all, and is it currently visible. Read from the actual anchors by their
+   * rigidAnchorName -- NOT from the loadout descriptor's claims -- so a caller (or a test) can catch
+   * a setLoadout that stopped doing what the descriptor says. Lazy candidates report
+   * mounted: false until their first selection actually lands the GLB.
+   */
+  function gearVisibility() {
+    return ALL_STUDIO_GEAR.map(({ id, bone, provenance }) => {
+      const anchor = hero.root.getObjectByName(rigidAnchorName(id, bone));
+      return {
+        id,
+        bone,
+        provenance,
+        mounted: Boolean(anchor),
+        visible: Boolean(anchor && anchor.visible),
+      };
+    });
   }
 
   const mixer = new THREE.AnimationMixer(hero.root);
@@ -262,9 +299,27 @@ export async function createStudioScene(canvas) {
   function frame(scale, bearingName, height = 0.9) {
     const p = new THREE.Vector3();
     hero.root.getWorldPosition(p);
-    const [x, y, z] = cameraPositionFor(scale, bearingName, height, [p.x, p.y, p.z]);
+    let target = p;
+    let targetHeight = height;
+    // 'closeup' (A1) frames the CURRENT LOADOUT'S REVIEW TARGET (loadoutDescriptors.js) rather than
+    // the whole character -- that is the entire point of the scale: a sword seat or a lantern mount
+    // at frame-filling size without hand-picked world positions. The target is the review target's
+    // own live anchor, so the framing is a pure function of (loadout, clip, time, bearing); if that
+    // anchor is not mounted yet the closeup falls back to the whole-character framing rather than
+    // guessing at a position.
+    if (scale === 'closeup') {
+      const descriptor = loadoutDescriptor(loadout);
+      const gear = descriptor ? gearVisibility().find((item) => item.id === descriptor.reviewTarget) : null;
+      const anchor = gear?.mounted ? hero.root.getObjectByName(rigidAnchorName(gear.id, gear.bone)) : null;
+      if (anchor) {
+        target = new THREE.Vector3();
+        anchor.getWorldPosition(target);
+        targetHeight = 0;
+      }
+    }
+    const [x, y, z] = cameraPositionFor(scale, bearingName, targetHeight, [target.x, target.y, target.z]);
     camera.position.set(x, y, z);
-    camera.lookAt(p.x, p.y + height, p.z);
+    camera.lookAt(target.x, target.y + targetHeight, target.z);
     camera.updateMatrixWorld(true);
   }
   frame('inspection', 'three-quarter');
@@ -298,6 +353,7 @@ export async function createStudioScene(canvas) {
     setLightingMode,
     onLightingModeChange,
     setLoadout,
+    gearVisibility,
     setOverlay,
     getGripMeasurement,
     getShieldMeasurement,

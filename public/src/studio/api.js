@@ -15,13 +15,33 @@
  * else (AGENTS.md: visual claims come from the running game).
  */
 import { HERO_URL } from '../character/hero.js';
+import { loadoutDescriptor } from './loadoutDescriptors.js';
 
 export function installStudioApi(studioScene) {
   const STUDIO_VERSION = 'galaquest-character-studio/1';
   let currentView = { scale: 'inspection', bearing: 'three-quarter' };
 
+  // A1: every mutating method notifies when it lands, so studio.html's controls re-read getState()
+  // and can never go stale relative to what actually rendered -- the same defect class the lighting
+  // label already guards against (a worker driving this API bypasses every click handler; before
+  // this, a worker's setLoadout('candidate-wildwood-blade') left the on-screen menu claiming
+  // "shipping" while an unshipped candidate was actually mounted, which is exactly the
+  // candidate-masquerading-as-shipped-gear outcome the whole review vocabulary exists to prevent).
+  // Caught by looking at the review-studio.mjs captures, not assumed safe.
+  const stateListeners = new Set();
+  function notifyStateChange() {
+    for (const listener of stateListeners) listener();
+  }
+
   const api = {
     version: STUDIO_VERSION,
+
+    /** UI-sync hook (not part of the Sol protocol surface): fires after any state-changing method
+     *  completes. Listeners read the new truth from getState() -- nothing is passed. */
+    onStateChange(listener) {
+      stateListeners.add(listener);
+      return () => stateListeners.delete(listener);
+    },
 
     loadCharacter(name) {
       if (name !== 'hero') throw new Error(`loadCharacter: only "hero" is supported in SR2/SR3, got "${name}"`);
@@ -33,19 +53,23 @@ export function installStudioApi(studioScene) {
 
     setAnimation(clipName) {
       studioScene.setAnimation(clipName);
+      notifyStateChange();
     },
 
     setAnimationTime(seconds) {
       studioScene.setAnimationTime(seconds);
+      notifyStateChange();
     },
 
     setAnimationPlaying(playing) {
       studioScene.setAnimationPlaying(playing);
+      notifyStateChange();
     },
 
     setView(scale, bearing) {
       studioScene.frame(scale, bearing);
       currentView = { scale, bearing };
+      notifyStateChange();
     },
 
     setViewport(width, height) {
@@ -59,13 +83,19 @@ export function installStudioApi(studioScene) {
 
     setLightingMode(mode) {
       studioScene.setLightingMode(mode);
+      notifyStateChange();
     },
 
     // SR4 locked comparison primitive -- see scene.js's own header comment. Only the loadout varies;
     // camera/viewport/animation time/lighting/character are whatever the caller already locked via
     // the other methods on this same object.
     setLoadout(name) {
-      return studioScene.setLoadout(name);
+      // Async (a first selection may still be downloading its GLB): notify only when the switch has
+      // actually LANDED, so a listener reading getState() sees the new loadout's real gear anchors
+      // rather than a half-applied state. A rejected switch notifies nothing -- state did not move.
+      const applied = Promise.resolve(studioScene.setLoadout(name));
+      applied.then(notifyStateChange, () => {});
+      return applied;
     },
 
     // SR5 (owner-plan.md sections 21-23): Grip Inspector, Shield Inspector, Fit Envelope. Every
@@ -73,6 +103,7 @@ export function installStudioApi(studioScene) {
     // gearInspectors.js's own header for why the overlay and the JSON never drift apart.
     setOverlay(name) {
       studioScene.setOverlay(name);
+      notifyStateChange();
     },
 
     getGripMeasurement() {
@@ -96,6 +127,12 @@ export function installStudioApi(studioScene) {
 
     getState() {
       const canvas = document.querySelector('#studio-canvas');
+      // A1: the semantic half of "what is actually being reviewed". `descriptor` is the loadout's
+      // declared meaning (loadoutDescriptors.js); `gear` is the LIVE scene-graph truth (which
+      // anchors exist and are visible right now, scene.js's gearVisibility). Published separately
+      // on purpose: a consumer that compares them can catch the scene disagreeing with the
+      // vocabulary, which a single merged field would hide.
+      const descriptor = loadoutDescriptor(studioScene.loadout);
       return {
         studioVersion: STUDIO_VERSION,
         character: 'hero',
@@ -117,7 +154,22 @@ export function installStudioApi(studioScene) {
         // left to guessing -- a candidate must never masquerade as shipping (armour-progression-
         // doctrine.md section 5.1). `loadoutIsShipping` is the load-bearing boolean a caller checks.
         loadout: studioScene.loadout,
+        // IS THIS THE BASELINE STATE THE GAME ITSELF PRODUCES? True only for the exact `shipping`
+        // loadout. This is NOT a synonym for `loadoutGearProvenance` below, and the two genuinely
+        // disagree: `shipping-sword-only` and `candidate-with-lantern` mount nothing but shipped
+        // meshes (provenance `shipping-only`) while being false here, because neither is the
+        // baseline. A caller asking "may I treat this capture as the shipping game's own look?"
+        // wants THIS field; a caller asking "is any unshipped asset in this frame?" wants the
+        // other one. test/studio-loadouts.test.mjs pins the divergence.
         loadoutIsShipping: studioScene.loadout === 'shipping',
+        // A1 semantic review state (see the comment above getState): stable identifiers for the
+        // next task's Owner Fit and for capture metadata -- never file paths, never label text.
+        loadoutLabel: descriptor?.label ?? null,
+        // DOES THIS STATE MOUNT ANY UNSHIPPED ASSET? 'shipping-only' | 'contains-candidate',
+        // derived from the mounted gear rather than authored, so it cannot flatter a candidate.
+        loadoutGearProvenance: descriptor?.gearProvenance ?? null,
+        reviewTarget: descriptor?.reviewTarget ?? null,
+        gear: studioScene.gearVisibility(),
         // SR5: which inspector overlay (if any) is currently drawn in the scene, so a capture's
         // metadata states what a screenshot shows rather than leaving it to be inferred visually.
         overlay: studioScene.overlay,

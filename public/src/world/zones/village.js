@@ -678,9 +678,10 @@ const DORMANT_LIGHTS = PROPS.filter((prop) => prop.dormant === true);
 export const TRAIL_LIGHTS = Object.freeze(
   DORMANT_LIGHTS.filter((prop) => prop.road !== 'beacon').map((prop) => prop.at),
 );
-/** The three lamps on the Old Beacon road, in the order a child walks past them. Same dormant rule
- *  and the same world/trail.js wake radius as TRAIL_LIGHTS -- a separate list, not a separate
- *  mechanic. */
+/** The lamps on the Old Beacon road, in the order a child walks past them. Same dormant rule and
+ *  the same world/trail.js wake radius as TRAIL_LIGHTS -- a separate list, not a separate mechanic.
+ *  There are two, and the count is a DESIGN decision rather than an accident of spacing: see the
+ *  `road: 'beacon'` block in PROPS for why a third one had to come out. */
 export const BEACON_ROAD_LIGHTS = Object.freeze(
   DORMANT_LIGHTS.filter((prop) => prop.road === 'beacon').map((prop) => prop.at),
 );

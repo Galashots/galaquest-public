@@ -453,12 +453,15 @@ async function executeStudioState(sessionId, seq, requestCommitSha, ref, review)
 
   await closeStudioPage({ page, targetId, server });
 
-  const { BEARINGS } = await import(
+  const { BEARINGS, SCALE_DISTANCES } = await import(
     pathToFileURL(join(review.repoRoot, 'public', 'src', 'review', 'cameraPresets.js')).href,
   );
   // Single source of truth: TUNING_TARGETS/TUNING_BOUNDS are gearInspectors.js's own exported
   // constants, not a second, hand-typed copy here -- the same discipline every other supported*
   // vocabulary field on this result already follows.
+  const { LOADOUT_IDS } = await import(
+    pathToFileURL(join(review.repoRoot, 'public', 'src', 'studio', 'loadoutDescriptors.js')).href,
+  );
   const { TUNING_TARGETS, TUNING_BOUNDS } = await import(
     pathToFileURL(join(review.repoRoot, 'public', 'src', 'character', 'gearInspectors.js')).href,
   );
@@ -482,10 +485,13 @@ async function executeStudioState(sessionId, seq, requestCommitSha, ref, review)
     // than guessing (same discovery-before-command principle this mode already exists to serve).
     loadout: state?.loadout ?? null,
     loadoutIsShipping: state?.loadoutIsShipping ?? null,
-    supportedLoadouts: ['shipping', 'candidate-with-lantern', 'candidate-wildwood-blade'],
+    supportedLoadouts: LOADOUT_IDS,
     // The protocol's own fixed vocabulary, not asset data -- true regardless of which character or
     // clip is loaded, so a caller does not have to guess these from a studioCapture rejection.
-    supportedViewScales: ['gameplay', 'inspection'],
+    // Both derive from the same modules the Studio itself executes (scale map, loadout descriptors)
+    // rather than hand-typed copies -- the exact "advertise only what you can execute" lesson
+    // docs/MISTAKES.md records for viewportPreset.
+    supportedViewScales: Object.keys(SCALE_DISTANCES),
     supportedBearings: BEARINGS.map(([name]) => name),
     supportedLightingModes: ['game', 'diagnostic'],
     supportedViewportPresets: ['portrait', 'landscape'],

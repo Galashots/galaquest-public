@@ -277,7 +277,7 @@ async function bootstrap() {
   // protocol change to say so. What they share is the world they are standing in, which is the part
   // that makes "come and see this" work.
   let trailLit = noTrailLightsLit(VILLAGE.TRAIL_LIGHTS.length);
-  // G1: the Old Beacon road's own three lamps, kept as a SECOND array against a SECOND coordinate
+  // G1: the Old Beacon road's own lamps, kept as a SECOND array against a SECOND coordinate
   // list rather than appended to trailLit -- see zones/village.js's TRAIL_LIGHTS/BEACON_ROAD_LIGHTS
   // split for why the two chains cannot share one list, and zoneLoader.js for the matching split on
   // the scene side. Same rule, same wake radius, same pure wakeTrailLights(): a second stretch of

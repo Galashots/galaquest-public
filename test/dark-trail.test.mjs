@@ -115,7 +115,7 @@ test('the zone really places dormant lights, and both chains are derived from th
 });
 
 // THE REASON THE SPLIT EXISTS, pinned as the failure it prevents. CAMP.at is "the last dormant lamp"
-// and ROWAN.facing is "the one before it". Letting the Beacon road's three lamps fall into
+// and ROWAN.facing is "the one before it". Letting the Beacon road's own lamps fall into
 // TRAIL_LIGHTS moves both of them eighteen metres up the new road -- the camp's own "you got here"
 // banner would fire at the Beacon and Rowan would spend the game staring past the child at a lamp
 // post. Nothing in the data's shape says so; only this does.

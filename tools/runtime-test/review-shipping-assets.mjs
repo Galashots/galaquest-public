@@ -38,6 +38,17 @@ import {
   GAMEPLAY_DISTANCE, INSPECTION_DISTANCE, PORTRAIT_VIEWPORT, BEARINGS, TAU,
 } from '../../public/src/review/cameraPresets.js';
 
+// This sheet's historical framing: the original front/three-quarter/back trio, pinned by name so
+// the A1 Studio bearings (side, rear-three-quarter, opposite-side) don't silently double this
+// harness's capture count. Filtered from BEARINGS rather than restated (GQ-007) -- a renamed or
+// removed canonical bearing fails here loudly instead of quietly shrinking the sheet.
+const SHEET_BEARING_NAMES = ['front', 'three-quarter', 'back'];
+const SHEET_BEARINGS = SHEET_BEARING_NAMES.map((wanted) => {
+  const found = BEARINGS.find(([name]) => name === wanted);
+  if (!found) throw new Error(`review sheet bearing "${wanted}" is no longer in cameraPresets.BEARINGS`);
+  return found;
+});
+
 const CHROME_PORT = 9224;
 const TAG = process.argv.includes('--tag')
   ? process.argv[process.argv.indexOf('--tag') + 1]
@@ -258,12 +269,12 @@ await placeHero(keeper.x + 14, keeper.z + 14);
 await sleep(700);
 
 console.log('\n== HERO: shipped Idle_11, equipped ==');
-for (const [name, bearing] of BEARINGS) {
+for (const [name, bearing] of SHEET_BEARINGS) {
   await frame('/^hero$/i', bearing, GAMEPLAY_DISTANCE);
   await sleep(200);
   await shot(`hero-gameplay-${name}`);
 }
-for (const [name, bearing] of BEARINGS) {
+for (const [name, bearing] of SHEET_BEARINGS) {
   await frame('/^hero$/i', bearing, INSPECTION_DISTANCE);
   await sleep(200);
   await shot(`hero-inspection-${name}`);
@@ -281,12 +292,12 @@ for (let i = 0; i < 8; i += 1) {
 // ── KEEPER: idle, at both scales ────────────────────────────────────────────────────────────────
 // Still out of range, so this is genuinely his idle rather than a wave caught mid-flight.
 console.log('\n== KEEPER: shipped Idle_11 + corrected v2 material ==');
-for (const [name, bearing] of BEARINGS) {
+for (const [name, bearing] of SHEET_BEARINGS) {
   await frame('/^keeper$/i', bearing, GAMEPLAY_DISTANCE);
   await sleep(200);
   await shot(`keeper-idle-gameplay-${name}`);
 }
-for (const [name, bearing] of BEARINGS) {
+for (const [name, bearing] of SHEET_BEARINGS) {
   await frame('/^keeper$/i', bearing, INSPECTION_DISTANCE);
   await sleep(200);
   await shot(`keeper-idle-inspection-${name}`);

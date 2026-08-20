@@ -44,7 +44,7 @@
             "lightingMode": { "type": "string", "enum": ["game", "diagnostic"] },
             "loadout": {
               "type": "string",
-              "enum": ["shipping", "candidate-with-lantern", "candidate-wildwood-blade"]
+              "enum": ["shipping", "shipping-sword-only", "candidate-with-lantern", "candidate-wildwood-blade"]
             },
             "viewportPreset": { "type": "string", "enum": ["portrait", "landscape"] },
             "overlay": { "type": "string", "enum": ["none", "grip", "shield"] },
@@ -79,10 +79,10 @@
                 "additionalProperties": false,
                 "required": ["scale", "bearing"],
                 "properties": {
-                  "scale": { "type": "string", "enum": ["gameplay", "inspection"] },
+                  "scale": { "type": "string", "enum": ["gameplay", "inspection", "closeup"] },
                   "bearing": {
                     "type": "string",
-                    "enum": ["front", "three-quarter", "back"]
+                    "enum": ["front", "three-quarter", "side", "rear-three-quarter", "back", "opposite-side"]
                   }
                 }
               }
@@ -116,7 +116,7 @@
                 "samples": { "type": "integer", "minimum": 1, "maximum": 60 },
                 "loadout": {
                   "type": "string",
-                  "enum": ["shipping", "candidate-with-lantern", "candidate-wildwood-blade"]
+                  "enum": ["shipping", "shipping-sword-only", "candidate-with-lantern", "candidate-wildwood-blade"]
                 },
                 "tuningOverride": {
                   "type": "object",
