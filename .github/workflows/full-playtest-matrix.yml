@@ -53,6 +53,7 @@ jobs:
           - drive-cart-loot
           - drive-village-board
           - drive-old-beacon
+          - drive-beacon-siege
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

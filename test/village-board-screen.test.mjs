@@ -122,3 +122,60 @@ test('sabotage: selected is not a constant -- each node\'s own selected flag fli
   const selectedIds = view.nodes.filter((n) => n.selected).map((n) => n.id);
   assert.deepEqual(selectedIds, ['workshop']);
 });
+
+// ── G6: the Board is a desire engine ────────────────────────────────────────────────────────────
+//
+// Every future node reads "Not yet" forever, which is honest and is also why a child stops opening
+// this screen: nothing on it has ever changed in response to anything they did. Lighting the Old
+// Beacon changes exactly one of them.
+
+test('the Ranger Lodge stays asleep until the Old Beacon is lit', () => {
+  const village = { coins: 0, shards: 0, workshopOwned: false };
+  const cold = villageBoardViewModel({
+    village, lanternUnlocked: true, selectedNodeId: null, beaconLit: false,
+  });
+  const lodge = cold.nodes.find((node) => node.id === 'ranger-lodge');
+  assert.equal(lodge.status, 'Not yet');
+  assert.equal(lodge.kind, 'future');
+});
+
+test('lighting the Beacon wakes the Ranger Lodge, and ONLY the Ranger Lodge', () => {
+  const village = { coins: 0, shards: 0, workshopOwned: false };
+  const lit = villageBoardViewModel({
+    village, lanternUnlocked: true, selectedNodeId: null, beaconLit: true,
+  });
+  const lodge = lit.nodes.find((node) => node.id === 'ranger-lodge');
+  assert.equal(lodge.kind, 'next', 'the lodge answers the light');
+  assert.notEqual(lodge.status, 'Not yet');
+
+  // The directive's own rule: show ONE or TWO things a child can want, never forty. Every other
+  // future node must be untouched by the Beacon.
+  const others = lit.nodes.filter((node) => node.id !== 'ranger-lodge' && node.kind === 'future');
+  assert.ok(others.length > 0, 'there are still other future nodes to check');
+  for (const node of others) {
+    assert.equal(node.status, 'Not yet', `${node.id} must not react to the Beacon`);
+  }
+});
+
+test('the woken Lodge names a place and a fantasy -- and still promises nothing buildable', () => {
+  const village = { coins: 0, shards: 0, workshopOwned: false };
+  const { detail } = villageBoardViewModel({
+    village, lanternUnlocked: true, selectedNodeId: 'ranger-lodge', beaconLit: true,
+  });
+  assert.equal(detail.nodeId, 'ranger-lodge');
+  assert.ok(detail.whatIsIt.length > 0, 'it says what the place is');
+  assert.ok(detail.whatChanges.length > 0, 'and why it is talking to you now');
+  // Still not actionable: no cost, no upgradeId, nothing a tap could buy. Promising a place a child
+  // can walk to before it exists is the defect G1 spent a whole slice not shipping.
+  assert.equal(detail.future, true);
+  assert.equal(detail.cost, undefined);
+  assert.equal(detail.upgradeId, undefined);
+});
+
+test('a cold Beacon leaves the Lodge detail empty rather than half-promising', () => {
+  const village = { coins: 0, shards: 0, workshopOwned: false };
+  const { detail } = villageBoardViewModel({
+    village, lanternUnlocked: true, selectedNodeId: 'ranger-lodge', beaconLit: false,
+  });
+  assert.equal(detail.whatIsIt, undefined);
+});

@@ -1879,6 +1879,9 @@ async function bootstrap() {
         village,
         lanternUnlocked: lanternUnlockedNow,
         selectedNodeId: selectedVillageNodeId,
+        // G6: the world reacts where a child can SEE it react. The Beacon burns twenty metres up
+        // a road they may not walk again for a week; the Board is in the village they live in.
+        beaconLit: siegeState.beaconLit,
       }));
     }
     // "Do we actually KNOW this hero's marks yet" -- which is not the same question as "is
