@@ -27,6 +27,11 @@ export const WORLD_LIMIT = ZONE.size / 2 - WORLD_EDGE_MARGIN_METERS;
 // why -- so z has two different limits and x still has one. Derived from the same zone data the
 // ground mesh is built from, for the same GQ-007 reason WORLD_LIMIT is.
 export const WORLD_LIMIT_NORTH = ZONE.size / 2 + (ZONE.northMeters ?? 0) - WORLD_EDGE_MARGIN_METERS;
+// The Wildwood again, east this time -- Arc 2's road out of Blackthorn Hollow toward the Ranger
+// Lodge. Derived from the same zone data for the same GQ-007 reason the other two are, and named
+// EAST rather than folded into WORLD_LIMIT because x is now asymmetric: the world did not grow west
+// and a single symmetric limit would silently hand back twelve metres of meadow nobody built.
+export const WORLD_LIMIT_EAST = ZONE.size / 2 + (ZONE.eastMeters ?? 0) - WORLD_EDGE_MARGIN_METERS;
 
 /**
  * Clamp along X. Unchanged: the world did not grow east or west.
@@ -38,7 +43,7 @@ export const WORLD_LIMIT_NORTH = ZONE.size / 2 + (ZONE.northMeters ?? 0) - WORLD
  * accident, which is the whole reason this is two functions rather than one with a flag.
  */
 export function clampToWorldX(value) {
-  return Math.min(WORLD_LIMIT, Math.max(-WORLD_LIMIT, value));
+  return Math.min(WORLD_LIMIT_EAST, Math.max(-WORLD_LIMIT, value));
 }
 
 /** Clamp along Z: the same southern limit, and the Wildwood's own to the north. */

@@ -114,6 +114,14 @@ export const OBJECTIVE_CUT_THE_BLACKTHORN = '🌿 Cut the blackthorn open';
 // THE END OF THE ARC, and it points at the one thing left in it rather than going blank -- the same
 // dead-end rule this whole file is written from. It stops being shown once they are inside.
 export const OBJECTIVE_SEARCH_THE_HOLLOW = '🔦 Search the hollow';
+// ARC 2. Names the DESTINATION, the same rule OBJECTIVE_FIND_THE_BEACON follows and for the same
+// reason: "the old road" is a thing a child can now see under their feet, running east out of the
+// Beacon's clearing, and the Lodge at the end of it is a thing Wren has already talked about. It is
+// safe to say only because the road exists -- world/zones/village.js grew the world east in the same
+// change that added this line, which is the whole of the discipline this file keeps: never promise a
+// place a child cannot walk to.
+export const OBJECTIVE_FIND_THE_LODGE = '🏚️ Follow the old road east';
+
 // The fallback for a zone with no trail at all. It is honest and it is a verb -- wolves really do
 // keep coming back on their patrol -- and it is what the village said between the gate landing and
 // the Dark Trail landing. Kept so that a zone which places no dormant lights still says something.
@@ -140,10 +148,18 @@ export function objectiveFindMarks(remaining) {
  *              or null before any of it is known (a zone with no seals placed).
  */
 export function beaconObjectiveFor(siege) {
-  // NOTHING LEFT TO SAY, and saying so honestly. Once a child has been inside the hollow the arc is
-  // finished; the chip goes quiet rather than inventing a chore, and the NEXT desire is carried by
-  // the things they can SEE in there (the ranger's marker) rather than by a line of text.
-  if (siege?.hollowFound === true) return null;
+  // NOTHING LEFT TO SAY, once they have walked the whole of it. The same rule as ever: the chip goes
+  // quiet rather than inventing a chore.
+  if (siege?.lodgeFound === true) return null;
+  // ...but until then it names the one place left. This branch could not exist until Arc 2 built the
+  // road east: the hollow used to BE the end of the world in that direction, so the chip went silent
+  // there and the next desire was carried entirely by a marker stone the child could see. The stone
+  // now points somewhere they can actually walk, and a chip that stayed quiet would be the game
+  // knowing about a place and declining to mention it.
+  //
+  // Gated on having been in the hollow rather than on owning the Blade: the road east is real ground,
+  // and a child who got past the tangle without cutting it has still found the road.
+  if (siege?.hollowFound === true) return OBJECTIVE_FIND_THE_LODGE;
   if (siege?.blackthornTorn === true) return OBJECTIVE_SEARCH_THE_HOLLOW;
   // ONLY WITH THE BLADE. See OBJECTIVE_CUT_THE_BLACKTHORN's own comment: a child holding the starter
   // sword is not told to do a thing the starter sword cannot do. Before they own it, the chip is

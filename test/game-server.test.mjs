@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   STALE_INPUT_MS,
   WORLD_LIMIT,
+  WORLD_LIMIT_EAST,
   WORLD_LIMIT_NORTH,
   attachGameServer,
   clampToWorldX,
@@ -127,7 +128,7 @@ test('a stale input stops the player, so a dropped connection cannot run forever
 });
 
 test('a player is clamped inside the world instead of walking off it', () => {
-  assert.equal(clampToWorldX(WORLD_LIMIT + 5), WORLD_LIMIT);
+  assert.equal(clampToWorldX(WORLD_LIMIT_EAST + 5), WORLD_LIMIT_EAST);
   assert.equal(clampToWorldX(-WORLD_LIMIT - 5), -WORLD_LIMIT);
   assert.equal(clampToWorldX(0), 0);
 
@@ -148,7 +149,12 @@ test('a player is clamped inside the world instead of walking off it', () => {
   assert.ok(Number.isFinite(player.x) && Number.isFinite(player.z), 'position stayed finite');
 });
 
-test('a player walking EAST is still stopped at the village edge -- the world only grew north', () => {
+// EAST, and the expected value is WORLD_LIMIT_EAST since 2026-08-20 -- the world grew that way for
+// Arc 2's road to the Ranger Lodge. This test used to be titled "the world only grew north" and
+// asserted WORLD_LIMIT, which was true right up until the day it was not; it is kept (rather than
+// deleted as obsolete) precisely because a server that clamped x with the WEST limit would sail
+// through a test that only ever walked west, and the two numbers are no longer the same.
+test('a player walking EAST is stopped at the new eastern edge, not the old village one', () => {
   const sim = createSimulation();
   const player = sim.addPlayer('kid');
   let now = 1000;
@@ -157,7 +163,21 @@ test('a player walking EAST is still stopped at the village edge -- the world on
     sim.applyInput(player.id, decode(encode(inputMessage(i + 1, 1, 0, 1, true))), now);
     sim.step(0.05, now);
   }
-  assert.equal(player.x, WORLD_LIMIT, `escaped to ${player.x}`);
+  assert.equal(player.x, WORLD_LIMIT_EAST, `escaped to ${player.x}`);
+  assert.notEqual(WORLD_LIMIT_EAST, WORLD_LIMIT,
+    'this assertion is only load-bearing while the two edges differ');
+});
+
+test('and a player walking WEST is still stopped where the village always ended', () => {
+  const sim = createSimulation();
+  const player = sim.addPlayer('kid');
+  let now = 1000;
+  for (let i = 0; i < 1200; i += 1) {
+    now += 50;
+    sim.applyInput(player.id, decode(encode(inputMessage(i + 1, -1, 0, 1, true))), now);
+    sim.step(0.05, now);
+  }
+  assert.equal(player.x, -WORLD_LIMIT, `escaped to ${player.x}`);
 });
 
 test('replayed or out-of-order input is ignored', () => {

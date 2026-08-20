@@ -52,7 +52,9 @@ import {
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
 import { rangerOwesCharm } from '../public/src/world/rangerSpeech.js';
 import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
-import { WORLD_LIMIT, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ } from '../public/src/world/bounds.js';
+import {
+  WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
+} from '../public/src/world/bounds.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
 import { openRewardStore } from './rewardStore.mjs';
 import { attachWebSocketServer } from './wsServer.mjs';
@@ -79,7 +81,7 @@ export const TICK_MS = 1000 / TICK_HZ;
 // has to clamp its own prediction to the same edge or reconciliation snaps the hero back off the
 // world's rim, and a browser cannot import this server-only module. Re-exported so this module's
 // existing callers and tests keep their single import site, exactly as WOLF_SPAWN is below.
-export { WORLD_LIMIT, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ };
+export { WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ };
 
 // Where the wolf stands. IMPORTED from the zone that places it, not declared here (Phase R2,
 // docs/MISTAKES.md GQ-007): this used to be a hand-written `{ x: 2.5, z: 8 }` and main.js used to be

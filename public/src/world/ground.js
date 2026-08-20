@@ -3,7 +3,7 @@ import { WORLD } from '../render/layers.js';
 import { FOG_FAR } from '../render/sky.js';
 import { MAX_PITCH, MIN_DISTANCE } from '../camera/follow.js';
 import { ROAD, ZONE } from './zones/village.js';
-import { WORLD_LIMIT, WORLD_LIMIT_NORTH } from './bounds.js';
+import { WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH } from './bounds.js';
 
 // Phase Y/Task C: the flat single-colour ground plane read as props scattered on a test pad -- see
 // the brief's own "Replace the flat green test-pad read with one integrated ground + road". This is
@@ -61,6 +61,22 @@ export function distanceToSegment(px, pz, ax, az, bx, bz) {
 
 /** Shortest distance from (px,pz) to a polyline through `points` ([[x,z], ...], at least 2 points
  *  -- the shape a road's own control-point list is). */
+/**
+ * How far (px, pz) is from the nearest point of a road, counting its branches.
+ *
+ * Exported because it is the one definition of "is this on the road", and the moment there was more
+ * than one polyline every hand-rolled `distanceToPolyline(x, z, ROAD.points)` in the repo became
+ * quietly wrong -- it would have said a tree planted squarely on the Lodge road was in a field.
+ * A road with no branches is exactly the old single-polyline answer, to the bit.
+ */
+export function distanceToRoadNetwork(px, pz, road) {
+  let min = distanceToPolyline(px, pz, road.points);
+  for (const branch of road.branches ?? []) {
+    min = Math.min(min, distanceToPolyline(px, pz, branch.points));
+  }
+  return min;
+}
+
 export function distanceToPolyline(px, pz, points) {
   let min = Infinity;
   for (let i = 0; i < points.length - 1; i += 1) {
@@ -114,12 +130,17 @@ export function meadowBlend(x, z) {
  */
 export function groundBounds(zone) {
   const half = zone.size / 2;
-  return { minX: -half, maxX: half, minZ: -half, maxZ: half + (zone.northMeters ?? 0) };
+  return {
+    minX: -half,
+    maxX: half + (zone.eastMeters ?? 0),
+    minZ: -half,
+    maxZ: half + (zone.northMeters ?? 0),
+  };
 }
 
 /** The rectangle a hero can actually STAND on, which is a metre inside the ground on every side. */
 export const WALKABLE_BOUNDS = Object.freeze({
-  minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT_NORTH,
+  minX: -WORLD_LIMIT, maxX: WORLD_LIMIT_EAST, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT_NORTH,
 });
 
 /**
@@ -177,8 +198,13 @@ export function buildGroundGeometry(bounds, road, cellMeters = CELL_METERS) {
       const z = minZ + iz * cellMeters;
       positions.push(x, 0, z);
       normals.push(0, 1, 0);
+      // NEAREST OF EVERY POLYLINE THIS ROAD IS MADE OF. The road was one line for three chapters
+      // and is a FORK from Arc 2 on: the Beacon stands where the trail from the village meets the
+      // old ranger road running east to the Lodge. Painted as branches on one road object rather
+      // than as a second road, because "how far is this vertex from road" has exactly one answer and
+      // every consumer -- this blend, the placement guards, the harnesses -- wants the same one.
       const blend = road
-        ? roadBlend(distanceToPolyline(x, z, road.points), halfWidth, ROAD_EDGE_SOFTEN_METERS)
+        ? roadBlend(distanceToRoadNetwork(x, z, road), halfWidth, ROAD_EDGE_SOFTEN_METERS)
         : 0;
       // Meadow first, road second, so a vertex fully on the road is EXACTLY ROAD_COLOR and the path
       // stays a clean path rather than picking up the field's mottling.

@@ -375,6 +375,7 @@ async function bootstrap() {
   // re-opening it after a reload costs nothing and pays nothing -- the shards are already banked.
   let hollowState = createHollowState();
   let hollowFound = false;
+  let lodgeFound = false;
   // Presentation edges, all diffed rather than chased -- the same "diff the published state, do not
   // chase a transient event" discipline the cart jolt and the Workshop ceremony already use, and the
   // reason it matters here is that the siege's events ride 10 Hz snapshots while these have to be
@@ -1457,6 +1458,7 @@ async function bootstrap() {
       blackthornTorn: hollowState.barrierTorn,
       blackthornGone: zoneBlackthorn?.isGone() ?? false,
       hollowFound,
+      lodgeFound,
       chestOpened: hollowState.chestOpened,
     }),
   };
@@ -2632,6 +2634,21 @@ async function bootstrap() {
       hollowFound = true;
       banner('Blackthorn Hollow', 2600);
     }
+
+    // ── ARC 2: THE END OF THE OLD ROAD ──────────────────────────────────────────────────────
+    //
+    // The same per-client, session-only discovery shape every other arrival in this file uses. It is
+    // deliberately NOT gated on the blackthorn being cut, and that is not laziness: nothing in this
+    // game collides, so a child who walks round the tangle has still walked the road, and refusing
+    // them the banner for taking the wrong line would be the game arguing with something it can
+    // plainly see them doing. The tangle's job is to make them WANT the Blade, not to be a wall.
+    if (!lodgeFound && reachedCamp(VILLAGE.LODGE, player.position.x, player.position.z)) {
+      lodgeFound = true;
+      // Names the place and claims nothing else -- the same rule the Beacon's own arrival banner
+      // follows. Whether anybody is home is a thing the child can see for themselves: the lantern at
+      // its gable is not lit.
+      banner('The Ranger Lodge', 3000);
+    }
     // The chest. Its lid is local presentation; its contents are a durable, server-authoritative
     // award, so the ask is throttled exactly the way a loot pickup's is (see lootRequestedAt).
     if (hollowFound && !hollowState.chestOpened
@@ -2723,6 +2740,7 @@ async function bootstrap() {
         bladeOwned: bladeOwnedSeen === true,
         blackthornTorn: hollowState.barrierTorn,
         hollowFound,
+        lodgeFound,
       },
     ));
     follow.update(player.position);
