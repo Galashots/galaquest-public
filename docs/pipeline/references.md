@@ -1,53 +1,53 @@
-# Reference images — where every asset starts, and where most failures are decided
+# Reference images — where every generated asset starts
 
-The reference image decides the mesh. Meshy reconstructs what is PAINTED, faithfully including
-your mistakes: painted seams become geometry channels, thin straps become breaks, backdrop
-gradients become segmentation noise. Ten minutes here beats a 15-credit re-roll.
+The reference image strongly shapes the mesh. Image-to-3D will reconstruct painted mistakes too:
+painted seams can become geometry channels, thin straps can break, busy backgrounds can become
+segmentation noise. Time spent making a clean reference is cheaper than paying to regenerate a bad one.
 
-## Producing the image (ChatGPT, the owner's account, GalaQuest project)
+## Produce the reference by capability, not by UI ritual
 
-Use ChatGPT image generation in the **GalaQuest project** (chatgpt.com, model GPT-5.6 Sol,
-effort High — the owner's standing setting), so the project context carries the art direction. Anchor
-EVERY request on an existing style image (upload it): the chest plate anchored the lantern, the
-lantern anchored the tree, older players' source anchored the keeper. The composer submits on Enter —
-write prompts as ONE line, no newlines.
+Use an image-generation or art-authoring surface that can produce the required reference and lets you
+compare it against GalaQuest's current public visual direction. Do not make a particular model name,
+effort setting, browser tab, local Chrome instance, or download trick a project prerequisite.
 
-The prompt must always say, in some phrasing:
-- lone subject, centered, plain solid pale-grey backdrop, generous empty margins
-- no cast shadow beyond a small contact patch, no text, no scene, no ground plane
-- every engraving/panel line as a FLAT PAINTED VALUE CHANGE, never a dark groove
-- one solid connected volume; no thin wires/chains/floating parts (thick straps, merged rings)
-- the destination ("Meshy image-to-3D at ~N triangles, judged at 90 px in a browser game")
+When an accepted public GalaQuest reference exists for the relevant role, use it as an anchor. When it
+does not, use `docs/GALAQUEST_VISUAL_AUTHORITY.md`, current running-game captures, and multiple external
+convention references rather than inventing a missing private prerequisite.
 
-Plus the shape rules for the asset class: props state widest-point and taper explicitly;
-characters are strict T-pose (see the character runbook); trees are cloud-mass canopies with no
-see-through gaps.
+The brief should state, in some phrasing:
 
-## Vetting (mandatory, free)
+- lone subject, centered, plain solid pale-grey background, generous empty margins;
+- no cast shadow beyond a small contact patch, no text, no scene, no ground plane;
+- engravings/panel lines as flat painted value changes, not dark grooves;
+- one robust connected form where the asset class permits it; avoid thin wires/chains/floating parts;
+- the destination: low-poly browser-game asset, judged at actual GalaQuest gameplay scale.
 
-```bash
-python tools/meshy/flatten_bg.py tmp/<name>.png tmp/<name>-flat.png [--grey N]
-```
-Read every line it prints:
-- **Margins + fill %**: subject comfortably inside frame.
-- **Silhouette runs**: for PROPS, a split that rejoins is a hole and Meshy will build it —
-  fix the image. For CHARACTERS, TREES, and anything multi-limbed, splits that rejoin are
-  anatomy — the tool over-fires there by design (calibration recorded 2026-08-13); judge by eye.
-- **Collision note**: if subject pixels sit near the backdrop value, re-run with the suggested
-  `--grey N` so segmentation cannot eat the subject. Always use the suggested value; it costs
-  nothing.
+Add the shape rules for the asset class: props describe widest point and taper; humanoid characters use
+a strict rig-friendly T-pose; trees use readable canopy masses rather than fine see-through detail.
 
-## Retrieving images from ChatGPT (browser automation)
+## Vet the image before any paid generation
 
-The generated `<img>` src is fetchable in-page: fetch → blob → object-URL → `<a download>` click
-lands it in `Downloads/`, then copy into `tmp/`. Verify you are driving the LOCAL Chrome before
-downloading anything (two Chromes are paired to this account; the local one is the one whose
-tabs you already hold — check `tabs_context` for your own known tab ids).
+The public repository currently has **no dedicated background-flattening/vetting script**, so do not
+cite one. Inspect the actual image before sending it to Meshy:
 
-## When visual confirmation is needed
+- subject comfortably inside frame with generous margins;
+- background visually uniform and clearly separated from the subject;
+- intended holes/openings are real and accidental gaps are absent;
+- no hair-thin wires, straps, chains, or floating fragments that will reconstruct unreliably;
+- broad value/color masses still read when the image is viewed small;
+- volumetric pieces show the fitted proportions and silhouette the mesh must actually have.
 
-Image-search comparable games (the hero is Toon-Link-class; search that class) and put the
-reference next to the capture BEFORE adjusting anything. For approval calls while the owner is busy,
-ask Sol in the GalaQuest project with the actual captures/renders attached — the owner delegated
-tactical visual approval to Sol on 2026-08-13 ("easier to correct things done later than stall");
-record Sol's ruling in the relevant doc, and the owner corrects later if needed.
+If image preparation becomes repetitive enough to deserve automation, add and test a public tool first,
+then update this runbook in the same PR. Do not document a command before it exists.
+
+Store working references under `tmp/` or another gitignored scratch surface. How the image is transferred
+from the authoring UI into that scratch area is execution-environment detail, not durable project guidance.
+
+## Visual confirmation
+
+Before adjusting a visible asset, search several comparable game references for the convention being
+solved and compare them beside the current GalaQuest runtime/capture. GalaQuest's own accepted public
+visual direction wins on identity, palette, silhouette and tone; external images are convention evidence.
+
+A tactical reviewer may make a call when the owner has explicitly delegated that review for the current
+work. Historical delegations recorded in old sessions are evidence, not standing approval authority.
