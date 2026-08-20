@@ -222,11 +222,27 @@ const FLAME_TIP_COLOR = 0xfff3d2;
  *  reason this geometry exists, and test/old-beacon.test.mjs asserts it stays positive. */
 export const FLAME_TIP_ABOVE_RIM_METERS = FLAME_TIP_HEIGHT_METERS - FLAME_ROOT_SINK_METERS
   - (CRESSET_HEIGHT_METERS - EMBER_RISE_METERS - EMBER_HEIGHT_METERS);
-// A second, much larger halo for the lit Beacon, hung at the flame's own middle rather than at the
+// A second, larger halo for the lit Beacon, hung at the flame's own middle rather than at the
 // cresset. The existing sprite is 1.6 m across and sits at the basket: perfect for "that thing is
 // not just scenery" at eighteen metres, far too small to be a bonfire on a tower. This one is the
 // light a child sees from the camp without looking up.
-export const BEACON_FIRE_GLOW_SIZE_METERS = 4.2;
+//
+// 2.8 m AND 0.7, NOT 4.2 m AND FULL, and the difference was visible the first time it was
+// photographed. An additive quad's contribution is area times opacity, so the first pass -- big
+// enough to cover a third of a portrait frame at nine metres, at the same strength as the small one
+// -- did not read as a Beacon lighting its clearing. It read as an orange filter over the whole
+// picture: the sky washed, the grass went warm to the horizon, and the pines on the frame edge came
+// out MAGENTA. The fire was drowning the world it was supposed to be a landmark in.
+//
+// The geometry is what says "it is burning" now (that is what beaconFlameParts is for). The halo
+// only has to say "and it throws light", which is a much smaller claim and wants a much smaller
+// quad. Kept above the gate lamp's own reach so the Beacon is still unmistakably the biggest light
+// in the world -- it is 1.75x the cold sprite's size and sits six metres up, where nothing else is.
+export const BEACON_FIRE_GLOW_SIZE_METERS = 2.8;
+/** What the fire halo peaks at, as a fraction of the ignition curve the cresset sprite follows. See
+ *  the size constant above: a bigger quad at the same opacity is not a brighter light, it is a
+ *  filter. Scaled rather than given its own curve so the two halos always rise together. */
+export const BEACON_FIRE_GLOW_SCALE = 0.7;
 /** Slow, and deliberately not a flicker. A flame that strobes reads as a broken light; a flame that
  *  BREATHES reads as alive, and the difference at gameplay distance is entirely the frequency. Two
  *  incommensurable sines so the loop never visibly repeats -- no Math.random anywhere near it, for
@@ -736,7 +752,7 @@ export function buildOldBeacon(scene, beacon) {
         sprite.material.color.setHex(BEACON_GLOW_WARM_COLOR);
         setGlowStrength(sprite, strength);
         applyFlame(1);
-        setGlowStrength(fireGlow, BEACON_GLOW_LIT);
+        setGlowStrength(fireGlow, BEACON_GLOW_LIT * BEACON_FIRE_GLOW_SCALE);
       } else {
         applyFlame(beaconFlameScale(0));
       }
@@ -754,7 +770,7 @@ export function buildOldBeacon(scene, beacon) {
           sprite.material.color.setHex(t >= 0.5 ? BEACON_GLOW_WARM_COLOR : BEACON_GLOW_COLOR);
           setGlowStrength(sprite, strength);
           applyFlame(beaconFlameScale(litSeconds));
-          setGlowStrength(fireGlow, strength);
+          setGlowStrength(fireGlow, strength * BEACON_FIRE_GLOW_SCALE);
           return;
         }
         // SETTLED, AND STILL ALIVE. The Beacon burns for the rest of the session, so this is the one
