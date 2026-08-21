@@ -20,6 +20,16 @@ export function isTerminalMeshyStatus(status) {
   return TERMINAL_MESHY_STATUSES.includes(status);
 }
 
+// How many CONSECUTIVE failed polls of an ALREADY-PAID task the Forge tolerates before it stops
+// polling. Stopping is not the same as abandoning the task: the pending record deliberately
+// survives, so the owner resumes this exact taskId instead of paying for a replacement. A network
+// blip during a two-minute generation must never become a second charge.
+export const MAX_CONSECUTIVE_POLL_FAILURES = 6;
+
+export function shouldAbandonPolling(consecutiveFailures) {
+  return consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES;
+}
+
 function validRecord(value) {
   return Boolean(value)
     && typeof value === 'object'

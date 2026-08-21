@@ -10,7 +10,8 @@ import { cameraPositionFor } from '../review/cameraPresets.js';
 import { loadGLB } from '../world/assets.js';
 import { createFitSession, FORGE_FIT_SCHEMA } from './fitAuthoring.js';
 import {
-  clearPendingTask, isTerminalMeshyStatus, loadPendingTask, savePendingTask,
+  clearPendingTask, isTerminalMeshyStatus, loadPendingTask,
+  MAX_CONSECUTIVE_POLL_FAILURES, savePendingTask, shouldAbandonPolling,
 } from './pendingTask.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -363,8 +364,9 @@ async function pollAndMountTask(taskId, kind) {
     } catch (error) {
       // Transient poll failures (network blip, server restart) must not abandon a paid task.
       consecutiveFailures += 1;
-      taskProgress(true, task?.progress ?? 0, `poll failed (${consecutiveFailures}/6) · ${error.message}`);
-      if (consecutiveFailures >= 6) break;
+      taskProgress(true, task?.progress ?? 0,
+        `poll failed (${consecutiveFailures}/${MAX_CONSECUTIVE_POLL_FAILURES}) · ${error.message}`);
+      if (shouldAbandonPolling(consecutiveFailures)) break;
       continue;
     }
     taskProgress(true, task.progress ?? 0, `${task.status} · ${task.progress ?? 0}%`);
