@@ -1,3 +1,4 @@
+import './responsive.js';
 import * as THREE from '../../vendor/three.module.min.js';
 
 const DEG = 180 / Math.PI;
