@@ -207,6 +207,23 @@ const KNOWN_DORMANT_DEFECTS = new Map([
   ['public/assets/enemies/candidates/bramble-stalker-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
   ['public/assets/gear/candidates/dawnwarden-sword-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
   ['public/assets/gear/candidates/dawnwarden-helmet-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  // Enemy Wave 1 rigged Meshy candidates. Structural intake passed, but the raw provider export
+  // keeps the same flooded emissive / PBR-default material signature. These files are candidate-only
+  // and have no active runtime load path; promotion requires material cleanup/re-export or a loader
+  // path that applies normaliseCharacterMaterial().
+  ['public/assets/enemies/candidates/spriggan-scrapper-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/thornback-orc-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/stagroot-warden-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/coalclaw-kobold-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/cinderfang-raider-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/magmahorn-juggernaut-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/snowfang-marauder-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/iceback-ogre-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/frostbound-warden-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/boneguard-raider-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/tombmaul-knight-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/graveflame-reaper-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/stormbreaker-colossus-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
 ]);
 
 test('every actively-loaded character GLB has its material defect, if any, either absent or fully neutralised by normaliseCharacterMaterial', () => {
