@@ -2,12 +2,27 @@ import * as THREE from '../../vendor/three.module.min.js';
 
 const DEG = 180 / Math.PI;
 
-function cloneBaseline(anchor) {
-  return Object.freeze({
+function baselineFor(anchor) {
+  const stored = anchor.userData?.gqForgeFitBaseline;
+  if (stored) {
+    return Object.freeze({
+      position: new THREE.Vector3().fromArray(stored.position),
+      quaternion: new THREE.Quaternion().fromArray(stored.quaternion),
+      scale: new THREE.Vector3().fromArray(stored.scale),
+    });
+  }
+
+  const baseline = {
     position: anchor.position.clone(),
     quaternion: anchor.quaternion.clone(),
     scale: anchor.scale.clone(),
-  });
+  };
+  anchor.userData.gqForgeFitBaseline = {
+    position: baseline.position.toArray(),
+    quaternion: baseline.quaternion.toArray(),
+    scale: baseline.scale.toArray(),
+  };
+  return Object.freeze(baseline);
 }
 
 function finite3(value, fallback = [0, 0, 0]) {
@@ -40,11 +55,13 @@ function transformOut(anchor) {
  * stored on the anchor in parent-local space, so it follows the bone normally once the animation runs.
  * Rotation deltas are local XYZ, composed on top of the captured candidate baseline. Uniform scale is
  * multiplicative around the baseline. Every apply starts from the original baseline: edits never drift.
+ * The pristine baseline is stored on the anchor itself so switching candidates away/back cannot turn a
+ * temporary Forge edit into a new baseline.
  */
 export function createFitSession(anchor) {
   if (!anchor?.isObject3D || !anchor.parent) throw new Error('fit authoring requires a mounted THREE.Object3D anchor');
 
-  const baseline = cloneBaseline(anchor);
+  const baseline = baselineFor(anchor);
   let delta = {
     positionWorld: [0, 0, 0],
     rotationDeg: [0, 0, 0],
