@@ -95,6 +95,7 @@ export async function createStudioScene(canvas) {
 
   // ── explicit locked-comparison loadouts ─────────────────────────────────────────────────────
   let loadout = 'shipping';
+  let hiddenAnatomy = Object.freeze(hero.setAnatomyCoverage([]));
   let candidateLanternMount = null;
   let candidateWildwoodBladeMount = null;
   let candidateDawnwardenSwordMount = null;
@@ -140,6 +141,10 @@ export async function createStudioScene(canvas) {
     if (candidateLanternMount) candidateLanternMount.anchor.visible = name === 'candidate-with-lantern';
     if (candidateWildwoodBladeMount) candidateWildwoodBladeMount.anchor.visible = name === 'candidate-wildwood-blade';
     if (candidateDawnwardenSwordMount) candidateDawnwardenSwordMount.anchor.visible = name === 'candidate-dawnwarden-sword';
+    const descriptor = loadoutDescriptor(name);
+    if (!descriptor) throw new Error(`loadout descriptor missing for "${name}"`);
+    const nextHiddenAnatomy = Object.freeze(hero.setAnatomyCoverage(descriptor.hideAnatomy));
+
     if (candidateDawnwardenHelmetMount) candidateDawnwardenHelmetMount.anchor.visible = name === 'candidate-dawnwarden-helmet';
 
     // Exactly one weapon in the hand. Helmet review keeps the full shipping baseline and adds only
@@ -147,6 +152,7 @@ export async function createStudioScene(canvas) {
     const replacesSword = name === 'candidate-wildwood-blade' || name === 'candidate-dawnwarden-sword';
     if (shippingSwordMount) shippingSwordMount.anchor.visible = !replacesSword;
     if (shippingShieldMount) shippingShieldMount.anchor.visible = name !== 'shipping-sword-only';
+    hiddenAnatomy = nextHiddenAnatomy;
     loadout = name;
   }
 
@@ -319,6 +325,7 @@ export async function createStudioScene(canvas) {
     get currentTime() { return currentAction?.time ?? 0; },
     get playing() { return playing; },
     get loadout() { return loadout; },
+    get hiddenAnatomy() { return [...hiddenAnatomy]; },
     get overlay() { return overlay; },
     GAMEPLAY_DISTANCE,
   };
