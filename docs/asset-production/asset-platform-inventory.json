@@ -2065,7 +2065,7 @@
       "provider_task_ids": [],
       "rig_task_id": null,
       "current_binary_location": "main:public/assets/gear/candidates/sword_wildwood_w1a.glb",
-      "sha256": null,
+      "sha256": "8a71123e4a1bffab851c2337df92a8e0ae0e3d14c70265a71c1168709be8ba71",
       "size_bytes": 88364,
       "git_blob_oid": "b044a77cc1fbc4425b313dc19f3385dd2a0f8969",
       "status": "candidate",

@@ -1,0 +1,152 @@
+{
+  "wave": "enemy-wave-1",
+  "owner_credit_ceiling": 500,
+  "observed_total_spend": 482,
+  "current_provider_balance_at_audit": 697,
+  "mapping_note": "Rig task IDs recorded in the same launch order as the Wave 1 source model ledger.",
+  "entries": [
+    {
+      "name": "Spriggan Scrapper",
+      "candidate_path": "public/assets/enemies/candidates/spriggan-scrapper-v1.glb",
+      "image_to_3d_task_id": "01a022c2-f4a4-7134-b2a7-190684b04449",
+      "rig_task_id": "01a022c5-8fb4-71c3-ac86-db31b0fa497d",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Thornback Orc",
+      "candidate_path": "public/assets/enemies/candidates/thornback-orc-v1.glb",
+      "image_to_3d_task_id": "01a022c3-03de-7dfe-9616-b58d8a9b5c4f",
+      "rig_task_id": "01a022c5-c06a-770e-9883-a21e6ae12e35",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Stagroot Warden",
+      "candidate_path": "public/assets/enemies/candidates/stagroot-warden-v1.glb",
+      "image_to_3d_task_id": "01a022c3-1355-7cbb-88df-111a2248a7f3",
+      "rig_task_id": "01a022c5-e4cd-7710-9e27-61976c468f5e",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Coalclaw Kobold",
+      "candidate_path": "public/assets/enemies/candidates/coalclaw-kobold-v1.glb",
+      "image_to_3d_task_id": "01a022c3-2173-7cbd-9f84-b233c003bbe6",
+      "rig_task_id": "01a022c7-1190-7ebf-a3a6-3eabb4a690ba",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Cinderfang Raider",
+      "candidate_path": "public/assets/enemies/candidates/cinderfang-raider-v1.glb",
+      "image_to_3d_task_id": "01a022c3-2f7c-7e10-8508-72c176cc9cdd",
+      "rig_task_id": "01a022c7-5c78-7234-bec0-e31f5c328227",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Magmahorn Juggernaut",
+      "candidate_path": "public/assets/enemies/candidates/magmahorn-juggernaut-v1.glb",
+      "image_to_3d_task_id": "01a022c3-3f4e-76a3-8b03-f42da4c6be6d",
+      "rig_task_id": "01a022c7-8283-7ee0-9f69-2d40003958de",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Snowfang Marauder",
+      "candidate_path": "public/assets/enemies/candidates/snowfang-marauder-v1.glb",
+      "image_to_3d_task_id": "01a022c3-4d65-76a8-913b-1d0ef9360a24",
+      "rig_task_id": "01a022c7-aade-7ee3-8042-c4a1bffae41c",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Iceback Ogre",
+      "candidate_path": "public/assets/enemies/candidates/iceback-ogre-v1.glb",
+      "image_to_3d_task_id": "01a022c3-5cd0-7144-b5c7-ca75d5bdd5f9",
+      "rig_task_id": "01a022c7-d8c8-7255-bec7-e335bc585994",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Frostbound Warden",
+      "candidate_path": "public/assets/enemies/candidates/frostbound-warden-v1.glb",
+      "image_to_3d_task_id": "01a022c3-77c1-7e19-8251-cb1649bc8e53",
+      "rig_task_id": "01a022c8-0132-7db6-9f98-4e34ffabf7d6",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Boneguard Raider",
+      "candidate_path": "public/assets/enemies/candidates/boneguard-raider-v1.glb",
+      "image_to_3d_task_id": "01a022c3-950d-7e1f-a29a-ffe70afc8677",
+      "rig_task_id": "01a022c8-3270-7270-808a-c6fa6b7bd71e",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Tombmaul Knight",
+      "candidate_path": "public/assets/enemies/candidates/tombmaul-knight-v1.glb",
+      "image_to_3d_task_id": "01a022c3-a5f2-7e24-b58e-dd509791e724",
+      "rig_task_id": "01a022c8-5863-7dbc-8c98-868b5599cc34",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Graveflame Reaper",
+      "candidate_path": "public/assets/enemies/candidates/graveflame-reaper-v1.glb",
+      "image_to_3d_task_id": "01a022c3-b8ca-7ccb-bb21-7c04a9c745f6",
+      "rig_task_id": "01a022c8-7d2a-7277-9ab2-0965094e9cd0",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    },
+    {
+      "name": "Stormbreaker Colossus",
+      "candidate_path": "public/assets/enemies/candidates/stormbreaker-colossus-v1.glb",
+      "image_to_3d_task_id": "01a022c3-cc9a-76b8-a968-3a86e078e61c",
+      "rig_task_id": "01a022c8-a568-7dbf-9254-43d45434a91b",
+      "base_rigged_glb_committed": true,
+      "basic_walk_run_available_from_rig_task": true,
+      "walk_run_committed": false,
+      "promotion_status": "candidate-only",
+      "visual_acceptance": "UNKNOWN"
+    }
+  ]
+}
