@@ -189,6 +189,17 @@ export function openRewardStore(path) {
   // have no other source today (public/src/world/cartLoot.js's CART_LOOT_TABLE is the only thing
   // that ever calls applyLootAward), so this doubles as exactly "which cart-loot:* ids are already
   // spent" without this file needing to know that table exists.
+  // Every durable fact one profile owns, as facts rather than as derived totals. The client keeps
+  // its own local journal so a family's progress survives this database being wiped or unavailable
+  // (see public/src/progression/profiles.js), and a journal can only be merged with this store if
+  // both sides hold the SAME facts under the same ids -- handing over a count would give the client
+  // a number it could not reconcile, only overwrite. Ordered by rowid so `weapon-equipped`, the one
+  // latest-wins field, arrives in the order it was written rather than in whatever order SQLite
+  // finds convenient.
+  const profileFactsStmt = db.prepare(
+    'SELECT id, type, value FROM reward_events WHERE guest_id = ? ORDER BY rowid ASC',
+  );
+
   const creditedLootIdsStmt = db.prepare(
     "SELECT id FROM reward_events WHERE type IN ('coin-earned', 'shard-earned')",
   );
@@ -255,6 +266,20 @@ export function openRewardStore(path) {
 
   function marksFor(guestId) {
     return marksStmt.get(guestId).c;
+  }
+
+  /** This profile's durable facts, shaped for public/src/progression/facts.js's union: `eventId` is
+   *  the same idempotency key apply() writes, so merging these into a local journal that already
+   *  holds some of them is a no-op for the overlap. `seq` carries the store's own write order, which
+   *  is what lets the client resolve the equipped weapon without depending on which side it read
+   *  first. */
+  function profileFactsFor(guestId) {
+    return profileFactsStmt.all(guestId).map((row, index) => ({
+      eventId: row.id,
+      type: row.type,
+      value: row.value ?? undefined,
+      seq: index,
+    }));
   }
 
   function coinsFor(guestId) {
@@ -324,6 +349,7 @@ export function openRewardStore(path) {
   return {
     apply,
     marksFor,
+    profileFactsFor,
     unlockedFor,
     satchelTakenFor,
     charmEarnedFor,

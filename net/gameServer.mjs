@@ -451,12 +451,17 @@ export function createRewardCoordinator(options = {}) {
     if (guestId) {
       const durableEventId = `mark:${guestId}:${award.lifeId}`;
       const result = store.apply({ guestId, heroId: award.heroId, type: 'mark-earned', eventId: durableEventId });
-      if (result.applied) events.push({ type: 'mark-earned', heroId: award.heroId });
+      // The durable eventId rides the event so the client can journal THIS fact under the same id
+      // the store used. That is what makes the device's copy mergeable with this one rather than a
+      // second opinion -- see public/src/progression/facts.js's union law.
+      if (result.applied) events.push({ type: 'mark-earned', heroId: award.heroId, eventId: durableEventId });
       if (store.marksFor(guestId) >= MARKS_TO_UNLOCK) {
         const unlocked = store.apply({
           guestId, heroId: award.heroId, type: 'lantern-unlocked', eventId: `lantern:${guestId}`,
         });
-        if (unlocked.applied) events.push({ type: 'lantern-unlocked', heroId: award.heroId });
+        if (unlocked.applied) {
+          events.push({ type: 'lantern-unlocked', heroId: award.heroId, eventId: `lantern:${guestId}` });
+        }
       }
       return events;
     }
@@ -555,6 +560,16 @@ export function createRewardCoordinator(options = {}) {
     charmEarnedFor(heroId) {
       const guestId = guestIdByPlayer.get(heroId);
       return guestId ? store.charmEarnedFor(guestId) : false;
+    },
+    /** Every durable fact this hero's profile owns, for the client to merge into its own local
+     *  journal. Facts, not totals: a device that keeps its own copy of family progress has to be
+     *  able to union the two sets by id (public/src/progression/facts.js), and a count cannot be
+     *  unioned with anything -- it can only overwrite or be overwritten, which is precisely the
+     *  ambiguity local-first is supposed to remove. Empty for an ephemeral, guestId-less hero,
+     *  which genuinely owns nothing durable. */
+    profileFactsFor(heroId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      return guestId ? store.profileFactsFor(guestId) : [];
     },
     recordBeaconLit,
     beaconLit,
