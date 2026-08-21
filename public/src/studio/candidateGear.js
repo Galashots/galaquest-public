@@ -19,6 +19,10 @@ export const DAWNWARDEN_HELMET_CANDIDATE = Object.freeze({
   boneName: 'Head',
   url: 'assets/gear/candidates/dawnwarden-helmet-v1.glb',
   kind: 'helmet',
+  // Semantic coverage is authored gear data, not a global "head slot" assumption. This open-face
+  // helm must clear the Hero's hair and ears while preserving the face/eyes/brows. Runtime occlusion
+  // will consume these names once the Hero carries the matching _GQ_REGION anatomy tags.
+  hideAnatomy: Object.freeze(['hair', 'ears']),
   targetWorldLongest: 0.38,
   worldUpOffset: 0.10,
 });
