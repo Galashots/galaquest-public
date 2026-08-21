@@ -1,35 +1,7 @@
 /**
- * Character Studio review harness (A1 Studio convergence) -- the committed acceptance seam for the
- * public Studio's review states, standard views, and deterministic state publication.
- *
- *   node tools/runtime-test/review-studio.mjs [--tag <label>]
- *
- * Port 9224 -- the isolated automation Chrome. NOT 9223, which is the owner's signed-in browser.
- *
- * WHAT IT PROVES (gate: true -- these are behavioural invariants, not aesthetics):
- *   - every loadout in loadoutDescriptors.js actually executes, and after each switch the LIVE
- *     scene-graph gear visibility (getState().gear) matches what the descriptor claims -- the
- *     descriptor is the claim, the anchors are the truth, and this harness is where they can
- *     disagree;
- *   - exactly one sword is ever visible in the weapon hand, in every loadout;
- *   - an unknown loadout fails closed (throws, state unchanged);
- *   - switching loadout preserves the selected view; the camera lands exactly where
- *     cameraPositionFor says for every bearing AND actually looks at the subject (position alone
- *     would pass a camera aimed at the sky);
- *   - the closeup scale genuinely frames the current review target at CLOSEUP_DISTANCE;
- *   - switching loadout actually changes the RENDERED PIXELS (a scene graph can claim a candidate
- *     is visible while the frame is unchanged), with a same-state control proving the probe can
- *     return zero;
- *   - the two provenance fields stay distinct: loadoutIsShipping means "the baseline state", not
- *     "no candidate mounted";
- *   - the on-screen loadout menu drives the same state the API reads back;
- *   - the control panel leaves the inspection surface usable at portrait AND landscape
- *     tablet viewports, and collapses down to its header row on demand.
- *
- * WHAT IT DOES NOT PROVE: that any of it LOOKS right. The captures in
- * .local/runtime-test/studio-review/ exist for a person to open and judge -- running-game pixels
- * stay the appearance authority (AGENTS.md), and this harness's green exit is a behaviour claim
- * only.
+ * Character Studio review harness -- behavioural invariants plus deterministic screenshots for human
+ * visual judgment. Green means the requested review state really rendered; it never means the asset
+ * looks good.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -119,7 +91,6 @@ async function openStudioPage(viewport) {
   });
   await page.send('Emulation.setDeviceMetricsOverride', viewport);
   await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-  // Fresh-guest discipline (GQ-008, docs/MISTAKES.md): every navigating harness starts known.
   await page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
   await page.send('Page.navigate', { url: `${server.url}studio.html` });
   let ready = false;
@@ -139,7 +110,6 @@ async function shot(page, name) {
 const state = (page) => page.eval('window.__galaQuestStudio.getState()');
 const gearById = (s) => new Map(s.gear.map((item) => [item.id, item]));
 
-/** The descriptor is the CLAIM; the anchors in getState().gear are the TRUTH. */
 function checkGearMatchesDescriptor(s, id) {
   const descriptor = loadoutDescriptor(id);
   const live = gearById(s);
@@ -162,16 +132,11 @@ function checkGearMatchesDescriptor(s, id) {
     && Boolean(live.get(s.reviewTarget)?.visible), `reviewTarget=${s.reviewTarget}`);
   check(`[${id}] gear provenance is published`, s.loadoutGearProvenance === descriptor.gearProvenance,
     `${s.loadoutGearProvenance} vs ${descriptor.gearProvenance}`);
-  // The two fields that must never be treated as synonyms (loadoutDescriptors.js's header): the
-  // baseline boolean is true ONLY for `shipping`, while provenance answers the different question
-  // of whether any unshipped mesh is in frame. Checked live, against the running Studio, because a
-  // capture consumer reads exactly these two fields to decide what a screenshot may be used for.
-  check(`[${id}] loadoutIsShipping means "the baseline state", not "no candidate mounted"`,
+  check(`[${id}] loadoutIsShipping means baseline, not provenance`,
     s.loadoutIsShipping === (id === 'shipping'),
     `loadoutIsShipping=${s.loadoutIsShipping} provenance=${s.loadoutGearProvenance}`);
 }
 
-// ── portrait: the full behavioural pass ───────────────────────────────────────────────────────
 console.log('\n== portrait (768x1024) ==');
 const portrait = await openStudioPage(PORTRAIT_VIEWPORT);
 check('Studio boots at portrait', portrait.ready);
@@ -187,21 +152,18 @@ const baseline = await state(page);
 check('baseline loadout is shipping', baseline.loadout === 'shipping');
 check('baseline lighting is game/authoritative', baseline.lightingMode === 'game' && baseline.lightingAuthoritative === true);
 check('baseline view is inspection/three-quarter',
-  baseline.view.scale === 'inspection' && baseline.view.bearing === 'three-quarter',
-  JSON.stringify(baseline.view));
+  baseline.view.scale === 'inspection' && baseline.view.bearing === 'three-quarter', JSON.stringify(baseline.view));
 check('lazy candidates start unmounted',
   baseline.gear.every((item) => item.mounted || loadoutDescriptor('shipping').gear.every((g) => g.id !== item.id)),
   JSON.stringify(baseline.gear.map((item) => `${item.id}:${item.mounted}`)));
 
-// Freeze the pose so every capture and measurement below is a pure function of the requested state.
 await page.eval('window.__galaQuestStudio.setAnimationPlaying(false)');
 await page.eval('window.__galaQuestStudio.setAnimationTime(0.5)');
 
-// Every loadout executes, the scene matches the descriptor, and the view survives the switch.
 await page.eval('window.__galaQuestStudio.setView("inspection", "three-quarter")');
 for (const id of LOADOUT_IDS) {
   await page.eval(`window.__galaQuestStudio.setLoadout(${JSON.stringify(id)})`);
-  await sleep(150);
+  await sleep(350);
   const s = await state(page);
   check(`[${id}] selected loadout is reported back`, s.loadout === id, s.loadout);
   check(`[${id}] view preserved across the switch`,
@@ -210,7 +172,6 @@ for (const id of LOADOUT_IDS) {
   await shot(page, `portrait-${id}-inspection-three-quarter`);
 }
 
-// Unknown loadout fails closed: throws, and the selected state does not move.
 let threw = false;
 try {
   await page.eval('window.__galaQuestStudio.setLoadout("helmet-of-wishes")');
@@ -221,9 +182,6 @@ const afterBad = await state(page);
 check('unknown loadout throws', threw);
 check('unknown loadout leaves state untouched', afterBad.loadout === LOADOUT_IDS[LOADOUT_IDS.length - 1], afterBad.loadout);
 
-// The camera lands exactly where cameraPositionFor says, for every bearing -- computed here in
-// Node from the same exported math, compared against the live camera. Hero root sits at the origin
-// in Studio, so the expectation needs no scene state beyond the bearing itself.
 await page.eval('window.__galaQuestStudio.setLoadout("shipping")');
 for (const [bearing] of BEARINGS) {
   await page.eval(`window.__galaQuestStudio.setView("inspection", ${JSON.stringify(bearing)})`);
@@ -231,10 +189,6 @@ for (const [bearing] of BEARINGS) {
   const expected = cameraPositionFor('inspection', bearing, 0.9, [0, 0, 0]);
   const drift = Math.hypot(...actual.map((v, i) => v - expected[i]));
   check(`camera lands deterministically at inspection/${bearing}`, drift < 1e-6, `drift ${drift}`);
-  // Position alone is only half of a framing: a camera standing in exactly the right place while
-  // aimed somewhere else photographs the sky and still passes the check above. The expected look
-  // direction is computed here from plain vector maths against the subject the Studio claims to be
-  // framing (hero at the origin, eye height 0.9), then compared with the camera's own forward axis.
   const forward = await page.eval(`(() => {
     const c = window.__galaQuestStudioScene.camera;
     const v = new (c.position.constructor)(0, 0, -1).applyQuaternion(c.quaternion);
@@ -249,66 +203,59 @@ for (const [bearing] of BEARINGS) {
   await shot(page, `portrait-shipping-inspection-${bearing}`);
 }
 
-// Closeup frames the CURRENT review target at CLOSEUP_DISTANCE (horizontal), not the whole hero.
-// Photographed from 'opposite-side' -- the sword hand's own side of this rig; from 'side' the
-// shield fills the whole frame (seen in this harness's first captures, not assumed).
-for (const id of ['shipping', 'candidate-wildwood-blade']) {
+// High-value fit views. Dawnwarden sword explicitly includes rear/back closeups so a reviewer can
+// see whether the hilt is actually seated in the hand rather than merely near the wrist. Helmet
+// closeups circle the head to expose body/hair/clothing overlap from every useful side.
+const closeupPlans = Object.freeze({
+  shipping: ['opposite-side'],
+  'candidate-wildwood-blade': ['opposite-side', 'back'],
+  'candidate-dawnwarden-sword': ['side', 'rear-three-quarter', 'back', 'opposite-side'],
+  'candidate-dawnwarden-helmet': ['front', 'three-quarter', 'side', 'rear-three-quarter', 'back'],
+});
+for (const [id, bearings] of Object.entries(closeupPlans)) {
   await page.eval(`window.__galaQuestStudio.setLoadout(${JSON.stringify(id)})`);
-  await page.eval('window.__galaQuestStudio.setView("closeup", "opposite-side")');
-  const measured = await page.eval(`(() => {
-    const scene = window.__galaQuestStudioScene;
-    const target = ${JSON.stringify(loadoutDescriptor(id).reviewTarget)};
-    const bone = ${JSON.stringify(loadoutDescriptor(id).gear.find((g) => g.id === loadoutDescriptor(id).reviewTarget).bone)};
-    const anchor = scene.hero.root.getObjectByName('InterimAdapter_' + target + '_' + bone);
-    if (!anchor) return null;
-    const p = new (anchor.position.constructor)();
-    anchor.getWorldPosition(p);
-    const c = scene.camera.position;
-    return Math.hypot(c.x - p.x, c.z - p.z);
-  })()`);
-  check(`[${id}] closeup stands CLOSEUP_DISTANCE from the review target`,
-    measured !== null && Math.abs(measured - CLOSEUP_DISTANCE) < 1e-3, `horizontal ${measured}`);
-  await sleep(120);
-  await shot(page, `portrait-${id}-closeup-opposite-side`);
+  for (const bearing of bearings) {
+    await page.eval(`window.__galaQuestStudio.setView("closeup", ${JSON.stringify(bearing)})`);
+    const measured = await page.eval(`(() => {
+      const scene = window.__galaQuestStudioScene;
+      const target = ${JSON.stringify(loadoutDescriptor(id).reviewTarget)};
+      const bone = ${JSON.stringify(loadoutDescriptor(id).gear.find((g) => g.id === loadoutDescriptor(id).reviewTarget).bone)};
+      const anchor = scene.hero.root.getObjectByName('InterimAdapter_' + target + '_' + bone);
+      if (!anchor) return null;
+      const p = new (anchor.position.constructor)();
+      anchor.getWorldPosition(p);
+      const c = scene.camera.position;
+      return Math.hypot(c.x - p.x, c.z - p.z);
+    })()`);
+    check(`[${id}] closeup/${bearing} stands CLOSEUP_DISTANCE from review target`,
+      measured !== null && Math.abs(measured - CLOSEUP_DISTANCE) < 1e-3, `horizontal ${measured}`);
+    await sleep(150);
+    await shot(page, `portrait-${id}-closeup-${bearing}`);
+  }
 }
 
-// The on-screen controls follow API-driven changes too (api.onStateChange -> refreshControls):
-// a worker switching the loadout must never leave the menu claiming the previous state -- the
-// stale-label defect this harness's own first captures exposed.
+// Put a known candidate state back on screen before checking UI synchronization.
+await page.eval('window.__galaQuestStudio.setLoadout("candidate-dawnwarden-sword")');
+await page.eval('window.__galaQuestStudio.setView("closeup", "back")');
 const menuAfterApi = await page.eval(`({
   loadout: document.querySelector('#loadout-select').value,
   scale: document.querySelector('#scale-select').value,
   bearing: document.querySelector('#bearing-select').value,
   review: document.querySelector('#review-target').textContent,
 })`);
-check('the loadout menu follows API-driven changes', menuAfterApi.loadout === 'candidate-wildwood-blade', menuAfterApi.loadout);
+check('the loadout menu follows API-driven changes', menuAfterApi.loadout === 'candidate-dawnwarden-sword', menuAfterApi.loadout);
 check('the view menus follow API-driven changes',
-  menuAfterApi.scale === 'closeup' && menuAfterApi.bearing === 'opposite-side',
-  `${menuAfterApi.scale}/${menuAfterApi.bearing}`);
-// Asserts the MEANING the line has to carry -- it names the review target and says out loud that
-// an unshipped asset is in frame -- rather than one exact spelling, so rewording the label stays
-// free while dropping the candidate warning fails.
+  menuAfterApi.scale === 'closeup' && menuAfterApi.bearing === 'back', `${menuAfterApi.scale}/${menuAfterApi.bearing}`);
 check('the review line follows API-driven changes and flags the candidate',
-  menuAfterApi.review.includes('sword_wildwood_w1a') && /candidate/i.test(menuAfterApi.review)
-  && /not shipped/i.test(menuAfterApi.review),
-  menuAfterApi.review);
+  menuAfterApi.review.includes('sword_dawnwarden_v1') && /candidate/i.test(menuAfterApi.review)
+  && /not shipped/i.test(menuAfterApi.review), menuAfterApi.review);
 
-// ── does switching loadout actually change the PICTURE? ────────────────────────────────────────
-// Every check above reads the scene graph, and a scene graph can say "the candidate blade is
-// visible" while nothing about the rendered frame changes (wrong anchor, zero scale, mesh inside
-// the body). This probe reads the actual rendered pixels: it downsamples the live canvas into a 2D
-// canvas inside the page and counts pixels that differ between two captured states.
-//
-// The CONTROL matters as much as the comparisons. Capturing the same state twice must return
-// ~zero, which is what proves the probe is measuring the render at all rather than returning a
-// large number for everything -- and it doubles as a determinism check on the frozen pose.
+// Pixel probe: state claims are not enough; named candidates must visibly change rendered pixels.
 await page.eval(`(() => {
   window.__gqPixels = {
     snaps: {},
     async grab(slot) {
       const canvas = document.querySelector('#studio-canvas');
-      // Read inside a rAF callback, which runs after the Studio's own render for this frame, so the
-      // WebGL drawing buffer still holds the rendered image (it is cleared at composite time).
       await new Promise((resolve) => requestAnimationFrame(() => resolve()));
       const off = document.createElement('canvas');
       off.width = 192; off.height = 256;
@@ -333,7 +280,7 @@ await page.eval(`(() => {
 async function pixelsOf(loadoutId, scale, bearing, slot) {
   await page.eval(`window.__galaQuestStudio.setLoadout(${JSON.stringify(loadoutId)})`);
   await page.eval(`window.__galaQuestStudio.setView(${JSON.stringify(scale)}, ${JSON.stringify(bearing)})`);
-  await sleep(250);
+  await sleep(350);
   const length = await page.eval(`window.__gqPixels.grab(${JSON.stringify(slot)})`);
   if (!length) throw new Error(`pixel probe returned nothing for ${slot}`);
 }
@@ -342,50 +289,47 @@ const pixelDiff = (a, b) => page.eval(`window.__gqPixels.diff(${JSON.stringify(a
 await pixelsOf('shipping', 'inspection', 'opposite-side', 'control-1');
 await pixelsOf('shipping', 'inspection', 'opposite-side', 'control-2');
 const controlDiff = await pixelDiff('control-1', 'control-2');
-check('the pixel probe reads the render: an unchanged state renders identically',
+check('the pixel probe reads the render: unchanged state renders identically',
   controlDiff !== null && controlDiff < 0.001, `${(controlDiff * 100).toFixed(3)}% of pixels differ`);
 
 await pixelsOf('candidate-wildwood-blade', 'inspection', 'opposite-side', 'wildwood-side');
-const swordSwapDiff = await pixelDiff('control-1', 'wildwood-side');
-check('swapping in the candidate blade visibly changes the render at the sword-side view',
-  swordSwapDiff !== null && swordSwapDiff > 0.004,
-  `${(swordSwapDiff * 100).toFixed(3)}% of pixels differ vs shipping`);
+const wildwoodDiff = await pixelDiff('control-1', 'wildwood-side');
+check('Wildwood blade visibly changes the sword-side render',
+  wildwoodDiff !== null && wildwoodDiff > 0.004, `${(wildwoodDiff * 100).toFixed(3)}% differ`);
+
+await pixelsOf('candidate-dawnwarden-sword', 'inspection', 'opposite-side', 'dawnwarden-sword-side');
+const dawnwardenSwordDiff = await pixelDiff('control-1', 'dawnwarden-sword-side');
+check('Dawnwarden sword visibly changes the sword-side render',
+  dawnwardenSwordDiff !== null && dawnwardenSwordDiff > 0.004,
+  `${(dawnwardenSwordDiff * 100).toFixed(3)}% differ`);
+await shot(page, 'portrait-candidate-dawnwarden-sword-inspection-opposite-side');
+
+await pixelsOf('shipping', 'inspection', 'front', 'shipping-front');
+await pixelsOf('candidate-dawnwarden-helmet', 'inspection', 'front', 'dawnwarden-helmet-front');
+const helmetDiff = await pixelDiff('shipping-front', 'dawnwarden-helmet-front');
+check('Dawnwarden helmet visibly changes the front render',
+  helmetDiff !== null && helmetDiff > 0.004, `${(helmetDiff * 100).toFixed(3)}% differ`);
+await shot(page, 'portrait-candidate-dawnwarden-helmet-inspection-front');
 
 await pixelsOf('shipping', 'inspection', 'three-quarter', 'shipping-3q');
 await pixelsOf('shipping-sword-only', 'inspection', 'three-quarter', 'sword-only-3q');
 const shieldHiddenDiff = await pixelDiff('shipping-3q', 'sword-only-3q');
-check('hiding the shield visibly changes the render at the default view',
+check('hiding the shield visibly changes the default render',
   shieldHiddenDiff !== null && shieldHiddenDiff > 0.004,
-  `${(shieldHiddenDiff * 100).toFixed(3)}% of pixels differ vs shipping`);
+  `${(shieldHiddenDiff * 100).toFixed(3)}% differ`);
 
-// NOT a gate, and deliberately so: this measures how much the candidate sword swap shows at the
-// DEFAULT three-quarter bearing, which looks at the shield arm and largely hides the sword hand
-// behind the body. The number is published so a reviewer knows to use the sword-side or closeup
-// path for weapon review rather than discovering the occlusion by eye. A threshold here would be
-// inventing an appearance verdict this harness has no authority to make.
-await pixelsOf('candidate-wildwood-blade', 'inspection', 'three-quarter', 'wildwood-3q');
-const defaultViewDiff = await pixelDiff('shipping-3q', 'wildwood-3q');
-console.log(`NOTE  the candidate sword swap changes ${(defaultViewDiff * 100).toFixed(3)}% of pixels at the`
-  + ' DEFAULT inspection/three-quarter bearing, versus'
-  + ` ${(swordSwapDiff * 100).toFixed(3)}% at inspection/opposite-side -- weapon review belongs on the`
-  + ' sword-side or closeup path.');
-results.push({ name: 'candidate visibility by bearing (not a gate)', passed: null, detail: { defaultViewDiff, swordSwapDiff } });
-await shot(page, 'portrait-candidate-wildwood-blade-inspection-three-quarter-occluded');
-
-// The on-screen menu drives the same state the API reads back -- the UI is not a second truth.
 await page.eval(`(() => {
   const select = document.querySelector('#loadout-select');
-  select.value = 'shipping-sword-only';
+  select.value = 'candidate-dawnwarden-helmet';
   select.dispatchEvent(new Event('change'));
 })()`);
-await sleep(300);
+await sleep(450);
 const viaMenu = await state(page);
-check('the loadout menu drives the API state', viaMenu.loadout === 'shipping-sword-only', viaMenu.loadout);
+check('the loadout menu drives the API state', viaMenu.loadout === 'candidate-dawnwarden-helmet', viaMenu.loadout);
 check('the review line shows the semantic target', await page.eval(
   'document.querySelector("#review-target").textContent',
 ).then((t) => t.includes(viaMenu.reviewTarget)), 'review-target text');
 
-// Panel occlusion: the inspection surface stays usable, and the panel really collapses.
 async function panelRect() {
   return page.eval(`(() => { const r = document.querySelector('#studio-panel').getBoundingClientRect();
     return { w: r.width, h: r.height }; })()`);
@@ -398,14 +342,13 @@ await page.eval('document.querySelector("#panel-toggle").click()');
 const collapsed = await panelRect();
 check('the panel collapses to its header row', collapsed.h < open.h * 0.5 && collapsed.h < 100,
   `collapsed ${Math.round(collapsed.h)}px vs open ${Math.round(open.h)}px`);
-await shot(page, 'portrait-shipping-sword-only-collapsed-panel');
+await shot(page, 'portrait-dawnwarden-helmet-collapsed-panel');
 await page.eval('document.querySelector("#panel-toggle").click()');
 
 check('no uncaught page exceptions during the portrait pass', portrait.exceptions.length === 0,
   portrait.exceptions.slice(0, 3).join(' | '));
 await browser.send('Target.closeTarget', { targetId: portrait.targetId });
 
-// ── landscape: boot, panel bounds, two captures ───────────────────────────────────────────────
 console.log('\n== landscape (1024x768) ==');
 const landscape = await openStudioPage(LANDSCAPE_VIEWPORT);
 check('Studio boots at landscape', landscape.ready);
@@ -415,11 +358,15 @@ if (landscape.ready) {
   await landscape.page.eval('window.__galaQuestStudio.setView("inspection", "three-quarter")');
   await sleep(150);
   await shot(landscape.page, 'landscape-shipping-inspection-three-quarter');
-  await landscape.page.eval('window.__galaQuestStudio.setLoadout("candidate-wildwood-blade")');
-  await sleep(200);
-  const ls = await state(landscape.page);
-  checkGearMatchesDescriptor(ls, 'candidate-wildwood-blade');
-  await shot(landscape.page, 'landscape-candidate-wildwood-blade-inspection-three-quarter');
+
+  for (const id of ['candidate-dawnwarden-sword', 'candidate-dawnwarden-helmet']) {
+    await landscape.page.eval(`window.__galaQuestStudio.setLoadout(${JSON.stringify(id)})`);
+    await sleep(450);
+    const ls = await state(landscape.page);
+    checkGearMatchesDescriptor(ls, id);
+    await shot(landscape.page, `landscape-${id}-inspection-three-quarter`);
+  }
+
   const lr = await landscape.page.eval(`(() => { const r = document.querySelector('#studio-panel').getBoundingClientRect();
     return { w: r.width, h: r.height }; })()`);
   check('landscape panel leaves the inspection surface usable',

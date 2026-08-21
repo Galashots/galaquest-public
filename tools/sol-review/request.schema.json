@@ -44,7 +44,14 @@
             "lightingMode": { "type": "string", "enum": ["game", "diagnostic"] },
             "loadout": {
               "type": "string",
-              "enum": ["shipping", "shipping-sword-only", "candidate-with-lantern", "candidate-wildwood-blade"]
+              "enum": [
+                "shipping",
+                "shipping-sword-only",
+                "candidate-with-lantern",
+                "candidate-wildwood-blade",
+                "candidate-dawnwarden-sword",
+                "candidate-dawnwarden-helmet"
+              ]
             },
             "viewportPreset": { "type": "string", "enum": ["portrait", "landscape"] },
             "overlay": { "type": "string", "enum": ["none", "grip", "shield"] },
@@ -116,7 +123,14 @@
                 "samples": { "type": "integer", "minimum": 1, "maximum": 60 },
                 "loadout": {
                   "type": "string",
-                  "enum": ["shipping", "shipping-sword-only", "candidate-with-lantern", "candidate-wildwood-blade"]
+                  "enum": [
+                    "shipping",
+                    "shipping-sword-only",
+                    "candidate-with-lantern",
+                    "candidate-wildwood-blade",
+                    "candidate-dawnwarden-sword",
+                    "candidate-dawnwarden-helmet"
+                  ]
                 },
                 "tuningOverride": {
                   "type": "object",

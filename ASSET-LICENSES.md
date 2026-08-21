@@ -52,6 +52,7 @@ source licence in `NOTICE`.
 | `sword_silverguard.glb` | Meshy paid-plan generation from an owner-drawn concept, Blender finishing |
 | `helmet_silverguard.glb`, `shoulder_silverguard.glb` | Meshy paid-plan generation, owner-directed, Blender finishing. The right shoulder is the left mirrored by a negative X scale, not a second generation. |
 | `candidates/sword_wildwood_w1a.glb` | Meshy paid-plan generation, owner-directed. Candidate, not yet promoted to gameplay. |
+| `candidates/dawnwarden-helmet-v1.glb`, `candidates/dawnwarden-sword-v1.glb` | Meshy paid-plan generation, owner-directed, then re-exported clean (measured generator `pygltflib@v1.16.5`). **Candidate, not shipped.** Kept in-tree only because they are the reference the owner-accepted Asset Forge fit was authored against. |
 
 **Input-provenance check.** These were reviewed for deliberate third-party or franchise input before
 publication. The generation prompts themselves are not recoverable from this repository — they lived
@@ -60,6 +61,33 @@ for in each case (for example an open-faced helmet with no visor; a single isola
 with no arm sleeve), and it is consistently generic fantasy-armour language. A targeted search of the
 full engineering tree for named franchises, characters and recognisable properties returned **no
 matches** in any gear-generation record. On that evidence these assets are treated as original work.
+
+## Candidate bank held outside this repository
+
+Some owner-directed paid-plan Meshy output is deliberately **not** stored in Git. It is still project
+material and is recorded here so its basis is not lost along with its bytes.
+
+| Group | Where the bytes are | Count | Status |
+| --- | --- | --- | --- |
+| Wren Ranger, Bramble Stalker (base + walk + run each) | external source archive; also reachable on the unmerged branch `feat/ranger-lodge-expansion` | 6 files | candidate |
+| Enemy Wave 1 rigged candidates | external source archive; also reachable on the unmerged branch `feat/enemy-asset-wave-1` | 13 files | candidate |
+| Seven gear families x five slots | Meshy provider task output; never downloaded | 35 tasks | candidate |
+
+Basis is the same as the sections above: **owner-directed generation on a paid Meshy plan**,
+redistribution resting on the owner's rights in that generated output together with the paid-plan
+terms in force at generation time. **Not CC0**, and not covered by the source licence in
+[`NOTICE`](NOTICE).
+
+Every item's provider task IDs, byte size, SHA-256, git blob OID and archive destination are recorded
+in [`docs/asset-production/asset-platform-inventory.json`](docs/asset-production/asset-platform-inventory.json).
+
+Two honest limits. First, **candidate is not shipped**: nothing in this table has passed visual or
+running-game acceptance, and appearing here is not a promotion. Second, the input-provenance review
+below was performed against the *gear* generation record; the enemy and character candidates were
+generated from the same owner-directed generic-fantasy briefs recorded in
+`docs/asset-production/ENEMY_BATCH_2026-08-20.md`, which describes the roster as deliberately
+"designed for farming variety without copying any specific game character". That is the evidence
+available; it is a reasoned position, not a legal opinion, and no stronger claim is made here.
 
 Design *references* cited in project documentation — naming other games when discussing, say, a row of
 hearts as a health-display precedent — are commentary, not derivation. No asset here is traced from
