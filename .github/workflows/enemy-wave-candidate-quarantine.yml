@@ -1,0 +1,68 @@
+name: Enemy Wave Candidate Quarantine
+
+on:
+  push:
+    branches:
+      - feat/enemy-asset-wave-1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/enemy-asset-wave-1
+          fetch-depth: 0
+
+      - name: Record dormant Meshy material defects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('test/glb-materials.test.mjs')
+          text = path.read_text()
+          marker = "  ['public/assets/gear/candidates/dawnwarden-helmet-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],\n]);"
+          block = """  ['public/assets/gear/candidates/dawnwarden-helmet-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  // Enemy Wave 1 raw Meshy rigged candidates. The ingestion audit proves they are structurally
+  // valid skinned GLBs, but the provider export carries the same known flooded/PBR-default material
+  // defect. They are deliberately quarantined under candidates/ and have no runtime load path.
+  // Before promotion, either re-export/clean the materials or load through normaliseCharacterMaterial().
+  ['public/assets/enemies/candidates/spriggan-scrapper-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/thornback-orc-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/stagroot-warden-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/coalclaw-kobold-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/cinderfang-raider-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/magmahorn-juggernaut-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/snowfang-marauder-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/iceback-ogre-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/frostbound-warden-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/boneguard-raider-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/tombmaul-knight-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/graveflame-reaper-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/stormbreaker-colossus-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+]);"""
+
+          if 'spriggan-scrapper-v1.glb' in text and 'Enemy Wave 1 raw Meshy rigged candidates' in text:
+              print('Wave 1 quarantine entries already present')
+          else:
+              if marker not in text:
+                  raise SystemExit('Expected KNOWN_DORMANT_DEFECTS anchor not found')
+              path.write_text(text.replace(marker, block, 1))
+          PY
+
+      - name: Commit quarantine record and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test/glb-materials.test.mjs
+          git rm .github/workflows/enemy-wave-candidate-quarantine.yml
+          git commit -m 'test(assets): quarantine wave 1 Meshy material defects'
+          git push origin HEAD:feat/enemy-asset-wave-1
