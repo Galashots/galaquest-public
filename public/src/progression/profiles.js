@@ -500,11 +500,25 @@ export function createProfileStore(options = {}) {
     return stateFor(profileId);
   }
 
-  /** The id this device should send as the wire's guestId, creating or migrating a profile if this
-   *  is a first run. Returns null only when a profile genuinely could not be minted. */
+  /**
+   * The id this device should send as the wire's guestId, creating or migrating a profile if this is
+   * a first run. Returns null only when a profile genuinely could not be minted.
+   *
+   * A device with nothing at all gets a default profile rather than nothing: before this module the
+   * client always minted a guest token on first load, and a child who opens the game must not lose
+   * their marks because the naming screen has not been built yet. They get a hero called Hero and
+   * can rename it; what matters is that the id exists and is durable from the first kill onward.
+   */
   function activeProfileId() {
     if (!keyring.activeProfileId) {
       migrateLegacyGuest();
+    }
+    if (!keyring.activeProfileId) {
+      try {
+        createProfile(DEFAULT_DISPLAY_NAME);
+      } catch (error) {
+        console.warn('[profiles] could not create a first profile:', error?.message ?? error);
+      }
     }
     return keyring.activeProfileId ?? null;
   }

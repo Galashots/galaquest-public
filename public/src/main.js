@@ -68,6 +68,7 @@ import { createTouchInput } from './input/touch.js';
 import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
+import { createProfileStore } from './progression/profiles.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
@@ -1042,6 +1043,31 @@ async function bootstrap() {
   // `spawned` flag says the cart has actually been searched; see lootPickups.js's own header.
   const lootPickups = createLootPickups(scene, VILLAGE.CART_SEARCH.at);
 
+  // Who is playing, and the device's own durable copy of what they have earned. Created before the
+  // socket because the profile id IS what identifies this child on the wire: it travels in the
+  // guestId field (it is minted in that alphabet on purpose), so the server needs no change and
+  // PROTOCOL_VERSION stays where it is. A device that has only the old gq-guest-id migrates on this
+  // first read, reusing that string verbatim as the profile id, so every reward row already on the
+  // server stays attached without a backfill.
+  const profiles = createProfileStore();
+  const profileId = profiles.activeProfileId();
+  const profileName = profiles.activeProfile()?.displayName ?? 'player';
+
+  /**
+   * Write a durable fact into this device's own journal as it is announced.
+   *
+   * The server is still the one that DECIDES a mark was earned -- this only keeps a second copy of
+   * the decision, under the same id the server used, so a family's progress does not live solely in
+   * a database that can be wiped or replaced (progression/facts.js's union law is what makes two
+   * copies safe rather than ambiguous). Events that predate the id riding the wire simply carry no
+   * eventId and are skipped: a fact with no stable name cannot be deduplicated, and guessing one
+   * would be worse than not recording it.
+   */
+  function journalDurableFact(event) {
+    if (!profileId || typeof event?.eventId !== 'string') return;
+    profiles.recordFacts(profileId, [{ eventId: event.eventId, type: event.type }]);
+  }
+
   // Phase D (D4): mark-earned/lantern-unlocked are never raised by combat/encounter.js, so they can
   // never enter createEncounterFeedback's table (see rewards/feedback.js's header for why that is a
   // hard boundary, not an oversight) -- this is their own dispatcher, same discipline.
@@ -1054,6 +1080,7 @@ async function bootstrap() {
     // dispatch time so it is the position the child just watched it die at) and flies to the belt.
     'mark-earned'(event) {
       rewardEventLog.push(event);
+      journalDurableFact(event);
       // GP1-C6: NO BANNER HERE ANY MORE. This fires on the same frame as wolf-defeated, so the two
       // announcements used to overwrite each other -- "The wolf is beaten!" appeared and was replaced
       // by "Lantern Mark!" before it could be read, and both landed under the kill's own gold burst.
@@ -1064,7 +1091,11 @@ async function bootstrap() {
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
     // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
-    'lantern-unlocked'(event) { rewardEventLog.push(event); banner('All three marks! Take them home.', 3200); },
+    'lantern-unlocked'(event) {
+      rewardEventLog.push(event);
+      journalDurableFact(event);
+      banner('All three marks! Take them home.', 3200);
+    },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See
@@ -1212,7 +1243,8 @@ async function bootstrap() {
   let netStatus = 'offline';
   let lastReconcile = { drift: 0, snapped: false };
   const net = createNetClient({
-    name: 'player',
+    name: profileName,
+    guestId: profileId ?? undefined,
     onStatus: (next) => { netStatus = next; },
     onLeave: (id) => remotes?.remove(id),
     // Snapshots arrive at 10 Hz on their own schedule, independent of the frame loop, so the
