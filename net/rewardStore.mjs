@@ -19,10 +19,18 @@ import { isKnownItem, isKnownWeapon } from '../public/src/progression/items.js';
 
 // v2, GP1: one nullable `value` column added for 'weapon-equipped' events, which need to carry
 // WHICH weapon rather than just count -- the mark/lantern events only ever needed COUNT, so the
-// column did not exist until an event type needed a payload. A v1 store ALTERs in place (below);
-// a fresh store creates the v2 shape directly, so there is exactly one column layout to reason
-// about once a store has ever been opened under this code.
-export const SCHEMA_VERSION = 2;
+// column did not exist until an event type needed a payload.
+//
+// v3, Stage 1: one nullable `rev` column, the ordering an equip is given AT THE MOMENT IT HAPPENS.
+// Added rather than derived because every derived version of this number was wrong: a count that the
+// act of paying changes, an in-memory counter that a page load resets, an index over whichever store
+// is readable now, and a stamp applied when a fact was first SEEN -- which cannot tell an older equip
+// delivered late from a newer one, because it is measuring delivery. See docs/MISTAKES.md GQ-014.
+// Only 'weapon-equipped' carries it; every other award type is additive and needs no order at all.
+//
+// A v1 or v2 store ALTERs in place (below); a fresh store creates the v3 shape directly, so there is
+// exactly one column layout to reason about once a store has ever been opened under this code.
+export const SCHEMA_VERSION = 3;
 
 function transaction(db, work) {
   db.exec('BEGIN IMMEDIATE;');
@@ -106,25 +114,31 @@ export function openRewardStore(path) {
           guest_id TEXT NOT NULL,
           type TEXT NOT NULL,
           created_at TEXT NOT NULL,
-          value TEXT
+          value TEXT,
+          rev INTEGER
         );
       `);
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
-  } else if (currentVersion === 1) {
-    // A real v1 store (marks/lantern-unlocked only, no value column) from before GP1. ALTER, not
-    // recreate -- every existing mark/lantern row is untouched, `value` reads NULL for all of them,
-    // which is exactly right: they never had a payload. The column check also repairs the precise
-    // interrupted-migration state where ALTER committed but the old two-statement migration crashed
-    // before user_version advanced: retrying that state must finish, not fail on a duplicate column.
+  } else if (currentVersion === 1 || currentVersion === 2) {
+    // A real older store: v1 predates GP1 and has neither `value` nor `rev`; v2 has `value` only.
+    // ALTER, not recreate -- every existing row is untouched, and the new columns read NULL for all
+    // of them, which is exactly right: they never had a payload or an order. Both versions are
+    // handled by the same branch because the repair is identical in kind, "add whichever columns are
+    // missing", and enumerating that per-version is how the second migration forgets the first.
+    //
+    // Adding columns one-by-one on inspection also repairs the precise interrupted-migration state
+    // where an ALTER committed but the process died before user_version advanced: retrying must
+    // finish, not fail on a duplicate column.
     transaction(db, () => {
       // Read the table shape only AFTER BEGIN IMMEDIATE has acquired the migration lock. Reading it
-      // beforehand creates a classic check-then-act race: two processes can both observe a v1 table
+      // beforehand creates a classic check-then-act race: two processes can both observe a store
       // without `value`, then one migrates while the other is waiting, and the second wakes up and
-      // retries the stale ALTER against the now-v2 table. The transaction makes the inspection and
-      // repair one serialized decision.
+      // retries the stale ALTER against the now-migrated table. The transaction makes the inspection
+      // and repair one serialized decision.
       const columns = db.prepare('PRAGMA table_info(reward_events)').all().map((row) => row.name);
       if (!columns.includes('value')) db.exec('ALTER TABLE reward_events ADD COLUMN value TEXT;');
+      if (!columns.includes('rev')) db.exec('ALTER TABLE reward_events ADD COLUMN rev INTEGER;');
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   } else if (currentVersion !== SCHEMA_VERSION) {
@@ -137,7 +151,7 @@ export function openRewardStore(path) {
   // INSERT OR IGNORE against the PRIMARY KEY on id: the whole idempotency guarantee lives in this one
   // line plus the schema's PRIMARY KEY constraint, not in application code that could drift from it.
   const insertStmt = db.prepare(
-    'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value) VALUES (?, ?, ?, ?, ?)',
+    'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value, rev) VALUES (?, ?, ?, ?, ?, ?)',
   );
   const marksStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE guest_id = ? AND type = 'mark-earned'");
   // GP2: coins and Wildwood Shards, counted exactly like marks -- one row per pickup ever credited to
@@ -197,7 +211,14 @@ export function openRewardStore(path) {
   // latest-wins field, arrives in the order it was written rather than in whatever order SQLite
   // finds convenient.
   const profileFactsStmt = db.prepare(
-    'SELECT id, type, value FROM reward_events WHERE guest_id = ? ORDER BY rowid ASC',
+    'SELECT id, type, value, rev FROM reward_events WHERE guest_id = ? ORDER BY rowid ASC',
+  );
+
+  // The highest order any equip of this guest's has ever been given. Used only when the server has
+  // to mint an identity itself (a caller that supplied none), so that a server-minted equip still
+  // lands ABOVE the guest's existing history rather than colliding with the middle of it.
+  const maxEquipRevStmt = db.prepare(
+    "SELECT MAX(rev) AS m FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped'",
   );
 
   const creditedLootIdsStmt = db.prepare(
@@ -260,6 +281,7 @@ export function openRewardStore(path) {
     }
     const result = insertStmt.run(
       award.eventId, award.guestId, award.type, new Date().toISOString(), award.value ?? null,
+      Number.isInteger(award.rev) ? award.rev : null,
     );
     return { applied: result.changes > 0 };
   }
@@ -283,7 +305,15 @@ export function openRewardStore(path) {
       eventId: row.id,
       type: row.type,
       value: row.value ?? undefined,
+      // Carried, never reconstructed. A row written before v3, or one of the additive types that
+      // has no order, reads NULL and is returned without the field rather than with a made-up one.
+      ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
     }));
+  }
+
+  function maxEquipRevFor(guestId) {
+    const m = maxEquipRevStmt.get(guestId)?.m;
+    return Number.isInteger(m) ? m : -1;
   }
 
   function coinsFor(guestId) {
@@ -354,6 +384,7 @@ export function openRewardStore(path) {
     apply,
     marksFor,
     profileFactsFor,
+    maxEquipRevFor,
     unlockedFor,
     satchelTakenFor,
     charmEarnedFor,

@@ -41,6 +41,10 @@ export const MESSAGE_TYPES = [
 // (progression/items.js), never player-authored text, so this is a sanity ceiling rather than a
 // UI constraint -- 32 comfortably covers every id that file defines today.
 const ITEM_ID_MAX_LENGTH = 32;
+// An equip eventId is `equip:<profileId>:<rev>:<uuid>`: a 64-char profile id ceiling plus the
+// prefix, the order and a UUID. Bounded like every other wire string so a client cannot make the
+// server store an arbitrarily long primary key.
+const EVENT_ID_MAX_LENGTH = 160;
 // GP2 pickup ids look like "cart-loot:shard:1" -- world/cartLoot.js's own table entries -- longer
 // than an item id but still a short, caller-built token, never player-authored text.
 const PICKUP_ID_MAX_LENGTH = 48;
@@ -188,7 +192,30 @@ export function decode(text) {
     case 'equip': {
       const itemId = requireString(raw.itemId, 'itemId', ITEM_ID_MAX_LENGTH);
       if (itemId.length === 0) fail('itemId must not be empty');
-      return { v: PROTOCOL_VERSION, type: 'equip', itemId };
+      // The equip's own identity and order, minted by the device at the moment the child chose --
+      // see docs/MISTAKES.md GQ-014. Optional, and additive rather than a version bump: a caller
+      // that sends neither (an older client, a harness, a test) still equips, and the server mints
+      // an identity above that guest's history instead. What it must never do is let a supplied
+      // identity through unvalidated, so both fields are checked exactly as strictly as any other.
+      const message = { v: PROTOCOL_VERSION, type: 'equip', itemId };
+      if (raw.eventId !== undefined) {
+        const eventId = requireString(raw.eventId, 'eventId', EVENT_ID_MAX_LENGTH);
+        if (eventId.length === 0) fail('eventId must not be empty');
+        message.eventId = eventId;
+      }
+      if (raw.rev !== undefined) {
+        if (!Number.isInteger(raw.rev) || raw.rev < 0) {
+          fail(`rev must be a non-negative integer, got ${JSON.stringify(raw.rev)}`);
+        }
+        message.rev = raw.rev;
+      }
+      // Half an identity is not one: an eventId with no order would be stored with a NULL rev and
+      // silently fall back to being ordered by when it was seen, which is the defect this carries
+      // an order to avoid.
+      if ((message.eventId === undefined) !== (message.rev === undefined)) {
+        fail('equip must carry both eventId and rev, or neither');
+      }
+      return message;
     }
 
     // Client -> server only, no payload: whoever sends this first (per the shared physical cart)
@@ -614,8 +641,13 @@ export function attackMessage(seq) {
   return { v: PROTOCOL_VERSION, type: 'attack', seq };
 }
 
-export function equipMessage(itemId) {
-  return { v: PROTOCOL_VERSION, type: 'equip', itemId };
+export function equipMessage(itemId, identity) {
+  const message = { v: PROTOCOL_VERSION, type: 'equip', itemId };
+  if (identity?.eventId !== undefined && identity?.rev !== undefined) {
+    message.eventId = identity.eventId;
+    message.rev = identity.rev;
+  }
+  return message;
 }
 
 export function searchCartMessage() {

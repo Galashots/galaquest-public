@@ -32,35 +32,44 @@ function fakeStorage(seed = {}) {
   };
 }
 
-function deterministicStore(storage) {
+function deterministicStore(storage, clock = { millis: Date.UTC(2026, 0, 1) }) {
   let n = 0;
-  return createProfileStore({
+  const store = createProfileStore({
     storage,
     randomUUID: () => {
       n += 1;
       return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
     },
-    now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, n)),
+    // An explicit, advanceable clock. Equip order is a timestamp now, so a test that let the real
+    // clock run would be asserting on whatever the machine felt like -- and two equips minted inside
+    // the same millisecond would tie for reasons that have nothing to do with the code under test.
+    now: () => new Date(clock.millis),
   });
+  store.clock = clock;
+  return store;
 }
 
 const equip = (eventId, itemId) => ({ eventId, type: 'weapon-equipped', value: itemId });
 
 test('reload, then a new equip while offline: the NEW weapon wins', () => {
   const storage = fakeStorage();
-  const first = deterministicStore(storage);
+  const clock = { millis: Date.UTC(2026, 0, 1, 9, 0, 0) };
+  const first = deterministicStore(storage, clock);
   const profile = first.createProfile('Leo');
 
-  // A long history: enough equips that any process-local counter starting over lands beneath it.
+  // A long history, minted the way the game mints it -- each a minute apart. Building these by hand
+  // would test the fold and skip the producer, which is the whole of GQ-015.
   for (let i = 0; i < 7; i += 1) {
-    first.recordFacts(profile.id, [equip(`equip:${profile.id}:old-${i}`, STARTER_SWORD_ID)]);
+    clock.millis += 60_000;
+    first.mintEquipFact(profile.id, STARTER_SWORD_ID);
   }
   assert.equal(first.stateFor(profile.id).equippedWeaponId, STARTER_SWORD_ID);
 
   // The page reloads. A brand-new store object over the same storage -- any in-memory counter is
   // back at zero, but the child's history is not.
-  const afterReload = deterministicStore(storage);
-  afterReload.recordFacts(profile.id, [equip(`equip:${profile.id}:new`, WILDWOOD_BLADE_ID)]);
+  clock.millis += 60_000;
+  const afterReload = deterministicStore(storage, clock);
+  afterReload.mintEquipFact(profile.id, WILDWOOD_BLADE_ID);
 
   assert.equal(
     afterReload.stateFor(profile.id).equippedWeaponId,
@@ -73,11 +82,13 @@ test('server wiped and rebuilt, then a new equip: the NEW weapon wins', () => {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-equip-recovery-'));
   try {
     const storage = fakeStorage();
-    const store = deterministicStore(storage);
+    const clock = { millis: Date.UTC(2026, 0, 1, 9, 0, 0) };
+    const store = deterministicStore(storage, clock);
     const profile = store.createProfile('Leo');
 
     // History on a server that also holds plenty of non-equip rows, so any ordering derived from a
-    // row index counts things the journal deliberately does not keep.
+    // row index counts things the journal deliberately does not keep. The equip here is written
+    // WITHOUT a revision on purpose: that is a pre-v3 row, the shape a real upgrade encounters.
     const server = openRewardStore(join(dir, 'rewards.db'));
     for (let i = 0; i < 5; i += 1) {
       server.apply({ guestId: profile.id, heroId: 'p1', type: 'mark-earned', eventId: `mark-${i}` });
@@ -87,15 +98,16 @@ test('server wiped and rebuilt, then a new equip: the NEW weapon wins', () => {
       guestId: profile.id, heroId: 'p1', type: 'weapon-equipped',
       eventId: `equip:${profile.id}:historic`, value: STARTER_SWORD_ID,
     });
-    store.recordFacts(profile.id, server.profileFactsFor(profile.id));
+    store.ingestServerFacts(profile.id, server.profileFactsFor(profile.id));
     server.close();
 
     // The database is replaced by an empty one. The device is the only party that survived.
     const rebuilt = openRewardStore(join(dir, 'rewards-rebuilt.db'));
     assert.equal(rebuilt.marksFor(profile.id), 0, 'the rebuilt server genuinely knows nothing');
 
-    const afterWipe = deterministicStore(storage);
-    afterWipe.recordFacts(profile.id, [equip(`equip:${profile.id}:after-wipe`, WILDWOOD_BLADE_ID)]);
+    clock.millis += 60_000;
+    const afterWipe = deterministicStore(storage, clock);
+    afterWipe.mintEquipFact(profile.id, WILDWOOD_BLADE_ID);
     const state = afterWipe.ingestServerFacts(profile.id, rebuilt.profileFactsFor(profile.id));
     rebuilt.close();
 
@@ -164,4 +176,42 @@ test('an already-observed server equip cannot outrank a newer local equip made a
     'a fact that has not changed must not age forward because the journal grew around it');
   assert.equal(after.equippedWeaponId, WILDWOOD_BLADE_ID,
     'the newest equip is the local one and must stay equipped');
+});
+
+test('an older server equip delivered late cannot outrank a newer offline equip', () => {
+  // The producer path, which the previously-observed case does not cover. B is equipped FIRST and
+  // recorded by the server. The device never hears about it -- it is offline -- and the child equips
+  // C. Only on reconnect does B arrive. B is older; only its DELIVERY is newer. An order derived
+  // when a fact is first seen cannot tell those apart, which is why the order has to be created with
+  // the fact instead.
+  const dir = mkdtempSync(join(tmpdir(), 'galaquest-late-delivery-'));
+  try {
+    const storage = fakeStorage();
+    const store = deterministicStore(storage);
+    const profile = store.createProfile('Leo');
+
+    // B: equipped first, through the real server, and never ingested by the device.
+    const bMillis = Date.UTC(2026, 0, 1, 10, 0, 0);
+    const server = openRewardStore(join(dir, 'rewards.db'));
+    server.apply({
+      guestId: profile.id, heroId: 'p1', type: 'weapon-equipped',
+      eventId: `equip:${profile.id}:${bMillis}:bbbb`, rev: bMillis, value: STARTER_SWORD_ID,
+    });
+
+    // C: equipped second -- an hour later by the clock -- offline, on a device that has never heard
+    // of B, so its journal is empty and any counter-based scheme would number C at zero.
+    store.clock.millis = Date.UTC(2026, 0, 1, 11, 0, 0);
+    const c = store.mintEquipFact(profile.id, WILDWOOD_BLADE_ID);
+    assert.ok(c.rev > bMillis, 'the later choice must carry the later order, with no shared counter');
+    assert.equal(store.stateFor(profile.id).equippedWeaponId, WILDWOOD_BLADE_ID);
+
+    // Reconnect: B finally arrives, carrying the order it was given when it happened.
+    const after = store.ingestServerFacts(profile.id, server.profileFactsFor(profile.id));
+    server.close();
+
+    assert.equal(after.equippedWeaponId, WILDWOOD_BLADE_ID,
+      'a late-delivered older equip must not rewrite chronology');
+  } finally {
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* OS scratch */ }
+  }
 });

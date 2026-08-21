@@ -364,7 +364,7 @@ export function createRewardCoordinator(options = {}) {
    * client can never produce this message -- this is the same "stale or hostile client" posture
    * attack/input already take on a message that is shaped correctly but makes no sense.
    */
-  function applyEquip(playerId, itemId) {
+  function applyEquip(playerId, itemId, identity) {
     if (!isKnownWeapon(itemId)) {
       throw new Error(`applyEquip got an unknown weapon id ${JSON.stringify(itemId)}`);
     }
@@ -373,13 +373,32 @@ export function createRewardCoordinator(options = {}) {
     }
     const guestId = guestIdByPlayer.get(playerId);
     if (guestId) {
-      // The old process-local sequence restarted at 1 on every server boot, repeating a durable
-      // primary key and making INSERT OR IGNORE silently discard the new choice. A UUID is an actual
-      // cross-process idempotency key; rewardStore orders equip choices by SQLite insertion order,
-      // not by trying to smuggle chronology into this identifier.
-      const eventId = `equip:${guestId}:${randomUUID()}`;
-      const result = store.apply({ guestId, heroId: playerId, type: 'weapon-equipped', eventId, value: itemId });
-      if (!result.applied) throw new Error(`applyEquip failed to record a new durable event for ${guestId}`);
+      // WHEN the child chose this weapon is a fact about the choice, so it is created with the
+      // choice -- on the device, before the message is sent -- and merely persisted here. Deriving
+      // it on this side instead was wrong four separate ways (docs/MISTAKES.md GQ-014); the last of
+      // them, ordering by arrival, cannot tell an older equip delivered late from a newer one,
+      // because arrival is not chronology.
+      //
+      // Trusting a client number is safe here and nowhere near as broad as it sounds: `rev` orders
+      // this profile's own equips against each other and nothing else. Ownership is still re-checked
+      // above, the weapon must still be real, and the worst a lie achieves is choosing which of the
+      // child's OWN swords their hero draws. The identity is still bounded and validated on the wire
+      // (net/protocol.js), and the PRIMARY KEY still makes a replay a no-op.
+      //
+      // A caller that supplies nothing -- an older client, a harness, a test -- still equips, and the
+      // server mints an identity ABOVE this guest's existing history so it cannot land in the middle
+      // of it. That fallback is a compatibility path, not the product path.
+      const eventId = identity?.eventId ?? `equip:${guestId}:${randomUUID()}`;
+      const rev = Number.isInteger(identity?.rev) ? identity.rev : store.maxEquipRevFor(guestId) + 1;
+      const result = store.apply({
+        guestId, heroId: playerId, type: 'weapon-equipped', eventId, value: itemId, rev,
+      });
+      // A repeated equip identity is a replay, not a failure: the child's choice is already on
+      // record with the order it was made, and re-sending it must be the no-op INSERT OR IGNORE
+      // already makes it. Only a server-minted identity is expected to be new every time.
+      if (!result.applied && !identity?.eventId) {
+        throw new Error(`applyEquip failed to record a new durable event for ${guestId}`);
+      }
     } else {
       ephemeralEquipped.set(playerId, itemId);
     }
@@ -1227,7 +1246,10 @@ export function attachGameServer(httpServer, options = {}) {
         // ProtocolError comment above this handler) for an itemId nobody defined. GP1's real client
         // only ever sends an id it already has loaded from progression/items.js, so this only ever
         // fires for a stale or hostile client, the same posture attack/input already take.
-        rewards.applyEquip(client.data.playerId, message.itemId);
+        // The device's own identity for this choice rides through when it sent one; protocol.js
+        // has already validated both halves, or refused the message.
+        rewards.applyEquip(client.data.playerId, message.itemId,
+          message.eventId === undefined ? undefined : { eventId: message.eventId, rev: message.rev });
         return;
       }
 

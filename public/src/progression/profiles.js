@@ -193,15 +193,30 @@ function highestEquipRevision(facts) {
  * facts in rowid order, so a device meeting an existing profile for the first time replays that
  * server's real chronology rather than inventing one.
  */
-function stampEquipRevisions(incoming, knownEventIds, startRev) {
-  let next = startRev;
-  return incoming.map((fact) => {
-    if (fact.type !== 'weapon-equipped') return fact;
-    if (knownEventIds.has(fact.eventId)) return fact;
-    if (typeof fact.rev === 'number' && Number.isFinite(fact.rev)) return fact;
-    next += 1;
-    return { ...fact, rev: next };
+function stampEquipRevisions(incoming, knownEventIds) {
+  // An equip that arrives with no revision at all is a row written before the order existed
+  // (rewardStore schema v2 and earlier). It is therefore OLDER than anything this device has
+  // numbered, and it is given a revision below zero to say so.
+  //
+  // An earlier version numbered these ABOVE the journal's history, on the reasoning that a fact
+  // arriving now must be new. That is the defect this whole field exists to prevent, one level up:
+  // it measures delivery, so an ancient equip handed over on reconnect outranked a choice the child
+  // had just made offline. Arrival is not chronology.
+  //
+  // Their order relative to EACH OTHER is real and is preserved: net/rewardStore.mjs returns a
+  // profile's facts in rowid order, so the last legacy equip to arrive is the last one that was made.
+  const unstamped = incoming.filter((fact) => (
+    fact.type === 'weapon-equipped'
+    && !knownEventIds.has(fact.eventId)
+    && !(typeof fact.rev === 'number' && Number.isFinite(fact.rev))
+  ));
+  const revById = new Map();
+  unstamped.forEach((fact, index) => {
+    revById.set(fact.eventId, index - unstamped.length);
   });
+  return incoming.map((fact) => (
+    revById.has(fact.eventId) ? { ...fact, rev: revById.get(fact.eventId) } : fact
+  ));
 }
 
 function writeJournal(storage, profileId, facts) {
@@ -251,6 +266,9 @@ export function createProfileStore(options = {}) {
   const now = options.now ?? (() => new Date());
   const nowIso = () => {
     try { return now().toISOString(); } catch { return null; }
+  };
+  const nowMillis = () => {
+    try { return now().getTime(); } catch { return NaN; }
   };
 
   let keyring = readKeyring(storage);
@@ -386,7 +404,7 @@ export function createProfileStore(options = {}) {
     const existing = readJournal(storage, profileId);
     const before = existing.length;
     const known = new Set(existing.map((fact) => fact.eventId));
-    const stamped = stampEquipRevisions(incoming, known, highestEquipRevision(existing));
+    const stamped = stampEquipRevisions(incoming, known);
     const merged = unionFacts(existing, stamped);
     if (merged.length === before) return { appended: 0 };
     writeJournal(storage, profileId, merged);
@@ -420,6 +438,49 @@ export function createProfileStore(options = {}) {
       equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
       ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
     });
+  }
+
+  /**
+   * Create this device's equip fact for `itemId` -- identity and order together -- journal it, and
+   * hand it back so the caller can send the same fact to the server.
+   *
+   * The order is created HERE, at the moment the child chooses, because that is the only moment it
+   * describes. Every version of this number that was computed later was wrong about something the
+   * later moment could not see, and the last of them could not distinguish an older equip delivered
+   * late from a newer one, because arrival is not chronology (docs/MISTAKES.md GQ-014).
+   *
+   * Journalled before it is sent, deliberately: a child who equips a sword with no network has
+   * equipped a sword. The send is how the server finds out, not how it becomes true.
+   *
+   * Assumes the caller has already ingested whatever the server knows -- which is why
+   * ingestServerFacts is the reconnect contract. A device that mints before ingesting can number a
+   * new choice beneath history it has not heard about yet; ingesting first is what makes the local
+   * maximum the real one.
+   */
+  function mintEquipFact(profileId, itemId) {
+    const journal = readJournal(storage, profileId);
+    const highest = highestEquipRevision(journal);
+    // WHEN it happened, in epoch milliseconds -- not how many have happened. A per-profile counter
+    // cannot order two choices made by writers that have not spoken to each other, and after a
+    // disconnect that is exactly the situation: a device whose journal is empty numbers its first
+    // offline equip 0, and so did the equip it has not heard about yet. Two zeroes is a tie, and a
+    // tiebreak is not chronology. A clock is the one thing both writers already share.
+    //
+    // Guarded to stay strictly above this profile's own history, so a device whose clock jumps
+    // backwards -- a manual change, a timezone edit by a child -- still orders its OWN equips
+    // correctly. Cross-device skew is left alone deliberately: the stake is which of your own swords
+    // your hero draws, and a household's tablets are not worth a vector clock.
+    const stamp = nowMillis();
+    const rev = Number.isFinite(stamp) ? Math.max(stamp, highest + 1) : highest + 1;
+    const unique = randomUUID ? randomUUID() : `local-${mintCounter += 1}`;
+    const fact = {
+      eventId: `equip:${profileId}:${rev}:${unique}`,
+      type: 'weapon-equipped',
+      value: itemId,
+      rev,
+    };
+    recordFacts(profileId, [fact]);
+    return fact;
   }
 
   /**
@@ -460,6 +521,7 @@ export function createProfileStore(options = {}) {
     migrateLegacyGuest,
     journalFor,
     recordFacts,
+    mintEquipFact,
     ingestServerFacts,
     stateFor,
   };

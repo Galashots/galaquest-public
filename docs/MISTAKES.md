@@ -607,7 +607,7 @@ blows-to-kill for the Blade, metres of visible flame for the Beacon.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-014 — An identity derived from mutable state is not an identity.
-**Status:** ENFORCED · **Hits:** 4 · **First:** 2026-08-21 · **Last:** 2026-08-21
+**Status:** ENFORCED · **Hits:** 5 · **First:** 2026-08-21 · **Last:** 2026-08-21
 **Enforced by:** `test/equip-recovery-order.test.mjs` (and `test/profile-identity.test.mjs` for the
 first incident, which is the same defect in the idempotency-key half of this rule)
 **Rule:** A durable fact needs a name, and an ordering needs a number. Neither may be derived from
@@ -630,12 +630,21 @@ each row's array index for the current read, which restarts when the database is
 exact event local-first exists to survive. (4) with both fixed, `stateFor()` still stamped revisions
 onto unseen server facts *for the duration of one read* without persisting them, so an unchanged
 remote equip aged forward every time the journal grew around it and could overtake a newer local one.
-(2) and (4) were caught by independent Director audit, not by the tests written alongside them --
-see GQ-015 for why those tests did not catch it.
+(5) the repair for (4) made observation durable but still derived the order at observation, so an
+older equip DELIVERED late outranked a newer offline one -- arrival is not chronology, and a device
+that has not heard about an equip yet numbers its own first offline choice 0 exactly as the unheard
+one was. Two writers who have not spoken cannot be ordered by independent counters at all; the fix
+was to stop counting and record WHEN the child chose, carried with the fact through both copies
+(rewardStore schema v3's `rev` column, minted on the device at the equip action).
+**The shape of the whole entry is the lesson:** four of the five incidents were introduced by the
+repair for the one before it, each time by moving WHERE the number came from instead of moving WHEN
+it was decided. If a fix relocates a derivation rather than eliminating it, it is the same bug in a
+new place. (2), (4) and (5) were caught by independent Director audit, not by the tests written
+alongside them -- see GQ-015 for why those tests did not catch it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-015 — A test that hand-feeds a pure function proves the function, not where its inputs come from.
-**Status:** RULE · **Hits:** 2 · **First:** 2026-08-21 · **Last:** 2026-08-21
+**Status:** RULE · **Hits:** 3 · **First:** 2026-08-21 · **Last:** 2026-08-21
 **Not enforced because:** the defect is a missing test, and the shape of the missing one depends on
 which input the function is being lied to about. No scanner can tell a legitimately isolated unit
 test from one that isolated away the actual bug; only asking "who really supplies this argument in
@@ -654,5 +663,10 @@ rather than the suite. (2) after the fold moved from `seq` to `rev`, the same te
 asserting nothing about ordering at all -- both facts now tied at "no revision", and the eventId
 tiebreak happened to return the item the assertion expected. Its name still said "latest-wins by
 sequence". Rewritten to name `rev` and to choose ids under which the tiebreak would return the WRONG
-weapon, so it now fails if the revision is ignored.
+weapon, so it now fails if the revision is ignored. (3) the regression suite written FOR the
+ordering bug still built its equip facts by hand, so it covered the fold and the journal but never
+the producer -- and the producer was where the remaining defect lived (GQ-014 incident 5). The
+give-away was visible and ignored: two of those tests broke the moment the real producer was
+introduced, because the hand-built facts had never been shaped like the real ones. All six now mint
+through `mintEquipFact`.
 **Foreknowledge helped:** not yet recorded.
