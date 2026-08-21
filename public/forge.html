@@ -99,4 +99,173 @@
       .coverage span { border-radius: 999px; border: 1px solid #76d6b43f; color: var(--mint); background: #76d6b40c; padding: 0.25rem 0.48rem; font: 700 0.65rem/1 ui-monospace, monospace; }
 
       .meshy-status { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.6rem; }
-      .dot { width: 0.56rem; height: 0.56rem; border-radius: 50%; background: #6d7780; box-sha
+      .dot { width: 0.56rem; height: 0.56rem; border-radius: 50%; background: #6d7780; box-shadow: 0 0 0 3px #ffffff08; }
+      .dot.good { background: var(--mint); }
+      .dot.warn { background: var(--gold); }
+      #meshy-message { color: var(--muted); font-size: 0.69rem; line-height: 1.35; }
+      .spend-gate { display: flex; align-items: flex-start; gap: 0.45rem; border: 1px solid #e7bb5840; background: #e7bb5809; border-radius: 0.48rem; padding: 0.55rem; margin: 0.55rem 0; color: #d9c995; font-size: 0.69rem; line-height: 1.35; }
+      #meshy-generate:disabled { opacity: 0.45; cursor: not-allowed; }
+      #task-progress { display: none; margin-top: 0.5rem; }
+      #task-progress.active { display: block; }
+      progress { width: 100%; accent-color: var(--gold); }
+
+      @media (max-width: 980px) {
+        #forge { grid-template-columns: 230px minmax(0, 1fr) 300px; }
+        .brand { min-width: auto; }
+      }
+      @media (max-width: 760px) {
+        #forge { grid-template-columns: 1fr; grid-template-rows: 48px minmax(0, 1fr); }
+        #left-panel, #right-panel { position: absolute; z-index: 10; top: 48px; bottom: 0; width: min(88vw, 340px); box-shadow: 0 0 35px #000a; }
+        #left-panel { left: 0; transform: translateX(-100%); }
+        #right-panel { right: 0; transform: translateX(100%); }
+        body.show-assets #left-panel { transform: translateX(0); }
+        body.show-fit #right-panel { transform: translateX(0); }
+        #stage { grid-column: 1; }
+        .mobile-toggle { display: inline-block !important; }
+        .top-meta .badge { display: none; }
+      }
+      .mobile-toggle { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="forge">
+      <header id="topbar">
+        <button id="mobile-assets" class="mobile-toggle small-button">assets</button>
+        <div class="brand"><strong>GALAQUEST</strong><span>Asset Forge / Alpha</span></div>
+        <div class="top-meta">
+          <span id="runtime-badge" class="badge warn">BOOTING</span>
+          <span id="meshy-badge" class="badge">MESHY …</span>
+          <a class="top-link" href="studio.html">Character Studio ↗</a>
+        </div>
+        <button id="mobile-fit" class="mobile-toggle small-button">fit</button>
+      </header>
+
+      <aside id="left-panel" class="panel">
+        <section class="section">
+          <h2>Candidate Rack</h2>
+          <button class="card candidate-button active" data-loadout="candidate-dawnwarden-helmet" data-asset="helmet_dawnwarden_v1" data-bone="Head">
+            <div class="card-title"><strong>Dawnwarden Helmet</strong><span class="tier">T4</span></div>
+            <div class="meta">Head · candidate · hides hair + ears</div>
+          </button>
+          <button class="card candidate-button" data-loadout="candidate-dawnwarden-sword" data-asset="sword_dawnwarden_v1" data-bone="RightHand">
+            <div class="card-title"><strong>Dawnwarden Sword</strong><span class="tier">T4</span></div>
+            <div class="meta">RightHand · candidate · rigid gear</div>
+          </button>
+          <div class="micro">The rack deliberately starts with real PR #26 candidates. Nothing shown here is promoted to shipping merely because it loads.</div>
+        </section>
+
+        <section class="section">
+          <h2>Meshy Lane</h2>
+          <div class="meshy-status"><span id="meshy-dot" class="dot"></span><strong id="meshy-state">checking bridge…</strong></div>
+          <div id="meshy-message">The browser never receives the Meshy API key. Paid actions pass through the same-origin Forge bridge.</div>
+          <div class="field">
+            <label for="forge-token">Forge unlock token <span>session only</span></label>
+            <input id="forge-token" type="password" autocomplete="off" placeholder="GALAQUEST_FORGE_TOKEN">
+          </div>
+          <div class="button-row">
+            <button id="check-balance" class="action-button">Check balance</button>
+            <button id="clear-token" class="action-button">Clear token</button>
+          </div>
+          <div id="balance-readout" class="micro" style="margin-top:0.45rem">balance: —</div>
+        </section>
+
+        <section class="section">
+          <h3>Generate from reference</h3>
+          <div class="field">
+            <label for="meshy-image">Reference image <span>PNG/JPEG</span></label>
+            <input id="meshy-image" type="file" accept="image/png,image/jpeg">
+          </div>
+          <div class="field">
+            <label for="meshy-kind">Asset kind <span>fit preset</span></label>
+            <select id="meshy-kind">
+              <option value="helmet">Helmet / head gear</option>
+              <option value="character">Character</option>
+              <option value="prop">Rigid prop / weapon</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="meshy-pose">Character pose <span>ignored for gear</span></label>
+            <select id="meshy-pose">
+              <option value="">none</option>
+              <option value="t-pose">T-pose</option>
+              <option value="a-pose">A-pose</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="meshy-polycount">Target triangles <span>500–80k</span></label>
+            <input id="meshy-polycount" type="number" min="500" max="80000" step="500" value="20000">
+          </div>
+          <div class="spend-gate">
+            <input id="approve-spend" type="checkbox">
+            <label for="approve-spend">I approve starting this paid Meshy generation task. Provider pricing is authoritative; the Forge will report the task's consumed credits when Meshy returns them.</label>
+          </div>
+          <button id="meshy-generate" class="action-button primary" style="width:100%" disabled>Generate candidate</button>
+          <div id="task-progress">
+            <progress id="task-bar" max="100" value="0"></progress>
+            <div id="task-label" class="micro">waiting…</div>
+          </div>
+        </section>
+      </aside>
+
+      <main id="stage">
+        <canvas id="forge-canvas"></canvas>
+        <div id="stage-status">loading Hero + candidate…</div>
+        <div id="stage-toolbar" aria-label="Forge viewport controls">
+          <button data-view="front">front</button>
+          <button data-view="three-quarter" aria-pressed="true">3/4</button>
+          <button data-view="side">side</button>
+          <button data-view="rear-three-quarter">rear 3/4</button>
+          <button data-view="back">back</button>
+          <button id="view-closeup">closeup</button>
+          <button id="toggle-animation">play</button>
+          <select id="animation-select" aria-label="Animation clip"></select>
+        </div>
+      </main>
+
+      <aside id="right-panel" class="panel">
+        <section class="section">
+          <h2>Fit Inspector</h2>
+          <div class="card">
+            <div class="card-title"><strong id="fit-asset-name">Dawnwarden Helmet</strong><span id="fit-provenance" class="tier">CANDIDATE</span></div>
+            <div id="fit-bone" class="meta">Head anchor</div>
+          </div>
+          <div class="field">
+            <label>Position <span>world metres · +Y = UP</span></label>
+            <div class="axis-grid" data-axis="x"><strong>X</strong><input id="pos-x" type="number" step="0.001" value="0"><button data-nudge="x" data-sign="-1">−</button><button data-nudge="x" data-sign="1">+</button></div>
+            <div class="axis-grid" data-axis="y"><strong>Y</strong><input id="pos-y" type="number" step="0.001" value="0"><button data-nudge="y" data-sign="-1">−</button><button data-nudge="y" data-sign="1">+</button></div>
+            <div class="axis-grid" data-axis="z"><strong>Z</strong><input id="pos-z" type="number" step="0.001" value="0"><button data-nudge="z" data-sign="-1">−</button><button data-nudge="z" data-sign="1">+</button></div>
+          </div>
+          <div class="nudge-row"><span class="micro">nudge:</span><button data-step="0.001">1 mm</button><button data-step="0.005" class="active">5 mm</button><button data-step="0.01">10 mm</button></div>
+          <div class="field">
+            <label>Rotation <span>local degrees</span></label>
+            <div class="axis-grid" data-axis="x"><strong>X</strong><input id="rot-x" type="number" step="1" value="0"><span></span><span></span></div>
+            <div class="axis-grid" data-axis="y"><strong>Y</strong><input id="rot-y" type="number" step="1" value="0"><span></span><span></span></div>
+            <div class="axis-grid" data-axis="z"><strong>Z</strong><input id="rot-z" type="number" step="1" value="0"><span></span><span></span></div>
+          </div>
+          <div class="field">
+            <label for="scale-delta">Uniform scale delta <span>0.02 = +2%</span></label>
+            <input id="scale-delta" type="number" step="0.01" min="-0.9" value="0">
+          </div>
+          <div class="button-row">
+            <button id="reset-fit" class="action-button danger">Reset</button>
+            <button id="save-fit" class="action-button primary">Save fit</button>
+          </div>
+          <button id="copy-fit" class="action-button" style="width:100%;margin-top:0.42rem">Copy fit JSON</button>
+        </section>
+
+        <section class="section">
+          <h3>Semantic coverage</h3>
+          <div id="coverage-chips" class="coverage"><span>hair</span><span>ears</span></div>
+          <p class="micro">Coverage comes from the equipped candidate descriptor and the live Hero anatomy map. It is not inferred from the helmet's bounding box.</p>
+        </section>
+
+        <section class="section">
+          <h3>Exact transform</h3>
+          <div id="transform-readout" class="transform-readout">waiting for candidate…</div>
+          <p class="micro">Save Fit stores this candidate's delta in browser local storage. Copy Fit JSON is the handoff packet an agent can bake into repository metadata after owner approval.</p>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="./src/forge/main.js"></script>
+  </body>
+</html>
