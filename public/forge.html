@@ -93,9 +93,15 @@
           <h2>Meshy Lane</h2>
           <div class="meshy-status"><span id="meshy-dot" class="dot"></span><strong id="meshy-state">checking bridge…</strong></div>
           <div id="meshy-message">The browser never receives the Meshy API key. Paid actions pass through the same-origin Forge bridge.</div>
-          <div class="field"><label for="forge-token">Forge unlock token <span>session only</span></label><input id="forge-token" type="password" autocomplete="off" placeholder="GALAQUEST_FORGE_TOKEN"></div>
+          <div class="field"><label for="forge-token">Forge unlock token <span>never stored — re-enter after reload</span></label><input id="forge-token" type="password" autocomplete="off" placeholder="GALAQUEST_FORGE_TOKEN"></div>
           <div class="button-row"><button id="check-balance" class="action-button">Check balance</button><button id="clear-token" class="action-button">Clear token</button></div>
           <div id="balance-readout" class="micro" style="margin-top:.45rem">balance: —</div>
+          <div id="resume-panel" class="card" hidden style="margin-top:.55rem;border-color:#e7bb5866">
+            <div class="card-title"><strong>Unfinished paid task</strong><span class="tier">PAID</span></div>
+            <div id="resume-info" class="micro" style="margin:.3rem 0 .5rem"></div>
+            <div class="button-row"><button id="resume-task" class="action-button primary">Resume paid task</button><button id="abandon-task" class="action-button danger">Abandon record</button></div>
+            <div class="micro" style="margin-top:.4rem">This task was already paid for. Resume it instead of generating again; new generations stay disabled until it is resumed or abandoned.</div>
+          </div>
         </section>
         <section class="section">
           <h3>Generate from reference</h3>
