@@ -9,6 +9,9 @@ import { normaliseCharacterMaterial } from '../character/hero.js';
 import { cameraPositionFor } from '../review/cameraPresets.js';
 import { loadGLB } from '../world/assets.js';
 import { createFitSession, FORGE_FIT_SCHEMA } from './fitAuthoring.js';
+import {
+  clearPendingTask, isTerminalMeshyStatus, loadPendingTask, savePendingTask,
+} from './pendingTask.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -208,8 +211,11 @@ async function forgeApi(path, init = {}) {
 }
 
 function refreshGenerateAvailability() {
+  // A recorded unfinished paid task blocks new submissions entirely: the owner must resume or
+  // explicitly abandon it first, so a reload/timeout can never quietly turn into a second spend.
   const ready = Boolean(
     meshyStatus.configured
+    && !loadPendingTask(localStorage)
     && $('#forge-token').value.trim()
     && $('#meshy-image').files?.[0]
     && $('#approve-spend').checked,
@@ -217,9 +223,30 @@ function refreshGenerateAvailability() {
   $('#meshy-generate').disabled = !ready;
 }
 
+function refreshResumePanel() {
+  const pending = loadPendingTask(localStorage);
+  const panel = $('#resume-panel');
+  panel.hidden = !pending;
+  if (pending) {
+    $('#resume-info').textContent = `${pending.kind} · task ${pending.taskId.slice(0, 12)}… · started ${pending.createdAt}`;
+  }
+  refreshGenerateAvailability();
+}
+
 async function refreshMeshyBridge() {
   try {
     meshyStatus = await forgeApi('/api/forge/meshy/status');
+    if (meshyStatus.enabled === false) {
+      // Fail-closed server: fit authoring works, the paid lane does not exist here.
+      meshyStatus = { configured: false, tokenConfigured: false, enabled: false };
+      $('#meshy-dot').className = 'dot warn';
+      $('#meshy-state').textContent = 'paid lane disabled on this server';
+      $('#meshy-badge').textContent = 'MESHY LOCKED';
+      $('#meshy-badge').className = 'badge warn';
+      $('#meshy-message').textContent = 'This server does not run the paid Forge lane (GALAQUEST_FORGE_ENABLED is not set). Fit authoring stays fully available. The public game host must never enable this.';
+      refreshGenerateAvailability();
+      return;
+    }
     const configured = meshyStatus.configured;
     $('#meshy-dot').className = `dot ${configured ? 'good' : 'warn'}`;
     $('#meshy-state').textContent = configured ? 'bridge configured' : 'Meshy key not configured';
@@ -319,18 +346,71 @@ async function mountGeneratedCandidate(task, kind) {
   status(`Meshy candidate mounted · ${task.consumed_credits ?? '?'} credits reported by provider`);
 }
 
+/**
+ * Poll one ALREADY-PAID provider task to a terminal state, then mount it. Deliberately reusable by
+ * both a fresh submission and the Resume path: it only ever GETs the existing taskId. Nothing in
+ * here can start a new paid task -- a timeout or transient network failure leaves the pending
+ * record in place and tells the human to resume, never resubmits.
+ */
+async function pollAndMountTask(taskId, kind) {
+  let task = null;
+  let consecutiveFailures = 0;
+  for (let poll = 0; poll < 120; poll += 1) {
+    await sleep(poll < 5 ? 2500 : 5000);
+    try {
+      task = await forgeApi(`/api/forge/meshy/image-to-3d/${taskId}`);
+      consecutiveFailures = 0;
+    } catch (error) {
+      // Transient poll failures (network blip, server restart) must not abandon a paid task.
+      consecutiveFailures += 1;
+      taskProgress(true, task?.progress ?? 0, `poll failed (${consecutiveFailures}/6) · ${error.message}`);
+      if (consecutiveFailures >= 6) break;
+      continue;
+    }
+    taskProgress(true, task.progress ?? 0, `${task.status} · ${task.progress ?? 0}%`);
+    if (isTerminalMeshyStatus(task.status)) break;
+  }
+
+  if (!task || !isTerminalMeshyStatus(task.status)) {
+    // Not terminal: the paid task is still running (or unreachable). Keep the pending record so the
+    // owner can resume this exact taskId later instead of paying for a replacement.
+    refreshResumePanel();
+    throw new Error(`Meshy task ${taskId.slice(0, 8)}… is still pending — use "Resume paid task", do not start a new generation`);
+  }
+
+  if (task.status !== 'SUCCEEDED') {
+    clearPendingTask(localStorage);
+    refreshResumePanel();
+    throw new Error(task.task_error?.message || `Meshy task ended ${task.status}`);
+  }
+
+  taskProgress(true, 100, `SUCCEEDED · consumed ${task.consumed_credits ?? '?'} credits`);
+  await mountGeneratedCandidate(task, kind);
+  clearPendingTask(localStorage);
+  refreshResumePanel();
+}
+
 async function generateCandidate() {
   const file = $('#meshy-image').files?.[0];
   if (!file || !$('#approve-spend').checked) return;
+  if (loadPendingTask(localStorage)) {
+    status('an unfinished paid task exists — resume or abandon it before generating again');
+    refreshResumePanel();
+    return;
+  }
   const kind = $('#meshy-kind').value;
   $('#meshy-generate').disabled = true;
   taskProgress(true, 0, 'encoding reference…');
   try {
+    // One key per human generation attempt: the server's spend ledger folds any duplicate
+    // submission of this attempt (double-click, retry, replayed request) into one provider task.
+    const idempotencyKey = crypto.randomUUID();
     const created = await forgeApi('/api/forge/meshy/image-to-3d', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         approvedPaidTask: true,
+        idempotencyKey,
         imageDataUrl: await imageDataUrl(file),
         aiModel: 'meshy-6',
         poseMode: kind === 'character' ? ($('#meshy-pose').value || 't-pose') : null,
@@ -341,24 +421,41 @@ async function generateCandidate() {
       }),
     });
 
+    savePendingTask(localStorage, {
+      taskId: created.taskId,
+      kind,
+      idempotencyKey,
+      createdAt: new Date().toISOString(),
+    });
+    refreshResumePanel();
     taskProgress(true, 1, `task ${created.taskId.slice(0, 8)}… submitted`);
-    let task;
-    for (let poll = 0; poll < 120; poll += 1) {
-      await sleep(poll < 5 ? 2500 : 5000);
-      task = await forgeApi(`/api/forge/meshy/image-to-3d/${created.taskId}`);
-      taskProgress(true, task.progress ?? 0, `${task.status} · ${task.progress ?? 0}%`);
-      if (['SUCCEEDED', 'FAILED', 'CANCELED'].includes(task.status)) break;
-    }
-    if (!task || task.status !== 'SUCCEEDED') {
-      throw new Error(task?.task_error?.message || `Meshy task ended ${task?.status ?? 'TIMEOUT'}`);
-    }
-    taskProgress(true, 100, `SUCCEEDED · consumed ${task.consumed_credits ?? '?'} credits`);
-    await mountGeneratedCandidate(task, kind);
+    await pollAndMountTask(created.taskId, kind);
     $('#approve-spend').checked = false;
   } catch (error) {
     taskProgress(true, 0, `ERROR · ${error.message}`);
     status(`generation failed · ${error.message}`);
   } finally {
+    refreshGenerateAvailability();
+  }
+}
+
+async function resumePendingTask() {
+  const pending = loadPendingTask(localStorage);
+  if (!pending) { refreshResumePanel(); return; }
+  if (!forgeToken()) {
+    status('enter the Forge unlock token to resume the paid task');
+    return;
+  }
+  $('#resume-task').disabled = true;
+  taskProgress(true, 0, `resuming task ${pending.taskId.slice(0, 8)}…`);
+  try {
+    await pollAndMountTask(pending.taskId, pending.kind);
+    status(`resumed and mounted paid task ${pending.taskId.slice(0, 8)}…`);
+  } catch (error) {
+    taskProgress(true, 0, `ERROR · ${error.message}`);
+    status(`resume failed · ${error.message}`);
+  } finally {
+    $('#resume-task').disabled = false;
     refreshGenerateAvailability();
   }
 }
@@ -386,8 +483,10 @@ async function bootstrap() {
   $('#runtime-badge').textContent = 'FORGE READY';
   $('#runtime-badge').className = 'badge good';
 
-  const rememberedToken = sessionStorage.getItem('gq-forge-token') ?? '';
-  $('#forge-token').value = rememberedToken;
+  // The unlock token is deliberately NOT persisted anywhere in the browser (see the input handler
+  // below): it is spend authorization on the origin the game shares. Re-enter it after a reload --
+  // including to resume a pending paid task, whose record persists without the token.
+  refreshResumePanel();
   await refreshMeshyBridge();
 
   const resize = () => studioScene.resize(canvas.clientWidth, canvas.clientHeight);
@@ -503,14 +602,19 @@ $('#copy-fit').addEventListener('click', async () => {
 });
 
 $('#forge-token').addEventListener('input', () => {
-  sessionStorage.setItem('gq-forge-token', $('#forge-token').value);
   refreshGenerateAvailability();
 });
 $('#clear-token').addEventListener('click', () => {
   $('#forge-token').value = '';
-  sessionStorage.removeItem('gq-forge-token');
   $('#balance-readout').textContent = 'balance: —';
   refreshGenerateAvailability();
+});
+$('#resume-task').addEventListener('click', resumePendingTask);
+$('#abandon-task').addEventListener('click', () => {
+  const pending = loadPendingTask(localStorage);
+  clearPendingTask(localStorage);
+  refreshResumePanel();
+  if (pending) status(`abandoned pending task record ${pending.taskId.slice(0, 8)}… (the provider task itself is not cancelled)`);
 });
 $('#check-balance').addEventListener('click', async () => {
   try {
