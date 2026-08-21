@@ -1,17 +1,19 @@
+import './responsive.js';
 import * as THREE from '../../vendor/three.module.min.js';
 import { createStudioScene } from '../studio/scene.js';
 import { loadoutDescriptor } from '../studio/loadoutDescriptors.js';
 import { attachStudioCandidate } from '../studio/candidateGear.js';
+import { OPEN_FACE_HELMET_PROFILE_V1 } from '../studio/gearFitProfiles.js';
 import { rigidAnchorName } from '../character/gear.js';
 import { normaliseCharacterMaterial } from '../character/hero.js';
 import { cameraPositionFor } from '../review/cameraPresets.js';
 import { loadGLB } from '../world/assets.js';
-import { createFitSession } from './fitAuthoring.js';
+import { createFitSession, FORGE_FIT_SCHEMA } from './fitAuthoring.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const fitKey = (assetId) => `gq-forge-fit:${sourceSha}:${assetId}`;
+const fitKey = (assetId) => `gq-forge-fit:${FORGE_FIT_SCHEMA}:${sourceSha}:${assetId}`;
 
 let sourceSha = 'unbound';
 let studioScene;
@@ -21,7 +23,10 @@ let dynamicObjectUrl = null;
 let bearing = 'three-quarter';
 let scale = 'inspection';
 let nudgeStep = 0.005;
+let rotationStep = 5;
+let scaleStep = 0.02;
 let meshyStatus = { configured: false, tokenConfigured: false };
+let selectionRevision = 0;
 
 function status(message) {
   $('#stage-status').textContent = message;
@@ -45,16 +50,18 @@ function currentPacket() {
   if (!current?.fit) return null;
   const shot = current.fit.snapshot();
   return {
-    schema: 'galaquest.asset-forge-fit/1',
+    schema: FORGE_FIT_SCHEMA,
     sourceSha,
     assetId: current.assetId,
     displayName: current.displayName,
     boneName: current.boneName,
     loadout: current.loadout ?? null,
     meshyTaskId: current.meshyTaskId ?? null,
+    fitProfile: current.fitProfile ?? null,
     hiddenAnatomy: [...(current.hiddenAnatomy ?? [])],
     delta: shot.delta,
     baseline: shot.baseline,
+    reference: shot.reference,
     effective: shot.effective,
     savedAt: new Date().toISOString(),
   };
@@ -82,14 +89,35 @@ function refreshFit(snapshot = current?.fit?.snapshot()) {
   $('#transform-readout').textContent = JSON.stringify(currentPacket(), null, 2);
 }
 
+function enterFitPose(announce = false) {
+  if (!studioScene) return;
+  const result = studioScene.setFitPose();
+  $('#toggle-animation').textContent = 'play';
+  if (announce) status(`fit pose · ${current?.displayName ?? 'Hero'} · ${result.boneCount} bones restored`);
+}
+
+function parsedFitInputs() {
+  const values = [
+    $('#pos-x').value, $('#pos-y').value, $('#pos-z').value,
+    $('#rot-x').value, $('#rot-y').value, $('#rot-z').value,
+    $('#scale-delta').value,
+  ];
+  // Number inputs report an empty string while a reviewer is midway through typing a negative or
+  // decimal value. Do not normalize the field back to zero until the value is actually parseable.
+  if (values.some((value) => value.trim() === '' || !Number.isFinite(Number(value)))) return null;
+  return {
+    positionWorld: values.slice(0, 3).map(Number),
+    rotationDeg: values.slice(3, 6).map(Number),
+    scale: Number(values[6]),
+  };
+}
+
 function applyInputs() {
   if (!current?.fit) return;
-  const snapshot = current.fit.apply({
-    positionWorld: [$('#pos-x').value, $('#pos-y').value, $('#pos-z').value],
-    rotationDeg: [$('#rot-x').value, $('#rot-y').value, $('#rot-z').value],
-    scale: $('#scale-delta').value,
-  });
-  refreshFit(snapshot);
+  const next = parsedFitInputs();
+  if (!next) return;
+  enterFitPose();
+  refreshFit(current.fit.apply(next));
 }
 
 function loadSavedFit() {
@@ -101,6 +129,7 @@ function loadSavedFit() {
   }
   try {
     const packet = JSON.parse(raw);
+    if (packet.schema !== FORGE_FIT_SCHEMA) throw new Error('stale Forge fit schema');
     refreshFit(current.fit.apply(packet.delta ?? {}));
     status(`restored saved fit · ${current.displayName}`);
   } catch {
@@ -118,9 +147,12 @@ function anchorFor(assetId, boneName) {
 }
 
 async function selectRackCandidate(button) {
+  const revision = ++selectionRevision;
   setActiveRackButton(button);
   if (dynamicMount) dynamicMount.anchor.visible = false;
-  await studioScene.setLoadout(button.dataset.loadout);
+  enterFitPose();
+  const applied = await studioScene.setLoadout(button.dataset.loadout);
+  if (!applied || revision !== selectionRevision) return;
   const descriptor = loadoutDescriptor(button.dataset.loadout);
   const anchor = anchorFor(button.dataset.asset, button.dataset.bone);
   if (!anchor) throw new Error(`mounted anchor missing for ${button.dataset.asset}`);
@@ -129,13 +161,14 @@ async function selectRackCandidate(button) {
     displayName: button.querySelector('strong').textContent,
     boneName: button.dataset.bone,
     loadout: button.dataset.loadout,
+    fitProfile: anchor.userData?.gqFitProfile ?? null,
     hiddenAnatomy: descriptor?.hideAnatomy ?? studioScene.hiddenAnatomy,
     anchor,
     fit: createFitSession(anchor),
   };
   loadSavedFit();
   applyView();
-  status(`fitting ${current.displayName}`);
+  status(`fitting ${current.displayName} · world XYZ fit frame`);
 }
 
 function applyView() {
@@ -241,14 +274,19 @@ async function mountGeneratedCandidate(task, kind) {
     for (const material of [].concat(object.material)) normaliseCharacterMaterial(material);
   });
 
+  enterFitPose();
   await studioScene.setLoadout('shipping');
   if (dynamicMount?.anchor?.parent) dynamicMount.anchor.parent.remove(dynamicMount.anchor);
 
   const assetId = `forge_${task.id.replaceAll('-', '').slice(0, 10)}_${kind}`;
   const spec = kind === 'helmet'
     ? {
-      id: assetId, boneName: 'Head', kind: 'helmet', targetWorldLongest: 0.38,
-      worldUpOffset: 0.10, hideAnatomy: ['hair', 'ears'],
+      id: assetId,
+      boneName: 'Head',
+      kind: 'helmet',
+      fitProfile: OPEN_FACE_HELMET_PROFILE_V1,
+      targetWorldLongest: OPEN_FACE_HELMET_PROFILE_V1.targetWorldLongest,
+      hideAnatomy: OPEN_FACE_HELMET_PROFILE_V1.hideAnatomy,
     }
     : {
       id: assetId, boneName: 'RightHand', kind: 'sword', targetWorldLongest: 0.9,
@@ -271,6 +309,7 @@ async function mountGeneratedCandidate(task, kind) {
     displayName: `Meshy ${kind} ${task.id.slice(0, 8)}`,
     boneName: spec.boneName,
     meshyTaskId: task.id,
+    fitProfile: spec.fitProfile?.id ?? null,
     hiddenAnatomy: spec.hideAnatomy,
     anchor: dynamicMount.anchor,
     fit: createFitSession(dynamicMount.anchor),
@@ -333,15 +372,13 @@ async function bootstrap() {
   const canvas = $('#forge-canvas');
   studioScene = await createStudioScene(canvas);
   window.__galaQuestForgeScene = studioScene;
-  studioScene.setAnimationPlaying(false);
-  $('#toggle-animation').textContent = 'play';
+  enterFitPose();
 
   const clips = studioScene.clipNames();
   for (const clip of clips) {
     const option = document.createElement('option');
     option.value = clip;
     option.textContent = clip;
-    option.selected = clip === studioScene.currentClipName;
     $('#animation-select').appendChild(option);
   }
 
@@ -368,13 +405,35 @@ for (const id of ['pos-x', 'pos-y', 'pos-z', 'rot-x', 'rot-y', 'rot-z', 'scale-d
 
 $$('[data-nudge]').forEach((button) => button.addEventListener('click', () => {
   if (!current?.fit) return;
-  const snapshot = current.fit.nudge(button.dataset.nudge, nudgeStep * Number(button.dataset.sign));
-  refreshFit(snapshot);
+  enterFitPose();
+  refreshFit(current.fit.nudge(button.dataset.nudge, nudgeStep * Number(button.dataset.sign)));
 }));
 
 $$('[data-step]').forEach((button) => button.addEventListener('click', () => {
   nudgeStep = Number(button.dataset.step);
   $$('[data-step]').forEach((item) => item.classList.toggle('active', item === button));
+}));
+
+$$('[data-rotate]').forEach((button) => button.addEventListener('click', () => {
+  if (!current?.fit) return;
+  enterFitPose();
+  refreshFit(current.fit.nudgeRotation(button.dataset.rotate, rotationStep * Number(button.dataset.sign)));
+}));
+
+$$('[data-rotation-step]').forEach((button) => button.addEventListener('click', () => {
+  rotationStep = Number(button.dataset.rotationStep);
+  $$('[data-rotation-step]').forEach((item) => item.classList.toggle('active', item === button));
+}));
+
+$$('[data-scale-nudge]').forEach((button) => button.addEventListener('click', () => {
+  if (!current?.fit) return;
+  enterFitPose();
+  refreshFit(current.fit.nudgeScale(scaleStep * Number(button.dataset.scaleNudge)));
+}));
+
+$$('[data-scale-step]').forEach((button) => button.addEventListener('click', () => {
+  scaleStep = Number(button.dataset.scaleStep);
+  $$('[data-scale-step]').forEach((item) => item.classList.toggle('active', item === button));
 }));
 
 $$('[data-view]').forEach((button) => button.addEventListener('click', () => {
@@ -387,6 +446,11 @@ $('#view-closeup').addEventListener('click', () => {
   applyView();
 });
 
+$('#fit-pose').addEventListener('click', () => {
+  enterFitPose(true);
+  refreshFit();
+});
+
 $('#animation-select').addEventListener('change', () => {
   const clip = studioScene.setAnimation($('#animation-select').value);
   studioScene.setAnimationPlaying(true);
@@ -394,15 +458,23 @@ $('#animation-select').addEventListener('change', () => {
   status(`previewing ${clip} · ${current?.displayName ?? 'candidate'}`);
 });
 $('#toggle-animation').addEventListener('click', () => {
-  studioScene.setAnimationPlaying(!studioScene.playing);
+  if (studioScene.playing) {
+    studioScene.setAnimationPlaying(false);
+  } else {
+    if (!studioScene.currentClipName && $('#animation-select').value) {
+      studioScene.setAnimation($('#animation-select').value);
+    }
+    studioScene.setAnimationPlaying(true);
+  }
   $('#toggle-animation').textContent = studioScene.playing ? 'pause' : 'play';
 });
 
 $('#reset-fit').addEventListener('click', () => {
   if (!current?.fit) return;
+  enterFitPose();
   localStorage.removeItem(fitKey(current.assetId));
   refreshFit(current.fit.reset());
-  status(`reset ${current.displayName} to candidate baseline`);
+  status(`reset ${current.displayName} to locked candidate baseline`);
 });
 
 $('#save-fit').addEventListener('click', () => {
