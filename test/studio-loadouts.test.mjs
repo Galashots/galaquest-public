@@ -1,9 +1,6 @@
-// A1 Studio convergence: the loadout vocabulary (public/src/studio/loadoutDescriptors.js) is the
-// semantic review-state seam the A2 Owner Fit work will consume. These tests protect the properties
-// that make it trustworthy: fail-closed lookup, truthful shipped/candidate provenance, the
-// one-sword rule, and the cross-boundary syncs (scene execution list, sol-review protocol enum)
-// that would otherwise drift silently. Wherever possible the expected value comes from a DIFFERENT
-// module than the one under test, so a bad implementation can actually disagree.
+// Character Studio loadout vocabulary is the semantic review-state seam. These tests protect the
+// properties that make it trustworthy: fail-closed lookup, truthful shipped/candidate provenance,
+// the one-sword rule, and cross-boundary schema/scene sync.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,6 +22,7 @@ import {
   WILDWOOD_BLADE_CANDIDATE_ID,
   WILDWOOD_BLADE_CANDIDATE_URL,
 } from '../public/src/character/gear.js';
+import { STUDIO_CANDIDATE_GEAR } from '../public/src/studio/candidateGear.js';
 import { LOADOUTS as SCENE_LOADOUTS } from '../public/src/studio/scene.js';
 
 test('an unknown loadout fails closed: null, not a guessed default and not a throw', () => {
@@ -46,9 +44,6 @@ test('scene.js executes exactly the descriptor vocabulary -- no orphan states in
 });
 
 test('the sol-review protocol loadout enums are pinned to the descriptor vocabulary', () => {
-  // The worker advertises supportedLoadouts from LOADOUT_IDS; the schema is what actually accepts
-  // or rejects a request. If these drift, the bridge advertises states it refuses to execute --
-  // the exact viewportPreset failure docs/MISTAKES.md records.
   const schema = JSON.parse(readFileSync('tools/sol-review/request.schema.json', 'utf8'));
   const capture = schema.else.then.properties.request.properties.loadout.enum;
   const envelope = schema.else.else.else.then.properties.request.properties.loadout.enum;
@@ -85,11 +80,6 @@ test('provenance is derived and truthful: contains-candidate iff a candidate ite
   }
 });
 
-// The distinction the Studio API publishes as two separate fields, pinned here so they can never
-// quietly collapse into one meaning. `loadoutIsShipping` answers "is this the baseline state the
-// game itself produces"; `gearProvenance` answers "does this state mount any unshipped asset".
-// These two states are exactly where the answers diverge -- if a future edit made provenance a
-// restatement of the baseline boolean, this fails.
 test('baseline-ness and gear provenance are different questions with different answers', () => {
   const diverging = ['shipping-sword-only', 'candidate-with-lantern'];
   for (const id of diverging) {
@@ -97,14 +87,13 @@ test('baseline-ness and gear provenance are different questions with different a
     assert.equal(descriptor.gearProvenance, SHIPPING_ONLY, `${id} mounts only shipped meshes`);
     assert.notEqual(id, 'shipping', `${id} is not the baseline loadout`);
   }
-  // ...and the baseline agrees with both, which is why the two fields look like synonyms until
-  // exactly these states are considered.
   assert.equal(loadoutDescriptor('shipping').gearProvenance, SHIPPING_ONLY);
   assert.equal(loadoutDescriptor('candidate-wildwood-blade').gearProvenance, CONTAINS_CANDIDATE);
+  assert.equal(loadoutDescriptor('candidate-dawnwarden-sword').gearProvenance, CONTAINS_CANDIDATE);
+  assert.equal(loadoutDescriptor('candidate-dawnwarden-helmet').gearProvenance, CONTAINS_CANDIDATE);
 });
 
 test('the provenance vocabulary never uses a bare "shipping" that could read as the baseline', () => {
-  // The wording itself is the safeguard against the two fields being mistaken for synonyms.
   assert.equal(SHIPPING_ONLY, 'shipping-only');
   assert.equal(CONTAINS_CANDIDATE, 'contains-candidate');
   for (const descriptor of STUDIO_LOADOUTS) {
@@ -112,15 +101,18 @@ test('the provenance vocabulary never uses a bare "shipping" that could read as 
   }
 });
 
-test('the candidate/shipped labels match where the assets actually live on disk', () => {
-  // The one candidate item is the Wildwood Blade, and its GLB genuinely sits in the quarantined
-  // candidates/ directory -- while every item marked shipped either ships inside the hero atlas
-  // (no separate file) or sits directly in assets/gear/. Checked against the real files so a
-  // relabelling (or a sneaky asset move) fails here rather than reading as an aesthetic call.
+test('candidate/shipped labels match where the assets actually live on disk', () => {
   const candidates = ALL_STUDIO_GEAR.filter((item) => item.provenance === 'candidate');
-  assert.deepEqual(candidates.map((item) => item.id), [WILDWOOD_BLADE_CANDIDATE_ID]);
+  const expectedIds = [WILDWOOD_BLADE_CANDIDATE_ID, ...STUDIO_CANDIDATE_GEAR.map((item) => item.id)].sort();
+  assert.deepEqual(candidates.map((item) => item.id).sort(), expectedIds);
+
   assert.match(WILDWOOD_BLADE_CANDIDATE_URL, /^assets\/gear\/candidates\//);
-  assert.ok(existsSync(`public/${WILDWOOD_BLADE_CANDIDATE_URL}`), 'candidate GLB missing from candidates/');
+  assert.ok(existsSync(`public/${WILDWOOD_BLADE_CANDIDATE_URL}`), 'Wildwood candidate GLB missing');
+  for (const candidate of STUDIO_CANDIDATE_GEAR) {
+    assert.match(candidate.url, /^assets\/gear\/candidates\//);
+    assert.ok(existsSync(`public/${candidate.url}`), `${candidate.id} candidate GLB missing`);
+  }
+
   assert.doesNotMatch(BELT_LANTERN_URL, /candidates/);
   assert.ok(existsSync(`public/${BELT_LANTERN_URL}`), 'shipped lantern GLB missing');
 });
@@ -153,31 +145,40 @@ test('shipping-sword-only mounts only shipped gear and only the sword', () => {
   assert.equal(descriptor.reviewTarget, loadoutDescriptor('shipping').reviewTarget);
 });
 
-test('the wildwood loadout keeps the shield -- the locked comparison varies only the sword', () => {
-  const wildwood = loadoutDescriptor('candidate-wildwood-blade');
+test('weapon candidate comparisons keep the shipping shield and replace only the sword', () => {
   const shipping = loadoutDescriptor('shipping');
   const shieldId = shipping.gear.find((item) => item.bone !== WILDWOOD_BLADE_CANDIDATE_BONE_NAME).id;
-  assert.ok(wildwood.gear.some((item) => item.id === shieldId), 'shield missing from the wildwood comparison state');
-  assert.equal(wildwood.reviewTarget, WILDWOOD_BLADE_CANDIDATE_ID);
+  for (const id of ['candidate-wildwood-blade', 'candidate-dawnwarden-sword']) {
+    const candidate = loadoutDescriptor(id);
+    assert.ok(candidate.gear.some((item) => item.id === shieldId), `${id}: shield missing`);
+    assert.equal(candidate.gear.filter((item) => item.bone === WILDWOOD_BLADE_CANDIDATE_BONE_NAME).length, 1);
+  }
+});
+
+test('Dawnwarden helmet comparison keeps the complete shipping loadout and adds only the helmet candidate', () => {
+  const shippingIds = loadoutDescriptor('shipping').gear.map((item) => item.id).sort();
+  const helmet = loadoutDescriptor('candidate-dawnwarden-helmet');
+  const candidateIds = helmet.gear.filter((item) => item.provenance === 'candidate').map((item) => item.id);
+  assert.equal(candidateIds.length, 1);
+  assert.ok(STUDIO_CANDIDATE_GEAR.some((item) => item.id === candidateIds[0] && item.kind === 'helmet'));
+  assert.deepEqual(helmet.gear.filter((item) => item.provenance === 'shipped').map((item) => item.id).sort(), shippingIds);
 });
 
 test('descriptors are deeply frozen data -- a consumer cannot quietly relabel a candidate', () => {
-  const descriptor = loadoutDescriptor('candidate-wildwood-blade');
+  const descriptor = loadoutDescriptor('candidate-dawnwarden-sword');
   assert.throws(() => { descriptor.gearProvenance = SHIPPING_ONLY; }, TypeError);
   assert.throws(() => { descriptor.gear[0].provenance = 'shipped'; }, TypeError);
   assert.throws(() => { STUDIO_LOADOUTS.push({}); }, TypeError);
 });
 
 test('Studio sources reference only assets that exist in public/ -- no private-era paths', () => {
-  // The A1 boundary rule: the public Studio must never grow a reference to private owner gear or
-  // to the private review-custody routes (/__review/...) that deliberately were not ported. Every
-  // literal asset path reachable from the Studio's own modules must resolve inside public/.
   const sources = [
     'public/studio.html',
     'public/src/studio/main.js',
     'public/src/studio/scene.js',
     'public/src/studio/api.js',
     'public/src/studio/loadoutDescriptors.js',
+    'public/src/studio/candidateGear.js',
     'public/src/character/gear.js',
   ];
   for (const file of sources) {
