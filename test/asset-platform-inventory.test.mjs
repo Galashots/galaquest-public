@@ -172,6 +172,44 @@ test('the recorded totals match the items they claim to summarise', () => {
     + 'the rationale recorded in the consolidation brief needs revisiting');
 });
 
+test('every code surface the manifest claims was ported is actually in the tree', () => {
+  // This is the zero-omissions proof, made mechanical. The manifest asserts that 50 non-binary
+  // surfaces from #26/#27/#28/#29 came across; if one silently did not, the claim is false and the
+  // consolidation has lost work without saying so.
+  const surfaces = items.filter((item) => String(item.item_id).startsWith('surface:'));
+  assert.equal(surfaces.length, 50);
+
+  const perPr = surfaces.reduce((counts, item) => {
+    counts[item.source_pr] = (counts[item.source_pr] ?? 0) + 1;
+    return counts;
+  }, {});
+  assert.deepEqual(perPr, { 26: 20, 27: 16, 28: 7, 29: 7 },
+    'these are the exact non-binary changed-file counts of each source PR against its own base');
+
+  const missing = surfaces
+    .filter((item) => !existsSync(resolve(repoRoot, ...item.proposed_destination.split('/'))))
+    .map((item) => item.proposed_destination);
+  assert.deepEqual(missing, [], 'a surface recorded as ported must exist at its destination');
+});
+
+test('PR #11 is dispositioned with reasons rather than silently dropped', () => {
+  const salvage = manifest.pr_11_salvage;
+  assert.ok(salvage, 'the oldest branch still needs an explicit written verdict');
+  assert.equal(salvage.head, '40b95c8101135b1503147203924b5f8212b5b2bd');
+
+  for (const surface of salvage.surfaces) {
+    assert.ok(['DO_NOT_PORT', 'HISTORICAL_ONLY', 'SUPERSEDED_BY', 'PRESERVE_LATER']
+      .includes(surface.disposition), `${surface.path} has an unusable disposition`);
+    assert.ok(surface.reason.length > 40, `${surface.path} needs a real reason`);
+  }
+
+  // The specific trap: PR #11's Meshy clients look like salvage and are actually less safe than
+  // what main already has. Nothing should ever quietly cherry-pick them back.
+  const client = salvage.surfaces.find((s) => s.path === 'tools/meshy/image_to_3d.mjs');
+  assert.equal(client.disposition, 'DO_NOT_PORT');
+  assert.match(client.reason, /REGRESSION/);
+});
+
 test('the provider-side gear bank is not quietly upgraded to verified', () => {
   const gear = items.filter((item) => item.category === 'provider-task/gear-candidate');
   for (const item of gear) {

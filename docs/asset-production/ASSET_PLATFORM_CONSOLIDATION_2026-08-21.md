@@ -180,9 +180,24 @@ of silently dropping a layer during a conflict resolution:
 - the two Dawnwarden GLBs — taken from #26's tree;
 - everything else binary — recorded in the inventory and left out of the tree.
 
-The four files touched by more than one PR (`public/src/studio/scene.js`,
-`public/src/studio/candidateGear.js`, `net/forgeApi.mjs`, `public/forge.html`,
-`public/src/forge/main.js`, `test/glb-materials.test.mjs`) are all covered by that rule.
+Six files were touched by more than one PR and are the places where a careless merge would silently
+drop a layer. All six are covered by the rule above, and each keeps its own inventory row per PR so
+the layering stays visible:
+
+| File | Layers | Taken from |
+| --- | --- | --- |
+| `public/src/studio/scene.js` | #26 + #27 | #29 |
+| `public/src/studio/candidateGear.js` | #26 + #27 | #29 |
+| `net/forgeApi.mjs` | #27 + #29 | #29 |
+| `public/forge.html` | #27 + #29 | #29 |
+| `public/src/forge/main.js` | #27 + #29 | #29 |
+| `test/glb-materials.test.mjs` | #26 + #28 | #28 |
+
+**50 non-binary surfaces** came across in total — 20 from #26, 16 from #27, 7 from #28 and 7 from
+#29, which are exactly each PR's non-binary changed-file count against its own base. One file moved:
+the dated Forge handoff went from the repository root to `docs/asset-production/`, where the other
+dated records live. `test/asset-platform-inventory.test.mjs` asserts all 50 counts and checks every
+destination exists, so the zero-omissions claim is mechanical rather than a promise.
 
 ## 8. Dispositions
 
@@ -204,7 +219,63 @@ Neither Wren nor Bramble Stalker is referenced by any code path in any of the fo
 every `bramble` hit in the source tree is the unrelated gameplay obstacle in `VILLAGE.BRAMBLES`. They
 archive cleanly with zero runtime risk.
 
-## 9. Deliberately not done
+## 9. PR #11 — nothing ported, and why
+
+Against `main`, PR #11 adds one file, deletes 30 and modifies 48. It introduces no binaries. Most of
+that surface is not new work: the branch diverged before roughly sixteen merged PRs, so `main` is
+ahead of it almost everywhere.
+
+The brief hoped to salvage its dry-run-first Image-to-3D, rigging and animation CLIs. **They are
+already on `main` in a strictly safer form**, merged by PR #15, so porting #11's versions would be a
+spend-safety *regression*. Read side by side:
+
+- **#11 `tools/meshy/image_to_3d.mjs`** awaits `balance()` at line 64, *before* the dry-run gate at
+  line 69. A "dry run" therefore reads credentials and makes a live authenticated provider call.
+- **`main`'s version** gates first — `if (!go)` returns at line 39, before the `api`/`balance`
+  helpers are even defined at line 67 — and its header states the dry run is *"fully offline"*.
+
+`tools/meshy/README.md` on #11 is also unmergeable as-is: it presents a session-scoped budget as
+standing permission, and `test/guidance-integrity.test.mjs` hard-bans the literal phrase it uses.
+`main`'s version carries the "Credit budgets are not authority" rule this consolidation enforces
+everywhere else.
+
+The one genuinely new file, `docs/pipeline/briefs/beacon-warden.md`, is **HISTORICAL_ONLY**. No asset
+named beacon-warden exists in the current bank — that is the 13-enemy Wave 1 roster plus Bramble
+Stalker — and the brief hardcodes paths that do not exist, which would fail the guidance path scan if
+landed under `docs/pipeline/`. It stays readable on its own unclosed branch as dated Warden art
+direction. **No Warden generation is authorised.**
+
+## 10. Independent verification
+
+Two read-only auditors worked in parallel on non-overlapping scopes, and their findings were
+cross-checked rather than taken on trust.
+
+- **Hashes agree.** The 21 candidate SHA-256 values were computed twice, independently — once by the
+  lead from git blobs and once by the inventory auditor. **21/21 match, zero mismatches.** Byte
+  totals, per-PR counts and the "35 tasks, 0 binaries" result agree exactly.
+- **A real misclassification was found and fixed.** The Dawnwarden helmet and sword were filed in
+  `KNOWN_DORMANT_DEFECTS` as raw flooded-emissive Meshy output. Re-parsing the glTF disproves it:
+  both measure `pygltflib@v1.16.5`, no emissive, explicit `metallicFactor 0` / `roughnessFactor 0.8`
+  — the same already-processed signature as the shipped Wildwood sword, and nothing like the raw
+  export signature (`Khronos glTF Blender I/O v4.0.43`, `emissiveFactor [1,1,1]`, no PBR factors)
+  carried by Wren, Bramble and all 13 enemies. The entries are removed and a guard now fails if a
+  clean asset is ever filed as broken again.
+- **A boot-level fault was found and fixed.** Hero anatomy drift took Game, Studio *and* the Forge
+  down, because `loadHero()` had no `try`/`catch` and none of its three callers caught the rejection.
+  Runtime now degrades loudly to no occlusion; CI still hard-fails.
+- **One spend-safety property was implemented but unproven.** Transient poll failures could not
+  duplicate spend, but nothing guarded the retry threshold. It is now named, shared and tested.
+
+Two anomalies are recorded rather than fixed, because fixing them is not this task's job:
+
+1. **Wren Ranger and Bramble Stalker have no provider task IDs at all** — no task record, rig ID or
+   brief, unlike Enemy Wave 1's three-deep provenance. Their git blob is the *only* handle on them,
+   which makes them the **highest-priority upload** in the archive queue: unlike the enemies, they
+   could not be re-downloaded from the provider if the branch were ever lost.
+2. #26 committed walk/run duplicates for its two characters while #28 deliberately did not for any of
+   its 13. That inconsistency is undocumented; the archive treats both the same way.
+
+## 11. Deliberately not done
 
 - No source PR merged, closed or modified.
 - No new Meshy generation, rigging or animation. No provider call at all, paid or read-only.
