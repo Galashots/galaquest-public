@@ -21,6 +21,7 @@ import {
   WILDWOOD_BLADE_CANDIDATE_BONE_NAME,
   WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../character/gear.js';
+import { normalizeHiddenRegions } from '../character/anatomyOcclusion.js';
 import {
   DAWNWARDEN_HELMET_CANDIDATE,
   DAWNWARDEN_SWORD_CANDIDATE,
@@ -39,8 +40,13 @@ const CANDIDATE = 'candidate';
 export const SHIPPING_ONLY = 'shipping-only';
 export const CONTAINS_CANDIDATE = 'contains-candidate';
 
-function gearEntry(id, bone, provenance) {
-  return Object.freeze({ id, bone, provenance });
+function gearEntry(id, bone, provenance, hideAnatomy = []) {
+  return Object.freeze({
+    id,
+    bone,
+    provenance,
+    hideAnatomy: Object.freeze(normalizeHiddenRegions(hideAnatomy)),
+  });
 }
 
 const sword = gearEntry(SHIPPING_SWORD.id, SHIPPING_SWORD.boneName, SHIPPED);
@@ -56,6 +62,7 @@ const dawnwardenHelmet = gearEntry(
   DAWNWARDEN_HELMET_CANDIDATE.id,
   DAWNWARDEN_HELMET_CANDIDATE.boneName,
   CANDIDATE,
+  DAWNWARDEN_HELMET_CANDIDATE.hideAnatomy,
 );
 
 function descriptor({ id, label, reviewTarget, gear, note = null }) {
@@ -68,6 +75,7 @@ function descriptor({ id, label, reviewTarget, gear, note = null }) {
     reviewTarget,
     gear: Object.freeze([...gear]),
     gearProvenance: gear.some((item) => item.provenance === CANDIDATE) ? CONTAINS_CANDIDATE : SHIPPING_ONLY,
+    hideAnatomy: Object.freeze(normalizeHiddenRegions(gear.flatMap((item) => item.hideAnatomy))),
     note,
   });
 }
