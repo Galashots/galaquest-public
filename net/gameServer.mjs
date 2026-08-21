@@ -423,26 +423,33 @@ export function createRewardCoordinator(options = {}) {
    * lantern:<guestId> insert actually take, so "exactly once, ever" holds even across a restart
    * (D2's own close+reopen guarantee is what this is built on).
    *
-   * DELIBERATE DEVIATION from using award.eventId verbatim as the durable key, found by a failing
-   * test (test/reward-wiring.test.mjs, "the third kill unlocks the lantern... across a store
-   * restart") rather than assumed: D1's `mark:<heroId>:<lifeIndex>` is only unique WITHIN one
-   * server process's lifetime. Both of its components reset on a real restart -- `lifeIndex` comes
-   * from marks.js's own in-memory ledger (starts at 0 again), and heroId is `p<n>` off
-   * createSimulation's own nextPlayerNumber (also starts at 0 again) -- so a kill immediately after
-   * a restart recomputes an eventId ALREADY on record from a previous run, and INSERT OR IGNORE
-   * silently swallows it as a replay. It is not a replay; it is a new kill that never gets its mark.
-   * The durable key instead anchors on guestId (the one identity that genuinely survives a restart)
-   * plus the store's OWN current count for that guest, read immediately before applying -- a value
-   * that can only ever grow, so it can never collide with a row already on record. D1's own
-   * award.eventId keeps its documented job for the ephemeral (guestId-less) fallback below, where
-   * per-process state is exactly right since that state does not survive a restart either.
+   * The durable key is `mark:<guestId>:<lifeId>` -- the guest who is owed, and the wolf-life they
+   * are owed FOR. Both halves matter and each replaced a broken predecessor:
+   *
+   *   - `mark:<heroId>:<lifeIndex>` (the fold's own id) is unique only within one process. Both
+   *     components reset on a restart, so the first kill after one recomputes an id already on
+   *     record and INSERT OR IGNORE swallows a real kill. Found by a failing test
+   *     (test/reward-wiring.test.mjs, "the third kill unlocks the lantern... across a store restart").
+   *   - Reading `store.marksFor(guestId)` here instead cured the restart case but was not idempotent:
+   *     two heroIds can map to ONE guestId (two tabs share localStorage, hence the guestId), the
+   *     fold credits each contributor separately, and this count was re-read BETWEEN the two awards
+   *     -- so the second computed a different key and inserted. One kill, two marks, and the lantern
+   *     unlocking in two kills instead of three. Proved by test/profile-identity.test.mjs.
+   *
+   * marks.js now mints one lifeId per wolf-defeated, so every contributor to a life carries the same
+   * one: one guest's two bodies collapse to a single durable key, while two different guests keep
+   * their own -- participation credit intact, duplication impossible. The count is not read at all
+   * any more; nothing here derives an identity from a number that the act of paying changes.
+   *
+   * D1's own award.eventId keeps its documented job for the ephemeral (guestId-less) fallback below,
+   * where per-process state is exactly right since that state does not survive a restart either.
    */
   function applyMarkAward(award) {
     const guestId = guestIdByPlayer.get(award.heroId);
     const events = [];
 
     if (guestId) {
-      const durableEventId = `mark:${guestId}:${store.marksFor(guestId)}`;
+      const durableEventId = `mark:${guestId}:${award.lifeId}`;
       const result = store.apply({ guestId, heroId: award.heroId, type: 'mark-earned', eventId: durableEventId });
       if (result.applied) events.push({ type: 'mark-earned', heroId: award.heroId });
       if (store.marksFor(guestId) >= MARKS_TO_UNLOCK) {
@@ -474,7 +481,10 @@ export function createRewardCoordinator(options = {}) {
    * mark-earned/lantern-unlocked "the way they hear wolf-defeated" -- one array, one broadcast.
    */
   function processTick(events) {
-    const folded = foldEvents(ledger, events);
+    // randomUUID, not the fold's own life index: the index restarts at 0 with the process and would
+    // recompute an eventId already on disk. See rewards/marks.js's header for both halves of that
+    // lesson and for why the id is minted per LIFE rather than per contributor.
+    const folded = foldEvents(ledger, events, { mintLifeId: () => randomUUID() });
     ledger = folded.ledger;
     const rewardEvents = [];
     for (const award of folded.awards) rewardEvents.push(...applyMarkAward(award));
