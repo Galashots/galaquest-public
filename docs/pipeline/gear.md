@@ -1,8 +1,9 @@
 # Gear lane — generated gear, mounted on the hero, judged in the running game
 
 Historical proven runs include the cuirass generate-and-fit proof and the shipped belt lantern. Gear is
-where the mesh pipeline meets the live rig: create/qualify the mesh with [props.md](props.md), then use
-this runbook for mounting and running-game acceptance.
+where the mesh pipeline meets the live rig: create/qualify the mesh with [props.md](props.md), apply the
+topology/anatomy-coverage gates in [character-armoring.md](character-armoring.md), then use this runbook
+for mounting and running-game acceptance.
 
 ## Mounting facts
 
@@ -13,6 +14,9 @@ this runbook for mounting and running-game acceptance.
 - Use the live bone transform/approved mounting convention; do not trust importer-synthesized bone
   tails as anatomical authority.
 - Runtime gear transforms are produced from measured fit work, never typed from aesthetic guesswork.
+- For an approved hand-seated sword, preserve proximal hand seating when changing length: extend the
+  change toward the tip. Never recenter through the mesh/bounding-box center, world-min, or length
+  compensation.
 - Before solving any mount, use the visual-reference-first procedure and state the carry convention in
   words. Geometry can produce a perfectly consistent wrong convention.
 

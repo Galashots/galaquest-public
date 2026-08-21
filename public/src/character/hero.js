@@ -1,6 +1,10 @@
 import { CHARACTER, setLayer } from '../render/layers.js';
 import { loadGLB } from '../world/assets.js';
 import { attachRigidTier2Gear } from './gear.js';
+import {
+  attachTriangleAnatomyRegions, geometryForAnatomyCoverage, normalizeHiddenRegions,
+} from './anatomyOcclusion.js';
+import { HERO_ANATOMY_SOURCE, HERO_ANATOMY_TRIANGLES } from './heroAnatomyRegions.js';
 
 export const HERO_URL = 'assets/hero/hero_lod1_ironwood_atlas.glb';
 
@@ -83,6 +87,36 @@ export function normaliseCharacterMaterial(material) {
   return changed;
 }
 
+function installHeroAnatomy(root) {
+  const skinnedBodies = [];
+  root.traverse((object) => {
+    if (object.isSkinnedMesh && object.geometry) skinnedBodies.push(object);
+  });
+  if (skinnedBodies.length !== 1) {
+    throw new Error(`Hero anatomy proof expected exactly one skinned body mesh, found ${skinnedBodies.length}`);
+  }
+  if (HERO_ANATOMY_SOURCE.assetPath !== HERO_URL) {
+    throw new Error(`Hero anatomy sidecar targets ${HERO_ANATOMY_SOURCE.assetPath}, runtime loads ${HERO_URL}`);
+  }
+
+  const body = skinnedBodies[0];
+  const sourceGeometry = body.geometry;
+  attachTriangleAnatomyRegions(sourceGeometry, HERO_ANATOMY_TRIANGLES, HERO_ANATOMY_SOURCE);
+  let coverage = Object.freeze([]);
+
+  return {
+    setCoverage(hiddenRegions = []) {
+      const normalized = Object.freeze(normalizeHiddenRegions(hiddenRegions));
+      body.geometry = geometryForAnatomyCoverage(sourceGeometry, normalized);
+      coverage = normalized;
+      return [...coverage];
+    },
+    get coverage() { return [...coverage]; },
+    body,
+    sourceGeometry,
+  };
+}
+
 export async function loadHero() {
   const gltf = await loadGLB(HERO_URL);
   const root = setLayer(gltf.scene, CHARACTER);
@@ -97,6 +131,7 @@ export async function loadHero() {
     }
   });
   const failed = Boolean(gltf.userData?.loadError);
+  const anatomy = failed ? null : installHeroAnatomy(root);
 
   // This runs before the local hero becomes the remote-player template, so
   // SkeletonUtils clones each solved anchor with the rest of the rig.
@@ -107,5 +142,13 @@ export async function loadHero() {
     failed,
     rigidGear,
     root,
+    setAnatomyCoverage(hiddenRegions = []) {
+      if (!anatomy) {
+        if (hiddenRegions.length) throw new Error('cannot apply anatomy coverage to failed Hero fallback');
+        return [];
+      }
+      return anatomy.setCoverage(hiddenRegions);
+    },
+    get anatomyCoverage() { return anatomy?.coverage ?? []; },
   };
 }
