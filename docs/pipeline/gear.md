@@ -1,8 +1,9 @@
 # Gear lane — generated gear, mounted on the hero, judged in the running game
 
 Historical proven runs include the cuirass generate-and-fit proof and the shipped belt lantern. Gear is
-where the mesh pipeline meets the live rig: create/qualify the mesh with [props.md](props.md), then use
-this runbook for mounting and running-game acceptance.
+where the mesh pipeline meets the live rig: create/qualify the mesh with [props.md](props.md), apply the
+topology/anatomy-coverage gates in [character-armoring.md](character-armoring.md), then use this runbook
+for mounting and running-game acceptance.
 
 ## Mounting facts
 
