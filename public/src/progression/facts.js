@@ -16,7 +16,16 @@
 // Merge a fact twice, in either order, from either origin: the same state comes out.
 //
 // The one field that is not additive is the equipped weapon, which is a single latest-wins value
-// rather than an accumulation. It carries `seq` and is resolved by highest seq -- see foldFacts.
+// rather than an accumulation. It carries `rev`, a DURABLE revision, and ties break on eventId --
+// see foldFacts, and see the note below on why the revision has to be durable to mean anything.
+//
+// `rev` is not a counter and not a row index, because it was both of those first and both were
+// wrong at exactly the boundary this file exists for. A counter held in memory restarts at zero on
+// the next page load; an index reconstructed from whichever database is currently readable restarts
+// when that database is replaced. Either way a NEW equip is minted with a number beneath an OLD one
+// and "latest wins" quietly returns the weapon the child stopped holding. The revision therefore has
+// to come from something that survives both events -- the device's own journal, which is the only
+// participant present on both sides of a server wipe. progression/profiles.js assigns it.
 //
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
@@ -69,14 +78,30 @@ export function unionFacts(...sequences) {
       const existing = byId.get(fact.eventId);
       if (existing === undefined) {
         byId.set(fact.eventId, fact);
-      } else if (numberOr(fact.seq, -1) > numberOr(existing.seq, -1)) {
-        // Same fact, but one copy carries a later sequence than the other. Keep the better-informed
-        // copy so equip ordering survives a union in either direction.
+      } else if (numberOr(fact.rev, -1) > numberOr(existing.rev, -1)) {
+        // The same fact reached us from both stores and only one copy knows its revision -- the
+        // journal has stamped it, the server's copy never carried one. Keep the better-informed
+        // copy: dropping the revision here would hand the ordering back to iteration order, which
+        // is the failure this whole field exists to prevent.
         byId.set(fact.eventId, fact);
       }
     }
   }
   return [...byId.values()];
+}
+
+/**
+ * Order two equip facts. Higher revision wins; a tie breaks on eventId.
+ *
+ * The tiebreaker is not decoration. Two tabs, or an offline equip meeting a server one, can
+ * genuinely mint the same revision, and "whichever the loop happened to reach last" would then make
+ * the child's weapon depend on which store was read first -- so a reload could silently change it.
+ * Comparing the ids is arbitrary but total and stable, which is all a tiebreak has to be.
+ */
+function equipOutranks(fact, bestRev, bestEventId) {
+  const rev = numberOr(fact.rev, -1);
+  if (rev !== bestRev) return rev > bestRev;
+  return bestEventId === null || fact.eventId > bestEventId;
 }
 
 function numberOr(value, fallback) {
@@ -109,7 +134,8 @@ export function foldFacts(facts, defaults = {}) {
   let charmOwned = false;
   const ownedItemIds = new Set(defaults.ownedItemIds ?? []);
   let equippedWeaponId = null;
-  let equippedSeq = -1;
+  let equippedRev = -1;
+  let equippedEventId = null;
 
   for (const fact of merged) {
     switch (fact.type) {
@@ -130,13 +156,15 @@ export function foldFacts(facts, defaults = {}) {
         break;
       }
       case 'weapon-equipped': {
-        // Latest-wins, resolved by an explicit sequence rather than by iteration order -- a Map's
-        // insertion order is a fact about how the union was built, not about when the child equipped
-        // something, and leaning on it would make the answer depend on which store was read first.
-        const seq = numberOr(fact.seq, 0);
-        if (typeof fact.value === 'string' && fact.value.length > 0 && seq >= equippedSeq) {
+        // Latest-wins, resolved by durable revision and then by eventId -- never by iteration order.
+        // A Map's insertion order is a fact about how the union was built, not about when the child
+        // equipped something, and leaning on it makes the answer depend on which store was read
+        // first, which is precisely what a reload changes.
+        if (typeof fact.value === 'string' && fact.value.length > 0
+          && equipOutranks(fact, equippedRev, equippedEventId)) {
           equippedWeaponId = fact.value;
-          equippedSeq = seq;
+          equippedRev = numberOr(fact.rev, -1);
+          equippedEventId = fact.eventId;
         }
         break;
       }

@@ -27,10 +27,16 @@
 
 import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS } from './items.js';
 import { foldFacts, isProfileFact, unionFacts } from './facts.js';
+// One authority for the client's id rule and one for the legacy key (GQ-007). net/guestId.js already
+// owns both -- a profile id travels the wire in the guestId field and so is the same kind of string,
+// and re-stating either here would leave two copies to drift apart. guestId.js keeps its own regex
+// separate from protocol.js's for a different reason it documents: that one is the WIRE validating
+// what it received, this is the CLIENT deciding what it will mint.
+import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../net/guestId.js';
 
 export const PROFILES_STORAGE_KEY = 'gq-profiles';
 export const JOURNAL_KEY_PREFIX = 'gq-journal:';
-export const LEGACY_GUEST_ID_KEY = 'gq-guest-id';
+export const LEGACY_GUEST_ID_KEY = GUEST_ID_STORAGE_KEY;
 
 export const PROFILES_SCHEMA_VERSION = 1;
 export const JOURNAL_SCHEMA_VERSION = 1;
@@ -42,18 +48,10 @@ export const MAX_PROFILES = 4;
 export const DISPLAY_NAME_MAX_LENGTH = 16;
 export const DEFAULT_DISPLAY_NAME = 'Hero';
 
-/** Mirrors public/src/net/protocol.js's GUEST_ID_PATTERN, because a profile id travels the wire in
- *  that field. Duplicated rather than imported for exactly the reason net/guestId.js states about
- *  the same regex: this is the client deciding what it will mint, not the wire validating what it
- *  received, and one regex literal is not the kind of thing that drifts. Verified: 'p-' plus a
- *  crypto.randomUUID() is 38 characters drawn from [A-Za-z0-9-], so a minted id always matches. */
-const PROFILE_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
-
-function sanitizeProfileId(candidate) {
-  if (typeof candidate !== 'string') return null;
-  const stripped = candidate.replace(/[^A-Za-z0-9-]/g, '');
-  return PROFILE_ID_PATTERN.test(stripped) ? stripped : null;
-}
+/** A profile id IS a guest id as far as the wire is concerned -- it travels in that field -- so it
+ *  is sanitized by that module's rule rather than by a second copy of it. Verified: 'p-' plus a
+ *  crypto.randomUUID() is 38 characters drawn from [A-Za-z0-9-], so a minted id always passes. */
+const sanitizeProfileId = sanitizeGuestId;
 
 /** Trimmed, length-capped, never empty. A blank name is replaced rather than rejected: a child who
  *  taps GO without typing gets a hero called Hero, not an error message. */
@@ -165,6 +163,47 @@ function readJournal(storage, profileId) {
   }
 }
 
+/**
+ * The highest equip revision this device has ever recorded for a profile.
+ *
+ * Read from the journal rather than held in a variable, and that is the entire repair: an in-memory
+ * counter is reset by the next page load, and a row index is reset by the next database, so either
+ * one lets a NEW equip be minted beneath an OLD one. The journal is the one participant present on
+ * both sides of a reload AND of a server wipe, so it is the only thing whose ordering can be trusted
+ * across them. -1 for a profile that has never equipped anything, so the first revision is 0.
+ */
+function highestEquipRevision(facts) {
+  let highest = -1;
+  for (const fact of facts) {
+    if (fact.type !== 'weapon-equipped') continue;
+    if (typeof fact.rev === 'number' && Number.isFinite(fact.rev) && fact.rev > highest) {
+      highest = fact.rev;
+    }
+  }
+  return highest;
+}
+
+/**
+ * Stamp a durable revision onto equip facts that arrived without one, continuing above everything
+ * already on record. Facts already in the journal are left exactly as they are -- re-stamping a
+ * known fact would move an ordering that has already been decided, which is how a replayed snapshot
+ * could otherwise re-equip an old weapon.
+ *
+ * Incoming order is preserved because it is meaningful: net/rewardStore.mjs returns a profile's
+ * facts in rowid order, so a device meeting an existing profile for the first time replays that
+ * server's real chronology rather than inventing one.
+ */
+function stampEquipRevisions(incoming, knownEventIds, startRev) {
+  let next = startRev;
+  return incoming.map((fact) => {
+    if (fact.type !== 'weapon-equipped') return fact;
+    if (knownEventIds.has(fact.eventId)) return fact;
+    if (typeof fact.rev === 'number' && Number.isFinite(fact.rev)) return fact;
+    next += 1;
+    return { ...fact, rev: next };
+  });
+}
+
 function writeJournal(storage, profileId, facts) {
   try {
     storage.setItem(journalKeyFor(profileId), JSON.stringify({ v: JOURNAL_SCHEMA_VERSION, facts }));
@@ -215,7 +254,10 @@ export function createProfileStore(options = {}) {
   };
 
   let keyring = readKeyring(storage);
-  let sequence = 0;
+  // Uniqueness only, never ordering: this disambiguates fallback ids minted on a host with no
+  // crypto.randomUUID. Equip ordering deliberately does NOT come from a counter like this one --
+  // see highestEquipRevision for why a number that restarts cannot order anything durable.
+  let mintCounter = 0;
 
   function mintProfileId() {
     if (randomUUID) {
@@ -228,7 +270,7 @@ export function createProfileStore(options = {}) {
     let attempt = 0;
     do {
       attempt += 1;
-      candidate = sanitizeProfileId(`p-local-${keyring.profiles.length + attempt}-${sequence += 1}`);
+      candidate = sanitizeProfileId(`p-local-${keyring.profiles.length + attempt}-${mintCounter += 1}`);
     } while (candidate && keyring.profiles.some((p) => p.id === candidate));
     return candidate;
   }
@@ -343,11 +385,8 @@ export function createProfileStore(options = {}) {
 
     const existing = readJournal(storage, profileId);
     const before = existing.length;
-    const stamped = incoming.map((fact) => (
-      fact.type === 'weapon-equipped' && typeof fact.seq !== 'number'
-        ? { ...fact, seq: (sequence += 1) }
-        : fact
-    ));
+    const known = new Set(existing.map((fact) => fact.eventId));
+    const stamped = stampEquipRevisions(incoming, known, highestEquipRevision(existing));
     const merged = unionFacts(existing, stamped);
     if (merged.length === before) return { appended: 0 };
     writeJournal(storage, profileId, merged);
@@ -364,7 +403,15 @@ export function createProfileStore(options = {}) {
    * on which of the two was reachable.
    */
   function stateFor(profileId, serverFacts = []) {
-    return foldFacts(unionFacts(readJournal(storage, profileId), serverFacts), {
+    const journal = readJournal(storage, profileId);
+    // Server facts this device has not journalled yet are stamped the same way recordFacts would,
+    // so reading before recording and reading after recording give the same answer. Without this a
+    // freshly-heard equip would fold with no revision at all and lose to the journal's history.
+    const known = new Set(journal.map((fact) => fact.eventId));
+    const stamped = stampEquipRevisions(
+      (serverFacts ?? []).filter(isProfileFact), known, highestEquipRevision(journal),
+    );
+    return foldFacts(unionFacts(journal, stamped), {
       equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
       ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
     });

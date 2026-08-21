@@ -270,15 +270,19 @@ export function openRewardStore(path) {
 
   /** This profile's durable facts, shaped for public/src/progression/facts.js's union: `eventId` is
    *  the same idempotency key apply() writes, so merging these into a local journal that already
-   *  holds some of them is a no-op for the overlap. `seq` carries the store's own write order, which
-   *  is what lets the client resolve the equipped weapon without depending on which side it read
-   *  first. */
+   *  holds some of them is a no-op for the overlap.
+   *
+   *  Deliberately carries NO ordering number. An index over these rows would look like an authority
+   *  and not be one: it is recomputed from whichever database is readable now, so a store that has
+   *  been wiped and rebuilt hands back low indices for facts the device already knows under high
+   *  ones, and "latest equipped" resolves to the weapon the child stopped holding. The row ORDER is
+   *  real (rowid ascending, below) and is the honest thing to publish; the client stamps a durable
+   *  revision from its own journal, which is the only record that survives this file being deleted. */
   function profileFactsFor(guestId) {
-    return profileFactsStmt.all(guestId).map((row, index) => ({
+    return profileFactsStmt.all(guestId).map((row) => ({
       eventId: row.id,
       type: row.type,
       value: row.value ?? undefined,
-      seq: index,
     }));
   }
 
