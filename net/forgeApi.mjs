@@ -1,9 +1,66 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 const MESHY_API = 'https://api.meshy.ai/openapi';
 const MAX_JSON_BYTES = 12 * 1024 * 1024;
 const LOCAL_KEY_URL = new URL('../.local/meshy/api-key.txt', import.meta.url);
+
+/**
+ * Deployment fail-closed gate. The Forge's Meshy lane must be impossible to reach on a host that was
+ * never explicitly turned into a Forge workstation -- most importantly the public Render game host.
+ * Every /api/forge route except the minimal status probe refuses to operate unless the operator set
+ * GALAQUEST_FORGE_ENABLED, independently of whether a key/token happen to be present. See
+ * docs/pipeline/forge-deployment.md for the deployment boundary this enforces.
+ */
+export function forgeEnabled() {
+  const value = (process.env.GALAQUEST_FORGE_ENABLED ?? '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
+// ── duplicate-spend protection (process-memory) ────────────────────────────────────────────────
+//
+// The ledger below makes a repeated generation-start with the same idempotency key return the
+// original provider task instead of creating a second paid task, and rate-limits how fast paid
+// tasks can be created at all. DURABILITY BOUNDARY, stated plainly: this state lives in process
+// memory only. A server restart forgets both the ledger and the rate window; this is NOT
+// restart-durable idempotency. That is an accepted trade for a zero-dependency repo -- the browser
+// additionally persists its own pending-task record (public/src/forge/pendingTask.js) and resumes
+// the provider task by id rather than resubmitting, so the two layers cover each other's gaps.
+// One unresolvable edge stays unresolvable at this layer: if the provider accepted a task but the
+// response was lost on the network, the server cannot know a task exists; the ledger entry is
+// dropped on provider error so an explicit human retry is possible.
+const SPEND_LEDGER_TTL_MS = 24 * 60 * 60 * 1000;
+export const SPEND_RATE_LIMIT = 6;
+export const SPEND_RATE_WINDOW_MS = 10 * 60 * 1000;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+
+const spendLedger = new Map(); // idempotencyKey -> { fingerprint, createdAtMs, taskPromise }
+const spendSubmissionTimes = []; // ms timestamps of actual provider submissions
+
+export function resetForgeSpendStateForTests() {
+  spendLedger.clear();
+  spendSubmissionTimes.length = 0;
+}
+
+function pruneSpendState(nowMs) {
+  for (const [key, entry] of spendLedger) {
+    if (nowMs - entry.createdAtMs > SPEND_LEDGER_TTL_MS) spendLedger.delete(key);
+  }
+  while (spendSubmissionTimes.length && nowMs - spendSubmissionTimes[0] > SPEND_RATE_WINDOW_MS) {
+    spendSubmissionTimes.shift();
+  }
+}
+
+function requireIdempotencyKey(input) {
+  const key = input?.idempotencyKey;
+  if (typeof key !== 'string' || !IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    throw Object.assign(
+      new Error('idempotencyKey is required: 8-128 chars of [A-Za-z0-9_-], unique per human generation attempt'),
+      { status: 400 },
+    );
+  }
+  return key;
+}
 
 function sendJson(response, status, value) {
   const body = Buffer.from(JSON.stringify(value));
@@ -161,10 +218,25 @@ export async function handleForgeApiRequest(request, response) {
     const key = await resolveMeshyKey();
 
     if (request.method === 'GET' && url.pathname === '/api/forge/meshy/status') {
+      // A disabled host answers only "disabled" -- it does not reveal whether a key or unlock token
+      // happens to be configured, so a public deployment is not a free configuration probe.
+      if (!forgeEnabled()) {
+        sendJson(response, 200, { enabled: false, spendLocked: true });
+        return true;
+      }
       sendJson(response, 200, {
+        enabled: true,
         configured: Boolean(key),
         spendLocked: true,
         tokenConfigured: Boolean(process.env.GALAQUEST_FORGE_TOKEN?.trim()),
+      });
+      return true;
+    }
+
+    if (!forgeEnabled()) {
+      sendJson(response, 503, {
+        error: 'forge_disabled',
+        message: 'The Forge Meshy lane is disabled on this server. Set GALAQUEST_FORGE_ENABLED=1 on a dedicated Forge workstation; never on the public game host.',
       });
       return true;
     }
@@ -186,9 +258,47 @@ export async function handleForgeApiRequest(request, response) {
 
     if (request.method === 'POST' && url.pathname === '/api/forge/meshy/image-to-3d') {
       const input = await readJsonBody(request);
+      const idempotencyKey = requireIdempotencyKey(input);
       const body = normalizeForgeImageTo3DRequest(input);
-      const created = await meshyJson(key, '/v1/image-to-3d', { method: 'POST', body: JSON.stringify(body) });
-      sendJson(response, 202, { taskId: created.result });
+      const fingerprint = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+      const nowMs = Date.now();
+      pruneSpendState(nowMs);
+
+      const existing = spendLedger.get(idempotencyKey);
+      if (existing) {
+        if (existing.fingerprint !== fingerprint) {
+          throw Object.assign(
+            new Error('idempotencyKey was already used for a different generation payload; use a fresh key per attempt'),
+            { status: 409 },
+          );
+        }
+        // Replay: same human attempt retried (double-click, network retry, reload). Return the
+        // provider task that attempt already created; never submit a second paid task.
+        const taskId = await existing.taskPromise;
+        sendJson(response, 202, { taskId, replayed: true });
+        return true;
+      }
+
+      if (spendSubmissionTimes.length >= SPEND_RATE_LIMIT) {
+        throw Object.assign(
+          new Error(`spend rate limit: at most ${SPEND_RATE_LIMIT} paid generations per ${SPEND_RATE_WINDOW_MS / 60000} minutes on this server`),
+          { status: 429 },
+        );
+      }
+
+      const taskPromise = meshyJson(key, '/v1/image-to-3d', { method: 'POST', body: JSON.stringify(body) })
+        .then((created) => created.result);
+      spendLedger.set(idempotencyKey, { fingerprint, createdAtMs: nowMs, taskPromise });
+      spendSubmissionTimes.push(nowMs);
+      try {
+        const taskId = await taskPromise;
+        sendJson(response, 202, { taskId, replayed: false });
+      } catch (error) {
+        // Provider call failed from this server's point of view; drop the entry so an explicit
+        // human retry with the same key is possible rather than replaying the failure forever.
+        spendLedger.delete(idempotencyKey);
+        throw error;
+      }
       return true;
     }
 
