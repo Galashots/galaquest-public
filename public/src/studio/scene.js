@@ -92,9 +92,24 @@ export async function createStudioScene(canvas) {
   const hero = await loadHero();
   scene.add(hero.root);
   hero.root.position.set(0, 0, 0);
+  hero.root.updateMatrixWorld(true);
+
+  // Capture the authored bind/rest pose before any AnimationMixer action is allowed to touch it.
+  // The Forge uses this as its deterministic manufacturing frame; animations are inspection only.
+  const fitPoseBones = [];
+  hero.root.traverse((object) => {
+    if (!object.isBone) return;
+    fitPoseBones.push(Object.freeze({
+      bone: object,
+      position: object.position.clone(),
+      quaternion: object.quaternion.clone(),
+      scale: object.scale.clone(),
+    }));
+  });
 
   // ── explicit locked-comparison loadouts ─────────────────────────────────────────────────────
   let loadout = 'shipping';
+  let loadoutRevision = 0;
   let hiddenAnatomy = Object.freeze(hero.setAnatomyCoverage([]));
   let candidateLanternMount = null;
   let candidateWildwoodBladeMount = null;
@@ -120,6 +135,7 @@ export async function createStudioScene(canvas) {
 
   async function setLoadout(name) {
     if (!LOADOUTS.includes(name)) throw new Error(`unknown loadout "${name}" -- expected one of ${LOADOUTS.join(', ')}`);
+    const revision = ++loadoutRevision;
 
     if (name === 'candidate-with-lantern' && !candidateLanternMount) {
       const gltf = await loadGLB(BELT_LANTERN_URL);
@@ -138,6 +154,10 @@ export async function createStudioScene(canvas) {
       candidateDawnwardenHelmetMount = await loadStudioCandidate(DAWNWARDEN_HELMET_CANDIDATE);
     }
 
+    // Candidate GLB loading is async. A slower earlier click must never overwrite the state chosen by
+    // a later click after it finally finishes loading.
+    if (revision !== loadoutRevision) return false;
+
     if (candidateLanternMount) candidateLanternMount.anchor.visible = name === 'candidate-with-lantern';
     if (candidateWildwoodBladeMount) candidateWildwoodBladeMount.anchor.visible = name === 'candidate-wildwood-blade';
     if (candidateDawnwardenSwordMount) candidateDawnwardenSwordMount.anchor.visible = name === 'candidate-dawnwarden-sword';
@@ -154,6 +174,7 @@ export async function createStudioScene(canvas) {
     if (shippingShieldMount) shippingShieldMount.anchor.visible = name !== 'shipping-sword-only';
     hiddenAnatomy = nextHiddenAnatomy;
     loadout = name;
+    return true;
   }
 
   function gearVisibility() {
@@ -182,6 +203,7 @@ export async function createStudioScene(canvas) {
     if (!clip) throw new Error(`no clip named "${name}" -- available: ${clipNames().join(', ')}`);
     if (currentAction) currentAction.stop();
     currentAction = mixer.clipAction(clip);
+    currentAction.reset();
     currentAction.play();
     currentAction.paused = !playing;
     return clip.name;
@@ -197,6 +219,19 @@ export async function createStudioScene(canvas) {
   function setAnimationPlaying(next) {
     playing = Boolean(next);
     if (currentAction) currentAction.paused = !playing;
+  }
+
+  function setFitPose() {
+    playing = false;
+    mixer.stopAllAction();
+    currentAction = null;
+    for (const record of fitPoseBones) {
+      record.bone.position.copy(record.position);
+      record.bone.quaternion.copy(record.quaternion);
+      record.bone.scale.copy(record.scale);
+    }
+    hero.root.updateMatrixWorld(true);
+    return Object.freeze({ pose: 'bind', boneCount: fitPoseBones.length });
   }
 
   const defaultClip = hero.animations.find((c) => c.name.toLowerCase().includes('idle')) ?? hero.animations[0];
@@ -308,6 +343,7 @@ export async function createStudioScene(canvas) {
     setAnimation,
     setAnimationTime,
     setAnimationPlaying,
+    setFitPose,
     clipNames,
     setLightingMode,
     onLightingModeChange,

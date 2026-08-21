@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 
 import { attachGameServer } from './net/gameServer.mjs';
+import { handleForgeApiRequest } from './net/forgeApi.mjs';
 
 export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -35,6 +36,11 @@ function safePath(requestUrl) {
 export function createRuntimeServer() {
   return createServer(async (request, response) => {
     try {
+      // The Asset Forge API is same-origin with the game so generated model bytes can move directly
+      // into the real Three.js inspection scene without exposing the Meshy credential to the browser.
+      // handleForgeApiRequest returns false for every non-Forge URL, preserving the existing runtime.
+      if (await handleForgeApiRequest(request, response)) return;
+
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         response.writeHead(405, { allow: 'GET, HEAD' });
         response.end('method not allowed');
@@ -98,6 +104,7 @@ export function startRuntimeServer(port = DEFAULT_PORT, options = {}) {
     console.log(`  port=${port}`);
     console.log(`  local=http://localhost:${port}/`);
     console.log(`  multiplayer=ws://localhost:${port}/ws`);
+    console.log(`  forge=http://localhost:${port}/forge.html`);
     for (const address of lanAddresses()) console.log(`  lan=http://${address}:${port}/`);
   });
   return server;
