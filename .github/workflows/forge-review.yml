@@ -9,7 +9,7 @@ on:
       - 'public/src/character/**'
       - 'net/forgeApi.mjs'
       - 'server.mjs'
-      - 'tools/runtime-test/review-forge.mjs'
+      - 'tools/forge-review/**'
       - '.github/workflows/forge-review.yml'
   workflow_dispatch:
 
@@ -53,7 +53,7 @@ jobs:
           exit 1
 
       - name: Review real Asset Forge page
-        run: node tools/runtime-test/review-forge.mjs
+        run: node tools/forge-review/review-forge.mjs
 
       - name: Upload Forge evidence
         if: always()
