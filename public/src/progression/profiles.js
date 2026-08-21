@@ -402,19 +402,41 @@ export function createProfileStore(options = {}) {
    * has seen" -- and because both are folded through the same union law, the answer does not depend
    * on which of the two was reachable.
    */
-  function stateFor(profileId, serverFacts = []) {
-    const journal = readJournal(storage, profileId);
-    // Server facts this device has not journalled yet are stamped the same way recordFacts would,
-    // so reading before recording and reading after recording give the same answer. Without this a
-    // freshly-heard equip would fold with no revision at all and lose to the journal's history.
-    const known = new Set(journal.map((fact) => fact.eventId));
-    const stamped = stampEquipRevisions(
-      (serverFacts ?? []).filter(isProfileFact), known, highestEquipRevision(journal),
-    );
-    return foldFacts(unionFacts(journal, stamped), {
+  /**
+   * This profile's durable state, derived from the journal and nothing else.
+   *
+   * READ-ONLY, and it takes no server facts on purpose. An earlier version accepted them and stamped
+   * revisions onto the unseen ones for the duration of the call, which quietly made a revision a
+   * property of WHEN YOU LOOKED rather than of when the child equipped something: the same unchanged
+   * server equip was numbered from the journal's current maximum, so it drifted upward every time
+   * the journal grew around it, and an old equip could overtake a newer local one having had nothing
+   * happen to it at all.
+   *
+   * Assigning a revision is therefore an act of observation, and observation has to be durable. Use
+   * ingestServerFacts to take facts in; this function only reports what has already been taken in.
+   */
+  function stateFor(profileId) {
+    return foldFacts(readJournal(storage, profileId), {
       equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
       ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
     });
+  }
+
+  /**
+   * Take server facts in and report the resulting state -- journalling anything unseen, with its
+   * revision settled, BEFORE deriving.
+   *
+   * One operation rather than two because the two halves must not be separable: any window between
+   * "the device has seen this fact" and "the device has written down where it sits in the order" is
+   * a window in which a newer local equip can be numbered underneath an older remote one. Once event
+   * B has been observed at revision N it stays at N forever, however much the journal grows later.
+   *
+   * This is the call the client makes whenever server facts arrive -- on welcome, and on any
+   * reconnect -- and it must happen before local progression can mint anything new.
+   */
+  function ingestServerFacts(profileId, serverFacts = []) {
+    recordFacts(profileId, serverFacts);
+    return stateFor(profileId);
   }
 
   /** The id this device should send as the wire's guestId, creating or migrating a profile if this
@@ -438,6 +460,7 @@ export function createProfileStore(options = {}) {
     migrateLegacyGuest,
     journalFor,
     recordFacts,
+    ingestServerFacts,
     stateFor,
   };
 }

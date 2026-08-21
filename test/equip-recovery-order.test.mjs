@@ -96,7 +96,7 @@ test('server wiped and rebuilt, then a new equip: the NEW weapon wins', () => {
 
     const afterWipe = deterministicStore(storage);
     afterWipe.recordFacts(profile.id, [equip(`equip:${profile.id}:after-wipe`, WILDWOOD_BLADE_ID)]);
-    const state = afterWipe.stateFor(profile.id, rebuilt.profileFactsFor(profile.id));
+    const state = afterWipe.ingestServerFacts(profile.id, rebuilt.profileFactsFor(profile.id));
     rebuilt.close();
 
     assert.equal(
@@ -131,4 +131,37 @@ test('the same equip seen from both origins does not lose its revision', () => {
 
   assert.equal(foldFacts(unionFacts([withRev, older], [withoutRev])).equippedWeaponId, WILDWOOD_BLADE_ID);
   assert.equal(foldFacts(unionFacts([withoutRev], [withRev, older])).equippedWeaponId, WILDWOOD_BLADE_ID);
+});
+
+test('an already-observed server equip cannot outrank a newer local equip made after it', () => {
+  // The revision is meant to name WHEN something was equipped, durably. If it is assigned during a
+  // read and thrown away, the same unchanged server fact drifts upward every time the journal grows
+  // around it -- so an old equip can overtake a newer one without anything about it changing.
+  const storage = fakeStorage();
+  const store = deterministicStore(storage);
+  const profile = store.createProfile('Leo');
+
+  // A: the oldest equip, already on record.
+  store.recordFacts(profile.id, [equip(`equip:${profile.id}:a`, STARTER_SWORD_ID)]);
+
+  // B: a newer equip the server reports. The device observes it and renders it.
+  const serverB = [equip(`equip:${profile.id}:b`, STARTER_SWORD_ID)];
+  const seenB = store.ingestServerFacts(profile.id, serverB);
+  assert.equal(seenB.equippedWeaponId, STARTER_SWORD_ID);
+  const revAfterFirstSight = store.journalFor(profile.id)
+    .find((fact) => fact.eventId === `equip:${profile.id}:b`)?.rev;
+  assert.equal(typeof revAfterFirstSight, 'number', 'observing a fact must settle its revision, not borrow one');
+
+  // C: the child equips something newer still.
+  store.recordFacts(profile.id, [equip(`equip:${profile.id}:c`, WILDWOOD_BLADE_ID)]);
+
+  // The server re-reports B, unchanged. Nothing about B has happened since.
+  const after = store.ingestServerFacts(profile.id, serverB);
+  const revAfterSecondSight = store.journalFor(profile.id)
+    .find((fact) => fact.eventId === `equip:${profile.id}:b`)?.rev;
+
+  assert.equal(revAfterSecondSight, revAfterFirstSight,
+    'a fact that has not changed must not age forward because the journal grew around it');
+  assert.equal(after.equippedWeaponId, WILDWOOD_BLADE_ID,
+    'the newest equip is the local one and must stay equipped');
 });

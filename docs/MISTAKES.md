@@ -126,7 +126,7 @@ refused, and burned the iteration while the wolf's own timer ran on. Suite fell 
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-002 — A stale file header is a lie the file tells about itself.
-**Status:** RULE · **Hits:** 3 · **First:** 2026-08-14 · **Last:** 2026-08-14
+**Status:** RULE · **Hits:** 4 · **First:** 2026-08-14 · **Last:** 2026-08-21
 **Not enforced because:** a stale comment is prose about intent; verifying it is current requires
 re-deriving what's still true, which no regex can do safely without also re-deriving the design.
 **Rule:** This repo deliberately puts its reasoning in the code; an agent reading a file top-to-bottom
@@ -138,7 +138,7 @@ would move there "when reconciled". `combat/encounter.js:68-72` argued splitting
 `WOLF_BITE_COOLDOWN_SECONDS` "was not worth doing" thirteen lines above the split that had already
 shipped. `net/protocol.js:1` said "GalaQuest wire protocol v1" three lines above
 `PROTOCOL_VERSION = 3`, and its `EMPTY_ENCOUNTER` comment named a "Task B3" as not-yet-landed after B3
-had landed.
+had landed. **Hit 4, 2026-08-21:** `progression/facts.js`'s `unionFacts` doc still explained how the union treats `seq` after the field had been renamed to `rev` and given a tiebreak, in the same file whose header had just been rewritten to explain why the ordering works -- so the file argued for the new design at the top and described the old one in the middle. Caught by Director audit, not by the rename. The rule earns its keep on rename commits specifically: grep the file for the old identifier before calling the rename done.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.
@@ -604,4 +604,55 @@ EMBERS, which sit inside an openEnded cresset 0.17 m below a 1.14 m rim; `isLit(
 banner said "The Old Beacon is burning!", and the capture of the winning moment is a black basket
 against a blue sky. Both fixed in the same change, and both gates rewritten to measure the effect:
 blows-to-kill for the Blade, metres of visible flame for the Beacon.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-014 — An identity derived from mutable state is not an identity.
+**Status:** ENFORCED · **Hits:** 4 · **First:** 2026-08-21 · **Last:** 2026-08-21
+**Enforced by:** `test/equip-recovery-order.test.mjs` (and `test/profile-identity.test.mjs` for the
+first incident, which is the same defect in the idempotency-key half of this rule)
+**Rule:** A durable fact needs a name, and an ordering needs a number. Neither may be derived from
+something that the act of recording changes, or that resets when a process, a page or a database
+does. The test is one question: **if I compute this twice, at two different moments, from two
+different survivors, do I get the same answer?** A count you re-read while paying it out, an
+in-memory counter, and an index over whichever store is readable right now all fail that question,
+and all three look durable in the diff. The give-away is that the number is computed at the moment
+of USE rather than carried from the moment of the FACT -- so write it down when the thing happens,
+and never let a later read re-derive it.
+**Incidents:** all four on 2026-08-21, in one branch, three of them in code written to fix the one
+before it. (1) `applyMarkAward` keyed a durable mark on `store.marksFor(guestId)`, read fresh per
+call; one guest with two connections got two marks for one wolf, because the count moved between the
+two awards for the same kill -- an idempotency key derived from a total that paying it out increments.
+Reachable by a child opening a second tab, and it unlocked the lantern in two kills instead of three.
+(2) the repair gave `weapon-equipped` an explicit order, then sourced it from a counter initialised
+to 0 in `createProfileStore`, so every page load began numbering beneath the history already on
+record and a NEW equip lost to an OLD one. (3) the same field was also synthesised server-side from
+each row's array index for the current read, which restarts when the database is replaced -- the
+exact event local-first exists to survive. (4) with both fixed, `stateFor()` still stamped revisions
+onto unseen server facts *for the duration of one read* without persisting them, so an unchanged
+remote equip aged forward every time the journal grew around it and could overtake a newer local one.
+(2) and (4) were caught by independent Director audit, not by the tests written alongside them --
+see GQ-015 for why those tests did not catch it.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-015 — A test that hand-feeds a pure function proves the function, not where its inputs come from.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-21 · **Last:** 2026-08-21
+**Not enforced because:** the defect is a missing test, and the shape of the missing one depends on
+which input the function is being lied to about. No scanner can tell a legitimately isolated unit
+test from one that isolated away the actual bug; only asking "who really supplies this argument in
+production, and is that path covered?" can.
+**Rule:** When a pure function takes a value that something else computes, a test that supplies that
+value by hand has tested half the system, and the half it skipped is where the interesting failures
+live. Cover the SOURCE at least once end-to-end -- construct the real producer, let it produce, and
+assert on the result -- or state in the test's own header that the producer is covered elsewhere and
+where. Corollary, which is how this gets discovered late: **a test that keeps passing after the field
+it is named for stops existing is not a passing test, it is an unread one.** When a rename or a
+redesign moves a field, grep the tests for the old name in the same change.
+**Incidents:** 2026-08-21, both in Checkpoint 1b. (1) `foldFacts`'s equip-ordering test passed
+throughout, because it fed hand-written `seq` values; the two places that actually produced that
+number in production were both broken (GQ-014, incidents 2 and 3), and an independent audit found it
+rather than the suite. (2) after the fold moved from `seq` to `rev`, the same test kept passing while
+asserting nothing about ordering at all -- both facts now tied at "no revision", and the eventId
+tiebreak happened to return the item the assertion expected. Its name still said "latest-wins by
+sequence". Rewritten to name `rev` and to choose ids under which the tiebreak would return the WRONG
+weapon, so it now fails if the revision is ignored.
 **Foreknowledge helped:** not yet recorded.

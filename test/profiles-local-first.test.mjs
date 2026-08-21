@@ -76,9 +76,13 @@ test('union is order-independent: server-first and journal-first agree exactly',
   assert.ok(a.ownedItemIds.includes(WILDWOOD_BLADE_ID));
 });
 
-test('the equipped weapon is latest-wins by sequence, not by which store was read first', () => {
-  const older = { eventId: 'e1', type: 'weapon-equipped', value: STARTER_SWORD_ID, seq: 1 };
-  const newer = { eventId: 'e2', type: 'weapon-equipped', value: WILDWOOD_BLADE_ID, seq: 7 };
+test('the equipped weapon is latest-wins by durable revision, not by input order', () => {
+  // Named for `rev` because the implementation reads `rev`. An earlier version of this test passed
+  // hand-written `seq` values that the fold no longer looks at, so it stayed green purely on the
+  // eventId tiebreak -- proving nothing about ordering. The ids here are deliberately chosen so the
+  // tiebreak would pick the WRONG weapon if the revision were ignored: 'zz' sorts above 'aa'.
+  const older = { eventId: 'equip:zz-older', type: 'weapon-equipped', value: STARTER_SWORD_ID, rev: 1 };
+  const newer = { eventId: 'equip:aa-newer', type: 'weapon-equipped', value: WILDWOOD_BLADE_ID, rev: 7 };
 
   assert.equal(foldFacts([older, newer]).equippedWeaponId, WILDWOOD_BLADE_ID);
   assert.equal(foldFacts([newer, older]).equippedWeaponId, WILDWOOD_BLADE_ID,
@@ -246,9 +250,8 @@ test('a child keeps their progression when the server store is wiped', () => {
     server.apply({ guestId: profile.id, heroId: 'p1', type: 'coin-earned', eventId: 'coin-a' });
 
     const facts = server.profileFactsFor(profile.id);
-    store.recordFacts(profile.id, facts);
 
-    const online = store.stateFor(profile.id, facts);
+    const online = store.ingestServerFacts(profile.id, facts);
     assert.equal(online.marks, 3);
     assert.equal(online.coins, 1);
     assert.ok(online.ownedItemIds.includes(WILDWOOD_BLADE_ID));
@@ -261,7 +264,7 @@ test('a child keeps their progression when the server store is wiped', () => {
 
     // The device still does, and it derives the SAME state through the same fold.
     const afterReload = deterministicStore(storage);
-    const recovered = afterReload.stateFor(profile.id, wiped.profileFactsFor(profile.id));
+    const recovered = afterReload.ingestServerFacts(profile.id, wiped.profileFactsFor(profile.id));
     wiped.close();
 
     assert.deepEqual(recovered, online, 'a wiped server must not cost the family its progress');
@@ -287,7 +290,7 @@ test('re-merging the server facts after recovery does not double anything', () =
     store.recordFacts(profile.id, facts);
 
     assert.equal(store.journalFor(profile.id).length, 1, 'the journal is a set, not a log of arrivals');
-    assert.equal(store.stateFor(profile.id, facts).marks, 1);
+    assert.equal(store.stateFor(profile.id).marks, 1);
     server.close();
   } finally {
     try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* OS scratch */ }
@@ -303,7 +306,7 @@ test('a guaranteed item is owned once however many times its fact is merged', ()
   store.recordFacts(p.id, [grant, grant]);
   store.recordFacts(p.id, [grant]);
 
-  const owned = store.stateFor(p.id, [grant]).ownedItemIds
+  const owned = store.ingestServerFacts(p.id, [grant]).ownedItemIds
     .filter((id) => id === WILDWOOD_BLADE_ID);
   assert.equal(owned.length, 1, 'a guaranteed piece must never be held twice');
 });

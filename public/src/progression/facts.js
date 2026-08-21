@@ -64,8 +64,8 @@ export function isProfileFact(fact) {
  * First-wins rather than last-wins on purpose: the same eventId is by construction the same fact
  * (that is what makes it an idempotency key at the store layer), so the two copies cannot disagree
  * about anything that matters, and first-wins makes the result independent of argument order for
- * everything except `seq` -- which foldFacts resolves by maximum, not by position, precisely so this
- * function never has to care.
+ * everything except `rev` -- which foldFacts resolves by maximum and then by eventId, never by
+ * position, precisely so this function never has to care.
  *
  * Non-profile facts are dropped here rather than at fold time so a caller can trust the union.
  */
