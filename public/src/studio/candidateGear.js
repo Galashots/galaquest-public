@@ -12,6 +12,25 @@ export const DAWNWARDEN_SWORD_CANDIDATE = Object.freeze({
   // Studio normalization target; the accepted fit is judged from pixels, not from this number.
   targetWorldLongest: 0.9,
   gripFractionFromMin: 0.12,
+  ownerFit: Object.freeze({
+    schema: 'galaquest.asset-forge-fit/1',
+    sourceSha: '687f903f33def5dddc7662e9093de4d80f55fc12',
+    savedAt: '2026-08-21T03:58:44.884Z',
+    delta: Object.freeze({
+      positionWorld: Object.freeze([0.09, -0.020000000000000007, 0]),
+      rotationDeg: Object.freeze([-64, -13, 40]),
+      scale: 0,
+    }),
+    baseline: Object.freeze({
+      localPosition: Object.freeze([-2.009597310113718, 14.788167245852243, 0.15963204044194867]),
+      localRotationQuaternion: Object.freeze([-0.16554002113104888, 0.8902172759576535, 0.009114995682822861, -0.4242954429524562]),
+      localScale: Object.freeze([47.38742650536052, 47.38742650536052, 47.38742650536052]),
+    }),
+    effective: Object.freeze({
+      localPosition: Object.freeze([-1.6385421309043957, 5.85455133950245, 2.4074804446994165]),
+      localScale: Object.freeze([47.38742650536052, 47.38742650536052, 47.38742650536052]),
+    }),
+  }),
 });
 
 export const DAWNWARDEN_HELMET_CANDIDATE = Object.freeze({
@@ -25,6 +44,25 @@ export const DAWNWARDEN_HELMET_CANDIDATE = Object.freeze({
   hideAnatomy: Object.freeze(['hair', 'ears']),
   targetWorldLongest: 0.38,
   worldUpOffset: 0.10,
+  ownerFit: Object.freeze({
+    schema: 'galaquest.asset-forge-fit/1',
+    sourceSha: '687f903f33def5dddc7662e9093de4d80f55fc12',
+    savedAt: '2026-08-21T04:00:09.002Z',
+    delta: Object.freeze({
+      positionWorld: Object.freeze([0, 0.045, 0]),
+      rotationDeg: Object.freeze([0, 0, 0]),
+      scale: 0,
+    }),
+    baseline: Object.freeze({
+      localPosition: Object.freeze([-0.08865604226265456, 9.535664418259842, -3.0105247062169873]),
+      localRotationQuaternion: Object.freeze([-0.15227835255560962, -0.0053021111882924805, 0.005302196102046388, 0.9883092014676261]),
+      localScale: Object.freeze([20.009290639414257, 20.009290639414257, 20.009290639414257]),
+    }),
+    effective: Object.freeze({
+      localPosition: Object.freeze([-0.12855126128084882, 13.826713406476742, -4.365260824014637]),
+      localScale: Object.freeze([20.009290639414257, 20.009290639414257, 20.009290639414257]),
+    }),
+  }),
 });
 
 export const STUDIO_CANDIDATE_GEAR = Object.freeze([
@@ -102,6 +140,29 @@ function normalizeHelmetPayload(assetRoot, bounds) {
   return payload;
 }
 
+function applyOwnerFit(anchor, ownerFit) {
+  if (!ownerFit) return;
+  const rotationDeg = ownerFit.delta?.rotationDeg ?? [0, 0, 0];
+  const baselineQ = ownerFit.baseline?.localRotationQuaternion;
+  const effectivePosition = ownerFit.effective?.localPosition;
+  const effectiveScale = ownerFit.effective?.localScale;
+  if (!Array.isArray(baselineQ) || baselineQ.length !== 4
+      || !Array.isArray(effectivePosition) || effectivePosition.length !== 3
+      || !Array.isArray(effectiveScale) || effectiveScale.length !== 3) {
+    throw new Error(`Studio candidate mount: malformed owner fit for ${anchor.name}`);
+  }
+  const radians = rotationDeg.map((value) => Number(value) * Math.PI / 180);
+  const deltaQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(...radians, 'XYZ'));
+  anchor.position.fromArray(effectivePosition);
+  anchor.quaternion.fromArray(baselineQ).multiply(deltaQ).normalize();
+  anchor.scale.fromArray(effectiveScale);
+  anchor.userData.gqOwnerFit = {
+    schema: ownerFit.schema,
+    sourceSha: ownerFit.sourceSha,
+    savedAt: ownerFit.savedAt,
+  };
+}
+
 /**
  * Mount one explicitly named unshipped PR candidate for Character Studio inspection.
  *
@@ -139,6 +200,8 @@ export function attachStudioCandidate(heroRoot, spec, assetRoot) {
   } else {
     throw new Error(`Studio candidate mount: unsupported kind ${spec.kind}`);
   }
+
+  applyOwnerFit(anchor, spec.ownerFit);
 
   bone.add(anchor);
   anchor.visible = false;
