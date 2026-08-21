@@ -11,7 +11,7 @@ import { createFitSession } from './fitAuthoring.js';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const fitKey = (assetId) => `gq-forge-fit:${assetId}`;
+const fitKey = (assetId) => `gq-forge-fit:${sourceSha}:${assetId}`;
 
 let sourceSha = 'unbound';
 let studioScene;
@@ -387,7 +387,12 @@ $('#view-closeup').addEventListener('click', () => {
   applyView();
 });
 
-$('#animation-select').addEventListener('change', () => studioScene.setAnimation($('#animation-select').value));
+$('#animation-select').addEventListener('change', () => {
+  const clip = studioScene.setAnimation($('#animation-select').value);
+  studioScene.setAnimationPlaying(true);
+  $('#toggle-animation').textContent = 'pause';
+  status(`previewing ${clip} · ${current?.displayName ?? 'candidate'}`);
+});
 $('#toggle-animation').addEventListener('click', () => {
   studioScene.setAnimationPlaying(!studioScene.playing);
   $('#toggle-animation').textContent = studioScene.playing ? 'pause' : 'play';
