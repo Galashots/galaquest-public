@@ -8,17 +8,18 @@ Candidate-only enemy manufacturing ledger for the first mass enemy wave. This wo
 
 Owner authorized up to **500 additional Meshy credits** for this enemy wave.
 
-Observed Meshy balance immediately before enemy generation: **1179 credits**.
-Observed balance after concept + 3D generation: **697 credits**.
-Observed balance delta during the wave: **482 credits**.
+- Observed Meshy balance immediately before the enemy wave: **1179 credits**.
+- Current balance after concepts, 3D generation, and rigging: **697 credits**.
+- Observed total wave spend: **482 credits**.
+- Remaining authorization headroom: **18 credits**.
 
-Because only 18 credits of the authorized ceiling remained, **no rigging jobs were launched** in this wave. Do not add paid rigging/retries to this batch without a fresh owner credit authorization.
+No new generation, retry, retexture, or custom-animation spend was made during repository intake.
 
 ## Art direction
 
-The roster was designed for Sword-Masters-style farming variety without copying any specific game character: strong readable silhouettes, clear regional themes, different perceived combat roles, and child-friendly fantasy menace rather than gore.
+The roster was designed for farming variety without copying any specific game character: strong readable silhouettes, clear regional themes, different perceived combat roles, and child-friendly fantasy menace rather than gore.
 
-Regions / tiers represented:
+Regions represented:
 - Forest: Spriggan Scrapper, Thornback Orc, Stagroot Warden
 - Volcanic: Coalclaw Kobold, Cinderfang Raider, Magmahorn Juggernaut
 - Frost: Snowfang Marauder, Iceback Ogre, Frostbound Warden
@@ -26,61 +27,62 @@ Regions / tiers represented:
 - Storm: Stormbreaker Colossus
 - Void: Voidfang Overlord concept reserve
 
-All modeled enemies were intentionally generated as full-body, symmetrical, empty-hand, T-pose-compatible character candidates so weapons can remain separate reusable attachments later.
+The 13 modeled enemies were generated as full-body, symmetrical, empty-hand, T-pose-compatible candidates so weapons can remain separate reusable attachments.
 
 ## Provider outcome
 
-All **13 submitted Image-to-3D jobs succeeded**. The fourteenth design, Voidfang Overlord, remains a successful concept-only reserve and did not receive a 3D job because the budget ceiling was nearly exhausted.
+- **13/13 Image-to-3D tasks: SUCCEEDED.**
+- **13/13 Wave 1 rig tasks: SUCCEEDED.**
+- Every rig task exposes a base rigged GLB plus Meshy's included walking/running outputs.
+- The base rigged GLBs are committed as candidates; walk/run duplicates are intentionally not committed.
+- Voidfang Overlord remains a concept-only reserve and did not receive a 3D job in this wave.
 
-No Image-to-3D failures were observed. No rigging jobs exist for this wave.
+The Meshy rig-task listing does not expose the upstream source task id, so the source-to-rig mapping is recorded in the same chronological launch order as the Wave 1 source model ledger. That assumption is explicit in `ENEMY_WAVE_1_PROVENANCE.json` rather than hidden.
 
-| Enemy | Concept task | Image-to-3D task | Provider state |
-|---|---|---|---|
-| Spriggan Scrapper | `01a022c1-a6dd-766b-a737-4e38b15ae50c` | `01a022c2-f4a4-7134-b2a7-190684b04449` | SUCCEEDED |
-| Thornback Orc | `01a022c1-bbf6-7dcd-a2b8-93515407ace3` | `01a022c3-03de-7dfe-9616-b58d8a9b5c4f` | SUCCEEDED |
-| Stagroot Warden | `01a022c1-d1d4-7dd1-add8-06ee0a3d94bc` | `01a022c3-1355-7cbb-88df-111a2248a7f3` | SUCCEEDED |
-| Coalclaw Kobold | `01a022c1-ebb2-766e-8d3c-2a25baab6a83` | `01a022c3-2173-7cbd-9f84-b233c003bbe6` | SUCCEEDED |
-| Cinderfang Raider | `01a022c1-fdd2-70fd-a5e4-bcef3f9ca9b4` | `01a022c3-2f7c-7e10-8508-72c176cc9cdd` | SUCCEEDED |
-| Magmahorn Juggernaut | `01a022c2-0d94-7677-b4e8-0696f5e70da8` | `01a022c3-3f4e-76a3-8b03-f42da4c6be6d` | SUCCEEDED |
-| Snowfang Marauder | `01a022c2-1d4e-7101-b618-58937c670218` | `01a022c3-4d65-76a8-913b-1d0ef9360a24` | SUCCEEDED |
-| Iceback Ogre | `01a022c2-2df8-767c-98e3-1adcacad7801` | `01a022c3-5cd0-7144-b5c7-ca75d5bdd5f9` | SUCCEEDED |
-| Frostbound Warden | `01a022c2-3f87-7c93-a424-931e8e6e0836` | `01a022c3-77c1-7e19-8251-cb1649bc8e53` | SUCCEEDED |
-| Boneguard Raider | `01a022c2-5184-7103-a75d-9049ec77bd92` | `01a022c3-950d-7e1f-a29a-ffe70afc8677` | SUCCEEDED |
-| Tombmaul Knight | `01a022c2-64b3-710f-b6ed-596b55101b0d` | `01a022c3-a5f2-7e24-b58e-dd509791e724` | SUCCEEDED |
-| Graveflame Reaper | `01a022c2-782d-7ca1-a248-d7899682bc98` | `01a022c3-b8ca-7ccb-bb21-7c04a9c745f6` | SUCCEEDED |
-| Stormbreaker Colossus | `01a022c2-92be-7690-aa05-c93c31d26ce5` | `01a022c3-cc9a-76b8-a968-3a86e078e61c` | SUCCEEDED |
-| Voidfang Overlord | `01a022c2-a744-7119-a0ab-5fc6daaadbec` | — | concept reserve only |
+## Durable provenance
 
-## Download / structural audit
+See:
+- `public/assets/enemies/candidates/README.md` — human-readable filename/source/rig mapping.
+- `docs/asset-production/ENEMY_WAVE_1_PROVENANCE.json` — machine-readable intake provenance and candidate status.
+- `docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json` — structural audit captured at ingestion.
 
-GLB download was proven for the batch. Sampled downloaded files were substantial textured assets rather than empty placeholders (roughly 9–18 MB) and exposed base-color/metallic/roughness/normal textures, with emission maps on several glow-heavy designs.
+## Structural audit
 
-Examples observed during download:
-- Spriggan Scrapper: ~9.1 MB GLB
-- Thornback Orc: ~12.8 MB GLB
-- Stagroot Warden: ~16.9 MB GLB
-- Coalclaw Kobold: ~13.9 MB GLB
-- Cinderfang Raider: ~16.1 MB GLB
-- Magmahorn Juggernaut: ~14.3 MB GLB
-- Snowfang Marauder: ~14.7 MB GLB
-- Iceback Ogre: ~18.1 MB GLB
+The repository ingestion job validated every committed Wave 1 base rigged GLB against the same minimum contract:
 
-The remaining successful jobs exposed downloadable GLB URLs through Meshy and were not provider failures.
+- GLB v2 header and declared byte length are valid;
+- file size is greater than 1 MB;
+- at least one mesh;
+- at least one skin;
+- at least 10 joints.
 
-This is a **structural intake PASS**, not a visual production acceptance. A proper thumbnail / model-turntable audit and later running-game review still have authority to RETRY or REJECT individual candidates.
+Result: **13/13 PASS_STRUCTURAL**. In practice every candidate reports one mesh, one skin, 24 joints, 26 nodes, one material, two textures, one image, and one embedded animation. File sizes are approximately 8.2–11.7 MB.
+
+This rejects obvious corrupt/empty/unrigged intake failures. It is **not visual acceptance**: silhouette quality, mesh defects visible only in rendering, skin deformation, animation clipping, materials under GalaQuest lighting, and gameplay readability remain UNKNOWN until browser/Studio review.
 
 ## Repository staging
 
 Branch: `feat/enemy-asset-wave-1`
-Base when opened: current `feat/asset-forge` head.
-Intended candidate path: `public/assets/enemies/candidates/`.
+PR: #28
+Candidate path: `public/assets/enemies/candidates/`
+Binary ingestion commit: `7e859dd35f7591dd60638ad37ac67436b779428a`
 
-The durable task ledger is committed here so every model can be re-downloaded from Meshy by task id. Binary GLBs remain candidate artifacts and must not be promoted to shipping registries until visual review, rigging, animation, and gameplay qualification are complete.
+The branch contains 13 base rigged Wave 1 GLBs plus provenance/audit records. No Wave 1 walk/run duplicates were added. Existing unrelated candidate files inherited from the base branch are not part of this Wave 1 count.
+
+## Gates
+
+- Provider 3D generation: **PASS** — 13/13.
+- Provider rigging: **PASS** — 13/13.
+- Base rigged GLB availability: **PASS** — 13/13.
+- Repository binary intake: **PASS** — 13/13 candidate GLBs committed.
+- Structural GLB/skin audit: **PASS** — 13/13.
+- Visual model acceptance: **UNKNOWN** — requires rendered review.
+- Walk/run gameplay acceptance: **UNKNOWN** — outputs are available provider-side but intentionally not committed yet.
+- Gameplay integration / shipping promotion: **BLOCKED BY DESIGN** — out of scope for this candidate-only asset branch.
 
 ## Next permitted actions
 
-1. Drop the 13 successful GLBs into `public/assets/enemies/candidates/` using the filenames in that directory's README.
-2. Perform a visual turntable/thumb audit; mark each PASS / RETRY / REJECT.
-3. Obtain fresh credit authorization before any rigging, retries, or the Voidfang 3D conversion.
-4. Rig only visually accepted humanoid candidates.
-5. Add combat animations / gameplay wiring in a later gameplay lane, not this asset-production branch.
+1. Render/turntable the 13 base rigged candidates and mark visual PASS / RETRY / REJECT.
+2. Exercise skin deformation using representative motions; only then select which free walk/run outputs are worth ingesting.
+3. Keep gameplay wiring and shipping promotion in a later, deliberate integration lane.
+4. Do not spend the remaining 18-credit headroom merely to use it; any retry should be justified by the visual audit and remain within explicit owner authorization.
