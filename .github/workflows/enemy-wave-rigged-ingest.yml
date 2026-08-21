@@ -1,0 +1,135 @@
+name: Enemy Wave Rigged Ingest
+
+on:
+  push:
+    branches:
+      - feat/enemy-asset-wave-1
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/enemy-asset-wave-1
+          fetch-depth: 0
+
+      - name: Download rigged base GLBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/assets/enemies/candidates docs/asset-production
+          fetch() {
+            local name="$1"
+            local url="$2"
+            echo "Downloading $name"
+            curl --fail --location --retry 3 --retry-delay 2 "$url" -o "public/assets/enemies/candidates/$name"
+          }
+          fetch 'spriggan-scrapper-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c5-8fb4-71c3-ac86-db31b0fa497d/output/Character_output.glb?Expires=1787549000&Signature=lV3EOTMuJvz-KKk8sGLtJGxk8SITjQHgClXKX2M3QKWoYd010kZADWS554U3PPbLE2AfWp1w3J8hr8CWtfEVWOL3p5QzvDJo0ooB04XOgB1oWiDm0KvQXrraP7lE8C8BODAFpQryQ~nYtLv4N16Ig3bozyTcgYxVKTDg1T~yDdD2CCD6UZNza7iq4FOALRjtW1Z7uNmFKtnQA6y~ZIZgnv3z4cu-Ef2LBzlsu3bHI8j2xLLtw1KA4x9rwfBEx0b~YZL9qmdnzpoek3wr5BMyxPdGucHRsM6i-2bs8X2SggRL9JFntOMk1N8-5NuB1l4sQQbhFqG3FgRLu7So04q8Fg__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'thornback-orc-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c5-c06a-770e-9883-a21e6ae12e35/output/Character_output.glb?Expires=1787549054&Signature=OeHpT9PvjMAYJz3zFhFAEv7iVM47tKxgbbeoFR7FI1-zHOsk1eK58bRSBk4mUlXFz7FnDpeUdLS7M7BsiwWHZiIri8k-FOFbO6NDG-f4ectlO98IQlM9YsZPs4iLWiKiUuGhmjBx7fkME4CEo9~h039RYh157~KbK~qJ3ZO4MrxoAz6zaF2w3m8qPToofGL1kiX78CCDENrXsH0VzMM18Sn-iG-QxhPknPgcJNym8u8~PORURxhtqxcKrkFtL1ylLIRt6KOcWlpFBLA7tDedyyo2xYJX1gl4UiLwX99KskShKrwTmNMVvFz7Sqe2zyZt0nv2iBdhFKaeW7PY69Jx3w__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'stagroot-warden-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c5-e4cd-7710-9e27-61976c468f5e/output/Character_output.glb?Expires=1787549045&Signature=aqnEuGYKK-qaoOCQNzLYKR~XZsgsEu8BXYIV2aXwqflXiRkwJgN4L~WDybfPJsB8BOt9bXm4Zb~cJkM-PxSBturEMdQeI-LKJOYZHuZYBHw5CJv8ec~WiCq1rlGGpKupXlX9hUEDUuLIfw6xPQHCpIiH8FxXWiwG0yk8GnjyPu32Tt3eGPJXWLzzFz97kDXUayPy4~6Jr3Z~KS9YOLyXerEgeRQyGejqvEwEnufG51w8Pf~ItMQq6FCmjQrkbtxfynk7Mmd1gBk9ZJuqXfVZGeFjk5owiZMNJjHzwUhpBZB6-bsBtcMGbR8lRN66iwgmxnH0CiKeL3ZKrswGmv6iNA__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'coalclaw-kobold-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c7-1190-7ebf-a3a6-3eabb4a690ba/output/Character_output.glb?Expires=1787549178&Signature=KldvLLtEe0W~U-RmR089vL4OGWt~4naTinRa-CS4ByY72bLNfkr2DFVYs8cy-GzivnK-ZpsCzMn2XTWKwj4D2JLwJl8cOmr6XrQRXdycSv8F89UXDjl~ZuA7o7TBzH2xiS5dXaxIq097eqlCUIFdov2B2YHzH1PnDvcCl~Ru6rYcVqNjntOR7ijHKdfCUu2BEFAUSsTaNybRIR4Swvv28ZB1tOSlKvMbbrtCHlPm48~-XDvSjwO2H9Pb0XjsJ~rRUbNSAs5cRT25AipDYcbJY0kxQI1oHZNKaVLdzHsfWTjQqTfVItn-ALJbIicr2-vXeEdAQZCfiZWUf5c4rt5COw__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'cinderfang-raider-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c7-5c78-7234-bec0-e31f5c328227/output/Character_output.glb?Expires=1787549163&Signature=Z9Jw3o4oZtiGMfzUlav~VHcVRDlBQ8qWrvFvODqcRgarZZ~oryKZUBlnZN~0iacW2IBq9~ZSc2MLksbEQU4JLvXzXYN4p1XcNlMnnCaX9f5UMqSKtNOTasbOIJ4RE5VvU1zSC2O8YdiU~5rRGt4w9LdIcwI-cpmgU05tgz4BOMdMMMyZn0zBYzO6WBmowQJjHzcKTF8Az-5fyZjoSyp0wKDiW9h-1mNoIaj4e2rYOe78ii40GestpZ1kmLtUr6TKumONNPztPdm2~3yIXEKwrcGc-02HaK~aqj1rgtLXE6r1hYCn1WY61Bbk~Bbe7xOWfPu2W66hDeg1EbR6dXWnxg__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'magmahorn-juggernaut-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c7-8283-7ee0-9f69-2d40003958de/output/Character_output.glb?Expires=1787549158&Signature=EeonjJf3j~ZMWFv9OPmoPcQf2jA5lRMFPvtSjD70WXVEMmFN6L-~occW-JPMZQv9CCkbE-6ZFyNI5YLXPYB~JkM51V3j1GNBr4zDJO7i0IQCmKbPOnOVOKNVOoG-hrQLwbnoAkSjWh~Rg~zA7dBclT0AOyZOTIJvMOJpsruIBDrkFIG2~yOi4Q-Ivcu-NWvI6eU6hzgqiVQWUPfJA1BzFCwEDGA--Zq73xUv2dduEK-3RUU6tygaP5tHess8ck8Mov4vOPFTCG7Omj7VoY8Mo~S5vzLqnzAo2fMj3J56FpEfxy98CUaHhy4uJa-BUa0AaMsdMUXHUV-5odDXuzrwXg__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'snowfang-marauder-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c7-aade-7ee3-8042-c4a1bffae41c/output/Character_output.glb?Expires=1787549180&Signature=JKfU1INkh1LVhFTQjVdpwZU~YCCGWsgXGl1V7VboN7~5GbzYuD9-zsoTTx2ht5jcv~qWPUNu6EUmeZMyZvIIq2EOzwJz5Zp0bQTmEaAtHNIKgkOFjZHXh1TXkDzXuvxK2puasUg1nswteWHZcavf9qjJf65DsNfa8WC8ttSUxH81tw-3p45T1~SPN-w6UbivPrmnolRfQeHGDsmr8z9aHzQfILbmEpyyxKEBv92v56BS0xexXmv4rrj1pK3Cb-rG3xH83P6bF3n1JvpLfmoLHygBWMx3~Q85E4wJYJGei-I74s-D5JWdmt1d4xWwB~iz1QikFw5IMVw1qK1TDP4AFg__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'iceback-ogre-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c7-d8c8-7255-bec7-e335bc585994/output/Character_output.glb?Expires=1787549182&Signature=pKuymZbVbMDq0lRfzF5Yz94M0t8fjYvMcLVJLN6hb0zcwwBd5pFIfrFpxUPrqDycv4BEN83wSoETVsuSFSq~meHG-P3ikWR1X3jodcrTLxNNlpyXRQLuavjda-DLNO8-btllWySwqIENWPoWA1OqPwW3DWo1AujEta3jO5THz~m3j9b56Ozdnvn6j-dI2f5ThdLXCZZhA6IHhDlvHfrv2TQiW1scCza-yvqfqm3xw2UkMQLCZTMjJY4dCfhKkUlsTbVhdxEGtom0gj7IjHoMgcy-9Y2MLxMt75KRmfsQozfNWYIft-ibg9WrJPJ8gVdQpw6dJnrV2CCCgkZsDgV6KA__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'frostbound-warden-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c8-0132-7db6-9f98-4e34ffabf7d6/output/Character_output.glb?Expires=1787549179&Signature=HExTo4iAP8KLFCMs0tgp735fZS~qLHVotdARyPIab5Y33yf~I78Ht~SFp0gusa4XzxljLoue6mCXFrReCnVQBye331w7J9KY9zOtEKsv8AcQzTnGXZoxMDc3aKX703zJgHwe~biqn5n0mFj5PJESkw72AnmwNAJF7ZiIgRcbJbSDhGcnN0LS2GGaYAg1AzOTTark0teRikOky8hEgVZxabseLbgt1vE5Uhu0rRYqQdy6rjdYGPPFvNNzfAdxixw6Jk0hYsYYhYt7LR~XYVIbC~OcaYFZpnJrR1sNK-nn1kLLQeK9gukQk7y9r3OQzNKyHu6eIolYXV3dOqo25nhQTA__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'boneguard-raider-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c8-3270-7270-808a-c6fa6b7bd71e/output/Character_output.glb?Expires=1787549205&Signature=lBueZgybQdErW6by~sQTCItTm28w-MUpGOGLV8UP0RKxIeSvEtfABkcOyWoZtaENNZqEMKee3QgaaVy-Yxj8yGacuQJdUZhMLVSt72sGickpG3~3rh-px2MFZytz5lYhimRn3JMRuRX9aocjXxhOXamq~DuGhbljz8AF8A1uXiLO885p-B3wzXjXnO2OQk1o~xsyX-zGI-L5WiCDhExlaE1LYIZns1IYT~jPo0H4-qu47OFQu1wIWmCxgTxmAp2~QT3pIy3EJ8QK2Xe1JOussmpiD~2afXjF5UExxx85VZyONj7~XdjylF~DqvWxlc4XNkY5Gwos9FBAWUyrTyTVPw__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'tombmaul-knight-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c8-5863-7dbc-8c98-868b5599cc34/output/Character_output.glb?Expires=1787549204&Signature=FicpN8b0GTsB9RKUsdGEI3SmFkoHIM~bwb0899kD71ybpWWiDVPWpDojNHREg-3H6pt9P~s1IYPVOWUmzqJX49JPsLsIAaiTgPMjbJ6OeOhuGl1iEzMnJX86811HG456~Ts7sfYZmsCBlNDvvHqsZrCeRzx56Qlbb1a9gExPUmpm7PQ-1SV2CaQzRJzmi3~NWjpr0abs8AfYQp-0bmAAbSYOweIPrDKS82Im6kmi8-KkDjLiqi9Im0c0grNOFiNWrE8csGNV5g8HcibmTm6k1efuak2~hCVymGhL09Sr4otGPqHOenMfhBT8UCpzPO2~ESQa1CfO7cMFpQLAypsNLA__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'graveflame-reaper-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c8-7d2a-7277-9ab2-0965094e9cd0/output/Character_output.glb?Expires=1787549234&Signature=c-1zSzIQxCO7GiAMqTj0x7zK0-ryPArALn7pTJw9hy2HKB8h3fM-Uek4BJeo0C0mro6AOemHO8BZsmNZoUk3PuaGPBfXc88sbiNLYVJb7kLQOaWXTYaBHjAfCDoG0zz-CYdvmvgzsRxtfs4HjVAIkTlWU4stVSuiJky9kLu5UFIbSySZwOyPlnxJcyTvyj323bZPM1iuh~tqk9r4l4HfOTqSsEZIJ2ybjaiH91GI~Tp1eBG-k18lc66QlRD3IL0L1aSQ2WG1wRC3aqfTiHvI241ssNoN-IOOXIYljYd2Ypj25vO8-z6ev2W7M1rFwH5hXXmVjuKXWYCwcmZpKDZEgg__&Key-Pair-Id=K1VGYTHIYLM9UM'
+          fetch 'stormbreaker-colossus-v1.glb' 'https://assets.meshy.ai/0fc05c0d-6f6a-40b2-a5cd-c9e696b7fc5a/tasks/01a022c8-a568-7dbf-9254-43d45434a91b/output/Character_output.glb?Expires=1787549253&Signature=fQZwiOCRhQ~t9yfmNGIi2A8AiLWKYA6eIrE7ld3DC0Ic-TAQJwPj8kG6mmdDsD3mvCpP6HM5qPPW2ow9KEkYRuv4242JXjMzEawajMHWAfeNGcM6jwHjHxFhdSRWQ9uH-ZsQ84i60vt3ld8prR3o~hUdg-n1aQAVWp9RyRf5jzAjuXedKvnKWlvloHhshlgnENC~tpx4CAmJgmtcQ8-4itW7HUyG3BI~yuLRF815A2vqjdKM3vAnRiAeBfxJIS6qD0NYgiJ75NCrdTqCipExnYj-CZFcg6Nr~EQUW9DDt-Fsh9HETozlD33Mkjonw8~GntIJy3X~cPG8a2ySHKmAVQ__&Key-Pair-Id=K1VGYTHIYLM9UM'
+
+      - name: Structural GLB audit and provenance manifest
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const entries = [
+            ['Spriggan Scrapper','spriggan-scrapper-v1.glb','01a022c2-f4a4-7134-b2a7-190684b04449','01a022c5-8fb4-71c3-ac86-db31b0fa497d'],
+            ['Thornback Orc','thornback-orc-v1.glb','01a022c3-03de-7dfe-9616-b58d8a9b5c4f','01a022c5-c06a-770e-9883-a21e6ae12e35'],
+            ['Stagroot Warden','stagroot-warden-v1.glb','01a022c3-1355-7cbb-88df-111a2248a7f3','01a022c5-e4cd-7710-9e27-61976c468f5e'],
+            ['Coalclaw Kobold','coalclaw-kobold-v1.glb','01a022c3-2173-7cbd-9f84-b233c003bbe6','01a022c7-1190-7ebf-a3a6-3eabb4a690ba'],
+            ['Cinderfang Raider','cinderfang-raider-v1.glb','01a022c3-2f7c-7e10-8508-72c176cc9cdd','01a022c7-5c78-7234-bec0-e31f5c328227'],
+            ['Magmahorn Juggernaut','magmahorn-juggernaut-v1.glb','01a022c3-3f4e-76a3-8b03-f42da4c6be6d','01a022c7-8283-7ee0-9f69-2d40003958de'],
+            ['Snowfang Marauder','snowfang-marauder-v1.glb','01a022c3-4d65-76a8-913b-1d0ef9360a24','01a022c7-aade-7ee3-8042-c4a1bffae41c'],
+            ['Iceback Ogre','iceback-ogre-v1.glb','01a022c3-5cd0-7144-b5c7-ca75d5bdd5f9','01a022c7-d8c8-7255-bec7-e335bc585994'],
+            ['Frostbound Warden','frostbound-warden-v1.glb','01a022c3-77c1-7e19-8251-cb1649bc8e53','01a022c8-0132-7db6-9f98-4e34ffabf7d6'],
+            ['Boneguard Raider','boneguard-raider-v1.glb','01a022c3-950d-7e1f-a29a-ffe70afc8677','01a022c8-3270-7270-808a-c6fa6b7bd71e'],
+            ['Tombmaul Knight','tombmaul-knight-v1.glb','01a022c3-a5f2-7e24-b58e-dd509791e724','01a022c8-5863-7dbc-8c98-868b5599cc34'],
+            ['Graveflame Reaper','graveflame-reaper-v1.glb','01a022c3-b8ca-7ccb-bb21-7c04a9c745f6','01a022c8-7d2a-7277-9ab2-0965094e9cd0'],
+            ['Stormbreaker Colossus','stormbreaker-colossus-v1.glb','01a022c3-cc9a-76b8-a968-3a86e078e61c','01a022c8-a568-7dbf-9254-43d45434a91b'],
+          ];
+
+          function inspectGlb(file) {
+            const buf = fs.readFileSync(file);
+            if (buf.length < 20) throw new Error('too small');
+            if (buf.toString('ascii', 0, 4) !== 'glTF') throw new Error('bad GLB magic');
+            const version = buf.readUInt32LE(4);
+            const declared = buf.readUInt32LE(8);
+            if (version !== 2) throw new Error(`unsupported GLB version ${version}`);
+            if (declared !== buf.length) throw new Error(`declared length ${declared} != actual ${buf.length}`);
+            let off = 12;
+            let json = null;
+            while (off + 8 <= buf.length) {
+              const len = buf.readUInt32LE(off);
+              const type = buf.readUInt32LE(off + 4);
+              const end = off + 8 + len;
+              if (end > buf.length) throw new Error('chunk overruns file');
+              if (type === 0x4E4F534A) {
+                json = JSON.parse(buf.subarray(off + 8, end).toString('utf8').replace(/\u0000/g, '').trim());
+              }
+              off = end;
+            }
+            if (!json) throw new Error('missing JSON chunk');
+            const skins = json.skins || [];
+            const meshes = json.meshes || [];
+            const nodes = json.nodes || [];
+            const materials = json.materials || [];
+            const textures = json.textures || [];
+            const images = json.images || [];
+            const joints = skins.reduce((n, s) => n + ((s.joints || []).length), 0);
+            if (buf.length < 1_000_000) throw new Error(`suspiciously small (${buf.length})`);
+            if (meshes.length < 1) throw new Error('no mesh');
+            if (skins.length < 1 || joints < 10) throw new Error(`missing/weak skin (${skins.length} skins, ${joints} joints)`);
+            return { bytes: buf.length, meshes: meshes.length, skins: skins.length, joints, nodes: nodes.length, materials: materials.length, textures: textures.length, images: images.length, embeddedAnimations: (json.animations || []).length };
+          }
+
+          const audit = [];
+          const manifest = [];
+          for (const [name, filename, sourceTaskId, rigTaskId] of entries) {
+            const repoPath = `public/assets/enemies/candidates/${filename}`;
+            const metrics = inspectGlb(repoPath);
+            audit.push({ name, filename, result: 'PASS_STRUCTURAL', ...metrics });
+            manifest.push({
+              name,
+              candidate_path: repoPath,
+              image_to_3d_task_id: sourceTaskId,
+              rig_task_id: rigTaskId,
+              base_rigged_glb_committed: true,
+              basic_walk_run_available_from_rig_task: true,
+              walk_run_committed: false,
+              promotion_status: 'candidate-only',
+              visual_acceptance: 'UNKNOWN'
+            });
+          }
+          fs.writeFileSync('docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json', JSON.stringify({ generated_at: new Date().toISOString(), criteria: 'GLB v2 header/length, >=1 mesh, >=1 skin, >=10 joints, >1MB', entries: audit }, null, 2) + '\n');
+          fs.writeFileSync('docs/asset-production/ENEMY_WAVE_1_PROVENANCE.json', JSON.stringify({ wave: 'enemy-wave-1', owner_credit_ceiling: 500, observed_total_spend: 482, current_provider_balance_at_audit: 697, mapping_note: 'Rig task IDs recorded in the same launch order as the Wave 1 source model ledger.', entries: manifest }, null, 2) + '\n');
+          console.table(audit);
+          NODE
+
+      - name: Commit candidate binaries and remove one-shot ingest workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/enemies/candidates/*.glb docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json docs/asset-production/ENEMY_WAVE_1_PROVENANCE.json
+          git rm .github/workflows/enemy-wave-rigged-ingest.yml
+          git commit -m 'assets(enemies): stage rigged wave 1 candidates'
+          git push origin HEAD:feat/enemy-asset-wave-1
