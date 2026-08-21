@@ -1,0 +1,74 @@
+name: forge-review
+
+on:
+  pull_request:
+    paths:
+      - 'public/forge.html'
+      - 'public/src/forge/**'
+      - 'public/src/studio/**'
+      - 'public/src/character/**'
+      - 'net/forgeApi.mjs'
+      - 'server.mjs'
+      - 'tools/forge-review/**'
+      - '.github/workflows/forge-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    # IMPORTANT: do not provide MESHY_API_KEY or GALAQUEST_FORGE_TOKEN here. This workflow proves
+    # the review page itself is safe/locked in CI and cannot accidentally spend provider credits.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Launch isolated Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/gq-forge-chrome"
+          google-chrome \
+            --remote-debugging-port=9224 \
+            --user-data-dir="$RUNNER_TEMP/gq-forge-chrome" \
+            --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu \
+            --hide-scrollbars --no-first-run --no-default-browser-check about:blank \
+            >"$RUNNER_TEMP/forge-chrome.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/gq-forge-chrome.pid"
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:9224/json/version >/dev/null; then
+              echo 'chrome ready'
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat "$RUNNER_TEMP/forge-chrome.log" || true
+          exit 1
+
+      - name: Review real Asset Forge page
+        run: node tools/forge-review/review-forge.mjs
+
+      - name: Upload Forge evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-forge-review-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .local/runtime-test/forge-review
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Clean owned review processes
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/gq-forge-chrome.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/gq-forge-chrome.pid")" 2>/dev/null || true
+          fi
+          pkill -f 'node server.mjs' 2>/dev/null || true
