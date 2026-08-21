@@ -38,9 +38,9 @@ GalaQuest instead uses **semantic anatomy coverage** while preserving a one-draw
 
 The runtime core lives in `public/src/character/anatomyOcclusion.js`. It fails closed if an asset is untagged or a triangle crosses semantic regions rather than guessing from world-space bounds.
 
-## 3. Author semantic regions on face corners, not extra materials
+## 3. Author semantic regions on face corners, not extra shipping materials
 
-The preferred shipping representation is a custom mesh attribute named `_GQ_REGION`, authored on Blender **face corners** so each triangle has one unambiguous semantic code. Blender's glTF exporter exports mesh attributes whose names begin with `_`, and the vendored three.js loader exposes that attribute to GalaQuest as `_gq_region`.
+The preferred shipping representation is a custom mesh attribute named `_GQ_REGION`, authored on Blender **face corners** so each triangle has one unambiguous semantic code. Blender's glTF exporter exports custom attributes whose names begin with `_`, and the vendored three.js loader exposes that attribute to GalaQuest as `_gq_region`.
 
 Current semantic vocabulary starts narrow on purpose:
 
@@ -62,6 +62,25 @@ For the current Dawnwarden helmet, the intended rule is:
 **hide `hair` + `ears`; preserve face, eyes, and brows.**
 
 Headgear type matters. A later hat may keep ears/beard and use a helmet-compatible under-hair fall; a full helm can hide much more. `head slot occupied` is not a sufficient coverage rule.
+
+### Supervised Blender bake
+
+`tools/blender/bake_anatomy_regions.py` makes the human-authoring step repeatable without turning semantic regions into shipping draw calls:
+
+1. Open the accepted character working file in Blender and keep the real shipping material in slot 0.
+2. Add temporary marker materials named `GQ_REGION__hair`, `GQ_REGION__ears`, etc.
+3. In Edit Mode, select the faces belonging to each semantic region and **Assign** the matching marker material. Untagged faces remain `core`.
+4. Save the working `.blend` and run:
+
+   ```bash
+   blender working.blend --background \
+     --python tools/blender/bake_anatomy_regions.py -- out.glb [mesh-name]
+   ```
+
+5. The baker converts marker assignments into the `_GQ_REGION` CORNER attribute, restores every polygon to material slot 0, removes the marker materials, verifies a one-material render mesh, and exports GLB.
+6. Run the GLB intake report and Studio validation on the exported bytes before replacing a shipping asset.
+
+The temporary marker materials are authoring UI only. If they survive into the shipping GLB as separate material primitives, the bake is wrong.
 
 ## 4. Supervised semantic authoring is currently mandatory
 
