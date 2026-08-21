@@ -170,6 +170,9 @@ export function installStudioApi(studioScene) {
         loadoutGearProvenance: descriptor?.gearProvenance ?? null,
         reviewTarget: descriptor?.reviewTarget ?? null,
         gear: studioScene.gearVisibility(),
+        // Semantic anatomy actually hidden by the live body geometry. A capture can therefore prove
+        // that the helmet did not merely declare coverage -- the Studio applied it.
+        hiddenAnatomy: studioScene.hiddenAnatomy,
         // SR5: which inspector overlay (if any) is currently drawn in the scene, so a capture's
         // metadata states what a screenshot shows rather than leaving it to be inferred visually.
         overlay: studioScene.overlay,
