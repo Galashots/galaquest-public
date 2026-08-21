@@ -1,5 +1,6 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import { rigidAnchorName } from '../character/gear.js';
+import { OPEN_FACE_HELMET_PROFILE_V1 } from './gearFitProfiles.js';
 
 // PR #26 asset-forge candidates. These paths deliberately stay under candidates/ until visual fit,
 // animation sweeps, runtime pixels, and final owner acceptance say otherwise.
@@ -38,12 +39,11 @@ export const DAWNWARDEN_HELMET_CANDIDATE = Object.freeze({
   boneName: 'Head',
   url: 'assets/gear/candidates/dawnwarden-helmet-v1.glb',
   kind: 'helmet',
-  // Semantic coverage is authored gear data, not a global "head slot" assumption. This open-face
-  // helm must clear the Hero's hair and ears while preserving the face/eyes/brows. Runtime occlusion
-  // will consume these names once the Hero carries the matching _GQ_REGION anatomy tags.
-  hideAnatomy: Object.freeze(['hair', 'ears']),
-  targetWorldLongest: 0.38,
-  worldUpOffset: 0.10,
+  // Dawnwarden is the owner-locked reference for this open-face fit family. The profile captures the
+  // approved seat/orientation and becomes the starting frame for later open-face helmet candidates.
+  fitProfile: OPEN_FACE_HELMET_PROFILE_V1,
+  hideAnatomy: OPEN_FACE_HELMET_PROFILE_V1.hideAnatomy,
+  targetWorldLongest: OPEN_FACE_HELMET_PROFILE_V1.targetWorldLongest,
   ownerFit: Object.freeze({
     schema: 'galaquest.asset-forge-fit/1',
     sourceSha: '687f903f33def5dddc7662e9093de4d80f55fc12',
@@ -133,15 +133,37 @@ function normalizeSwordPayload(assetRoot, bounds, gripFractionFromMin) {
 function normalizeHelmetPayload(assetRoot, bounds) {
   const payload = new THREE.Group();
   payload.name = 'StudioCandidateHelmetNormalization';
-  // Put the generated helmet's geometric centre on the mount point. We then place that mount point
-  // just above the real Head bone. Fine fit is intentionally left to Studio pixels.
+  // Put the generated helmet's geometric centre on the mount point. The fit profile owns where that
+  // normalized helmet centre sits relative to the Hero; new candidates start in the accepted frame.
   payload.position.copy(bounds.center).multiplyScalar(-1);
   payload.add(assetRoot);
   return payload;
 }
 
+function applyHelmetFitProfile(anchor, bone, bounds, profile, fallbackTargetWorldLongest) {
+  if (!profile) return false;
+  if (profile.boneName !== bone.name) {
+    throw new Error(`Studio candidate mount: fit profile ${profile.id} targets ${profile.boneName}, not ${bone.name}`);
+  }
+  if (!Array.isArray(profile.anchorLocalPosition) || profile.anchorLocalPosition.length !== 3
+      || !Array.isArray(profile.anchorLocalQuaternion) || profile.anchorLocalQuaternion.length !== 4) {
+    throw new Error(`Studio candidate mount: malformed fit profile ${profile.id}`);
+  }
+  anchor.position.fromArray(profile.anchorLocalPosition);
+  anchor.quaternion.fromArray(profile.anchorLocalQuaternion).normalize();
+  anchor.scale.setScalar(localScaleForWorldExtent(
+    bone,
+    bounds.longest,
+    profile.targetWorldLongest ?? fallbackTargetWorldLongest,
+  ));
+  anchor.userData.gqFitProfile = profile.id;
+  return true;
+}
+
 function applyOwnerFit(anchor, ownerFit) {
   if (!ownerFit) return;
+  // v1 packets used local-XYZ rotation deltas. Preserve that historical interpretation when baking
+  // the already-approved Dawnwarden placements; new authoring packets use the Forge v2 world frame.
   const rotationDeg = ownerFit.delta?.rotationDeg ?? [0, 0, 0];
   const baselineQ = ownerFit.baseline?.localRotationQuaternion;
   const effectivePosition = ownerFit.effective?.localPosition;
@@ -185,17 +207,20 @@ export function attachStudioCandidate(heroRoot, spec, assetRoot) {
     anchor.scale.setScalar(localScaleForWorldExtent(bone, bounds.longest, spec.targetWorldLongest));
     anchor.add(normalizeSwordPayload(assetRoot, bounds, spec.gripFractionFromMin));
   } else if (spec.kind === 'helmet') {
-    const boneWorldPos = new THREE.Vector3();
-    const boneWorldQ = new THREE.Quaternion();
-    const heroWorldQ = new THREE.Quaternion();
-    bone.getWorldPosition(boneWorldPos);
-    bone.getWorldQuaternion(boneWorldQ);
-    heroRoot.getWorldQuaternion(heroWorldQ);
+    const usedProfile = applyHelmetFitProfile(anchor, bone, bounds, spec.fitProfile, spec.targetWorldLongest);
+    if (!usedProfile) {
+      const boneWorldPos = new THREE.Vector3();
+      const boneWorldQ = new THREE.Quaternion();
+      const heroWorldQ = new THREE.Quaternion();
+      bone.getWorldPosition(boneWorldPos);
+      bone.getWorldQuaternion(boneWorldQ);
+      heroRoot.getWorldQuaternion(heroWorldQ);
 
-    const desiredWorldPos = boneWorldPos.clone().add(new THREE.Vector3(0, spec.worldUpOffset, 0));
-    anchor.position.copy(bone.worldToLocal(desiredWorldPos.clone()));
-    anchor.quaternion.copy(boneWorldQ.clone().invert().multiply(heroWorldQ));
-    anchor.scale.setScalar(localScaleForWorldExtent(bone, bounds.longest, spec.targetWorldLongest));
+      const desiredWorldPos = boneWorldPos.clone().add(new THREE.Vector3(0, spec.worldUpOffset ?? 0, 0));
+      anchor.position.copy(bone.worldToLocal(desiredWorldPos.clone()));
+      anchor.quaternion.copy(boneWorldQ.clone().invert().multiply(heroWorldQ));
+      anchor.scale.setScalar(localScaleForWorldExtent(bone, bounds.longest, spec.targetWorldLongest));
+    }
     anchor.add(normalizeHelmetPayload(assetRoot, bounds));
   } else {
     throw new Error(`Studio candidate mount: unsupported kind ${spec.kind}`);
