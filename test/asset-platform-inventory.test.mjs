@@ -172,6 +172,48 @@ test('the recorded totals match the items they claim to summarise', () => {
     + 'the rationale recorded in the consolidation brief needs revisiting');
 });
 
+test('ARCHIVED_VERIFIED means real evidence, not a status string someone typed', () => {
+  // Flipping a status from PENDING to ARCHIVED_VERIFIED is one keystroke. Losing 256 MB because
+  // nobody checked whether the upload happened is permanent. So the label has to carry its proof.
+  const archived = items.filter((item) => item.archive_status === 'ARCHIVED_VERIFIED');
+  assert.ok(archived.length > 0, 'nothing claims to be archived; this test must not pass vacuously');
+
+  for (const item of archived) {
+    assert.match(item.archive_file_id ?? '', /^[A-Za-z0-9_-]{10,}$/,
+      `${item.item_id} claims archival with no Drive file id`);
+    assert.match(item.archive_file_url ?? '', /^https:\/\/drive\.google\.com\/file\/d\//,
+      `${item.item_id} claims archival with no real Drive file URL`);
+
+    const proof = item.archive_verification;
+    assert.ok(proof, `${item.item_id} claims archival with no verification record`);
+    assert.equal(proof.pre_upload_sha256_match, true,
+      `${item.item_id} must have been hashed against this manifest BEFORE upload`);
+    assert.equal(proof.remote_size_verified_via_drive_api, true,
+      `${item.item_id} must have had its size confirmed server-side, not just locally`);
+    assert.equal(proof.drive_readback_sha256_match, true,
+      `${item.item_id} must have been read back from Drive and re-hashed`);
+    assert.equal(proof.remote_size_bytes, item.size_bytes,
+      `${item.item_id} remote size disagrees with the recorded byte size`);
+    assert.match(proof.local_md5_of_uploaded_bytes ?? '', /^[0-9a-f]{32}$/,
+      `${item.item_id} must record an MD5 a future audit can compare against Drive md5Checksum`);
+
+    // Honesty clause: the connector cannot read Drive's own md5Checksum, and the record must say so
+    // rather than implying a stronger check than was performed.
+    assert.equal(typeof proof.server_md5_checksum_compared, 'boolean');
+    if (proof.server_md5_checksum_compared === false) {
+      assert.ok((proof.md5_limitation ?? '').length > 40,
+        `${item.item_id} must explain why no server checksum comparison was made`);
+    }
+
+    // Archival is a second home, never a replacement for the git recovery route.
+    assert.ok(item.git_blob_oid && item.sha256 && item.source_ref,
+      `${item.item_id} lost its git recovery coordinates when it gained a Drive copy`);
+  }
+
+  assert.match(manifest.recovery_contract.still_primary ?? '', /not a replacement/i,
+    'the git-blob recovery contract must not be quietly retired now that Drive holds a copy');
+});
+
 test('every code surface the manifest claims was ported is actually in the tree', () => {
   // This is the zero-omissions proof, made mechanical. The manifest asserts that 50 non-binary
   // surfaces from #26/#27/#28/#29 came across; if one silently did not, the claim is false and the

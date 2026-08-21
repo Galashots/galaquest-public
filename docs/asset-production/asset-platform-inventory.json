@@ -17,14 +17,27 @@
   "recovery_contract": {
     "statement": "Every binary listed here is recoverable today without Google Drive. No source PR is closed and no source branch is modified, so every blob stays reachable on GitHub.",
     "command": "git fetch origin <source_ref> && git cat-file -p <git_blob_oid> > <name>.glb",
-    "verify": "Hash the result with sha256 and compare against the sha256 field in this manifest."
+    "verify": "Hash the result with sha256 and compare against the sha256 field in this manifest.",
+    "still_primary": "The Google Drive archive is now a SECOND home for these bytes, not a replacement for this route. This contract stays in force and is deliberately not weakened: the git blob remains a valid, independent recovery path for as long as the source branches exist, which is why closing or deleting them is still an owner-controlled decision rather than a consequence of archival."
   },
   "drive_archive": {
     "account": "leoalvespinto@gmail.com",
     "root_url": "https://drive.google.com/drive/folders/1rwHbW5aZNwGXnL0_QNFZOI-9TNU8-LlA",
     "consolidation_url": "https://drive.google.com/drive/folders/1g_sSIyfNUJI9vuCI2ifkNdltx9so3IHH",
     "folders_created_utc": "2026-08-21T16:27Z",
-    "upload_state": "Folder hierarchy created and currently empty. Binary upload is PENDING_OWNER_UPLOAD: the Drive integration available to this session cannot stream 8-20 MB binaries, so the owner uploads the bytes. This manifest already names the exact destination folder and URL for every file."
+    "upload_state": "COMPLETE for every binary this consolidation removed from Git. All 19 files (256,041,964 bytes) were uploaded on 2026-08-21 and each carries archive_status ARCHIVED_VERIFIED with a real Drive file id and URL. The 35 gear-family candidates are deliberately NOT here: they were never downloaded from the provider and remain identified by their Meshy task IDs only.",
+    "upload_verification_summary": {
+      "files_expected": 19,
+      "files_uploaded": 19,
+      "bytes_uploaded": 256041964,
+      "pre_upload_sha256_verified": 19,
+      "remote_size_verified_via_drive_api": 19,
+      "drive_readback_sha256_verified": 19,
+      "server_md5_checksum_compared": 0,
+      "failures": 0,
+      "note": "Server-side md5Checksum is not exposed by the Drive connector available to this session; see archive_verification.md5_limitation on any archived item. Size was confirmed server-side and content was confirmed by reading every uploaded file back through the Drive mount."
+    },
+    "access": "Private to the owner Google account. The archive was NOT shared publicly or link-shared."
   },
   "no_spend_declaration": "This consolidation performed NO provider calls of any kind. No Meshy generation, rigging, animation, balance check, or status poll was issued, paid or read-only.",
   "pr_11_salvage": {
@@ -105,9 +118,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/characters/wren",
       "archive_url": "https://drive.google.com/drive/folders/1wdyehkHz84YpZ_kUc0WXr3jU3ZAu0q5y",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands."
+      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands.",
+      "archive_file_id": "1gSYliFFh1aydaF0kWxudyEGkVy3jFY_o",
+      "archive_file_url": "https://drive.google.com/file/d/1gSYliFFh1aydaF0kWxudyEGkVy3jFY_o/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 19159020,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "ec715db28211839685d618f004a4cf92",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "wren-ranger-v1-walk",
@@ -128,9 +155,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/characters/wren",
       "archive_url": "https://drive.google.com/drive/folders/1wdyehkHz84YpZ_kUc0WXr3jU3ZAu0q5y",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands."
+      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands.",
+      "archive_file_id": "19ndQotsfDM0jpHt4KzHgzJKVVQiVvzGr",
+      "archive_file_url": "https://drive.google.com/file/d/19ndQotsfDM0jpHt4KzHgzJKVVQiVvzGr/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 19163628,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "e4bf092776fafaf69a8db02444dd3d03",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "wren-ranger-v1",
@@ -151,9 +192,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/characters/wren",
       "archive_url": "https://drive.google.com/drive/folders/1wdyehkHz84YpZ_kUc0WXr3jU3ZAu0q5y",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands."
+      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands.",
+      "archive_file_id": "1S5DbfOxOV-94VmRcGgxEYE8cVwx9BZuV",
+      "archive_file_url": "https://drive.google.com/file/d/1S5DbfOxOV-94VmRcGgxEYE8cVwx9BZuV/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 19150856,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "09b28e1b12b03e21f5d42f9181353842",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "bramble-stalker-v1-run",
@@ -174,9 +229,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/bramble-stalker",
       "archive_url": "https://drive.google.com/drive/folders/1z88qfqBq-SrmmEO83CGqxv-injaYhflW",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands."
+      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands.",
+      "archive_file_id": "1ZLxhXuWYDKItEGOl_p10bfSXBYCx8GN8",
+      "archive_file_url": "https://drive.google.com/file/d/1ZLxhXuWYDKItEGOl_p10bfSXBYCx8GN8/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 20288416,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "d0ebc690561145f86b7204e52dd6f1b9",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "bramble-stalker-v1-walk",
@@ -197,9 +266,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/bramble-stalker",
       "archive_url": "https://drive.google.com/drive/folders/1z88qfqBq-SrmmEO83CGqxv-injaYhflW",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands."
+      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands.",
+      "archive_file_id": "1UzzKyQKtfmAswyUg554FMSuTncDjodD3",
+      "archive_file_url": "https://drive.google.com/file/d/1UzzKyQKtfmAswyUg554FMSuTncDjodD3/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 20293028,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "a8933ecdbdf065aa9ee503f6d5182354",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "bramble-stalker-v1",
@@ -220,9 +303,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/bramble-stalker",
       "archive_url": "https://drive.google.com/drive/folders/1z88qfqBq-SrmmEO83CGqxv-injaYhflW",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands."
+      "reason": "Raw unoptimised Meshy candidate with no code reference and no runtime load path. The entire public/assets tree on main is 6,273,437 bytes; committing these would inflate the publicly served tree roughly 43x for bytes nothing loads. The repository already declares this policy in .gitignore (.local/ scratch space, \"Never committed: a single rigged export is ~25 MB\"). Bytes stay recoverable from the unclosed source branch by git blob OID until the Drive upload lands.",
+      "archive_file_id": "1cThxQyBq4HJ2e7h1vvWJi4kYJawYJumm",
+      "archive_file_url": "https://drive.google.com/file/d/1cThxQyBq4HJ2e7h1vvWJi4kYJawYJumm/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 20280248,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "ed0632a2c3a9b5955b6c61f96218ef0f",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "dawnwarden-helmet-v1",
@@ -1664,9 +1761,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1bvhPJ7U_2xn5RaYWSjOzFL1w-Oj-KObi",
+      "archive_file_url": "https://drive.google.com/file/d/1bvhPJ7U_2xn5RaYWSjOzFL1w-Oj-KObi/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 8213752,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "bb6261a55e3f56bba205236b81beaa2f",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "thornback-orc-v1",
@@ -1697,9 +1808,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1zDNw9tx_BkdZxgQuyE1pcakz_N7w0fPh",
+      "archive_file_url": "https://drive.google.com/file/d/1zDNw9tx_BkdZxgQuyE1pcakz_N7w0fPh/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 9994564,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "5ea0530ebc20c940f2480a50c580410c",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "stagroot-warden-v1",
@@ -1730,9 +1855,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1fTm59BCo7xzE9onLJJF0WQfCLtnFAha5",
+      "archive_file_url": "https://drive.google.com/file/d/1fTm59BCo7xzE9onLJJF0WQfCLtnFAha5/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10288132,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "43bd6793dedae1b66c043b8d94af909b",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "coalclaw-kobold-v1",
@@ -1763,9 +1902,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1o2e9X4jKuoMvDzGf-5vxSOgIdXe5LBhA",
+      "archive_file_url": "https://drive.google.com/file/d/1o2e9X4jKuoMvDzGf-5vxSOgIdXe5LBhA/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 11712012,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "e25d865efecf537c01d18e9a91ffb607",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "cinderfang-raider-v1",
@@ -1796,9 +1949,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1Sp_u2CmQ7lKpAAMPJdsUdc6ZpEVv_9mb",
+      "archive_file_url": "https://drive.google.com/file/d/1Sp_u2CmQ7lKpAAMPJdsUdc6ZpEVv_9mb/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10551520,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "3cedd4553f3b4c22498e5857a5f9d997",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "magmahorn-juggernaut-v1",
@@ -1829,9 +1996,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1MHX0fAQAbJOa3ySbkmifhsjJIMm0PHVF",
+      "archive_file_url": "https://drive.google.com/file/d/1MHX0fAQAbJOa3ySbkmifhsjJIMm0PHVF/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10462712,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "dc62d39e8b152279936332b59ba04d74",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "snowfang-marauder-v1",
@@ -1862,9 +2043,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1UaNOtbkHRRrK-mdNkll5PasAkLDJqXUD",
+      "archive_file_url": "https://drive.google.com/file/d/1UaNOtbkHRRrK-mdNkll5PasAkLDJqXUD/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10717056,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "d74c9056fbff3d2c14474802708d962c",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "iceback-ogre-v1",
@@ -1895,9 +2090,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1EB5kt9dznyXU6tKEeM6gqjNLE7cCcd8Z",
+      "archive_file_url": "https://drive.google.com/file/d/1EB5kt9dznyXU6tKEeM6gqjNLE7cCcd8Z/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 11373148,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "50d8651c2b1406895bc8e0c3f5362ad0",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "frostbound-warden-v1",
@@ -1928,9 +2137,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1t0IpsIOnY47j99Txko12x_x7Gsk3TP6B",
+      "archive_file_url": "https://drive.google.com/file/d/1t0IpsIOnY47j99Txko12x_x7Gsk3TP6B/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10957256,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "958055ff2881ddaa7aeb7ad94c7b2047",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "boneguard-raider-v1",
@@ -1961,9 +2184,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1EG3S-nyDMJ4Vu3C0rnTw4JYjt2A0S8tU",
+      "archive_file_url": "https://drive.google.com/file/d/1EG3S-nyDMJ4Vu3C0rnTw4JYjt2A0S8tU/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10861656,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "8dcd58cc42c2bb28edb65787145d433e",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "tombmaul-knight-v1",
@@ -1994,9 +2231,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1FHlP9GdfUy7WCtqbpttIMEhAPo34G2gU",
+      "archive_file_url": "https://drive.google.com/file/d/1FHlP9GdfUy7WCtqbpttIMEhAPo34G2gU/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10670204,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "4a226ecf49dac17d1949d776cff5b943",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "graveflame-reaper-v1",
@@ -2027,9 +2278,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "1ul_ak3KSan_zZ54g2I-pwHQLPUc5gQUM",
+      "archive_file_url": "https://drive.google.com/file/d/1ul_ak3KSan_zZ54g2I-pwHQLPUc5gQUM/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 10837080,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "1de14804bf74bbf9018994dfa312dc11",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "stormbreaker-colossus-v1",
@@ -2060,9 +2325,23 @@
       "proposed_destination": null,
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",
       "archive_url": "https://drive.google.com/drive/folders/11QSsmnsr-yZ0XKj5O2OGl4PRp4ep8mlu",
-      "archive_status": "PENDING_OWNER_UPLOAD",
+      "archive_status": "ARCHIVED_VERIFIED",
       "disposition": "PRESERVE_EXTERNAL_ARCHIVE",
-      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands."
+      "reason": "Full Wave 1 provenance preserved: image task, rig task, structural audit and defect quarantine. The bytes are large, unoptimised and unreferenced by any code path, so they leave the served tree but stay recoverable by git blob OID from the unclosed source branch until the Drive upload lands.",
+      "archive_file_id": "19AECST4SHcZFNhHi-AVhPGs5jD_9M2AD",
+      "archive_file_url": "https://drive.google.com/file/d/19AECST4SHcZFNhHi-AVhPGs5jD_9M2AD/view",
+      "archive_verification": {
+        "uploaded_utc": "2026-08-21",
+        "pre_upload_sha256_match": true,
+        "pre_upload_size_match": true,
+        "remote_size_bytes": 11067676,
+        "remote_size_verified_via_drive_api": true,
+        "drive_readback_sha256_match": true,
+        "local_md5_of_uploaded_bytes": "ff89fdc8f29bca9cfc82194ffc340bfb",
+        "server_md5_checksum_compared": false,
+        "method": "Recovered from the recorded git blob OID, verified against this manifest by byte size and SHA-256 BEFORE upload, copied to the owner Google Drive archive through the authenticated Drive for Desktop mount, then confirmed server-side: the Drive API reports the file with a matching fileSize and a real file id. Re-reading the uploaded file back through the Drive mount reproduces the recorded SHA-256 exactly.",
+        "md5_limitation": "Google Drive server-side md5Checksum is NOT exposed by the connector available to this session, and downloading 256 MB back through it was not practical, so no server-computed checksum comparison was performed. The MD5 recorded here was computed locally from the exact uploaded bytes so a future audit can compare it against Drive md5Checksum directly."
+      }
     },
     {
       "item_id": "voidfang-overlord",
@@ -2642,7 +2921,7 @@
       "archive_url": null,
       "archive_status": "IN_GIT",
       "disposition": "PRESERVE_NOW",
-      "reason": "Ported with a deliberate relocation: a dated production handoff belongs beside the other dated records in docs/asset-production/, not at the repository root, where only AGENTS.md, README.md, NOTICE and ASSET-LICENSES.md live. Only the document’s own self-reference pointed at the old path."
+      "reason": "Ported with a deliberate relocation: a dated production handoff belongs beside the other dated records in docs/asset-production/, not at the repository root, where only AGENTS.md, README.md, NOTICE and ASSET-LICENSES.md live. Only the document’s own self-reference pointed at the old path. It also carries a HISTORICAL HANDOFF — SUPERSEDED banner: its body names feat/asset-forge and PR #27 as the active workstream, which would read as current authority on the new main. The banner exempts the owner decisions in its section 2, including the accepted Dawnwarden placements, which remain live."
     },
     {
       "item_id": "surface:27:docs/asset-production/GEAR_BATCH_2026-08-20.md",

@@ -1,3 +1,25 @@
+> # HISTORICAL HANDOFF — SUPERSEDED
+>
+> This document records the Asset Forge session state as of **2026-08-20** and is retained for
+> provenance only. It is **not current repository authority**, and the branch, PR and SHA
+> instructions inside it are transient session state that has since moved on.
+>
+> For the current consolidated asset-platform state, use:
+>
+> - [`ASSET_PLATFORM_CONSOLIDATION_2026-08-21.md`](ASSET_PLATFORM_CONSOLIDATION_2026-08-21.md)
+> - [`asset-platform-inventory.json`](asset-platform-inventory.json)
+> - live `main`, refreshed from GitHub, for anything the two above do not answer.
+>
+> **Do not resume work from the PR, branch or head references below without re-verifying live GitHub
+> state first.** In particular, this file names `feat/asset-forge` and PR #27 as the active Forge
+> workstream. That work has been consolidated onto a clean branch cut from `main`; PR #27 is no
+> longer the place to continue it.
+>
+> One thing here is *not* superseded: the **owner decisions** recorded in section 2, including the
+> accepted Dawnwarden Helmet and Sword placements. Those remain live product direction. They are
+> carried forward by the consolidation, and the fit packets they describe are pinned in
+> `test/forge-owner-fit.test.mjs` against their original authoring SHA.
+
 # GalaQuest Asset Forge — Detailed Session Handoff & Progress Report
 
 **Prepared:** 2026-08-20 Mountain time (GitHub timestamps may show 2026-08-21 UTC)  

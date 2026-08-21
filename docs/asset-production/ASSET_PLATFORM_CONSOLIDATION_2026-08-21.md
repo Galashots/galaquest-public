@@ -100,13 +100,12 @@ its `source_ref`, `git_blob_oid`, `sha256` and `size_bytes`.
 git fetch origin <source_ref> && git cat-file -p <git_blob_oid> > <name>.glb
 ```
 
-Hash the result and compare against the manifest. That is the preservation guarantee; the Drive
-archive is where the bytes should *live*, not the only place they *exist*.
+Hash the result and compare against the manifest. This contract stays in force and is deliberately
+**not** weakened now that Drive holds a copy: the git blob is an independent second recovery path,
+which is why closing or deleting the source branches remains an owner decision rather than an
+automatic consequence of archival.
 
-### Google Drive archive
-
-The folder hierarchy has been created in the owner's Drive and every folder URL is recorded in the
-inventory:
+### Google Drive archive — upload complete
 
 - Root — <https://drive.google.com/drive/folders/1rwHbW5aZNwGXnL0_QNFZOI-9TNU8-LlA>
 - This consolidation — <https://drive.google.com/drive/folders/1g_sSIyfNUJI9vuCI2ifkNdltx9so3IHH>
@@ -114,9 +113,28 @@ inventory:
 Layout: `gear/{embermaw,frostfang,stormwing,voidstar,wildthorn,sunlion,behemoth,dawnwarden}`,
 `enemies/{wave-1,bramble-stalker}`, `characters/wren`, `historical/beacon-warden`.
 
-The folders are **empty**. The Drive integration available to this session cannot stream 8–20 MB
-binaries, so every binary is recorded `PENDING_OWNER_UPLOAD` against a real, named destination
-folder. No URL is invented. The unresolved byte count is stated in §9.
+**All 19 binaries this consolidation removed from Git — 256,041,964 bytes — were uploaded on
+2026-08-21 and verified.** Every one carries `archive_status: ARCHIVED_VERIFIED` in the inventory
+with a real Drive file id and URL. Wren and Bramble went first, because they carry no provider task
+IDs at all and their git blob was the only handle on them.
+
+What was verified, precisely:
+
+| Check | Result |
+| --- | --- |
+| Recovered from the recorded git blob OID | 19/19 |
+| Byte size and SHA-256 matched the manifest **before** upload | 19/19 |
+| Drive API reports the file with a matching server-side `fileSize` | 19/19 |
+| Re-read from Drive reproduces the recorded SHA-256 | 19/19 |
+| Server-computed `md5Checksum` compared | **0/19 — not available** |
+
+The Drive connector available to this session does not expose `md5Checksum`, and pulling 256 MB back
+through it was not practical. So the manifest records a locally computed MD5 of the exact uploaded
+bytes for every file, letting a future audit compare it against Drive's own checksum directly. The
+archive is **private to the owner account** and was not shared or link-published.
+
+The 35 gear-family candidates are **not** in the archive and are not pending upload to it: they were
+never downloaded from the provider, and remain identified by their Meshy task IDs alone.
 
 ## 5. The seven gear families — 35 tasks, zero bytes
 
@@ -219,7 +237,21 @@ Neither Wren nor Bramble Stalker is referenced by any code path in any of the fo
 every `bramble` hit in the source tree is the unrelated gameplay obstacle in `VILLAGE.BRAMBLES`. They
 archive cleanly with zero runtime risk.
 
-## 9. PR #11 — nothing ported, and why
+## 9. Historical records retained beside this one
+
+`docs/asset-production/` deliberately holds dated records as well as current state. These are kept
+for provenance and are **not** current authority:
+
+| Document | Status |
+| --- | --- |
+| [`ASSET_FORGE_HANDOFF_2026-08-20.md`](ASSET_FORGE_HANDOFF_2026-08-20.md) | **HISTORICAL — SUPERSEDED.** Names `feat/asset-forge` and PR #27 as the active workstream. Carries a supersession banner. Its section 2 owner decisions, including the accepted Dawnwarden placements, remain live. |
+| [`GEAR_BATCH_2026-08-20.md`](GEAR_BATCH_2026-08-20.md) | Live provenance for the 35 gear tasks; its budget section is dated historical accounting and grants no spend authority. |
+| [`ENEMY_BATCH_2026-08-20.md`](ENEMY_BATCH_2026-08-20.md) | Live provenance for Enemy Wave 1; same treatment of its spend section. |
+
+The rule this follows is `docs/GUIDANCE.md`'s: mark a superseded statement historical rather than
+leaving two documents that both read as current.
+
+## 10. PR #11 — nothing ported, and why
 
 Against `main`, PR #11 adds one file, deletes 30 and modifies 48. It introduces no binaries. Most of
 that surface is not new work: the branch diverged before roughly sixteen merged PRs, so `main` is
@@ -245,7 +277,7 @@ Stalker — and the brief hardcodes paths that do not exist, which would fail th
 landed under `docs/pipeline/`. It stays readable on its own unclosed branch as dated Warden art
 direction. **No Warden generation is authorised.**
 
-## 10. Independent verification
+## 11. Independent verification
 
 Two read-only auditors worked in parallel on non-overlapping scopes, and their findings were
 cross-checked rather than taken on trust.
@@ -269,13 +301,14 @@ cross-checked rather than taken on trust.
 Two anomalies are recorded rather than fixed, because fixing them is not this task's job:
 
 1. **Wren Ranger and Bramble Stalker have no provider task IDs at all** — no task record, rig ID or
-   brief, unlike Enemy Wave 1's three-deep provenance. Their git blob is the *only* handle on them,
-   which makes them the **highest-priority upload** in the archive queue: unlike the enemies, they
-   could not be re-downloaded from the provider if the branch were ever lost.
+   brief, unlike Enemy Wave 1's three-deep provenance. Before archival their git blob was the *only*
+   handle on them, so they were uploaded first. They now have two independent homes, but they are
+   still the weakest-provenance assets in the bank: unlike the enemies, they could not be
+   re-downloaded from the provider if both copies were ever lost.
 2. #26 committed walk/run duplicates for its two characters while #28 deliberately did not for any of
    its 13. That inconsistency is undocumented; the archive treats both the same way.
 
-## 11. Deliberately not done
+## 12. Deliberately not done
 
 - No source PR merged, closed or modified.
 - No new Meshy generation, rigging or animation. No provider call at all, paid or read-only.
