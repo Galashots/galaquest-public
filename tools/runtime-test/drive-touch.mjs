@@ -17,6 +17,8 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { NUDGE_FRACTION, SNAP_DRIFT_UNITS } from '../../public/src/net/client.js';
+import { INPUT_SEND_HZ, SNAPSHOT_HZ } from '../../public/src/net/protocol.js';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
@@ -30,6 +32,20 @@ const ORIGIN_UNDER_TEST = server.origin;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 // iPhone-ish portrait, which is what the owner tests on.
 const VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true };
+
+const SETTLE_DRAG_INTERVALS = 3;
+const SETTLE_TARGET_ERROR = 0.02 / (1 - (1 - NUDGE_FRACTION) ** SETTLE_DRAG_INTERVALS);
+const SETTLE_EPSILON_UNITS = NUDGE_FRACTION * SETTLE_TARGET_ERROR;
+const SETTLE_INTERVAL_MS = Math.round(1000 / SNAPSHOT_HZ);
+const SETTLE_TIMEOUT_MS = Math.ceil(
+  2 * (Math.log(SETTLE_TARGET_ERROR / SNAP_DRIFT_UNITS) / Math.log(1 - NUDGE_FRACTION)) * SETTLE_INTERVAL_MS,
+);
+
+// Declared UP HERE, with the other top-level constants, rather than beside the function that
+// documents them. They are `const`, so a use above their declaration is a temporal dead zone, and
+// the first draft of this file put them next to settleReconciliation and read SETTLE_EPSILON_UNITS
+// eighty lines earlier in the stop check. Same defect that stopped the game booting at 5e4c180,
+// caught here by reading back rather than by running.
 
 mkdirSync(OUT, { recursive: true });
 
@@ -269,10 +285,34 @@ check('stick-up moves the hero away from the camera', awayFromCamera > 0.9,
   `dot(cameraToHero, stickForward) = ${awayFromCamera.toFixed(3)}`);
 
 await touch('touchEnd', [{ x: stickPoint.x, y: stickPoint.y - 90 }]);
-await sleep(300);
-const released = await state();
+// Same defect class as the settle above, and the same repair: `await sleep(300)` then assert
+// `speed === 0` was measuring the runner. A release travels one input interval to the server and
+// comes back on the next snapshot -- ~167 ms nominal, so 300 ms was under 2x the happy path and a
+// starved frame put the sample mid-stride, reading 2.8 m/s. test/game-server.test.mjs's own
+// stop-check carries this exact lesson ("this is what made this test fail roughly half of all
+// runs") and fixed it by waiting for the state rather than for the clock.
+//
+// Deliberately NOT "poll until speed is 0 and then assert speed is 0", which proves nothing. The
+// two halves are separated:
+//   LIVENESS -- did the hero ever stop? A timeout here IS a failure, and it is the real regression
+//               this check is named for.
+//   PROPERTY -- having stopped, does it stay stopped? That is the slide a child would actually see.
+const stopBudgetMs = Math.ceil(10 * (1000 / INPUT_SEND_HZ + 1000 / SNAPSHOT_HZ));
+const released = await waitForStop(stopBudgetMs);
 check('releasing the stick stops the hero', released.speed === 0 && !released.touchActive,
   `speed=${released.speed} status="${released.status}"`);
+// ...and STAYS stopped. This is the half a poll cannot fake: having waited for speed 0, the
+// question left is whether the hero slides on afterwards, which is what a child would actually see.
+// Measured over a real snapshot interval rather than instantaneously, because a slide is a
+// displacement over time and a single sample cannot show one.
+const restingAt = await state();
+await sleep(Math.round(1000 / SNAPSHOT_HZ) * 3);
+const stillResting = await state();
+const slid = Math.hypot(stillResting.px - restingAt.px, stillResting.pz - restingAt.pz);
+check('and stays stopped -- no slide after the thumb comes off',
+  released.speed === 0 && slid < SETTLE_EPSILON_UNITS,
+  `drifted ${slid.toFixed(4)} units over 3 snapshot intervals`
+  + ` (epsilon ${SETTLE_EPSILON_UNITS.toFixed(4)})`);
 await shot('04-released-idle.png');
 
 // A child re-grabbing the stick straight after releasing it must get a live stick. The 320ms
@@ -299,13 +339,81 @@ check('re-grabbing the stick immediately still drives the hero',
   regrabbed.touchActive && regrabbed.speed > 0,
   `touchActive=${regrabbed.touchActive} speed=${regrabbed.speed.toFixed(2)}`);
 
+/**
+ * Poll until the hero has come to rest, and hand back that state.
+ *
+ * Bounded on purpose: returning the last sample on timeout rather than throwing lets the check that
+ * called it report the real speed it saw, which is the honest failure ("the hero never stopped at
+ * 2.80 m/s") instead of a harness stack trace that says nothing about the product.
+ */
+async function waitForStop(budgetMs) {
+  const deadline = Date.now() + budgetMs;
+  let last = await state();
+  while (Date.now() < deadline) {
+    if (last.speed === 0 && !last.touchActive) return last;
+    await sleep(Math.round(1000 / SNAPSHOT_HZ));
+    last = await state();
+  }
+  return last;
+}
+
+/**
+ * Wait until the hero has actually stopped drifting, rather than for a fixed number of milliseconds.
+ *
+ * Every number here is DERIVED from the reconciliation it is waiting on, imported rather than
+ * restated (GQ-007). net/client.js closes prediction error by NUDGE_FRACTION per snapshot at
+ * SNAPSHOT_HZ, so with a remaining error E the hero moves NUDGE_FRACTION*E in one snapshot interval.
+ *
+ * The epsilon is chosen backwards from the assertion it protects. The drag below spans ~3 snapshot
+ * intervals, over which a remaining error E produces E*(1 - (1-NUDGE_FRACTION)^3) of movement. For
+ * that to stay under the 0.02 the check asserts, E must be below ~0.074 -- so waiting until one
+ * interval's movement is under NUDGE_FRACTION * 0.074 leaves the drag window comfortably clear. That
+ * is what makes this a settle rather than a fudge: the check still fails if camera input ever
+ * genuinely commands movement, because 0.02 is untouched.
+ *
+ * The timeout is the slowest legal case: SNAP_DRIFT_UNITS is the largest error corrected gradually
+ * rather than snapped, and ln(target/start)/ln(1-NUDGE_FRACTION) snapshots to reach the target --
+ * about 2.4 s here. Doubled, because a starved runner advances the reconciliation in wall-clock
+ * terms more slowly than the maths assumes ("automation timeouts are wall-clock budgets").
+ */
+
+async function settleReconciliation() {
+  const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+  let previous = await state();
+  let stillFor = 0;
+  while (Date.now() < deadline) {
+    await sleep(SETTLE_INTERVAL_MS);
+    const now = await state();
+    const moved = Math.hypot(now.px - previous.px, now.pz - previous.pz);
+    previous = now;
+    // TWO consecutive quiet intervals, not one: a single sample can land between two nudges and read
+    // as still while the hero is very much still being pulled.
+    stillFor = moved < SETTLE_EPSILON_UNITS ? stillFor + 1 : 0;
+    if (stillFor >= 2) return { settled: true, movedLast: moved };
+  }
+  // Not a failure of its own -- the check below is what judges the product. Reporting it keeps a
+  // timed-out settle from being invisible in a run where the real check then fails for that reason.
+  console.log(`  [settle] reconciliation did not converge within ${SETTLE_TIMEOUT_MS}ms`
+    + ` (epsilon ${SETTLE_EPSILON_UNITS.toFixed(4)} units per ${SETTLE_INTERVAL_MS}ms)`);
+  return { settled: false, movedLast: null };
+}
+
 // ── 2. camera drag, outside the region ─────────────────────────────────────────────────────────
 // Let reconciliation settle before asserting the hero is still. With a server in the loop the local
 // prediction and the server's authority sit slightly apart during motion -- measured 0.02 to 0.15
 // units, because the client moves on the thumb while the server moves when the input arrives up to
 // one 66ms interval later -- and the hero legitimately drifts toward authority afterwards. Settling
 // first keeps the check below strict instead of loosening it to swallow real movement.
-await sleep(900);
+//
+// This WAS `await sleep(900)`, and the Checkpoint 0 audit caught it failing reproducibly on a
+// property that actually holds. A control run settled the same 900 ms with NO camera drag at all
+// and the hero still drifted 0.051 units -- 2.5x the threshold, with zero camera input -- while the
+// same drag after a 4.1 s settle moved only 0.013 and passed. The comment three lines up even
+// documents drift "0.02 to 0.15 units" while the assertion below reads `< 0.02`: the check was
+// measuring the settle, not the product. **The threshold is deliberately unchanged.** A fixed sleep
+// is the wrong instrument, which is the lesson play-fight.mjs already learned for its own
+// body-separation check, and this is that lesson applied here.
+await settleReconciliation();
 const camPoint = { x: size.w * 0.7, y: size.h * 0.3 };
 const beforeDrag = await state();
 await touch('touchStart', [camPoint]);
