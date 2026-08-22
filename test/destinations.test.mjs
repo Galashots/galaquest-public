@@ -13,6 +13,7 @@ import test from 'node:test';
 import {
   DESTINATION_IDS,
   destinationFor,
+  nearestPlaceTo,
   placelessReasonFor,
 } from '../public/src/world/destinations.js';
 import {
@@ -185,4 +186,42 @@ test('moving a place in the world moves the arrow, with nothing to remember', ()
   );
   assert.equal(beacon.id, 'find-the-beacon');
   assert.deepEqual(destinationFor(beacon), { x: OLD_BEACON.at[0], z: OLD_BEACON.at[1] });
+});
+
+// ── the nearest of several ─────────────────────────────────────────────────────────────────────
+
+test('the next light is the CLOSEST one still out, not the first one written down', () => {
+  // The whole reason this exists. A child at the far end of the trail must be sent to the light
+  // beside them, not walked back to the start because that one happens to be first in the array.
+  const stillOut = [{ x: 0, z: 0 }, { x: 0, z: 40 }, { x: 0, z: 20 }];
+  assert.deepEqual(nearestPlaceTo(stillOut, 0, 38), { x: 0, z: 40 });
+  assert.deepEqual(nearestPlaceTo(stillOut, 0, 1), { x: 0, z: 0 });
+});
+
+test('nothing left to do is null, not a crash and not the last one', () => {
+  assert.equal(nearestPlaceTo([], 0, 0), null);
+  assert.equal(nearestPlaceTo([null, undefined], 0, 0), null);
+});
+
+test('the same frame twice does not flip the arrow', () => {
+  // Ties are arbitrary; what matters is that they are STABLE. An arrow that alternates between two
+  // equidistant lights every frame is worse than no arrow.
+  const tied = [{ x: -5, z: 0 }, { x: 5, z: 0 }];
+  assert.deepEqual(nearestPlaceTo(tied, 0, 0), nearestPlaceTo(tied, 0, 0));
+  assert.deepEqual(nearestPlaceTo(tied, 0, 0), { x: -5, z: 0 });
+});
+
+test('a dynamic objective resolves through it end to end', () => {
+  // Not hand-feeding destinationFor a coordinate: this drives the real branch to the real objective
+  // and then supplies the context the way main.js does.
+  const waking = questObjectiveFor(
+    { marks: 3, lanternUnlocked: true }, true, true, true,
+    { lights: 6, lit: 2, campFound: false, rowanMet: false, cartSearched: false, beaconFound: false },
+  );
+  assert.equal(waking.id, 'wake-lights');
+  const unlit = [{ x: 2, z: 30 }, { x: 3, z: 12 }];
+  assert.deepEqual(
+    destinationFor(waking, { nearestUnlitLight: nearestPlaceTo(unlit, 3, 10) }),
+    { x: 3, z: 12 },
+  );
 });

@@ -99,6 +99,35 @@ const DESTINATIONS = Object.freeze({
 export const DESTINATION_IDS = Object.freeze(Object.keys(DESTINATIONS));
 
 /**
+ * The nearest of several places, or null when there are none left.
+ *
+ * Exists because two of the entries above are "the next one you have not done yet", and "next" for a
+ * child means the closest -- not the first in the list, which is the order an adult wrote them in.
+ * A child standing at the far end of the trail should be sent to the light beside them, not walked
+ * back to the start.
+ *
+ * Pure, and takes the already-normalised { x, z } shape rather than the world's raw pairs, so the
+ * caller does the filtering it is the only one that can do ("which of these are still unlit") and
+ * this does the arithmetic.
+ *
+ * Ties are broken by list order, which is arbitrary and stable. Two lights exactly equidistant is a
+ * coin toss either way; what matters is that the same frame twice does not flip the arrow.
+ */
+export function nearestPlaceTo(places, fromX, fromZ) {
+  let nearest = null;
+  let shortest = Infinity;
+  for (const place of places) {
+    if (!place) continue;
+    const metres = Math.hypot(place.x - fromX, place.z - fromZ);
+    if (metres < shortest) {
+      shortest = metres;
+      nearest = place;
+    }
+  }
+  return nearest;
+}
+
+/**
  * Where the objective is, or null if it has no place.
  *
  * @param objective the value world/quest.js returned -- the whole thing, not its id, so a caller
