@@ -69,6 +69,7 @@ import {
 } from './combat/encounter.js';
 import { createAttackInput } from './input/attackButton.js';
 import { createKeyboardInput } from './input/keyboard.js';
+import { pointerModeFor } from './input/pointerMode.js';
 import { createTouchInput } from './input/touch.js';
 import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
@@ -198,6 +199,12 @@ perfHud.dataset.debug = new URLSearchParams(location.search).get('debug') === '1
 // same param in the same place -- two elements, one decision, rather than two decisions that have
 // to be kept agreeing. Its fault states override this in CSS; see index.html's rule.
 status.dataset.debug = perfHud.dataset.debug;
+
+// WHICH CONTROLS THIS DEVICE GETS. Read once at startup for the same reason the debug switch is:
+// a device does not grow a touchscreen mid-session, and re-deciding this on a resize would make the
+// stick appear and vanish under a thumb that is already on it. input/pointerMode.js owns the rule
+// and records why it is deliberately biased towards keeping the stick.
+document.querySelector('#game').dataset.pointer = pointerModeFor(navigator.maxTouchPoints);
 
 async function bootstrap() {
   const scene = new THREE.Scene();

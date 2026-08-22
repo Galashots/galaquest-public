@@ -678,6 +678,34 @@
         #village-board-nodes { top: 4.5rem; left: 0.75rem; right: 0.75rem; justify-content: center; }
         #village-board-detail { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; }
       }
+      /* ── Touch controls, and the devices that should not see them ──────────────────────────
+         The stick and ATTACK shipped on EVERY device. On a desktop that is a large obvious control
+         that does nothing: input/touch.js listens for touch events, so a click never drives it and
+         falls through to the camera drag underneath -- you push the joystick and the world spins.
+         A visible control that lies is worse than no control.
+
+         Only a device reporting ZERO touch points loses them; see input/pointerMode.js for why the
+         rule is asymmetric and why it is maxTouchPoints rather than a (pointer: coarse) query.
+         Nothing on screen had ever said the words WASD, Space, drag or scroll, so the hint takes
+         the space the stick vacates rather than being one more thing competing for a corner. */
+      #game[data-pointer="mouse"] #touch-stick,
+      #game[data-pointer="mouse"] #attack-button { display: none; }
+      #desktop-keys {
+        position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%);
+        margin: 0; padding: 0.4rem 0.7rem;
+        color: rgb(255 255 255 / 82%); background: rgb(12 20 31 / 62%); border-radius: 0.35rem;
+        font: 600 0.78rem/1.2 system-ui, sans-serif; white-space: nowrap;
+        pointer-events: none; touch-action: none;
+      }
+      /* Hidden by default rather than shown by default: the attribute is set by main.js at startup,
+         and a tablet must never flash a line about a keyboard it does not have while that runs. */
+      #desktop-keys { display: none; }
+      #game[data-pointer="mouse"] #desktop-keys { display: block; }
+      /* Both live at bottom-centre, and on a desktop both can be on screen at once -- with ?debug=1,
+         or on a fault, which is the one time #runtime-status shows without it. The DEVELOPER line is
+         the one that moves: the child-facing hint keeps the natural position. Harmless when the
+         status line is hidden, which is almost always. */
+      #game[data-pointer="mouse"] #runtime-status { bottom: 3.2rem; }
       #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 112px; height: 112px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
       #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / 72%); transform: translate(-50%, -50%); pointer-events: none; }
       /* RUNNING. younger players told us at the first child playtest that their character moved too slowly,
@@ -898,6 +926,7 @@
       <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
+      <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
       <!-- GP1: the Hero screen. aria-pressed mirrors data-shown on #hero-screen -- one boolean, two
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/
