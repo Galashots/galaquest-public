@@ -383,6 +383,22 @@ async function run() {
       `active ${recovered.id} with ${recovered.state.marks} marks (Rowan is ${rowanId})`);
     await capture(tab, '06-switched-back-portrait');
 
+    // Typing a new hero's name and then touching anything else must not throw the name away. The
+    // gate re-renders for reasons unrelated to the name -- arming a Remove is one -- and render()
+    // rewrites the name row from the view, so without state the field vanishes mid-answer.
+    await clickSelector(tab, '#profile-chip');
+    await clickSelector(tab, '.profile-card-add');
+    await typeName(tab, 'Halfway');
+    const anyCard = (await gateState(tab)).cards[0];
+    await clickSelector(tab, `.profile-card[data-profile-id="${anyCard.id}"] .profile-card-remove`);
+    const midAnswer = JSON.parse(await tab.page.eval(`JSON.stringify({
+      rowShown: document.querySelector('#profile-gate-name-row')?.dataset.shown === 'true',
+      typed: document.querySelector('#profile-gate-name')?.value ?? null,
+    })`));
+    check('a half-typed hero name survives an unrelated re-render',
+      midAnswer.rowShown && midAnswer.typed === 'Halfway', JSON.stringify(midAnswer));
+    await clickSelector(tab, '#profile-gate-close');
+
     // ── a named link must not out-vote the child ───────────────────────────────────────────────
     //
     // `?hero=Sam` is adopted on every boot, so switching away from Sam while standing on Sam's link

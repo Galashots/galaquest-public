@@ -143,18 +143,30 @@ export function createProfileGate(options = {}) {
   // be cleared by any other interaction: a confirm left armed while a child taps elsewhere is a
   // delete waiting to happen on a mis-tap.
   let confirmingDeleteId = null;
+  // Whether the child has tapped "New hero" and is typing. Held as state rather than left in the
+  // DOM because render() rewrites the name row from the view on every call, and a re-render is
+  // triggered by things that have nothing to do with the name -- arming a Remove, for one. Without
+  // this, a child who taps New hero, types "Sam", then touches any card watches the field vanish
+  // with what they typed still in it.
+  let creatingNewHero = false;
 
   function setShown(next) {
     if (shown === next) return;
     shown = next;
     screen.dataset.shown = String(shown);
-    if (!shown) confirmingDeleteId = null;
+    if (!shown) {
+      confirmingDeleteId = null;
+      creatingNewHero = false;
+    }
     onOpenChange(shown);
   }
 
   function makeButton(className, label) {
-    const button = root.ownerDocument?.createElement?.('button')
-      ?? document.createElement('button');
+    // `document`, plainly. An earlier version reached for root.ownerDocument first, which implied an
+    // injectability nothing else in this function honours -- every other element below is built from
+    // `document` -- so it was a promise the module could not keep. The pure half is where the
+    // testability lives; this half is proved in a browser.
+    const button = document.createElement('button');
     button.type = 'button';
     button.className = className;
     button.textContent = label;
@@ -214,6 +226,7 @@ export function createProfileGate(options = {}) {
       const add = makeButton('profile-card-add', view.createLabel);
       add.addEventListener('click', () => {
         confirmingDeleteId = null;
+        creatingNewHero = true;
         nameRow.dataset.shown = 'true';
         nameInput.value = '';
         nameInput.focus();
@@ -235,7 +248,8 @@ export function createProfileGate(options = {}) {
     noticeEl.dataset.shown = String(Boolean(view.fullNotice));
     // Naming the very first hero is the whole screen; there is no list to choose from and no way
     // out of it, because a child who dismisses it has no hero at all.
-    nameRow.dataset.shown = String(view.mode === 'naming');
+    // Shown when the screen IS the question, or while a child is part-way through answering it.
+    nameRow.dataset.shown = String(view.mode === 'naming' || creatingNewHero);
     confirmButton.dataset.intent = view.mode === 'naming' ? 'name-first' : 'create';
     closeButton.dataset.shown = String(view.mode !== 'naming');
     renderCards(view);
