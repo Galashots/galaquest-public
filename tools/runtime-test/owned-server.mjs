@@ -41,6 +41,23 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const HARNESS_HERO_NAME = 'Harness';
 
 /**
+ * The URL a harness must navigate to in order to land IN THE GAME.
+ *
+ * Exported because `startOwnedServer().url` is not enough on its own: several harnesses build their
+ * own address from a port or an origin -- they pin a specific gq-guest-id first and navigate by
+ * hand -- and those bypassed the `?hero=` on `url` entirely. The result was silent and total: they
+ * landed on the profile gate's naming question, with the world behind a modal and input suspended,
+ * and reported the game not answering. drive-ranger and drive-beacon-siege both went from green to
+ * red that way while the fix that was supposed to cover them looked complete.
+ *
+ * So the rule is one function rather than one field, and test/harness-game-url.test.mjs enforces
+ * that no harness hand-builds a game root without it.
+ */
+export function gameUrlFor(origin) {
+  return `${origin}/?hero=${encodeURIComponent(HARNESS_HERO_NAME)}`;
+}
+
+/**
  * The pool every harness draws from, tried in order and never randomised.
  *
  * Deliberately excludes 5201 (the shared playtest service a human may be using on an iPad right
@@ -189,7 +206,7 @@ export async function startOwnedServer({
   //
   // `origin` stays clean, because Storage.clearDataForOrigin takes an origin and not a URL, and a
   // harness that wants another page under this server builds it from `origin` too.
-  const url = `${origin}/?hero=${encodeURIComponent(HARNESS_HERO_NAME)}`;
+  const url = gameUrlFor(origin);
 
   let up = false;
   for (let i = 0; i < 40 && !up && !exited; i += 1) {

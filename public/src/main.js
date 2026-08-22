@@ -1506,7 +1506,12 @@ async function bootstrap() {
     // store that still knows this child, so the common case sends nothing at all.
     const knownToServer = new Set(serverFacts.map((fact) => fact.eventId));
     const missing = profiles.journalFor(profileId).filter((fact) => !knownToServer.has(fact.eventId));
-    if (missing.length > 0) net.sendRestoreProfile(missing);
+    // Only worth sending when this device HAS a durable identity. Without one the server treats the
+    // connection as ephemeral and refuses the restore outright -- correctly, it has no profile to
+    // restore into -- so an unguarded send would push the device's whole journal on every single
+    // reconnect, forever, to be thrown away every time. Harmless per message and wasteful in the
+    // exact situation that produces it: a device whose storage is failing, reconnecting repeatedly.
+    if (durableProfileId && missing.length > 0) net.sendRestoreProfile(missing);
   }
 
   const net = createNetClient({

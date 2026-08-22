@@ -78,7 +78,10 @@ export function profileGateViewModel({
       // one is not a choice, and a destructive control has no business on a question with one
       // answer. Every check passed; the picture is what caught it.
       heroes: [],
-      // Which profile the typed name belongs to, since there is no card to carry it.
+      // Which profile the typed name belongs to, since there is no card to carry it. Null when
+      // there is no hero at all -- see the DOM half's confirm handler, which then CREATES rather
+      // than renaming. Without that fallback the one button on the screen does nothing, which is
+      // the worst failure a screen with one button can have.
       namingProfileId: cards.find((card) => card.active)?.id ?? cards[0]?.id ?? null,
       canCreate: false,
       createLabel: null,
@@ -242,7 +245,10 @@ export function createProfileGate(options = {}) {
     const typed = nameInput.value;
     if (confirmButton.dataset.intent === 'name-first') {
       // Read off the view rather than off a card, because the naming screen deliberately has none.
+      // With no hero to rename, the same tap has to CREATE one: a device that reached this screen
+      // holding nothing still asked the child a question, and the answer must go somewhere.
       if (lastView?.namingProfileId) onRename(lastView.namingProfileId, typed);
+      else onCreate(typed);
       return;
     }
     onCreate(typed);

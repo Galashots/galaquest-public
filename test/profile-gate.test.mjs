@@ -195,3 +195,21 @@ test('an empty or absent name in a link is ignored rather than creating a hero c
   assert.equal(store.adoptNamedHero(null), null);
   assert.equal(store.listProfiles().length, 0, 'nothing was created by a meaningless link');
 });
+
+test('the naming screen still knows where the typed name goes when there is a hero', () => {
+  const view = profileGateViewModel({
+    heroes: [{ id: 'p-a', displayName: 'Hero', marks: 0 }],
+    activeProfileId: 'p-a',
+    namingFirstHero: true,
+  });
+  assert.equal(view.namingProfileId, 'p-a', 'the name belongs to the hero that already exists');
+});
+
+test('...and reports having nowhere to put it when there is not', () => {
+  // The DOM half turns this null into a CREATE rather than a no-op. Asserted here because the
+  // alternative is a screen with one button that does nothing, which is the worst failure a screen
+  // with one button can have -- and because `?? null` is easy to read as "cannot happen".
+  const view = profileGateViewModel({ heroes: [], namingFirstHero: true });
+  assert.equal(view.namingProfileId, null);
+  assert.equal(view.mode, 'naming', 'it is still the question, not the chooser');
+});

@@ -35,6 +35,11 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
+// The game URL a harness must land on. Imported rather than hand-built: this file spawns its
+// own server on a fixed port and so never saw startOwnedServer's `?hero=`, which is exactly how
+// it went red when the profile gate landed -- straight onto the naming question, world behind a
+// modal, input suspended. See owned-server.mjs's gameUrlFor.
+import { gameUrlFor } from './owned-server.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
@@ -308,7 +313,7 @@ async function boot(label, { withSatchel }) {
   await sleep(600);
   // The key is IMPORTED, not retyped (GQ-007).
   await tab.page.eval(`localStorage.setItem(${JSON.stringify(GUEST_ID_STORAGE_KEY)}, ${JSON.stringify(guestId)})`);
-  await tab.page.send('Page.navigate', { url: `${origin}/` });
+  await tab.page.send('Page.navigate', { url: gameUrlFor(origin) });
   const ready = await pollUntil(tab, (s) => s.ready && s.zone?.loaded >= s.zone?.requested, 60000);
   if (!ready.ready) throw new Error('runtime never came up');
 
@@ -406,7 +411,7 @@ async function phaseCharm() {
     await shot(tab, 'ranger-03-the-fourth-heart');
 
     // AND IT IS DURABLE. A fourth heart that evaporates on reload is a fourth heart nobody has.
-    await tab.page.send('Page.navigate', { url: `${origin}/` });
+    await tab.page.send('Page.navigate', { url: gameUrlFor(origin) });
     // BOTH facts, not just the hearts. A reboot learns `beaconLit` from the first snapshot's siege
     // block and its hearts from the same snapshot's rewards block, and there is no rule saying the
     // two land on the same frame -- so a poll that stops at the hearts can read a village Wren has
