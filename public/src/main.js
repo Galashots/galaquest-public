@@ -50,7 +50,7 @@ import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progressi
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
-import { createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
+import { REWARD_EVENT_TYPES, createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
 import { createMarkSparks } from './rewards/markSpark.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
@@ -1313,6 +1313,14 @@ async function bootstrap() {
       rewardEventLog.push(event);
       banner('All three marks! Take them home.', 3200);
     },
+    // Currency: DURABILITY ONLY, no ceremony. The pickup's own burst, sound and loot-HUD count
+    // already told the child what happened, and every one of those is diffed off the rewards block
+    // as before. These handlers exist so the fact is journalled under the store's own id by the
+    // dispatch loop below -- a count cannot be journalled, only a named fact can. They are present
+    // rather than absent because createRewardFeedback throws at construction for a missing handler,
+    // which is the guarantee that a new reward type cannot be half-added.
+    'coin-earned'(event) { rewardEventLog.push(event); },
+    'shard-earned'(event) { rewardEventLog.push(event); },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See
@@ -2216,7 +2224,7 @@ async function bootstrap() {
         // journal something it should not -- and a new durable event type stops needing a second
         // edit here to be remembered.
         journalDurableFact(event);
-        if (event.type === 'mark-earned' || event.type === 'lantern-unlocked') {
+        if (REWARD_EVENT_TYPES.includes(event.type)) {
           const rewardRecipeName = soundForRewardEvent(event.type);
           if (rewardRecipeName) audio.play(rewardRecipeName);
           onRewardEvent(event);

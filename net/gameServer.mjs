@@ -429,8 +429,16 @@ export function createRewardCoordinator(options = {}) {
       if (result.applied) {
         if (kind === COIN_KIND) villageCoinsEarned += 1;
         else villageShardsEarned += 1;
+        // Announced with the id the row was keyed on, the same way applyMarkAward announces a mark.
+        // Until this existed the device learned its coins only as a COUNT on the rewards block, and
+        // a count cannot be journalled -- fold "coins: 3" into a grow-only set and every reconnect
+        // adds three more. The pickup id is already globally unique by construction (see this
+        // function's header), so there is no identity to mint here, only one that was kept private.
+        //
+        // Only on `applied`: a replayed collect is not a second coin, and must not announce one.
+        return [{ type, heroId: playerId, eventId: pickupId }];
       }
-      return;
+      return [];
     }
     // No durable path for an ephemeral connection (same caveat ownedItemIdsFor's own comment gives) --
     // in-memory only, lost on disconnect. The simulation-layer lootState check is still what prevents
@@ -438,6 +446,10 @@ export function createRewardCoordinator(options = {}) {
     const state = ephemeralLoot.get(playerId) ?? { coins: 0, shards: 0 };
     if (kind === COIN_KIND) state.coins += 1; else state.shards += 1;
     ephemeralLoot.set(playerId, state);
+    // Nothing durable happened, so nothing durable is announced. An ephemeral connection's HUD
+    // still updates from the rewards block exactly as before; what it does not get is a named fact,
+    // because there is no row anywhere for that name to refer to.
+    return [];
   }
 
   /** One mark-earned award, applied durably or in-memory, plus the lantern-unlocked check that
@@ -1156,6 +1168,24 @@ export function createSimulation(options = {}) {
   }
 
   /**
+   * Put an already-recorded durable fact onto the next snapshot.
+   *
+   * Deliberately narrow, and the narrowness is the point. Everything else that reaches
+   * `pendingEvents` is raised BY the rules -- a swing, a bite, a defeat -- and this repo is careful
+   * that a caller holding the simulation gets published state rather than a handle on those rules
+   * (see the runtime object's own comment in main.js). This does not move the fight: it carries a
+   * fact the reward store has ALREADY written, so the client can journal it under the store's id
+   * instead of waiting for the next welcome to hear about it.
+   *
+   * Used by the reward paths that run off a message rather than off the tick -- loot collection
+   * lands in a WebSocket handler, whereas a mark is folded inside the tick and can push directly.
+   */
+  function announceRewardFacts(events) {
+    if (!Array.isArray(events) || events.length === 0) return;
+    pendingEvents.push(...events);
+  }
+
+  /**
    * G4: is this player standing close enough to Rowan, under a lit Beacon, to be owed the Wildwood
    * Blade right now?
    *
@@ -1220,6 +1250,7 @@ export function createSimulation(options = {}) {
     atHollowClue,
     rangerClaimState,
     drainEvents,
+    announceRewardFacts,
     get tick() {
       return tick;
     },
@@ -1438,7 +1469,13 @@ export function attachGameServer(httpServer, options = {}) {
         // and no error either: same "a rejected command is a clean no, not a disconnect" posture
         // requestPartyAttack's own accepted:false already takes for a swing outside reach.
         const { accepted, kind } = simulation.applyCollectLoot(client.data.playerId, message.pickupId);
-        if (accepted) rewards.applyLootAward(client.data.playerId, message.pickupId, kind);
+        if (accepted) {
+          // The award's own announcement rides the next snapshot, so the device journals this coin
+          // under the store's id as it happens rather than learning it from the next welcome.
+          simulation.announceRewardFacts(
+            rewards.applyLootAward(client.data.playerId, message.pickupId, kind),
+          );
+        }
         return;
       }
 

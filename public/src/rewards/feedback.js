@@ -11,7 +11,13 @@
 // never edited (repo convention). This module gives the reward events the exact same "every event
 // must be accounted for" guarantee, scoped to the table that actually owns them.
 
-export const REWARD_EVENT_TYPES = Object.freeze(['mark-earned', 'lantern-unlocked']);
+// coin-earned / shard-earned join the table for DURABILITY rather than for presentation. The loot
+// HUD already shows a collected pickup, diffed off the rewards block, and nothing here changes that
+// -- these exist so the device can journal the fact under the same id the store keyed it on, which
+// a count can never be. Their handlers in main.js are deliberately empty of ceremony; see there.
+export const REWARD_EVENT_TYPES = Object.freeze([
+  'mark-earned', 'lantern-unlocked', 'coin-earned', 'shard-earned',
+]);
 
 /**
  * Build a reward-event dispatcher from one callback per event type. Throws immediately if a handler
@@ -42,6 +48,11 @@ export function createRewardFeedback(callbacks) {
 export const REWARD_RECIPE_MAP = Object.freeze({
   'mark-earned': 'sparkle',
   'lantern-unlocked': 'unlock-flourish',
+  // Explicitly silent, not forgotten. Collecting a pickup already has its own sound and its own
+  // burst on the pickup itself; a second one fired from the durable announcement would be the same
+  // moment played twice, which is the defect GP1-C6 fixed for marks in the other direction.
+  'coin-earned': null,
+  'shard-earned': null,
 });
 
 export function soundForRewardEvent(eventType) {
