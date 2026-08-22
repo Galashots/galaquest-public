@@ -947,6 +947,37 @@ async function bootstrap() {
   // The DOM half of a pure/DOM split: ui/offscreenPointer.js decides where the arrow goes and which
   // way it faces and is unit tested; this does the projection, which needs a camera and therefore a
   // browser, and is proved by a harness instead.
+  // THE TWO PLACES ONLY THE RUNNING GAME KNOWS. "The next dark light" is not a fixed coordinate --
+  // it is whichever is nearest and still out, which depends on where the child is standing and on
+  // what they have already done. destinations.js cannot know either, so it asks.
+  //
+  // GETTERS, so nothing is computed for an objective that does not want it: destinationFor reads at
+  // most one of these per frame, and building both lists every frame to throw one away is work a
+  // starved device cannot spare. Built ONCE, out here rather than in the frame loop, for the same
+  // reason -- the getters close over the live bindings, so a hoisted object still reads this frame's
+  // state while allocating nothing per frame.
+  //
+  // The trail's positions and its lit flags are parallel arrays and so are the seals', which is why
+  // this filters by index. That join is sound by construction: trailLit is built as
+  // noTrailLightsLit(TRAIL_LIGHTS.length) and sealsSeen as COLD_SEALS.map(...).
+  const pointerContext = {
+    get nearestUnlitLight() {
+      return nearestPlaceTo(
+        VILLAGE.TRAIL_LIGHTS
+          .filter((_, index) => trailLit[index] !== true)
+          .map(([x, z]) => ({ x, z })),
+        player.position.x, player.position.z,
+      );
+    },
+    get nearestUnbrokenSeal() {
+      return nearestPlaceTo(
+        VILLAGE.COLD_SEALS
+          .filter((_, index) => siegeState.seals[index]?.burst !== true)
+          .map(([x, z]) => ({ x, z })),
+        player.position.x, player.position.z,
+      );
+    },
+  };
   const objectivePointerElement = document.querySelector('#objective-pointer');
   const objectivePointerArrowElement = document.querySelector('#objective-pointer-arrow');
   const pointerTarget = new THREE.Vector3();
@@ -967,7 +998,13 @@ async function bootstrap() {
     // axis is the only thing that distinguishes them.
     pointerTarget.set(place.x, POINTER_TARGET_HEIGHT_METERS, place.z);
     pointerForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
-    const behindCamera = pointerTarget.clone().sub(camera.position).dot(pointerForward) < 0;
+    // The dot product written out rather than `pointerTarget.clone().sub(...).dot(...)`. The clone
+    // allocated a Vector3 on EVERY FRAME of a game that has to run on a tablet, which is exactly the
+    // kind of steady garbage that shows up as stutter rather than as a bug. Three multiplies.
+    const behindCamera =
+      (place.x - camera.position.x) * pointerForward.x
+      + (POINTER_TARGET_HEIGHT_METERS - camera.position.y) * pointerForward.y
+      + (place.z - camera.position.z) * pointerForward.z < 0;
 
     pointerTarget.project(camera);
     const indicator = edgeIndicatorFor({
@@ -3183,32 +3220,6 @@ async function bootstrap() {
     // yet, so those objectives draw no arrow rather than a wrong one. destinationFor returns null for
     // a place the caller could not name, which is the same answer as "this one has nowhere", and the
     // pointer treats both as nothing to say. Wiring them is its own slice.
-    // THE TWO PLACES ONLY THIS LOOP KNOWS. "The next dark light" is not a fixed coordinate -- it is
-    // whichever is nearest and still out, which depends on where the child is standing and on what
-    // they have already done. destinations.js cannot know either, so it asks.
-    //
-    // GETTERS, so nothing is computed for an objective that does not want it: destinationFor reads
-    // at most one of these per frame, and building both lists every frame to throw one away is work
-    // a starved device cannot spare. The trail's positions and its lit flags are parallel arrays --
-    // the index is the join, which is why this filters by index rather than by identity.
-    const pointerContext = {
-      get nearestUnlitLight() {
-        return nearestPlaceTo(
-          VILLAGE.TRAIL_LIGHTS
-            .filter((_, index) => trailLit[index] !== true)
-            .map(([x, z]) => ({ x, z })),
-          player.position.x, player.position.z,
-        );
-      },
-      get nearestUnbrokenSeal() {
-        return nearestPlaceTo(
-          VILLAGE.COLD_SEALS
-            .filter((_, index) => siegeState.seals[index]?.burst !== true)
-            .map(([x, z]) => ({ x, z })),
-          player.position.x, player.position.z,
-        );
-      },
-    };
     const pointer = renderObjectivePointer(currentObjective, pointerContext);
     // NaN when the errand has no place -- "cut the bramble" is the thing in front of you and has no
     // coordinate to be far from. The watch treats that as nothing to measure rather than as a child
