@@ -226,6 +226,29 @@ async function shot(name) {
 const framesBefore = (await state()).frames;
 await sleep(1000);
 const framesAfter = (await state()).frames;
+// ── developer chrome is not player chrome ──────────────────────────────────────────────────────
+// #runtime-status used to paint `you (14.2,-3.1) · wolf 3hp · you 4hp · players 1` over the game for
+// the whole session. It is hidden in play now, behind the same ?debug=1 switch #perf-hud uses.
+//
+// Checked HERE, from a harness that reads that element's textContent a few lines up, because those
+// two facts have to hold together: the line must be invisible to a child AND still readable by the
+// eighteen harnesses that parse it. A check that only proved the first would be satisfied by
+// deleting the element, which would take the whole suite down with it.
+const devChrome = await page.eval(`JSON.stringify((() => {
+  const el = document.querySelector('#runtime-status');
+  if (!el) return { missing: true };
+  return {
+    hiddenToPlayer: el.offsetParent === null,
+    textReadable: (el.textContent ?? '').length > 0,
+    debug: el.dataset.debug,
+    fault: el.dataset.fault,
+  };
+})())`).then(JSON.parse);
+check('the developer status line is not painted over the game a child is playing',
+  devChrome.hiddenToPlayer === true && devChrome.fault === 'false', JSON.stringify(devChrome));
+check('...and is still readable by the harnesses that parse it',
+  devChrome.textReadable === true, JSON.stringify(devChrome));
+
 check('the frame loop is running', framesAfter > 0 && framesBefore >= 0,
   `sampler holds ${framesAfter} frames (capacity 40)`);
 

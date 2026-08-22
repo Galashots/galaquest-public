@@ -26,6 +26,21 @@
         font: 700 0.8rem/1.2 system-ui, sans-serif; text-align: center;
         touch-action: none; pointer-events: none;
       }
+      /* DEVELOPER TELEMETRY, hidden in play -- the same data-debug convention #perf-hud already uses,
+         because a second mechanism for "show this only to a developer" is a second thing to keep
+         true. This line read `you (14.2,-3.1) · wolf 3hp · you 4hp · players 1` permanently, over
+         the game, for the whole session. None of it is for a child: their health is the hearts, the
+         wolf's is the bar over the wolf, and the coordinates and player count are for me.
+
+         BUT NOT WHEN IT IS A FAULT. The same element carries the four things that get said when the
+         game breaks -- context lost, hero load failed, bootstrap failed. Those are the one case
+         where the text is worth more than the clutter, so data-fault overrides the hide. They are
+         still developer-worded, and making them child-readable is a real error screen and a
+         separate piece of work; hiding them would be shipping LESS than that, not more.
+
+         Harnesses are unaffected: eighteen of them read this element's textContent, which CSS does
+         not touch. #perf-hud's own comment records that same check being made before it was hidden. */
+      #runtime-status[data-debug="false"]:not([data-fault="true"]) { display: none; }
       /* Mirrors the stick: same size, same inset, opposite corner. Microsoft's touch-layout guidance,
          drawn from over 200 streamed titles, reserves the right inner wheel for exactly ONE control —
          the most frequent action — with a large hit area, and warns that thumbs cannot reach far
@@ -879,7 +894,7 @@
         </div>
         <button id="keeper-speech-speak" type="button" aria-label="Hear this line aloud">🔊</button>
       </div>
-      <div id="runtime-status" role="status">loading hero…</div>
+      <div id="runtime-status" role="status" data-debug="false" data-fault="false">loading hero…</div>
       <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>

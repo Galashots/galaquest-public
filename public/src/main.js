@@ -194,6 +194,10 @@ const attackButtonElement = document.querySelector('#attack-button');
 // why. Read once at startup, not reactively: this is a boot-time opt-in for a runtime-test harness's
 // own navigation, not a setting a child ever toggles mid-session.
 perfHud.dataset.debug = new URLSearchParams(location.search).get('debug') === '1' ? 'true' : 'false';
+// #runtime-status carries the same telemetry problem and therefore the same switch, read from the
+// same param in the same place -- two elements, one decision, rather than two decisions that have
+// to be kept agreeing. Its fault states override this in CSS; see index.html's rule.
+status.dataset.debug = perfHud.dataset.debug;
 
 async function bootstrap() {
   const scene = new THREE.Scene();
@@ -209,8 +213,8 @@ async function bootstrap() {
   camera.lookAt(0, 0.7, 0);
 
   const runtimeRenderer = createRenderer(canvas, {
-    onContextLost: () => { status.textContent = 'rendering paused — WebGL context lost'; },
-    onContextRestored: () => { status.textContent = 'WebGL restored — hero standing'; },
+    onContextLost: () => { status.dataset.fault = 'true'; status.textContent = 'rendering paused — WebGL context lost'; },
+    onContextRestored: () => { status.dataset.fault = 'false'; status.textContent = 'WebGL restored — hero standing'; },
   });
   const quality = createQualityLadder({
     onLevelChange: ({ level }) => {
@@ -3113,6 +3117,7 @@ async function bootstrap() {
   // Remote heroes clone this same loaded asset, so the pool cannot exist before it has arrived. Until
   // then sampleRemotes() is simply never drawn -- snapshots still buffer, so nobody is missed.
   remotes = createRemotePlayers(scene, hero);
+  status.dataset.fault = hero.failed ? 'true' : 'false';
   status.textContent = hero.failed ? 'hero load failed — placeholder shown' : 'hero standing';
 
   // The wolf is loaded after the hero and never awaited alongside it. A missing or broken wolf must
@@ -3132,5 +3137,6 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
   console.error('[runtime] bootstrap failed', error);
+  status.dataset.fault = 'true';
   status.textContent = 'runtime failed — see console';
 });
