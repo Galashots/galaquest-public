@@ -3045,6 +3045,10 @@ async function bootstrap() {
     }
 
 
+    // `.text` because an objective is now a thing with a NAME, not a sentence -- the id is
+    // what world/destinations.js turns into a place, and the chip only ever wanted the words.
+    // The optional chain keeps the null branch working: questObjectiveFor returns null before
+    // there are any rewards to reason about, and the renderer treats null as "show nothing".
     renderQuestObjective(questObjectiveFor(
       rewardsKnown ? rewardsForRelight : null, treeLitNow, gateFound, questGiven,
       {
@@ -3067,7 +3071,7 @@ async function bootstrap() {
         hollowFound,
         lodgeFound,
       },
-    ));
+    )?.text ?? null);
     follow.update(player.position);
     rimLight.update(player.position);
     runtimeRenderer.renderer.render(scene, camera);

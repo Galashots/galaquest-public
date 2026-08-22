@@ -26,8 +26,8 @@ test('the hunt counts DOWN, so the objective is a target and not a score', () =>
   assert.equal(questObjectiveFor({ marks: 0, lanternUnlocked: false }, false), objectiveFindMarks(3));
   assert.equal(questObjectiveFor({ marks: 1, lanternUnlocked: false }, false), objectiveFindMarks(2));
   assert.equal(questObjectiveFor({ marks: 2, lanternUnlocked: false }, false), objectiveFindMarks(1));
-  assert.match(objectiveFindMarks(1), /1 more Lantern Mark$/, 'the last one must not say "Marks"');
-  assert.match(objectiveFindMarks(2), /2 more Lantern Marks/);
+  assert.match(objectiveFindMarks(1).text, /1 more Lantern Mark$/, 'the last one must not say "Marks"');
+  assert.match(objectiveFindMarks(2).text, /2 more Lantern Marks/);
 });
 
 test('the first objective asks for exactly the number of marks the reward rule needs', () => {
@@ -42,7 +42,7 @@ test('a hero holding the light but standing at a dark tree is sent to the tree B
   assert.equal(line, OBJECTIVE_LIGHT_THE_TREE);
   // The one step where a child must walk to a specific place. The chip has to name it, and it has to
   // name the same thing the Keeper does -- his line for this state is "stand by the tree".
-  assert.match(line, /tree/i, `"${line}" does not say where to go`);
+  assert.match(line.text, /tree/i, `"${line}" does not say where to go`);
   assert.match(KEEPER_LINE_ALL_MARKS, /tree/i, 'the Keeper stopped naming the tree; the chip is now alone');
 });
 
@@ -80,8 +80,8 @@ test('the chip and the Keeper both stop sending a finished hero north once they 
 test('a nonsense mark count never produces a nonsense objective', () => {
   for (const marks of [Number.NaN, undefined, -4, 99]) {
     const line = questObjectiveFor({ marks, lanternUnlocked: false }, false);
-    assert.doesNotMatch(line, /NaN|undefined|-/, `"${line}" leaked a bad count`);
-    assert.doesNotMatch(line, /\b0 more\b/, `"${line}" asks for nothing while the quest is open`);
+    assert.doesNotMatch(line.text, /NaN|undefined|-/, `"${line}" leaked a bad count`);
+    assert.doesNotMatch(line.text, /\b0 more\b/, `"${line}" asks for nothing while the quest is open`);
   }
 });
 
@@ -120,7 +120,7 @@ test('a returning player with progress is never sent back to be told what they a
 
 test('the chip names the same Keeper the speech bubble does', () => {
   assert.ok(
-    OBJECTIVE_MEET_THE_KEEPER.includes(KEEPER_NAME),
+    OBJECTIVE_MEET_THE_KEEPER.text.includes(KEEPER_NAME),
     `"${OBJECTIVE_MEET_THE_KEEPER}" points at somebody the game never introduces`,
   );
 });
@@ -129,9 +129,9 @@ test('every objective reads at a glance and leads with a symbol', () => {
   const lines = [OBJECTIVE_LIGHT_THE_TREE, OBJECTIVE_FIND_THE_GATE, OBJECTIVE_MEET_THE_KEEPER,
     OBJECTIVE_KEEP_THE_VILLAGE_SAFE, objectiveFindMarks(1), objectiveFindMarks(3)];
   for (const line of lines) {
-    assert.ok(line.split(/\s+/).length <= 6, `"${line}" is too long to read at a glance`);
+    assert.ok(line.text.split(/\s+/).length <= 6, `"${line}" is too long to read at a glance`);
     // A leading symbol, so it reads before it is read (AGENTS.md: signs use symbols, not text).
-    assert.doesNotMatch(line[0], /[a-z0-9]/i, `"${line}" should lead with a symbol`);
+    assert.doesNotMatch(line.text[0], /[a-z0-9]/i, `"${line}" should lead with a symbol`);
   }
   assert.notEqual(OBJECTIVE_LIGHT_THE_TREE, objectiveFindMarks(1));
 });
