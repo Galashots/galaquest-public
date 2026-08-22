@@ -700,6 +700,29 @@
       /* Hidden by default rather than shown by default: the attribute is set by main.js at startup,
          and a tablet must never flash a line about a keyboard it does not have while that runs. */
       #desktop-keys { display: none; }
+      /* ── Which way to turn ─────────────────────────────────────────────────────────────────
+         Measured, not assumed: from the spawn the Keeper sits at NDC (0.37, 0.25) -- comfortably on
+         screen -- and ONE 200px thumb-drag, 69 degrees of camera, puts him at NDC x 1.5 and gone.
+         The chip still reads "Talk to Keeper Aldric" and the banner still says he is waving, with
+         nothing anywhere indicating which way to turn. Swiping to look around is the first thing
+         anybody does with a 3D world, so that is not an edge case, it is second three.
+
+         ui/offscreenPointer.js decides where this goes and which way it faces; the header there is
+         mostly about why a target BEHIND the camera has to be handled explicitly rather than trusted
+         to project sensibly. Hidden whenever the objective is already on screen: an arrow pointing
+         at something the child can see is noise, and noise is how a child learns to stop looking. */
+      #objective-pointer {
+        position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+        display: grid; place-items: center;
+        pointer-events: none; touch-action: none;
+        transition: opacity 140ms ease-out;
+      }
+      #objective-pointer[data-shown="false"] { opacity: 0; }
+      #objective-pointer[data-shown="true"] { opacity: 1; }
+      #objective-pointer-arrow {
+        display: block; font-size: 1.7rem; line-height: 1; color: #f2b33d;
+        text-shadow: 0 0 0.35rem rgb(12 20 31 / 95%), 0 0 0.9rem rgb(12 20 31 / 75%);
+      }
       #game[data-pointer="mouse"] #desktop-keys { display: block; }
       /* Both live at bottom-centre, and on a desktop both can be on screen at once -- with ?debug=1,
          or on a fault, which is the one time #runtime-status shows without it. The DEVELOPER line is
@@ -927,6 +950,7 @@
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
       <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
+      <div id="objective-pointer" data-shown="false" aria-hidden="true"><span id="objective-pointer-arrow">➤</span></div>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
       <!-- GP1: the Hero screen. aria-pressed mirrors data-shown on #hero-screen -- one boolean, two
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/

@@ -101,6 +101,8 @@ import {
   RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSpeechState,
 } from './world/rangerSpeech.js';
 import { questObjectiveFor } from './world/quest.js';
+import { destinationFor } from './world/destinations.js';
+import { edgeIndicatorFor } from './ui/offscreenPointer.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
   bramblesCut,
@@ -185,6 +187,10 @@ const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
 // fallback minting path also unavailable). Never sent as the wire's guestId -- see durableProfileId
 // -- because a constant on the wire would collapse every such device onto one save server-side.
 const SESSION_ONLY_PROFILE_ID = 'p-session-only';
+
+// Roughly a hero's chest, so the arrow aims at a person rather than at the ground under them. The
+// hero measures 1.479 m; a destination is a place on the map and has no height of its own.
+const POINTER_TARGET_HEIGHT_METERS = 1.0;
 
 const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
@@ -930,6 +936,53 @@ async function bootstrap() {
     questObjectiveLine = line;
     questObjectiveElement.dataset.shown = String(line !== null);
     if (line !== null) questObjectiveElement.textContent = line;
+  }
+  // WHICH WAY TO TURN. The chip says what to do; this says where it is.
+  //
+  // Measured before it was written: from the spawn the Keeper is on screen at NDC (0.37, 0.25), and
+  // one 200px thumb-drag -- 69 degrees -- puts him at NDC x 1.5 with the chip still reading "Talk to
+  // Keeper Aldric" and nothing at all indicating which way he went.
+  //
+  // The DOM half of a pure/DOM split: ui/offscreenPointer.js decides where the arrow goes and which
+  // way it faces and is unit tested; this does the projection, which needs a camera and therefore a
+  // browser, and is proved by a harness instead.
+  const objectivePointerElement = document.querySelector('#objective-pointer');
+  const objectivePointerArrowElement = document.querySelector('#objective-pointer-arrow');
+  const pointerTarget = new THREE.Vector3();
+  const pointerForward = new THREE.Vector3();
+  function renderObjectivePointer(objective, context) {
+    const place = destinationFor(objective, context);
+    if (!place) {
+      // No objective, no place for it, or a dynamic place the caller could not supply. All three are
+      // the same answer to "where do I point", which is: nowhere, so say nothing.
+      objectivePointerElement.dataset.shown = 'false';
+      return;
+    }
+
+    // BEHIND THE CAMERA IS COMPUTED, NOT INFERRED, and this is the whole reason offscreenPointer.js
+    // takes it as an argument. project() performs the perspective divide without clipping, so a
+    // point behind the camera comes back mirrored through the origin -- a plausible on-screen
+    // coordinate pointing exactly the wrong way. The sign of the depth along the camera's forward
+    // axis is the only thing that distinguishes them.
+    pointerTarget.set(place.x, POINTER_TARGET_HEIGHT_METERS, place.z);
+    pointerForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const behindCamera = pointerTarget.clone().sub(camera.position).dot(pointerForward) < 0;
+
+    pointerTarget.project(camera);
+    const indicator = edgeIndicatorFor({
+      ndcX: pointerTarget.x,
+      ndcY: pointerTarget.y,
+      behindCamera,
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    });
+
+    // An arrow over a thing the child can already see is noise, and noise is how a child learns to
+    // stop looking at the screen.
+    objectivePointerElement.dataset.shown = String(!indicator.onScreen);
+    if (indicator.onScreen) return;
+    objectivePointerElement.style.transform = `translate(${indicator.x}px, ${indicator.y}px)`;
+    objectivePointerArrowElement.style.transform = `rotate(${indicator.angle}rad)`;
   }
   function renderNpcSpeech(next) {
     keeperSpeechElement.dataset.shown = String(next.visible);
@@ -3056,11 +3109,14 @@ async function bootstrap() {
     }
 
 
-    // `.text` because an objective is now a thing with a NAME, not a sentence -- the id is
-    // what world/destinations.js turns into a place, and the chip only ever wanted the words.
-    // The optional chain keeps the null branch working: questObjectiveFor returns null before
-    // there are any rewards to reason about, and the renderer treats null as "show nothing".
-    renderQuestObjective(questObjectiveFor(
+    // ONE objective, read once, rendered two ways. The chip shows its words and the pointer shows
+    // where it is -- and because they are the same value rather than two calls, the arrow can never
+    // point at a different errand from the one named above it. That is the whole reason an objective
+    // became a thing with a NAME instead of a sentence.
+    //
+    // The optional chain keeps the null branch working: questObjectiveFor returns null before there
+    // are any rewards to reason about, and both renderers treat null as "show nothing".
+    const currentObjective = questObjectiveFor(
       rewardsKnown ? rewardsForRelight : null, treeLitNow, gateFound, questGiven,
       {
         lights: VILLAGE.TRAIL_LIGHTS.length,
@@ -3082,7 +3138,13 @@ async function bootstrap() {
         hollowFound,
         lodgeFound,
       },
-    )?.text ?? null);
+    );
+    renderQuestObjective(currentObjective?.text ?? null);
+    // The two dynamic destinations -- the next dark light, the next unbroken seal -- are not supplied
+    // yet, so those objectives draw no arrow rather than a wrong one. destinationFor returns null for
+    // a place the caller could not name, which is the same answer as "this one has nowhere", and the
+    // pointer treats both as nothing to say. Wiring them is its own slice.
+    renderObjectivePointer(currentObjective, {});
     follow.update(player.position);
     rimLight.update(player.position);
     runtimeRenderer.renderer.render(scene, camera);
