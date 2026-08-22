@@ -1299,7 +1299,6 @@ async function bootstrap() {
     // dispatch time so it is the position the child just watched it die at) and flies to the belt.
     'mark-earned'(event) {
       rewardEventLog.push(event);
-      journalDurableFact(event);
       // GP1-C6: NO BANNER HERE ANY MORE. This fires on the same frame as wolf-defeated, so the two
       // announcements used to overwrite each other -- "The wolf is beaten!" appeared and was replaced
       // by "Lantern Mark!" before it could be read, and both landed under the kill's own gold burst.
@@ -1312,7 +1311,6 @@ async function bootstrap() {
     // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
     'lantern-unlocked'(event) {
       rewardEventLog.push(event);
-      journalDurableFact(event);
       banner('All three marks! Take them home.', 3200);
     },
   });
@@ -2211,6 +2209,13 @@ async function bootstrap() {
       // breaking that guard's own regression test. Same "every event accounted for, sound decided
       // explicitly" discipline, just addressed through its own two small tables.
       for (const event of events) {
+        // Journalled HERE rather than inside the two reward handlers that used to do it, so the
+        // device keeps a copy of every durable fact it is told about rather than of the two types
+        // somebody remembered to wire. journalDurableFact ignores anything with no stable id, and
+        // recordFacts refuses anything that is not a profile fact, so widening the call cannot
+        // journal something it should not -- and a new durable event type stops needing a second
+        // edit here to be remembered.
+        journalDurableFact(event);
         if (event.type === 'mark-earned' || event.type === 'lantern-unlocked') {
           const rewardRecipeName = soundForRewardEvent(event.type);
           if (rewardRecipeName) audio.play(rewardRecipeName);
