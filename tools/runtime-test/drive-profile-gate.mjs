@@ -477,7 +477,12 @@ async function run() {
       if (!raw) return { noKeyring: true };
       const keyring = JSON.parse(raw);
       const active = keyring.profiles.find((p) => p.id === keyring.activeProfileId) ?? keyring.profiles[0];
-      return { name: active?.displayName ?? null, onboarding: active?.onboarding ?? null };
+      return {
+        name: active?.displayName ?? null,
+        onboarding: active?.onboarding ?? null,
+        avatar: active?.avatar ?? null,
+        allAvatars: keyring.profiles.map((p) => p.avatar),
+      };
     })())`));
 
     const before = await teaching();
@@ -510,6 +515,20 @@ async function run() {
     check('and the reload did not forget who they are either',
       remembered.name === moved.name && remembered.onboarding?.named === true,
       JSON.stringify(remembered));
+
+    // THE ANIMAL IS WRITTEN DOWN, not recomputed. A child who cannot read navigates this screen by
+    // it, so it has to be theirs permanently -- and if it were derived from which animals are free
+    // on the device, deleting a sibling's save would hand them somebody else's. GQ-014: an identity
+    // derived from mutable state is not an identity. Asserted against the stored bytes, because a
+    // derived-on-render animal would look identical on screen and fail only later.
+    check('each hero has an animal of their own, stored on the profile',
+      typeof remembered.avatar === 'string' && remembered.avatar.length > 0,
+      JSON.stringify(remembered.avatar));
+    check('and no two heroes on this tablet share one',
+      new Set(remembered.allAvatars).size === remembered.allAvatars.length,
+      JSON.stringify(remembered.allAvatars));
+    check('and it is the same animal it was before the reload',
+      remembered.avatar === moved.avatar, `${moved.avatar} -> ${remembered.avatar}`);
 
     check('no console errors across the whole run',
       tab.consoleErrors.length === 0,

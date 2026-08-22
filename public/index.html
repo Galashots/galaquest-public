@@ -837,11 +837,32 @@
       .profile-card[data-active="true"] { border-color: #f2b33d; background: rgb(242 179 61 / 14%); }
       .profile-card-choose {
         flex: 1 1 auto; min-height: 64px; padding: 0.6rem 0.9rem;
-        display: flex; flex-direction: column; justify-content: center; gap: 0.15rem;
+        display: flex; flex-direction: row; align-items: center; gap: 0.7rem;
         border: 0; border-radius: 0.6rem; background: transparent; color: #fff;
         text-align: left; font: 800 1.15rem/1.2 system-ui, sans-serif;
       }
+      /* THE ANIMAL. The largest thing on the card and the first in reading order, because for the
+         child this screen is designed for it is the ONLY thing on it they can decode -- the name is
+         letters and the badge is a sentence. Its colour is its own, so two cards differ by more than
+         a glyph at a glance. progression/heroAvatars.js says why the animal is stored on the profile
+         and therefore never changes when a sibling's save is deleted. */
+      .profile-card-face {
+        flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%;
+        display: grid; place-items: center; font-size: 1.7rem; line-height: 1;
+        box-shadow: inset 0 0 0 2px rgb(255 255 255 / 22%);
+      }
+      .profile-card-words { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
       .profile-card-name { display: block; }
+      /* The same three pips, in the same order, as the HUD's own Lantern Marks row -- a child
+         matches a shape they already know instead of reading a count. The lantern is appended
+         rather than being a fourth pip: it is what the three were FOR. */
+      .profile-card-pips { display: flex; align-items: center; gap: 0.28rem; margin-top: 0.1rem; }
+      .profile-card-pip {
+        width: 11px; height: 11px; border-radius: 50%;
+        border: 2px solid rgb(242 179 61 / 55%); background: transparent;
+      }
+      .profile-card-pip[data-filled="true"] { background: #f2b33d; border-color: #f2b33d; }
+      .profile-card-lantern { font-size: 0.95rem; line-height: 1; margin-left: 0.15rem; }
       /* The line that lets a child tell their hero from their sibling's. Quieter than the name but
          never small enough to be decoration -- it is doing real work on this screen. */
       .profile-card-badge {

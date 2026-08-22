@@ -28,6 +28,8 @@
 // and is proved in a browser.
 
 import { DEFAULT_DISPLAY_NAME, MAX_PROFILES, sanitizeDisplayName } from './profiles.js';
+import { avatarForProfile } from './heroAvatars.js';
+import { MARKS_TO_UNLOCK } from '../rewards/marks.js';
 
 /** Plain language for how far a hero has got. Not a number in a corner: this is the line a child
  *  uses to tell their own hero from their sibling's, so it says what happened rather than what was
@@ -37,6 +39,27 @@ export function progressBadgeFor({ marks = 0, lanternUnlocked = false } = {}) {
   if (lanternUnlocked) return 'Lantern lit';
   if (marks <= 0) return 'Just starting';
   return marks === 1 ? '1 Lantern Mark' : `${marks} Lantern Marks`;
+}
+
+/**
+ * How far along, as things to draw rather than words to read.
+ *
+ * Three Lantern Marks is the opening's whole count, so three pips is a shape a child can match
+ * against the row on their own HUD -- the same pips, in the same order, meaning the same thing. The
+ * lantern is separate rather than a fourth pip because it is not one more of the same: it is what
+ * the three were FOR, and a child who has lit it should see the payoff, not a longer row.
+ *
+ * @returns { marks, of, lanternLit } -- `of` travels with the count so the binder never has to know
+ *   how many marks an opening has, and a change to MARKS_TO_UNLOCK cannot leave the gate drawing a
+ *   row of the wrong length.
+ */
+export function progressPipsFor({ marks = 0, lanternUnlocked = false } = {}) {
+  const total = MARKS_TO_UNLOCK;
+  return {
+    marks: Math.max(0, Math.min(total, Math.trunc(marks) || 0)),
+    of: total,
+    lanternLit: lanternUnlocked === true,
+  };
 }
 
 /**
@@ -60,6 +83,14 @@ export function profileGateViewModel({
     name: sanitizeDisplayName(hero.displayName),
     active: hero.id === activeProfileId,
     badge: progressBadgeFor(hero),
+    // THE PART A CHILD WHO CANNOT READ USES. The name and the badge are both shapes they cannot
+    // decode; the animal is what they are actually looking for on this screen. heroAvatars.js says
+    // why it is stored on the profile rather than computed from what is free.
+    avatar: avatarForProfile(hero),
+    // And the progress as COUNTS rather than as prose, so the binder can draw pips a child can
+    // count on their fingers instead of a sentence they have to be read. The words stay too --
+    // `badge` above -- because a parent reads them and they are how an adult tells the saves apart.
+    progress: progressPipsFor(hero),
   }));
 
   if (namingFirstHero) {
@@ -185,13 +216,51 @@ export function createProfileGate(options = {}) {
       // The whole card is the tap target, not a small button inside it.
       const choose = makeButton('profile-card-choose', '');
       choose.dataset.profileId = hero.id;
+      // THE ANIMAL FIRST, and first is the point: it is the only thing on this card a child who
+      // cannot read can use, so it is the largest thing and the thing at the start of the reading
+      // order. Its colour comes with it so two cards differ by more than one glyph.
+      const face = document.createElement('span');
+      face.className = 'profile-card-face';
+      face.textContent = hero.avatar.emoji;
+      face.style.background = hero.avatar.colour;
+      // Named for a screen reader, which is the one reader that cannot see an animal at all.
+      face.setAttribute('aria-hidden', 'false');
+      face.setAttribute('role', 'img');
+      face.setAttribute('aria-label', hero.avatar.name);
+
       const nameSpan = document.createElement('span');
       nameSpan.className = 'profile-card-name';
       nameSpan.textContent = hero.name;
       const badgeSpan = document.createElement('span');
       badgeSpan.className = 'profile-card-badge';
       badgeSpan.textContent = hero.badge;
-      choose.append(nameSpan, badgeSpan);
+
+      // THE PROGRESS AS PIPS, the same row and the same order as the HUD's own Lantern Marks, so a
+      // child matches a shape they already know rather than reading a count. The words stay beside
+      // them for the adult in the room.
+      const pips = document.createElement('span');
+      pips.className = 'profile-card-pips';
+      for (let i = 0; i < hero.progress.of; i += 1) {
+        const pip = document.createElement('span');
+        pip.className = 'profile-card-pip';
+        pip.dataset.filled = String(i < hero.progress.marks);
+        pips.append(pip);
+      }
+      if (hero.progress.lanternLit) {
+        // Not a fourth pip: the lantern is what the three marks were FOR, so a child who has lit it
+        // sees the payoff rather than a longer row.
+        const lantern = document.createElement('span');
+        lantern.className = 'profile-card-lantern';
+        lantern.textContent = '🏮';
+        lantern.setAttribute('role', 'img');
+        lantern.setAttribute('aria-label', 'Lantern lit');
+        pips.append(lantern);
+      }
+
+      const words = document.createElement('span');
+      words.className = 'profile-card-words';
+      words.append(nameSpan, badgeSpan, pips);
+      choose.append(face, words);
       choose.addEventListener('click', () => {
         confirmingDeleteId = null;
         onSelect(hero.id);

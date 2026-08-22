@@ -34,6 +34,8 @@ import { foldFacts, isProfileFact, unionFacts } from './facts.js';
 // what it received, this is the CLIENT deciding what it will mint.
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../net/guestId.js';
 
+
+import { chooseAvatarId } from './heroAvatars.js';
 export const PROFILES_STORAGE_KEY = 'gq-profiles';
 export const JOURNAL_KEY_PREFIX = 'gq-journal:';
 export const LEGACY_GUEST_ID_KEY = GUEST_ID_STORAGE_KEY;
@@ -82,6 +84,10 @@ function freshProfile(id, displayName, nowIso) {
     // called. It lives with the other onboarding latches rather than being inferred from the display
     // name, because "is the name still the default" is not the same question -- a child is perfectly
     // entitled to call their hero Hero, and inferring would ask them again forever.
+    // The animal a child navigates by. Null until something chooses one -- createProfile does,
+    // from what is free on this device. Left null here so migrateLegacyGuest's profiles fall to the
+    // id-derived fallback rather than all being handed the same first animal.
+    avatar: null,
     onboarding: { questGiven: false, movementTaught: false, attackTaught: false, named: false },
     discovered: {
       gate: false, camp: false, rowan: false, cart: false,
@@ -124,6 +130,7 @@ function readKeyring(storage) {
       displayName: sanitizeDisplayName(entry?.displayName),
       createdAt: typeof entry?.createdAt === 'string' ? entry.createdAt : null,
       lastPlayedAt: typeof entry?.lastPlayedAt === 'string' ? entry.lastPlayedAt : null,
+      avatar: typeof entry?.avatar === 'string' ? entry.avatar : null,
       onboarding: { ...freshProfile(id, '', null).onboarding, ...(entry?.onboarding ?? {}) },
       discovered: { ...freshProfile(id, '', null).discovered, ...(entry?.discovered ?? {}) },
       migratedFrom: typeof entry?.migratedFrom === 'string' ? entry.migratedFrom : null,
@@ -342,6 +349,9 @@ export function createProfileStore(options = {}) {
     const id = mintProfileId();
     if (!id) throw new Error('could not mint a profile id');
     const profile = freshProfile(id, displayName, nowIso());
+    // Chosen once, here, from what is free on this device -- see heroAvatars.js on why it is stored
+    // rather than computed from the set every time it is drawn.
+    profile.avatar = chooseAvatarId(keyring.profiles.map((existing) => existing.avatar).filter(Boolean));
     keyring.profiles.push(profile);
     keyring.activeProfileId = id;
     persist();

@@ -100,6 +100,7 @@ function pixelSizedRules() {
 const NOT_TAP_TARGETS = new Map([
   ['#hero-down-bar', 'a progress bar; nothing is aimed at it'],
   ['#touch-stick-knob', 'the visual knob INSIDE the 112px stick, and pointer-events: none'],
+  ['.profile-card-pip', 'a progress dot drawn INSIDE .profile-card-choose; the whole card is the target'],
 ]);
 
 test('the sweep finds the controls it is supposed to be looking at', () => {
