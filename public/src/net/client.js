@@ -12,6 +12,7 @@ import {
   decode,
   encode,
   equipMessage,
+  restoreProfileMessage,
   inputMessage,
   joinMessage,
   claimBladeMessage,
@@ -227,9 +228,27 @@ export function createNetClient(options = {}) {
    * idempotent on the server (net/gameServer.mjs's applyEquip just records "the latest choice"), so
    * there is nothing a seq would protect here that the store's own latest-wins read does not already.
    */
-  function sendEquip(itemId) {
+  /** @param identity the device's own `{ eventId, rev }` for this choice, minted at the moment the
+   *  child tapped EQUIP (progression/profiles.js's mintEquipFact) and journalled before it is sent.
+   *  Passing it through unchanged is what lets the server store the SAME fact the device holds, so
+   *  the two copies merge instead of becoming two equips; omitted, the server mints its own, which
+   *  is the pre-1b behaviour a harness or an older client still gets. */
+  function sendEquip(itemId, identity) {
     if (status !== 'online') return false;
-    return send(equipMessage(itemId));
+    return send(equipMessage(itemId, identity));
+  }
+
+  /**
+   * Hand the server durable facts this device still holds, for a store that has lost them.
+   *
+   * Same online-only guard as every other send. No sequence number and no reply expected: the facts
+   * carry their own ids, so the server's INSERT OR IGNORE makes a resend a no-op, and there is
+   * nothing to acknowledge that the next welcome does not already say.
+   */
+  function sendRestoreProfile(facts) {
+    if (status !== 'online') return false;
+    if (!Array.isArray(facts) || facts.length === 0) return false;
+    return send(restoreProfileMessage(facts));
   }
 
   /** GP2: ask the server to search the shared cart. Same online-only guard and no-sequence-number
@@ -326,6 +345,7 @@ export function createNetClient(options = {}) {
     setIntent,
     sendAttack,
     sendEquip,
+    sendRestoreProfile,
     sendSearchCart,
     sendClaimBlade,
     sendClaimSatchel,

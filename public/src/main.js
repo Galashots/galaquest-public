@@ -38,8 +38,13 @@ import {
 } from './character/gear.js';
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
   from './character/weaponLoadout.js';
-import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID, swingDamageFor } from './progression/items.js';
+import { MARKS_TO_UNLOCK } from './rewards/marks.js';
+import {
+  OFFLINE_HERO_ID,
+  createLifeIdMinter,
+  createOfflineProgress,
+} from './rewards/offlineProgress.js';
+import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS, swingDamageFor } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
 import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
@@ -68,6 +73,8 @@ import { createTouchInput } from './input/touch.js';
 import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
+import { createProfileStore } from './progression/profiles.js';
+import { foldFacts } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
@@ -167,9 +174,15 @@ const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
 // landed the hit, read off event.heroId -- but the OFFLINE solo path's events (combat/encounter.js's
 // stripHeroId, the same shape createEncounter()'s old stateful surface always produced) never carry
 // one, since there has only ever been exactly one hero to mean. This fixed id is stamped on before
-// folding, purely locally, so the offline loop is demonstrable with no server at all; it is never
-// sent anywhere and never confused with a real playerId (net/gameServer.mjs's ids are `p<n>`).
-const OFFLINE_HERO_ID = 'offline-hero';
+// folding, purely locally, so the offline loop works with no server at all; it is never sent
+// anywhere and never confused with a real playerId (net/gameServer.mjs's ids are `p<n>`). It DOES
+// now appear inside durable mark ids (`mark:offline-hero:<lifeId>`), which is deliberate: it names
+// which hero earned the mark, and offline there is exactly one. rewards/offlineProgress.js owns the
+// constant so the id in the journal and the id stamped before folding cannot drift apart.
+// What a device journals under when it could not mint a durable profile id (no crypto, and the
+// fallback minting path also unavailable). Never sent as the wire's guestId -- see durableProfileId
+// -- because a constant on the wire would collapse every such device onto one save server-side.
+const SESSION_ONLY_PROFILE_ID = 'p-session-only';
 
 const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
@@ -569,10 +582,12 @@ async function bootstrap() {
   // ENTIRELY invisible, the camera being inside a wall and inside a trunk respectively. It is now a
   // dedicated render pass over a cleared depth buffer (render/heroPreview.js's own header carries the
   // full before/after). Nothing dollies, so there is no saved camera to restore.
-  // Offline fallback (Phase D's own pattern, see OFFLINE_HERO_ID / offlineMarks below): with no
-  // server there is no rewards mirror to read an equip choice off, so this is progression's own
-  // small piece of local state, applied instead of net.sendEquip when netStatus is not 'online'.
-  let offlineEquippedWeaponId = DEFAULT_EQUIPPED_WEAPON_ID;
+  // Equip has no session-only fallback any more. It used to keep one -- a plain `let` holding the
+  // offline choice -- and that variable WAS the bug: a child who equipped a sword with no server was
+  // holding the starter sword again after a refresh, because the only record of the choice was a
+  // binding in this closure. The choice is now journalled the moment it is made (see onEquip below)
+  // and read back from `profileState`, so offline and online differ in who ADJUDICATES, not in
+  // whether the child's own decision survives.
   // Which weapon is highlighted in the owned-item strip, independent of which is actually equipped --
   // null until the child taps one, at which point heroScreenViewModel's own fallback (unowned/null
   // resolves to the equipped item) stops applying.
@@ -588,8 +603,18 @@ async function bootstrap() {
     onSelect: (itemId) => { selectedHeroItemId = itemId; },
     onEquip: (itemId) => {
       if (!canEquip(itemId)) return;
-      if (netStatus === 'online') net.sendEquip(itemId);
-      else offlineEquippedWeaponId = itemId;
+      // ONE act, ONE identity. The device mints the fact -- eventId and durable revision together --
+      // at the moment the child chose, journals it, and then tells the server about that same fact
+      // rather than asking the server to invent a second one. Both copies therefore carry the same
+      // name and the same place in the order, which is what makes holding two copies a union rather
+      // than a disagreement (docs/MISTAKES.md GQ-014).
+      //
+      // Journalled BEFORE it is sent, and sent only when there is a server: a child who equips a
+      // sword with no network has equipped a sword. The send is how the server finds out, not how it
+      // becomes true -- and if it never gets sent, the reconnect path below delivers it.
+      const fact = profiles.mintEquipFact(profileId, itemId);
+      refreshProfileState();
+      if (netStatus === 'online') net.sendEquip(itemId, fact ?? undefined);
       selectedHeroItemId = itemId;
     },
     // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
@@ -927,14 +952,17 @@ async function bootstrap() {
   }
 
   // Offline fallback (brief D4): the SAME pure fold the server runs (rewards/marks.js), run locally
-  // against OFFLINE_HERO_ID-stamped events, so the mark-per-kill loop is demonstrable with no server
-  // at all. Deliberately session-only -- no sqlite, no guestId sent anywhere, nothing survives a
-  // refresh -- and that is not a bug to fix here: it is the honest, visible difference between this
-  // fallback and the real, persisted, online loop. A refresh while offline resets these three
-  // variables along with everything else in this closure, which is exactly the point.
-  let offlineRewardLedger = createRewardLedger();
-  let offlineMarks = 0;
-  let offlineLanternUnlocked = false;
+  // against OFFLINE_HERO_ID-stamped events, so the mark-per-kill loop works with no server at all.
+  //
+  // It used to be session-only, and this file argued that was honest rather than a defect. Director
+  // correction 4 retired that: a same-device family save must recover a child's progression whether
+  // or not a server was ever reachable, and Lantern Marks are named in the list. What a child earns
+  // on a tablet with no network is now journalled like everything else -- see rewards/offlineProgress.js,
+  // which also owns the reason the durable id could not just be the fold's own life index.
+  // Created below, immediately after the profile store it journals into -- see the offline
+  // progress block there. Declared here only so this section still reads in the order the loop
+  // runs in; a `let` rather than a const because the construction genuinely happens later.
+  let offlineProgress = null;
 
   // Belt-lantern mount state (brief D4). `lanternMounted` only ever flips true after a REAL attach
   // succeeds; a missing asset or an unloaded hero must not latch it, or a legitimately-unlocked
@@ -1042,6 +1070,87 @@ async function bootstrap() {
   // `spawned` flag says the cart has actually been searched; see lootPickups.js's own header.
   const lootPickups = createLootPickups(scene, VILLAGE.CART_SEARCH.at);
 
+  // Who is playing, and the device's own durable copy of what they have earned. Created before the
+  // socket because the profile id IS what identifies this child on the wire: it travels in the
+  // guestId field (it is minted in that alphabet on purpose), so the server needs no change and
+  // PROTOCOL_VERSION stays where it is. A device that has only the old gq-guest-id migrates on this
+  // first read, reusing that string verbatim as the profile id, so every reward row already on the
+  // server stays attached without a backfill.
+  const profiles = createProfileStore();
+  // The DURABLE id, or null when a device could not mint one at all. Only this may go on the wire:
+  // it is what ties a child to their rows in the server's store.
+  const durableProfileId = profiles.activeProfileId();
+  // What this session JOURNALS under. Falls back to a session-only id so a device that could not
+  // mint a durable one still plays a coherent session -- equip, marks and inventory all work, they
+  // simply are not there next time. Deliberately NOT sent as the guestId: a fixed fallback id on the
+  // wire would make every such device share one save on the server.
+  const profileId = durableProfileId ?? SESSION_ONLY_PROFILE_ID;
+  const profileName = profiles.activeProfile()?.displayName ?? 'player';
+
+  /**
+   * This device's own folded copy of the active profile's durable state.
+   *
+   * A CACHE of the journal and never a second authority -- every write path recomputes it from
+   * storage rather than mutating it in place, so the two cannot drift. That distinction is the whole
+   * GQ-014 lesson: a number kept alongside the record it is derived from eventually disagrees with
+   * it. It exists only because the frame loop reads the equipped weapon every frame and folding a
+   * JSON journal sixty times a second would be real work for a value that changes when a child taps
+   * a button.
+   *
+   * Shaped exactly like the wire's own rewards block (progression/facts.js's foldFacts says why), so
+   * the offline and online branches below feed one renderer rather than two.
+   */
+  let profileState = foldFacts([], {
+    equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
+    ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
+  });
+
+  function refreshProfileState() {
+    profileState = profiles.stateFor(profileId);
+    return profileState;
+  }
+  refreshProfileState();
+
+  // The offline reward loop, built HERE because it journals into the profile above and reads the
+  // durable count back to decide the lantern -- so it cannot exist before the profile does. It was
+  // first written further up, beside the frame-loop code that drives it, and that was a temporal
+  // dead zone: `profiles` is not initialised until this point and the page failed to boot with
+  // "Cannot access 'profiles' before initialization". Nothing under test/ loads main.js, so the
+  // unit suite could not see it; the browser found it on the first load.
+  offlineProgress = createOfflineProgress({
+    profiles,
+    profileId,
+    // Unique across page loads, not merely within one. See createLifeIdMinter: on the LAN http the
+    // tablets actually use, crypto.randomUUID is absent, and a counter there would recompute an id
+    // the journal already holds and silently swallow the first kill after every refresh.
+    mintLifeId: createLifeIdMinter(),
+  });
+
+  /**
+   * Write a durable fact into this device's own journal as it is announced.
+   *
+   * The server is still the one that DECIDES a mark was earned -- this only keeps a second copy of
+   * the decision, under the same id the server used, so a family's progress does not live solely in
+   * a database that can be wiped or replaced (progression/facts.js's union law is what makes two
+   * copies safe rather than ambiguous). Events that predate the id riding the wire simply carry no
+   * eventId and are skipped: a fact with no stable name cannot be deduplicated, and guessing one
+   * would be worse than not recording it.
+   */
+  function journalDurableFact(event) {
+    if (typeof event?.eventId !== 'string') return;
+    profiles.recordFacts(profileId, [{
+      eventId: event.eventId,
+      type: event.type,
+      // Carried when the event has one. A gear-owned fact is worthless without knowing WHICH gear,
+      // and dropping it here would journal an item the fold cannot name.
+      ...(typeof event.value === 'string' ? { value: event.value } : {}),
+    }]);
+    // The cache is derived, so it is recomputed rather than incremented -- see profileState. An
+    // offline mark has already refreshed it by this point; an ONLINE one has not, and without this
+    // a child who plays online and then loses the network would drop back to a stale count.
+    refreshProfileState();
+  }
+
   // Phase D (D4): mark-earned/lantern-unlocked are never raised by combat/encounter.js, so they can
   // never enter createEncounterFeedback's table (see rewards/feedback.js's header for why that is a
   // hard boundary, not an oversight) -- this is their own dispatcher, same discipline.
@@ -1054,6 +1163,7 @@ async function bootstrap() {
     // dispatch time so it is the position the child just watched it die at) and flies to the belt.
     'mark-earned'(event) {
       rewardEventLog.push(event);
+      journalDurableFact(event);
       // GP1-C6: NO BANNER HERE ANY MORE. This fires on the same frame as wolf-defeated, so the two
       // announcements used to overwrite each other -- "The wolf is beaten!" appeared and was replaced
       // by "Lantern Mark!" before it could be read, and both landed under the kill's own gold burst.
@@ -1064,7 +1174,11 @@ async function bootstrap() {
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
     // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
-    'lantern-unlocked'(event) { rewardEventLog.push(event); banner('All three marks! Take them home.', 3200); },
+    'lantern-unlocked'(event) {
+      rewardEventLog.push(event);
+      journalDurableFact(event);
+      banner('All three marks! Take them home.', 3200);
+    },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See
@@ -1211,9 +1325,47 @@ async function bootstrap() {
   // single-player game. A child on a phone with no server still gets a hero that walks.
   let netStatus = 'offline';
   let lastReconcile = { drift: 0, snapped: false };
+  /**
+   * The reconnect contract, run on EVERY welcome rather than only the first -- a reconnect is a
+   * fresh join, and whatever the device missed while it was away arrives here.
+   *
+   * Two halves, in this order, and the order is the point:
+   *
+   * 1. Ingest. progression/profiles.js journals every fact the server knows and settles each one's
+   *    revision durably before deriving. Local progression must not mint above history it has not
+   *    written down yet, or a new choice gets numbered beneath an old one it was told about in this
+   *    very message (docs/MISTAKES.md GQ-014).
+   *
+   * 2. Restore what the server has not got. A child who played offline holds marks, gear and a
+   *    weapon the server never saw; it is about to publish a rewards block saying otherwise and
+   *    silently take them back. The ORIGINAL facts are sent, identities and revisions intact, so the
+   *    server records what the child actually did at the moment they did it -- and because every
+   *    fact carries its own id, a resend is an INSERT OR IGNORE no-op rather than a second earning.
+   *
+   *    The whole missing set rather than just the equip, and that is not thoroughness for its own
+   *    sake: net/gameServer.mjs refuses an equip for a weapon the guest does not own, so against a
+   *    store that has lost this profile, sending the choice without the ownership it depends on is
+   *    rejected and the hero snaps back to a weapon the child stopped holding. The two have to
+   *    arrive together, which is why this is one message and not a sequence of them.
+   */
+  function ingestWelcome(message) {
+    const serverFacts = Array.isArray(message?.profileFacts) ? message.profileFacts : [];
+    profileState = profiles.ingestServerFacts(profileId, serverFacts);
+
+    // Everything this device holds that the server does not. Empty on an ordinary reconnect to a
+    // store that still knows this child, so the common case sends nothing at all.
+    const knownToServer = new Set(serverFacts.map((fact) => fact.eventId));
+    const missing = profiles.journalFor(profileId).filter((fact) => !knownToServer.has(fact.eventId));
+    if (missing.length > 0) net.sendRestoreProfile(missing);
+  }
+
   const net = createNetClient({
-    name: 'player',
+    name: profileName,
+    // Only a DURABLE id goes on the wire -- see profileId's own comment for why the session-only
+    // fallback must not.
+    guestId: durableProfileId ?? undefined,
     onStatus: (next) => { netStatus = next; },
+    onWelcome: (message) => ingestWelcome(message),
     onLeave: (id) => remotes?.remove(id),
     // Snapshots arrive at 10 Hz on their own schedule, independent of the frame loop, so the
     // block is captured here and the events queued; the frame loop mirrors/drains both once per
@@ -1268,7 +1420,7 @@ async function bootstrap() {
     // a harness does not need to know gear.js's node-naming convention to ask "did it mount".
     rewards: () => (netStatus === 'online'
       ? (serverEncounter?.rewards ?? {})
-      : { [OFFLINE_HERO_ID]: { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked } }),
+      : { [OFFLINE_HERO_ID]: profileState }),
     lanternMounted: () => lanternMounted,
     // GP1: "observable without seeing it" once more (see zoneKeeperState's own comment for the
     // pattern) -- a harness can confirm the Hero screen actually opened/closed and read what it is
@@ -1276,7 +1428,7 @@ async function bootstrap() {
     heroScreenOpen: () => heroScreen.isOpen(),
     heroScreenEquippedWeaponId: () => equippedWeaponIdFromRewards(netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { equippedWeaponId: offlineEquippedWeaponId }),
+      : profileState),
     // GP1-C3: the showcase pass's own state -- whether it is drawing, which accent the equipped
     // weapon put on its kickers, the framing it solved for this viewport, and the live hero's bounds
     // PROJECTED THROUGH THE PREVIEW CAMERA into normalized screen space. Same "observable without
@@ -1525,9 +1677,12 @@ async function bootstrap() {
     // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
     // and the showcase pass needs the current equipped id the frame the screen OPENS, so it can pick
     // up mid-frame whatever the DOM render below just set rather than painting one frame stale.
+    // Offline this is the device's own journal, folded -- the same shape the wire's rewards block
+    // has, which is what lets one renderer read either. It carries real owned items too, so an
+    // offline child's Hero screen shows what they have actually earned rather than the starter set.
     const ownRewards = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { equippedWeaponId: offlineEquippedWeaponId };
+      : profileState;
     const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
     if (heroScreenOpen) {
       heroScreen.render(heroScreenViewModel({
@@ -1781,22 +1936,15 @@ async function bootstrap() {
         events.push(...stepped.events);
 
         // Offline fallback reward loop (brief D4): the same D1 fold net/gameServer.mjs runs online,
-        // run here against the solo hero's own (heroId-less) events, stamped with OFFLINE_HERO_ID so
-        // foldEvents has someone to credit. See offlineRewardLedger's own comment above for why this
-        // is session-only by construction.
-        const offlineFolded = foldEvents(
-          offlineRewardLedger,
-          stepped.events.map((event) => ({ ...event, heroId: OFFLINE_HERO_ID })),
-        );
-        offlineRewardLedger = offlineFolded.ledger;
-        for (const award of offlineFolded.awards) {
-          if (award.type !== 'mark-earned') continue;
-          offlineMarks += 1;
-          events.push({ type: 'mark-earned' });
-        }
-        if (!offlineLanternUnlocked && offlineMarks >= MARKS_TO_UNLOCK) {
-          offlineLanternUnlocked = true;
-          events.push({ type: 'lantern-unlocked' });
+        // run here against the solo hero's own (heroId-less) events -- see rewards/offlineProgress.js
+        // for the stamping, the durable id, and why the two cannot be done separately.
+        // Each raised event carries the durable eventId it was recorded under, so the dispatcher's
+        // journalDurableFact writes the same named fact an online mark writes rather than a
+        // nameless one -- which is what lets the two origins merge instead of double-count.
+        const earned = offlineProgress.recordKills(stepped.events);
+        if (earned.length > 0) {
+          refreshProfileState();
+          events.push(...earned);
         }
       }
 
@@ -1806,7 +1954,7 @@ async function bootstrap() {
       // state -- pips and the lantern mount always read whichever of these two is live right now.
       const ownRewards = netStatus === 'online'
         ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-        : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
+        : profileState;
       renderLanternPips(markProgressToShow(ownRewards?.marks ?? 0));
       ensureLanternMounted(ownRewards?.lanternUnlocked === true);
 
@@ -1973,7 +2121,7 @@ async function bootstrap() {
     // decides "lit or not" from that shape; see zoneLoader.js.
     const rewardsForRelight = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
+      : profileState;
     const lanternUnlockedNow = lanternUnlockedFromRewards(rewardsForRelight);
     // GP3: the Village Board's own render, reusing lanternUnlockedNow just computed above rather
     // than re-deriving a second "is the tree lit" answer -- see village/boardScreen.js's own
