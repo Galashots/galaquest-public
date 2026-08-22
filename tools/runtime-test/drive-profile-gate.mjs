@@ -146,6 +146,26 @@ async function setViewport(tab, viewport) {
  * loaded it has already minted a profile, and clearing then would leave the running tab holding an
  * id nothing on disk agrees with (GQ-008, the same rule for gq-guest-id).
  */
+/**
+ * Wait for the game to be up in whatever page the tab is currently on.
+ *
+ * Separate from load() because the gate navigates ITSELF -- switching a profile reloads -- and the
+ * test that proves a named link does not out-vote the child must not re-navigate to wait, since
+ * that would put `?hero=` back and destroy the thing under test. A fixed sleep here read the chip
+ * mid-boot and reported an empty string; the same wait-for-the-system lesson as drive-touch.
+ */
+async function waitForRuntime(tab, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const ready = await tab.page.eval(
+      `Boolean(window.__galaQuestRuntime) && Boolean(document.querySelector('#profile-chip')?.textContent)`,
+    ).catch(() => false);
+    if (ready) return;
+    if (Date.now() > deadline) throw new Error('runtime never came up after a self-initiated reload');
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
 async function load(tab, url, { clearStorage = false } = {}) {
   if (clearStorage) {
     // Storage.clearDataForOrigin, and BEFORE the first navigate -- not a localStorage.clear() from
@@ -362,6 +382,31 @@ async function run() {
       recovered.id === rowanId && recovered.state.marks === 2,
       `active ${recovered.id} with ${recovered.state.marks} marks (Rowan is ${rowanId})`);
     await capture(tab, '06-switched-back-portrait');
+
+    // ── a named link must not out-vote the child ───────────────────────────────────────────────
+    //
+    // `?hero=Sam` is adopted on every boot, so switching away from Sam while standing on Sam's link
+    // has to actually stick. It did not: the switch reloads, the reload re-adopted the name in the
+    // URL, and the gate silently did nothing. Found by reasoning about the feature rather than by a
+    // failing check, which is why it is pinned here now.
+    await load(tab, `${server.origin}/?hero=Rowan`);
+    let named = await gateState(tab);
+    check('following a named link plays as that hero', named.chip === 'Rowan',
+      `chip ${JSON.stringify(named.chip)}`);
+
+    await clickSelector(tab, '#profile-chip');
+    const samCard = (await gateState(tab)).cards.find((c) => c.name === 'Sam');
+    await clickSelector(tab, `.profile-card-choose[data-profile-id="${samCard.id}"]`);
+    await waitForRuntime(tab);
+    named = await gateState(tab);
+    check('and switching away from it STAYS switched, rather than being undone by the URL',
+      named.chip === 'Sam', `chip ${JSON.stringify(named.chip)} (the link still said Rowan)`);
+
+    // Back to Rowan for the cap phase below, which counts on a known active hero.
+    await clickSelector(tab, '#profile-chip');
+    await clickSelector(tab, `.profile-card-choose[data-profile-id="${rowanId}"]`);
+    await waitForRuntime(tab);
+    await load(tab, gameUrl);
 
     // ── the cap, said in words ─────────────────────────────────────────────────────────────────
     await clickSelector(tab, '#profile-chip');

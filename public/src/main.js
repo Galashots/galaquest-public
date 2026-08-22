@@ -1186,7 +1186,22 @@ async function bootstrap() {
 
   function switchToProfile(profileId_) {
     profiles.selectProfile(profileId_);
-    window.location.reload();
+    // Reload WITHOUT the `hero` parameter, and this is not tidiness -- it is the difference between
+    // the switch working and silently not happening. `?hero=Sam` is adopted on every boot, so a
+    // plain reload would re-select Sam and undo the choice the child just made. The gate would look
+    // like it did nothing, forever, for anyone who followed a named link.
+    //
+    // Only `hero` is dropped; anything else in the query is somebody's and stays.
+    let target = null;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('hero');
+      target = url.toString();
+    } catch {
+      target = null;
+    }
+    if (target && target !== window.location.href) window.location.replace(target);
+    else window.location.reload();
   }
 
   const profileGate = createProfileGate({
