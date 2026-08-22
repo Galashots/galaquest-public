@@ -70,6 +70,7 @@ import {
 import { createAttackInput } from './input/attackButton.js';
 import { createKeyboardInput } from './input/keyboard.js';
 import { pointerModeFor } from './input/pointerMode.js';
+import { firstHurtCoachingLine } from './ui/coaching.js';
 import { createTouchInput } from './input/touch.js';
 import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
@@ -212,7 +213,8 @@ status.dataset.debug = perfHud.dataset.debug;
 // a device does not grow a touchscreen mid-session, and re-deciding this on a resize would make the
 // stick appear and vanish under a thumb that is already on it. input/pointerMode.js owns the rule
 // and records why it is deliberately biased towards keeping the stick.
-document.querySelector('#game').dataset.pointer = pointerModeFor(navigator.maxTouchPoints);
+const POINTER_MODE = pointerModeFor(navigator.maxTouchPoints);
+document.querySelector('#game').dataset.pointer = POINTER_MODE;
 
 async function bootstrap() {
   const scene = new THREE.Scene();
@@ -769,6 +771,8 @@ async function bootstrap() {
   // What the bar is currently SHOWING, so the per-frame read in the loop repaints on a change rather
   // than rewriting four dataset attributes sixty times a second.
   let heartsShown = { hp: HERO_MAX_HP, maxHp: HERO_MAX_HP };
+  // Said once per session, on the first bite. See the hero-hurt handler.
+  let combatCoached = false;
   function renderHearts(hp, maxHp = heartCeiling) {
     heartCeiling = Math.max(1, Math.min(HERO_MAX_HP_CEILING, Math.round(maxHp)));
     const filled = heartsForHp(hp, heartCeiling);
@@ -1629,6 +1633,19 @@ async function bootstrap() {
       flashHeroHurt();
       renderHearts(event.remaining);
       reactions?.triggerHit({ swinging: swing?.isSwinging() === true });
+      // THE ONE SENTENCE THE GAME NEVER SAID. Measured against the real rules: a child who freezes
+      // and never swings takes 7 knockouts in a minute and never scratches the wolf, while a child
+      // who mashes the button kills it in 3.85 seconds. The whole distance between those is whether
+      // they found the verb, and nothing -- not the Keeper, not a banner, not a hint -- had ever
+      // named it. combat/coaching.js carries the measurement and picks the line for this device.
+      //
+      // Once, on the FIRST bite. A child who has been told and is now fighting does not need telling
+      // again, and a game that repeats itself is a game they stop reading. Held a little longer than
+      // an ordinary banner because it is the only instruction in the game.
+      if (!combatCoached) {
+        combatCoached = true;
+        banner(firstHurtCoachingLine(POINTER_MODE), 3200);
+      }
     },
     // The wolf's jaws visibly close on nothing; that already reads without extra feedback.
     'bite-missed'() {},
