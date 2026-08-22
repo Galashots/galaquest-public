@@ -959,14 +959,10 @@ async function bootstrap() {
   // or not a server was ever reachable, and Lantern Marks are named in the list. What a child earns
   // on a tablet with no network is now journalled like everything else -- see rewards/offlineProgress.js,
   // which also owns the reason the durable id could not just be the fold's own life index.
-  const offlineProgress = createOfflineProgress({
-    profiles,
-    profileId,
-    // Unique across page loads, not merely within one. See createLifeIdMinter: on the LAN http the
-    // tablets actually use, crypto.randomUUID is absent, and a counter there would recompute an id
-    // the journal already holds and silently swallow the first kill after every refresh.
-    mintLifeId: createLifeIdMinter(),
-  });
+  // Created below, immediately after the profile store it journals into -- see the offline
+  // progress block there. Declared here only so this section still reads in the order the loop
+  // runs in; a `let` rather than a const because the construction genuinely happens later.
+  let offlineProgress = null;
 
   // Belt-lantern mount state (brief D4). `lanternMounted` only ever flips true after a REAL attach
   // succeeds; a missing asset or an unloaded hero must not latch it, or a legitimately-unlocked
@@ -1114,6 +1110,21 @@ async function bootstrap() {
     return profileState;
   }
   refreshProfileState();
+
+  // The offline reward loop, built HERE because it journals into the profile above and reads the
+  // durable count back to decide the lantern -- so it cannot exist before the profile does. It was
+  // first written further up, beside the frame-loop code that drives it, and that was a temporal
+  // dead zone: `profiles` is not initialised until this point and the page failed to boot with
+  // "Cannot access 'profiles' before initialization". Nothing under test/ loads main.js, so the
+  // unit suite could not see it; the browser found it on the first load.
+  offlineProgress = createOfflineProgress({
+    profiles,
+    profileId,
+    // Unique across page loads, not merely within one. See createLifeIdMinter: on the LAN http the
+    // tablets actually use, crypto.randomUUID is absent, and a counter there would recompute an id
+    // the journal already holds and silently swallow the first kill after every refresh.
+    mintLifeId: createLifeIdMinter(),
+  });
 
   /**
    * Write a durable fact into this device's own journal as it is announced.

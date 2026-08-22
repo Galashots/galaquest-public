@@ -716,3 +716,35 @@ GitHub. Found by the Director, not by the branch. The failure is mild here -- a 
 -- but the surface is the project's own gate history, which is the one record that is supposed to be
 harder to drift than the code.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Nothing under `test/` loads `main.js`, so a bootstrap-fatal edit passes the whole gate.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-22
+**Rule:** `public/src/main.js` is the only module the unit suite structurally cannot import — it
+touches `document` at load, so no `node --test` file has ever required it, and none can without a
+DOM. Every other rule in this ledger assumes a test COULD have caught the defect and asks why it did
+not. This one is the class where no test can: the wiring file is the largest module in the repo, it
+is where every subsystem is joined, and the required gate cannot see a single line of it. A green
+`node --test test/*.test.mjs` therefore says nothing whatever about whether the game boots.
+
+The practical rule is not "unit test main.js" — that is what the harnesses are for. It is: **any
+change that moves code IN `main.js` is unproven until something loads the page**, and the cheapest
+such proof is a bare CDP navigation that asserts the runtime object exists and the console is clean.
+That takes seconds and is worth running before the commit, not after the push. The lesson generalises
+past this repo: the gate you trust most is the one with the largest blind spot, because its
+greenness is what stops you looking.
+**Incident (2026-08-22, Checkpoint 1b-wire):** the durable-offline-marks change constructed
+`createOfflineProgress({ profiles, ... })` at `main.js:962` while `const profiles` is initialised at
+`main.js:1083`. A textbook temporal dead zone: `bootstrap failed ReferenceError: Cannot access
+'profiles' before initialization`, thrown on the first line of the first frame. **The page did not
+render at all.** The full unit suite passed — 1369 tests, 1366 pass, 0 fail — and the commit was
+pushed on the strength of it. It was found on the next action, the first browser load, and only
+because that load happened; nothing else in the workflow would have said a word until hosted CI ran
+the runtime bundle. The fix was to construct it after the store it reads from, which is where the
+ordering constraint always was.
+
+A second, quieter half worth recording: the placement was first patched in by matching a nearby line
+of source text, and that string occurred twice, so the construction landed inside the equip handler
+— still bootable, but rebuilding the reward ledger on every EQUIP tap. Anchoring an edit on a string
+that is not unique is a silent way to write working code in the wrong place; the second edit matched
+on the enclosing function instead and asserted the anchor occurred exactly once.
+**Foreknowledge helped:** not yet recorded.
