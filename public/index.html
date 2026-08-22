@@ -717,6 +717,25 @@
         pointer-events: none; touch-action: none;
         transition: opacity 140ms ease-out;
       }
+      /* ── The dial ───────────────────────────────────────────────────────────────────────────
+         Hero at the centre, camera forward pointing UP. Not north-up: a north-up map asks the reader
+         to hold a rotation in their head and apply it to their own body, which is a skill children
+         get years after they can play this game. Camera-up means a thing drawn to the right of the
+         dot is to the child's right, with nothing to work out.
+
+         It draws the ROAD and the current errand. It is NOT enemy radar -- a dial that shows where
+         the wolf is turns an encounter a child is supposed to look up and see into a chart they read
+         instead. ui/minimap.js owns the maths and says all of this at more length.
+
+         Under the objective chip, in the same left-hand information column, and clear of both thumb
+         zones. 110 CSS px backed by a 220 px canvas so it is not soft on a 2x tablet. */
+      #minimap {
+        position: absolute; left: 0.75rem; top: 7.5rem;
+        width: 110px; height: 110px; border-radius: 50%;
+        border: 2px solid rgb(242 179 61 / 45%);
+        background: rgb(12 20 31 / 62%);
+        pointer-events: none; touch-action: none;
+      }
       /* ── Offering help, and mostly not offering it ──────────────────────────────────────────
          The arrow only helps a child who looks at it. ui/guidanceRescue.js decides when one has
          stopped getting closer -- not when they have stopped moving, and not when they are walking
@@ -976,6 +995,7 @@
       <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
       <div id="objective-pointer" data-shown="false" aria-hidden="true"><span id="objective-pointer-arrow">➤</span></div>
       <button id="guidance-rescue" type="button" data-shown="false">👀 Show me where</button>
+      <canvas id="minimap" width="220" height="220" aria-hidden="true"></canvas>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
       <!-- GP1: the Hero screen. aria-pressed mirrors data-shown on #hero-screen -- one boolean, two
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/

@@ -104,6 +104,7 @@ import { questObjectiveFor } from './world/quest.js';
 import { destinationFor, nearestPlaceTo } from './world/destinations.js';
 import { edgeIndicatorFor } from './ui/offscreenPointer.js';
 import { createRescueWatch } from './ui/guidanceRescue.js';
+import { DEFAULT_RANGE_METERS, minimapPlacement, minimapPolyline } from './ui/minimap.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
   bramblesCut,
@@ -1025,6 +1026,77 @@ async function bootstrap() {
     // call site. A caller that only wants the arrow drawn can ignore this.
     return { pointing: true };
   }
+  // THE DIAL. Hero at the centre, camera forward pointing up; ui/minimap.js owns the maths and the
+  // reasoning, including why it is camera-up rather than north-up and why it is not enemy radar.
+  //
+  // REDRAWN AT MOST TWELVE TIMES A SECOND, not every frame. A map is not an animation: at a walk of
+  // 1.4 m/s a child covers 12 cm between redraws on a 22 m dial, which is a third of a pixel. Sixty
+  // redraws a second would spend the difference on nothing, and this is a tablet game whose frame
+  // budget is already the thing that decides whether the opening fight is winnable.
+  const MINIMAP_REDRAW_INTERVAL_MS = 1000 / 12;
+  const minimapCanvas = document.querySelector('#minimap');
+  const minimapCtx = minimapCanvas.getContext('2d');
+  const minimapRadiusPx = minimapCanvas.width / 2;
+  let minimapDrawnAt = 0;
+  function renderMinimap(now, objectivePlace) {
+    if (now - minimapDrawnAt < MINIMAP_REDRAW_INTERVAL_MS) return;
+    minimapDrawnAt = now;
+    const shared = {
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      heading: follow.heading,
+      rangeMeters: DEFAULT_RANGE_METERS,
+      radiusPx: minimapRadiusPx,
+    };
+    const size = minimapCanvas.width;
+    minimapCtx.clearRect(0, 0, size, size);
+
+    // THE ROAD. Drawn as one path with out-of-range vertices kept in their true positions rather
+    // than pinned to the rim -- a road whose far ends are all on the rim stops being a road and
+    // becomes a starburst. The circular clip is what keeps it inside the dial.
+    minimapCtx.save();
+    minimapCtx.beginPath();
+    minimapCtx.arc(minimapRadiusPx, minimapRadiusPx, minimapRadiusPx, 0, Math.PI * 2);
+    minimapCtx.clip();
+    const road = minimapPolyline(VILLAGE.ROAD.points, shared);
+    minimapCtx.beginPath();
+    road.forEach((point, index) => {
+      if (index === 0) minimapCtx.moveTo(point.x, point.y);
+      else minimapCtx.lineTo(point.x, point.y);
+    });
+    minimapCtx.strokeStyle = 'rgba(214, 178, 122, 0.85)';
+    minimapCtx.lineWidth = 7;
+    minimapCtx.lineJoin = 'round';
+    minimapCtx.lineCap = 'round';
+    minimapCtx.stroke();
+    minimapCtx.restore();
+
+    // THE ERRAND, pinned to the rim when it is beyond the range -- the opposite rule to the road,
+    // and for the same reason the off-screen pointer exists: a marker that vanishes at the range
+    // boundary makes the dial go blank exactly when a child most needs to know which way to go.
+    if (objectivePlace) {
+      const marker = minimapPlacement({ ...shared, worldX: objectivePlace.x, worldZ: objectivePlace.z });
+      minimapCtx.beginPath();
+      minimapCtx.arc(marker.x, marker.y, marker.withinRange ? 9 : 7, 0, Math.PI * 2);
+      minimapCtx.fillStyle = '#f2b33d';
+      minimapCtx.fill();
+    }
+
+    // THE CHILD, always dead centre, always pointing up. The triangle is what makes "up is where you
+    // are facing" legible without a word of explanation.
+    minimapCtx.save();
+    minimapCtx.translate(minimapRadiusPx, minimapRadiusPx);
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(0, -11);
+    minimapCtx.lineTo(8, 8);
+    minimapCtx.lineTo(0, 3);
+    minimapCtx.lineTo(-8, 8);
+    minimapCtx.closePath();
+    minimapCtx.fillStyle = '#ffffff';
+    minimapCtx.fill();
+    minimapCtx.restore();
+  }
+
   // OFFERING HELP, and mostly not offering it. The arrow only helps a child who looks at it.
   //
   // ui/guidanceRescue.js decides when one has stopped getting CLOSER -- not when they have stopped
@@ -3225,6 +3297,7 @@ async function bootstrap() {
     // coordinate to be far from. The watch treats that as nothing to measure rather than as a child
     // standing still, so a placeless stretch cannot accumulate a stuck clock.
     rescueTarget = destinationFor(currentObjective, pointerContext);
+    renderMinimap(frameStart, rescueTarget);
     renderRescueOffer(rescueWatch.update({
       distanceMeters: rescueTarget
         ? Math.hypot(player.position.x - rescueTarget.x, player.position.z - rescueTarget.z)
