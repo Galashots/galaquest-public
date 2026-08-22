@@ -42,6 +42,7 @@ import { openRewardStore } from '../../net/rewardStore.mjs';
 import { gameUrlFor } from './owned-server.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
+import { KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
 import { RANGER_LINE_INTRO, RANGER_LINE_SATCHEL_GIVEN }
   from '../../public/src/world/rangerSpeech.js';
@@ -235,6 +236,32 @@ const STATE_EXPR = `JSON.stringify((() => {
 
 const state = (tab) => tab.page.eval(STATE_EXPR).then(JSON.parse);
 
+/**
+ * Why the bubble says what it says -- written because the hosted failure for Wren's post-charm line
+ * read, in full, `"🔊"`.
+ *
+ * That is the speaker button alone with the text span empty, which is what a HIDDEN bubble's
+ * textContent looks like, and it names nothing at all. The bubble is hidden when the hero is outside
+ * rangerSpeechState's radius, and that radius is KEEPER_WAVE_RADIUS_METERS -- two metres. A child
+ * standing still for twelve seconds while prediction reconciliation settles can leave a two-metre
+ * circle without ever meaning to, and so can this harness, which stands still and polls.
+ *
+ * So this reports the distance rather than the silence. It deliberately does NOT widen the poll
+ * budget: if the cause is drift out of a two-metre conversation radius, a longer wait hides a
+ * product defect a young child would hit with a thumb on a virtual stick, and the Checkpoint 0
+ * audit already flagged that radius as the tightest trigger in the game.
+ */
+function whyTheBubbleSaysThat(sample) {
+  const [heroX, heroZ] = sample.heroPos ?? [NaN, NaN];
+  const metres = Math.hypot(heroX - RANGER.at[0], heroZ - RANGER.at[1]);
+  return [
+    JSON.stringify((sample.npcLine ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)),
+    `shown ${sample.npcShown}`,
+    `hero ${metres.toFixed(2)}m from Wren, radius ${KEEPER_WAVE_RADIUS_METERS}m`,
+    `satchel ${sample.ranger?.satchelCarried} charm ${sample.ranger?.charmOwned}`,
+  ].join(' · ');
+}
+
 async function pollUntil(tab, predicate, maxMillis) {
   const deadline = deadlineAfter(maxMillis);
   let last = await state(tab);
@@ -406,8 +433,7 @@ async function phaseCharm() {
       `ceiling ${hearted.ranger?.heartCeiling}, hearts ${hearted.ranger?.hearts}`);
     const said = await pollUntil(tab, (s) => s.npcLine.includes(RANGER_LINE_SATCHEL_GIVEN.slice(0, 18)), 12000);
     check(said.npcLine.includes(RANGER_LINE_SATCHEL_GIVEN.slice(0, 18)),
-      'and she tells the child where her brother got to',
-      JSON.stringify(said.npcLine.replace(/\s+/g, ' ').trim().slice(0, 80)));
+      'and she tells the child where her brother got to', whyTheBubbleSaysThat(said));
     await shot(tab, 'ranger-03-the-fourth-heart');
 
     // AND IT IS DURABLE. A fourth heart that evaporates on reload is a fourth heart nobody has.
