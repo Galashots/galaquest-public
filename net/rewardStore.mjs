@@ -29,9 +29,16 @@ import { latestEquippedWeaponId } from '../public/src/progression/facts.js';
 // delivered late from a newer one, because it is measuring delivery. See docs/MISTAKES.md GQ-014.
 // Only 'weapon-equipped' carries it; every other award type is additive and needs no order at all.
 //
-// A v1 or v2 store ALTERs in place (below); a fresh store creates the v3 shape directly, so there is
+// v4, Stage 1: one nullable `origin` column, naming WHO ATTESTED the row. NULL -- every row ever
+// written before this and every row since that the server itself adjudicated -- means the server
+// decided it. 'client' means a device handed it back for a store that had lost it (net/gameServer.mjs's
+// restoreProfileFacts). The distinction has to live in the record rather than in anyone's memory of
+// how a row got there, and it has to stay narrow to mean anything: if every row were labelled the
+// label would say nothing.
+//
+// An older store ALTERs in place (below); a fresh store creates the v4 shape directly, so there is
 // exactly one column layout to reason about once a store has ever been opened under this code.
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 function transaction(db, work) {
   db.exec('BEGIN IMMEDIATE;');
@@ -116,13 +123,22 @@ export function openRewardStore(path) {
           type TEXT NOT NULL,
           created_at TEXT NOT NULL,
           value TEXT,
-          rev INTEGER
+          rev INTEGER,
+          origin TEXT
         );
       `);
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
-  } else if (currentVersion === 1 || currentVersion === 2) {
-    // A real older store: v1 predates GP1 and has neither `value` nor `rev`; v2 has `value` only.
+  } else if (currentVersion >= 1 && currentVersion < SCHEMA_VERSION) {
+    // A real older store: v1 predates GP1 and has neither `value` nor `rev`; v2 has `value` only;
+    // v3 has both but no `origin`.
+    //
+    // The branch is a RANGE rather than an enumeration of versions, which is the repair the v3
+    // migration's own comment argued for and then did not take: it listed `1 || 2`, so adding v4
+    // meant editing the condition, and the version that forgets to edit it is the one that throws
+    // "schema version 3, this code expects 4" at a store it could have migrated in place. The
+    // per-column inspection below already makes the repair version-independent; the condition
+    // should be too.
     // ALTER, not recreate -- every existing row is untouched, and the new columns read NULL for all
     // of them, which is exactly right: they never had a payload or an order. Both versions are
     // handled by the same branch because the repair is identical in kind, "add whichever columns are
@@ -140,6 +156,7 @@ export function openRewardStore(path) {
       const columns = db.prepare('PRAGMA table_info(reward_events)').all().map((row) => row.name);
       if (!columns.includes('value')) db.exec('ALTER TABLE reward_events ADD COLUMN value TEXT;');
       if (!columns.includes('rev')) db.exec('ALTER TABLE reward_events ADD COLUMN rev INTEGER;');
+      if (!columns.includes('origin')) db.exec('ALTER TABLE reward_events ADD COLUMN origin TEXT;');
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   } else if (currentVersion !== SCHEMA_VERSION) {
@@ -152,7 +169,7 @@ export function openRewardStore(path) {
   // INSERT OR IGNORE against the PRIMARY KEY on id: the whole idempotency guarantee lives in this one
   // line plus the schema's PRIMARY KEY constraint, not in application code that could drift from it.
   const insertStmt = db.prepare(
-    'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value, rev) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value, rev, origin) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
   const marksStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE guest_id = ? AND type = 'mark-earned'");
   // GP2: coins and Wildwood Shards, counted exactly like marks -- one row per pickup ever credited to
@@ -222,7 +239,7 @@ export function openRewardStore(path) {
   // latest-wins field, arrives in the order it was written rather than in whatever order SQLite
   // finds convenient.
   const profileFactsStmt = db.prepare(
-    'SELECT id, type, value, rev FROM reward_events WHERE guest_id = ? ORDER BY rowid ASC',
+    'SELECT id, type, value, rev, origin FROM reward_events WHERE guest_id = ? ORDER BY rowid ASC',
   );
 
   // The highest order any equip of this guest's has ever been given. Used only when the server has
@@ -293,6 +310,9 @@ export function openRewardStore(path) {
     const result = insertStmt.run(
       award.eventId, award.guestId, award.type, new Date().toISOString(), award.value ?? null,
       Number.isInteger(award.rev) ? award.rev : null,
+      // Only ever the literal 'client'. Not a free-text provenance field: an attestation nobody can
+      // enumerate is one nobody can query, and this exists to be queried.
+      award.origin === 'client' ? 'client' : null,
     );
     return { applied: result.changes > 0 };
   }
@@ -319,6 +339,8 @@ export function openRewardStore(path) {
       // Carried, never reconstructed. A row written before v3, or one of the additive types that
       // has no order, reads NULL and is returned without the field rather than with a made-up one.
       ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
+      // Absent for everything the server adjudicated, which is almost everything -- see the v4 note.
+      ...(row.origin ? { origin: row.origin } : {}),
     }));
   }
 

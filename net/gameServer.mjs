@@ -25,8 +25,12 @@ import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessa
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
 import {
-  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownWeapon, swingDamageFor,
+  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownItem, isKnownWeapon, swingDamageFor,
 } from '../public/src/progression/items.js';
+// One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
+// imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
+// and the server consumes it rather than keeping a second list that drifts.
+import { isProfileFact } from '../public/src/progression/facts.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
@@ -589,6 +593,81 @@ export function createRewardCoordinator(options = {}) {
     profileFactsFor(heroId) {
       const guestId = guestIdByPlayer.get(heroId);
       return guestId ? store.profileFactsFor(guestId) : [];
+    },
+    /**
+     * Take back the durable facts a DEVICE still holds, for a store that has lost them.
+     *
+     * This is the empty-store half of local-first recovery, and it exists because re-sending the
+     * equip alone provably cannot work: applyEquip refuses a weapon the guest does not own, and
+     * against a wiped store the child owns nothing but the starter sword. The recovered choice is
+     * rejected and the hero snaps back to a weapon the child stopped holding. The ownership has to
+     * arrive with the choice that depends on it, which is why this takes the whole set at once
+     * rather than one fact at a time -- the two are validated against each other below.
+     *
+     * WHAT A DEVICE MAY SAY, precisely:
+     *   - only about the guest THIS CONNECTION claimed; an ephemeral connection has no profile to
+     *     restore into and is refused outright;
+     *   - only the fact types public/src/progression/facts.js already recognises as a profile's own
+     *     earnings, so a device cannot restore a WORLD fact (beacon-lit, village-upgrade) and change
+     *     something every other child shares;
+     *   - only real items, checked the same way the store checks an adjudicated award;
+     *   - and only a weapon-equipped whose item the profile will actually own once this restore
+     *     lands. Without that last check the derived state contradicts itself: a hero holding a
+     *     weapon the same rows say they do not own.
+     *
+     * WHAT IT IS NOT. It is not live adjudication and does not touch it. The server still decides
+     * every question asked in the present tense -- did that hit land, is this affordable, is this
+     * claim in range -- and nothing here is consulted for any of them. Every row written is stamped
+     * `origin: 'client'` and stays distinguishable from an adjudicated one forever.
+     *
+     * The residual trust is real and worth naming rather than burying: a device can assert it earned
+     * marks it did not. For a same-device family game with no accounts and no competitive stakes,
+     * that is the trade AGENTS.md already records, and the alternative -- refusing -- costs a child
+     * their sword because a database file was replaced. Tightening it (a signed journal, a
+     * server-side high-water mark) is a product decision, not something to smuggle in here.
+     */
+    restoreProfileFacts(heroId, facts) {
+      const guestId = guestIdByPlayer.get(heroId);
+      // Nothing durable to restore into, and no way to know whose facts these are. Refused rather
+      // than thrown: a device that lost its storage mid-session is confused, not hostile, and
+      // dropping its connection over it would be a worse answer than ignoring the message.
+      if (!guestId) return { restored: 0, refused: Array.isArray(facts) ? facts.length : 0 };
+
+      const candidates = (Array.isArray(facts) ? facts : []).filter((fact) => (
+        isProfileFact(fact)
+        && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
+        && !(fact.type === 'weapon-equipped' && !isKnownWeapon(fact.value))
+      ));
+
+      // What this profile owns once the restore lands: what the store already knows, plus whatever
+      // ownership this message brings. Computed BEFORE anything is written so the equip check below
+      // sees the same final picture regardless of the order the facts happen to be listed in.
+      const ownedAfter = new Set(store.ownedItemIdsFor(guestId));
+      for (const fact of candidates) {
+        if (fact.type === 'gear-owned') ownedAfter.add(fact.value);
+      }
+
+      let restored = 0;
+      let refused = 0;
+      for (const fact of candidates) {
+        if (fact.type === 'weapon-equipped' && !ownedAfter.has(fact.value)) {
+          refused += 1;
+          continue;
+        }
+        const result = store.apply({
+          guestId,
+          heroId,
+          type: fact.type,
+          eventId: fact.eventId,
+          value: fact.value,
+          ...(Number.isInteger(fact.rev) ? { rev: fact.rev } : {}),
+          origin: 'client',
+        });
+        // A fact the store already held is not a failure -- restoring twice has to be the same as
+        // restoring once, which is the INSERT OR IGNORE the whole design rests on.
+        if (result.applied) restored += 1;
+      }
+      return { restored, refused: refused + ((Array.isArray(facts) ? facts.length : 0) - candidates.length) };
     },
     recordBeaconLit,
     beaconLit,
@@ -1243,6 +1322,15 @@ export function attachGameServer(httpServer, options = {}) {
         if (!client.data.playerId) throw new ProtocolError('attack before join');
         // Applied the instant it arrives, not batched to the tick -- see applyAttack's comment.
         simulation.applyAttack(client.data.playerId, message);
+        return;
+      }
+
+      if (message.type === 'restore-profile') {
+        // Same before-join posture as every other durable action: refusing is honest, silently
+        // dropping is not. Past that, restoreProfileFacts decides -- including refusing an
+        // ephemeral connection, which is a legitimate state rather than a protocol error.
+        if (!client.data.playerId) throw new ProtocolError('restore-profile before join');
+        rewards.restoreProfileFacts(client.data.playerId, message.facts);
         return;
       }
 

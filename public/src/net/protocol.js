@@ -35,6 +35,7 @@ export const PROTOCOL_VERSION = 3;
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
+  'restore-profile',
 ];
 
 // Mirrors requireString's own default cap. Item ids are short snake_case tokens
@@ -252,6 +253,15 @@ export function decode(text) {
     case 'claim-charm':
       return { v: PROTOCOL_VERSION, type: 'claim-charm' };
 
+    // Client -> server. A device handing back the durable facts it still holds, for a store that
+    // no longer has them -- see net/gameServer.mjs's restoreProfileFacts for what is and is not
+    // accepted, and test/empty-server-recovery.test.mjs for why re-sending only the equip cannot
+    // work. Reuses decodeProfileFacts, the SAME validation the welcome direction uses: this is
+    // literally the same fact shape travelling the other way, and two validators for one shape is
+    // the GQ-007 defect in its usual form.
+    case 'restore-profile':
+      return { v: PROTOCOL_VERSION, type: 'restore-profile', facts: decodeProfileFacts(raw.facts) };
+
     // Client -> server only, same direction as 'attack'/'equip'. Shape validation only -- whether
     // pickupId names a real, unclaimed, in-reach pickup is world/cartLoot.js's own business rule,
     // the same boundary 'equip' draws against isKnownWeapon/ownership.
@@ -438,6 +448,14 @@ function decodeProfileFacts(facts) {
     // would be claiming a place in a chronology it was never part of, which is the GQ-014 defect.
     if (fact.rev !== undefined && fact.rev !== null) {
       decoded.rev = requireInteger(fact.rev, `profileFacts[${index}].rev`);
+    }
+    // Who attested this fact. Present only on a row a DEVICE handed back for a store that had lost
+    // it; a fact the server adjudicated carries nothing, so the label means something rather than
+    // being on everything. Carried in both directions: the device is told which of its facts the
+    // server only knows because it was told, which is what makes the attestation visible rather
+    // than merely recorded.
+    if (fact.origin !== undefined && fact.origin !== null) {
+      decoded.origin = requireString(fact.origin, `profileFacts[${index}].origin`);
     }
     return decoded;
   });
@@ -689,6 +707,10 @@ export function inputMessage(seq, dirX, dirZ, magnitude, run) {
 
 export function attackMessage(seq) {
   return { v: PROTOCOL_VERSION, type: 'attack', seq };
+}
+
+export function restoreProfileMessage(facts) {
+  return { v: PROTOCOL_VERSION, type: 'restore-profile', facts: facts ?? NO_PROFILE_FACTS };
 }
 
 export function equipMessage(itemId, identity) {

@@ -12,6 +12,7 @@ import {
   decode,
   encode,
   equipMessage,
+  restoreProfileMessage,
   inputMessage,
   joinMessage,
   claimBladeMessage,
@@ -237,6 +238,19 @@ export function createNetClient(options = {}) {
     return send(equipMessage(itemId, identity));
   }
 
+  /**
+   * Hand the server durable facts this device still holds, for a store that has lost them.
+   *
+   * Same online-only guard as every other send. No sequence number and no reply expected: the facts
+   * carry their own ids, so the server's INSERT OR IGNORE makes a resend a no-op, and there is
+   * nothing to acknowledge that the next welcome does not already say.
+   */
+  function sendRestoreProfile(facts) {
+    if (status !== 'online') return false;
+    if (!Array.isArray(facts) || facts.length === 0) return false;
+    return send(restoreProfileMessage(facts));
+  }
+
   /** GP2: ask the server to search the shared cart. Same online-only guard and no-sequence-number
    *  reasoning as sendEquip -- the server's own requestSearchCart is what makes a resend (offline
    *  reconnect retrying its own local trigger) a clean no-op rather than a second haul. */
@@ -331,6 +345,7 @@ export function createNetClient(options = {}) {
     setIntent,
     sendAttack,
     sendEquip,
+    sendRestoreProfile,
     sendSearchCart,
     sendClaimBlade,
     sendClaimSatchel,

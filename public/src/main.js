@@ -74,7 +74,7 @@ import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
 import { createProfileStore } from './progression/profiles.js';
-import { foldFacts, latestEquippedFact } from './progression/facts.js';
+import { foldFacts } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
@@ -1336,24 +1336,27 @@ async function bootstrap() {
    *    written down yet, or a new choice gets numbered beneath an old one it was told about in this
    *    very message (docs/MISTAKES.md GQ-014).
    *
-   * 2. Re-send an equip the server has not heard about. A child who equipped offline holds that
-   *    weapon; the server, which never saw it, is about to publish a rewards block saying otherwise
-   *    and silently take it back. The ORIGINAL fact is re-sent, identity and revision intact, so the
-   *    server records the choice the child actually made at the moment they made it -- a repeated
-   *    equip identity is a replay server-side, not a second choice, so this is idempotent.
+   * 2. Restore what the server has not got. A child who played offline holds marks, gear and a
+   *    weapon the server never saw; it is about to publish a rewards block saying otherwise and
+   *    silently take them back. The ORIGINAL facts are sent, identities and revisions intact, so the
+   *    server records what the child actually did at the moment they did it -- and because every
+   *    fact carries its own id, a resend is an INSERT OR IGNORE no-op rather than a second earning.
+   *
+   *    The whole missing set rather than just the equip, and that is not thoroughness for its own
+   *    sake: net/gameServer.mjs refuses an equip for a weapon the guest does not own, so against a
+   *    store that has lost this profile, sending the choice without the ownership it depends on is
+   *    rejected and the hero snaps back to a weapon the child stopped holding. The two have to
+   *    arrive together, which is why this is one message and not a sequence of them.
    */
   function ingestWelcome(message) {
     const serverFacts = Array.isArray(message?.profileFacts) ? message.profileFacts : [];
     profileState = profiles.ingestServerFacts(profileId, serverFacts);
 
+    // Everything this device holds that the server does not. Empty on an ordinary reconnect to a
+    // store that still knows this child, so the common case sends nothing at all.
     const knownToServer = new Set(serverFacts.map((fact) => fact.eventId));
-    const localEquip = latestEquippedFact(profiles.journalFor(profileId));
-    // Only when the server genuinely has not got it. Comparing eventIds rather than weapon ids on
-    // purpose: two facts can name the same weapon and still be different choices, and re-sending a
-    // fact the server already holds is a write with nothing to say.
-    if (localEquip && !knownToServer.has(localEquip.eventId)) {
-      net.sendEquip(localEquip.value, localEquip);
-    }
+    const missing = profiles.journalFor(profileId).filter((fact) => !knownToServer.has(fact.eventId));
+    if (missing.length > 0) net.sendRestoreProfile(missing);
   }
 
   const net = createNetClient({
