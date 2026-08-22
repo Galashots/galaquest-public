@@ -459,6 +459,66 @@ check('turning the camera does not move the hero', dragMoved < 0.02,
   `moved ${dragMoved.toExponential(2)} units (stick input would be ~0.5)`);
 await shot('05-camera-turned.png');
 
+// ── which way to turn, once turning has hidden the thing ───────────────────────────────────────
+// The camera has just been dragged, which is the exact gesture Checkpoint 0 named: one thumb-drag
+// destroys all spatial guidance with no recovery path. Measured from a fresh spawn, 69 degrees is
+// enough to put the Keeper off screen while the chip still says to go and talk to him.
+//
+// Checked HERE rather than in a harness of its own because this file already performs the gesture,
+// and a guidance check that has to re-create a camera drag to test itself would be testing its own
+// setup. Both halves are asserted together -- shown when the errand is off screen, hidden when it is
+// not -- because either alone is satisfied by an arrow that is always in one state.
+// The arrow's angle is pulled out of its CSS transform by STRIPPING rather than by matching, and
+// the reason is a trap specific to writing regexes inside a template literal: the literal consumes
+// the backslash before the regex ever sees it, so /rotate\(...\)/ arrives as /rotate(...)/ with the
+// parens as grouping, matches nothing, and the check fails reading "angle undefined" for a reason
+// that has nothing to do with the arrow. Cost one run to find. "rotate" and "rad" contain no digits,
+// so removing every non-numeric character leaves exactly the angle.
+const guidance = await page.eval(`JSON.stringify((() => {
+  const r = window.__galaQuestRuntime;
+  const el = document.querySelector('#objective-pointer');
+  const arrow = document.querySelector('#objective-pointer-arrow');
+  const rescue = r.guidanceRescueState ? r.guidanceRescueState() : null;
+  if (!rescue || rescue.targetX === null) return { noObjectivePlace: true };
+
+  // Where the errand actually is on screen, computed the way main.js does rather than read back off
+  // the element -- an arrow pinned to an EDGE says nothing about which world thing it means.
+  const Vec3 = r.scene.position.constructor;
+  const v = new Vec3(rescue.targetX, 1.0, rescue.targetZ);
+  v.project(r.camera);
+  const onScreen = Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 && v.z <= 1;
+  const transform = arrow?.style.transform ?? '';
+  const stripped = transform.replace(/[^-0-9.]/g, '');
+  return {
+    onScreen,
+    ndcX: Math.round(v.x * 100) / 100,
+    shown: el?.dataset.shown === 'true',
+    angleRad: stripped === '' ? null : Number(stripped),
+    targetX: rescue.targetX,
+    targetZ: rescue.targetZ,
+  };
+})())`).then(JSON.parse);
+
+if (guidance.noObjectivePlace) {
+  // Reachable and not a defect: some objectives genuinely have nowhere to point ("cut the black
+  // bramble" is the thing in front of you). DIAG rather than PASS, because a check that silently
+  // succeeds when it did not run is the false-confidence shape this file's own helper exists for.
+  diagnostic('the arrow is shown exactly when the errand is off screen', false, JSON.stringify(guidance),
+    { authoritative: false, reason: 'the current objective has no place, so there is nothing to point at' });
+} else {
+  check('the arrow is shown exactly when the errand is off screen',
+    guidance.shown === !guidance.onScreen, JSON.stringify(guidance));
+  if (!guidance.onScreen) {
+    // Off to the RIGHT means the arrow points right: atan2 in a +y-down space, so |angle| < 90deg.
+    // Sign-checked rather than compared to a magic number, because the exact bearing depends on the
+    // viewport and the whole point of the module is that it does.
+    const pointsRight = Math.abs(guidance.angleRad) < Math.PI / 2;
+    check('and it points towards the side the errand is actually on',
+      (guidance.ndcX > 0) === pointsRight,
+      `ndcX ${guidance.ndcX}, angle ${guidance.angleRad?.toFixed(2)}rad`);
+  }
+}
+
 // Pitch: drag up should raise the camera.
 const beforePitch = await state();
 await touch('touchStart', [camPoint]);
