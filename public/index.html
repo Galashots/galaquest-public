@@ -451,8 +451,13 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
+      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
+         and these two were the only controls in the game under that floor -- flagged in the
+         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
+         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
+         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
       #hero-screen-close {
-        width: 36px; height: 36px; display: grid; place-items: center;
+        width: 44px; height: 44px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
         background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
       }
@@ -564,8 +569,13 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
+      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
+         and these two were the only controls in the game under that floor -- flagged in the
+         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
+         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
+         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
       #village-board-close {
-        width: 36px; height: 36px; display: grid; place-items: center;
+        width: 44px; height: 44px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
         background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
       }

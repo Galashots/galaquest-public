@@ -49,6 +49,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STARTER_SWORD_ID, WILDWOOD_BLADE_ID } from '../../public/src/progression/items.js';
 import { swatchFor } from '../../public/src/progression/heroScreen.js';
+import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 import { DEFAULT_DISTANCE, MIN_DISTANCE } from '../../public/src/camera/follow.js';
 import { PREVIEW_ORBIT_YAW_RADIANS } from '../../public/src/render/heroPreview.js';
 import { SWING_SECONDS } from '../../public/src/combat/encounter.js';
@@ -362,8 +363,9 @@ check('the Blade-fixture guest starts with the starter sword EQUIPPED (owning is
   beforeOpen.equipped === STARTER_SWORD_ID, JSON.stringify(beforeOpen));
 
 const heroButtonRect = await rectOf('#hero-button');
-check('the Hero button meets the >=44px touch target', Boolean(heroButtonRect)
-  && heroButtonRect.width >= 44 && heroButtonRect.height >= 44, JSON.stringify(heroButtonRect));
+check(`the Hero button meets the >=${TAP_TARGET_FLOOR_PX}px touch target`, Boolean(heroButtonRect)
+  && heroButtonRect.width >= TAP_TARGET_FLOOR_PX && heroButtonRect.height >= TAP_TARGET_FLOOR_PX,
+  JSON.stringify(heroButtonRect));
 await clickSelector('#hero-button');
 await sleep(200);
 await shot('portrait-open');

@@ -35,6 +35,7 @@ import {
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 
 const CHROME_PORT = 9224;
 // Spawns and owns its own server on an isolated port rather than using the shared 5201 (Phase H1).
@@ -316,8 +317,9 @@ const [keeperX, keeperZ] = SPAWNS.keeper;
     const r = b.getBoundingClientRect();
     return JSON.stringify({ width: r.width, height: r.height });
   })()`).then(JSON.parse);
-  check('fresh guest: the speaker button meets the >=44px touch target',
-    speakerRect.width >= 44 && speakerRect.height >= 44, JSON.stringify(speakerRect));
+  check(`fresh guest: the speaker button meets the >=${TAP_TARGET_FLOOR_PX}px touch target`,
+    speakerRect.width >= TAP_TARGET_FLOOR_PX && speakerRect.height >= TAP_TARGET_FLOOR_PX,
+    JSON.stringify(speakerRect));
 
   await setCameraDistance(page, 8);
   await setHeadingToward(page, keeperX, keeperZ);

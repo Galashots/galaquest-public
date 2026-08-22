@@ -38,6 +38,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MAX_PROFILES } from '../../public/src/progression/profiles.js';
+import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
@@ -48,7 +49,7 @@ const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true
 /** The floor every interactive target on this screen has to clear. Not a style preference: it is
  *  the size below which a young child's tap lands somewhere else, and the Checkpoint 0 audit found
  *  two existing controls under it. */
-const TAP_TARGET_FLOOR_PX = 44;
+// (imported above -- GQ-007: the floor is a product law, not a harness opinion.)
 
 const results = [];
 let failures = 0;
