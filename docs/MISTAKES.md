@@ -748,3 +748,41 @@ of source text, and that string occurred twice, so the construction landed insid
 that is not unique is a silent way to write working code in the wrong place; the second edit matched
 on the enclosing function instead and asserted the anchor occurred exactly once.
 **Foreknowledge helped:** not yet recorded.
+
+### GQ-016 — Booting the app mints an identity, so a harness that seeds one must do it before the first boot.
+**Status:** ENFORCED · **Hits:** 2 · **First/Last:** 2026-08-22
+**Enforced by:** `test/harness-seeded-identity.test.mjs`
+**Rule:** Several harnesses reach the state they exist to test by writing a known `gq-guest-id` and
+letting the server hand back rewards seeded under it. That worked for as long as the guest id WAS
+the durable identity. It is not any more: `progression/profiles.js` folds a legacy guest id into a
+profile whose id is that same string, but only while the device holds no profiles yet —
+`migrateLegacyGuest()` returns null the moment one exists. Booting the app creates one. So a guest
+id written after the first boot is not an identity at all, it is a dead string sitting beside a
+profile the boot already minted, and the seeded rows stay on the server under a name nothing on the
+device points at. The repair is one line and it is the CLEAR, not the write: put the device back to
+"no profiles" before pinning, which is the only state the migration is defined for.
+
+What makes this worth a rule rather than a comment is **how it reports**. Nothing says "identity".
+The harness fails wherever the seeded state was supposed to show up, so the message names whichever
+subsystem happened to be downstream: `drive-ranger` reported an empty speech bubble and a ranger who
+would not talk; `fit-lantern` reported `lantern mesh never appeared under its anchor -- is this
+profile unlocked (3 marks) and the GLB shipped?`, which is a question about the asset pipeline. Both
+were one defect wearing the costume of whatever the seed unlocked. **A failure that names the wrong
+subsystem is more expensive than one that names nothing, because it is followed.**
+
+The generalisation past this repo: when a system starts minting identity at startup, every fixture
+that used to inject identity is now racing the startup, and none of them will say so.
+**Incident 1 (2026-08-22, `aa633c2`):** adding `?hero=` to the harness URL to get past the new
+profile gate created a second profile beside the seeded guest in `drive-ranger` and
+`drive-beacon-siege`; the seeded guest's owned Wildwood Blade vanished. Repaired by making
+`adoptNamedHero()` migrate before it creates — correct, and it fixed only the harnesses that pin
+before the first boot.
+**Incident 2 (2026-08-22, found at `4e792b3`):** `fit-lantern` pins after its first navigate, so
+the migration had already been skipped; it went SUCCESS at base `82478ea` to FAILURE, and was found
+by diffing the CI job list against the base run rather than by reading the failure, which pointed at
+the GLB. This is the second consecutive regression of mine that only a job-list diff caught, which
+is itself the lesson in GQ-003's neighbourhood: a remembered failing set is not a diffed one.
+**Foreknowledge helped:** no — the class was known and written down in `adoptNamedHero()`'s own
+comment ("the seeded guest's owned Blade vanished because ?hero= had created a second profile beside
+it") one commit before it recurred in a different file. A lesson recorded at the site of the first
+fix is invisible from the site of the second; that is what the mechanical guard is for.
