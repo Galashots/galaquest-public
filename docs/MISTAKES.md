@@ -25,7 +25,7 @@ names a test file that actually exists, every `GQ-NNN` ID is unique and never re
 ---
 
 ### GQ-007 — Never restate a constant. Import it.
-**Status:** ENFORCED · **Hits:** 6 · **First:** 2026-08-11 · **Last:** 2026-08-20
+**Status:** ENFORCED · **Hits:** 7 · **First:** 2026-08-11 · **Last:** 2026-08-22
 **Enforced by:** `test/shared-constants.test.mjs`
 **Rule:** A value used by two modules lives in one importable module. If a module cannot import it,
 that is the thing to fix. **Hit 6's addition: a constant DERIVED from other modules' numbers is the
@@ -42,6 +42,12 @@ literal in `world/ground.js`. Growing the world north for the Beacon road (`ZONE
 end's edge inward by half the growth, and the SOUTH horizon regressed from an edit that never went
 near it. The world ended on a hard line of 29.8% grass against open sky, in the shipped capture the
 visual gate had already passed. Three separate comments asserted the invariant; nothing checked it.
+**Hit 7, 2026-08-22:** the same defect in its purest form -- not a restated NUMBER but a restated
+LAW. "Which weapon is equipped" was implemented twice: once in SQL as `ORDER BY rowid DESC` and once
+in JS as highest `rev` with an eventId tiebreak. Both were defensible in isolation and they answered
+differently the moment a newer choice reached the table first. A rule with two implementations is a
+constant with two copies; the fix was to export the comparator from `progression/facts.js` and have
+the store import it, so there is one law and the database is just where the rows live.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-008 — A harness that navigates to the game must start from a known guest.
@@ -126,7 +132,7 @@ refused, and burned the iteration while the wolf's own timer ran on. Suite fell 
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-002 — A stale file header is a lie the file tells about itself.
-**Status:** RULE · **Hits:** 4 · **First:** 2026-08-14 · **Last:** 2026-08-21
+**Status:** RULE · **Hits:** 5 · **First:** 2026-08-14 · **Last:** 2026-08-22
 **Not enforced because:** a stale comment is prose about intent; verifying it is current requires
 re-deriving what's still true, which no regex can do safely without also re-deriving the design.
 **Rule:** This repo deliberately puts its reasoning in the code; an agent reading a file top-to-bottom
@@ -138,7 +144,10 @@ would move there "when reconciled". `combat/encounter.js:68-72` argued splitting
 `WOLF_BITE_COOLDOWN_SECONDS` "was not worth doing" thirteen lines above the split that had already
 shipped. `net/protocol.js:1` said "GalaQuest wire protocol v1" three lines above
 `PROTOCOL_VERSION = 3`, and its `EMPTY_ENCOUNTER` comment named a "Task B3" as not-yet-landed after B3
-had landed. **Hit 4, 2026-08-21:** `progression/facts.js`'s `unionFacts` doc still explained how the union treats `seq` after the field had been renamed to `rev` and given a tiebreak, in the same file whose header had just been rewritten to explain why the ordering works -- so the file argued for the new design at the top and described the old one in the middle. Caught by Director audit, not by the rename. The rule earns its keep on rename commits specifically: grep the file for the old identifier before calling the rename done.
+had landed. **Hit 4, 2026-08-21:** `progression/facts.js`'s `unionFacts` doc still explained how the union treats `seq` after the field had been renamed to `rev` and given a tiebreak, in the same file whose header had just been rewritten to explain why the ordering works -- so the file argued for the new design at the top and described the old one in the middle. Caught by Director audit, not by the rename. The rule earns its keep on rename commits specifically: grep the file for the old identifier before calling the rename done. **Hit 5, 2026-08-22:** `rewardStore.mjs` still
+asserted "Latest INSERT wins... event ids are no longer overloaded as an ordering mechanism" nine
+lines below a schema header introducing the column that had just replaced that rule. The comment was
+not merely stale, it was the clearest statement of the bug, sitting directly above it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.
@@ -607,7 +616,7 @@ blows-to-kill for the Blade, metres of visible flame for the Beacon.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-014 — An identity derived from mutable state is not an identity.
-**Status:** ENFORCED · **Hits:** 5 · **First:** 2026-08-21 · **Last:** 2026-08-21
+**Status:** ENFORCED · **Hits:** 6 · **First:** 2026-08-21 · **Last:** 2026-08-22
 **Enforced by:** `test/equip-recovery-order.test.mjs` (and `test/profile-identity.test.mjs` for the
 first incident, which is the same defect in the idempotency-key half of this rule)
 **Rule:** A durable fact needs a name, and an ordering needs a number. Neither may be derived from
@@ -636,10 +645,16 @@ that has not heard about an equip yet numbers its own first offline choice 0 exa
 one was. Two writers who have not spoken cannot be ordered by independent counters at all; the fix
 was to stop counting and record WHEN the child chose, carried with the fact through both copies
 (rewardStore schema v3's `rev` column, minted on the device at the equip action).
-**The shape of the whole entry is the lesson:** four of the five incidents were introduced by the
+(6) with the order finally created at the equip action and persisted, the SERVER'S READ SIDE was
+still `ORDER BY rowid DESC LIMIT 1` -- so the device resolved the equipped weapon by the order the
+child chose in and the store resolved it by the order the rows arrived in, from the same rows. The
+rewards block and live combat damage could name a weapon the recovered profile did not. Fixing the
+WRITE side is only half of a chronology change; every reader has to consume the new authority, and
+the one that was not converted was the one nobody had a test for.
+**The shape of the whole entry is the lesson:** five of the six incidents were introduced by the
 repair for the one before it, each time by moving WHERE the number came from instead of moving WHEN
 it was decided. If a fix relocates a derivation rather than eliminating it, it is the same bug in a
-new place. (2), (4) and (5) were caught by independent Director audit, not by the tests written
+new place. (2), (4), (5) and (6) were caught by independent Director audit, not by the tests written
 alongside them -- see GQ-015 for why those tests did not catch it.
 **Foreknowledge helped:** not yet recorded.
 

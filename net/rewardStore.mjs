@@ -16,6 +16,7 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { isKnownItem, isKnownWeapon } from '../public/src/progression/items.js';
+import { latestEquippedWeaponId } from '../public/src/progression/facts.js';
 
 // v2, GP1: one nullable `value` column added for 'weapon-equipped' events, which need to carry
 // WHICH weapon rather than just count -- the mark/lantern events only ever needed COUNT, so the
@@ -178,14 +179,24 @@ export function openRewardStore(path) {
   const charmStmt = db.prepare(
     "SELECT 1 AS found FROM reward_events WHERE guest_id = ? AND type = 'charm-earned' LIMIT 1",
   );
-  // Latest INSERT wins, unlike marks/unlocked which are counted: equipping is a CHOICE, not an
-  // accumulation, so the current state is "whatever was equipped most recently". rowid is SQLite's
-  // own insertion order for this ordinary table, and therefore remains correct across process
-  // restarts, same-millisecond writes and wall-clock rollback. Event ids remain idempotency keys;
-  // they are no longer overloaded as an ordering mechanism.
-  const equippedWeaponStmt = db.prepare(
-    "SELECT value FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped' "
-    + 'ORDER BY rowid DESC LIMIT 1',
+  // Equipping is a CHOICE, not an accumulation, so the current state is "whatever was equipped most
+  // recently" -- but "most recently" is decided by public/src/progression/facts.js's
+  // latestEquippedWeaponId, NOT by this table's own arrival order, and every equip row is fetched so
+  // that shared law can be applied to them.
+  //
+  // This used to be `ORDER BY rowid DESC LIMIT 1`, on the reasoning that SQLite's insertion order is
+  // the one thing that survives restarts and same-millisecond writes. That was true and still beside
+  // the point: rowid records when a row REACHED this table, and a newer choice can reach it first --
+  // two tabs share one profile id, WebSocket ordering holds only per connection, and recovery writes
+  // facts long after the moment they describe. The device already resolved this by the order the
+  // child chose in, so keeping a second law here meant the rewards block and live combat damage
+  // could name a different weapon from the profile the device had recovered, from these same rows.
+  // Arrival is not chronology; see docs/MISTAKES.md GQ-014, and GQ-007 on why this is imported.
+  //
+  // A handful of rows per guest, so fetching them all costs nothing worth a second definition.
+  const equipFactsStmt = db.prepare(
+    "SELECT id, value, rev FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped' "
+    + 'ORDER BY rowid ASC',
   );
   // GP1-C1: ownership is a SET (has this guest ever been granted item X), unlike equip's latest-wins
   // read above -- DISTINCT because the same durable grant could in principle be applied more than
@@ -342,7 +353,12 @@ export function openRewardStore(path) {
    *  the caller (progression/state.js, mirrored through net/gameServer.mjs) is what knows the
    *  default to fall back to; this store only ever reports what actually happened. */
   function equippedWeaponFor(guestId) {
-    return equippedWeaponStmt.get(guestId)?.value ?? null;
+    return latestEquippedWeaponId(equipFactsStmt.all(guestId).map((row) => ({
+      eventId: row.id,
+      type: 'weapon-equipped',
+      value: row.value ?? undefined,
+      ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
+    }))) ?? null;
   }
 
   /** Every item this guest has been durably granted, NOT including the starter sword (see this

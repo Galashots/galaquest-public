@@ -104,6 +104,54 @@ function equipOutranks(fact, bestRev, bestEventId) {
   return bestEventId === null || fact.eventId > bestEventId;
 }
 
+/**
+ * THE law for "which weapon is equipped", exported so there is exactly one of it.
+ *
+ * Both readers of the durable rows have to answer this identically or the game contradicts itself:
+ * net/rewardStore.mjs answers it for the rewards block and for live combat damage, and the device
+ * answers it for the profile it recovered. They had drifted -- the store ordered by `rowid DESC`,
+ * the arrival order of the rows, while the fold ordered by the order the child actually chose in.
+ * Whenever a newer choice reached the table first (two tabs on one profile, a reconnect, an import
+ * writing facts long after the moment they describe) the two gave different weapons from the same
+ * rows. Arrival is not chronology; that is the whole reason `rev` exists.
+ *
+ * @param facts  weapon-equipped facts IN ARRIVAL ORDER (rowid ascending for the store, journal order
+ *               for the device). Order only decides the legacy case below.
+ *
+ * Two tiers, because the store predates the ordering:
+ *   - Any fact carrying a `rev` outranks every fact that carries none. A row written before schema
+ *     v3 describes a choice made before the ordering existed, so it cannot claim to be the newer one
+ *     however late it was written down.
+ *   - Among revved facts: highest `rev`, ties broken on `eventId` -- arbitrary but total and stable,
+ *     so two tabs minting the same millisecond cannot resolve differently on the two sides.
+ *   - Among un-revved facts only: the last to arrive, which is the only order they have ever had.
+ */
+export function latestEquippedWeaponId(facts) {
+  let bestRev = -1;
+  let bestEventId = null;
+  let bestValue = null;
+  let legacyValue = null;
+
+  for (const fact of facts) {
+    if (!isProfileFact(fact) || fact.type !== 'weapon-equipped') continue;
+    if (typeof fact.value !== 'string' || fact.value.length === 0) continue;
+
+    if (typeof fact.rev === 'number' && Number.isFinite(fact.rev)) {
+      if (equipOutranks(fact, bestRev, bestEventId)) {
+        bestRev = fact.rev;
+        bestEventId = fact.eventId;
+        bestValue = fact.value;
+      }
+    } else {
+      // Last one seen wins among the un-revved, which is why this takes arrival order as its input
+      // rather than sorting: there is nothing else about these rows to sort BY.
+      legacyValue = fact.value;
+    }
+  }
+
+  return bestValue ?? legacyValue;
+}
+
 function numberOr(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -133,9 +181,6 @@ export function foldFacts(facts, defaults = {}) {
   let satchelCarried = false;
   let charmOwned = false;
   const ownedItemIds = new Set(defaults.ownedItemIds ?? []);
-  let equippedWeaponId = null;
-  let equippedRev = -1;
-  let equippedEventId = null;
 
   for (const fact of merged) {
     switch (fact.type) {
@@ -155,19 +200,8 @@ export function foldFacts(facts, defaults = {}) {
         if (Number.isFinite(amount)) xp += amount;
         break;
       }
-      case 'weapon-equipped': {
-        // Latest-wins, resolved by durable revision and then by eventId -- never by iteration order.
-        // A Map's insertion order is a fact about how the union was built, not about when the child
-        // equipped something, and leaning on it makes the answer depend on which store was read
-        // first, which is precisely what a reload changes.
-        if (typeof fact.value === 'string' && fact.value.length > 0
-          && equipOutranks(fact, equippedRev, equippedEventId)) {
-          equippedWeaponId = fact.value;
-          equippedRev = numberOr(fact.rev, -1);
-          equippedEventId = fact.eventId;
-        }
-        break;
-      }
+      // weapon-equipped is resolved by latestEquippedWeaponId below, not here: it is the one field
+      // that is a choice rather than an accumulation, and its law is shared with the server.
       default: break;
     }
   }
@@ -175,7 +209,7 @@ export function foldFacts(facts, defaults = {}) {
   return {
     marks,
     lanternUnlocked,
-    equippedWeaponId: equippedWeaponId ?? defaults.equippedWeaponId ?? null,
+    equippedWeaponId: latestEquippedWeaponId(merged) ?? defaults.equippedWeaponId ?? null,
     ownedItemIds: [...ownedItemIds],
     coins,
     shards,
