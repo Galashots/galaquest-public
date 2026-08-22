@@ -786,3 +786,38 @@ is itself the lesson in GQ-003's neighbourhood: a remembered failing set is not 
 comment ("the seeded guest's owned Blade vanished because ?hero= had created a second profile beside
 it") one commit before it recurred in a different file. A lesson recorded at the site of the first
 fix is invisible from the site of the second; that is what the mechanical guard is for.
+
+### GQ-017 — Changing a type is not done when the tests pass. The readers are not all in one directory.
+**Status:** ENFORCED · **Hits:** 1 · **First/Last:** 2026-08-22
+**Enforced by:** `test/objective-comparisons.test.mjs`
+**Rule:** The CP2 keystone turned an objective from a string into `{ id, text }`. Every consumer
+under `test/` was found and updated, the full gate went green, and the change was pushed. The
+harnesses in `tools/runtime-test/` were never looked at, because one directory had been swept and
+that felt like the sweep. **A gate that cannot see a caller cannot tell you the caller is broken**,
+and this repo has two suites for exactly that reason -- which is precisely why finishing one of them
+is not finishing.
+
+**One direction of the breakage is silent, and that is the part worth the rule.** Against a value
+object:
+
+    domString === OBJECTIVE_FIND_THE_BEACON     always FALSE -> the check fails, loudly
+    domString !== OBJECTIVE_BEACON_IS_COLD      always TRUE  -> the check PASSES, forever, checking nothing
+
+Two of `drive-old-beacon`'s guards were the second kind. They did not go red; they went vacuous, and
+would have reported PASS for the rest of the project's life while asserting a tautology. That is
+GQ-015's corollary in a new costume: a test that keeps passing after the thing it names stops
+existing is not a passing test, it is an unread one. **When a type changes, the failures you can see
+are not the problem. The assertions that quietly became tautologies are.**
+
+**Incident (2026-08-22, `73ce88b`):** `drive-old-beacon` went from success to three failing checks
+and two vacuous ones. Found five commits later, and only because a job-list diff was run.
+**Corollary, and its own small lesson: the diff tool hid it for two of those runs.** `ci-diff.py`
+counted `conclusion == "failure"`, and the job had been CANCELLED -- superseded by the next push --
+so the run read as clean. Worse, because the tool computed "fixed" as `base_failures - head_failures`,
+two harnesses that were merely cancelled were REPORTED TO THE DIRECTOR AS FIXED. A cancelled job has
+said nothing about the code: it is not a failure and it is not a pass, and collapsing it into either
+is how a tool built to prevent confident wrong answers produces one. It now reports FAILED and
+UNPROVEN as separate buckets.
+**Foreknowledge helped:** partly. The sweep-every-caller instinct was there and was applied
+thoroughly to `test/`; what was missing was the knowledge that `tools/runtime-test/` imports the same
+module. The fix for that is mechanical rather than remembered, which is what the guard is.

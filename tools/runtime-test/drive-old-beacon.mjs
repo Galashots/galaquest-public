@@ -42,6 +42,10 @@ import {
 import { WORLD_LIMIT_NORTH } from '../../public/src/world/bounds.js';
 import { BEACON_GLOW_REST } from '../../public/src/world/oldBeacon.js';
 import {
+  // `.text` AT EVERY COMPARISON BELOW. An objective is a value object now, not a sentence, and
+  // `s.objective` is the chip's textContent. `string === object` is always false, which broke three
+  // checks -- and `string !== object` is always TRUE, which is worse: two guards here went vacuous
+  // and would have reported PASS forever while checking nothing.
   OBJECTIVE_BEACON_IS_COLD, OBJECTIVE_FIND_THE_BEACON, objectiveBreakSeals,
 } from '../../public/src/world/quest.js';
 import { ROWAN_LINE_BEACON_FOUND, ROWAN_LINE_CART_SEARCHED } from '../../public/src/world/rowanSpeech.js';
@@ -452,7 +456,7 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     if (full) {
       atCamp = await reachTheCartBeat(tab);
       check(`${label}: finishing the cart points the objective at the Beacon`,
-        atCamp.objective === OBJECTIVE_FIND_THE_BEACON,
+        atCamp.objective === OBJECTIVE_FIND_THE_BEACON.text,
         `chip reads ${JSON.stringify(atCamp.objective)}`);
       check(`${label}: Rowan's directions name the road rather than saying the Beacon must wait`,
         (atCamp.npcLine ?? '').includes(ROWAN_LINE_CART_SEARCHED),
@@ -559,10 +563,10 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     // never actually check. OBJECTIVE_BEACON_IS_COLD stays imported and asserted in the reload phase
     // below, where it is still the floor for a child who has not walked up yet.
     const after = await pollUntil(
-      tab, (s) => s.sealsLeft > 0 && s.objective === objectiveBreakSeals(s.sealsLeft), 5000,
+      tab, (s) => s.sealsLeft > 0 && s.objective === objectiveBreakSeals(s.sealsLeft).text, 5000,
     );
     check(`${label}: the post-arrival objective is the honest one`,
-      after.sealsLeft > 0 && after.objective === objectiveBreakSeals(after.sealsLeft),
+      after.sealsLeft > 0 && after.objective === objectiveBreakSeals(after.sealsLeft).text,
       `chip reads ${JSON.stringify(after.objective)} with ${after.sealsLeft} seal(s) unbroken`);
     check(`${label}: and every seal it names is really standing there`,
       after.sealsLeft === after.sealsStanding,
@@ -644,7 +648,7 @@ async function runReloadPhase() {
       && Math.abs((first.beaconGlow ?? 0) - BEACON_GLOW_REST) < 1e-6,
       `built ${first.beaconBuilt}, stirring ${first.beaconStirring}, glow ${first.beaconGlow}`);
     check('reload: and has not been told it arrived somewhere it has not been',
-      first.beaconFound === false && first.objective !== OBJECTIVE_BEACON_IS_COLD,
+      first.beaconFound === false && first.objective !== OBJECTIVE_BEACON_IS_COLD.text,
       `beaconFound ${first.beaconFound}, chip ${JSON.stringify(first.objective)}`);
 
     await tab.page.send('Page.reload', { ignoreCache: false });
@@ -655,7 +659,7 @@ async function runReloadPhase() {
       && Math.abs((after.beaconGlow ?? 0) - BEACON_GLOW_REST) < 1e-6,
       `built ${after.beaconBuilt}, stirring ${after.beaconStirring}, glow ${after.beaconGlow}`);
     check('reload: the objective after a reload is truthful for a client that has not walked yet',
-      after.objective !== OBJECTIVE_BEACON_IS_COLD && after.objective !== OBJECTIVE_FIND_THE_BEACON,
+      after.objective !== OBJECTIVE_BEACON_IS_COLD.text && after.objective !== OBJECTIVE_FIND_THE_BEACON.text,
       `chip ${JSON.stringify(after.objective)}`);
     check('reload: no console errors', tab.consoleErrors.length === 0,
       tab.consoleErrors.slice(0, 3).join(' | '));
