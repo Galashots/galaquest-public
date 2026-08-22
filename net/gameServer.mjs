@@ -170,11 +170,29 @@ export function createRewardCoordinator(options = {}) {
    * table equip/marks/lantern use); an ephemeral one has no durable path to grant into and this is a
    * no-op for it, consistent with ownedItemIdsFor's own treatment of ephemeral connections.
    */
+  /**
+   * Announce a durable fact the store has just accepted, under the id it was written with.
+   *
+   * One helper rather than the same three lines in five grant paths, because the rule is one rule:
+   * a profile fact the device is not TOLD about is one it can only learn from the next welcome, and
+   * a reward database lost in between takes it with it. A count on the rewards block cannot stand in
+   * -- fold a count into a grow-only set and every reconnect adds it again. Only a named fact merges.
+   *
+   * Returns an array so a caller can hand it straight to simulation.announceRewardFacts, and an
+   * EMPTY one when the write was a replay: re-claiming is not a second grant and must not announce
+   * one. Announcing is deliberately separate from writing -- the store decides what is true, this
+   * only decides who hears about it.
+   */
+  function announcementFor(result, fact) {
+    return result.applied ? [fact] : [];
+  }
+
   function grantOwnership(playerId, itemId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return;
+    if (!guestId) return [];
     const eventId = `own:${guestId}:${itemId}`;
-    store.apply({ guestId, heroId: playerId, type: 'gear-owned', eventId, value: itemId });
+    const result = store.apply({ guestId, heroId: playerId, type: 'gear-owned', eventId, value: itemId });
+    return announcementFor(result, { type: 'gear-owned', heroId: playerId, eventId, value: itemId });
   }
 
   /**
@@ -193,7 +211,7 @@ export function createRewardCoordinator(options = {}) {
    */
   function claimWildwoodBlade(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: false };
+    if (!guestId) return { granted: false, facts: [] };
     const result = store.apply({
       guestId,
       heroId: playerId,
@@ -201,7 +219,15 @@ export function createRewardCoordinator(options = {}) {
       eventId: `own:${guestId}:${WILDWOOD_BLADE_ID}`,
       value: WILDWOOD_BLADE_ID,
     });
-    return { granted: result.applied };
+    return {
+      granted: result.applied,
+      facts: announcementFor(result, {
+        type: 'gear-owned',
+        heroId: playerId,
+        eventId: `own:${guestId}:${WILDWOOD_BLADE_ID}`,
+        value: WILDWOOD_BLADE_ID,
+      }),
+    };
   }
 
   /**
@@ -212,12 +238,17 @@ export function createRewardCoordinator(options = {}) {
    */
   function claimSatchel(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: false };
+    if (!guestId) return { granted: false, facts: [] };
     const result = store.apply({
       guestId, heroId: playerId, type: 'satchel-taken',
       eventId: `satchel:${guestId}`, value: null,
     });
-    return { granted: result.applied };
+    return {
+      granted: result.applied,
+      facts: announcementFor(result, {
+        type: 'satchel-taken', heroId: playerId, eventId: `satchel:${guestId}`,
+      }),
+    };
   }
 
   /**
@@ -230,12 +261,17 @@ export function createRewardCoordinator(options = {}) {
    */
   function claimCharm(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: false };
+    if (!guestId) return { granted: false, facts: [] };
     const result = store.apply({
       guestId, heroId: playerId, type: 'charm-earned',
       eventId: `charm:${guestId}`, value: null,
     });
-    return { granted: result.applied };
+    return {
+      granted: result.applied,
+      facts: announcementFor(result, {
+        type: 'charm-earned', heroId: playerId, eventId: `charm:${guestId}`,
+      }),
+    };
   }
 
   /**
@@ -251,19 +287,22 @@ export function createRewardCoordinator(options = {}) {
    */
   function applyHollowCache(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: 0 };
+    if (!guestId) return { granted: 0, facts: [] };
     let granted = 0;
+    const facts = [];
     for (let index = 1; index <= HOLLOW_CACHE_SHARDS; index += 1) {
+      const eventId = `hollow-cache:${guestId}:${index}`;
       const result = store.apply({
         guestId,
         heroId: playerId,
         type: 'shard-earned',
-        eventId: `hollow-cache:${guestId}:${index}`,
+        eventId,
         value: null,
       });
       if (result.applied) granted += 1;
+      facts.push(...announcementFor(result, { type: 'shard-earned', heroId: playerId, eventId }));
     }
-    return { granted };
+    return { granted, facts };
   }
 
   /** G3: write down that the Old Beacon is burning. A WORLD fact, so the row is not what makes it
@@ -1403,7 +1442,7 @@ export function attachGameServer(httpServer, options = {}) {
         // The client's own ask and this allow are the SAME function (world/rowanSpeech.js), so the
         // two can never drift into "the game offered it and the server refused".
         if (!rowanOwesBlade({ inRange, beaconLit, bladeOwned })) return;
-        rewards.claimWildwoodBlade(playerId);
+        simulation.announceRewardFacts(rewards.claimWildwoodBlade(playerId).facts);
         return;
       }
 
@@ -1419,7 +1458,7 @@ export function attachGameServer(httpServer, options = {}) {
         const playerId = client.data.playerId;
         if (!rewards.hasDurableIdentity(playerId)) return;
         if (!simulation.atHollowChest(playerId)) return;
-        rewards.applyHollowCache(playerId);
+        simulation.announceRewardFacts(rewards.applyHollowCache(playerId).facts);
         return;
       }
 
@@ -1437,7 +1476,7 @@ export function attachGameServer(httpServer, options = {}) {
         // it, so the chest and the satchel are guarded the same way rather than one of them pretending
         // to a check the server cannot actually make.
         if (!simulation.atHollowClue(playerId)) return;
-        rewards.claimSatchel(playerId);
+        simulation.announceRewardFacts(rewards.claimSatchel(playerId).facts);
         return;
       }
 
@@ -1452,7 +1491,7 @@ export function attachGameServer(httpServer, options = {}) {
           satchelCarried: rewards.satchelTakenFor(playerId),
           charmOwned: rewards.charmEarnedFor(playerId),
         })) return;
-        rewards.claimCharm(playerId);
+        simulation.announceRewardFacts(rewards.claimCharm(playerId).facts);
         return;
       }
 

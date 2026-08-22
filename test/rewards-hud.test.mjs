@@ -50,7 +50,10 @@ test('pipsForMarks defaults its length to MARKS_TO_UNLOCK', () => {
 test('REWARD_EVENT_TYPES is exactly the durable facts the reward coordinator announces', () => {
   assert.deepEqual(
     [...REWARD_EVENT_TYPES].sort(),
-    ['coin-earned', 'lantern-unlocked', 'mark-earned', 'shard-earned'],
+    [
+      'charm-earned', 'coin-earned', 'gear-owned', 'lantern-unlocked',
+      'mark-earned', 'satchel-taken', 'shard-earned',
+    ],
   );
 });
 
@@ -107,8 +110,10 @@ test('every reward event is decided, and any sound it names actually exists', ()
   // burst -- a second one fired from the durable announcement would play one moment twice, which is
   // the defect GP1-C6 fixed for marks in the other direction. Asserted rather than assumed, so
   // giving them a sound later is a deliberate edit to this line and not an accident.
-  assert.equal(soundForRewardEvent('coin-earned'), null);
-  assert.equal(soundForRewardEvent('shard-earned'), null);
+  for (const durableOnly of ['coin-earned', 'shard-earned', 'gear-owned', 'satchel-taken', 'charm-earned']) {
+    assert.equal(soundForRewardEvent(durableOnly), null,
+      `${durableOnly} announces a fact for the journal; its beat is fired by diffing the rewards block`);
+  }
 });
 
 test('soundForRewardEvent never throws on an unknown type', () => {

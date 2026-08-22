@@ -17,6 +17,7 @@
 // a count can never be. Their handlers in main.js are deliberately empty of ceremony; see there.
 export const REWARD_EVENT_TYPES = Object.freeze([
   'mark-earned', 'lantern-unlocked', 'coin-earned', 'shard-earned',
+  'gear-owned', 'satchel-taken', 'charm-earned',
 ]);
 
 /**
@@ -53,6 +54,13 @@ export const REWARD_RECIPE_MAP = Object.freeze({
   // moment played twice, which is the defect GP1-C6 fixed for marks in the other direction.
   'coin-earned': null,
   'shard-earned': null,
+  // Same reasoning, one step further along the arc: each of these already has a ceremony of its own
+  // -- the Blade's unlock card, the satchel being lifted, Wren's fourth heart -- fired by DIFFING
+  // the rewards block, which is how those beats survive a reconnect without replaying. The durable
+  // announcement is for the JOURNAL, and a sound here would be that beat played a second time.
+  'gear-owned': null,
+  'satchel-taken': null,
+  'charm-earned': null,
 });
 
 export function soundForRewardEvent(eventType) {

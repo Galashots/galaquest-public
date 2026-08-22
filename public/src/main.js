@@ -1321,6 +1321,14 @@ async function bootstrap() {
     // which is the guarantee that a new reward type cannot be half-added.
     'coin-earned'(event) { rewardEventLog.push(event); },
     'shard-earned'(event) { rewardEventLog.push(event); },
+    // Gear, satchel and charm: durability only, for the same reason as currency. Each already has
+    // its own ceremony fired by DIFFING the rewards block -- the Blade's unlock card, the satchel
+    // lift, Wren's fourth heart -- and those diffs are what make a beat survive a reconnect without
+    // replaying, so nothing here may fire one. What these add is the NAMED fact, journalled by the
+    // dispatch loop under the id the store wrote it with.
+    'gear-owned'(event) { rewardEventLog.push(event); },
+    'satchel-taken'(event) { rewardEventLog.push(event); },
+    'charm-earned'(event) { rewardEventLog.push(event); },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See

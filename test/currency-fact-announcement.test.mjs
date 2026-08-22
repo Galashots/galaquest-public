@@ -35,6 +35,8 @@ import {
 import { CART_LOOT_TABLE, pickupWorldPosition } from '../public/src/world/cartLoot.js';
 import { CART_SEARCH } from '../public/src/world/zones/village.js';
 import { createProfileStore } from '../public/src/progression/profiles.js';
+import { PROFILE_FACT_TYPES } from '../public/src/progression/facts.js';
+import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import { REWARD_EVENT_TYPES } from '../public/src/rewards/feedback.js';
 
 const GUEST = 'p-currency-1111-2222-3333';
@@ -207,6 +209,60 @@ test('an ephemeral collector announces nothing durable, because it earned nothin
 
     const currency = c.allEvents().filter((e) => e.type === 'coin-earned' || e.type === 'shard-earned');
     assert.deepEqual(currency, [], 'no durable identity, no durable fact');
+
+    c.socket.close();
+  });
+});
+
+// ── the rest of correction 4's durable list ────────────────────────────────────────────────────
+
+test('every profile fact type the coordinator can write is one the client can route', () => {
+  // The completeness rule, stated as a relationship rather than as a list. A durable fact the
+  // server writes but the client's dispatcher does not know falls through to the COMBAT dispatcher
+  // and logs "no handler" -- which is a console error, which is a harness failure. So "the server
+  // can write it" and "the client can route it" have to stay the same set, minus the two that
+  // legitimately never ride this path.
+  const announceable = PROFILE_FACT_TYPES.filter((type) => (
+    // Minted by the DEVICE at the equip action and journalled there, so it never arrives as a
+    // server announcement (docs/MISTAKES.md GQ-014).
+    type !== 'weapon-equipped'
+    // Does not exist yet anywhere in the codebase; it is CP3 work.
+    && type !== 'xp-earned'
+  ));
+
+  const unroutable = announceable.filter((type) => !REWARD_EVENT_TYPES.includes(type));
+  assert.deepEqual(unroutable, [],
+    `these durable facts have no client handler, so announcing one would log a console error: ${unroutable.join(', ')}`);
+});
+
+test('claiming the Blade announces the ownership fact under the store id', async () => {
+  await withServer(async ({ url, game }) => {
+    const c = client(url);
+    await c.open();
+    c.send(joinMessage('kid', GUEST));
+    const welcome = await c.waitFor(() => c.messages.find((m) => m.type === 'welcome'), 'welcome');
+
+    // Granted through the coordinator directly rather than by walking to Rowan with a lit Beacon:
+    // what is under test is the ANNOUNCEMENT, and the claim's own preconditions have their own
+    // tests. The grant path is the same store write either way.
+    game.simulation.announceRewardFacts(game.rewards.grantOwnership(welcome.id, WILDWOOD_BLADE_ID));
+
+    const owned = await c.waitFor(
+      () => c.allEvents().find((event) => event.type === 'gear-owned'),
+      'a gear-owned event on a snapshot',
+    );
+    assert.equal(owned.eventId, `own:${GUEST}:${WILDWOOD_BLADE_ID}`, 'the store id rides the event');
+    assert.equal(owned.value, WILDWOOD_BLADE_ID, 'and it names WHICH gear -- without that it names nothing');
+
+    // A second grant is a replay, not a second item, and must announce nothing.
+    const before = c.allEvents().filter((e) => e.type === 'gear-owned').length;
+    game.simulation.announceRewardFacts(game.rewards.grantOwnership(welcome.id, WILDWOOD_BLADE_ID));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(
+      c.allEvents().filter((e) => e.type === 'gear-owned').length,
+      before,
+      're-granting an item already owned must not announce a second acquisition',
+    );
 
     c.socket.close();
   });
