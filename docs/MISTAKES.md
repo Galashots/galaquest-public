@@ -132,7 +132,7 @@ refused, and burned the iteration while the wolf's own timer ran on. Suite fell 
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-002 — A stale file header is a lie the file tells about itself.
-**Status:** RULE · **Hits:** 5 · **First:** 2026-08-14 · **Last:** 2026-08-22
+**Status:** RULE · **Hits:** 6 · **First:** 2026-08-14 · **Last:** 2026-08-22
 **Not enforced because:** a stale comment is prose about intent; verifying it is current requires
 re-deriving what's still true, which no regex can do safely without also re-deriving the design.
 **Rule:** This repo deliberately puts its reasoning in the code; an agent reading a file top-to-bottom
@@ -147,7 +147,17 @@ shipped. `net/protocol.js:1` said "GalaQuest wire protocol v1" three lines above
 had landed. **Hit 4, 2026-08-21:** `progression/facts.js`'s `unionFacts` doc still explained how the union treats `seq` after the field had been renamed to `rev` and given a tiebreak, in the same file whose header had just been rewritten to explain why the ordering works -- so the file argued for the new design at the top and described the old one in the middle. Caught by Director audit, not by the rename. The rule earns its keep on rename commits specifically: grep the file for the old identifier before calling the rename done. **Hit 5, 2026-08-22:** `rewardStore.mjs` still
 asserted "Latest INSERT wins... event ids are no longer overloaded as an ordering mechanism" nine
 lines below a schema header introducing the column that had just replaced that rule. The comment was
-not merely stale, it was the clearest statement of the bug, sitting directly above it.
+not merely stale, it was the clearest statement of the bug, sitting directly above it. **Hit 6,
+2026-08-22:** `progression/facts.js` again -- its header still argued the equip revision "has to come
+from ... the device's own journal, which is the only participant present on both sides of a server
+wipe", after `rev` had become action-time epoch millis minted at the choice. The prose did not merely
+lag the code; it preserved the SUPERSEDED rationale, and that rationale is the one the fix disproved
+-- two devices that have not spoken both start from an empty journal, so journal-derived numbering
+ties exactly where it must not. A reader trusting the header would have rebuilt the defect. Second
+hit in this file, and the second found by Director audit rather than by the commit that caused it.
+The sharper form of the rule: when a fix REPLACES a reason, the old reason is more dangerous than an
+old fact, because it still reads as an argument. Grep the file for the abandoned rationale, not just
+the abandoned identifier.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.

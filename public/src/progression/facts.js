@@ -17,15 +17,23 @@
 //
 // The one field that is not additive is the equipped weapon, which is a single latest-wins value
 // rather than an accumulation. It carries `rev`, a DURABLE revision, and ties break on eventId --
-// see foldFacts, and see the note below on why the revision has to be durable to mean anything.
+// see latestEquippedWeaponId for the reading law, and the note below for what the revision means.
 //
 // `rev` is not a counter and not a row index, because it was both of those first and both were
 // wrong at exactly the boundary this file exists for. A counter held in memory restarts at zero on
 // the next page load; an index reconstructed from whichever database is currently readable restarts
 // when that database is replaced. Either way a NEW equip is minted with a number beneath an OLD one
-// and "latest wins" quietly returns the weapon the child stopped holding. The revision therefore has
-// to come from something that survives both events -- the device's own journal, which is the only
-// participant present on both sides of a server wipe. progression/profiles.js assigns it.
+// and "latest wins" quietly returns the weapon the child stopped holding.
+//
+// So `rev` is WHEN the child chose: epoch milliseconds stamped at the action itself, guarded to stay
+// strictly above that profile's own history so a clock knocked backwards still orders that device's
+// own equips. Surviving a wipe is not what makes the number mean something -- being minted at the
+// only moment that describes the choice is. The device journal does outlive a server wipe, but two
+// devices that have not spoken both start from an empty journal and both number their first offline
+// equip identically; that is a tie, and a tie is not chronology. A clock is the one ordering both
+// writers already share. progression/profiles.js mints it, and it then TRAVELS with the fact through
+// journal and server alike -- neither store recomputes it, which is what keeps the two sides from
+// disagreeing about an order neither of them authored.
 //
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
