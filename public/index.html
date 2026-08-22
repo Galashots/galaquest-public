@@ -717,6 +717,30 @@
         pointer-events: none; touch-action: none;
         transition: opacity 140ms ease-out;
       }
+      /* ── Offering help, and mostly not offering it ──────────────────────────────────────────
+         The arrow only helps a child who looks at it. ui/guidanceRescue.js decides when one has
+         stopped getting closer -- not when they have stopped moving, and not when they are walking
+         AWAY, because a child rounding a house walks away for four seconds and is not lost while a
+         child circling two metres from the Keeper never gets far and is completely lost. It measures
+         whether they have ever been nearer than they are now.
+
+         Tapping it turns the camera to face the errand and nothing else. It does not walk them
+         there, and it does not turn the camera on its own: camera/follow.js says "the player owns
+         the camera" and a rescue that seizes it would be the game taking the one thing a child had
+         learned to control. Player-initiated, once, on a tap.
+
+         Above the stick and the ATTACK button rather than between them, and clear of #desktop-keys
+         on a desktop. 44 px floor like everything else -- ui/tapTargets.js owns that number. */
+      #guidance-rescue {
+        position: absolute; left: 50%; bottom: 5rem; transform: translateX(-50%);
+        min-height: 44px; padding: 0.55rem 1rem;
+        border: 2px solid rgb(242 179 61 / 70%); border-radius: 1.4rem;
+        background: rgb(12 20 31 / 88%); color: #fff;
+        font: 700 0.92rem/1.1 system-ui, sans-serif; white-space: nowrap;
+        transition: opacity 180ms ease-out;
+      }
+      #guidance-rescue[data-shown="false"] { display: none; }
+      #guidance-rescue[data-shown="true"] { display: block; pointer-events: auto; }
       #objective-pointer[data-shown="false"] { opacity: 0; }
       #objective-pointer[data-shown="true"] { opacity: 1; }
       #objective-pointer-arrow {
@@ -951,6 +975,7 @@
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
       <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
       <div id="objective-pointer" data-shown="false" aria-hidden="true"><span id="objective-pointer-arrow">➤</span></div>
+      <button id="guidance-rescue" type="button" data-shown="false">👀 Show me where</button>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
       <!-- GP1: the Hero screen. aria-pressed mirrors data-shown on #hero-screen -- one boolean, two
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/

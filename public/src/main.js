@@ -103,6 +103,7 @@ import {
 import { questObjectiveFor } from './world/quest.js';
 import { destinationFor } from './world/destinations.js';
 import { edgeIndicatorFor } from './ui/offscreenPointer.js';
+import { createRescueWatch } from './ui/guidanceRescue.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
   bramblesCut,
@@ -956,7 +957,7 @@ async function bootstrap() {
       // No objective, no place for it, or a dynamic place the caller could not supply. All three are
       // the same answer to "where do I point", which is: nowhere, so say nothing.
       objectivePointerElement.dataset.shown = 'false';
-      return;
+      return { pointing: false };
     }
 
     // BEHIND THE CAMERA IS COMPUTED, NOT INFERRED, and this is the whole reason offscreenPointer.js
@@ -980,10 +981,41 @@ async function bootstrap() {
     // An arrow over a thing the child can already see is noise, and noise is how a child learns to
     // stop looking at the screen.
     objectivePointerElement.dataset.shown = String(!indicator.onScreen);
-    if (indicator.onScreen) return;
+    if (indicator.onScreen) return { pointing: false };
     objectivePointerElement.style.transform = `translate(${indicator.x}px, ${indicator.y}px)`;
     objectivePointerArrowElement.style.transform = `rotate(${indicator.angle}rad)`;
+    // Reported so the rescue offer can stay quiet while the errand is already in frame: see the
+    // call site. A caller that only wants the arrow drawn can ignore this.
+    return { pointing: true };
   }
+  // OFFERING HELP, and mostly not offering it. The arrow only helps a child who looks at it.
+  //
+  // ui/guidanceRescue.js decides when one has stopped getting CLOSER -- not when they have stopped
+  // moving, and not when they are heading away. Both of those are wrong in opposite directions: a
+  // child rounding a house walks away for four seconds and is fine, and a child circling two metres
+  // from the Keeper never gets far away and is completely stuck.
+  //
+  // `rescueTarget` is held here rather than read in the handler because the objective is recomputed
+  // per frame inside the loop and a click arrives between frames. Storing the PLACE rather than the
+  // objective means the tap cannot aim at an errand that has since changed.
+  const guidanceRescueElement = document.querySelector('#guidance-rescue');
+  const rescueWatch = createRescueWatch();
+  let rescueTarget = null;
+  function renderRescueOffer(offering) {
+    guidanceRescueElement.dataset.shown = String(offering === true);
+  }
+  guidanceRescueElement.addEventListener('click', () => {
+    // Turn to face it. Not walk to it, and not a camera that turns by itself: camera/follow.js says
+    // the player owns the camera, so this is the one frame in the game where the game aims it, and
+    // only because a child asked it to.
+    if (rescueTarget) {
+      follow.setHeading(headingToward(player.position.x, player.position.z, rescueTarget.x, rescueTarget.z));
+    }
+    // Accepting quiets the watch until real progress, not until a timer expires. A child who has
+    // just been shown where to go and is now walking there must not be asked again on the way.
+    rescueWatch.accept();
+    renderRescueOffer(false);
+  });
   function renderNpcSpeech(next) {
     keeperSpeechElement.dataset.shown = String(next.visible);
     if (next.line !== npcSpeechLine) {
@@ -1812,6 +1844,13 @@ async function bootstrap() {
     // this body actually have. Reported as OBSERVABLE facts rather than as the flags behind them --
     // `rangerHere` is whether the mesh is drawn, not whether the Beacon is lit, which is the
     // distinction docs/MISTAKES.md GQ-013 is about.
+    // The guidance rescue's own reading, for the same reason every zone exposes one: a harness has
+    // to be able to ask why the offer did or did not appear, and "it did not" is not an answer.
+    guidanceRescueState: () => ({
+      ...rescueWatch.debugState(),
+      targetX: rescueTarget?.x ?? null,
+      targetZ: rescueTarget?.z ?? null,
+    }),
     zoneRangerState: () => ({
       rangerHere: zoneRanger?.isHere() === true,
       rangerBuilt: zoneRanger !== null,
@@ -3144,7 +3183,31 @@ async function bootstrap() {
     // yet, so those objectives draw no arrow rather than a wrong one. destinationFor returns null for
     // a place the caller could not name, which is the same answer as "this one has nowhere", and the
     // pointer treats both as nothing to say. Wiring them is its own slice.
-    renderObjectivePointer(currentObjective, {});
+    const pointer = renderObjectivePointer(currentObjective, {});
+    // NaN when the errand has no place -- "cut the bramble" is the thing in front of you and has no
+    // coordinate to be far from. The watch treats that as nothing to measure rather than as a child
+    // standing still, so a placeless stretch cannot accumulate a stuck clock.
+    rescueTarget = destinationFor(currentObjective, {});
+    renderRescueOffer(rescueWatch.update({
+      distanceMeters: rescueTarget
+        ? Math.hypot(player.position.x - rescueTarget.x, player.position.z - rescueTarget.z)
+        : NaN,
+      objectiveId: currentObjective?.id ?? null,
+      // THE RAW DELTA, not the clamped one. `deltaSeconds` above is clamped to 0.1 so a hitch
+      // cannot teleport the hero -- a physics bound. Patience is wall-clock: a child staring at an
+      // unchanging screen for twelve seconds has been staring for twelve seconds whether the device
+      // manages sixty frames a second or two. Feeding the physics clamp here made the clock run at
+      // 40% of real time on a starved device, measured, and the offer simply never arrived.
+      // guidanceRescue.js applies its own bound for the backgrounded-tab case.
+      deltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
+    }).offering
+      // ONLY WHEN TURNING WOULD HELP. Tapping this aims the camera at the errand and does nothing
+      // else, so offering it while the errand is already in frame offers a button that cannot change
+      // anything. A control that does nothing when pressed teaches a child to stop pressing things,
+      // which is the opposite of what a rescue is for. The clock keeps running underneath -- a child
+      // who is stuck while looking straight at the thing is still stuck, and the moment they turn
+      // away the offer is there immediately rather than twelve seconds later.
+      && pointer.pointing === true);
     follow.update(player.position);
     rimLight.update(player.position);
     runtimeRenderer.renderer.render(scene, camera);

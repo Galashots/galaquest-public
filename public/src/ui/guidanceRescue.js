@@ -50,6 +50,25 @@ export const PROGRESS_EPSILON_METERS = 0.25;
  *              just said no is the last person to ask again sooner.
  *   reset()    start over, for a caller that knows something this cannot see.
  */
+/**
+ * The most one update may add to the clock, however long the gap really was.
+ *
+ * PATIENCE IS WALL-CLOCK, and this is the bound that makes that safe. A child who has been staring
+ * at an unchanging screen for twelve seconds has been staring for twelve seconds whether the device
+ * managed sixty frames a second or two -- so the caller must NOT feed this the movement clamp.
+ * main.js clamps its own deltaSeconds to 0.1 so a hitch cannot teleport the hero, which is a physics
+ * concern; feeding that here makes a starved device count time at 40% of real, and it did: measured
+ * in a browser, this clock reached 5.97 s over 15 wall-clock seconds and the offer never came.
+ *
+ * But raw wall-clock has its own failure, in the other direction. A tablet put down for five minutes
+ * hands back a single 300-second frame when it wakes, and a child returning to their game would be
+ * met instantly by an offer of help for standing still while the screen was off. They were not
+ * staring at it; they were not there. A gap longer than a second is not a slow frame, it is an
+ * absence, and it is credited as one second rather than as nothing so a genuinely slow device is
+ * still counted honestly.
+ */
+export const MAX_CREDITED_SECONDS = 1;
+
 export function createRescueWatch({
   patienceSeconds = DEFAULT_PATIENCE_SECONDS,
   progressEpsilonMeters = PROGRESS_EPSILON_METERS,
@@ -99,7 +118,7 @@ export function createRescueWatch({
       return { offering, secondsStuck, bestMeters };
     }
 
-    secondsStuck += Math.max(0, deltaSeconds);
+    secondsStuck += Math.min(MAX_CREDITED_SECONDS, Math.max(0, deltaSeconds));
     offering = !answered && secondsStuck >= patienceSeconds;
     return { offering, secondsStuck, bestMeters };
   }

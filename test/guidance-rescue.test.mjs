@@ -10,6 +10,7 @@ import test from 'node:test';
 
 import {
   DEFAULT_PATIENCE_SECONDS,
+  MAX_CREDITED_SECONDS,
   PROGRESS_EPSILON_METERS,
   createRescueWatch,
 } from '../public/src/ui/guidanceRescue.js';
@@ -188,6 +189,29 @@ test('it counts seconds, not frames', () => {
   assert.equal(frames(5).offering, true, '5 fps, same twelve seconds');
   // And a frame rate below the threshold's own granularity still counts real time rather than ticks.
   assert.equal(frames(2).offering, true, '2 fps, the starved-runner case');
+});
+
+test('a tablet put down and picked up again is not a child standing still', () => {
+  // The other half of "patience is wall-clock". main.js hands this the RAW frame delta, because the
+  // movement clamp of 0.1 s made the clock run at 40% of real time on a starved device -- measured
+  // in a browser, 5.97 s of patience over 15 wall-clock seconds, and the offer never came.
+  //
+  // Raw wall-clock then fails the opposite way: a device asleep for five minutes returns ONE frame
+  // with a 300-second delta, and a child coming back to their game would be met instantly with an
+  // offer of help for standing still while the screen was off. They were not staring at it. They
+  // were not there.
+  const watch = createRescueWatch();
+  const back = watch.update({ distanceMeters: 15, objectiveId: OBJ, deltaSeconds: 300 });
+  assert.equal(back.offering, false, 'five minutes of being elsewhere is not five minutes of being lost');
+  assert.equal(back.secondsStuck, MAX_CREDITED_SECONDS, 'the gap is credited as one second, not as nothing and not as 300');
+
+  // And a genuinely slow device is still counted honestly, which is what stops the bound becoming
+  // a second version of the bug it fixes.
+  const starved = createRescueWatch();
+  for (let i = 0; i < DEFAULT_PATIENCE_SECONDS * 2; i += 1) {
+    starved.update({ distanceMeters: 9, objectiveId: OBJ, deltaSeconds: 0.5 });
+  }
+  assert.equal(starved.debugState().offering, true, '2 fps for twelve real seconds is twelve real seconds');
 });
 
 test('a negative or absent delta cannot rush the offer', () => {
