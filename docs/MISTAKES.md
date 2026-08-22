@@ -695,3 +695,24 @@ give-away was visible and ignored: two of those tests broke the moment the real 
 introduced, because the hand-built facts had never been shaped like the real ones. All six now mint
 through `mintEquipFact`.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A status a document holds on someone else's behalf goes stale with no commit to catch it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-22
+**Rule:** GQ-002 and GQ-003 both go stale because YOU changed something -- the rename, the test count,
+the schema -- so the causing commit is also the natural place to catch them. A field recording an
+EXTERNAL authority's verdict has no such moment. Nothing in the tree changes when a reviewer rules,
+so no diff, no test, and no file-header pass will ever look at it. Two consequences worth acting on:
+a provisional word (`awaiting`, `pending`, `in review`, `TBD`) is the one value guaranteed to become
+false, and it becomes false somewhere you are not looking; and a document that declares itself
+*canonical* about such a status has promised to be re-read on an event, not on an edit. So treat
+receiving the verdict as the trigger -- ratchet the record in the same turn you read the ruling, not
+in the next commit that happens to touch the file, because there may not be one.
+**Incidents (2026-08-22, Checkpoint 1b):** PR #31's body declares itself the canonical checkpoint
+ledger. The Director recorded `1b-core.3` as **PASS** at `7abbed1`, and the ledger row still read
+"COMPLETE — awaiting Director re-audit" against the superseded SHA `60f466b` -- the very SHA the
+Director had ruled **NOT PASS** on. Two commits landed in between (`7abbed1`, `a212957`) and neither
+touched the row, because neither had any reason to: the row was wrong about an event that happened on
+GitHub. Found by the Director, not by the branch. The failure is mild here -- a stale word in a brief
+-- but the surface is the project's own gate history, which is the one record that is supposed to be
+harder to drift than the code.
+**Foreknowledge helped:** not yet recorded.
