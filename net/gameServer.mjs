@@ -1217,8 +1217,15 @@ export function attachGameServer(httpServer, options = {}) {
         // mid-fight wolf correctly (Design ruling 7). Now including that guest's own persisted
         // marks, so a reconnect (same guestId, new playerId) sees them immediately on welcome --
         // the "marks survive a refresh" acceptance the brief's D6 harness exercises live.
+        // ...and that guest's DURABLE facts, each with the eventId the store keyed it on. The
+        // rewards block above is derived -- counts and a resolved weapon -- which a device cannot
+        // journal, because a fact with no stable name cannot be deduplicated. These are what
+        // progression/profiles.js's ingestServerFacts needs to recover a profile whose device has
+        // never seen it, and to settle each fact's revision BEFORE local progression mints above it.
+        // Ephemeral connections get [] from profileFactsFor, so nobody is handed anyone else's save.
         client.send(encode(welcomeMessage(
           player.id, simulation.tick, simulation.snapshot(), encounterSnapshotWithRewards(),
+          rewards.profileFactsFor(player.id),
         )));
         return;
       }

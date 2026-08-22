@@ -177,6 +177,10 @@ export function decode(text) {
         tick: requireInteger(raw.tick, 'tick'),
         players: decodePlayers(raw.players),
         encounter: decodeEncounter(raw.encounter),
+        // Additive, same reasoning as guestId on join and equippedWeaponId on the rewards block:
+        // absent entirely (a pre-1b server, or an ephemeral connection) decodes to `[]` rather than
+        // failing, so this is not the version bump. PROTOCOL_VERSION stays 3.
+        profileFacts: decodeProfileFacts(raw.profileFacts),
       };
 
     case 'attack': {
@@ -397,6 +401,48 @@ function decodeHeroes(heroes) {
 // decoder-strictness test asks to check for first. A client only ever needs to read its OWN entry;
 // nothing here filters that down, the same way heroes carries every hero and main.js does the
 // filtering.
+/**
+ * The joining profile's DURABLE facts -- the rows behind the rewards block, each with the stable
+ * eventId that makes a second copy mergeable instead of double counted.
+ *
+ * This is deliberately not the same thing as `encounter.rewards`, and the difference is the whole
+ * reason it exists. The rewards block is DERIVED: counts and a resolved weapon id. A device cannot
+ * journal a count -- a fact with no stable name cannot be deduplicated, so folding "marks: 2" into a
+ * grow-only set would add two more marks every reconnect. These are the named facts themselves, so
+ * ingesting the same welcome twice is a no-op (progression/facts.js's union law).
+ *
+ * SHAPE only, exactly the boundary decodeRewards draws for itemIds: this layer does not know which
+ * fact types exist. progression/facts.js's isProfileFact owns that list and already drops anything
+ * it does not recognise, so a new durable fact type is a progression change and not a wire change.
+ * Restating the list here would be a second copy of a rule that has an authority (GQ-007).
+ *
+ * Not length-capped on purpose. The array grows with a profile's whole history, and the only thing a
+ * cap could do to an unusually long-lived save is refuse the join or silently truncate it -- both
+ * strictly worse than a large welcome. Worth revisiting if a real profile ever gets big enough to
+ * matter; at Stage 1 volumes it is tens of facts.
+ */
+function decodeProfileFacts(facts) {
+  if (facts === undefined || facts === null) return [];
+  if (!Array.isArray(facts)) fail('profileFacts must be an array');
+  return facts.map((fact, index) => {
+    if (fact === null || typeof fact !== 'object') fail(`profileFacts[${index}] must be an object`);
+    const decoded = {
+      eventId: requireString(fact.eventId, `profileFacts[${index}].eventId`, EVENT_ID_MAX_LENGTH),
+      type: requireString(fact.type, `profileFacts[${index}].type`),
+    };
+    if (decoded.eventId.length === 0) fail(`profileFacts[${index}].eventId must not be empty`);
+    if (fact.value !== undefined && fact.value !== null) {
+      decoded.value = requireString(fact.value, `profileFacts[${index}].value`, ITEM_ID_MAX_LENGTH);
+    }
+    // Absent rather than null when the row has no order -- a fact given a made-up revision here
+    // would be claiming a place in a chronology it was never part of, which is the GQ-014 defect.
+    if (fact.rev !== undefined && fact.rev !== null) {
+      decoded.rev = requireInteger(fact.rev, `profileFacts[${index}].rev`);
+    }
+    return decoded;
+  });
+}
+
 function decodeRewards(rewards) {
   if (rewards === undefined) return {};
   if (rewards === null || typeof rewards !== 'object' || Array.isArray(rewards)) {
@@ -617,6 +663,10 @@ const EMPTY_ENCOUNTER = Object.freeze({
   siege: EMPTY_SIEGE,
 });
 const NO_EVENTS = Object.freeze([]);
+// An ephemeral connection (no guestId) owns no durable facts, and neither does a caller that predates
+// the field. Its own frozen constant rather than a shared one with NO_EVENTS: they are different
+// kinds of empty, and sharing the binding would make a later change to one silently change the other.
+const NO_PROFILE_FACTS = Object.freeze([]);
 
 // Builders, so no call site hand-assembles an object shape the decoder would reject.
 
@@ -629,8 +679,8 @@ export function joinMessage(name, guestId) {
   return message;
 }
 
-export function welcomeMessage(id, tick, players, encounter = EMPTY_ENCOUNTER) {
-  return { v: PROTOCOL_VERSION, type: 'welcome', id, tick, players, encounter };
+export function welcomeMessage(id, tick, players, encounter = EMPTY_ENCOUNTER, profileFacts = NO_PROFILE_FACTS) {
+  return { v: PROTOCOL_VERSION, type: 'welcome', id, tick, players, encounter, profileFacts };
 }
 
 export function inputMessage(seq, dirX, dirZ, magnitude, run) {

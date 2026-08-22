@@ -39,7 +39,7 @@ import {
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
   from './character/weaponLoadout.js';
 import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID, swingDamageFor } from './progression/items.js';
+import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS, swingDamageFor } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
 import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
@@ -69,6 +69,7 @@ import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
 import { createProfileStore } from './progression/profiles.js';
+import { foldFacts, latestEquippedFact } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
@@ -171,6 +172,10 @@ const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
 // folding, purely locally, so the offline loop is demonstrable with no server at all; it is never
 // sent anywhere and never confused with a real playerId (net/gameServer.mjs's ids are `p<n>`).
 const OFFLINE_HERO_ID = 'offline-hero';
+// What a device journals under when it could not mint a durable profile id (no crypto, and the
+// fallback minting path also unavailable). Never sent as the wire's guestId -- see durableProfileId
+// -- because a constant on the wire would collapse every such device onto one save server-side.
+const SESSION_ONLY_PROFILE_ID = 'p-session-only';
 
 const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
@@ -570,10 +575,12 @@ async function bootstrap() {
   // ENTIRELY invisible, the camera being inside a wall and inside a trunk respectively. It is now a
   // dedicated render pass over a cleared depth buffer (render/heroPreview.js's own header carries the
   // full before/after). Nothing dollies, so there is no saved camera to restore.
-  // Offline fallback (Phase D's own pattern, see OFFLINE_HERO_ID / offlineMarks below): with no
-  // server there is no rewards mirror to read an equip choice off, so this is progression's own
-  // small piece of local state, applied instead of net.sendEquip when netStatus is not 'online'.
-  let offlineEquippedWeaponId = DEFAULT_EQUIPPED_WEAPON_ID;
+  // Equip has no session-only fallback any more. It used to keep one -- a plain `let` holding the
+  // offline choice -- and that variable WAS the bug: a child who equipped a sword with no server was
+  // holding the starter sword again after a refresh, because the only record of the choice was a
+  // binding in this closure. The choice is now journalled the moment it is made (see onEquip below)
+  // and read back from `profileState`, so offline and online differ in who ADJUDICATES, not in
+  // whether the child's own decision survives.
   // Which weapon is highlighted in the owned-item strip, independent of which is actually equipped --
   // null until the child taps one, at which point heroScreenViewModel's own fallback (unowned/null
   // resolves to the equipped item) stops applying.
@@ -589,8 +596,18 @@ async function bootstrap() {
     onSelect: (itemId) => { selectedHeroItemId = itemId; },
     onEquip: (itemId) => {
       if (!canEquip(itemId)) return;
-      if (netStatus === 'online') net.sendEquip(itemId);
-      else offlineEquippedWeaponId = itemId;
+      // ONE act, ONE identity. The device mints the fact -- eventId and durable revision together --
+      // at the moment the child chose, journals it, and then tells the server about that same fact
+      // rather than asking the server to invent a second one. Both copies therefore carry the same
+      // name and the same place in the order, which is what makes holding two copies a union rather
+      // than a disagreement (docs/MISTAKES.md GQ-014).
+      //
+      // Journalled BEFORE it is sent, and sent only when there is a server: a child who equips a
+      // sword with no network has equipped a sword. The send is how the server finds out, not how it
+      // becomes true -- and if it never gets sent, the reconnect path below delivers it.
+      const fact = profiles.mintEquipFact(profileId, itemId);
+      refreshProfileState();
+      if (netStatus === 'online') net.sendEquip(itemId, fact ?? undefined);
       selectedHeroItemId = itemId;
     },
     // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
@@ -1050,8 +1067,39 @@ async function bootstrap() {
   // first read, reusing that string verbatim as the profile id, so every reward row already on the
   // server stays attached without a backfill.
   const profiles = createProfileStore();
-  const profileId = profiles.activeProfileId();
+  // The DURABLE id, or null when a device could not mint one at all. Only this may go on the wire:
+  // it is what ties a child to their rows in the server's store.
+  const durableProfileId = profiles.activeProfileId();
+  // What this session JOURNALS under. Falls back to a session-only id so a device that could not
+  // mint a durable one still plays a coherent session -- equip, marks and inventory all work, they
+  // simply are not there next time. Deliberately NOT sent as the guestId: a fixed fallback id on the
+  // wire would make every such device share one save on the server.
+  const profileId = durableProfileId ?? SESSION_ONLY_PROFILE_ID;
   const profileName = profiles.activeProfile()?.displayName ?? 'player';
+
+  /**
+   * This device's own folded copy of the active profile's durable state.
+   *
+   * A CACHE of the journal and never a second authority -- every write path recomputes it from
+   * storage rather than mutating it in place, so the two cannot drift. That distinction is the whole
+   * GQ-014 lesson: a number kept alongside the record it is derived from eventually disagrees with
+   * it. It exists only because the frame loop reads the equipped weapon every frame and folding a
+   * JSON journal sixty times a second would be real work for a value that changes when a child taps
+   * a button.
+   *
+   * Shaped exactly like the wire's own rewards block (progression/facts.js's foldFacts says why), so
+   * the offline and online branches below feed one renderer rather than two.
+   */
+  let profileState = foldFacts([], {
+    equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
+    ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
+  });
+
+  function refreshProfileState() {
+    profileState = profiles.stateFor(profileId);
+    return profileState;
+  }
+  refreshProfileState();
 
   /**
    * Write a durable fact into this device's own journal as it is announced.
@@ -1242,10 +1290,44 @@ async function bootstrap() {
   // single-player game. A child on a phone with no server still gets a hero that walks.
   let netStatus = 'offline';
   let lastReconcile = { drift: 0, snapped: false };
+  /**
+   * The reconnect contract, run on EVERY welcome rather than only the first -- a reconnect is a
+   * fresh join, and whatever the device missed while it was away arrives here.
+   *
+   * Two halves, in this order, and the order is the point:
+   *
+   * 1. Ingest. progression/profiles.js journals every fact the server knows and settles each one's
+   *    revision durably before deriving. Local progression must not mint above history it has not
+   *    written down yet, or a new choice gets numbered beneath an old one it was told about in this
+   *    very message (docs/MISTAKES.md GQ-014).
+   *
+   * 2. Re-send an equip the server has not heard about. A child who equipped offline holds that
+   *    weapon; the server, which never saw it, is about to publish a rewards block saying otherwise
+   *    and silently take it back. The ORIGINAL fact is re-sent, identity and revision intact, so the
+   *    server records the choice the child actually made at the moment they made it -- a repeated
+   *    equip identity is a replay server-side, not a second choice, so this is idempotent.
+   */
+  function ingestWelcome(message) {
+    const serverFacts = Array.isArray(message?.profileFacts) ? message.profileFacts : [];
+    profileState = profiles.ingestServerFacts(profileId, serverFacts);
+
+    const knownToServer = new Set(serverFacts.map((fact) => fact.eventId));
+    const localEquip = latestEquippedFact(profiles.journalFor(profileId));
+    // Only when the server genuinely has not got it. Comparing eventIds rather than weapon ids on
+    // purpose: two facts can name the same weapon and still be different choices, and re-sending a
+    // fact the server already holds is a write with nothing to say.
+    if (localEquip && !knownToServer.has(localEquip.eventId)) {
+      net.sendEquip(localEquip.value, localEquip);
+    }
+  }
+
   const net = createNetClient({
     name: profileName,
-    guestId: profileId ?? undefined,
+    // Only a DURABLE id goes on the wire -- see profileId's own comment for why the session-only
+    // fallback must not.
+    guestId: durableProfileId ?? undefined,
     onStatus: (next) => { netStatus = next; },
+    onWelcome: (message) => ingestWelcome(message),
     onLeave: (id) => remotes?.remove(id),
     // Snapshots arrive at 10 Hz on their own schedule, independent of the frame loop, so the
     // block is captured here and the events queued; the frame loop mirrors/drains both once per
@@ -1308,7 +1390,7 @@ async function bootstrap() {
     heroScreenOpen: () => heroScreen.isOpen(),
     heroScreenEquippedWeaponId: () => equippedWeaponIdFromRewards(netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { equippedWeaponId: offlineEquippedWeaponId }),
+      : profileState),
     // GP1-C3: the showcase pass's own state -- whether it is drawing, which accent the equipped
     // weapon put on its kickers, the framing it solved for this viewport, and the live hero's bounds
     // PROJECTED THROUGH THE PREVIEW CAMERA into normalized screen space. Same "observable without
@@ -1557,9 +1639,12 @@ async function bootstrap() {
     // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
     // and the showcase pass needs the current equipped id the frame the screen OPENS, so it can pick
     // up mid-frame whatever the DOM render below just set rather than painting one frame stale.
+    // Offline this is the device's own journal, folded -- the same shape the wire's rewards block
+    // has, which is what lets one renderer read either. It carries real owned items too, so an
+    // offline child's Hero screen shows what they have actually earned rather than the starter set.
     const ownRewards = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { equippedWeaponId: offlineEquippedWeaponId };
+      : profileState;
     const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
     if (heroScreenOpen) {
       heroScreen.render(heroScreenViewModel({

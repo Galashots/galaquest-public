@@ -113,7 +113,7 @@ function equipOutranks(fact, bestRev, bestEventId) {
 }
 
 /**
- * THE law for "which weapon is equipped", exported so there is exactly one of it.
+ * THE law for "which equip fact is the current one", exported so there is exactly one of it.
  *
  * Both readers of the durable rows have to answer this identically or the game contradicts itself:
  * net/rewardStore.mjs answers it for the rewards block and for live combat damage, and the device
@@ -134,11 +134,11 @@ function equipOutranks(fact, bestRev, bestEventId) {
  *     so two tabs minting the same millisecond cannot resolve differently on the two sides.
  *   - Among un-revved facts only: the last to arrive, which is the only order they have ever had.
  */
-export function latestEquippedWeaponId(facts) {
+export function latestEquippedFact(facts) {
   let bestRev = -1;
   let bestEventId = null;
-  let bestValue = null;
-  let legacyValue = null;
+  let best = null;
+  let legacy = null;
 
   for (const fact of facts) {
     if (!isProfileFact(fact) || fact.type !== 'weapon-equipped') continue;
@@ -148,16 +148,29 @@ export function latestEquippedWeaponId(facts) {
       if (equipOutranks(fact, bestRev, bestEventId)) {
         bestRev = fact.rev;
         bestEventId = fact.eventId;
-        bestValue = fact.value;
+        best = fact;
       }
     } else {
       // Last one seen wins among the un-revved, which is why this takes arrival order as its input
       // rather than sorting: there is nothing else about these rows to sort BY.
-      legacyValue = fact.value;
+      legacy = fact;
     }
   }
 
-  return bestValue ?? legacyValue;
+  return best ?? legacy;
+}
+
+/**
+ * Which weapon that fact names -- the answer almost every caller actually wants.
+ *
+ * A thin wrapper rather than a second loop, and that is the point: the reading law had two
+ * implementations once already (the store's `ORDER BY rowid DESC` against the fold's revision order)
+ * and the two gave different weapons from the same rows. A caller that needs the whole fact -- to
+ * re-send an equip the server has not heard about, identity and order intact -- must not have to
+ * re-derive "which one is latest" to get it, because a second derivation is a second law (GQ-007).
+ */
+export function latestEquippedWeaponId(facts) {
+  return latestEquippedFact(facts)?.value ?? null;
 }
 
 function numberOr(value, fallback) {

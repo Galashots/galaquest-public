@@ -227,9 +227,14 @@ export function createNetClient(options = {}) {
    * idempotent on the server (net/gameServer.mjs's applyEquip just records "the latest choice"), so
    * there is nothing a seq would protect here that the store's own latest-wins read does not already.
    */
-  function sendEquip(itemId) {
+  /** @param identity the device's own `{ eventId, rev }` for this choice, minted at the moment the
+   *  child tapped EQUIP (progression/profiles.js's mintEquipFact) and journalled before it is sent.
+   *  Passing it through unchanged is what lets the server store the SAME fact the device holds, so
+   *  the two copies merge instead of becoming two equips; omitted, the server mints its own, which
+   *  is the pre-1b behaviour a harness or an older client still gets. */
+  function sendEquip(itemId, identity) {
     if (status !== 'online') return false;
-    return send(equipMessage(itemId));
+    return send(equipMessage(itemId, identity));
   }
 
   /** GP2: ask the server to search the shared cart. Same online-only guard and no-sequence-number

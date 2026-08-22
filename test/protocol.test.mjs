@@ -63,7 +63,15 @@ test('every builder produces something the decoder accepts unchanged', () => {
     v: PROTOCOL_VERSION, type: 'join', name: 'kid-one',
   });
   assert.deepEqual(roundTrip(welcomeMessage('p1', 42, [], ENCOUNTER_FIXTURE)), {
-    v: PROTOCOL_VERSION, type: 'welcome', id: 'p1', tick: 42, players: [], encounter: ENCOUNTER_FIXTURE,
+    v: PROTOCOL_VERSION,
+    type: 'welcome',
+    id: 'p1',
+    tick: 42,
+    players: [],
+    encounter: ENCOUNTER_FIXTURE,
+    // A join with no durable identity owns no facts. Present-and-empty rather than absent, so the
+    // client reads one shape whether or not this connection has a profile behind it.
+    profileFacts: [],
   });
   assert.deepEqual(roundTrip(inputMessage(7, 0, 1, 0.5, false)), {
     v: PROTOCOL_VERSION, type: 'input', seq: 7, dirX: 0, dirZ: 1, magnitude: 0.5, run: false,
@@ -133,7 +141,21 @@ test('a welcome message carries the current encounter block for a late joiner', 
     tick: 3,
     players: [],
     encounter: ENCOUNTER_FIXTURE,
+    profileFacts: [],
   });
+});
+
+test('a welcome message carries the joining profile durable facts unchanged', () => {
+  // The rewards block is DERIVED state -- counts and a resolved weapon. These are the named facts
+  // behind it, and the eventId is what makes a device able to journal a second copy without
+  // double-counting it. Round-tripped here so a change to the decoder cannot quietly drop the
+  // identity or the order and leave only the values.
+  const facts = [
+    { eventId: 'mark:one', type: 'mark-earned' },
+    { eventId: 'equip:p-a:900:x', type: 'weapon-equipped', value: 'wildwood_blade', rev: 900 },
+  ];
+  const welcome = welcomeMessage('p1', 3, [], ENCOUNTER_FIXTURE, facts);
+  assert.deepEqual(roundTrip(welcome).profileFacts, facts);
 });
 
 test('a wolf.mode outside the known set is rejected', () => {
