@@ -21,6 +21,7 @@ export const HARNESSES = {
   'drive-hero-screen': { gate: true, why: 'GP1 Hero screen: open, compare, equip via a real server round trip, portrait and landscape' },
   'drive-cart-loot': { gate: true, why: 'GP2 cart loot: search, burst, HUD-gated collection, and a two-client double-collect proof, portrait and landscape' },
   'drive-village-board': { gate: true, why: 'GP3 Village Board: Workshop I purchase, 3D transformation, shared-balance two-client and race proofs, and a real server restart, portrait and landscape' },
+  'drive-profile-gate': { gate: true, why: 'Stage 1 family profile gate: name a first hero, add a sibling, switch, reload, per-child isolation, the four-hero cap, two-tap remove, and the 44px tap floor, portrait and landscape' },
   'drive-old-beacon': { gate: true, why: 'G1 Old Beacon road: the whole approach walked with the stick, visibility before arrival, one-shot arrival, honest post-arrival objective, world edge, portrait, landscape, reduced motion and a reload' },
   'fit-shield': { gate: true, why: 'shield carry fit; exits non-zero when its own bake is untrustworthy' },
   'fit-sword': { gate: false, why: 'sword carry measurement; always exits 0 by design' },
@@ -83,5 +84,6 @@ export const SUITES = {
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
+    'drive-profile-gate',
   ],
 };

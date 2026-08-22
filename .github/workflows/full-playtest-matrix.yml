@@ -68,6 +68,7 @@ jobs:
           - drive-old-beacon
           - drive-beacon-siege
           - drive-ranger
+          - drive-profile-gate
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

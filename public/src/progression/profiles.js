@@ -78,7 +78,11 @@ function freshProfile(id, displayName, nowIso) {
     // Client-only and, before this module existed, not persisted at all: main.js held these as
     // plain `let` bindings, so a child who refreshed was told to go and find the gate again. They
     // are the one class of state with no server copy, which makes this file their only home.
-    onboarding: { questGiven: false, movementTaught: false, attackTaught: false },
+    // `named` is the profile gate's own flag: whether a child has ever been asked what this hero is
+    // called. It lives with the other onboarding latches rather than being inferred from the display
+    // name, because "is the name still the default" is not the same question -- a child is perfectly
+    // entitled to call their hero Hero, and inferring would ask them again forever.
+    onboarding: { questGiven: false, movementTaught: false, attackTaught: false, named: false },
     discovered: {
       gate: false, camp: false, rowan: false, cart: false,
       beacon: false, hollow: false, lodge: false, trail: false,

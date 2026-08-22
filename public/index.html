@@ -665,6 +665,140 @@
       #touch-stick[data-run="true"] { border-color: rgb(255 208 130 / 95%); box-shadow: 0 0 0.8rem 0.1rem rgb(255 190 96 / 55%); }
       #touch-stick-knob { transition: width 90ms ease-out, height 90ms ease-out, background-color 90ms ease-out; }
       #touch-stick[data-run="true"] #touch-stick-knob { width: 54px; height: 54px; background: rgb(255 224 170 / 92%); }
+      /* ── The family profile gate ────────────────────────────────────────────────────────────
+         Tablet-first and child-first. Every interactive target here is at or above the 44 px floor
+         -- deliberately including the close and remove controls, which is where #hero-screen-close
+         and #village-board-close (both 36 px, flagged in the Checkpoint 0 audit) fall short. A
+         5-year-old's tap lands within about a centimetre of where they meant it.
+
+         Unlike the Hero screen and the Village Board this one is OPAQUE rather than a vignette over
+         the world: it is a question that has to be answered, not an overlay on play, and a
+         half-visible village behind it invites a child to try to tap the village. */
+      #profile-gate {
+        position: absolute; inset: 0; pointer-events: none;
+        display: grid; place-items: center;
+        background: rgb(9 15 24 / 96%);
+        /* Above the HUD, not merely above the world. Found by looking at a capture: the backdrop
+           dimmed the village correctly and the hearts, the objective chip, the Hero/Board buttons
+           and the loading line all still sat ON TOP of the question. A stacking context is the half
+           of "opaque" that a background colour does not give you. */
+        z-index: 20;
+        opacity: 0; transition: opacity 160ms ease-out;
+      }
+      #profile-gate[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      /* Same closed-overlay trap #hero-screen and #village-board-screen both had to fix: chrome
+         inside sets pointer-events auto, so without this a closed gate keeps eating taps aimed at
+         the touch stick underneath it. */
+      #profile-gate[data-shown="false"] { pointer-events: none; }
+      #profile-gate[data-shown="false"] * { pointer-events: none; }
+      #profile-gate-panel {
+        width: min(92vw, 560px); max-height: 88vh; overflow-y: auto;
+        padding: 1.1rem 1.1rem 1.3rem;
+        display: flex; flex-direction: column; gap: 0.9rem;
+      }
+      #profile-gate-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+      #profile-gate-title {
+        margin: 0; color: #f2b33d;
+        font: 800 1.5rem/1.15 system-ui, sans-serif; letter-spacing: 0.02em;
+      }
+      #profile-gate-close {
+        flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+      }
+      /* Hidden outright while a first hero is being named: there is nowhere to go back to, and a
+         dismissable question a child cannot answer any other way is a dead end. */
+      #profile-gate-close[data-shown="false"] { display: none; }
+      #profile-gate-list { display: flex; flex-direction: column; gap: 0.6rem; }
+      .profile-card {
+        display: flex; align-items: stretch; gap: 0.5rem;
+        border: 2px solid rgb(255 255 255 / 18%); border-radius: 0.7rem;
+        background: rgb(20 31 46 / 88%);
+      }
+      .profile-card[data-active="true"] { border-color: #f2b33d; background: rgb(242 179 61 / 14%); }
+      .profile-card-choose {
+        flex: 1 1 auto; min-height: 64px; padding: 0.6rem 0.9rem;
+        display: flex; flex-direction: column; justify-content: center; gap: 0.15rem;
+        border: 0; border-radius: 0.6rem; background: transparent; color: #fff;
+        text-align: left; font: 800 1.15rem/1.2 system-ui, sans-serif;
+      }
+      .profile-card-name { display: block; }
+      /* The line that lets a child tell their hero from their sibling's. Quieter than the name but
+         never small enough to be decoration -- it is doing real work on this screen. */
+      .profile-card-badge {
+        display: block; color: rgb(255 255 255 / 72%);
+        font: 600 0.82rem/1.2 system-ui, sans-serif; letter-spacing: 0.02em;
+      }
+      .profile-card-remove {
+        flex: 0 0 auto; min-width: 44px; min-height: 44px; align-self: center;
+        margin-right: 0.5rem; padding: 0 0.7rem;
+        border: 2px solid rgb(255 255 255 / 20%); border-radius: 0.5rem;
+        background: transparent; color: rgb(255 255 255 / 70%);
+        font: 700 0.78rem/1 system-ui, sans-serif;
+      }
+      /* Armed, and saying so in words rather than in colour alone -- the child who most needs this
+         warning is the one least able to read a red tint as a meaning. */
+      .profile-card-remove[data-armed="true"] {
+        border-color: #e2564d; color: #ff9c95; background: rgb(226 86 77 / 16%);
+      }
+      /* Looks like a card, is not one -- see profileGate.js's makeButton call for why it does not
+         share the .profile-card class. The shared look is repeated here rather than inherited,
+         which is the cost of that separation and is worth it. */
+      .profile-card-add {
+        display: block; min-height: 64px; width: 100%; padding: 0.6rem 0.9rem;
+        border: 2px dashed rgb(242 179 61 / 50%); border-radius: 0.7rem;
+        background: transparent; color: #f2b33d;
+        font: 800 1.05rem/1.2 system-ui, sans-serif; text-align: left;
+      }
+      #profile-gate-name-row { display: none; gap: 0.5rem; }
+      #profile-gate-name-row[data-shown="true"] { display: flex; }
+      #profile-gate-name {
+        flex: 1 1 auto; min-height: 52px; padding: 0 0.8rem;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 0.6rem;
+        background: rgb(12 20 31 / 90%); color: #fff;
+        font: 800 1.15rem/1.2 system-ui, sans-serif;
+      }
+      #profile-gate-confirm {
+        flex: 0 0 auto; min-width: 96px; min-height: 52px; padding: 0 1rem;
+        border: 0; border-radius: 0.6rem; background: #f2b33d; color: #14202f;
+        font: 900 1.05rem/1 system-ui, sans-serif; letter-spacing: 0.06em;
+      }
+      #profile-gate-notice {
+        margin: 0; color: rgb(255 255 255 / 70%);
+        font: 600 0.85rem/1.35 system-ui, sans-serif;
+      }
+      #profile-gate-notice[data-shown="false"] { display: none; }
+      /* The HUD's own "who is playing" chip, and the only way back into the gate once a hero is
+         chosen. Named rather than an icon: the child's own hero name is the most recognisable
+         thing that could sit there. */
+      #profile-chip {
+        /* Third in the top-right control row, left of the Board (52px) and Hero (52px) buttons.
+           NOT top-left: #hero-health, #lantern-marks and #quest-objective already stack there, and
+           a chip in that column would push the child's own objective further down the screen. */
+        position: absolute; top: 0.75rem; right: calc(0.75rem + 52px + 0.5rem + 52px + 0.5rem);
+        max-width: min(40vw, 11rem);
+        min-height: 44px; padding: 0 0.85rem;
+        overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        display: flex; align-items: center; gap: 0.4rem;
+        border: 2px solid rgb(242 179 61 / 45%); border-radius: 999px;
+        background: rgb(12 20 31 / 78%); color: #f2b33d;
+        font: 800 0.9rem/1 system-ui, sans-serif; letter-spacing: 0.02em;
+      }
+      #game[data-hero-screen-open="true"] #profile-chip,
+      #game[data-village-board-open="true"] #profile-chip { opacity: 0; pointer-events: none; }
+      /* Same list the other two overlays hide, plus the chip and the two HUD buttons: this screen is
+         a question that has to be answered, so nothing behind it should look tappable. */
+      #game[data-profile-gate-open="true"] #keeper-speech,
+      #game[data-profile-gate-open="true"] #quest-objective,
+      #game[data-profile-gate-open="true"] #banner,
+      #game[data-profile-gate-open="true"] #hero-health,
+      #game[data-profile-gate-open="true"] #lantern-marks,
+      #game[data-profile-gate-open="true"] #loot-hud,
+      #game[data-profile-gate-open="true"] #runtime-status,
+      #game[data-profile-gate-open="true"] #workshop-interact,
+      #game[data-profile-gate-open="true"] #hero-button,
+      #game[data-profile-gate-open="true"] #village-board-button,
+      #game[data-profile-gate-open="true"] #profile-chip { opacity: 0; pointer-events: none; }
     </style>
   </head>
   <body>
@@ -773,6 +907,9 @@
            village/boardScreen.js's own header). Same aria-pressed/data-shown pairing as the Hero
            button/screen above. -->
       <button id="village-board-button" type="button" aria-label="Village Board" aria-pressed="false">🗺</button>
+      <!-- Who is playing, and the way back to the gate. The hero's own NAME rather than an icon:
+           it is the most recognisable thing that could sit here for the child it belongs to. -->
+      <button id="profile-chip" type="button" aria-label="Change who is playing"></button>
       <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false">
         <div id="village-board-header">
           <span id="village-board-title">VILLAGE</span>
@@ -820,6 +957,25 @@
           </div>
           <div id="village-board-detail-future" data-shown="false">Not yet.</div>
           <button id="village-board-upgrade-button" type="button" data-shown="false">UPGRADE</button>
+        </div>
+      </div>
+      <!-- The family profile gate. A shared tablet, per-child saves: this is where a child says
+           which hero is theirs. Cards are BUILT by progression/profileGate.js rather than declared
+           here, because the number of heroes genuinely varies from one to four and markup for four
+           with three hidden is a shape that lies about what is on screen. -->
+      <div id="profile-gate" role="dialog" aria-modal="true" aria-label="Who is playing" data-shown="false">
+        <div id="profile-gate-panel">
+          <div id="profile-gate-header">
+            <h2 id="profile-gate-title">Who is playing?</h2>
+            <button id="profile-gate-close" type="button" aria-label="Close" data-shown="true">✕</button>
+          </div>
+          <div id="profile-gate-list" role="list" aria-label="Heroes on this tablet"></div>
+          <div id="profile-gate-name-row" data-shown="false">
+            <input id="profile-gate-name" type="text" maxlength="16" autocomplete="off"
+                   spellcheck="false" aria-label="Hero name" placeholder="Hero" />
+            <button id="profile-gate-confirm" type="button" data-intent="create">START</button>
+          </div>
+          <p id="profile-gate-notice" data-shown="false"></p>
         </div>
       </div>
     </main>

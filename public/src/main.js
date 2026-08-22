@@ -74,6 +74,7 @@ import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
 import { createProfileStore } from './progression/profiles.js';
+import { createProfileGate, profileGateViewModel } from './progression/profileGate.js';
 import { foldFacts } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
@@ -1125,6 +1126,130 @@ async function bootstrap() {
     // the journal already holds and silently swallow the first kill after every refresh.
     mintLifeId: createLifeIdMinter(),
   });
+
+  // ── WHO IS PLAYING ───────────────────────────────────────────────────────────────────────────
+  //
+  // A shared tablet with per-child saves needs a place to say which child this is. Everything under
+  // progression/ already keeps two siblings apart; without this the answer was decided silently by
+  // whatever localStorage happened to hold, which is fine for one child and wrong for two.
+  //
+  // SWITCHING RELOADS THE PAGE, deliberately. The profile id IS the wire's guestId and it is read
+  // once at bootstrap, so changing it mid-session would mean re-joining under a new identity while
+  // a fully built world, an open socket, a prediction buffer and a frame loop all still hold the old
+  // one. A reload is the only way to be certain nothing keeps a stale half of the previous child --
+  // and it costs a second on a game with no build step. It also gets the ceremony question right for
+  // free: the new session HYDRATES from the journal rather than replaying, so a sibling who already
+  // lit the lantern does not watch it be unlocked again (docs/MISTAKES.md, "Hydration restores
+  // state; it must not replay the ceremony that created it").
+  //
+  // Renaming does NOT reload: the id never moves, so nothing about the session is stale. That
+  // asymmetry is the id/name split made visible -- see progression/profiles.js's renameProfile.
+  const profileChipElement = document.querySelector('#profile-chip');
+
+  function heroesForGate() {
+    // Each sibling's own folded state, so the cards can say how far each has got. Read here rather
+    // than in the view model because deriving it means touching storage, and that half is pure.
+    return profiles.listProfiles().map((profile) => ({
+      id: profile.id,
+      displayName: profile.displayName,
+      ...profiles.stateFor(profile.id),
+    }));
+  }
+
+  function gateView() {
+    return profileGateViewModel({
+      heroes: heroesForGate(),
+      activeProfileId: profileId,
+      // Asked once, on a device whose only hero has never been given a name. A returning child gets
+      // the chooser; a brand-new one gets the question, because a list of one is not a choice.
+      namingFirstHero: profiles.listProfiles().length <= 1
+        && profiles.activeProfile()?.onboarding?.named !== true,
+    });
+  }
+
+  function paintProfileChip() {
+    if (profileChipElement) {
+      profileChipElement.textContent = profiles.activeProfile()?.displayName ?? 'Hero';
+    }
+  }
+
+  function switchToProfile(profileId_) {
+    profiles.selectProfile(profileId_);
+    window.location.reload();
+  }
+
+  const profileGate = createProfileGate({
+    onSelect: (id) => {
+      // Choosing the hero already playing is not a switch; closing is the honest response to it, and
+      // reloading would make a child who tapped their own card watch the game restart for nothing.
+      if (id === profileId) {
+        profiles.setFlags(id, { onboarding: { named: true } });
+        profileGate.close();
+        return;
+      }
+      switchToProfile(id);
+    },
+    onCreate: (displayName) => {
+      try {
+        const created = profiles.createProfile(displayName);
+        profiles.setFlags(created.id, { onboarding: { named: true } });
+        switchToProfile(created.id);
+      } catch (error) {
+        // The only real cause is the MAX_PROFILES cap, which the gate already refuses to offer a
+        // button for -- so reaching here means the view and the store disagreed. Re-render from the
+        // store, which is the side that is right.
+        console.warn('[profiles] could not create a hero:', error?.message ?? error);
+        profileGate.render(gateView());
+      }
+    },
+    onRename: (id, displayName) => {
+      profiles.renameProfile(id, displayName);
+      // Named, so the gate stops asking. Recorded against the profile rather than in a variable
+      // here for the obvious reason: the question must not come back on the next page load.
+      profiles.setFlags(id, { onboarding: { named: true } });
+      paintProfileChip();
+      profileGate.render(gateView());
+      profileGate.close();
+    },
+    onDelete: (id) => {
+      profiles.deleteProfile(id);
+      // Deleting the hero currently playing leaves this session holding an id with no profile and no
+      // journal behind it, which is not a state to keep rendering from -- reload into whoever is
+      // left, or into the naming question if that was the last one.
+      if (id === profileId) {
+        window.location.reload();
+        return;
+      }
+      profileGate.render(gateView());
+    },
+    onOpenChange: (open) => {
+      // The same input-suspend contract the other two overlays have. Movement and attack must not
+      // be drivable behind a screen that is asking whose game this is.
+      touchStickElement.dataset.suspended = String(open);
+      attackButtonElement.dataset.suspended = String(open);
+      // And the same HUD-hiding attribute, for a reason a capture made obvious: a dimmed backdrop
+      // still leaves the hearts and the objective looking tappable, and behind a modal they are not.
+      gameSurface.dataset.profileGateOpen = String(open);
+      if (open) {
+        heroScreen.close();
+        villageBoard?.close();
+      }
+    },
+  });
+
+  paintProfileChip();
+  profileChipElement?.addEventListener('click', () => {
+    profileGate.render(gateView());
+    profileGate.open();
+  });
+
+  // A brand-new hero is asked their name before anything else. Not gated on the socket or the
+  // world: the question is answerable while the village is still loading, and a child staring at a
+  // half-built village with no idea what to do is the failure this whole checkpoint is about.
+  if (gateView().mode === 'naming') {
+    profileGate.render(gateView());
+    profileGate.open();
+  }
 
   /**
    * Write a durable fact into this device's own journal as it is announced.
