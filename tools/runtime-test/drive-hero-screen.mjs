@@ -89,9 +89,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 let failures = 0;
 function check(name, passed, detail) {
-  results.push({ name, passed, detail });
+  // Coerced, so the summary below can count `passed === true` exactly as
+  // test/harness-verdict-semantics.test.mjs requires -- a truthy non-boolean would otherwise be
+  // neither a counted pass nor a failure, which is a third state nobody declared.
+  results.push({ name, passed: Boolean(passed), detail });
   if (!passed) failures += 1;
   console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
+}
+
+/**
+ * A measurement this environment cannot authoritatively judge -- the same third state
+ * drive-two-clients.mjs already defines, and enforced by test/harness-verdict-semantics.test.mjs.
+ *
+ * Used here for COVERAGE rather than for a physical measurement: whether the frame sampler's window
+ * actually spanned the transitions a claim is about is a fact about the runner's throughput, not
+ * about the game. Reporting it as FAIL makes one slow revert produce two reds for one cause;
+ * reporting it as PASS would be the false statement this state exists to prevent. DIAG says the
+ * true thing: the invariant held over what was sampled, and the sample was thinner than intended.
+ */
+function diagnostic(name, passed, detail, { authoritative, reason }) {
+  if (authoritative) return check(name, passed, detail);
+  results.push({ name, passed: null, outcome: 'DIAG', actualPredicate: passed, detail });
+  console.log(`DIAG  ${name}${detail ? ` — ${detail}` : ''}`
+    + ` [NOT JUDGED: ${reason}; predicate actually ${passed ? 'held' : 'VIOLATED'}]`);
 }
 
 // Idempotent (INSERT OR IGNORE on the eventId primary key): safe to run this file over and over
@@ -483,12 +503,26 @@ async function weaponMeshState() {
 // round trip. "No double sword for even one stable rendered frame" is a per-frame claim, and a
 // node-side poll at 30 ms cannot make it -- it would miss exactly the one-frame overlap it is
 // supposed to catch. Reads the same published accessor a harness reads; touches nothing.
+/**
+ * Sample the one-sword invariant on every rendered frame, and record what the sample SPANNED.
+ *
+ * The span is the addition, and it replaces a frame count as the coverage gate -- see the check at
+ * the bottom of this phase for why. Alongside the per-frame count it keeps the sequence of distinct
+ * equipped ids, so "did this window actually contain the two equips and the unequip the check claims
+ * to be about" is answerable from the sample itself rather than assumed from its size.
+ */
 async function startWeaponFrameSampler() {
   await page.eval(`(() => {
     window.__gqWeaponSamples = [];
+    window.__gqWeaponEquipSeq = [];
+    window.__gqWeaponSampleStart = performance.now();
     const tick = () => {
       if (!window.__gqWeaponSampling) return;
-      window.__gqWeaponSamples.push(window.__galaQuestRuntime.equippedWeaponMeshState().visibleSwords);
+      const state = window.__galaQuestRuntime.equippedWeaponMeshState();
+      window.__gqWeaponSamples.push(state.visibleSwords);
+      // Distinct-consecutive, so the sequence is the TRANSITIONS rather than one entry per frame.
+      const seq = window.__gqWeaponEquipSeq;
+      if (seq.length === 0 || seq[seq.length - 1] !== state.equippedItemId) seq.push(state.equippedItemId);
       requestAnimationFrame(tick);
     };
     window.__gqWeaponSampling = true;
@@ -501,7 +535,14 @@ async function stopWeaponFrameSampler() {
     const s = window.__gqWeaponSamples ?? [];
     const counts = {};
     for (const n of s) counts[n] = (counts[n] ?? 0) + 1;
-    return JSON.stringify({ frames: s.length, counts });
+    const equipSequence = window.__gqWeaponEquipSeq ?? [];
+    return JSON.stringify({
+      frames: s.length,
+      counts,
+      equipSequence,
+      transitions: Math.max(0, equipSequence.length - 1),
+      elapsedMs: Math.round(performance.now() - (window.__gqWeaponSampleStart ?? performance.now())),
+    });
   })()`).then(JSON.parse);
 }
 
@@ -677,9 +718,39 @@ await sleep(200);
 
 // ── the per-frame invariant, over the whole phase ──
 const samples = await stopWeaponFrameSampler();
-check(`GP1-C4: across all ${samples.frames} RENDERED frames of this phase -- two equips, a swing and an unequip -- the hero held exactly one sword in every single one`,
-  samples.frames > 100 && Object.keys(samples.counts).length === 1 && samples.counts['1'] === samples.frames,
+// COVERAGE IS THE TRANSITIONS, NOT THE FRAME COUNT.
+//
+// This gate used to also require `samples.frames > 100`, and that number was measuring the runner
+// rather than the game. A Director audit found the check red on a run that had observed 91 of 91
+// rendered frames holding exactly one sword -- the invariant perfectly satisfied, the verdict
+// FAIL, purely because a software-rasterised runner drew 91 frames instead of 101. That is a false
+// negative on the one check here that decides whether a child ever sees two swords in one fist, and
+// a false negative on a safety invariant is worse than no check: it trains a reader to discount it.
+//
+// What actually makes the sample meaningful is whether it SPANNED the events the check names. The
+// sampler now records the sequence of distinct equipped ids, so the window is required to contain
+// the real starter -> Blade -> starter journey. At 3 fps that is a handful of frames and the claim
+// holds; at 120 fps it is thousands and the claim is the same one. Frame count is reported for
+// diagnosis and gates nothing.
+//
+// The one-sword assertion itself is deliberately untouched: every sampled frame must read exactly 1.
+// THE INVARIANT. Gating, and scoped to exactly what was sampled -- no claim about coverage is
+// baked into this PASS, which is what the old wording did when it named "two equips, a swing and an
+// unequip" in a check whose only real gate was a frame count.
+check(`GP1-C4: across all ${samples.frames} RENDERED frames sampled in this phase, the hero held exactly one sword in every single one`,
+  samples.frames > 0
+  && Object.keys(samples.counts).length === 1 && samples.counts['1'] === samples.frames,
   JSON.stringify(samples));
+
+// THE COVERAGE, reported separately and never as a product verdict. A window that did not span the
+// full starter -> Blade -> starter journey is weaker evidence for the invariant above, and saying so
+// is honest; failing for it would report one slow revert as two defects, when the revert has its own
+// check twenty lines up which is the one that should go red.
+diagnostic('GP1-C4 coverage: the sampled window spanned the whole equip -> swing -> unequip journey',
+  samples.transitions >= 2,
+  `${samples.transitions} transitions over ${samples.frames} frames in ${samples.elapsedMs} ms`
+  + ` (${samples.equipSequence.join(' -> ')})`,
+  { authoritative: false, reason: 'frame throughput and round-trip latency decide how much of the journey one window can contain' });
 
 // ── phase 3: the same screen, opened from six HOSTILE world positions ────────────────────────────
 //
@@ -898,6 +969,10 @@ check('no console errors across the whole Hero-screen pass, fresh guest, granted
   realErrors.length === 0, realErrors.slice(0, 5).join(' | '));
 
 writeFileSync(`${OUT}hero-screen-results.json`, JSON.stringify({ results, consoleErrors }, null, 2));
-console.log(`\n${results.length - failures}/${results.length} checks passed`);
+// Counted separately rather than as `results.length - failures`, which silently counts every DIAG
+// as a pass -- the same lie drive-two-clients.mjs's own summary comment calls out.
+const diagCount = results.filter((r) => r.outcome === 'DIAG').length;
+const passedCount = results.filter((r) => r.passed === true).length;
+console.log(`\n${passedCount} PASS / ${failures} FAIL / ${diagCount} DIAG  (${results.length} checks)`);
 await page.send('Target.closeTarget', { targetId });
 process.exit(failures === 0 ? 0 : 1);

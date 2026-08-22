@@ -513,6 +513,61 @@ export function createProfileStore(options = {}) {
    * their marks because the naming screen has not been built yet. They get a hero called Hero and
    * can rename it; what matters is that the id exists and is durable from the first kill onward.
    */
+  /**
+   * Adopt a hero named in the URL: select the one already called that, or create it.
+   *
+   * The README's whole distribution model is "players join by URL", and on a shared tablet the
+   * natural extension is a link per child -- `.../?hero=Sam` is Sam's link, and following it puts
+   * Sam's save on screen without a five-year-old having to pick their own name off a list first.
+   *
+   * By NAME rather than by id on purpose: the id is a 38-character machine string that nobody is
+   * going to put in a link, and a name is the thing a family already uses. The consequence is
+   * accepted rather than overlooked -- two heroes deliberately called the same name share a link,
+   * and the first one wins. Inside one household that is the behaviour a parent would predict.
+   *
+   * Select-or-create rather than always-create, or every reload of the same link would mint another
+   * hero and fill the four slots with duplicates.
+   *
+   * Returns the profile, or null when the name was unusable or the tablet is full -- callers fall
+   * back to the ordinary gate, which is the honest thing to do when a link cannot be honoured.
+   */
+  function adoptNamedHero(rawName) {
+    const wanted = sanitizeDisplayName(rawName);
+    if (typeof rawName !== 'string' || rawName.trim().length === 0) return null;
+
+    // MIGRATION BEFORE CREATE, and this is the one place it could most easily have been skipped.
+    // A device that has been played on before this module existed holds a bare gq-guest-id, and
+    // every reward row on the server points at that string. Minting a fresh profile here instead
+    // would leave the child looking at an empty save while their real one sat on the server under a
+    // name nothing on the device pointed at any more -- orphaned, not deleted, which is worse
+    // because nothing looks broken. Caught by a harness: the seeded guest's owned Blade vanished
+    // because ?hero= had created a second profile beside it.
+    const migrated = migrateLegacyGuest();
+
+    const existing = keyring.profiles.find((p) => p.displayName === wanted);
+    if (existing) return selectProfile(existing.id);
+
+    // The legacy save IS this device's save, so the name in the link belongs to it rather than to a
+    // new hero standing next to it. Renaming keeps the id -- which is the whole point of the id and
+    // the name being different things.
+    if (migrated) {
+      const named = renameProfile(migrated.id, wanted);
+      setFlags(migrated.id, { onboarding: { named: true } });
+      return named;
+    }
+
+    if (keyring.profiles.length >= MAX_PROFILES) return null;
+    try {
+      const created = createProfile(wanted);
+      // A hero who arrived by name has been named, so the gate must not ask again.
+      setFlags(created.id, { onboarding: { named: true } });
+      return { ...created, onboarding: { ...created.onboarding, named: true } };
+    } catch (error) {
+      console.warn('[profiles] could not adopt the hero named in the URL:', error?.message ?? error);
+      return null;
+    }
+  }
+
   function activeProfileId() {
     if (!keyring.activeProfileId) {
       migrateLegacyGuest();
@@ -537,6 +592,7 @@ export function createProfileStore(options = {}) {
     deleteProfile,
     setFlags,
     migrateLegacyGuest,
+    adoptNamedHero,
     journalFor,
     recordFacts,
     mintEquipFact,

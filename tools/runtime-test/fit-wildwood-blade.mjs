@@ -127,14 +127,14 @@ await page.send('Emulation.setDeviceMetricsOverride', VIEWPORT);
 // Fresh-guest discipline (GQ-008) -- see docs/MISTAKES.md. Every harness that navigates starts from
 // a known identity rather than whatever the persistent automation profile was holding.
 await page.send('Storage.clearDataForOrigin', { origin: ORIGIN_UNDER_TEST, storageTypes: 'local_storage' });
-await page.send('Page.navigate', { url: `${URL_UNDER_TEST}studio.html` });
+await page.send('Page.navigate', { url: `${ORIGIN_UNDER_TEST}/studio.html` });
 
 let ready = false;
 for (let i = 0; i < 60 && !ready; i += 1) {
   await sleep(500);
   ready = await page.eval('Boolean(window.__galaQuestStudioReady)').catch(() => false);
 }
-if (!ready) throw new Error(`Character Studio never became ready on ${URL_UNDER_TEST}studio.html`);
+if (!ready) throw new Error(`Character Studio never became ready on ${ORIGIN_UNDER_TEST}/studio.html`);
 await sleep(300);
 
 await page.eval('window.__galaQuestStudio.setLoadout("candidate-wildwood-blade")');

@@ -1078,6 +1078,17 @@ async function bootstrap() {
   // first read, reusing that string verbatim as the profile id, so every reward row already on the
   // server stays attached without a backfill.
   const profiles = createProfileStore();
+  // A hero named in the URL wins over whatever this device last had active. `.../?hero=Sam` is
+  // Sam's link -- the README's own "players join by URL" model, applied to a shared tablet -- and
+  // following it must put Sam's save on screen rather than the last child's. Done BEFORE the id is
+  // read, because it can change which profile is active. Unusable or unhonourable names return null
+  // and fall through to the ordinary gate.
+  try {
+    const wanted = new URLSearchParams(window.location.search).get('hero');
+    if (wanted) profiles.adoptNamedHero(wanted);
+  } catch (error) {
+    console.warn('[profiles] could not read the hero from the URL:', error?.message ?? error);
+  }
   // The DURABLE id, or null when a device could not mint one at all. Only this may go on the wire:
   // it is what ties a child to their rows in the server's store.
   const durableProfileId = profiles.activeProfileId();

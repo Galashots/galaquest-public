@@ -92,7 +92,7 @@ async function openStudioPage(viewport) {
   await page.send('Emulation.setDeviceMetricsOverride', viewport);
   await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
-  await page.send('Page.navigate', { url: `${server.url}studio.html` });
+  await page.send('Page.navigate', { url: `${server.origin}/studio.html` });
   let ready = false;
   for (let i = 0; i < 60 && !ready; i += 1) {
     await sleep(500);

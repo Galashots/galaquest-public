@@ -256,13 +256,18 @@ let ORIGIN_UNDER_TEST = null;
 
 async function run() {
   const server = await startOwnedServer({ rewardStorePath: freshStorePath('main') });
-  ORIGIN_UNDER_TEST = server.origin ?? new URL(server.url).origin;
+  ORIGIN_UNDER_TEST = server.origin;
+  // The BARE url, deliberately not server.url. owned-server.mjs appends `?hero=Harness` so the other
+  // 27 harnesses land in the game instead of on an unanswered naming question -- and this is the one
+  // harness whose whole first phase is that question. Driving the named link here would skip the
+  // thing under test and still print green, which is the worst available outcome.
+  const gameUrl = `${server.origin}/`;
   const tab = await openTab();
   try {
     await setViewport(tab, PORTRAIT);
 
     // ── a brand-new tablet is ASKED, not assumed ───────────────────────────────────────────────
-    await load(tab, server.url, { clearStorage: true });
+    await load(tab, gameUrl, { clearStorage: true });
     let state = await gateState(tab);
     check('a first-ever load opens the gate by itself', state.shown, `shown ${state.shown}`);
     check('and it asks for a name rather than listing one hero',
@@ -285,14 +290,14 @@ async function run() {
 
     // The question must not come back. This is the whole reason `named` is a stored flag rather
     // than "is the display name still the default" -- a child may legitimately be called Hero.
-    await load(tab, server.url);
+    await load(tab, gameUrl);
     state = await gateState(tab);
     check('a reload does NOT ask the name again', !state.shown, `shown ${state.shown}`);
     check('and the hero is still Rowan after the reload', state.chip === 'Rowan', `chip ${JSON.stringify(state.chip)}`);
 
     // ── give Rowan some progress, so the sibling check has something to be about ───────────────
     const rowanId = await grantMarksToActiveProfile(tab, 2);
-    await load(tab, server.url);
+    await load(tab, gameUrl);
     await clickSelector(tab, '#profile-chip');
     state = await gateState(tab);
     check('the chip opens the gate', state.shown, `shown ${state.shown}`);
@@ -309,7 +314,7 @@ async function run() {
     await clickSelector(tab, '#profile-gate-confirm');
     // Creating a hero reloads, by design -- the profile id IS the wire's guestId.
     await new Promise((r) => setTimeout(r, 500));
-    await load(tab, server.url);
+    await load(tab, gameUrl);
     state = await gateState(tab);
     check('the new sibling is the one now playing', state.chip === 'Sam', `chip ${JSON.stringify(state.chip)}`);
 
@@ -343,7 +348,7 @@ async function run() {
     // ── switching back, which is the claim the whole design rests on ───────────────────────────
     await clickSelector(tab, `.profile-card-choose[data-profile-id="${rowanId}"]`);
     await new Promise((r) => setTimeout(r, 500));
-    await load(tab, server.url);
+    await load(tab, gameUrl);
     state = await gateState(tab);
     check('switching back returns to Rowan', state.chip === 'Rowan', `chip ${JSON.stringify(state.chip)}`);
 
@@ -365,7 +370,7 @@ async function run() {
       await typeName(tab, `Kid${i}`);
       await clickSelector(tab, '#profile-gate-confirm');
       await new Promise((r) => setTimeout(r, 500));
-      await load(tab, server.url);
+      await load(tab, gameUrl);
       await clickSelector(tab, '#profile-chip');
     }
     state = await gateState(tab);
