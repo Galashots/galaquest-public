@@ -771,8 +771,14 @@ async function bootstrap() {
   // What the bar is currently SHOWING, so the per-frame read in the loop repaints on a change rather
   // than rewriting four dataset attributes sixty times a second.
   let heartsShown = { hp: HERO_MAX_HP, maxHp: HERO_MAX_HP };
-  // Said once per session, on the first bite. See the hero-hurt handler.
+  // ── The teaching latches ────────────────────────────────────────────────────────────────────
+  // Three things a child learns ONCE and must never be taught again: that the Keeper gave them a
+  // quest, that they can move, that they can swing. All three are declared here and HYDRATED from
+  // the active profile further down, once durableProfileId exists -- not at the declaration, because
+  // that runs long before the profile store is read and a hydrate up here would be reading a
+  // variable that does not exist yet. This branch has already shipped one temporal dead zone.
   let combatCoached = false;
+  let movementTaught = false;
   function renderHearts(hp, maxHp = heartCeiling) {
     heartCeiling = Math.max(1, Math.min(HERO_MAX_HP_CEILING, Math.round(maxHp)));
     const filled = heartsForHp(hp, heartCeiling);
@@ -1308,6 +1314,26 @@ async function bootstrap() {
   const profileId = durableProfileId ?? SESSION_ONLY_PROFILE_ID;
   const profileName = profiles.activeProfile()?.displayName ?? 'player';
 
+  // WHAT THIS CHILD HAS ALREADY BEEN TAUGHT, read back from their own profile.
+  //
+  // The store has carried onboarding.{questGiven, movementTaught, attackTaught} since it was
+  // written; nothing has ever set them but `named`. So every latch reset on every reload: a child
+  // who came back tomorrow was a stranger who had never met the Keeper, and any hint keyed on these
+  // would have fired again at somebody who already knew. Durable teaching state is the difference
+  // between a save file and a session.
+  const taught = profiles.activeProfile()?.onboarding ?? {};
+  questGiven = taught.questGiven === true;
+  movementTaught = taught.movementTaught === true;
+  combatCoached = taught.attackTaught === true;
+
+  /** Write a latch down the first time it flips. No-op without a durable profile: a session-only
+   *  device still plays a coherent session, it simply has nowhere to remember into (see profileId
+   *  above), and silently doing nothing is the honest behaviour rather than inventing a home. */
+  function rememberTeaching(flags) {
+    if (!durableProfileId) return;
+    profiles.setFlags(durableProfileId, { onboarding: flags });
+  }
+
   /**
    * This device's own folded copy of the active profile's durable state.
    *
@@ -1644,6 +1670,7 @@ async function bootstrap() {
       // an ordinary banner because it is the only instruction in the game.
       if (!combatCoached) {
         combatCoached = true;
+        rememberTeaching({ attackTaught: true });
         banner(firstHurtCoachingLine(POINTER_MODE), 3200);
       }
     },
@@ -2116,6 +2143,15 @@ async function bootstrap() {
     const input = anyOverlayOpen ? touchInput : (touchInput.active ? touchInput : keyboard.read());
     const inputMagnitude = Math.hypot(input.screen.x, input.screen.y);
     player.groundSpeed = groundSpeedForInput(inputMagnitude, input.run);
+    // MOVEMENT IS LEARNED BY DOING IT. There is no movement tutorial to have been shown, so the
+    // honest latch is that this child has driven themselves at least once -- which is the thing any
+    // future "use the stick" hint would need to know, and the thing that must not un-learn itself on
+    // reload. Gated on a real push rather than any non-zero reading, so a resting thumb or a
+    // fractional drift does not count as having learned.
+    if (!movementTaught && inputMagnitude > 0.25) {
+      movementTaught = true;
+      rememberTeaching({ movementTaught: true });
+    }
     // One direction, used for both the local integration and the wire, so the server can never be
     // told a different heading from the one the hero is walking.
     const worldDirection = worldDirectionForInput(input.screen, follow.heading);
@@ -2699,7 +2735,10 @@ async function bootstrap() {
     if (rowanSpeech.visible) rowanMet = true;
     // He has told you, so the objective chip can stop telling you first. Latched rather than read
     // live, so the instruction does not vanish again the moment the child steps out of his radius.
-    if (keeperSpeech.visible) questGiven = true;
+    if (keeperSpeech.visible && !questGiven) {
+      questGiven = true;
+      rememberTeaching({ questGiven: true });
+    }
     // And the "!" over his head goes out with it. Shown only while he is the thing to do: a child
     // who has already been told, or who came back tomorrow with two marks on record, is not sent to
     // queue at an old man again. Keyed on the same latch the objective chip reads, so the floating

@@ -464,6 +464,53 @@ async function run() {
       `${state.cards.length} cards left`);
     check('and the tablet offers a new hero again', state.hasAdd, `hasAdd ${state.hasAdd}`);
 
+    // ── what this child has already been taught ────────────────────────────────────────────────
+    // The store has carried onboarding.{questGiven, movementTaught, attackTaught} since it was
+    // written and nothing ever set them but `named`, so every latch reset on every reload: a child
+    // who came back tomorrow was a stranger who had never met the Keeper. Durable teaching state is
+    // the difference between a save file and a session.
+    //
+    // Read out of localStorage rather than off the runtime, deliberately. A mirror in memory would
+    // pass this check while nothing had been written to disk, which is the whole failure.
+    const teaching = async () => JSON.parse(await tab.page.eval(`JSON.stringify((() => {
+      const raw = localStorage.getItem('gq-profiles');
+      if (!raw) return { noKeyring: true };
+      const keyring = JSON.parse(raw);
+      const active = keyring.profiles.find((p) => p.id === keyring.activeProfileId) ?? keyring.profiles[0];
+      return { name: active?.displayName ?? null, onboarding: active?.onboarding ?? null };
+    })())`));
+
+    const before = await teaching();
+    check('a child who has not moved yet has not been taught movement',
+      before.onboarding?.movementTaught === false, JSON.stringify(before));
+
+    // A real push on the stick, not a synthetic flag flip.
+    const stick = { x: 16 + 56, y: LANDSCAPE.height - 16 - 56 };
+    const push = (type, points) => tab.page.send('Input.dispatchTouchEvent', {
+      type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: i })),
+    });
+    await push('touchStart', [stick]);
+    for (let i = 0; i < 20; i += 1) {
+      await push('touchMove', [{ x: stick.x, y: stick.y - 46 }]);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await push('touchEnd', []);
+    await new Promise((r) => setTimeout(r, 700));
+
+    const moved = await teaching();
+    check('and once they drive themselves, the tablet writes it down',
+      moved.onboarding?.movementTaught === true, JSON.stringify(moved));
+
+    // THE POINT. A latch that only lives until the tab closes is not a latch.
+    await load(tab, gameUrl);
+    await waitForRuntime(tab);
+    const remembered = await teaching();
+    check('and it is still true after a real reload, which is what a save file means',
+      remembered.onboarding?.movementTaught === true, JSON.stringify(remembered));
+    check('and the reload did not forget who they are either',
+      remembered.name === moved.name && remembered.onboarding?.named === true,
+      JSON.stringify(remembered));
+
     check('no console errors across the whole run',
       tab.consoleErrors.length === 0,
       tab.consoleErrors.length ? JSON.stringify(tab.consoleErrors.slice(0, 3)) : 'none');
