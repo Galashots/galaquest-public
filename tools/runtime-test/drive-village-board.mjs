@@ -332,6 +332,12 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })),
 });
 
+/** Resolves after the page has actually PAINTED, not after a duration. Two frames, because one
+ *  requestAnimationFrame can resolve inside the frame already in flight. */
+const afterAFrame = (tab) => tab.page.eval(
+  'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
+);
+
 /** How much further out than the caller's ring the HELD leg is allowed to latch. The held walk
  *  releases the stick on arrival and the hero coasts, so it aims wide on purpose and lets the
  *  pulsed leg place him. This is not a slack constant that has to be right -- the loop below
@@ -396,8 +402,24 @@ async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     try {
       // eslint-disable-next-line no-await-in-loop
       await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+      // THE PULSE, OR ONE RENDERED FRAME, WHICHEVER IS LONGER.
+      //
+      // movementPulseMillis is capped at 300ms and floored at 70ms, which is right on a machine
+      // painting every 17ms and useless on one painting every 300-400ms: main.js samples input only
+      // from its frame loop, so a press that begins and ends between two frames transmits nothing at
+      // all. That is consequence 2 in in-page-driver.mjs's header, and it is why the last metre of
+      // this approach would not close -- as the hero got nearer the pulse got shorter, and below one
+      // frame he simply stopped moving. Hosted at 66cf253 the held walk brought him from 3.26m to
+      // 2.43m of a 2.4m interact radius and the pulsed leg could not find the last three
+      // centimetres.
+      //
+      // Waiting on BOTH means the fast machine keeps its measured pulse and the slow one gets a
+      // press that spans a frame, with no constant to pick and nothing to go stale.
       // eslint-disable-next-line no-await-in-loop
-      await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
+      await Promise.all([
+        sleep(movementPulseMillis(Math.max(0, distance - stopWithin))),
+        afterAFrame(tab),
+      ]);
     } finally {
       // eslint-disable-next-line no-await-in-loop
       await touch(tab, 'touchEnd', []);
