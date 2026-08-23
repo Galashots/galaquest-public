@@ -198,6 +198,16 @@ const bootB = await waitFor(pageB, 'Boolean(window.__galaQuestRuntime?.hero && w
 if (bootA && bootB) {
   // A background tab can receive snapshots but not run rAF to render its remote. Bring B forward:
   // the requirement is that B sees A, and this models the child looking at B's iPad.
+  // A tab publishes encounterState() from its FRAME LOOP, and a backgrounded tab does not run one.
+  // So bringToFront alone is not enough to make a tab readable: its snapshot may have arrived over
+  // the socket while it was asleep and not yet been folded into the state a harness can see. This
+  // waits for two rendered frames -- two rather than one because the first callback can have been
+  // scheduled before the tab came forward -- and it is what turned the last "disagreement" from
+  // A=0/B=1 into an actual comparison.
+  const afterAFrame = (page) => page.eval(
+    'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
+  );
+
   await pageB.send('Page.bringToFront');
   await waitFor(pageB, 'window.__galaQuestRuntime.netState().remoteCount === 1', 'tab B receives tab A as a remote');
   const initialA = await state(pageA);
@@ -218,7 +228,13 @@ if (bootA && bootB) {
   // Render B's interpolated result while it is foreground. At the preceding assertion, stale B rAF
   // was the only reason its scene graph could lag behind otherwise-current socket snapshots.
   await pageB.send('Page.bringToFront');
+  // Both, and in this order. The half second is the interpolation B needs to catch up; the frame
+  // wait is the guarantee that it actually PAINTED afterwards, because a backgrounded tab's scene
+  // graph is only advanced by rAF and half a second of wall clock hosted can buy one frame or none.
+  // Replacing the sleep with the frame wait alone made this measurement worse rather than better --
+  // the two are answering different questions and it needs both answered.
   await sleep(500);
+  await afterAFrame(pageB);
   const endB = await state(pageB);
   const remoteAonB = endB.net.remotes[0];
   const authoritativeA = endA.net.serverSelf;
@@ -377,16 +393,6 @@ if (bootA && bootB) {
   // If A did change, the sample cannot answer the question at all -- it is neither agreement nor
   // disagreement -- so it is excluded and COUNTED, because a sample silently dropped is how a
   // harness reports "all agreeing" about rounds it never managed to compare.
-  // A tab publishes encounterState() from its FRAME LOOP, and a backgrounded tab does not run one.
-  // So bringToFront alone is not enough to make a tab readable: its snapshot may have arrived over
-  // the socket while it was asleep and not yet been folded into the state a harness can see. This
-  // waits for two rendered frames -- two rather than one because the first callback can have been
-  // scheduled before the tab came forward -- and it is what turned the last "disagreement" from
-  // A=0/B=1 into an actual comparison.
-  const afterAFrame = (page) => page.eval(
-    'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
-  );
-
   async function bracketedPair(maxWaitMs) {
     const deadline = deadlineAfter(maxWaitMs);
     let a = null;
