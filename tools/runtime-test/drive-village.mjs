@@ -34,7 +34,7 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  metresOrUnknown, READ_WALK, startWalk, STOP_WALK,
+  metresOrUnknown, READ_WALK, readWatchSource, startWalk, startWatch, STOP_WALK, stopWatchSource,
 } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
@@ -484,6 +484,52 @@ const animationStretch = await (async () => {
 /** A timeout for something gated on an animation FINISHING, rather than on wall-clock. */
 const animationBudget = (ms) => Math.round(ms * animationStretch);
 
+/**
+ * Wait for an animation-gated state, budgeted in the clock the ANIMATION actually advances on.
+ *
+ * WHY animationBudget IS NOT ENOUGH, measured hosted at 66cf253. That scaler is sampled ONCE, over
+ * one second, before the walk -- and then every animation-gated wait in the run is scaled by that
+ * one number. `after the greeting, the keeper talks` went red at `talking:false` after 7.8s of
+ * polling, while the SECOND wave, later in the same run, handed off to talk correctly twice. The
+ * frame rate had moved between the sample and the wait. A measurement taken once is a constant with
+ * a better story, and this file already has an entry's worth of those.
+ *
+ * THE CLOCK AN ANIMATION ADVANCES ON is not wall-clock and is not rendered frames either. main.js
+ * feeds its mixers `Math.min(frameDelta, 0.1)`, so a clip advances 0.1s per frame below 10fps and
+ * one wall-second per wall-second above it. Summing that over the recorded frames gives the only
+ * unit in which "this clip has had long enough" means the same thing on every machine. Computed
+ * node-side from the recorder's own timestamps, so it needs no new in-page state and restates
+ * nothing -- FRAME_DELTA_CLAMP_SECONDS below is main.js's clamp and the reason this works at all.
+ *
+ * @param budgetSeconds how much ANIMATION time the transition is allowed, as a claim about the clip.
+ */
+const FRAME_DELTA_CLAMP_SECONDS = 0.1;
+
+function mixerSecondsOf(samples) {
+  let total = 0;
+  for (let i = 1; i < samples.length; i += 1) {
+    const gap = (samples[i].t - samples[i - 1].t) / 1000;
+    if (Number.isFinite(gap) && gap > 0) total += Math.min(gap, FRAME_DELTA_CLAMP_SECONDS);
+  }
+  return total;
+}
+
+async function waitForAnimationGated(key, sampleExpression, predicate, budgetSeconds) {
+  await page.eval(startWatch(key, `({ t: performance.now(), v: ${sampleExpression} })`));
+  const read = () => page.eval(readWatchSource(key)).then(JSON.parse);
+  // The wall ceiling is a backstop against a page that has stopped painting entirely -- it is not
+  // what decides, and it is deliberately far larger than any budget a caller would pass.
+  const watch = await pollUntilDeadline(read,
+    (w) => Boolean(w) && (w.samples.some((sample) => predicate(sample.v))
+      || mixerSecondsOf(w.samples) >= budgetSeconds),
+    { intervalMs: 100, timeoutMs: 120_000 });
+  await page.eval(stopWatchSource(key));
+  const met = watch.samples.some((sample) => predicate(sample.v));
+  console.log(`  ${key}: ${met ? 'seen' : 'NOT SEEN'} over ${watch.samples.length} frame(s) / `
+    + `${mixerSecondsOf(watch.samples).toFixed(2)}s of animation time (budget ${budgetSeconds}s)`);
+  return met;
+}
+
 const approached = await walkToward(keeperX, keeperZ, 1.5, 20000);
 check('walking reaches the keeper',
   Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
@@ -516,9 +562,11 @@ check('the keeper stops waving while the hero is still standing there, rather th
 // wave radius (2.0 m) and the shared speech radius (the same constant), so keeperSpeech stays
 // visible and wantsTalking stays true across the handoff -- if this doesn't become true, the
 // 'finished' handler's fallback to idleAction is firing instead of the talk branch.
-const talking = await pollUntil((s) => s.keeper?.talking === true, { timeoutMs: animationBudget(3000) });
+const talking = await waitForAnimationGated('keeper-talk',
+  'window.__galaQuestRuntime.zoneKeeperState()?.talking === true', (v) => v === true, 6);
 check('after the greeting, the keeper talks while the hero is still there and the line is visible',
-  talking.keeper?.talking === true, `keeperState ${JSON.stringify(talking.keeper)}`);
+  talking, `talking seen on a recorded frame: ${talking}; `
+    + `keeperState now ${JSON.stringify((await state()).keeper)}`);
 
 // Step 4: holding position must NOT restart the wave. This is the direct regression Sol asked for --
 // "holding a hero continuously at 1.4 m for 10 seconds must produce one greeting wave, not five" --
@@ -562,9 +610,11 @@ check('re-entering after leaving produces exactly one new greeting wave',
 const resettled = await pollUntil((s) => s.keeper?.waving === false, { timeoutMs: animationBudget(6000) });
 check('the second wave also ends while the hero is still there',
   resettled.keeper?.waving === false, `keeperState ${JSON.stringify(resettled.keeper)}`);
-const retalking = await pollUntil((s) => s.keeper?.talking === true, { timeoutMs: animationBudget(3000) });
+const retalking = await waitForAnimationGated('keeper-retalk',
+  'window.__galaQuestRuntime.zoneKeeperState()?.talking === true', (v) => v === true, 6);
 check('talk resumes after the second wave, closing the full cycle',
-  retalking.keeper?.talking === true, `keeperState ${JSON.stringify(retalking.keeper)}`);
+  retalking, `talking seen on a recorded frame: ${retalking}; `
+    + `keeperState now ${JSON.stringify((await state()).keeper)}`);
 // 8, not 6: at 6 the hero's own back and the keeper's robe (a simple low-poly trapezoid at this
 // character's triangle budget -- see public/src/world/zones/village.js's KEEPER comment) fill
 // most of the frame at a close, low angle and the wave is hard to read. Confirmed empirically
