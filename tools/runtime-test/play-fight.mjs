@@ -110,6 +110,22 @@ function check(name, passed, detail) {
   console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
 }
 
+/**
+ * A verdict this machine is not equipped to give -- same shape as drive-two-clients.mjs's.
+ *
+ * `authoritative` must be a MEASUREMENT, never a guess about which runner this is. The one use
+ * below gates on the shutter latency this run actually measured against the length of the swing it
+ * is trying to photograph, because the question "can three separable photographs fit inside a 1.5s
+ * animation" has a different answer on a laptop and on a runner with no GPU, and the run can tell
+ * which it is on. A red that only means "this machine is slow" trains people to ignore reds.
+ */
+function diagnostic(name, passed, detail, { authoritative, reason }) {
+  if (authoritative) return check(name, passed, detail);
+  results.push({ name, passed: null, outcome: 'DIAG', actualPredicate: passed, detail });
+  console.log(`DIAG  ${name}${detail ? ` — ${detail}` : ''}`
+    + ` [NOT JUDGED: ${reason}; predicate actually ${passed ? 'held' : 'VIOLATED'}]`);
+}
+
 // Spawn and own the runtime server. Everything about how that is done -- probing a port by
 // listening, skipping rather than killing an occupied one, spawning from the repo root, polling
 // until it really serves, and the process-'exit' teardown backstop -- lives in owned-server.mjs.
@@ -1275,10 +1291,16 @@ async function photographTheSwing() {
   // the constant means they follow it, and 'contact' is aimed at the moment the rules actually apply
   // damage rather than at a number that once happened to be near it.
   //
-  // Each target is pulled earlier by the round trip a state() read plus a PNG encode costs, because
-  // the frame lands at the sleep PLUS that latency, not at the sleep.
-  const LATENCY_MS = 90;
-  const at = (seconds) => Math.max(0, Math.round(seconds * 1000) - LATENCY_MS);
+  // Each target is pulled earlier by what the round trip actually costs, because the frame lands at
+  // the sleep PLUS that latency, not at the sleep.
+  //
+  // MEASURED, not a constant. This was `LATENCY_MS = 90`, hand-set against a developer laptop, and
+  // it is the exact shape docs/MISTAKES.md GQ-019 is about: hosted at bc262f8 the reads landed at
+  // 0.407s, 1.160s and past the end of a 1.5s swing while aiming at 0.181, 0.517 and 0.930. The
+  // shutter measurement this run already took is the same round trip, so use it rather than a
+  // second guess -- and clamp at zero, because the earliest a swing can be photographed is when it
+  // starts.
+  const at = (seconds) => Math.max(0, Math.round((seconds - shutterSeconds) * 1000));
   const frames = [];
   for (const [label, atMillis] of [
     ['windup', at(SWING_CONTACT_SECONDS * 0.35)],
@@ -1302,9 +1324,20 @@ async function photographTheSwing() {
     frames.push({ label, swingSeconds: shownSwing, down: at.hero.downSeconds >= 0 });
   }
   const caught = frames.filter((frame) => frame.swingSeconds >= 0 && !frame.down);
-  check('the swing frames actually caught a swing, rather than whatever came next',
+  // WHETHER THIS MACHINE CAN BE ASKED AT ALL. Each photograph costs one shutter, and the earliest
+  // moment reachable is therefore `shutterSeconds` into the swing; the latest is SWING_SECONDS.
+  // Three separable phases need that window to be wider than the spread bar below. Where it is not,
+  // the answer is not FAIL -- nothing about the game is wrong, the instrument is slower than its
+  // subject -- and it is not silence either. Measured at bc262f8: a 1280ms shutter against a 1.5s
+  // swing leaves 220ms to place three photographs in.
+  const reachable = SWING_SECONDS - shutterSeconds;
+  const aimable = reachable > SWING_SECONDS * 0.3;
+  const shutterNote = `shutter ${Math.round(shutterSeconds * 1000)}ms of a ${SWING_SECONDS}s swing `
+    + `leaves ${Math.round(reachable * 1000)}ms to aim in`;
+  diagnostic('the swing frames actually caught a swing, rather than whatever came next',
     frames.length === 3 && caught.length === 3,
-    frames.map((f) => `${f.label} ${f.swingSeconds.toFixed(3)}s${f.down ? ' DOWN' : ''}`).join(', '));
+    frames.map((f) => `${f.label} ${f.swingSeconds.toFixed(3)}s${f.down ? ' DOWN' : ''}`).join(', '),
+    { authoritative: aimable, reason: shutterNote });
   // Three frames that all caught the same instant would pass the check above and still be useless as
   // evidence of an arc.
   //
@@ -1316,11 +1349,12 @@ async function photographTheSwing() {
   const spread = caught.length === 3
     ? Math.max(...caught.map((f) => f.swingSeconds)) - Math.min(...caught.map((f) => f.swingSeconds))
     : null;
-  check('the three frames are spread across the swing rather than three copies of one instant',
+  diagnostic('the three frames are spread across the swing rather than three copies of one instant',
     spread !== null && spread > SWING_SECONDS * 0.3 && spread <= SWING_SECONDS,
     spread === null
       ? `only ${caught.length} of 3 frames caught a swing, so there is no spread to measure`
-      : `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`);
+      : `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`,
+    { authoritative: aimable, reason: shutterNote });
 
   // AND THE ARM MOVED. Measured against the hero's OWN standing-still, not against a distance in
   // metres: a bar of "at least so many centimetres" is a number picked off one rig, and this rig is
@@ -1339,7 +1373,16 @@ async function photographTheSwing() {
   const arm = JSON.parse(await page.eval(readWatchSource('swing-arm')));
   await page.eval(stopWatchSource('swing-arm'));
   const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);
-  const still = arm.samples.filter((sample) => sample.swingSeconds < 0);
+  // REST IS THE FRAMES BEFORE THE FIRST SWING, not every frame that was not mid-swing. Those two
+  // are the same thing only on a fast machine. Hosted at bc262f8 this check FAILED at 0.7x, because
+  // "not swinging" swept up the frames where the arm was still returning to rest between the three
+  // swings -- at a 317ms frame there are about five samples in a 1.5s swing, so a single boundary
+  // frame carries a large part of the arc into the baseline it is being compared against. The
+  // baseline then grew to 0.54m while the swing measured 0.38m, and the check reported that a
+  // moving arm moves less than a still one. Before the first tap the hero is unambiguously standing
+  // there, and that is the only stretch of this recording that means "at rest".
+  const firstSwing = arm.samples.findIndex((sample) => sample.swingSeconds >= 0);
+  const still = firstSwing > 0 ? arm.samples.slice(0, firstSwing) : [];
   const handSwinging = travelOf(swinging.map((sample) => sample.hand));
   const handStill = travelOf(still.map((sample) => sample.hand));
   // The hero is not supposed to go anywhere here -- the wolf is dead and nothing walks -- so if he
@@ -1352,8 +1395,10 @@ async function photographTheSwing() {
     stoodStill && handSwinging !== null && handStill !== null
       && handSwinging > handStill * SWING_DWARFS_IDLE,
     handSwinging === null || handStill === null
-      ? `no ${SWORD_HAND_BONE} bone was readable over ${arm.samples.length} frame(s), `
-        + 'so this proved nothing rather than passing'
+      ? `nothing to compare over ${arm.samples.length} recorded frame(s): `
+        + `${swinging.length} swinging and ${still.length} at rest carried a readable `
+        + `${SWORD_HAND_BONE}. So this proved nothing rather than passing -- and it says WHICH `
+        + 'half was missing, because "no bone" and "no rest frames" want different fixes'
       : `hand travelled ${handSwinging.toFixed(2)}m over ${swinging.length} swinging frame(s) `
         + `against ${handStill.toFixed(2)}m over ${still.length} idle one(s) `
         + `(${(handSwinging / Math.max(handStill, 1e-6)).toFixed(1)}x, bar ${SWING_DWARFS_IDLE}x); `
@@ -1530,5 +1575,16 @@ writeFileSync(`${OUT}fight-results.json`,
     // fight, and by then the wolf can already have respawned. The checks read the recorder.
     afterFight, corpseLog,
   }, null, 2));
-console.log(`\n${results.length - failures}/${results.length} checks passed`);
+// `results.length - failures` would count every DIAG as a pass, which is the same lie the
+// individual verdict lines were built to stop telling. Same summary shape as drive-two-clients.
+// `r`, not `result`: test/harness-verdict-semantics.test.mjs matches this summary by the literal
+// text `r.passed === true`, so the parameter name is load-bearing. Same spelling as
+// drive-two-clients.mjs, which is where the shape comes from.
+const passedCount = results.filter((r) => r.passed === true).length;
+const diagCount = results.filter((r) => r.outcome === 'DIAG').length;
+// Always all three, even at zero DIAG: test/harness-verdict-semantics.test.mjs requires it, and it
+// is right to. A summary that only mentions DIAG when there is one teaches a reader that the
+// absence of the word means the run had nothing to report, and the first time it appears they read
+// it as noise. The shape is the promise, not the numbers in it.
+console.log(`\n${passedCount} PASS / ${failures} FAIL / ${diagCount} DIAG  (${results.length} checks)`);
 process.exit(failures === 0 ? 0 : 1);
