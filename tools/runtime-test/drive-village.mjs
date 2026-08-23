@@ -23,6 +23,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_DISTANCE } from '../../public/src/camera/follow.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import {
   headingToward, KEEPER_GREET_REARM_RADIUS_METERS, KEEPER_WAVE_RADIUS_METERS,
 } from '../../public/src/world/zoneLoader.js';
@@ -248,6 +249,17 @@ async function setCameraDistance(distance) {
 const stickX = VIEWPORT.width * 0.18;
 const stickY = VIEWPORT.height * 0.86;
 const STICK_PX = 56;
+// THE FINE LEG WALKS; THE COARSE LEG RUNS, which is what a person does and which is the difference
+// between converging and bouncing. Even with the release moved into the page there is a real coast
+// left -- the client samples the stick in its own frame loop, so zero intent reaches the server a
+// frame or so after the thumb lifts. That latency is fixed; the DISTANCE it costs is speed times
+// latency, and the harness picks the speed. Hosted at b683623 the fine leg latched at 0.07m of a
+// 1.5m ring and the reading afterwards said 3.13m: about 1.1s of latency at RUN_SPEED's 2.8 m/s.
+// The same 1.1s at WALK_SPEED is half that, which is inside the ring instead of past it.
+//
+// RUN_DEFLECTION, not a fraction chosen to feel right: it is the speed law's own named boundary,
+// the exact push at which groundSpeedForInput returns WALK_SPEED. See character/speed.js.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 
 // Walks toward a fixed world point (unlike play-fight.mjs's walkToward, which re-aims at a live
 // wolf every tick -- these targets, the keeper and a point along the wolf lane, do not move).
@@ -361,7 +373,7 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // at most one poll, and the walker is still aiming at the target when that poll lands, so the extra
 // travel is toward the keeper rather than past him. Held straight up, the stick is pure
 // camera-forward -- the `sy = 1` case the rotation above used to compute.
-async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
+async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis, deflectionPx = STICK_PX) {
   await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin,
     { releaseOnArrival: true }));
   // ASK THE PAGE WHETHER WE ARE ALREADY THERE, BEFORE TOUCHING THE STICK. A walk that starts inside
@@ -378,7 +390,7 @@ async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
     return pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
   }
   await touch('touchStart', [{ x: stickX, y: stickY }]);
-  await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
+  await touch('touchMove', [{ x: stickX, y: stickY - deflectionPx }]);
   let walk;
   try {
     walk = await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
@@ -412,11 +424,19 @@ async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
 // the held leg closes whatever distance is left quickly, the pulsed leg places him exactly, and if
 // the release carried him past, the next turn round the loop simply walks him back. Bounded by the
 // caller's own budget, and it reports how many passes it took so a slow route says so out loud.
+// PASSES, NOT MILLISECONDS -- the same unit fix play-fight's settle budget needed, applied to the
+// loop that was still counting in the wrong one. A pass costs whatever a pass costs on the machine
+// you are on: hosted at 4fps each one took eight or nine seconds, so a 20s budget bought TWO, and
+// the run that failed at b683623 stopped at 3.13m having had no third. The number of passes a walk
+// needs is a property of the walk (how far the coast is against how wide the ring is), not of the
+// runner, so that is what to budget. The clock stays as a backstop against a page that has stopped
+// painting -- generous, because it is no longer the thing being budgeted.
+const APPROACH_PASSES = 6;
 async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
-  const deadline = deadlineAfter(maxMillis);
+  const deadline = deadlineAfter(Math.max(maxMillis, 90_000));
   let last = await state();
   let passes = 0;
-  while (Date.now() < deadline) {
+  while (passes < APPROACH_PASSES && Date.now() < deadline) {
     // A FRESH READING EACH TIME ROUND, not the one the previous leg handed back. That leg returns as
     // soon as the SERVER hero has stopped, and the rendered hero keeps converging onto him for a
     // while afterwards -- so its parting number is the hero mid-reconciliation, and it reads further
@@ -462,7 +482,7 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
     // instead guarantees there is none: one pass ate three quarters of the lane walk's 12s and the
     // loop stopped at 1.50m against a check that wants under 1.5, passing on the last centimetre.
     last = await heldWalkToward(targetX, targetZ, stopWithin,
-      Math.max(2000, deadline - Date.now()));
+      Math.max(2000, deadline - Date.now()), FINE_STICK_PX);
     // The pulse is the last resort now, not the placer: it runs only if the fine held leg could not
     // latch at all, which on a page that is still painting means the target is unreachable rather
     // than merely far.
@@ -474,7 +494,8 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
     }
   }
   const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
-  console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target`);
+  const spent = passes >= APPROACH_PASSES ? ` -- SPENT ALL ${APPROACH_PASSES} PASSES` : '';
+  console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target${spent}`);
   return last;
 }
 
