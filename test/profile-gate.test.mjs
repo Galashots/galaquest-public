@@ -10,7 +10,9 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
 import { profileGateViewModel, progressBadgeFor } from '../public/src/progression/profileGate.js';
-import { HERO_AVATARS, avatarForProfile, fallbackAvatarIdFor } from '../public/src/progression/heroAvatars.js';
+import {
+  HERO_AVATARS, avatarForProfile, chooseAvatarId, fallbackAvatarIdFor,
+} from '../public/src/progression/heroAvatars.js';
 import {
   LEGACY_GUEST_ID_KEY,
   MAX_PROFILES,
@@ -60,6 +62,40 @@ test('a brand-new device is ASKED a name rather than shown a list of one', () =>
   // A list of one is not a choice, and the screen must not offer a way out of a question that has
   // to be answered -- there is no hero to fall back to.
   assert.equal(view.createLabel, null);
+});
+
+// THE NAMING SCREEN IS THE FIRST THING A CHILD EVER SEES, AND IT HAD NOTHING ON IT FOR THEM.
+//
+// Captured on a fresh tablet at 768x1024: a sentence, an empty text box with a grey word in it, and
+// a button reading START. Every one of those is a shape a four-year-old cannot decode, and the
+// screen this file's own header says is for "a child who cannot reliably read" therefore asked them
+// to type. The chooser earned its animals; the screen before it had none, because `heroes: []` is
+// right about CARDS and was silently also right about pictures.
+//
+// So the naming view carries the animal this hero HAS OR IS ABOUT TO GET. Not a choice -- choosing
+// is a product decision and not mine -- just the cue, so a child looking at their first screen sees
+// who they are going to be.
+//
+// It comes from the same law that assigns it, never a second copy: `chooseAvatarId` is exactly what
+// createProfile calls, given exactly the animals already spoken for. A preview computed any other
+// way would be a promise the create path is free to break.
+test('the naming screen shows the animal this hero is about to be', () => {
+  const view = profileGateViewModel({ heroes: [], namingFirstHero: true });
+  assert.ok(view.avatar, 'a screen with no cards and no reader still has to show the child something');
+  assert.equal(view.avatar.id, chooseAvatarId([]),
+    'the preview has to be what createProfile would actually hand out, not a second guess at it');
+  assert.ok(view.avatar.emoji, 'and it has to be the picture, not just the id');
+});
+
+test('renaming an existing hero shows THAT hero\'s animal, not the next free one', () => {
+  // Naming is also how a hero already on the tablet gets renamed. Showing the next unclaimed animal
+  // there would tell a child their fox had become an owl because they changed their name.
+  const rowan = { id: 'p-a', displayName: 'Rowan', avatar: 'owl', marks: 1 };
+  const view = profileGateViewModel({
+    heroes: [rowan], activeProfileId: 'p-a', namingFirstHero: true,
+  });
+  assert.equal(view.namingProfileId, 'p-a', 'premise: this is a rename, not a create');
+  assert.equal(view.avatar.id, 'owl', 'a child keeps their animal through a rename');
 });
 
 test('a returning device is shown who is playing', () => {

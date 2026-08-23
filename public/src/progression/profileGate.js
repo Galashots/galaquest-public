@@ -28,7 +28,7 @@
 // and is proved in a browser.
 
 import { DEFAULT_DISPLAY_NAME, MAX_PROFILES, sanitizeDisplayName } from './profiles.js';
-import { avatarForProfile } from './heroAvatars.js';
+import { avatarForProfile, avatarById, chooseAvatarId } from './heroAvatars.js';
 import { MARKS_TO_UNLOCK } from '../rewards/marks.js';
 
 /** Plain language for how far a hero has got. Not a number in a corner: this is the line a child
@@ -102,6 +102,9 @@ export function profileGateViewModel({
   }));
 
   if (namingFirstHero) {
+    const namingId = cards.find((card) => card.active)?.id ?? cards[0]?.id ?? null;
+    const renaming = heroes.find((hero) => hero.id === namingId) ?? null;
+    const takenAvatarIds = heroes.map((hero) => avatarForProfile(hero).id);
     return {
       mode: 'naming',
       // A question, in words a child hears rather than reads. "Profile" appears nowhere.
@@ -121,7 +124,19 @@ export function profileGateViewModel({
       // there is no hero at all -- see the DOM half's confirm handler, which then CREATES rather
       // than renaming. Without that fallback the one button on the screen does nothing, which is
       // the worst failure a screen with one button can have.
-      namingProfileId: cards.find((card) => card.active)?.id ?? cards[0]?.id ?? null,
+      namingProfileId: namingId,
+      // THE ONE THING ON THIS SCREEN A CHILD WHO CANNOT READ CAN USE. Everything else here is a
+      // sentence, a text field and a word; a capture of a fresh tablet showed all three and nothing
+      // else, on the screen this file's own header says is for a child who cannot reliably read.
+      // The chooser earned its animals and the screen BEFORE it had none, because `heroes: []` is
+      // right about cards and was quietly also right about pictures.
+      //
+      // A cue, not a choice: which animal a child gets is a product decision and not this file's.
+      // On a rename it is the animal they already have -- telling a child their fox became an owl
+      // because they changed their name is worse than showing nothing. On a create it is what
+      // createProfile will actually hand out, from the SAME call with the SAME input, because a
+      // preview computed any other way is a promise the create path is free to break.
+      avatar: renaming ? avatarForProfile(renaming) : avatarById(chooseAvatarId(takenAvatarIds)),
       canCreate: false,
       createLabel: null,
       fullNotice: null,
@@ -169,6 +184,9 @@ export function createProfileGate(options = {}) {
 
   const screen = root.querySelector('#profile-gate');
   const titleEl = root.querySelector('#profile-gate-title');
+  // Optional on purpose: profileGateViewModel is the tested half and must keep working against a
+  // document that predates this element, which is also what every existing gate test hands it.
+  const faceEl = root.querySelector('#profile-gate-face');
   const listEl = root.querySelector('#profile-gate-list');
   const nameRow = root.querySelector('#profile-gate-name-row');
   const nameInput = root.querySelector('#profile-gate-name');
@@ -327,6 +345,16 @@ export function createProfileGate(options = {}) {
     // out of it, because a child who dismisses it has no hero at all.
     // Shown when the screen IS the question, or while a child is part-way through answering it.
     nameRow.dataset.shown = String(view.mode === 'naming' || creatingNewHero);
+    // The animal only belongs on the naming screen: the chooser's cards each carry their own, and a
+    // second copy floating above them would say nothing about which hero it meant.
+    if (faceEl) {
+      const showFace = view.mode === 'naming' && Boolean(view.avatar);
+      faceEl.dataset.shown = String(showFace);
+      faceEl.textContent = showFace ? view.avatar.emoji : '';
+      faceEl.style.background = showFace ? view.avatar.colour : '';
+      // The one reader that cannot see an animal at all still gets told which one it is.
+      faceEl.setAttribute('aria-label', showFace ? view.avatar.name : '');
+    }
     confirmButton.dataset.intent = view.mode === 'naming' ? 'name-first' : 'create';
     closeButton.dataset.shown = String(view.mode !== 'naming');
     renderCards(view);
