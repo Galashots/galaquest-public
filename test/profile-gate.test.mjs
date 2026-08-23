@@ -324,3 +324,44 @@ test('every card carries an animal with something to draw and something to annou
     assert.ok(card.avatar.colour, `${card.name}'s animal has no colour`);
   }
 });
+
+test('the row that offers a NEW hero shows one, rather than being the only row with no animal', () => {
+  // Found by opening a capture of the chooser and reading it as a child who cannot read: four cards
+  // each led with a face, and the one row offering something new led with the words "New hero" and
+  // nothing else. That is the same gap the naming screen had before it was given a face -- fixed
+  // there and missed one row below it, on the same screen, in the same session.
+  const heroes = [{ id: 'p-a', displayName: 'Rowan', avatar: HERO_AVATARS[0].id }];
+  const view = profileGateViewModel({ heroes, activeProfileId: 'p-a' });
+
+  assert.ok(view.canCreate, 'premise: one hero on a multi-hero tablet can still add another');
+  assert.ok(view.createAvatar, 'the add row has no animal to draw, so a child sees words or nothing');
+  assert.ok(view.createAvatar.emoji, 'and it has to be the picture, not just the id');
+});
+
+test('the animal offered on the add row is the one a new hero would actually be given', () => {
+  // The whole value of the cue is that it is a PROMISE. A child taps the owl because it is an owl;
+  // handing them a whale would make the only part of that screen they can read the wrong part.
+  // Same law as the card test above: one function decides, and both readers call it.
+  const heroes = [
+    { id: 'p-a', displayName: 'Rowan', avatar: HERO_AVATARS[0].id },
+    { id: 'p-b', displayName: 'Sam', avatar: HERO_AVATARS[1].id },
+  ];
+  const view = profileGateViewModel({ heroes, activeProfileId: 'p-a' });
+  const taken = heroes.map((hero) => avatarForProfile(hero).id);
+
+  assert.equal(view.createAvatar.id, chooseAvatarId(taken),
+    'the add row is previewing an animal the create path is free to disagree with');
+  assert.ok(!taken.includes(view.createAvatar.id),
+    `offered ${view.createAvatar.id}, which one of these heroes already has`);
+});
+
+test('a full tablet offers no animal, because it offers no new hero', () => {
+  // The sentinel case: canCreate false must not leave a face pointing at a row that is not drawn.
+  const heroes = HERO_AVATARS.slice(0, 4).map((avatar, index) => ({
+    id: `p-${index}`, displayName: `Kid${index}`, avatar: avatar.id,
+  }));
+  const view = profileGateViewModel({ heroes, activeProfileId: 'p-0', maxProfiles: 4 });
+
+  assert.equal(view.canCreate, false, 'premise: four heroes fill this tablet');
+  assert.equal(view.createAvatar, null, 'a tablet with no room still offered a face for a fifth hero');
+});

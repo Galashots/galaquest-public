@@ -101,10 +101,14 @@ export function profileGateViewModel({
     progress: progressPipsFor(hero),
   }));
 
+  // Which animals are spoken for, computed once: both the naming screen's cue and the chooser's
+  // add-card cue below have to be the SAME answer, because a child who taps the owl and is then
+  // handed a whale has been lied to by the only part of the screen they could read.
+  const takenAvatarIds = heroes.map((hero) => avatarForProfile(hero).id);
+
   if (namingFirstHero) {
     const namingId = cards.find((card) => card.active)?.id ?? cards[0]?.id ?? null;
     const renaming = heroes.find((hero) => hero.id === namingId) ?? null;
-    const takenAvatarIds = heroes.map((hero) => avatarForProfile(hero).id);
     return {
       mode: 'naming',
       // A question, in words a child hears rather than reads. "Profile" appears nowhere.
@@ -153,6 +157,16 @@ export function profileGateViewModel({
     namingProfileId: null,
     canCreate: !full,
     createLabel: 'New hero',
+    // THE ADD CARD'S OWN ANIMAL, and the reason this exists: every hero card on this screen leads
+    // with a face, and the one row that offers a child something NEW led with two words. A child
+    // who cannot read saw a list of animals and an empty dashed box, which is the same gap the
+    // naming screen had before it was given a face -- fixed there and missed one row below it, on
+    // the same screen, in the same session.
+    //
+    // The animal shown is the one `createProfile` will actually hand out, from the same
+    // chooseAvatarId call on the same input the naming view uses, so tapping the owl gets the owl.
+    // Null when the tablet is full, because there is no add card to put it on.
+    createAvatar: full ? null : avatarById(chooseAvatarId(takenAvatarIds)),
     // Said plainly and only when it applies. A disabled button with no explanation is the single
     // most confusing thing a screen like this can do to a child.
     fullNotice: full ? `This tablet holds ${maxProfiles} heroes. Remove one to add another.` : null,
@@ -318,7 +332,26 @@ export function createProfileGate(options = {}) {
       // "how many heroes are on this tablet" queries that class, and a create button answering to it
       // makes the count wrong for every reader -- which is exactly how the browser harness first
       // read three heroes on a two-hero device. Shared look, separate identity.
-      const add = makeButton('profile-card-add', view.createLabel);
+      const add = makeButton('profile-card-add', '');
+      if (view.createAvatar) {
+        // ITS OWN CLASS, not .profile-card-face, for exactly the reason the makeButton call above
+        // does not reuse .profile-card: anything asking "what animals are on this tablet" queries
+        // that class, and a row offering a hero who does not exist yet must not answer. Reusing it
+        // took one run to break -- `every card shows the animal that profile actually has stored`
+        // read three faces on a two-hero device and reported "New hero, the Owl" as a stored animal.
+        // Shared look, separate identity, one level further down than the first time this bit.
+        const nextFace = document.createElement('span');
+        nextFace.className = 'profile-card-add-face';
+        nextFace.textContent = view.createAvatar.emoji;
+        nextFace.style.background = view.createAvatar.colour;
+        nextFace.setAttribute('role', 'img');
+        nextFace.setAttribute('aria-label', `New hero, the ${view.createAvatar.name}`);
+        add.append(nextFace);
+      }
+      const addWords = document.createElement('span');
+      addWords.className = 'profile-card-add-words';
+      addWords.textContent = view.createLabel;
+      add.append(addWords);
       add.addEventListener('click', () => {
         confirmingDeleteId = null;
         creatingNewHero = true;

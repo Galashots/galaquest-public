@@ -855,7 +855,7 @@
          letters and the badge is a sentence. Its colour is its own, so two cards differ by more than
          a glyph at a glance. progression/heroAvatars.js says why the animal is stored on the profile
          and therefore never changes when a sibling's save is deleted. */
-      .profile-card-face {
+      .profile-card-face, .profile-card-add-face {
         flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%;
         display: grid; place-items: center; font-size: 1.7rem; line-height: 1;
         box-shadow: inset 0 0 0 2px rgb(255 255 255 / 22%);
@@ -894,11 +894,18 @@
          share the .profile-card class. The shared look is repeated here rather than inherited,
          which is the cost of that separation and is worth it. */
       .profile-card-add {
-        display: block; min-height: 64px; width: 100%; padding: 0.6rem 0.9rem;
+        display: flex; align-items: center; gap: 0.85rem;
+        min-height: 64px; width: 100%; padding: 0.6rem 0.9rem;
         border: 2px dashed rgb(242 179 61 / 50%); border-radius: 0.7rem;
         background: transparent; color: #f2b33d;
         font: 800 1.05rem/1.2 system-ui, sans-serif; text-align: left;
       }
+      /* The waiting hero's face, dimmed: it is the animal a new hero WOULD get, offered rather than
+         owned, and it has to read as different from the four that already exist or the row becomes
+         a list of five heroes one of which is a lie. Same size and same shape as theirs, because
+         the point is that a child recognises it as the same kind of thing. */
+      .profile-card-add-face { opacity: 0.55; filter: saturate(0.8); }
+      .profile-card-add-words { min-width: 0; }
       #profile-gate-name-row { display: none; gap: 0.5rem; }
       #profile-gate-name-row[data-shown="true"] { display: flex; }
       #profile-gate-name {

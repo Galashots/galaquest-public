@@ -220,6 +220,7 @@ async function gateState(tab) {
       active: card.dataset.active === 'true',
       name: card.querySelector('.profile-card-name')?.textContent ?? null,
       badge: card.querySelector('.profile-card-badge')?.textContent ?? null,
+      face: card.querySelector('.profile-card-face')?.textContent ?? null,
     }));
     const addButton = document.querySelector('#profile-gate-list .profile-card-add');
     return {
@@ -227,6 +228,10 @@ async function gateState(tab) {
       title: document.querySelector('#profile-gate-title')?.textContent ?? null,
       cards,
       hasAdd: Boolean(addButton),
+      // What the add row DRAWS, not just whether it exists. A child who cannot read is offered a
+      // new hero by this row and by nothing else on the screen, so "there is a button" is not the
+      // question -- "is there a picture on it" is.
+      addFace: addButton?.querySelector('.profile-card-add-face')?.textContent ?? null,
       nameRowShown: document.querySelector('#profile-gate-name-row')?.dataset.shown === 'true',
       notice: document.querySelector('#profile-gate-notice')?.textContent ?? '',
       chip: document.querySelector('#profile-chip')?.textContent ?? null,
@@ -343,6 +348,12 @@ async function run() {
       state.cards.length === 1 && state.cards[0].badge === '2 Lantern Marks',
       JSON.stringify(state.cards));
     check('and offers a new hero', state.hasAdd, `hasAdd ${state.hasAdd}`);
+    // Rendered, not just modelled. The view model carrying an animal and the DOM drawing one are
+    // two claims, and this file exists because the second is the one a child meets.
+    check('and offers it with an animal, like every other row on this screen',
+      Boolean(state.addFace) && !state.cards.some((card) => card.face === state.addFace),
+      `add row drew ${JSON.stringify(state.addFace)}, `
+        + `cards already have ${JSON.stringify(state.cards.map((card) => card.face))}`);
     await capture(tab, '03-choosing-portrait');
 
     // ── a sibling ──────────────────────────────────────────────────────────────────────────────
