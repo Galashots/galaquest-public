@@ -1,9 +1,11 @@
 // When to offer a lost child help, and — harder — when to shut up.
 //
-// CP2 PREPARATION. Pure, unit tested, wired to nothing. Third of the three "never lost" pieces whose
-// maths do not depend on the destination-identity question still open with the Director:
-// ui/offscreenPointer.js says where the arrow goes, ui/minimap.js says where the dial puts it, and
-// this says whether the child needs either of them offered rather than merely available.
+// Pure and unit tested, and WIRED: main.js holds one createRescueWatch() and feeds it the live
+// distance every frame, showing #guidance-rescue when it offers. (The header said "wired to
+// nothing" for longer than it was true, which the Director caught -- a stale comment about what
+// calls a module is a lie about the blast radius of changing it.) Third of the three "never lost"
+// pieces: ui/offscreenPointer.js says where the arrow goes, ui/minimap.js says where the dial puts
+// it, and this says whether the child needs either of them offered rather than merely available.
 //
 // THE MEASURE IS PROGRESS, NOT MOVEMENT, AND NOT DIRECTION.
 //

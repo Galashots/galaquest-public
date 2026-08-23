@@ -21,7 +21,9 @@
 // cannot drift from the world the way a second set of numbers would (GQ-007). Moving the Beacon
 // moves the arrow, with nothing to remember.
 //
-// CP2 PREPARATION: nothing calls this yet.
+// CALLED BY main.js, which reads destinationFor(objective, context) every frame to aim the
+// off-screen pointer and to give the rescue watch a distance. Said "nothing calls this yet"
+// for several commits after that stopped being true; see ui/guidanceRescue.js's header.
 
 import {
   BEACON_WARDEN,
