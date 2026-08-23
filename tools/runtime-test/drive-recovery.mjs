@@ -29,7 +29,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ATTACK_REACH, SWING_CONTACT_SECONDS, canAttack, isWithinStrike } from '../../public/src/combat/encounter.js';
+import {
+  ATTACK_REACH, WOLF_RESPAWN_SECONDS, canAttack, isWithinStrike,
+} from '../../public/src/combat/encounter.js';
 import { worldToScreen } from '../../public/src/camera/rotation.js';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { deadlineAfter, movementPulseMillis } from './automation-timing.mjs';
@@ -181,6 +183,13 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
     netStatus: net.status,
     pipsFilled: pips.filter((el) => el.dataset.filled === 'true').length,
     marks: own?.marks ?? 0,
+    // THE SERVER'S OWN ENTRY, KEYED, WITH NO FALLBACK -- unlike the field above, which takes any
+    // entry in the map when this guest is not in it. The HUD paints from exactly this while online,
+    // so when the two disagree, the difference IS what the child is looking at.
+    // (No backticks in this comment on purpose: the whole block is inside a template literal, and a
+    //  stray one terminates it. That has cost this branch two debugging rounds already.)
+    serverMarksKeyed: (net.selfId !== null && net.selfId !== undefined)
+      ? (r.rewards()[net.selfId]?.marks ?? null) : null,
     guestId: r.guestId(),
   };
 })())`).then(JSON.parse).then((s) => ({ ...s, canAttack: canAttack(s) }));
@@ -265,21 +274,33 @@ async function earnAMark(tab, budgetMs = 70000) {
   const deadline = deadlineAfter(budgetMs);
   await walkToward(tab, (live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 30000);
 
+  // TAP ON A CLOCK, AND STOP TALKING TO THE PAGE BETWEEN TAPS.
+  //
+  // This loop used to read the full `state(tab)` before every tap, skip when `canAttack` was false,
+  // and then poll at a 20ms interval for the length of a swing -- roughly fifty CDP round trips per
+  // swing on a runner where each costs real time. It spent its budget talking rather than swinging,
+  // which is why the online earn was an unexplained DIAG while the offline one, running the same
+  // code with fewer server round trips to compete with, landed every time.
+  //
+  // The fight itself was never the problem. Measured in this same browser, online, stopping at the
+  // kill: FOUR taps, all four connect, the wolf down in 16.5s and 17.4s. The deterministic engine
+  // gives the same fight in 5.1s (test/opening-fight.test.mjs). So this now does what a child does --
+  // presses on its own clock and looks up occasionally -- rather than asking the game for permission
+  // before every press. A refused tap is FREE; asking whether one would be refused is not.
+  const TAP_GAP_MS = 600;
+  // One number, not the whole state object: this runs between every tap and the difference is the
+  // point of the rewrite.
+  const cheapLook = () => tab.page.eval(`JSON.stringify((() => {
+    const r = window.__galaQuestRuntime;
+    const net = r.netState();
+    const all = r.rewards();
+    const own = (net.selfId != null ? all[net.selfId] : null) ?? Object.values(all)[0] ?? null;
+    const w = r.encounterState().wolf;
+    return { wolfHp: w.hp, mode: w.mode, marks: own?.marks ?? 0 };
+  })())`).then(JSON.parse);
+
+  let tapsSinceLook = 0;
   while (Date.now() < deadline) {
-    const live = await state(tab);
-    if (live.marks > startMarks) break;
-    // Already beaten: the mark is on its way, so stop swinging at a corpse and let the poll below
-    // wait for it rather than burning the budget here.
-    if (live.wolf.mode === 'dying' || live.wolf.mode === 'dead') { await sleep(250); continue; }
-    const authority = live.serverPos ?? live.heroPos;
-    const gap = Math.hypot(authority[0] - live.wolf.x, authority[1] - live.wolf.z);
-    if (gap > 1.4) {
-      await walkToward(tab, (l) => ({ x: l.wolf.x, z: l.wolf.z }), 1.2, 4000);
-      continue;
-    }
-    // Down, mid-swing, or on cooldown. A tap here is discarded by the rules and costs a second of a
-    // budget the offline run does not have to spare.
-    if (!live.canAttack) { await sleep(120); continue; }
     // NOT re-aimed before the swing. My first attempt pulsed the stick at the wolf to set the
     // hero's facing, the way drive-marks does, and measured WORSE across three runs -- the pulse
     // moves the hero, and moving during the approach to a swing costs more position than the facing
@@ -288,8 +309,22 @@ async function earnAMark(tab, budgetMs = 70000) {
     await touch(tab, 'touchStart', [attack]);
     await sleep(60);
     await touch(tab, 'touchEnd', []);
-    await pollUntil(tab, (x) => x.wolf.mode === 'dying' || x.wolf.mode === 'dead' || x.marks > startMarks,
-      (SWING_CONTACT_SECONDS + 0.4) * 1000, 20);
+    await sleep(TAP_GAP_MS);
+    tapsSinceLook += 1;
+
+    const look = await cheapLook();
+    if (look.marks > startMarks) break;
+    if (look.wolfHp <= 0 || look.mode === 'dying' || look.mode === 'dead') break;
+    // Only re-close the gap every few taps. Walking is the one thing that genuinely needs the wolf's
+    // position, and it is the only thing worth a full read.
+    if (tapsSinceLook >= 4) {
+      tapsSinceLook = 0;
+      const live = await state(tab);
+      const authority = live.serverPos ?? live.heroPos;
+      if (Math.hypot(authority[0] - live.wolf.x, authority[1] - live.wolf.z) > 1.4) {
+        await walkToward(tab, (l) => ({ x: l.wolf.x, z: l.wolf.z }), 1.2, 4000);
+      }
+    }
   }
   return pollUntil(tab, (x) => x.marks > startMarks, 10000);
 }
@@ -366,7 +401,15 @@ async function run() {
     check('a fresh child starts with nothing on record', before.marks === 0 && before.pipsFilled === 0,
       `marks ${before.marks}, pips ${before.pipsFilled}`);
 
-    const earned = await earnAMark(tab);
+    // A SHORT BUDGET, because this phase is the diagnostic and the one below is the proof.
+    //
+    // Before the tap loop was fixed this fight always LOST, and the file was reliable precisely
+    // because of that: it left a full-health wolf standing for the offline earn. Making it win broke
+    // the file -- two fights then had to fit in a budget that affords one. That is a regression
+    // introduced by fixing something, which is the most expensive kind, so it is written down rather
+    // than tuned away quietly. Twenty-five seconds comes from the measurement, not from taste: the
+    // fight lands in about seventeen when it lands.
+    const earned = await earnAMark(tab, 25000);
     const authorityAt = earned.serverPos ?? earned.heroPos;
     const wouldLand = isWithinStrike(
       { x: authorityAt[0], z: authorityAt[1] }, earned.heroHeading, { x: earned.wolf.x, z: earned.wolf.z },
@@ -378,8 +421,13 @@ async function run() {
       + `a swing from here would ${wouldLand ? 'LAND' : 'MISS'}, hero ${earned.hero.hp}hp`,
       {
         authoritative: false,
-        reason: 'cannot separate automation reaction speed from online adjudication; the offline '
-          + 'fight below uses the same driving code and lands',
+        // THE REASON HAS CHANGED, and that is worth more than the verdict. The old one was "cannot
+        // separate automation reaction speed from online adjudication". That is now answered: it was
+        // reaction speed, and specifically this harness's own -- changing only the HARNESS turned it
+        // from never landing to usually landing. There is no product defect behind it.
+        reason: 'the fight itself is proven elsewhere (4 taps, ~17s, same browser; 5.1s in the '
+          + 'deterministic engine); what is left is this harness losing an approach to a knockdown '
+          + 'inside one budget, which is not something to gate a recovery proof on',
       });
 
     RECOVERY_PROFILE = await activeProfileId(tab);
@@ -390,6 +438,30 @@ async function run() {
     // THE EARN THE RECOVERY PROOF RIDES ON, and it is offline on purpose rather than as a
     // concession. A Mark the server has NEVER SEEN is the strongest possible starting point for
     // "the device is the durable copy": there is no server row anywhere to fall back on.
+    // WAIT FOR A WOLF FIRST, WHILE THERE IS STILL A SERVER TO GROW ONE.
+    //
+    // This phase used to get a live wolf for free, because the fight above was failing and leaving
+    // one standing. Two phases sharing one wolf is a dependency neither of them declared, and it
+    // surfaced the moment the fight started landing.
+    //
+    // The wait has to come BEFORE the server dies: putting it after left the wolf dead for the full
+    // sixteen seconds, because respawn is adjudicated server-side and there was nothing left to
+    // adjudicate. A child losing their network mid-play has a live wolf in front of them anyway,
+    // which is the situation this is reproducing.
+    //
+    // WOLF_RESPAWN_SECONDS is imported rather than slept past, and the poll decides: a fixed sleep
+    // would be right until somebody changed the constant.
+    const respawned = await pollUntil(
+      tab, (s) => s.wolf.hp > 0 && s.wolf.mode !== 'dead' && s.wolf.mode !== 'dying',
+      (WOLF_RESPAWN_SECONDS + 8) * 1000, 500,
+    );
+    // Stated as what the NEXT phase needs -- a wolf to fight -- rather than as "one respawned".
+    // Those are the same thing only when the fight above actually killed one, and on the runs where
+    // it does not, "a wolf came back" would report a success about an event that never happened.
+    check('there is a live wolf for the offline half to fight', respawned.wolf.hp > 0,
+      `wolf ${respawned.wolf.mode} at ${respawned.wolf.hp}hp`
+      + `${earned.marks >= 1 ? ' (the diagnostic fight killed one, so this one respawned)' : ' (the diagnostic fight did not land, so this is the original)'}`);
+
     console.log('\n── phase offline (a car, a holiday, a router that died) ──');
     await server.kill();
     const offline = await pollUntil(tab, (s) => s.netStatus !== 'online', 15000);
@@ -408,18 +480,34 @@ async function run() {
 
     // ── 3. a server that has never heard of this child ───────────────────────────────────────
     console.log('\n── phase never-heard-of-you (an empty server appears) ──');
+    // MEASURED BEFORE THE SERVER STARTS, and that ordering is the fix rather than a detail. Reading
+    // it after `restartOn` races the very thing the next checks assert: the page is still open, it
+    // reconnects within a moment, and the device teaches this store the marks it holds. The check
+    // then reports "the new server already knows this child" -- which is TRUE, and is a statement
+    // about the harness's own timing rather than about the product. Opening the path creates an
+    // empty store, so this is the honest read of "what did this database know before anyone spoke".
+    const storeBStartedAt = marksIn(STORE_B);
+    check('the new server has never heard of this profile', storeBStartedAt === 0,
+      `store B at ${storeBStartedAt} marks before anything connected`);
     server = await restartOn(STORE_B);
-    check('the new server has never heard of this profile', marksIn(STORE_B) === 0, 'store B at 0 marks');
 
     await tab.page.send('Page.navigate', { url: GAME_URL });
     await waitForRuntime(tab);
     const met = await pollUntil(tab, (s) => s.netStatus === 'online' && s.marks > 0, 25000);
     check('THE CHILD STILL HAS THEIR MARK when the server has never seen them',
       met.marks >= 1, `marks ${met.marks}, net ${met.netStatus}`);
-    check('and the HUD draws it, which is what the child actually sees', met.pipsFilled >= 1, `pips ${met.pipsFilled}`);
-    const taughtB = await marksInEventually(STORE_B, 1);
+    // BOTH NUMBERS, because this check has failed intermittently and "pips 0" alone cannot say why.
+    // The HUD paints from the server's OWN keyed entry while online; the harness's `marks` above
+    // falls back to any entry in the map. If the keyed one is behind, the child is online, holding
+    // marks locally, and looking at an empty lantern row.
+    check('and the HUD draws it, which is what the child actually sees', met.pipsFilled >= 1,
+      `pips ${met.pipsFilled}, server's own keyed entry ${met.serverMarksKeyed}, harness read ${met.marks}`);
+    // WANT WHAT THE CHILD HOLDS, not a hardcoded 1. Once the diagnostic fight above started
+    // landing there were two marks, and a wait for "at least one" returns while the second is
+    // still in flight -- proving less than the check's own sentence claims.
+    const taughtB = await marksInEventually(STORE_B, met.marks);
     check('and the DEVICE TEACHES the empty server, so it is durable on both sides again',
-      taughtB >= 1, `store B marks ${taughtB}`);
+      taughtB >= met.marks, `store B marks ${taughtB}, child holds ${met.marks}`);
     await shot(tab, '02-taught-an-empty-server');
 
     // ── 4. and again, when a server that DID have it is replaced ─────────────────────────────
@@ -427,17 +515,19 @@ async function run() {
     // to a machine that has never seen this family. Reached without a second fight by swapping the
     // store under a server that has just been taught.
     console.log('\n── phase replaced (the database that HAD it is swapped out) ──');
+    const storeCStartedAt = marksIn(STORE_C);
+    check('the replacement server is empty too', storeCStartedAt === 0,
+      `store C at ${storeCStartedAt} marks before anything connected`);
     server = await restartOn(STORE_C);
-    check('the replacement server is empty too', marksIn(STORE_C) === 0, 'store C at 0 marks');
 
     await tab.page.send('Page.navigate', { url: GAME_URL });
     await waitForRuntime(tab);
     const again = await pollUntil(tab, (s) => s.netStatus === 'online' && s.marks > 0, 25000);
     check('THE CHILD STILL HAS IT after the database that held it was replaced',
       again.marks >= 1, `marks ${again.marks}, net ${again.netStatus}`);
-    const taughtC = await marksInEventually(STORE_C, 1);
+    const taughtC = await marksInEventually(STORE_C, again.marks);
     check('and the device repopulates that one too -- restore is not a one-off',
-      taughtC >= 1, `store C marks ${taughtC}`);
+      taughtC >= again.marks, `store C marks ${taughtC}, child holds ${again.marks}`);
     await shot(tab, '03-and-again');
 
     // The socket failing is THIS HARNESS killing the server on purpose, and a child on a dead router
