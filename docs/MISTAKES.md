@@ -1346,3 +1346,29 @@ rather than through the probe.
 JSON beside it simply had no such keys. Undefined everywhere, including for a field that could not be
 undefined if the code had run, is not a measurement -- it is the absence of one.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — An instrument that covers a subset reports on the subset, and reads as covering the whole.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A checker built against one source answers about that source. Nothing in its output says
+so, and the answer looks identical to an answer about everything -- so the moment a second source
+exists, every clean report it prints is silently narrower than it reads. Either widen the instrument
+to the whole, or make it name its own scope in the output. Preferably both.
+**Incident (2026-08-23, `browser-proof`):** `tools/ci-diff.py` diffs a full-playtest-matrix job list,
+because that is the workflow it was written for. `forge-review` is a different workflow, so its
+`browser-proof` check was not passing or failing in the diff -- it was ABSENT. It sat red from 01:40
+to 15:30 while I published several reports saying the head was clean with no new failures. The head
+had nine failing checks; the tool said eight, and I read eight as all.
+**What it was hiding was not cosmetic.** The forge review's job is to prove the asset-review page
+cannot spend Meshy credits in CI. It timed out before reaching that check, so for fourteen hours the
+guard that exists to prevent unauthorised provider spend ran and proved nothing. **A safety gate that
+is red is a safety gate that is not gating.** That is worth more than the fourteen hours: a red check
+whose failure is not diagnosed has been silently downgraded to no check.
+**And the failure itself was one line.** `${server.url}forge.html` -- where `url` is the GAME's
+address and ends in `?hero=Harness` -- resolves to a request for the site root. The tool waited for a
+badge that only exists on forge.html, on a page that was index.html, and reported "Forge never
+reached FORGE READY". The symptom named the Forge; the cause was the address.
+**Repairs, all three levels:** the address (`server.origin`); the tool now checks WHICH PAGE it
+landed on before checking the badge, so a wrong address costs one line rather than a day; and
+`ci-diff.py --sha` reads `/commits/{sha}/check-runs`, which returns every check on a commit whatever
+workflow raised it. The file mode still exists and now prints "one workflow only" beside its answer.
+**Foreknowledge helped:** not yet recorded.
