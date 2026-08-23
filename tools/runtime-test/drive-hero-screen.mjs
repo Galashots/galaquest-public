@@ -378,12 +378,38 @@ check('tapping the Hero button opens the screen', opened.open === true, JSON.str
 const online = await pollUntil(heroRuntimeState, (s) => s.netStatus === 'online', { timeoutMs: 5000 });
 check('this harness reaches the server (online), so the equip below is a real round trip, not just the offline fallback',
   online.netStatus === 'online', JSON.stringify(online));
-check('the Blade-fixture guest sees BOTH items in the strip (owns starter sword + granted Blade)',
+// THIS CHECK DID NOT CHECK WHAT IT SAID. Its sentence is about the strip; its predicate read
+// `online.equipped === STARTER_SWORD_ID`, which is the check two lines above it restated. So the
+// strip was never inspected, and when every check AFTER this one began failing there was nothing to
+// say whether the Blade was even on screen to be tapped. The next four checks all report
+// `equippedItemId: "starter_sword"` and none of them can tell a click that missed from an equip
+// that was refused.
+//
+// It reads the strip now, the same way the fresh-guest case above already does.
+const bladeStripIds = await page.eval(
+  "JSON.stringify([...document.querySelectorAll('.hero-item')].map((el) => el.dataset.itemId))",
+).then(JSON.parse);
+check('the Blade-fixture guest sees the granted Blade in the strip, so there is something to tap',
+  bladeStripIds.includes(WILDWOOD_BLADE_ID), JSON.stringify(bladeStripIds));
+check('and the starter sword is still equipped, because owning is not equipping',
   online.equipped === STARTER_SWORD_ID, JSON.stringify(online));
 
 await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
-await sleep(100);
-const compareText = await page.eval("document.querySelector('#hero-item-compare').textContent");
+// POLL FOR THE TEXT, rather than reading 100ms after the click and calling an empty string a defect.
+// Selecting an item re-renders the card, and on a software-rendered runner that is not instant. The
+// old fixed 100ms read reported "" and the four checks after it inherited the blame -- the same
+// read-too-early shape that made drive-recovery report an empty lantern row.
+//
+// BOUNDED AT TWO SECONDS, deliberately, because the bound is what keeps this a race detector rather
+// than a way of waiting until it passes: a card that is still blank two seconds after a child tapped
+// an item is a defect, and this will still say so.
+let compareText = '';
+for (let i = 0; i < 20 && compareText.trim() === ''; i += 1) {
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(100);
+  // eslint-disable-next-line no-await-in-loop
+  compareText = await page.eval("document.querySelector('#hero-item-compare').textContent");
+}
 check('selecting the Wildwood Blade shows the plan\'s own worked comparison, 1 -> 2 DAMAGE',
   compareText.replace(/\s+/g, ' ').trim() === '1 → 2 DAMAGE', JSON.stringify(compareText));
 await shot('portrait-compare');
