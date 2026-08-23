@@ -35,6 +35,7 @@ import {
 import { startOwnedServer } from './owned-server.mjs';
 import {
   metresOrUnknown, READ_WALK, readWatchSource, startWalk, startWatch, STOP_WALK, stopWatchSource,
+  waitForSample,
 } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
@@ -340,8 +341,7 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // at most one poll, and the walker is still aiming at the target when that poll lands, so the extra
 // travel is toward the keeper rather than past him. Held straight up, the stick is pure
 // camera-forward -- the `sy = 1` case the rotation above used to compute.
-async function heldWalkToward(targetX, targetZ, stopWithin, maxMillis) {
-  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
   await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
   await touch('touchStart', [{ x: stickX, y: stickY }]);
   await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
@@ -386,19 +386,49 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
     const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
     if (away <= stopWithin) break;
     passes += 1;
-    const held = away > stopWithin + HELD_APPROACH_SLACK_METRES;
-    if (held) {
+    // COARSE, THEN FINE, AND BOTH OF THEM HELD -- carried over from drive-village-board after this
+    // file's lane walk flapped: green at 3f2d45a, red again at 2e0f407 on a commit that touched
+    // only play-fight.mjs and the ledger. A check that changes verdict without its subject changing
+    // is sitting exactly on the boundary of what the machine can do, and here the boundary is
+    // known: pulsing cannot place a hero finer than one frame of travel plus the release latency,
+    // and this walk aims at a 0.6m ring against 0.4-0.8m of frame travel at 4fps. It landed 1.23m
+    // out locally and 1.53m hosted, against a check that wants under 1.5m -- passing and failing on
+    // which side of the resolution it happened to fall.
+    //
+    // The fine leg holds to the RING ITSELF. The slack belongs to the coarse leg, whose job is to
+    // cover distance and hand over near the target; the fine leg's job is to stop, and aiming it
+    // wide is asking it not to. Only the in-page latch can stop that finely, because it decides
+    // arrival on the frame it happens rather than a CDP round trip later.
+    if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
       // eslint-disable-next-line no-await-in-loop
-      last = await heldWalkToward(targetX, targetZ, stopWithin, deadline - Date.now());
+      last = await heldWalkToward(targetX, targetZ, stopWithin + HELD_APPROACH_SLACK_METRES,
+        Math.max(2000, deadline - Date.now()));
     }
+    // NO COAST CORRECTION, and I tried it twice. After the latch fires the stick is released a CDP
+    // round trip later and the hero carries on for it, which is the entire remaining error -- so
+    // aiming short by the coast the loop measured looks obviously right. Per-walk it moved the lane
+    // approach from 1.03m to 0.98m, which is inside this file's own run-to-run noise. Carried across
+    // walks, so that the first leg is calibrated too, it went to 1.43m and took a keeper check down
+    // with it: a coast measured on one walk is not the coast of the next.
+    //
+    // What is left is principled by construction rather than by tuning -- pulsing cannot place a
+    // hero finer than one frame of travel, and the latch can -- and that is the part worth keeping.
     // eslint-disable-next-line no-await-in-loop
-    // Half the remaining budget only when a held leg ran -- only then is there a second mechanism
-    // to reserve it FOR, namely walking back an overshoot. Halving on every pass regardless is a
-    // geometric squeeze on the ONLY thing that can place a hero on a tight ring: hosted at 83e1d95
-    // `walking partway up the lane toward the wolf` took three passes and ended 1.53m out with most
-    // of its 12s unspent, because pass three was handed an eighth of it.
-    last = await pulseWalkToward(targetX, targetZ, stopWithin,
-      held ? Math.max(1500, (deadline - Date.now()) / 2) : Math.max(1500, deadline - Date.now()));
+    // THE FULL REMAINING BUDGET FOR BOTH LEGS, not half each. A held leg exits when it LATCHES, so
+    // it only consumes its budget when it is failing -- halving to reserve room for a second pass
+    // instead guarantees there is none: one pass ate three quarters of the lane walk's 12s and the
+    // loop stopped at 1.50m against a check that wants under 1.5, passing on the last centimetre.
+    last = await heldWalkToward(targetX, targetZ, stopWithin,
+      Math.max(2000, deadline - Date.now()));
+    // The pulse is the last resort now, not the placer: it runs only if the fine held leg could not
+    // latch at all, which on a page that is still painting means the target is unreachable rather
+    // than merely far.
+    const stillOut = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+    if (stillOut > stopWithin + HELD_APPROACH_SLACK_METRES) {
+      // eslint-disable-next-line no-await-in-loop
+      last = await pulseWalkToward(targetX, targetZ, stopWithin,
+        Math.max(1500, (deadline - Date.now()) / 2));
+    }
   }
   const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
   console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target`);
@@ -614,14 +644,27 @@ check('talk stops once the hero is out of range',
 
 // Step 6: re-entering must produce exactly ONE new greeting -- proof the latch actually re-armed
 // rather than staying permanently spent after its first use.
+//
+// THE RECORDER STARTS BEFORE THE WALK, not after it. The wave fires the moment the hero crosses the
+// radius and it is over in about a second; a poll that begins once the walk has returned is looking
+// for something that already happened, and on a slow frame it finds `waving:false, talking:true` --
+// the wave finished and handed off while nobody was watching. That flaked one run in three here.
+// Recording from before the approach means the wave is in the log whether or not the poll was
+// looking, which is the same fix the two talk checks in this file already carry.
+await page.eval(startWatch('keeper-rewave',
+  '({ t: performance.now(), v: window.__galaQuestRuntime.zoneKeeperState()?.waving === true })'));
 const reapproached = await walkToward(keeperX, keeperZ, 1.5, 20000);
 check('walking back up to the keeper closes the distance again',
   Math.hypot(reapproached.heroPos[0] - keeperX, reapproached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
   `hero ${JSON.stringify(reapproached.heroPos)}, keeper [${keeperX}, ${keeperZ}], `
     + `radius ${KEEPER_WAVE_RADIUS_METERS}m`);
-const rewaved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: animationBudget(3000) });
+const rewaveLog = await waitForSample(page, 'keeper-rewave', (sample) => sample.v === true,
+  { intervalMs: 60, timeoutMs: 6000 });
+await page.eval(stopWatchSource('keeper-rewave'));
+const rewaved = rewaveLog.samples.some((sample) => sample.v === true);
 check('re-entering after leaving produces exactly one new greeting wave',
-  rewaved.keeper?.waving === true, `keeperState ${JSON.stringify(rewaved.keeper)}`);
+  rewaved, `waving seen on a recorded frame: ${rewaved}, over ${rewaveLog.samples.length} frame(s) `
+    + `from before the approach; keeperState now ${JSON.stringify((await state()).keeper)}`);
 
 // Step 7: the second wave must end and hand back to talk too -- the whole cycle repeats cleanly
 // rather than the re-arm producing a wave that gets stuck, or that never reconnects to talk.
