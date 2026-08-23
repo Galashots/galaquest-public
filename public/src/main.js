@@ -34,6 +34,7 @@ import {
   attachBeltLantern,
   attachWildwoodBladeCandidate,
   BELT_LANTERN_URL,
+  RIGID_BELT_LANTERN,
   WILDWOOD_BLADE_CANDIDATE_URL,
 } from './character/gear.js';
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
@@ -1261,37 +1262,56 @@ async function bootstrap() {
   }
 
   /**
-   * Mount the Wildwood Blade on a REMOTE hero's clone, for net/remotes.js.
+   * Mount a piece of gear on a REMOTE hero's clone, for net/remotes.js.
    *
-   * The local hero's mount above is lazy on purpose -- the GLB is fetched only when this child
-   * equips the Blade -- which means the ordinary situation at the moment a sibling earns one is that
-   * THIS client has never had any reason to load it. Without this the wire would say "Blade" and
-   * every other screen would still draw an Ironwood: the defect with an extra step.
+   * The local hero's mounts above are lazy on purpose -- an asset is fetched only when THIS child
+   * earns the thing -- which means the ordinary situation at the moment a sibling earns one is that
+   * this client has never had a reason to load it. Without this the wire would say "Blade" or
+   * "lantern" and every other screen would still draw the old body: the defect with an extra step.
    *
    * `loadGLB` caches by URL, so a dozen siblings and this hero cost one download between them. The
-   * gltf.scene itself is cloned per mount: an Object3D has one parent, and attaching the cached one
-   * to a second hero would silently take it off the first.
+   * gltf.scene is cloned per mount: an Object3D has one parent, and attaching the cached one to a
+   * second hero would silently take it off the first.
    *
-   * `wildwoodAssetMissing` is SHARED with the local hero's mount deliberately. It is one fact about
-   * one file, and two flags for it would be two answers to "is this asset here" -- one of which
-   * would keep warning after the other had given up.
+   * The asset-missing flags are SHARED with the local hero's mounts deliberately. Each is one fact
+   * about one file, and two flags for it would be two answers to "is this asset here" -- one of
+   * which would keep warning after the other had given up.
+   *
+   * Returns the anchor, never makes it visible: net/remotes.js decides that from the same rules the
+   * local hero is drawn by, and nothing else is allowed to show a piece of gear.
    */
-  async function mountWildwoodOnRemote(clonedRoot, meshId) {
-    if (meshId !== WILDWOOD_BLADE_CANDIDATE_ID || wildwoodAssetMissing) return null;
-    const gltf = await loadGLB(WILDWOOD_BLADE_CANDIDATE_URL);
-    if (gltf.userData?.loadError) {
-      if (!wildwoodAssetMissing) {
-        wildwoodAssetMissing = true;
-        console.warn(
-          `[progression] ${WILDWOOD_BLADE_CANDIDATE_URL} is missing -- a sibling holding the Blade `
-          + 'is drawn with the Ironwood sword until the asset lands.',
-        );
+  async function mountGearOnRemote(clonedRoot, gearId) {
+    if (gearId === WILDWOOD_BLADE_CANDIDATE_ID) {
+      if (wildwoodAssetMissing) return null;
+      const gltf = await loadGLB(WILDWOOD_BLADE_CANDIDATE_URL);
+      if (gltf.userData?.loadError) {
+        if (!wildwoodAssetMissing) {
+          wildwoodAssetMissing = true;
+          console.warn(
+            `[progression] ${WILDWOOD_BLADE_CANDIDATE_URL} is missing -- a sibling holding the Blade `
+            + 'is drawn with the Ironwood sword until the asset lands.',
+          );
+        }
+        return null;
       }
-      return null;
+      return attachWildwoodBladeCandidate(clonedRoot, gltf.scene.clone(true)).anchor;
     }
-    // The anchor only; net/remotes.js decides visibility from the same rule the local hero uses, and
-    // nothing else is allowed to make a sword appear.
-    return attachWildwoodBladeCandidate(clonedRoot, gltf.scene.clone(true)).anchor;
+    if (gearId === RIGID_BELT_LANTERN.id) {
+      if (lanternAssetMissingLogged) return null;
+      const gltf = await loadGLB(BELT_LANTERN_URL);
+      if (gltf.userData?.loadError) {
+        if (!lanternAssetMissingLogged) {
+          lanternAssetMissingLogged = true;
+          console.warn(
+            `[rewards] ${BELT_LANTERN_URL} is missing -- a sibling who has earned the lantern is `
+            + 'drawn with a bare belt until the asset lands.',
+          );
+        }
+        return null;
+      }
+      return attachBeltLantern(clonedRoot, gltf.scene.clone(true)).anchor;
+    }
+    return null;
   }
 
   function ensureLanternMounted(shouldBeUnlocked) {
@@ -2445,17 +2465,11 @@ async function bootstrap() {
       // hand arrived rather than an interpolation delay ahead of it; that is a hundred milliseconds
       // on a once-a-session event, and it is not worth a duplicate wire field. `heroes` above is read
       // the same way, for the far more timing-sensitive knockdown.
-      const remoteWeapons = {};
-      if (netStatus === 'online' && serverEncounter?.rewards) {
-        for (const [id, reward] of Object.entries(serverEncounter.rewards)) {
-          if (typeof reward?.equippedWeaponId === 'string') remoteWeapons[id] = reward.equippedWeaponId;
-        }
-      }
       remotes?.update(net.sampleRemotes(), {
         deltaSeconds,
         reactionDeltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
         heroes: netStatus === 'online' && serverEncounter?.heroes ? serverEncounter.heroes : {},
-        weapons: remoteWeapons,
+        rewards: netStatus === 'online' && serverEncounter?.rewards ? serverEncounter.rewards : {},
       });
       // Read the mode from the speed the locomotion controller is given, not from the run flag, so
       // the status line cannot disagree with the clip actually playing.
@@ -3617,7 +3631,7 @@ async function bootstrap() {
   reactions = createReactionAnimator(hero.root, hero.animations);
   // Remote heroes clone this same loaded asset, so the pool cannot exist before it has arrived. Until
   // then sampleRemotes() is simply never drawn -- snapshots still buffer, so nobody is missed.
-  remotes = createRemotePlayers(scene, hero, { mountWeapon: mountWildwoodOnRemote });
+  remotes = createRemotePlayers(scene, hero, { mountGear: mountGearOnRemote });
   status.dataset.fault = hero.failed ? 'true' : 'false';
   status.textContent = hero.failed ? 'hero load failed — placeholder shown' : 'hero standing';
 

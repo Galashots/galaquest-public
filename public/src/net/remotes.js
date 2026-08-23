@@ -37,6 +37,7 @@ import { CHARACTER, setLayer } from '../render/layers.js';
 import {
   cloneWeaponAnchors, showWeaponOnClone, weaponMeshIdFor, WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../character/weaponLoadout.js';
+import { BELT_LANTERN_BONE_NAME, RIGID_BELT_LANTERN, rigidAnchorName } from '../character/gear.js';
 import { createLocomotionController } from '../character/locomotion.js';
 import { locomotionModeForSpeed } from '../character/speed.js';
 import { createReactionAnimator } from '../character/reactClips.js';
@@ -47,12 +48,12 @@ import { createClipSwingAnimator } from '../character/swingClip.js';
 import { SWING_SECONDS } from '../combat/encounter.js';
 
 /**
- * @param mountWeapon  optional `(clonedRoot, meshId) -> Promise<anchor|null>`. Supplied by main.js,
+ * @param mountGear  optional `(clonedRoot, gearId) -> Promise<anchor|null>`. Supplied by main.js,
  *   which owns the loader and the solved transforms; this module holds no handle on either and does
  *   not want one. Absent (offline, tests, the studio) simply means a sibling keeps whatever sword
  *   their clone was born with, which is the same honest fallback as an asset that never lands.
  */
-export function createRemotePlayers(scene, template, { mountWeapon = null } = {}) {
+export function createRemotePlayers(scene, template, { mountGear = null } = {}) {
   // template: { root, animations } — the loaded hero. Cloned per remote via SkeletonUtils, because a
   // plain .clone() copies the mesh but leaves it bound to the ORIGINAL bones: every remote would then
   // deform to the local hero's pose. Verified rather than assumed -- see the vendoring commit.
@@ -90,7 +91,11 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
       root,
       locomotion: createLocomotionController(root, template.animations),
       anchors: cloneWeaponAnchors(root),
-      weaponMountInFlight: false,
+      // A clone inherits whatever the LOCAL hero was wearing, so this anchor exists on a remote for
+      // reasons that have nothing to do with the child it represents. Found once; whether it is
+      // SHOWN is decided every frame from that child's own rewards.
+      lanternAnchor: root.getObjectByName(rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME)) ?? null,
+      gearMountsInFlight: new Set(),
       // Both degrade per-clip and return null when the rig ships nothing to play, the same contract
       // main.js gets: a remote on a rig with no death clip is still positioned, still walks, and
       // simply cannot be shown falling over.
@@ -119,50 +124,78 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
     return true;
   }
 
-  // Mount the mesh this sibling's weapon needs, if this clone has not got it and somebody can
-  // fetch it. The Wildwood GLB is loaded lazily -- only when the hero this clone was taken from had
-  // equipped it -- so the common case at the moment a child earns the Blade is that their SIBLING'S
-  // client has never had a reason to load it. Without this the wire would say "Blade" and every
-  // other screen would still draw an Ironwood, which is the defect with an extra step.
+  // Mount a piece of gear this sibling needs and this clone has not got, if somebody can fetch it.
+  // Assets are loaded lazily -- only when the hero this clone was taken from had earned the thing --
+  // so the common case at the moment a child earns something is that their SIBLING'S client has
+  // never had a reason to load it. Without this the wire would say "Blade" or "lantern" and every
+  // other screen would still draw the old body: the defect with an extra step.
   //
-  // Fire-and-forget, once per remote: `mountWeapon` resolves null for an asset that is missing or
-  // failed, and the in-flight flag is cleared without setting the anchor, so the visibility rule
-  // below keeps returning the shipping sword. It does NOT retry -- a mount that failed once will
-  // fail again every frame, and a hero holding the wrong sword is a small thing next to a fetch
-  // loop at frame rate. loadGLB caches by URL, so a dozen siblings cost one download.
+  // Fire-and-forget, once per gear id per remote: `mountGear` resolves null for an asset that is
+  // missing or failed, and the in-flight entry is cleared without an anchor being stored, so the
+  // rules below keep drawing what the clone already has. It does NOT retry -- a mount that failed
+  // once will fail again every frame, and the wrong belt is a small thing next to a fetch loop at
+  // frame rate. loadGLB caches by URL, so a dozen siblings cost one download.
+  function mountOnce(remote, gearId, store) {
+    if (!mountGear || remote.gearMountsInFlight.has(gearId)) return;
+    remote.gearMountsInFlight.add(gearId);
+    Promise.resolve(mountGear(remote.root, gearId))
+      .then((anchor) => {
+        // Mounted HIDDEN. The per-frame rules below are the only thing that ever makes a piece of
+        // gear visible, so an arriving asset cannot show itself before the rule agrees -- the same
+        // discipline main.js applies to the local hero's own lazy mounts.
+        if (anchor) {
+          anchor.visible = false;
+          // ON THE REMOTE'S OWN LAYER. setLayer traverses, and it ran at spawn -- long before this
+          // anchor existed -- so a freshly mounted piece of gear lands on the default WORLD layer
+          // while the body it hangs on is CHARACTER. In gameplay that happens to render, because the
+          // main camera enables both; any pass that selects CHARACTER alone would drop the sword off
+          // a sibling and leave the sibling. Making it true here is cheaper than depending on which
+          // layers a future pass happens to enable.
+          setLayer(anchor, CHARACTER);
+          store(anchor);
+        }
+      })
+      // WARNED, NOT SWALLOWED. The first version of this was `.catch(() => {})`, in code whose
+      // entire purpose is to make something visible -- and it duly hid the first real failure: the
+      // browser check reported a sibling with no blade and nothing said why. A mount that throws is
+      // a bug in the attach, not weather.
+      .catch((error) => {
+        console.warn(`[remotes] could not mount ${gearId} on ${remote.id}:`, error);
+      })
+      // Cleared only after the anchor is stored: clearing first would let the next frame start a
+      // second fetch for a mount that had already succeeded.
+      .finally(() => { remote.gearMountsInFlight.delete(gearId); });
+  }
+
   function ensureRemoteWeapon(remote, weaponId) {
-    if (mountWeapon
-      && weaponMeshIdFor(weaponId) === WILDWOOD_BLADE_CANDIDATE_ID
-      && remote.anchors.candidate === null
-      && !remote.weaponMountInFlight) {
-      remote.weaponMountInFlight = true;
-      Promise.resolve(mountWeapon(remote.root, WILDWOOD_BLADE_CANDIDATE_ID))
-        .then((anchor) => {
-          // Mounted hidden; showWeaponOnClone is the only thing that ever makes a sword visible, so
-          // an arriving asset cannot show itself before the rule agrees. Same discipline main.js
-          // applies to the local hero's own lazy mount.
-          if (anchor) {
-            anchor.visible = false;
-            remote.anchors.candidate = anchor;
-          }
-        })
-        // WARNED, NOT SWALLOWED. The first version of this was `.catch(() => {})`, in code whose
-        // entire purpose is to make something visible -- and it duly hid the first real failure:
-        // the browser check reported a sibling with no blade and nothing said why. A mount that
-        // throws is a bug in the attach, not weather. Once per remote, because it will not
-        // succeed on a later frame either.
-        .catch((error) => {
-          console.warn(`[remotes] could not mount ${WILDWOOD_BLADE_CANDIDATE_ID} on ${remote.id}:`, error);
-        })
-        // Cleared in both directions, and only after the anchor is stored: clearing it first would
-        // let the next frame start a second fetch for a mount that had already succeeded.
-        .finally(() => { remote.weaponMountInFlight = false; });
+    if (weaponMeshIdFor(weaponId) === WILDWOOD_BLADE_CANDIDATE_ID && remote.anchors.candidate === null) {
+      mountOnce(remote, WILDWOOD_BLADE_CANDIDATE_ID, (anchor) => { remote.anchors.candidate = anchor; });
     }
-    // Recorded so describe() can report what this remote was TOLD, beside what its anchors show.
-    // A harness seeing the wrong sword otherwise cannot tell "the server never said" from "it said
-    // and we could not draw it" -- repairs in different files. One string, no traversal.
+    // Recorded so describe() can report what this remote was TOLD, beside what its anchors show. A
+    // harness seeing the wrong sword otherwise cannot tell "the server never said" from "it said and
+    // we could not draw it" -- repairs in different files. One string, no traversal.
     remote.weaponId = weaponId;
     showWeaponOnClone(remote.anchors, weaponId);
+  }
+
+  // WHETHER THIS PARTICULAR CHILD HAS EARNED ONE, every frame, from their own rewards.
+  //
+  // This went wrong in both directions before it was read at all, and the second is the worse: a
+  // sibling who lit the Beacon was drawn with a bare belt on a client whose own child had not, AND a
+  // sibling who had not was drawn WEARING one on a client whose own child had -- because the clone
+  // inherits the local hero's belt. The second is a lie about someone else's progression, told by
+  // your screen. weaponLoadout.js's forceShippingWeaponOnClone existed to prevent exactly that lie
+  // about the sword; the lantern never got the equivalent.
+  //
+  // Absence is not permission: no rewards entry means not yet earned as far as this body is
+  // concerned, which is the same answer a `false` gives and the only safe one for gear that is a
+  // statement about what a child has done.
+  function ensureRemoteLantern(remote, unlocked) {
+    if (unlocked && remote.lanternAnchor === null) {
+      mountOnce(remote, RIGID_BELT_LANTERN.id, (anchor) => { remote.lanternAnchor = anchor; });
+    }
+    remote.lanternUnlocked = unlocked;
+    if (remote.lanternAnchor) remote.lanternAnchor.visible = unlocked;
   }
 
   /**
@@ -172,9 +205,10 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
    * @param heroes  encounter.heroes from the newest snapshot, keyed by the same player id the
    *                samples are. Absent or missing entries are fine: a player can be in the players
    *                list before the fight knows about them, and offline there is no encounter at all.
-   * @param weapons  equipped item id per player id, from the same snapshot. Missing means "we have
-   *                not been told", which resolves to the shipping sword -- the same answer
-   *                weaponMeshIdFor gives an unknown id, rather than a second rule about absence.
+   * @param rewards  the snapshot's rewards block, keyed by the same player id -- passed through
+   *                whole rather than unpacked into one map per cosmetic, because a sibling's body is
+   *                decided by several of its fields and there will be more. Missing means "we have
+   *                not been told": the shipping sword, and no lantern.
    *
    * THE TWO DELTAS ARE SEPARATE ARGUMENTS ON PURPOSE. main.js clamps its frame delta so a hitch
    * cannot teleport a hero; an animation mixer has no such hazard, because advancing a clip further
@@ -186,16 +220,18 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
    * single shared `deltaSeconds`. There is deliberately no default: a caller has to say which is
    * which, because the wrong one is silent.
    */
-  function update(sampled, { deltaSeconds, reactionDeltaSeconds, heroes = {}, weapons = {} } = {}) {
+  function update(sampled, { deltaSeconds, reactionDeltaSeconds, heroes = {}, rewards = {} } = {}) {
     for (const [id, sample] of sampled) {
       const remote = remotes.get(id) ?? spawn(id, sample);
       remote.root.position.set(sample.x, 0, sample.z);
       remote.root.rotation.y = sample.heading;
 
-      // WHICH SWORD IS IN THEIR HAND. Every frame rather than on change, because it is two boolean
-      // writes against cached anchors -- there is no state to keep in step and therefore no way for
-      // it to drift out of step, which is worth more here than the two writes cost.
-      ensureRemoteWeapon(remote, weapons[id] ?? null);
+      // WHAT THIS CHILD HAS EARNED, on their body. Every frame rather than on change, because these
+      // are boolean writes against cached anchors -- there is no state to keep in step and therefore
+      // no way for it to drift out of step, which is worth more here than the writes cost.
+      const reward = rewards[id] ?? null;
+      ensureRemoteWeapon(remote, reward?.equippedWeaponId ?? null);
+      ensureRemoteLantern(remote, reward?.lanternUnlocked === true);
 
       const hero = heroes[id] ?? null;
       const downSeconds = hero?.downSeconds ?? -1;
@@ -225,7 +261,7 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
       // is written, and death is the write that survives the frame.
       //
       // HONESTLY: no test in test/remote-heroes.test.mjs proves this swap. Removing it and running
-      // the die-mid-swing case leaves all nine green, so on this path the restore never won a frame
+      // the die-mid-swing case leaves the suite green, so on this path the restore never won a frame
       // to begin with. It is kept because it matches what main.js does for the local hero, where the
       // hazard WAS measured, and because a remote is drawn by the same three animators in the same
       // order -- not because anything here caught it. Said out loud so the next person does not read
@@ -269,6 +305,7 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
         down: remote.reactions?.getState().death ?? remote.down === true,
         swinging: remote.swing?.isSwinging() === true,
         weaponId: remote.weaponId ?? null,
+        lanternUnlocked: remote.lanternUnlocked === true,
         visible: remote.root.visible,
       }));
     },

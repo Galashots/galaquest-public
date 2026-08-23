@@ -23,6 +23,7 @@ import { rigidAnchorName } from '../../public/src/character/gear.js';
 import {
   SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME, WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../../public/src/character/weaponLoadout.js';
+import { BELT_LANTERN_BONE_NAME, RIGID_BELT_LANTERN } from '../../public/src/character/gear.js';
 
 const CHROME_PORT = 9224;
 // Two tabs against ONE server, and it must be a server nobody else is on: this harness's central
@@ -241,6 +242,12 @@ if (bootA) {
       guestId: guestA, type: 'weapon-equipped',
       eventId: `equip:${guestA}:seed`, value: WILDWOOD_BLADE_ID, rev: Date.now(),
     });
+    // ...and the belt lantern, the other thing this child has to show for the opening. Granted here
+    // rather than earned through three Marks for the same reason the equip is seeded: the earning is
+    // proved elsewhere, and what this file is asking is what the OTHER screen draws.
+    store.apply({
+      guestId: guestA, type: 'lantern-unlocked', eventId: `lantern:${guestA}:seed`,
+    });
     const equipped = store.equippedWeaponFor(guestA);
     store.close();
     check('tab A is now a child who has earned and equipped the Wildwood Blade',
@@ -286,13 +293,19 @@ if (bootA && bootB) {
   // renderer obeys. That also makes this the only proof that attachWildwoodBladeCandidate works on a
   // SkeletonUtils CLONE at all -- it bakes bind-pose bone matrices out of the skeleton's own
   // boneInverses, and a clone has its own skeleton. No unit test can reach that.
-  const remoteSwords = `(() => {
+  const remoteGear = `(() => {
     const r = window.__galaQuestRuntime;
     const remote = r.netState().remotes[0] || null;
     if (!remote) return { present: false };
     const body = r.hero && r.hero.parent ? r.hero.parent.getObjectByName('remote-' + remote.id) : null;
     if (!body) return { present: false };
     const named = (name) => { const a = body.getObjectByName(name); return a ? a.visible === true : null; };
+    // VISIBLE IS NOT THE SAME AS ON SCREEN. The camera enables specific layers, and gear.js's own
+    // lightTheLantern comment warns that something left on layer 0 is invisible to it. An anchor
+    // flagged visible on a layer the camera does not draw would pass a visible-is-true check and
+    // show a child nothing, so the mask is compared against the body it hangs on -- same layer as
+    // the sibling means it is drawn exactly when the sibling is.
+    const maskOf = (name) => { const a = body.getObjectByName(name); return a ? a.layers.mask : null; };
     return {
       present: true,
       shipping: named(${JSON.stringify(rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME))}),
@@ -302,6 +315,11 @@ if (bootA && bootB) {
       // repairs in different files. Read from the rewards block, which is where a hero's equipped
       // weapon has always ridden -- main.js reads the same field for the same reason.
       toldWeaponId: remote.weaponId ?? null,
+      lantern: named(${JSON.stringify(rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME))}),
+      toldLantern: remote.lanternUnlocked === true,
+      bodyMask: body.layers.mask,
+      lanternMask: maskOf(${JSON.stringify(rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME))}),
+      bladeMask: maskOf(${JSON.stringify(rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME))}),
     };
   })()`;
   // The mesh is fetched on demand: this client had no reason to load the Blade until it was told a
@@ -309,8 +327,8 @@ if (bootA && bootB) {
   // read once, and a timeout here is a real failure rather than a slow machine's fault -- the asset
   // is local and the budget is generous.
   const sawBlade = await waitFor(pageB,
-    `(${remoteSwords}).blade === true`, 'tab B mounts and shows the sibling\'s Blade', 15_000);
-  const swords = JSON.parse(await pageB.eval(`JSON.stringify(${remoteSwords})`));
+    `(${remoteGear}).blade === true`, 'tab B mounts and shows the sibling\'s Blade', 15_000);
+  const swords = JSON.parse(await pageB.eval(`JSON.stringify(${remoteGear})`));
   check('tab B draws the sibling holding the Wildwood Blade they earned, not the starter sword',
     sawBlade && swords.blade === true && swords.shipping === false, JSON.stringify(swords));
   // EXACTLY ONE, never two out of the same fist and never an empty hand -- weaponVisibility's
@@ -318,6 +336,50 @@ if (bootA && bootB) {
   check('exactly one sword is visible on the sibling',
     [swords.shipping, swords.blade].filter((v) => v === true).length === 1,
     JSON.stringify(swords));
+
+  // THE LANTERN, IN BOTH DIRECTIONS -- and the second is the one nobody was guarding.
+  //
+  // Tab A has earned it and tab B has not. So tab B must DRAW one on its remote, and tab A must NOT.
+  // The second is the harder claim and the worse bug: a clone inherits whatever the local hero is
+  // wearing, so tab A -- whose own child has a lantern -- was drawing tab B wearing one too. That is
+  // a lie about someone else's progression, told by your screen, and weaponLoadout.js's
+  // forceShippingWeaponOnClone existed to prevent exactly that lie about the sword while the lantern
+  // never got an equivalent.
+  const sawLantern = await waitFor(pageB,
+    `(${remoteGear}).lantern === true`, 'tab B mounts and shows the sibling\'s lantern', 15_000);
+  const bGear = JSON.parse(await pageB.eval(`JSON.stringify(${remoteGear})`));
+  check('tab B draws the sibling wearing the lantern they earned',
+    sawLantern && bGear.lantern === true, JSON.stringify(bGear));
+  // Judged only when both pieces are actually mounted. A mask that is null means the anchor is not
+  // there, which the check above has already reported -- and one slow mount producing two reds is
+  // the thing this file's own diagnostic() header objects to.
+  diagnostic('the mounted gear is on the same render layer as the sibling it hangs on',
+    bGear.lanternMask === bGear.bodyMask && bGear.bladeMask === bGear.bodyMask,
+    `body ${bGear.bodyMask}, lantern ${bGear.lanternMask}, blade ${bGear.bladeMask}`,
+    {
+      authoritative: bGear.lanternMask !== null && bGear.bladeMask !== null,
+      reason: 'a piece of gear had not mounted yet, so there is no layer of its own to compare',
+    });
+
+  await pageA.send('Page.bringToFront');
+  await afterAFrame(pageA);
+  const aGear = JSON.parse(await pageA.eval(`JSON.stringify(${remoteGear})`));
+  // JUDGED ONLY IF THERE WAS SOMETHING TO HIDE. A clone carries a lantern anchor only when it was
+  // taken after the local hero mounted one, and that is a race this harness does not control: if tab
+  // A cloned tab B before A's own lantern arrived, the anchor is absent and a bare belt proves
+  // nothing about the rule. `false` is a real pass -- an anchor that exists and is hidden -- and
+  // `true` is the lie either way. `null` is neither, and saying so is the point of DIAG.
+  //
+  // The rule itself is proved deterministically in test/remote-heroes.test.mjs, which builds the
+  // clone WITH an anchor on purpose. This is the browser confirming it, when the browser can.
+  diagnostic('tab A does NOT draw a lantern on a sibling who has not earned one',
+    aGear.present === true && aGear.lantern !== true, JSON.stringify(aGear),
+    {
+      authoritative: aGear.lantern !== null,
+      reason: "tab A's clone of tab B never carried a lantern anchor, so there was nothing to hide",
+    });
+  await pageB.send('Page.bringToFront');
+  await afterAFrame(pageB);
   const initialA = await state(pageA);
   const initialB = await state(pageB);
   check('tab B sees exactly one remote hero', initialB.net.remoteCount === 1,

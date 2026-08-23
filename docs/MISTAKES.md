@@ -1304,3 +1304,45 @@ but "what did I just learn about what this check can see". One of these two was 
 coverage of a real bug; the other was an unproven claim sitting in a comment as if settled. Neither
 would have surfaced from a green suite.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Before adding a field to a protocol, read what the producer already publishes.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A new wire field is a new source of truth, and a second source for a fact that already
+travels is worse than no field at all -- the two can disagree, and nothing says which is right. The
+cost of checking is one read of the producer; the cost of not checking is a duplicate that has to be
+found later by somebody who no longer remembers which was added when.
+**Incident (2026-08-23, `players[].weaponId`):** to draw a sibling's sword I added a per-player
+weapon field to the snapshot, validated it in `protocol.js`, and carried it through all three of
+`interpolation.js`'s sample paths. Two hours later, while looking for the next thing a sibling cannot
+see, I read `rewardsFor` and found `equippedWeaponId` -- per hero, on every snapshot, decoded and
+validated since long before the branch. The whole addition was withdrawn, three files and eight tests
+with it, and the client reads `serverEncounter.rewards[id].equippedWeaponId` instead.
+**What made it findable and what made it avoidable are the same thing:** the fact I needed was one
+function away in a file I had already opened for something else. I designed the transport before
+reading the producer, and the design was fine -- it was just second.
+**The one thing the duplicate had:** the weapon travelled WITH the interpolated body, so a swap
+landed on the frame the hand arrived rather than an interpolation delay ahead of it. About a hundred
+milliseconds, on a once-a-session event. That is what a duplicate wire field buys, and it is not
+enough. `heroes`, which drives the far more timing-sensitive knockdown, is already read the same
+newest-snapshot way one line above.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A scripted edit that is not asserted is a change you have not made.
+**Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
+**Rule:** `str.replace` on a pattern that does not match returns the string unchanged and reports
+nothing. Every scripted edit therefore needs an assertion that its anchor was found -- before the
+write, so a miss is a crash rather than a silent no-op. Without one, the next green run reads as
+confirmation of a change that was never applied.
+**Incidents, both 2026-08-23:**
+(1) a python heredoc whose assertion threw BEFORE `open(p, 'w')`, so nothing was written at all -- and
+the harness run that followed was briefly read as validating a patch that did not exist.
+(2) a browser probe gained two new fields and a check that reads them. The `check` call applied; the
+FIELDS did not, because that replacement had no assert and its anchor text had shifted under an
+earlier edit. The run then reported `lantern undefined` and a FAIL for a lantern that had never been
+asked about -- an instrument reporting on a measurement it was not taking, which is the family
+"prove the instrument can see a known-good case" is about, arriving this time through the editor
+rather than through the probe.
+**The tell in (2):** the check printed `body undefined, lantern undefined, blade undefined` while the
+JSON beside it simply had no such keys. Undefined everywhere, including for a field that could not be
+undefined if the code had run, is not a measurement -- it is the absence of one.
+**Foreknowledge helped:** not yet recorded.

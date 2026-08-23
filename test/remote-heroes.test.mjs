@@ -9,6 +9,7 @@ import { rigidAnchorName } from '../public/src/character/gear.js';
 import {
   SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME, WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../public/src/character/weaponLoadout.js';
+import { BELT_LANTERN_BONE_NAME, RIGID_BELT_LANTERN } from '../public/src/character/gear.js';
 
 // WHAT A CHILD SEES OF THEIR SIBLING.
 //
@@ -42,7 +43,7 @@ function poseClip(name, seconds, from, to, node = 'hips') {
 // for by their real lowercase-substring names (locomotion: idle/walking/running, reactions:
 // hit/death, swing: sword_slash). Standing is 0, the fall runs to +1, the swing to -1, so no two
 // animators can be mistaken for each other.
-function heroTemplate({ deathSeconds = 2.97, withBlade = false } = {}) {
+function heroTemplate({ deathSeconds = 2.97, withBlade = false, withLantern = false } = {}) {
   const root = new THREE.Object3D();
   root.name = 'hero-template';
   const hips = new THREE.Object3D();
@@ -60,6 +61,14 @@ function heroTemplate({ deathSeconds = 2.97, withBlade = false } = {}) {
     const blade = new THREE.Object3D();
     blade.name = rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME);
     root.add(blade);
+  }
+  // Same fork for the belt lantern, and it matters in BOTH directions here: a clone inherits
+  // whatever the local hero was wearing, so `withLantern` models a template taken from a child who
+  // had already earned one.
+  if (withLantern) {
+    const lantern = new THREE.Object3D();
+    lantern.name = rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME);
+    root.add(lantern);
   }
   return {
     root,
@@ -382,17 +391,21 @@ const swordsVisible = (scene, id = 'sib') => {
     .map((anchor) => anchor.name);
 };
 
-const walking = (weaponId) => ({
+// The rewards block as it rides the wire, per hero -- the shape net/gameServer.mjs's rewardsFor
+// publishes and net/protocol.js decodes. Passed through whole rather than unpacked into one map per
+// cosmetic: a sibling's body is decided by several of these fields and there will be more.
+const walking = (reward) => ({
   deltaSeconds: 0.05,
   reactionDeltaSeconds: 0.05,
   heroes: { sib: { hp: 3, swingSeconds: -1, downSeconds: -1 } },
-  weapons: weaponId === undefined ? {} : { sib: weaponId },
+  rewards: reward === undefined ? {} : { sib: reward },
 });
+const holding = (equippedWeaponId) => walking({ equippedWeaponId });
 
 test('a sibling holding the starter sword is drawn holding the starter sword', () => {
   const scene = new THREE.Scene();
   const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
-  remotes.update(sampleOf(), walking('starter_sword'));
+  remotes.update(sampleOf(), holding('starter_sword'));
   assert.deepEqual(swordsVisible(scene),
     [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
 });
@@ -401,7 +414,7 @@ test('a sibling who earned the Wildwood Blade is drawn holding it', () => {
   // The whole point. A child equips the Blade, and the sibling standing next to them sees it.
   const scene = new THREE.Scene();
   const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
-  remotes.update(sampleOf(), walking('wildwood_blade'));
+  remotes.update(sampleOf(), holding('wildwood_blade'));
   assert.deepEqual(swordsVisible(scene),
     [rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)]);
 });
@@ -413,7 +426,7 @@ test('exactly one sword is visible on a sibling, at every step of a swap', () =>
   const scene = new THREE.Scene();
   const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
   for (const weaponId of [undefined, 'starter_sword', 'wildwood_blade', 'starter_sword', null]) {
-    remotes.update(sampleOf(), walking(weaponId));
+    remotes.update(sampleOf(), weaponId === undefined ? walking(undefined) : holding(weaponId));
     assert.equal(swordsVisible(scene).length, 1,
       `weapon ${JSON.stringify(weaponId)} left ${swordsVisible(scene).length} swords visible`);
   }
@@ -426,7 +439,7 @@ test('a sibling with the Blade on a clone that never mounted one keeps the shipp
   // is already holding -- and the fallback here is the same one weaponMeshIdFor gives an unknown id.
   const scene = new THREE.Scene();
   const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: false }));
-  remotes.update(sampleOf(), walking('wildwood_blade'));
+  remotes.update(sampleOf(), holding('wildwood_blade'));
   assert.deepEqual(swordsVisible(scene),
     [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
 });
@@ -434,10 +447,10 @@ test('a sibling with the Blade on a clone that never mounted one keeps the shipp
 test('a sibling who swaps weapons mid-session is redrawn, not frozen at what they joined with', () => {
   const scene = new THREE.Scene();
   const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
-  remotes.update(sampleOf(), walking('starter_sword'));
+  remotes.update(sampleOf(), holding('starter_sword'));
   assert.deepEqual(swordsVisible(scene),
     [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
-  remotes.update(sampleOf(), walking('wildwood_blade'));
+  remotes.update(sampleOf(), holding('wildwood_blade'));
   assert.deepEqual(swordsVisible(scene),
     [rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)]);
 });
@@ -455,10 +468,91 @@ test('two siblings holding different swords are drawn differently', () => {
     deltaSeconds: 0.05,
     reactionDeltaSeconds: 0.05,
     heroes: {},
-    weapons: { sib: 'wildwood_blade', other: 'starter_sword' },
+    rewards: { sib: { equippedWeaponId: 'wildwood_blade' }, other: { equippedWeaponId: 'starter_sword' } },
   });
   assert.deepEqual(swordsVisible(scene, 'sib'),
     [rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)]);
   assert.deepEqual(swordsVisible(scene, 'other'),
     [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
+});
+
+// ── the belt lantern a sibling earned, and the one they did not ─────────────────────────────────
+//
+// `rewards[heroId].lanternUnlocked` has ridden every snapshot for every hero since the rewards block
+// was written. Nothing read it for anybody but the local child, and a clone inherits whatever the
+// LOCAL hero happened to be wearing -- so this went wrong in both directions at once, and the second
+// is the worse one:
+//
+//   a sibling who lit the Beacon is drawn with a bare belt, on a client whose own child has not;
+//   a sibling who has NOT is drawn wearing one, on a client whose own child has.
+//
+// The second is a lie about someone else's progression, told by your screen, and nothing guarded it.
+// forceShippingWeaponOnClone existed to prevent exactly that lie about the sword; the lantern never
+// got the equivalent.
+
+const lanternVisible = (scene, id = 'sib') => {
+  const anchor = scene.getObjectByName(`remote-${id}`)
+    .getObjectByName(rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME));
+  return anchor ? anchor.visible === true : null;
+};
+
+test('a sibling who has not earned the lantern is not drawn wearing one', () => {
+  // The lie, and the direction with no guard at all. The template here is a child who HAS earned it,
+  // which is how a clone comes to carry the anchor in the first place.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withLantern: true }));
+  remotes.update(sampleOf(), walking({ lanternUnlocked: false }));
+  assert.equal(lanternVisible(scene), false);
+});
+
+test('a sibling the server has said nothing about is not drawn wearing a lantern either', () => {
+  // Absence is not permission. A hero who is in the players list before the rewards block mentions
+  // them must not be shown wearing someone else's earned gear for those frames.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withLantern: true }));
+  remotes.update(sampleOf(), walking(undefined));
+  assert.equal(lanternVisible(scene), false);
+});
+
+test('a sibling who earned the lantern is drawn wearing it', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withLantern: true }));
+  remotes.update(sampleOf(), walking({ lanternUnlocked: true }));
+  assert.equal(lanternVisible(scene), true);
+});
+
+test('a sibling who lights the Beacon mid-session puts the lantern on without a rejoin', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withLantern: true }));
+  remotes.update(sampleOf(), walking({ lanternUnlocked: false }));
+  assert.equal(lanternVisible(scene), false);
+  remotes.update(sampleOf(), walking({ lanternUnlocked: true }));
+  assert.equal(lanternVisible(scene), true);
+});
+
+test('a clone with no lantern anchor is left alone rather than throwing', () => {
+  // The ordinary case on a client whose own child has never earned one: the mesh is fetched lazily,
+  // so there is nothing to show and nothing to hide. Mounting it is the caller's job via mountGear,
+  // and a caller without one degrades to a bare belt rather than to an exception on the join path.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withLantern: false }));
+  remotes.update(sampleOf(), walking({ lanternUnlocked: true }));
+  assert.equal(lanternVisible(scene), null);
+  assert.equal(remotes.count, 1);
+});
+
+test('two siblings, one with a lantern and one without, are drawn differently', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withLantern: true }));
+  remotes.update(new Map([
+    ['sib', { x: 0, z: 0, heading: 0, speed: 0 }],
+    ['other', { x: 3, z: 0, heading: 0, speed: 0 }],
+  ]), {
+    deltaSeconds: 0.05,
+    reactionDeltaSeconds: 0.05,
+    heroes: {},
+    rewards: { sib: { lanternUnlocked: true }, other: { lanternUnlocked: false } },
+  });
+  assert.equal(lanternVisible(scene, 'sib'), true);
+  assert.equal(lanternVisible(scene, 'other'), false);
 });
