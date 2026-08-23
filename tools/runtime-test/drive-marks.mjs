@@ -21,7 +21,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  SWING_CONTACT_SECONDS, SWING_SECONDS, WOLF_MAX_HP, canAttack,
+  ATTACK_REACH, SWING_CONTACT_SECONDS, WOLF_MAX_HP, canAttack,
 } from '../../public/src/combat/encounter.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
 import {
@@ -353,10 +353,9 @@ await page.eval(`(() => {
 //   trip. It aims at an expression, not a captured pair, so a wolf that moves during the walk is
 //   followed at frame resolution.
 //
-//   The taps go out at SWING_SECONDS plus one MEASURED frame of this machine's pace, rather than
-//   600ms. Six hundred was not wrong so much as arbitrary: the rules allow one swing every 1.5s
-//   with ATTACK_COOLDOWN_SECONDS at 0, so two taps in three were always going to be refused, and
-//   each one still cost a round trip's worth of the fight's budget.
+//   The taps go out on a measured cadence rather than a flat 600ms -- see the note above the
+//   cadence itself for what that turned out to mean, and for why the first attempt at it was
+//   exactly wrong.
 //
 //   The fight is RECORDED per frame instead of point-read between taps. The wolf's `hit` reaction
 //   lives WOLF_HIT_FLASH_SECONDS (0.18s) and `dying` is brief; a read every ~370ms was sampling
@@ -377,6 +376,17 @@ const FIGHT_SAMPLE = `(() => {
     sparks: runtime.markSparksInFlight(),
   };
 })()`;
+
+// THE RE-CLOSE PULSES UNLESS THERE IS REAL GROUND TO COVER. A held walk cannot stop on a mark --
+// the release costs a poll and a round trip while authority keeps walking, which at a full-deflection
+// stick is a metre and a half. Ask it to stop at 1.0m from the wolf and it hands back a hero 2.5m
+// away, outside ATTACK_REACH, so the swing that follows hits nothing. Hosted at 3c43815 that read as
+// a hero knocked down sixteen times with the wolf never below 1hp, with the re-close present and
+// doing harm. The pulsed walker is slow per metre and exact, and exact is what matters here: the
+// wolf brings itself to about a metre, and what the walk is really for is turning the hero, since he
+// only turns while moving. The held leg is kept for the one case with actual distance in it --
+// coming back from a knockdown, which respawns him at spawn.
+const HELD_APPROACH_SLACK_METRES = 3;
 
 // The stick held straight up is pure camera-forward -- the same `sy = 1` case the pulsed steering
 // above computes -- so with the heading re-aimed in-page every frame, "hold forward" means "walk at
@@ -400,8 +410,22 @@ const readFight = () => page.eval(readWatchSource('fight')).then(JSON.parse);
 await sleep(1000);
 const paced = await readFight();
 // One second of recording just happened, so the frame count IS the frame rate.
+// TAP ONCE PER RENDERED FRAME, NOT ONCE PER SWING.
+//
+// Pacing taps at SWING_SECONDS plus a frame looked like deriving the cadence from the rules and was
+// actually half the swing rate. The swing does not start when the tap is dispatched: it starts when
+// authority receives it, a frame plus the wire later, and runs SWING_SECONDS from there -- so it
+// ends about 1.9s after the tap, and a tap sent at 1.8s is refused for being early. The next one
+// then comes at 3.6s. One swing every 3.6 seconds against a hero who survives about nine.
+//
+// A refused tap costs nothing -- the rules simply ignore it -- so the right rate is the fastest the
+// game can even notice: main.js samples input once per rendered frame, so tapping faster than the
+// frame period cannot help and tapping slower wastes eligibility. In practice the two CDP round
+// trips a tap costs put the real rate near 0.7s, which is what the original 600ms here had by
+// instinct. The recorder is read every few taps rather than every one, so noticing the kill stays
+// prompt without paying a round trip per press.
 const framePeriodMs = paced.frames > 0 ? Math.round(1000 / paced.frames) : 17;
-const tapEveryMs = Math.round(SWING_SECONDS * 1000 + framePeriodMs);
+const tapEveryMs = framePeriodMs;
 console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEveryMs}ms`);
 
 // RE-CLOSE BEFORE EVERY SWING, INSIDE THE CADENCE RATHER THAN INSTEAD OF IT.
@@ -418,11 +442,25 @@ console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEv
 // first frame and the whole thing is a short nudge, which is all that is needed since turning is
 // what it is for.
 let killed = false;
+let lastGap = 0;
+const gapsAtTap = [];
 const killDeadline = Date.now() + 120000;
-for (let tap = 0; tap < 60 && !killed && Date.now() < killDeadline; tap += 1) {
+// WHAT THE LOOP SPENDS ITS FIGHT ON IS ROUND TRIPS, so the tap path has as few as it can.
+//
+// Walking before every swing was measured at 4.4 SECONDS a tap -- 28 swings in the 124s the fight
+// was given, against a hero who is knocked down every nine or ten. The pulsed walker alone is five
+// round trips and a pulse, and at 333ms a frame that is most of a hero's life spent repositioning
+// by a metre. The gap log said the repositioning was not even needed: every swing went out from
+// between 1.0m and 1.6m, all of them inside ATTACK_REACH, because the wolf brings itself to
+// MIN_BODY_SEPARATION and stays there.
+//
+// So the tap path is two touches and nothing else, and the walk happens only when the recorder says
+// the hero is actually out of reach -- which is what a knockdown does, since respawning puts him
+// back at spawn. Reading every fourth tap keeps that decision current without paying for it every
+// time.
+const REACH_CHECK_EVERY = 4;
+for (let tap = 0; tap < 200 && !killed && Date.now() < killDeadline; tap += 1) {
   const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  await heldWalkToward(WOLF_TARGET, 1.0, 8000);
   // eslint-disable-next-line no-await-in-loop
   await touch('touchStart', [{ x: attackX, y: attackY }]);
   // eslint-disable-next-line no-await-in-loop
@@ -431,12 +469,20 @@ for (let tap = 0; tap < 60 && !killed && Date.now() < killDeadline; tap += 1) {
   await touch('touchEnd', []);
   // eslint-disable-next-line no-await-in-loop
   await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-  // One read per tap. At a 1.8s cadence that is about a sixth of the cycle even where a round trip
-  // costs a whole frame, and it is what lets the loop stop the moment the wolf goes down.
+  if (tap % REACH_CHECK_EVERY !== 0) continue;
   // eslint-disable-next-line no-await-in-loop
   const log = await readFight();
   killed = log.samples.some((sample) => sample.hp <= 0 || sample.mode === 'dying' || sample.mode === 'dead');
+  lastGap = log.samples[log.samples.length - 1]?.gap ?? 0;
+  gapsAtTap.push(Number(lastGap.toFixed(2)));
+  if (!killed && lastGap > ATTACK_REACH) {
+    // eslint-disable-next-line no-await-in-loop
+    await heldWalkToward(WOLF_TARGET, 1.0, 15000);
+  }
 }
+// The gap the hero was actually standing at when each swing went out. ATTACK_REACH is 1.7m, so
+// this is the line that says whether a missed swing missed because of RANGE or something else.
+console.log(`  swing gaps: ${JSON.stringify(gapsAtTap)}`);
 const fightLog = await readFight();
 const knockdowns = fightLog.samples.filter((sample, index) =>
   sample.heroDown && !fightLog.samples[index - 1]?.heroDown).length;

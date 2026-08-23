@@ -362,20 +362,48 @@ if (bootA && bootB) {
   // stale background mirror would otherwise be compared against a fresh one), and a brief settle
   // poll absorbs the small chance a hit lands in the gap between reading A and reading B rather than
   // treating that timing crack as a real disagreement.
-  async function settledPair(maxWaitMs) {
+  // BRACKETED, not settled. Two tabs cannot be read at the same instant -- rAF only advances for the
+  // foregrounded one, so each read costs a bringToFront and they land hundreds of milliseconds
+  // apart on a starved runner. If the wolf takes a hit in that gap the two values differ for a
+  // reason that has nothing to do with what either child saw.
+  //
+  // The version this replaces absorbed that by re-reading while the two disagreed, for 600ms. On a
+  // runner where one round trip is a whole frame, 600ms buys a single retry -- and the tell that it
+  // was measuring its own read order rather than the game is that the direction of the disagreement
+  // FLIPPED between environments: A=2 B=1 locally, A=1 B=2 hosted. A real desync has a direction.
+  //
+  // So read A, then B, then A again. If A is unchanged across B's read, then B's value is bracketed
+  // by two identical A values and any difference between them is real, whatever the latency was.
+  // If A did change, the sample cannot answer the question at all -- it is neither agreement nor
+  // disagreement -- so it is excluded and COUNTED, because a sample silently dropped is how a
+  // harness reports "all agreeing" about rounds it never managed to compare.
+  // A tab publishes encounterState() from its FRAME LOOP, and a backgrounded tab does not run one.
+  // So bringToFront alone is not enough to make a tab readable: its snapshot may have arrived over
+  // the socket while it was asleep and not yet been folded into the state a harness can see. This
+  // waits for two rendered frames -- two rather than one because the first callback can have been
+  // scheduled before the tab came forward -- and it is what turned the last "disagreement" from
+  // A=0/B=1 into an actual comparison.
+  const afterAFrame = (page) => page.eval(
+    'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
+  );
+
+  async function bracketedPair(maxWaitMs) {
     const deadline = deadlineAfter(maxWaitMs);
-    await pageA.send('Page.bringToFront');
-    let a = await fightState(pageA);
-    await pageB.send('Page.bringToFront');
-    let b = await fightState(pageB);
-    while (a.wolf.hp !== b.wolf.hp && Date.now() < deadline) {
-      await sleep(80);
+    let a = null;
+    let b = null;
+    do {
       await pageA.send('Page.bringToFront');
-      a = await fightState(pageA);
+      await afterAFrame(pageA);
+      const before = await fightState(pageA);
       await pageB.send('Page.bringToFront');
+      await afterAFrame(pageB);
       b = await fightState(pageB);
-    }
-    return { a, b };
+      await pageA.send('Page.bringToFront');
+      await afterAFrame(pageA);
+      a = await fightState(pageA);
+      if (before.wolf.hp === a.wolf.hp) return { a, b, bracketed: true };
+    } while (Date.now() < deadline);
+    return { a, b, bracketed: false };
   }
 
   const hpSamples = [];
@@ -394,17 +422,22 @@ if (bootA && bootB) {
         await sleep(200);
       }
     }
-    const { a, b } = await settledPair(600);
-    hpSamples.push({ round, aHp: a.wolf.hp, bHp: b.wolf.hp, aMode: a.wolf.mode, bMode: b.wolf.mode });
+    const { a, b, bracketed } = await bracketedPair(12_000);
+    hpSamples.push({
+      round, bracketed, aHp: a.wolf.hp, bHp: b.wolf.hp, aMode: a.wolf.mode, bMode: b.wolf.mode,
+    });
     killed = a.wolf.mode === 'dead' && b.wolf.mode === 'dead';
   }
 
-  const disagreements = hpSamples.filter((sample) => sample.aHp !== sample.bHp);
+  const comparable = hpSamples.filter((sample) => sample.bracketed);
+  const uncomparable = hpSamples.length - comparable.length;
+  const disagreements = comparable.filter((sample) => sample.aHp !== sample.bHp);
   check('both tabs agree on wolf HP at every sampled snapshot during the shared fight',
-    disagreements.length === 0,
+    disagreements.length === 0 && comparable.length > 0,
     disagreements.length
       ? `first disagreement at round ${disagreements[0].round}: A=${disagreements[0].aHp} B=${disagreements[0].bHp}`
-      : `${hpSamples.length} rounds sampled, all agreeing`);
+      : `${comparable.length} of ${hpSamples.length} rounds compared cleanly, all agreeing`
+        + `${uncomparable ? `; ${uncomparable} could not be bracketed (the wolf changed mid-read)` : ''}`);
   check('both tabs converge on the same final dead mode',
     killed,
     `after ${hpSamples.length} rounds: A=${hpSamples.at(-1)?.aMode ?? 'n/a'}, B=${hpSamples.at(-1)?.bMode ?? 'n/a'}`);

@@ -54,6 +54,7 @@ import {
 // owner asked for a tougher wolf, reporting "tapping ATTACK does not damage the wolf" when the real
 // change was a number going up.
 import {
+  ATTACK_REACH,
   MIN_BODY_SEPARATION,
   HERO_MAX_HP,
   RESPAWN_SECONDS,
@@ -619,12 +620,25 @@ await shot('02-engaged');
 // The gap that mattered most in the whole feature: previously a bitten hero got no feedback of any
 // kind. This beat does not attack at all -- it only needs to stand within bite range and wait for the
 // WOLF to act, then poll tightly enough to catch #hero-hurt-flash before its fade finishes.
-const beforeBite = await state();
+// A BITE IS A DECREASE BETWEEN TWO FRAMES, not a difference between two point reads.
+//
+// Comparing a reading from before the walk against one taken after it straddles whatever happened
+// in between -- including a knockdown and the respawn that follows it, which puts the hero back on
+// full hearts. Seen locally: `hero 0hp -> 0hp`, because the walk into range took long enough for
+// him to be knocked out before the comparison even started, and `hp < 0` is not reachable. The
+// recorder makes the claim directly: at some frame, the hero had fewer hearts than he had on the
+// frame before. That is what a bite landing IS, and no respawn can forge it.
+await page.eval(startWatch('bite', '({ hp: window.__galaQuestRuntime.encounterState().hero.hp })'));
 await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.0, 4000, { faceTarget: true });
-const biteState = await pollUntil((s) => s.hero.hp < beforeBite.hero.hp, { timeoutMs: 6000 });
+const bitten = await waitForSample(page, 'bite', (sample, index, all) =>
+  index > 0 && sample.hp < all[index - 1].hp, { timeoutMs: 12000 });
+await page.eval(stopWatchSource('bite'));
 await shot('hero-hurt-flash');
+const bites = bitten.samples.filter((sample, index) => index > 0 && sample.hp < bitten.samples[index - 1].hp);
 check('a wolf bite lands and the capture catches it while the hurt flash is still up',
-  biteState.hero.hp < beforeBite.hero.hp, `hero ${beforeBite.hero.hp}hp -> ${biteState.hero.hp}hp`);
+  bites.length > 0,
+  `${bitten.frames} frames recorded, ${bites.length} bite(s) seen, hearts `
+    + `${bitten.samples[0]?.hp} -> ${bitten.samples[bitten.samples.length - 1]?.hp}`);
 
 // ── GP1-C5: being knocked out, photographed ─────────────────────────────────────────────────────
 //
@@ -801,8 +815,22 @@ await sleep(1000);
 const readFight = () => page.eval(readWatchSource('fight')).then(JSON.parse);
 const paced = await readFight();
 const gaps = paced.samples.slice(1).map((sample, index) => sample.t - paced.samples[index].t);
+// TAP ONCE PER RENDERED FRAME, NOT ONCE PER SWING.
+//
+// Pacing taps at SWING_SECONDS plus a frame looked like deriving the cadence from the rules and was
+// actually half the swing rate. The swing does not start when the tap is dispatched: it starts when
+// authority receives it, a frame plus the wire later, and runs SWING_SECONDS from there -- so it
+// ends about 1.9s after the tap, and a tap sent at 1.8s is refused for being early. The next one
+// then comes at 3.6s. One swing every 3.6 seconds against a hero who survives about nine.
+//
+// A refused tap costs nothing -- the rules simply ignore it -- so the right rate is the fastest the
+// game can even notice: main.js samples input once per rendered frame, so tapping faster than the
+// frame period cannot help and tapping slower wastes eligibility. In practice the two CDP round
+// trips a tap costs put the real rate near 0.7s, which is what the original 600ms here had by
+// instinct. The recorder is read every few taps rather than every one, so noticing the kill stays
+// prompt without paying a round trip per press.
 const framePeriodMs = gaps.length ? gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 17;
-const tapEveryMs = Math.round(SWING_SECONDS * 1000 + framePeriodMs);
+const tapEveryMs = framePeriodMs;
 console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEveryMs}ms`);
 
 // Four taps per burst is one hero life's worth at this cadence, so a burst that starts while he is
@@ -822,8 +850,20 @@ console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEvery
 // hero is already in reach the walker latches on its first frame and the whole thing is a short
 // nudge -- which is all that is needed, since turning is what it is for. The cadence stays at
 // SWING_SECONDS plus a frame either way, which is what decides whether three hits fit in one life.
+// THE RE-CLOSE PULSES UNLESS THERE IS REAL GROUND TO COVER, and getting that the wrong way round
+// cost a hosted round. A held walk cannot stop on a mark -- the release costs a poll and a round
+// trip while authority keeps walking, which at a full-deflection stick is a metre and a half. Ask
+// it to stop at 1.0m from the wolf and it hands back a hero 2.5m away: outside ATTACK_REACH, so the
+// swing that follows hits nothing. Hosted at 3c43815 that read as `hero knocked down 16x, wolf
+// reached 1hp` over 965 frames, with the re-close present and doing harm.
+//
+// So the pulsed walker does the re-close. It is slow per metre and exact, and exact is what matters
+// here: the wolf brings itself to about a metre, and what the walk is really for is turning the
+// hero, since he only turns while moving. The held walk is kept for the one case with actual
+// distance in it -- coming back from a knockdown, which respawns him at spawn.
 const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
-async function closeOnWolf(stopWithin, maxMillis) {
+const HELD_APPROACH_SLACK_METRES = 3;
+async function heldLegToWolf(stopWithin, maxMillis) {
   await page.eval(startWalk(WOLF_TARGET, stopWithin));
   await touch('touchStart', [{ x: stickX, y: stickY }]);
   await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
@@ -835,6 +875,13 @@ async function closeOnWolf(stopWithin, maxMillis) {
     await page.eval(STOP_WALK);
   }
 }
+async function closeOnWolf(gapMetres, stopWithin) {
+  if (gapMetres > stopWithin + HELD_APPROACH_SLACK_METRES) {
+    await heldLegToWolf(stopWithin + HELD_APPROACH_SLACK_METRES, 8000);
+  }
+  await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), stopWithin, 900,
+    { faceTarget: true });
+}
 
 // ONE READ PER TAP, not per burst. Reading in bursts of four was cheaper and it broke the check
 // after this one: the kill went unnoticed for up to four cadences, and WOLF_RESPAWN_SECONDS is 10s,
@@ -844,10 +891,18 @@ async function closeOnWolf(stopWithin, maxMillis) {
 let killed = false;
 let sawHit = false;
 let shotSwing = false;
-for (let tap = 0; tap < 40 && !killed; tap += 1) {
+let lastGap = 0;
+// WHAT THE LOOP SPENDS ITS FIGHT ON IS ROUND TRIPS, so the tap path has as few as it can. Walking
+// before every swing was measured at 4.4 SECONDS a tap in drive-marks -- against a hero who is
+// knocked down every nine or ten seconds, and a wolf that Design ruling 5 heals to full each time.
+// The gap log said the repositioning was not even needed: every swing went out from between 1.0m
+// and 1.6m, inside ATTACK_REACH, because the wolf brings itself to MIN_BODY_SEPARATION and stays
+// there. So the tap path is two touches and nothing else, and the walk happens only when the
+// recorder says the hero is actually out of reach -- which is what a knockdown does, since
+// respawning puts him back at spawn.
+const REACH_CHECK_EVERY = 4;
+for (let tap = 0; tap < 200 && !killed; tap += 1) {
   const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  await closeOnWolf(1.0, 4000);
   // eslint-disable-next-line no-await-in-loop
   await touch('touchStart', [{ x: attackX, y: attackY }]);
   // eslint-disable-next-line no-await-in-loop
@@ -862,10 +917,14 @@ for (let tap = 0; tap < 40 && !killed; tap += 1) {
   }
   // eslint-disable-next-line no-await-in-loop
   await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+  if (tap % REACH_CHECK_EVERY !== 0) continue;
   // eslint-disable-next-line no-await-in-loop
   const log = await readFight();
   sawHit = log.samples.some((sample) => sample.wolfMode === 'hit');
   killed = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
+  lastGap = log.samples[log.samples.length - 1]?.gap ?? 0;
+  // eslint-disable-next-line no-await-in-loop
+  if (!killed && lastGap > ATTACK_REACH) await closeOnWolf(lastGap, 1.0);
 }
 const fight = await readFight();
 await page.eval(stopWatchSource('fight'));
@@ -1047,18 +1106,20 @@ await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000
 await page.eval(startWatch('landscape-fight', FIGHT_SAMPLE));
 const readLandscape = () => page.eval(readWatchSource('landscape-fight')).then(JSON.parse);
 let landscapeKilled = false;
-for (let attempt = 0; attempt < 20 && !landscapeKilled; attempt += 1) {
+let landscapeGap = 0;
+for (let attempt = 0; attempt < 120 && !landscapeKilled; attempt += 1) {
   const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  await closeOnWolf(1.0, 4000);
   // eslint-disable-next-line no-await-in-loop
   await tapAttack();
   // eslint-disable-next-line no-await-in-loop
   await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
   // eslint-disable-next-line no-await-in-loop
   const log = await readLandscape();
+  landscapeGap = log.samples[log.samples.length - 1]?.gap ?? 0;
   landscapeKilled = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
   if (landscapeKilled) await shot('landscape-defeated');
+  // eslint-disable-next-line no-await-in-loop
+  if (!landscapeKilled && landscapeGap > ATTACK_REACH) await closeOnWolf(landscapeGap, 1.0);
 }
 await page.eval(stopWatchSource('landscape-fight'));
 check('landscape: the finishing blow was photographed too', landscapeKilled,
