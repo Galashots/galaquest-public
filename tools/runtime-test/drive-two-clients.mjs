@@ -186,6 +186,7 @@ const pageA = await pageFor(browser, targetA);
 const pageB = await pageFor(browser, targetB);
 const hostedHeadless = await pageA.eval("navigator.userAgent.includes('HeadlessChrome')");
 const consoleErrors = { a: [], b: [] };
+const profileWarnings = { a: [], b: [] };
 
 // Once, before either tab navigates. See openTab's own note for why this moved out of it.
 await pageA.send('Storage.clearDataForOrigin', { origin: ORIGIN_UNDER_TEST, storageTypes: 'local_storage' });
@@ -199,6 +200,16 @@ for (const [name, page] of [['a', pageA], ['b', pageB]]) {
       // known-missing, non-blocking assets filtered out below.
       const entry = message.params.entry;
       consoleErrors[name].push(entry.url ? `${entry.text} [${entry.url}]` : entry.text);
+    }
+    // AND THE PROFILE MODULE'S OWN WARNINGS, which are not errors and were therefore invisible.
+    // progression/profiles.js warns rather than throws when it cannot reach localStorage or cannot
+    // adopt the hero named in the URL -- it falls back to an in-memory keyring and hands out a
+    // perfectly usable id that simply does not survive a reload. That is one of the two candidate
+    // causes of the identity failure below, and the app says so out loud every time; nobody was
+    // listening. Narrow on purpose: this collects the one prefix, not every warning in the page.
+    if (message.method === 'Log.entryAdded' && message.params.entry.level === 'warning'
+      && String(message.params.entry.text ?? '').includes('[profiles]')) {
+      profileWarnings[name].push(message.params.entry.text);
     }
     if (message.method === 'Runtime.exceptionThrown') consoleErrors[name].push(message.params.exceptionDetails.text);
   });
@@ -284,10 +295,25 @@ if (bootA) {
       'tab A rejoins holding the Blade', 60_000);
     const storedAfter = await pageA.eval(
       `JSON.stringify(window.localStorage.getItem(${JSON.stringify(PROFILES_STORAGE_KEY)}))`);
+    // ABSENT IS NOT THE SAME AS PRESENT-WITHOUT-THIS-ID, and the first version of this line could
+    // not tell them apart. Hosted at 2d0f6b1 it said `before the reload: false`, which killed the
+    // theory it was written to test -- the row was not lost across the reload, it was never there --
+    // and then could not say whether the key was missing entirely (nothing ever persisted; profiles
+    // fell back to its in-memory store, which still hands out a working id) or present with somebody
+    // else's profile in it (a wipe or another tab). Those want completely different fixes, so the
+    // raw value goes in the log, truncated.
+    const describeStored = (raw) => {
+      const value = JSON.parse(raw);
+      if (value === null) return 'ABSENT (no such key)';
+      const ids = [...String(value).matchAll(/"id":"([^"]+)"/g)].map((m) => m[1]);
+      return `${ids.length} profile(s): ${ids.join(', ') || '(none parsed)'}`;
+    };
     const heldBefore = (JSON.parse(storedBefore) ?? '').includes(guestA);
     const heldAfter = (JSON.parse(storedAfter) ?? '').includes(guestA);
-    console.log(`  profile durability: ${PROFILES_STORAGE_KEY} held ${guestA} before the reload: `
-      + `${heldBefore}; after: ${heldAfter}`);
+    console.log(`  profile durability: ${PROFILES_STORAGE_KEY} held ${guestA}`);
+    console.log(`    before the reload: ${heldBefore} -- ${describeStored(storedBefore)}`);
+    console.log(`    after  the reload: ${heldAfter} -- ${describeStored(storedAfter)}`);
+    console.log(`    profiles warned: ${profileWarnings.a.length ? profileWarnings.a.join(' | ') : 'nothing'}`);
     check('tab A is the same child after the reload, not a fresh one',
       (await pageA.eval('window.__galaQuestRuntime.guestId()')) === guestA,
       `guestId ${JSON.stringify(await pageA.eval('window.__galaQuestRuntime.guestId()'))}`);
