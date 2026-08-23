@@ -1398,6 +1398,17 @@ async function bootstrap() {
     return profiles.listProfiles().map((profile) => ({
       id: profile.id,
       displayName: profile.displayName,
+      // THE STORED ANIMAL, CARRIED THROUGH. It was missing, and because this object is built field
+      // by field rather than spread, nothing said so: `hero.avatar` was simply undefined and
+      // avatarForProfile fell through to its id-derived fallback for EVERY card. The stored value
+      // was written correctly and then never read, so a new sibling's animal was decided by their
+      // random uuid rather than by what was free -- which is the collision the allocator was fixed
+      // to prevent, arriving one layer further out.
+      //
+      // It hid because the id-derived answer is a legitimate-looking animal: six of them, so two
+      // profiles agree about one time in six, and the browser check that was supposed to catch this
+      // asked "are they different" and passed on luck four runs in a row.
+      avatar: profile.avatar,
       ...profiles.stateFor(profile.id),
     }));
   }

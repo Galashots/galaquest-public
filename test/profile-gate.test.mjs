@@ -10,6 +10,7 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
 import { profileGateViewModel, progressBadgeFor } from '../public/src/progression/profileGate.js';
+import { HERO_AVATARS, avatarForProfile, fallbackAvatarIdFor } from '../public/src/progression/heroAvatars.js';
 import {
   LEGACY_GUEST_ID_KEY,
   MAX_PROFILES,
@@ -212,4 +213,78 @@ test('...and reports having nowhere to put it when there is not', () => {
   const view = profileGateViewModel({ heroes: [], namingFirstHero: true });
   assert.equal(view.namingProfileId, null);
   assert.equal(view.mode, 'naming', 'it is still the question, not the chooser');
+});
+
+// ── the animal on the card ─────────────────────────────────────────────────────────────────────
+//
+// For the reader this screen is built for, the animal is the whole card: the name is a shape they
+// cannot decode and the badge is a sentence. So "which animal does this card show" is not a detail,
+// it is the feature.
+
+/** A profile id whose id-derived fallback is deliberately NOT the animal we store on it. */
+function idWhoseFallbackIsNot(avatarId) {
+  for (let i = 0; i < 200; i += 1) {
+    const id = `p-fixture-${i}`;
+    if (fallbackAvatarIdFor(id) !== avatarId) return id;
+  }
+  throw new Error('could not find a fixture id whose fallback differs; the fallback may be constant');
+}
+
+test('a card shows the animal the profile has STORED, not one derived from its id', () => {
+  // THE CASE THAT WAS MISSING, and the bug it would have caught was real and shipped: main.js built
+  // each card's hero from a handful of named fields and did not carry `avatar` across, so every card
+  // fell through to the id-derived fallback and the stored value was written and never read.
+  //
+  // The fixture id is chosen so the two answers DIFFER. Picking any id would pass one time in six by
+  // coincidence, which is exactly how the browser check that was supposed to catch this passed four
+  // runs in a row while the defect was live.
+  const stored = HERO_AVATARS[3].id;
+  const id = idWhoseFallbackIsNot(stored);
+  assert.notEqual(fallbackAvatarIdFor(id), stored, 'premise: the fixture actually distinguishes the two');
+
+  const view = profileGateViewModel({
+    heroes: [{ id, displayName: 'Sam', avatar: stored }],
+    activeProfileId: id,
+  });
+  assert.equal(view.heroes[0].avatar.id, stored,
+    `card showed ${view.heroes[0].avatar.id}, which is what this profile's ID says rather than what it HAS`);
+});
+
+test('a profile with nothing stored still gets a stable animal rather than none', () => {
+  // Legacy profiles predate the field. They must still have a face, and the same one every time.
+  const id = 'guest-00000004';
+  const view = profileGateViewModel({ heroes: [{ id, displayName: 'Older', avatar: null }] });
+  assert.equal(view.heroes[0].avatar.id, fallbackAvatarIdFor(id));
+  const again = profileGateViewModel({ heroes: [{ id, displayName: 'Older', avatar: null }] });
+  assert.equal(again.heroes[0].avatar.id, view.heroes[0].avatar.id, 'and it does not move between renders');
+});
+
+test('the card agrees with the shared law, so allocation and drawing cannot disagree', () => {
+  // The property that makes the allocator's work mean anything: createProfile chooses against
+  // avatarForProfile(existing).id, so the card must render through the same function. Two answers to
+  // "what animal is this child" is the whole failure mode -- one used to pick and a different one
+  // used to draw is a chooser avoiding collisions nobody can see.
+  const heroes = [
+    { id: 'guest-00000004', displayName: 'Older', avatar: null },
+    { id: 'p-abc', displayName: 'Sibling', avatar: HERO_AVATARS[1].id },
+    { id: 'p-def', displayName: 'Third', avatar: HERO_AVATARS[4].id },
+  ];
+  const view = profileGateViewModel({ heroes });
+  assert.deepEqual(
+    view.heroes.map((card) => card.avatar.id),
+    heroes.map((hero) => avatarForProfile(hero).id),
+  );
+});
+
+test('every card carries an animal with something to draw and something to announce', () => {
+  // A card whose avatar has no emoji is a blank square, and one with no name has nothing for a
+  // screen reader or for a harness to read back.
+  const view = profileGateViewModel({
+    heroes: HERO_AVATARS.map((a, i) => ({ id: `p-${i}`, displayName: `Kid${i}`, avatar: a.id })),
+  });
+  for (const card of view.heroes) {
+    assert.ok(card.avatar.emoji && card.avatar.emoji.length > 0, `${card.name} has no face to draw`);
+    assert.ok(card.avatar.name && card.avatar.name.length > 0, `${card.name}'s animal has no name`);
+    assert.ok(card.avatar.colour, `${card.name}'s animal has no colour`);
+  }
 });

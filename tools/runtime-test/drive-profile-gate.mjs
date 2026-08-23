@@ -40,6 +40,7 @@ import { fileURLToPath } from 'node:url';
 import { MAX_PROFILES } from '../../public/src/progression/profiles.js';
 import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 import { startOwnedServer } from './owned-server.mjs';
+import { avatarForProfile } from '../../public/src/progression/heroAvatars.js';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -122,7 +123,16 @@ async function openTab() {
   page.ws.addEventListener('message', (e) => {
     const msg = JSON.parse(e.data);
     if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') {
-      consoleErrors.push(msg.params.entry.text);
+      // THE URL, NOT JUST THE TEXT. Chrome's message for a failed fetch is "Failed to load resource:
+      // the server responded with a status of 404 (Not Found)" and names nothing -- so a recorded
+      // error could not say WHAT failed, and the allow-list below could not match on a path.
+      //
+      // I hit both halves of that in one commit: I copied COSMETIC_404_PATTERNS from
+      // drive-cart-loot.mjs and not the capture line it depends on, so the filter was matching
+      // against a string that never contained a URL. Half a mechanism, and it passed locally
+      // because a long-lived Chrome had negative-cached the request.
+      const entry = msg.params.entry;
+      consoleErrors.push(entry.url ? `${entry.text} [${entry.url}]` : entry.text);
     }
     if (msg.method === 'Runtime.exceptionThrown') {
       consoleErrors.push(msg.params.exceptionDetails.text);
@@ -601,6 +611,31 @@ async function run() {
     await load(tab, gameUrl);
     await clickSelector(tab, '#profile-chip');
     const animals = await shownAnimals();
+    // THE STORED BYTES BESIDE THE RENDERED LABELS, because "Fox, Fox" alone cannot say which half
+    // is wrong: an allocator that handed out a duplicate, or a renderer drawing the wrong animal for
+    // a correctly-stored one. Same reason the store-B check in drive-recovery reports what it
+    // actually read rather than a sentence about what it expected.
+    const stored = JSON.parse(await tab.page.eval(`JSON.stringify(
+      (JSON.parse(localStorage.getItem('gq-profiles') || '{}').profiles || [])
+        .map((p) => ({ id: p.id, name: p.displayName ?? p.name, avatar: p.avatar }))
+    )`));
+    // ASSERT WHAT IS STORED, NOT MERELY THAT THEY DIFFER.
+    //
+    // "are they different" passes five times in six even when the cards are ignoring the stored
+    // avatar entirely -- there are six animals, so two id-derived ones agree about one time in six.
+    // It passed four runs in a row while the bug it was written for was live, and only failed on the
+    // fifth. A check whose failure is a coin toss reports luck.
+    //
+    // So this compares each rendered label against the animal that profile's STORED bytes say it
+    // should be, using the product's own law. Deterministic: it fails every single time if the card
+    // is drawing anything other than what was written down.
+    const expected = stored.map((p) => avatarForProfile(p).name);
+    check('every card shows the animal that profile actually has stored',
+      animals.length === expected.length && animals.every((a, i) => a === expected[i]),
+      `rendered ${JSON.stringify(animals)}, stored says ${JSON.stringify(expected)} `
+      + `from ${JSON.stringify(stored)}`);
+    // And the consequence a child cares about, which the allocator is responsible for: no two heroes
+    // on this tablet wear the same face.
     check('the migrated child and the new sibling show DIFFERENT animals, after a reload',
       animals.length >= 2 && new Set(animals).size === animals.length,
       JSON.stringify(animals));
