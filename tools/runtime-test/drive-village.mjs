@@ -23,7 +23,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_DISTANCE } from '../../public/src/camera/follow.js';
-import { headingToward, KEEPER_GREET_REARM_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
+import {
+  headingToward, KEEPER_GREET_REARM_RADIUS_METERS, KEEPER_WAVE_RADIUS_METERS,
+} from '../../public/src/world/zoneLoader.js';
 import { SPAWNS, LANDMARKS } from '../../public/src/world/zones/village.js';
 import {
   deadlineAfter,
@@ -31,6 +33,9 @@ import {
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import {
+  metresOrUnknown, READ_WALK, startWalk, STOP_WALK,
+} from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 // Spawns and owns its own server on an isolated port rather than using the shared 5201 (Phase H1).
@@ -181,6 +186,10 @@ const state = () => page.eval(`(() => {
   return JSON.stringify({
     heroPos: [+r.player.position.x.toFixed(2), +r.player.position.z.toFixed(2)],
     serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(2), +net.serverSelf.z.toFixed(2)] : null,
+    // So a walk can return when the hero has actually STOPPED rather than a fixed sleep after the
+    // release. A held walk that hands back a coasting hero lets him drift out the far side of
+    // KEEPER_WAVE_RADIUS_METERS while the greeting plays, which starves the wave's handoff to talk.
+    serverSpeed: net.serverSelf?.speed ?? null,
     heading: r.follow.heading,
     keeper: r.zoneKeeperState(),
   });
@@ -232,7 +241,23 @@ const STICK_PX = 56;
 // then maps screen.x = deltaX/radius, screen.y = -deltaY/radius, so the pixel offset from the
 // stick's origin is (sx*radius, -sy*radius). At heading 0 this reduces to exactly play-fight.mjs's
 // formula (sx=-nx, sy=nz), which is what proves the generalisation rather than just asserting it.
-async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
+// TWO WALKERS, AND WHICH ONE IS RIGHT DEPENDS ON HOW FAR AND HOW TIGHT.
+//
+// This one pulses: press the stick, release it, read, re-aim. Each iteration costs three CDP round
+// trips, so on a runner painting at 367ms a frame it covers about a metre of ground per second of
+// wall clock -- useless over six metres, which is why the keeper approaches below use the held
+// walker instead. But it STOPS where it says it does, and that is the property the lane hop needs:
+// a 3.35m walk judged against a 1.5m bound has no room for the held walker's release cost.
+//
+// A held walk cannot stop on a mark, and the reason is worth writing down rather than tuning
+// around. Arrival is latched in-page at frame resolution, but the RELEASE still costs the harness a
+// poll and a round trip -- two frames at 4fps -- and the server keeps integrating real time
+// throughout, in the last direction it was sent. On top of that the rendered hero is running ~32%
+// behind authority at this frame rate (every frame exceeds prediction's 250ms step cap), so once
+// the stick is released he travels FURTHER FORWARD catching up to where the server stopped.
+// Measured here: latched at 0.53m, read at 1.56m past the waypoint. Over a long walk into a
+// generous radius that is free; over a short hop into a tight one it is the whole budget.
+async function pulseWalkToward(targetX, targetZ, stopWithin, maxMillis) {
   let last = await state();
   const deadline = deadlineAfter(maxMillis);
   while (Date.now() < deadline) {
@@ -250,20 +275,85 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
     const sx = -cos * nx + sin * nz;
     const sy = sin * nx + cos * nz;
 
-    // Pulse and release before reading state. On a loaded hosted runner a single CDP read can be
-    // much slower than 90ms; holding the stick through that read made observation latency move the
-    // hero several extra metres and turned a short route into a boundary collision.
+    // Release before reading. Holding the stick through a slow CDP read is what the held walker
+    // below does deliberately, with an in-page stop condition to make it safe; without one,
+    // observation latency becomes unobserved movement.
+    // eslint-disable-next-line no-await-in-loop
     await touch('touchStart', [{ x: stickX, y: stickY }]);
     try {
+      // eslint-disable-next-line no-await-in-loop
       await touch('touchMove', [{ x: stickX + sx * STICK_PX, y: stickY - sy * STICK_PX }]);
+      // eslint-disable-next-line no-await-in-loop
       await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
     } finally {
+      // eslint-disable-next-line no-await-in-loop
       await touch('touchEnd', []);
     }
+    // eslint-disable-next-line no-await-in-loop
     await sleep(80);
+    // eslint-disable-next-line no-await-in-loop
     last = await state();
   }
   return last;
+}
+
+// HOW CLOSE A HELD WALK MAY BE TRUSTED TO GET BEFORE THE PULSED ONE TAKES OVER.
+//
+// A held walk cannot stop on a mark. Arrival latches in-page at frame resolution, but the RELEASE
+// costs the harness a poll and a round trip -- two frames at 4fps -- and authority keeps
+// integrating real time throughout, in the last direction it was sent. Then the rendered hero, who
+// is running behind at this frame rate (every frame exceeds prediction's 250ms step cap), travels
+// further forward still, catching up to where the server stopped.
+//
+// Measured here, walking to the Keeper: latched at 0.87m, stopped at 2.36m -- 1.5m of overshoot,
+// against a 2.0m radius. It is roughly double drive-relight.mjs's overshoot on the same walk, and
+// the reason is speed: that harness holds the keyboard, which walks, while a stick at full
+// deflection RUNS. Three metres is comfortably outside that, and short enough that the pulsed
+// walker -- slow per metre, but exact -- finishes the last leg inside its budget even hosted.
+const HELD_APPROACH_SLACK_METRES = 3;
+
+// THE STICK IS HELD FOR THE DISTANCE, AND THE LAST LEG IS PULSED SO IT STOPS WHERE IT SAYS. See in-page-driver.mjs for the
+// measurements; this harness's own evidence is that at 45ae179 hosted it reported
+// `walking reaches the keeper -- hero [-1.34,-2.27]` against a keeper at [-2.8,-5.8]: 3.9m short,
+// well outside KEEPER_WAVE_RADIUS_METERS, which is also why `talk resumes after the second wave`
+// failed behind it.
+//
+// The comment this replaces was right about its own bug and wrong about the remedy. Holding the
+// stick through a slow read DID overshoot -- but only because the harness was the one deciding when
+// to stop, an answer that arrives one round trip late. Pulsing fixed the overshoot by making the
+// walk too slow to arrive at all: on a runner painting at 367ms a frame, most of each iteration is
+// three CDP round trips and the hero covers about a metre of the six he needs.
+//
+// Deciding in-page removes the reason to pulse. An rAF loop re-aims the heading at the target every
+// frame and latches arrival at frame resolution, so the stick can stay down: the release is late by
+// at most one poll, and the walker is still aiming at the target when that poll lands, so the extra
+// travel is toward the keeper rather than past him. Held straight up, the stick is pure
+// camera-forward -- the `sy = 1` case the rotation above used to compute.
+async function heldWalkToward(targetX, targetZ, stopWithin, maxMillis) {
+  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await touch('touchStart', [{ x: stickX, y: stickY }]);
+  await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
+  let walk;
+  try {
+    walk = await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+  } finally {
+    await touch('touchEnd', []);
+    await page.eval(STOP_WALK);
+  }
+  const reached = walk.arrived
+    ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
+    : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`;
+  console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
+    + `${metresOrUnknown(walk.metres)}, ${reached}`);
+  // Let the release reach the page, then wait for authority to agree the hero has STOPPED before
+  // the pulsed leg starts measuring from him. A fixed sleep here handed the next phase a coasting
+  // hero, and handed the caller one who drifted out the far side of the speech radius while the
+  // greeting played -- which cost the wave its handoff to talk in one run out of two.
+  await sleep(200);
+  await pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+  return pulseWalkToward(targetX, targetZ, stopWithin, maxMillis);
 }
 
 // ── Task B: the 12/14/16 exploration-camera comparison ─────────────────────────────────────────
@@ -315,15 +405,16 @@ await shot('lane-to-wolf');
 // is evidence the combat-bowl guarantee (no prop within radius 4 of the wolf spawn) is actually
 // walkable, not just a data-module assertion (test/zone-data.test.mjs already checks the data;
 // this checks the loaded scene).
-const laneWalk = await walkToward(wolfX * 0.4, wolfZ * 0.4, 0.6, 6000);
+const laneWalk = await pulseWalkToward(wolfX * 0.4, wolfZ * 0.4, 0.6, 6000);
 check('walking partway up the lane toward the wolf actually closes distance',
   Math.hypot(laneWalk.heroPos[0] - wolfX * 0.4, laneWalk.heroPos[1] - wolfZ * 0.4) < 1.5,
   `hero ${JSON.stringify(laneWalk.heroPos)}, target [${(wolfX * 0.4).toFixed(2)}, ${(wolfZ * 0.4).toFixed(2)}]`);
 
 // ── (b) walk up to the keeper and catch the wave ────────────────────────────────────────────────
 const [keeperX, keeperZ] = SPAWNS.keeper;
-// KEEPER_WAVE_RADIUS_METERS is 2.0 (zoneLoader.js); stop just inside it so the trigger has fired
-// by the time this resolves, not right on the boundary where a float rounding could miss it.
+// The walks below stop just INSIDE KEEPER_WAVE_RADIUS_METERS rather than on it, so the trigger has
+// fired by the time they resolve and a float rounding cannot land the hero exactly on the
+// boundary. The radius itself is imported above, never restated here (GQ-007).
 // HOW MUCH SLOWER THAN AUTHORED DO ANIMATIONS RUN ON THIS MACHINE?
 //
 // The Keeper's greeting ends on the AnimationMixer's own 'finished' event, and the mixer is advanced
@@ -362,10 +453,11 @@ const animationStretch = await (async () => {
 /** A timeout for something gated on an animation FINISHING, rather than on wall-clock. */
 const animationBudget = (ms) => Math.round(ms * animationStretch);
 
-const approached = await walkToward(keeperX, keeperZ, 1.5, 10000);
+const approached = await heldWalkToward(keeperX, keeperZ, 1.5, 10000);
 check('walking reaches the keeper',
-  Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) < 2.0,
-  `hero ${JSON.stringify(approached.heroPos)}, keeper [${keeperX}, ${keeperZ}]`);
+  Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
+  `hero ${JSON.stringify(approached.heroPos)}, keeper [${keeperX}, ${keeperZ}], `
+    + `radius ${KEEPER_WAVE_RADIUS_METERS}m`);
 const waved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: animationBudget(3000) });
 check('the keeper actually waves when a hero comes within range',
   waved.keeper?.waving === true, `keeperState ${JSON.stringify(waved.keeper)}`);
@@ -414,7 +506,7 @@ check('the wave does not restart while the hero holds position, several seconds 
 // Step 5: walking back OUT past the re-arm radius must stop talk and re-arm the latch. Targeting the
 // hero's own spawn -- already proven walkable earlier in this run (the very first leg of this
 // script) -- rather than an arbitrary point.
-const left = await walkToward(0, 0, 1.0, 8000);
+const left = await heldWalkToward(0, 0, 1.0, 8000);
 const leftDistance = Math.hypot(left.heroPos[0] - keeperX, left.heroPos[1] - keeperZ);
 check('walking away clears both the wave and the (wider) re-arm radius',
   leftDistance > KEEPER_GREET_REARM_RADIUS_METERS,
@@ -425,10 +517,11 @@ check('talk stops once the hero is out of range',
 
 // Step 6: re-entering must produce exactly ONE new greeting -- proof the latch actually re-armed
 // rather than staying permanently spent after its first use.
-const reapproached = await walkToward(keeperX, keeperZ, 1.5, 10000);
+const reapproached = await heldWalkToward(keeperX, keeperZ, 1.5, 10000);
 check('walking back up to the keeper closes the distance again',
-  Math.hypot(reapproached.heroPos[0] - keeperX, reapproached.heroPos[1] - keeperZ) < 2.0,
-  `hero ${JSON.stringify(reapproached.heroPos)}, keeper [${keeperX}, ${keeperZ}]`);
+  Math.hypot(reapproached.heroPos[0] - keeperX, reapproached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
+  `hero ${JSON.stringify(reapproached.heroPos)}, keeper [${keeperX}, ${keeperZ}], `
+    + `radius ${KEEPER_WAVE_RADIUS_METERS}m`);
 const rewaved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: animationBudget(3000) });
 check('re-entering after leaving produces exactly one new greeting wave',
   rewaved.keeper?.waving === true, `keeperState ${JSON.stringify(rewaved.keeper)}`);
