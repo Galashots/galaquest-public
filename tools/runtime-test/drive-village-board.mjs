@@ -345,9 +345,8 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // and the hero only moves during the pulse. Hosted at 760188f the Workshop approach ran out of its
 // 120s budget with the late joiner standing 3.26m from a 2.4m interact radius, and the check that
 // the Workshop is "immediately interactable" went red about a hero who had simply not arrived.
-async function heldWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function heldWalkToward(tab, targetX, targetZ, holdWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
-  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
   await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
   await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
   await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
@@ -445,21 +444,33 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
     if (away <= stopWithin) break;
     passes += 1;
-    const held = away > stopWithin + HELD_APPROACH_SLACK_METRES;
-    if (held) {
+    // COARSE, then FINE, and both of them HELD -- the conclusion of measuring the pulse three ways
+    // on this approach. Pulsing cannot place a hero finer than one frame of travel plus the release
+    // latency, whichever way its duration is tuned: floored to a frame it overshoots, unfloored it
+    // transmits nothing. The in-page latch can, because it decides arrival on the frame it happens
+    // and the only thing left in the error is the CDP round trip that carries the release.
+    //
+    // So the fine leg holds to the ring ITSELF rather than to the ring plus a slack. The slack
+    // exists for the coarse leg, whose job is to cover distance and hand over near the target; the
+    // fine leg's job is to stop, and aiming it wide is asking it not to. If the release carries him
+    // past, the loop simply comes round again -- which is the whole reason it is a loop.
+    if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
       // eslint-disable-next-line no-await-in-loop
-      last = await heldWalkToward(tab, targetX, targetZ, stopWithin,
-        Math.max(2000, deadline - Date.now()));
+      last = await heldWalkToward(tab, targetX, targetZ, stopWithin + HELD_APPROACH_SLACK_METRES,
+        Math.max(2000, (deadline - Date.now()) / 2));
     }
-    // HALF THE REMAINING BUDGET ONLY WHEN A HELD LEG RAN, because then there is something to
-    // reserve it FOR -- the held leg releases the stick wide and the hero coasts, so the next turn
-    // round needs time to walk him back. When he is already inside the held slack the pulse is the
-    // only mechanism there is, and halving each pass geometrically starves it: measured on this
-    // container, three passes at a 0.15m ring left him 2.65m out with most of a 120s budget unspent,
-    // because pass three was handed an eighth of it.
     // eslint-disable-next-line no-await-in-loop
-    last = await pulseWalkToward(tab, targetX, targetZ, stopWithin,
-      held ? Math.max(1500, (deadline - Date.now()) / 2) : Math.max(1500, deadline - Date.now()));
+    last = await heldWalkToward(tab, targetX, targetZ, stopWithin,
+      Math.max(2000, (deadline - Date.now()) / 2));
+    // The pulse is the last resort now, not the placer: it runs only if the fine leg could not
+    // latch at all, which on a page still painting means the target is unreachable rather than
+    // merely far.
+    const stillOut = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+    if (stillOut > stopWithin + HELD_APPROACH_SLACK_METRES) {
+      // eslint-disable-next-line no-await-in-loop
+      last = await pulseWalkToward(tab, targetX, targetZ, stopWithin,
+        Math.max(1500, (deadline - Date.now()) / 2));
+    }
   }
   const finalAway = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
   console.log(`  approach: ${passes} pass(es), ${finalAway.toFixed(2)}m from target `
