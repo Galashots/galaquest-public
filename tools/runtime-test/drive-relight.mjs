@@ -26,7 +26,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
-import { headingToward, KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
+import {
+  headingToward, KEEPER_GREET_REARM_RADIUS_METERS, KEEPER_WAVE_RADIUS_METERS,
+} from '../../public/src/world/zoneLoader.js';
 import { SPAWNS, LANDMARKS } from '../../public/src/world/zones/village.js';
 import { KEEPER_LINE_QUEST, KEEPER_LINE_UNLOCKED } from '../../public/src/world/keeperSpeech.js';
 import {
@@ -397,11 +399,63 @@ const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
   const speakerRect = await page.eval(`(() => {
     const b = document.querySelector('#keeper-speech-speak');
     const r = b.getBoundingClientRect();
-    return JSON.stringify({ width: r.width, height: r.height });
+    return JSON.stringify({ width: r.width, height: r.height, x: r.x, y: r.y });
   })()`).then(JSON.parse);
   check(`fresh guest: the speaker button meets the >=${TAP_TARGET_FLOOR_PX}px touch target`,
     speakerRect.width >= TAP_TARGET_FLOOR_PX && speakerRect.height >= TAP_TARGET_FLOOR_PX,
     JSON.stringify(speakerRect));
+
+  // READ-ALOUD, PROVEN IN A BROWSER.
+  //
+  // keeperSpeech.js's unit tests prove the latch: nothing speaks before the button is tapped, and
+  // every line after it does. They cannot prove main.js is WIRED to it, and that wiring is the
+  // whole feature -- the quest, the count of marks left and where to go next reach a child who
+  // cannot read through this route and no other. A module that works and a caller that never calls
+  // it look identical from node, which is the same gap the body-height checks in play-fight exist
+  // for.
+  //
+  // The sink is replaced, not the speaker: window.speechSynthesis.speak keeps being the thing
+  // main.js calls, and the real utterance still goes through. Recording what passes through it is
+  // the only way to hear a headless browser.
+  await page.eval(`(() => {
+    window.__gqSpoken = [];
+    const real = window.speechSynthesis.speak.bind(window.speechSynthesis);
+    window.speechSynthesis.speak = (utterance) => {
+      window.__gqSpoken.push(utterance.text);
+      return real(utterance);
+    };
+    return true;
+  })()`);
+  const spokenSoFar = () => page.eval('JSON.stringify(window.__gqSpoken)').then(JSON.parse);
+  check('fresh guest: nothing has been read aloud before the child asks for it',
+    (await spokenSoFar()).length === 0,
+    JSON.stringify(await spokenSoFar()));
+
+  // A real tap on the real button, at its real position.
+  const speakAt = { x: speakerRect.x + speakerRect.width / 2, y: speakerRect.y + speakerRect.height / 2 };
+  await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: speakAt.x, y: speakAt.y, id: 0 }] });
+  await sleep(60);
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  const afterTap = await pollUntilDeadline(spokenSoFar, (lines) => lines.length > 0,
+    { intervalMs: 100, timeoutMs: 4000 });
+  check('fresh guest: tapping the speaker reads the line the child is looking at',
+    afterTap.length === 1 && afterTap[0] === KEEPER_LINE_QUEST,
+    JSON.stringify(afterTap));
+
+  // And the half that only exists because of the latch: walk out of the speech radius and back, so
+  // the line goes away and returns, and it should read ITSELF this time with no second tap. Out and
+  // back rather than a forced state change, because "the line changed" is exactly what main.js
+  // watches for and a child gets there by walking.
+  await walkToward(page, keeperX + KEEPER_GREET_REARM_RADIUS_METERS + 4, keeperZ, 1.5, 20000);
+  await pollUntil(page, (s) => s.keeperLine.shown !== 'true');
+  await walkToward(page, keeperX, keeperZ, 0.75, 20000);
+  const returned = await pollUntil(page, (s) => s.keeperLine.shown === 'true');
+  const afterReturn = await pollUntilDeadline(spokenSoFar, (lines) => lines.length > 1,
+    { intervalMs: 100, timeoutMs: 6000 });
+  check('fresh guest: after that one tap, a line that comes back reads itself with no second tap',
+    afterReturn.length >= 2 && afterReturn[afterReturn.length - 1] === KEEPER_LINE_QUEST,
+    `${afterReturn.length} utterance(s) ${JSON.stringify(afterReturn)}, `
+      + `line on screen ${JSON.stringify(returned.keeperLine.text)}`);
 
   await setCameraDistance(page, 8);
   await setHeadingToward(page, keeperX, keeperZ);
