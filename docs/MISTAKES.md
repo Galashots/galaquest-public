@@ -1180,7 +1180,7 @@ duplication worth removing.
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — Prove the instrument can see a known-good case before believing what it says about the product.
-**Status:** OBSERVED · **Hits:** 4 · **First/Last:** 2026-08-23
+**Status:** OBSERVED · **Hits:** 5 · **First/Last:** 2026-08-23
 **Rule:** A probe built to measure the product will happily measure itself, and the reading looks
 exactly the same. Before reporting anything surprising, drive the probe at an outcome already known
 to be true; if it cannot see that, it cannot see anything. The give-away, every time, was that the
@@ -1213,6 +1213,28 @@ moves when he swings; rather than believe a green, this entry sent me to sabotag
 `swing?.update(...)` into a no-op, leaving the rules running and nothing writing the pose. The check
 went red at 0.9x against its 3x bar, so it can see the case it is for. It also turned up the finding
 below, which was not what the sabotage was for.
+
+**Fifth incident (2026-08-23, `drive-two-clients`, the sibling's weapon), and it went further than the
+other four.** The harness read a tab's identity back through `runtime.net.guestId`, got `undefined`,
+and concluded the seeded guest had not taken. The published accessor is `runtime.guestId()`. So the
+reading was a fact about the probe -- the same shape as (1) through (4).
+
+What was new is what I did with it: I generalised from that one bad reading to **four other harnesses
+I never ran**, and told the Director I would not trust the identity half of what they assert. They
+were fine. Pinning `gq-guest-id` still controls the joined identity by two independent paths --
+`profiles.migrateLegacyGuest()` reuses the id verbatim as the profile id, and `client.js` falls back
+to `getOrCreateGuestId()` whenever there is no durable profile.
+
+**And the disconfirming evidence was already green.** `drive-hero-screen` seeds a Blade-owning fixture
+guest and then asserts that guest can compare and equip the Blade. Those checks pass, in CI, and they
+could not if the pin were being ignored. A passing test whose assertions depend on the thing you are
+about to declare broken is not a coincidence to be stepped over -- it is the known-good case this
+rule says to drive the probe at, sitting there already run.
+
+The operative addition: **the blast radius of a bad instrument is not the file it is in.** A reading
+you have not confirmed justifies a claim about the thing you measured and nothing else; the moment a
+conclusion reaches files you did not run, it needs evidence from those files. Retracted on the PR
+within the hour, which is the only part of this that went right.
 
 ### OBSERVED — A trigger radius a child's approach ends AT is decided by drift, not by the child.
 **Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-23
