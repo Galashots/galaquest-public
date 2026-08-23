@@ -527,6 +527,29 @@ the ratio between them. Write the number in the units the SUBJECT advances in, o
 to where those units are counted.
 **Foreknowledge helped:** not yet recorded.
 
+### OBSERVED — A sentinel that means "no value" will happily do arithmetic, and can carry a check over its own bar.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** `-1` for "not swinging", `null` for "not measured", `0` for "never arrived" — every codebase
+has them, and they are fine until one reaches a comparison. Then the check does not merely tolerate
+the missing reading, **the missing reading is what makes it pass**, and the check is now most
+reliable exactly when its evidence is worst. Two questions catch it: does my sentinel survive into
+the arithmetic, and if a reading were MISSING would that push this number toward the bar or away
+from it? Filter to the readings that exist, require the count you meant, and bound the result on
+both sides — a spread wider than the thing it spans is as wrong as one narrower.
+**Incident (2026-08-23):** `play-fight`'s `the three frames are spread across the swing rather than
+three copies of one instant` measured `max - min` of three `swingSeconds` against a bar of
+`SWING_SECONDS * 0.3`. A frame that caught no swing carries `-1`, and `0.911 - (-1.000)` is `1.911`
+— so hosted it reported `spread 1.911s of 1.5s`, **a spread wider than the swing it was measuring**,
+on the very run where a third of its evidence was missing. It sat one line below the check that had
+just gone red for that same missing frame, and passed. Fixed by computing over the frames that
+caught a swing, requiring all three, and adding the upper bound that would have made the impossible
+number impossible to report.
+**The tell, worth naming:** the number was NOT PHYSICALLY POSSIBLE and nobody read it. A spread
+cannot exceed the interval it lies in, a fraction cannot exceed one, a distance cannot be negative.
+An evidence string is not decoration — it is where an unfalsifiable check announces itself, and this
+one had been announcing itself in every hosted log it appeared in.
+**Foreknowledge helped:** not yet recorded.
+
 ### OBSERVED — A clamp that protects one subsystem silently degrades every other one sharing the clock.
 **Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
 **Rule:** `main.js` computes `deltaSeconds = Math.min(gap / 1000, 0.1)` so a hitch cannot teleport
