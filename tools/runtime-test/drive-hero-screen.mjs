@@ -1154,17 +1154,44 @@ for (const [orientation, metrics] of [['portrait', PORTRAIT], ['landscape', LAND
     + `reopened ${heroReopened}; while open the point on #hero-button belongs to `
     + `${await hitTestWhileOpen('#hero-button', '#hero-screen')}`);
 
-  // Switching panels must not strand the first one open -- two full-screen overlays at once is the
-  // state main.js's mutual exclusion exists to prevent, and a child who taps both buttons in a row
-  // is the likeliest way to reach it.
+  // MODAL ISOLATION: while one panel owns the screen, the navigation layer and the OTHER panel's
+  // button are out of the way. A child reading the Hero screen should not also have a map, an
+  // arrow, a rescue button and a second menu icon arguing with it -- and the sibling button is the
+  // very thing that was covering the X.
+  //
+  // NOTE THE TENSION, because it is a real one and it was resolved deliberately rather than
+  // silently: the Director's ledger asks both for "switching panels closes the other cleanly" and
+  // for "hide the inactive sibling menu button while a full-screen panel owns the screen". A hidden
+  // button cannot be tapped to switch, so those two cannot both be literally true. This implements
+  // the second -- newer, and backed by exact-SHA captures -- and keeps the first as the underlying
+  // INVARIANT rather than a tap route: main.js still closes one before opening the other, proven
+  // below through the presenter rather than through a finger.
+  const heroOpenNow = await shownOf('#hero-screen');
+  const siblingHit = await hitTest('#village-board-button');
+  check(`${orientation}: while the Hero screen owns the screen, the map button is out of the way`,
+    heroOpenNow && siblingHit !== 'itself',
+    `hero open ${heroOpenNow}; the point on #village-board-button belongs to ${siblingHit}`);
+  for (const sel of ['#minimap', '#objective-pointer', '#guidance-rescue']) {
+    const faded = await page.eval(
+      `(getComputedStyle(document.querySelector(${JSON.stringify(sel)})).opacity === '0')`,
+    );
+    check(`${orientation}: ${sel} yields while a full-screen panel is up`,
+      faded === true || faded === 'true', `opacity 0: ${faded}`);
+  }
+
+  // The invariant itself, driven through the element rather than a touch, because the touch route is
+  // deliberately closed now. Two full-screen overlays at once is the state this prevents.
   const heroWasOpen = await shownOf('#hero-screen');
-  await tapAt('#village-board-button');
+  await clickSelector('#village-board-button');
+  await sleep(150);
   const boardOpen = await shownOf('#village-board-screen');
   const heroGaveWay = !(await shownOf('#hero-screen'));
-  check(`${orientation}: opening the Village Board closes the Hero screen instead of stacking on it`,
+  check(`${orientation}: opening the Village Board still closes the Hero screen instead of stacking`,
     heroWasOpen && boardOpen && heroGaveWay,
     `hero was open ${heroWasOpen}, board open ${boardOpen}, hero closed ${heroGaveWay}`);
 
+  // The ACTIVE panel keeps its own toggle -- that is the half of modal isolation that must stay
+  // reachable, or the fix above would have taken away the way out it just restored.
   const boardHitWhileOpen = await hitTest('#village-board-button');
   await tapAt('#village-board-button');
   const boardClosedBySameButton = !(await shownOf('#village-board-screen'));

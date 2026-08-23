@@ -78,6 +78,21 @@
       #game[data-hero-screen-open="true"] #loot-hud {
         opacity: 0 !important; pointer-events: none !important;
       }
+      /* MODAL ISOLATION, SECOND HALF: the navigation layer gets out of the way too.
+         The rule above already hid the transient TEXT callouts. Exact-SHA browser captures at the
+         frozen child baseline still showed the minimap and "Show me where" sitting behind a
+         full-screen panel, and the OTHER panel's button competing in the same top-right row -- so a
+         child looking at the Hero screen still had a map, an arrow, a rescue button and a second
+         menu icon arguing with it. Subtracting competing HUD, not adding any.
+         The inactive sibling button goes with them: while Hero owns the screen the map button is not
+         an escape, it is the thing that was covering the X. The ACTIVE panel keeps its own toggle
+         (so the button that opened it still closes it) and its own X. */
+      #game[data-hero-screen-open="true"] #minimap,
+      #game[data-hero-screen-open="true"] #objective-pointer,
+      #game[data-hero-screen-open="true"] #guidance-rescue,
+      #game[data-hero-screen-open="true"] #village-board-button {
+        opacity: 0 !important; pointer-events: none !important;
+      }
       /* GP3: the Village Board hides the identical set of transient HUD text, for the identical
          reason -- a second full-screen overlay competing with keeper-speech/quest-objective for the
          same on-screen space. Its own attribute rather than folding into [data-hero-screen-open]
@@ -90,6 +105,21 @@
       #game[data-village-board-open="true"] #hero-health,
       #game[data-village-board-open="true"] #lantern-marks,
       #game[data-village-board-open="true"] #loot-hud {
+        opacity: 0 !important; pointer-events: none !important;
+      }
+      /* MODAL ISOLATION, SECOND HALF: the navigation layer gets out of the way too.
+         The rule above already hid the transient TEXT callouts. Exact-SHA browser captures at the
+         frozen child baseline still showed the minimap and "Show me where" sitting behind a
+         full-screen panel, and the OTHER panel's button competing in the same top-right row -- so a
+         child looking at the Hero screen still had a map, an arrow, a rescue button and a second
+         menu icon arguing with it. Subtracting competing HUD, not adding any.
+         The inactive sibling button goes with them: while Hero owns the screen the map button is not
+         an escape, it is the thing that was covering the X. The ACTIVE panel keeps its own toggle
+         (so the button that opened it still closes it) and its own X. */
+      #game[data-village-board-open="true"] #minimap,
+      #game[data-village-board-open="true"] #objective-pointer,
+      #game[data-village-board-open="true"] #guidance-rescue,
+      #game[data-village-board-open="true"] #hero-button {
         opacity: 0 !important; pointer-events: none !important;
       }
       /* Greyed while the swing is on cooldown, so mashing it reads as "not yet" rather than "broken". */
