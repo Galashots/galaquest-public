@@ -527,6 +527,55 @@ the ratio between them. Write the number in the units the SUBJECT advances in, o
 to where those units are counted.
 **Foreknowledge helped:** not yet recorded.
 
+### GQ-020 — A presentational class is an identity. Reusing it for the look makes every reader that queries it wrong.
+**Status:** RULE · **Hits:** 2 · **First:** earlier · **Last:** 2026-08-23
+**Not enforced because:** the offence is a class on the wrong element, and only the reader's INTENT
+says which elements belong. `.profile-card-face` on a row that is not a card is indistinguishable,
+to any scanner, from `.profile-card-face` on a card -- the wrongness is entirely in what the queries
+elsewhere mean by it. A rule about naming, checkable only by whether the queries still answer right,
+which is what those queries' own tests are for.
+**Rule:** When something must LOOK like a member of a set without BEING one, give it its own class
+and repeat the CSS. The shared class is not styling, it is the answer to "how many of these are
+there" for every `querySelectorAll` in the codebase and every harness reading the DOM. Copying six
+lines of CSS is the cost of that separation and it is always cheaper than the alternative, which is
+a count that is quietly wrong in a place nobody is looking at.
+**Incidents:** (1) The chooser's "New hero" row was first built as a `.profile-card`, because it
+looks like one. The browser harness immediately read three heroes on a two-hero device. Fixed by
+giving it `.profile-card-add`, with a comment in `progression/profileGate.js` saying exactly why --
+"shared look, separate identity". (2) 2026-08-23, and this is the interesting one: giving that same
+row an animal face, I reached for `.profile-card-face`. **Three lines below a comment explaining why
+the row does not share `.profile-card`, for the identical reason.** One run later, `every card shows
+the animal that profile actually has stored` read three faces on a two-hero device and reported
+"New hero, the Owl" as a stored animal. The lesson was written down, in the right file, at the right
+place, by someone who had just been bitten -- and it was scoped to the class it had been bitten on
+rather than to the kind of class it was.
+**The general form:** a warning about one identifier teaches the identifier. Write it about the
+KIND, or the next member of that kind walks straight into it.
+**Foreknowledge helped:** no -- worse than no. The comment was three lines away and was read.
+
+### OBSERVED — "Everything that is not X" is not the opposite of X when the sampling is coarse.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A comparison against a baseline needs the baseline to be a state the subject was actually
+IN, not the complement of the state under test. Those two are the same set only when the sampling is
+fine enough that transitions cost nothing. At 5 samples per event they are not: every boundary frame
+carries part of the event into the baseline it is being measured against, and the contamination
+scales with the frame period -- so the test is tightest exactly where the machine is fastest and
+worthless where it is slowest. Take the baseline from a stretch where the subject is unambiguously
+at rest, before the first event, and say in the code why that stretch and not the complement.
+**Incident (2026-08-23):** a new check comparing how far the hero's sword hand travels while
+swinging against how far it travels while not, to prove the swing animation is not a frozen pose.
+Locally: 1.32m against 0.18m, 7.2x, comfortable. Hosted at a 317ms frame: **0.38m against 0.54m,
+0.7x** -- it reported that a moving arm moves less than a still one, and went red. Three swings
+sampled five times each leave a handful of return-to-rest frames in "not swinging", and those few
+frames carried most of an arc. Fixed by taking rest from the frames before the first tap.
+**Why it is worth an entry rather than a shrug:** this check was written the same morning, expressly
+to catch a defect that only appears on slow devices, and was sabotage-tested and confirmed
+red-capable. It still went in with a baseline that dissolves on a slow device. **Proving an
+instrument can see its failure case does not prove it is measuring the right two things.** The
+sabotage answered "would this notice a frozen arm" and never asked "is `!swinging` the same as
+`still`".
+**Foreknowledge helped:** not yet recorded.
+
 ### OBSERVED — A sentinel that means "no value" will happily do arithmetic, and can carry a check over its own bar.
 **Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
 **Rule:** `-1` for "not swinging", `null` for "not measured", `0` for "never arrived" — every codebase
