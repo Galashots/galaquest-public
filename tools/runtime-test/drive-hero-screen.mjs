@@ -619,8 +619,11 @@ await page.send('Emulation.setDeviceMetricsOverride', PORTRAIT);
 await sleep(300);
 
 // ── equip the Blade and watch the hand ──
-await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
-await sleep(100);
+// selectItem, not click-and-hope: the equip button acts on whatever is currently selected, so a
+// fixed sleep here equips the PREVIOUS selection whenever the re-render is slower than the guess.
+// This pair passed on some runs and not others for exactly that reason.
+check('GP1-C4: the Wildwood Blade is actually SELECTED before the equip button is tapped',
+  (await selectItem(WILDWOOD_BLADE_ID)) === true, 'selection did not land within 2s');
 await clickSelector('#hero-equip-button');
 // Waits on the MESH, not on the equip mirror: the server round trip that flips `equipped`, the GLB
 // download and the frame that first draws the new anchor are three separate async events, and only
@@ -695,6 +698,44 @@ const swordHandY = () => page.eval(`(() => {
   return +p.y.toFixed(4);
 })()`);
 
+/**
+ * Record the sword hand's world height EVERY FRAME, inside the page, and read it back once.
+ *
+ * `pollUntil(swordHandY, ...)` looks like 16ms sampling and is not: every sample is a CDP round
+ * trip, and on a software-rendered runner this page produces about five frames a second, so the
+ * "peak" it returns is simply the last value it managed to fetch. Measured across two runs, the same
+ * swing reported a travel of 0.030 m through that lens and 0.245 m through this one.
+ *
+ * The arc itself is large and real: idle jitter is 0.0066 m, the swing moves 0.205-0.245 m, and on
+ * one run the peak reached idle + 0.375 m -- above the threshold this check had been failing. Which
+ * side of it a run lands on is decided by whether a frame happened to be rendered near the top.
+ */
+const startArcRecorder = () => page.eval(`(() => {
+  const r = window.__galaQuestRuntime;
+  const hand = r.hero.getObjectByName('RightHand');
+  if (!hand) return false;
+  const p = new (r.hero.position.constructor)();
+  const log = []; window.__swingArc = log;
+  const tick = () => {
+    hand.getWorldPosition(p);
+    log.push(+p.y.toFixed(4));
+    if (log.length < 3000) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return true;
+})()`);
+const readArc = () => page.eval('JSON.stringify(window.__swingArc ?? [])').then(JSON.parse);
+const resetArc = () => page.eval('(window.__swingArc ??= []).length = 0');
+const spread = (ys) => (ys.length === 0 ? 0 : Math.max(...ys) - Math.min(...ys));
+
+// IDLE FIRST, so the floor below is derived from this run rather than picked. An idling hero still
+// breathes, and "the hand moved" has to mean more than that.
+await startArcRecorder();
+await sleep(1500);
+const idleArc = await readArc();
+const idleJitter = spread(idleArc);
+await resetArc();
+
 const idleHandY = await swordHandY();
 // Reported alongside the arc measurement below, because when this check failed the first time the
 // interesting question was immediately "did the button even receive the tap" -- and a bare
@@ -738,9 +779,23 @@ check('GP1-C4: the swap survives the recovery -- still exactly one sword at the 
 
 // Proves the two captures above are of a MOVING hero rather than two photographs of the same idle,
 // which is exactly the mistake the three earlier versions of this block made.
+//
+// MEASURED OVER EVERY FRAME OF THE SWING, not at two fetched instants -- see startArcRecorder for
+// why those two instants are not the extremes they claim to be.
+//
+// The floor is DERIVED, not chosen: ten times this run's own measured idle jitter, with an absolute
+// backstop so a frozen hero (jitter 0) cannot make the bar zero and the check vacuous. Idle jitter
+// measures about 0.0066 m and a real swing moves 0.2 m, so the two are thirty times apart and the
+// floor sits comfortably between them. A hero who did not swing cannot clear it; a hero who did
+// cannot fail it because a frame was not rendered at the right moment.
+const swingArc = await readArc();
+const swingTravel = spread(swingArc);
+const travelFloor = Math.max(idleJitter * 10, 0.10);
 check('GP1-C4: the attack really swung -- the sword hand travelled a real arc, so the frames above are not two photographs of an idle',
-  struckY <= idleHandY - 0.02 && peakY >= idleHandY + 0.30,
-  `idle y ${idleHandY}, strike y ${struckY}, peak y ${peakY} (travel ${(peakY - struckY).toFixed(3)} m)`
+  swingArc.length > 0 && swingTravel >= travelFloor,
+  `travelled ${swingTravel.toFixed(3)} m over ${swingArc.length} recorded frames, against a floor of `
+  + `${travelFloor.toFixed(3)} m (10x this run's idle jitter of ${idleJitter.toFixed(4)} m over `
+  + `${idleArc.length} frames); idle y ${idleHandY}, strike sample ${struckY}, peak sample ${peakY}`
   + ` -- at the tap: ${JSON.stringify(attackDiagnostics)}`);
 
 await pollUntil(swordHandY, (y) => y !== null && Math.abs(y - idleHandY) < 0.03,
@@ -919,8 +974,11 @@ await sleep(200);
 // that CHANGED, not the default.
 await clickSelector('#hero-button');
 await sleep(150);
-await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
-await sleep(100);
+// selectItem, not click-and-hope: the equip button acts on whatever is currently selected, so a
+// fixed sleep here equips the PREVIOUS selection whenever the re-render is slower than the guess.
+// This pair passed on some runs and not others for exactly that reason.
+check('GP1-C4: the Wildwood Blade is actually SELECTED before the equip button is tapped',
+  (await selectItem(WILDWOOD_BLADE_ID)) === true, 'selection did not land within 2s');
 await clickSelector('#hero-equip-button');
 await pollUntil(heroRuntimeState, (s) => s.equipped === WILDWOOD_BLADE_ID, { timeoutMs: 4000 });
 await clickSelector('#hero-screen-close');
