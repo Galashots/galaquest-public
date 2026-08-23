@@ -856,3 +856,55 @@ unlit lights has a nearest that flips as they drift, and a clock that restarts o
 reaches the patience. A rescue that can never fire looks exactly like restraint. Both wrong answers
 are now pinned by a test each, because the correct behaviour sits between them.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A test that derives its probe input from the constant under test cannot fail on that constant.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** Importing a constant is right for an **expected value** and wrong for the **input you probe
+its boundary with**. If the input scales with the thing under test, the boundary moves with the probe
+and the case is green forever. The probe input has to come from the PRODUCT CLAIM instead -- a
+statement about the player, the device or the world, which the constant then has to satisfy. That is
+not a second copy of the constant; it is the requirement the constant exists to meet, and the two
+being separate is the entire point.
+**Incident (2026-08-23, `test/opening-fight.test.mjs`):** the case proving a child facing off to one
+side still hits the wolf aimed at `ATTACK_HALF_ARC_RADIANS * 0.5`. A sabotage run narrowed the arc
+from 152 degrees to 29 and the case stayed green, because the probe narrowed with it. Rewritten to
+aim at a flat 45 degrees -- what "roughly facing the wolf" means for a four-year-old with a thumb on
+a stick -- plus an assertion that the constant is at least that wide. Now: 29 degrees fails, and 108
+degrees passes, which is the right answer for a legitimate tuning change.
+**Note the tension with GQ-007, because it is easy to read this as its opposite.** GQ-007 says never
+restate a constant. This says the probe input is not a restatement of the constant -- it is a
+different fact, about people rather than about the rules, and collapsing the two is what makes the
+test vacuous. When they happen to be equal today, that is a property worth asserting, not a
+duplication worth removing.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Prove the instrument can see a known-good case before believing what it says about the product.
+**Status:** OBSERVED · **Hits:** 4 · **First/Last:** 2026-08-23
+**Rule:** A probe built to measure the product will happily measure itself, and the reading looks
+exactly the same. Before reporting anything surprising, drive the probe at an outcome already known
+to be true; if it cannot see that, it cannot see anything. The give-away, every time, was that the
+numbers were internally inconsistent -- and the inconsistency was visible in the same output as the
+claim, which is the part worth learning.
+**Incidents:** four in one night, all in browser probes of the opening wolf fight, and **all four were
+reported to the Director as facts about the game before being caught**:
+(1) the attack button's coordinates were invented as `(w-92, h-128)` when `play-fight.mjs` had been
+using the real `(w-68, h-68)` all along -- **0 of 36 taps landed**, which read as a brutally hard
+fight and was a probe tapping empty screen.
+(2) one server reused across fights, so the second fight walked up to the corpse the first had left
+and reported a **1.6-second rout with zero taps**. The wolf is server-authoritative; a fresh server
+per fight is not optional.
+(3) the button was sampled 250 ms after each press when contact is at **0.5167 s** -- it saw no miss
+rings and reported that whiffs are silent. That is the absence of a thing that had not happened yet,
+which reads identically to the thing not existing.
+(4) a fixed 45-second mash window against a fight that takes a fraction of that: the wolf died,
+respawned ten seconds later (`WOLF_RESPAWN_SECONDS`) and was fought again, and the run reported
+**"wolf 3hp -> 3hp" alongside five hp transitions**. A window longer than the thing inside it
+measures the window.
+**What it cost:** a reported hurt-loop P0 that does not exist. Corrected measurement, same browser:
+**four taps, all four connect, the wolf is down in about seventeen seconds** -- and the seventeen is
+the tap cadence, not the game. The deterministic engine gives the same fight in 5.1 s.
+**The through-line:** every one of the four made the probe report on itself, and every one was
+detectable from its own output without knowing anything about the game. `0 of 36`, `1.6 s and zero
+taps`, and `3hp -> 3hp with five transitions` are not surprising findings, they are broken
+instruments announcing themselves.
+**Foreknowledge helped:** not yet recorded.
