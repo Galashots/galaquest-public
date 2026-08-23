@@ -450,18 +450,71 @@ about a second before hiding them. Fixed by passing the initial collection state
 starting collected pickups at `gone`; pinned by `test/loot-pickups.test.mjs`.
 **Foreknowledge helped:** not yet recorded.
 
-### OBSERVED — Automation timeouts are wall-clock budgets, not sample counts.
-**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
-**Rule:** A browser driver that promises “try for N milliseconds” must compare against a monotonic
+### GQ-019 — Automation timeouts are wall-clock budgets, not sample counts — and the fix for that has its own floor.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-17 · **Last:** 2026-08-23
+**Not enforced because:** the defect is a budget being too small for a machine nobody has measured,
+and no test can know what machine the next one is. `test/automation-timing.test.mjs` pins the helper;
+what it cannot pin is a caller's choice of number. The countermeasure is the successor entry below --
+stop spending the budget on reads at all.
+**Rule:** A browser driver that promises "try for N milliseconds" must compare against a monotonic
 wall-clock deadline. Never convert milliseconds into a fixed number of CDP reads: each read can take
-hundreds of milliseconds under hosted 3D load. Release movement input before every slow observation,
-so instrumentation latency cannot become unobserved travel.
-**Incidents:** Several full-matrix harnesses used names such as `maxSamples`/`maxSteps` as if one CDP
-state read cost one millisecond, while keeping movement held during each read. Under GitHub-hosted
-load nominal ten-second walks and fight polls expanded into multi-minute overshoots and false red
-gates. Fixed by `tools/runtime-test/automation-timing.mjs`, wall-clock deadlines, pulse/release/read
-movement, and structural coverage in `test/automation-timing.test.mjs` and
-`test/review-suite.test.mjs`.
+hundreds of milliseconds under hosted 3D load.
+**Hit 2's correction, and it is a correction to this entry's own remedy.** The original said "release
+movement input before every slow observation, so instrumentation latency cannot become unobserved
+travel." That is right about the hazard and, below roughly 5 fps, wrong about the cure: releasing per
+read makes the duty cycle the read rate, and the walk then never arrives at all. Measured 2026-08-23,
+`drive-relight`: the pulse/release/read walk spent **7217 ms of a 10000 ms budget** locally to cross
+6.44 m -- 3120 ms of it the per-iteration settle sleep, only 129 ms actual CDP -- finishing with 28%
+to spare on a machine where round trips are effectively free. Hosted, at a measured mean frame of
+**367 ms**, the same loop covered 3.1 m and stopped 3.3 m short. Release-per-read is correct only
+while a read is cheap relative to a frame. When it is not, the stop condition has to move into the
+page instead, which is what the successor entry is about.
+**Incidents:** (1) 2026-08-17 -- several full-matrix harnesses used names such as `maxSamples`/
+`maxSteps` as if one CDP state read cost one millisecond, while keeping movement held during each
+read; nominal ten-second walks expanded into multi-minute overshoots. Fixed by
+`tools/runtime-test/automation-timing.mjs`, wall-clock deadlines, pulse/release/read movement, and
+structural coverage in `test/automation-timing.test.mjs` and `test/review-suite.test.mjs`.
+(2) 2026-08-23 -- eight harnesses red hosted and green locally, every one of them a budget sized on
+a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a frame.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A harness written in wall-clock time is driving something that advances in rendered frames.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** On a browser with no GPU the page paints at 2-4 fps and a `Runtime.evaluate` waits on the
+main thread, so a CDP read costs a FRAME, not a millisecond. Three consequences follow, and they are
+one mistake wearing three hats: a loop budgeted in milliseconds gets a fraction of its iterations; a
+short-lived state can live and die between two reads; and a read taken after an act can land before
+the frame that applies it, or after the state has moved on again. **Enlarging the timeout re-decides
+the same number against the next machine.** Move the frame-rate-sensitive half into the page instead:
+record the value once per rendered frame and read the log, so observation costs nothing and cannot
+be too slow, and decide arrival in-page so input can be held rather than pulsed. Polling a RECORDER
+is safe at any rate; polling LIVE STATE is not.
+**Corollaries, each of which cost a round on 2026-08-23:**
+- **A log is a history.** "Wait until the hero is back up" was satisfied by a frame from before he
+  ever went down. A recorder needs a `since` index or it answers with the past.
+- **A backgrounded tab has not painted, whatever the clock says.** rAF only advances for the
+  foregrounded tab, so `bringToFront` plus a sleep is not enough to make one readable; two rendered
+  frames is. Half a second there bought one frame or none.
+- **Two things read sequentially cannot be compared.** Two tabs' wolf health "disagreed" — and the
+  direction of the disagreement FLIPPED between environments (A=2 B=1 locally, A=1 B=2 hosted), which
+  is the tell: a real desync has a direction. Bracket the second read between two of the first.
+- **A slack constant between two phases is a number picked against one machine.** A walk that holds
+  for distance then pulses to place itself needs no such number if it simply loops until it arrives.
+**Incidents (2026-08-23, one session):** `play-fight` swung every 7.5 s against a rule allowing one
+every 1.5 s, so with Design ruling 5 healing the wolf on each knockdown it reported a fight
+unwinnable that is won in three swings; `drive-marks` 10/21 with 13 knockdowns; `drive-lifecycle`
+timed a 10 s respawn at 0.26 s because the stopwatch started when a poll NOTICED the corpse;
+`play-fight` read `wolf on 3hp of 3` after a fight the recorder proves it lost, because the wolf had
+respawned before the read; `tapping ATTACK starts a swing` failed while the very next check passed
+against the SAME tap. Matrix went 12 red to 7, with the remaining chaseable two being genuine
+environment limits rather than bugs. Shared primitives in
+`tools/runtime-test/in-page-driver.mjs`; the hosted frame rate and the refutation of the competing
+"input never reaches authority" hypothesis are in that file's header, measured by
+`.github/workflows/movement-diagnostic-probe.yml`.
+**The general form, worth stating separately because the three hats hide it:** when an instrument and
+the thing it measures keep different clocks, every number the instrument carries is a claim about
+the ratio between them. Write the number in the units the SUBJECT advances in, or move the decision
+to where those units are counted.
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — Evidence may name a commit only after executing from that exact clean commit.
@@ -876,20 +929,38 @@ reaches the patience. A rescue that can never fire looks exactly like restraint.
 are now pinned by a test each, because the correct behaviour sits between them.
 **Foreknowledge helped:** not yet recorded.
 
-### OBSERVED — A test that derives its probe input from the constant under test cannot fail on that constant.
-**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+### GQ-018 — A test that derives its probe input from the constant under test cannot fail on that constant.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-23 · **Last:** 2026-08-23
+**Not enforced because:** deciding which constant a given case is "under test" for is a judgement no
+static check can make -- the same import is correct as an expected value and wrong as a probe input,
+and nothing in the source distinguishes them. What IS mechanical is the countermeasure, and it is
+cheap: sabotage the constant and watch the case go red before committing it. Both incidents below
+were caught that way and neither would have been caught any other way.
 **Rule:** Importing a constant is right for an **expected value** and wrong for the **input you probe
 its boundary with**. If the input scales with the thing under test, the boundary moves with the probe
 and the case is green forever. The probe input has to come from the PRODUCT CLAIM instead -- a
 statement about the player, the device or the world, which the constant then has to satisfy. That is
 not a second copy of the constant; it is the requirement the constant exists to meet, and the two
 being separate is the entire point.
-**Incident (2026-08-23, `test/opening-fight.test.mjs`):** the case proving a child facing off to one
+**Incident 1 (2026-08-23, `test/opening-fight.test.mjs`):** the case proving a child facing off to one
 side still hits the wolf aimed at `ATTACK_HALF_ARC_RADIANS * 0.5`. A sabotage run narrowed the arc
 from 152 degrees to 29 and the case stayed green, because the probe narrowed with it. Rewritten to
 aim at a flat 45 degrees -- what "roughly facing the wolf" means for a four-year-old with a thumb on
 a stick -- plus an assertion that the constant is at least that wide. Now: 29 degrees fails, and 108
 degrees passes, which is the right answer for a legitimate tuning change.
+**Incident 2 (2026-08-23, the same file, hours later, by the agent writing incident 1):** a new case
+asking whether a slow child can still win the first fight set its cadence to
+`HERO_MAX_HP * WOLF_BITE_COOLDOWN_SECONDS / WOLF_MAX_HP` -- the cadence the rules themselves imply.
+That reads like the opposite of restating a constant and is this defect exactly: dropping
+`HERO_MAX_HP` from 3 to 2 broke four other cases in the file and left the new one green, because its
+bar had dropped with it. Rewritten to a flat 2.5 s, declared as a statement about a four-year-old's
+thumb. Now the same sabotage fails it.
+
+That the second hit came from inside the entry's own first write-up is the finding. Knowing the rule
+in the abstract did not help; the shape is seductive precisely because deriving-from-the-rules looks
+like rigour, and it wears GQ-007's clothes while doing the opposite of what GQ-007 asks. **The tell
+is not the import. It is asking whether the number would move if the constant moved -- and if it
+would, the case cannot see that constant at all.**
 **Note the tension with GQ-007, because it is easy to read this as its opposite.** GQ-007 says never
 restate a constant. This says the probe input is not a restatement of the constant -- it is a
 different fact, about people rather than about the rules, and collapsing the two is what makes the
