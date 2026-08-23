@@ -715,7 +715,13 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
       const targetId = wolf.targetId;
       const target = targetId == null ? null : heroes[targetId];
       const targetPosition = targetId == null ? null : (commandHeroes[targetId]?.position ?? { x: 0, z: 0 });
-      if (target && target.downSeconds < 0 && isWithinStrike(wolf, wolf.heading, targetPosition, WOLF_BITE_RANGE)) {
+      // Re-checked at CONTACT and not only at bite start, for the same reason downSeconds is: the
+      // target is read fresh here, so a hero who has stepped out of the wolf's reach -- or who the
+      // caller has stopped offering as a target -- between windup and contact does not take a blow
+      // decided a third of a second ago.
+      const stillTargetable = targetId == null || commandHeroes[targetId]?.targetable !== false;
+      if (target && target.downSeconds < 0 && stillTargetable
+        && isWithinStrike(wolf, wolf.heading, targetPosition, WOLF_BITE_RANGE)) {
         target.hp -= 1;
         events.push(withHeroId({ type: 'hero-hurt', remaining: Math.max(0, target.hp) }, targetId));
         if (target.hp <= 0) {
@@ -742,6 +748,11 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
   let nearestDistance = Infinity;
   for (const heroId of heroIds) {
     if (heroes[heroId].downSeconds >= 0) continue;
+    // NOT A TARGET THIS TICK, because the caller said so. One generic boolean, defaulting to
+    // targetable when absent, so every caller written before this existed keeps the fight it had.
+    // The rules layer deliberately does not know WHY -- the reason lives with whoever owns the
+    // world (see world/rangerSpeech.js's rangerSanctuaryHolds, and combat-purity.test.mjs).
+    if (commandHeroes[heroId]?.targetable === false) continue;
     const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
     const dx = position.x - wolf.x;
     const dz = position.z - wolf.z;
@@ -892,6 +903,9 @@ export function stepEncounter(state, command = {}) {
     // WOLF_DAMAGE_PER_HIT, so every caller written before equipment existed keeps the fight it has
     // always had.
     heroWeaponDamage = null,
+    // One more thing the caller knows and the rules do not, carried exactly as position and weapon
+    // damage are. Defaults to targetable so every existing caller fights unchanged.
+    heroTargetable = true,
     attack = false,
   } = command;
 
@@ -910,7 +924,10 @@ export function stepEncounter(state, command = {}) {
     deltaSeconds,
     heroes: {
       [SOLO_HERO_ID]: {
-        position: heroPosition, heading: heroHeading, weaponDamage: heroWeaponDamage,
+        position: heroPosition,
+        heading: heroHeading,
+        weaponDamage: heroWeaponDamage,
+        targetable: heroTargetable !== false,
       },
     },
   });

@@ -68,6 +68,14 @@ mkdirSync(OUT, { recursive: true });
 const JOB_CEILING_MS = 18 * 60 * 1000;
 const RUN_DEADLINE_MS = JOB_CEILING_MS - 150_000;
 const WALK_BUDGET_MS = 90_000;
+// HOW MUCH OF A CONVERSATION, counted in RENDERED FRAMES rather than seconds. Wren's opening line is
+// about six seconds read aloud; at the 3-10 fps a hosted runner paints, that is 20-60 frames. Forty
+// is inside that band and is more than three of the wolf's bite cooldowns, so an unprotected child
+// standing this long is bitten several times over -- which is what the unit seam's red-capable case
+// measures and what this number has to stay above to keep meaning anything.
+const CONVERSATION_FRAMES = 40;
+// Twelve times slower is where the mauling was first reproduced locally. See openTab's cpuThrottle.
+const SANCTUARY_THROTTLE = 12;
 const startedAt = Date.now();
 const msLeft = () => RUN_DEADLINE_MS - (Date.now() - startedAt);
 /** Throw with a verdict the log can actually show, rather than letting the runner kill us mute. */
@@ -167,7 +175,16 @@ class CDP {
   }
 }
 
-async function openTab(width, height) {
+/**
+ * @param cpuThrottle  slowdown multiplier for Emulation.setCPUThrottlingRate, or 1 for none.
+ *   This is how the Wren mauling was first reproduced OFF a hosted runner: local Chrome paints this
+ *   scene far too fast to starve, and every frame-rate defect this project has found lives in the
+ *   3-10 fps band a hosted headless runner actually renders at (GQ-021). Throttling is the only way
+ *   to put a local run in that band on purpose rather than by luck. It stacks with whatever the
+ *   runner is already doing, so the phase that uses it MEASURES and prints the frame rate it got
+ *   instead of claiming one.
+ */
+async function openTab(width, height, { cpuThrottle = 1 } = {}) {
   const version = await fetch(`http://127.0.0.1:${CHROME_PORT}/json/version`).then((r) => r.json());
   const browser = new CDP(version.webSocketDebuggerUrl);
   await browser.ready();
@@ -182,6 +199,7 @@ async function openTab(width, height) {
     screenOrientation: { angle: width > height ? 90 : 0, type: width > height ? 'landscapePrimary' : 'portraitPrimary' },
   });
   await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+  if (cpuThrottle > 1) await page.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottle });
   // CONSOLE ERRORS ARE A RESULT, so they are collected from the first frame rather than sampled at
   // the end. A page that threw during boot and recovered is still a page that threw.
   const consoleErrors = [];
@@ -442,7 +460,7 @@ async function shot(tab, name) {
  * Boot one client into a seeded world and hand back a live tab. Shared by both phases because they
  * differ only in what was seeded, which is the whole point of splitting them.
  */
-async function boot(label, { withSatchel }) {
+async function boot(label, { withSatchel, cpuThrottle = 1 }) {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-ranger-'));
   const storePath = join(dir, 'rewards.db');
   const guestId = seedGuest(storePath, label, { withSatchel });
@@ -456,7 +474,7 @@ async function boot(label, { withSatchel }) {
   console.log(`  harness-owned server on http://127.0.0.1:${port}/ (pid ${server.pid})`);
   await sleep(2500);
 
-  const tab = await openTab(768, 1024);
+  const tab = await openTab(768, 1024, { cpuThrottle });
   const origin = `http://127.0.0.1:${port}`;
   // GQ-008: CLEAR STORAGE BEFORE THE FIRST NAVIGATION. The automation profile is persistent, so a
   // harness that simply navigates inherits whatever gq-guest-id the last run left behind and quietly
@@ -667,7 +685,78 @@ async function phaseLodge() {
   }
 }
 
-const PHASES = { arrival: phaseArrival, charm: phaseCharm, lodge: phaseLodge };
+/**
+ * SEAM 5 OF THE WREN SANCTUARY RULING: stand at her feet long enough to have the conversation, in a
+ * real browser, and prove the child keeps every heart.
+ *
+ * The four unit seams in test/wren-sanctuary.test.mjs argue about the rules. This one argues about
+ * the GAME: the whole chain -- authoritative server deriving `targetable` from position and Beacon
+ * state, the rules honouring it, the bar on screen -- under the frame rate a child's tablet and a
+ * hosted runner actually produce.
+ *
+ * DELIBERATELY THROTTLED, because the unthrottled local run does not reproduce the defect: the
+ * arrival phase above passes locally with hearts held most of the time purely because it finishes
+ * before the wolf arrives. Twelve times slower puts a local run in the 1-3 fps band where the
+ * mauling was first measured, and it stacks with whatever the hosted runner is already doing. The
+ * achieved rate is printed rather than assumed.
+ *
+ * BOUNDED IN FRAMES, NOT MILLISECONDS (GQ-021). "Twelve seconds" on a runner painting once a second
+ * is twelve frames, which is not a conversation; the wait below runs until the recorder has seen
+ * enough rendered frames, with a wall-clock ceiling only as a liveness backstop.
+ */
+async function phaseSanctuary() {
+  console.log('\n── phase sanctuary (a child may stand and listen without being eaten) ──');
+  const { tab, server } = await boot('sanctuary', { withSatchel: false, cpuThrottle: SANCTUARY_THROTTLE });
+  try {
+    await pollUntil(tab, (state) => state.ranger?.rangerHere === true, 25000);
+    await startApproachRecorder(tab, 'wren-sanctuary');
+    await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
+
+    // Stand there. No input at all -- this is a child listening, which is exactly the posture the
+    // defect punished.
+    const startedAt = Date.now();
+    const ceiling = deadlineAfter(Math.min(Math.max(msLeft() - 60_000, 30_000), 180_000));
+    let watch = null;
+    while (Date.now() < ceiling) {
+      watch = JSON.parse(await tab.page.eval(readWatchSource('wren-sanctuary')));
+      if ((watch?.samples?.length ?? 0) >= CONVERSATION_FRAMES) break;
+      await sleep(500);
+    }
+    const { frames, summary } = await approachStory(tab, 'wren-sanctuary');
+    const seconds = (Date.now() - startedAt) / 1000;
+    const inside = frames.filter((frame) => frame.m <= KEEPER_WAVE_RADIUS_METERS);
+    console.log(`    stood ${seconds.toFixed(1)}s for ${frames.length} frame(s) `
+      + `(~${(frames.length / Math.max(seconds, 0.001)).toFixed(1)} fps at ${SANCTUARY_THROTTLE}x throttle), `
+      + `${inside.length} of them inside her speech radius`);
+    console.log(`    ${summary}`);
+
+    // THE FIXTURE HAS TO HAVE BEEN AT RISK. Every assertion below is "the child was not hurt", and
+    // a child who never got near Wren is trivially unhurt -- the same vacuous shape the third
+    // arrival check used to have. So require that they actually stood in the conversation.
+    check(inside.length >= CONVERSATION_FRAMES / 2,
+      'the child really did stand in front of Wren for the conversation',
+      `${inside.length} frame(s) inside ${KEEPER_WAVE_RADIUS_METERS}m of ${frames.length} recorded`);
+
+    const hearts = frames.map((frame) => frame.hp).filter((hp) => Number.isFinite(hp));
+    const lowest = hearts.length > 0 ? Math.min(...hearts) : null;
+    check(lowest === HERO_MAX_HP,
+      'and kept every heart while she talked -- the sanctuary holds in a real browser',
+      lowest === null ? 'hearts unread, which is a broken instrument not a pass'
+        : `lowest ${lowest} of ${HERO_MAX_HP} over ${hearts.length} frame(s)`);
+
+    check(frames.some((frame) => frame.shown === true),
+      'and her bubble was actually open, so there was a conversation to protect',
+      `open on ${frames.filter((frame) => frame.shown).length} of ${frames.length} frame(s)`);
+
+    await shot(tab, 'ranger-04-listening-in-safety');
+    check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
+  } finally {
+    await tab.close().catch(() => {});
+    try { process.kill(-server.pid); } catch { /* already gone */ }
+  }
+}
+
+const PHASES = { arrival: phaseArrival, charm: phaseCharm, lodge: phaseLodge, sanctuary: phaseSanctuary };
 
 async function run() {
   const asked = process.argv.slice(2).filter((name) => name in PHASES);

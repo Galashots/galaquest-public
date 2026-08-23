@@ -54,7 +54,7 @@ import {
   WOLF_SPAWNS,
 } from '../public/src/world/zones/village.js';
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
-import { rangerOwesCharm } from '../public/src/world/rangerSpeech.js';
+import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
 import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
@@ -1061,6 +1061,22 @@ export function createSimulation(options = {}) {
         // a child can be handed Wren's charm mid-session, and a value copied at join would mean the
         // fourth heart only appeared after a reconnect.
         maxHp: maxHpFor(player.id),
+        // ...and whether the wolf may pick this hero at all. Derived HERE, on the side of the seam
+        // that knows both where everyone is standing and whether the Beacon is burning, from the
+        // same RANGER_CLAIM radius the charm handover is already adjudicated against. Nothing new
+        // goes on the wire for it: the authoritative server owns both inputs already, so a client
+        // could not tell it anything about this that it does not know better.
+        //
+        // Per hero, deliberately. A sibling out in the open is still a target on the very same
+        // tick, and the wolf keeps hunting them -- this is a sanctuary, not a truce.
+        targetable: !rangerSanctuaryHolds({
+          heroX: player.x,
+          heroZ: player.z,
+          rangerX: RANGER_CLAIM.at[0],
+          rangerZ: RANGER_CLAIM.at[1],
+          claimRadiusMeters: RANGER_CLAIM.radiusMeters,
+          beaconLit: siegeState.beaconLit,
+        }),
       };
     }
     // The handoff runs BEFORE either engine steps, so a hero is never simulated for a tick by the

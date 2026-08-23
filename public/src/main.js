@@ -105,7 +105,7 @@ import {
 } from './world/keeperSpeech.js';
 import { ROWAN_NAME, rowanOwesBlade, rowanSpeechState } from './world/rowanSpeech.js';
 import {
-  RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSpeechState,
+  RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSanctuaryHolds, rangerSpeechState,
 } from './world/rangerSpeech.js';
 import { questObjectiveFor } from './world/quest.js';
 import { destinationFor, nearestPlaceTo } from './world/destinations.js';
@@ -2583,6 +2583,18 @@ async function bootstrap() {
           // re-derived). Resolved to a number on this side of the seam, exactly as
           // net/gameServer.mjs does for the online fight.
           heroWeaponDamage: swingDamageFor(equippedWeaponIdThisFrame),
+          // THE SAME QUESTION net/gameServer.mjs asks per player, asked here for the offline hero
+          // and answered by the same function against the same RANGER_CLAIM radius. A child playing
+          // with no socket gets the identical sanctuary; two answers to "may the wolf have this
+          // child" would be two things to keep in step, which is the whole of GQ-007.
+          heroTargetable: !rangerSanctuaryHolds({
+            heroX: player.position.x,
+            heroZ: player.position.z,
+            rangerX: VILLAGE.RANGER_CLAIM.at[0],
+            rangerZ: VILLAGE.RANGER_CLAIM.at[1],
+            claimRadiusMeters: VILLAGE.RANGER_CLAIM.radiusMeters,
+            beaconLit: siegeState.beaconLit,
+          }),
         });
         encounterState = stepped.state;
         events.push(...stepped.events);
