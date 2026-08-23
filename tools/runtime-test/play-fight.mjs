@@ -372,13 +372,45 @@ const SWING_SAMPLE = `(() => {
   };
 })()`;
 
-/** How far a set of recorded points spreads, as the diagonal of the box that contains them. One
- *  number for "did this thing move", with no dependence on the order frames were sampled in. */
+/** How far a set of recorded points spreads, as the diagonal of the box that contains them. */
 function travelOf(points) {
   const live = points.filter((point) => Array.isArray(point) && point.every(Number.isFinite));
   if (live.length < 2) return null;
   const range = (axis) => Math.max(...live.map((p) => p[axis])) - Math.min(...live.map((p) => p[axis]));
   return Math.hypot(range(0), range(1), range(2));
+}
+
+/**
+ * The fastest the hand moved between two consecutive recorded frames, in metres per second.
+ *
+ * WHY SPEED AND NOT EXTENT, which is the third formulation of this measurement and the first that
+ * can survive being run on a machine other than the one it was written on. Bounding-box travel
+ * answers "how far did the hand get", and the idle clip's own breathing eventually takes the arm
+ * through its whole cycle, so that number GROWS WITH HOW MUCH OF THE CYCLE YOU SAMPLE. Locally, 70
+ * frames at 17ms covers 1.2s of animation and rest measured 0.19m. Hosted, 54 frames at 229ms
+ * covers 5.4s and rest measured 0.56m -- against a swing sampled about twice, at 0.79m. The check
+ * read 1.4x and went red, and my 6.7x locally had been flattered by under-sampling the idle cycle
+ * rather than by the swing being large.
+ *
+ * Speed does not have that problem. Breathing carries the hand half a metre over several seconds;
+ * a swing carries it about that far in a fifth of one. Sampling more of either changes how likely
+ * the peak is caught, not how big it is, and the two are an order of magnitude apart even at three
+ * samples per swing.
+ */
+function peakSpeedOf(samples) {
+  let peak = 0;
+  let pairs = 0;
+  for (let i = 1; i < samples.length; i += 1) {
+    const a = samples[i - 1];
+    const b = samples[i];
+    if (!Array.isArray(a?.hand) || !Array.isArray(b?.hand)) continue;
+    const seconds = (b.t - a.t) / 1000;
+    if (!(seconds > 0)) continue;
+    pairs += 1;
+    const step = Math.hypot(b.hand[0] - a.hand[0], b.hand[1] - a.hand[1], b.hand[2] - a.hand[2]);
+    peak = Math.max(peak, step / seconds);
+  }
+  return pairs ? peak : null;
 }
 // By name off the live scene, because the wolf presenter publishes its clip but not its root, and
 // the question here is about the body rather than about what the presenter believes. Re-found every
@@ -1410,8 +1442,8 @@ async function photographTheSwing() {
   // there, and that is the only stretch of this recording that means "at rest".
   const firstSwing = arm.samples.findIndex((sample) => sample.swingSeconds >= 0);
   const still = firstSwing > 0 ? arm.samples.slice(0, firstSwing) : [];
-  const handSwinging = travelOf(swinging.map((sample) => sample.hand));
-  const handStill = travelOf(still.map((sample) => sample.hand));
+  const handSwinging = peakSpeedOf(swinging);
+  const handStill = peakSpeedOf(still);
   // The hero is not supposed to go anywhere here -- the wolf is dead and nothing walks -- so if he
   // did, the arm travel above is partly his own stroll and this measurement is not usable. Said out
   // loud rather than absorbed, because a check that quietly measures the wrong thing is the defect
@@ -1428,9 +1460,10 @@ async function photographTheSwing() {
         + `${swinging.length} swinging and ${still.length} at rest carried a readable `
         + `${SWORD_HAND_BONE}. So this proved nothing rather than passing -- and it says WHICH `
         + 'half was missing, because "no bone" and "no rest frames" want different fixes'
-      : `hand travelled ${handSwinging.toFixed(2)}m over ${swinging.length} swinging frame(s) `
-        + `against ${handStill.toFixed(2)}m over ${still.length} idle one(s) `
+      : `hand peaked at ${handSwinging.toFixed(2)}m/s over ${swinging.length} swinging frame(s) `
+        + `against ${handStill.toFixed(2)}m/s over ${still.length} at rest `
         + `(${(handSwinging / Math.max(handStill, 1e-6)).toFixed(1)}x, bar ${SWING_DWARFS_IDLE}x); `
+        + `arc spanned ${(travelOf(swinging.map((sample) => sample.hand)) ?? 0).toFixed(2)}m, `
         + `hero himself moved ${rootTravel === null ? 'unreadably' : `${rootTravel.toFixed(3)}m`}`);
 }
 await photographTheSwing();
