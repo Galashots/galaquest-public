@@ -46,7 +46,11 @@ import { headingToward } from '../../public/src/world/zoneLoader.js';
 import { CART_LOOT_TABLE, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
 import { WORKSHOP_I_ID, remainingVillageSupplies } from '../../public/src/village/economy.js';
 import { WORKSHOP_BUILD_SECONDS } from '../../public/src/world/workshop.js';
-import { movementPulseMillis } from './automation-timing.mjs';
+import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
+// The held-walk primitive, shared with drive-relight and drive-village. See its module header for
+// the measurement behind it: a walk budgeted in milliseconds gets a fraction of its iterations on a
+// runner that paints every 300-400ms, and stops short of wherever it was aimed.
+import { metresOrUnknown, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
@@ -291,6 +295,9 @@ async function state(tab) {
       heroPos: [+r.player.position.x.toFixed(3), +r.player.position.z.toFixed(3)],
       serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(3), +net.serverSelf.z.toFixed(3)] : null,
       heading: r.follow.heading,
+      // How fast AUTHORITY thinks the hero is moving, so the walk below can wait for him to have
+      // actually stopped rather than sleeping a guess and measuring a coasting hero.
+      serverSpeed: net.serverSelf?.speed ?? null,
       netStatus: net.status,
       selfId: net.selfId,
       guestId: r.guestId(),
@@ -325,7 +332,45 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })),
 });
 
-async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+/** How much further out than the caller's ring the HELD leg is allowed to latch. The held walk
+ *  releases the stick on arrival and the hero coasts, so it aims wide on purpose and lets the
+ *  pulsed leg place him. This is not a slack constant that has to be right -- the loop below
+ *  converges whatever it is. */
+const HELD_APPROACH_SLACK_METRES = 3;
+
+// HOLD THE STICK AND DECIDE ARRIVAL IN-PAGE, once per rendered frame.
+//
+// The pulsed walker below is correct on a developer machine and wrong on a runner with no GPU: each
+// of its iterations costs four CDP round trips, each round trip costs a whole rendered frame there,
+// and the hero only moves during the pulse. Hosted at 760188f the Workshop approach ran out of its
+// 120s budget with the late joiner standing 3.26m from a 2.4m interact radius, and the check that
+// the Workshop is "immediately interactable" went red about a hero who had simply not arrived.
+async function heldWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  let walk;
+  try {
+    walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+  } finally {
+    await touch(tab, 'touchEnd', []);
+    await tab.page.eval(STOP_WALK);
+  }
+  console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
+    + `${metresOrUnknown(walk.metres)}, ${walk.arrived
+      ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
+      : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`}`);
+  // Wait for AUTHORITY to agree he has stopped before the pulsed leg measures from him -- a fixed
+  // sleep here hands the next leg a coasting hero and it aims from where he was.
+  await sleep(200);
+  return pollUntil(tab, (next) => next.serverPos !== null && next.serverSpeed === 0,
+    { timeoutMs: 4000 });
+}
+
+async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   const deadline = Date.now() + maxMillis;
   let last = await state(tab);
@@ -362,6 +407,45 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     // eslint-disable-next-line no-await-in-loop
     last = await state(tab);
   }
+  return last;
+}
+
+// HOLD, THEN PULSE, AND GO ROUND AGAIN IF HE IS NOT THERE YET.
+//
+// Same shape as drive-village.mjs's, and for the same reason: one hold followed by one pulse is not
+// enough, and no single slack number makes it enough -- any number picked here is picked against
+// one machine, which is the mistake this family of bugs is made of. The loop converges instead. The
+// held leg closes whatever distance is left at walking pace, the pulsed leg places him exactly, and
+// if the release carried him past, the next turn simply walks him back. Bounded by the caller's own
+// budget, and it says how many passes it took so a slow route reports itself.
+async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const deadline = deadlineAfter(maxMillis);
+  let last = await state(tab);
+  let passes = 0;
+  const awayFrom = (p) => (p ? Math.hypot(targetX - p[0], targetZ - p[1]) : Infinity);
+  while (Date.now() < deadline) {
+    const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+    if (away <= stopWithin) break;
+    passes += 1;
+    const held = away > stopWithin + HELD_APPROACH_SLACK_METRES;
+    if (held) {
+      // eslint-disable-next-line no-await-in-loop
+      last = await heldWalkToward(tab, targetX, targetZ, stopWithin,
+        Math.max(2000, deadline - Date.now()));
+    }
+    // HALF THE REMAINING BUDGET ONLY WHEN A HELD LEG RAN, because then there is something to
+    // reserve it FOR -- the held leg releases the stick wide and the hero coasts, so the next turn
+    // round needs time to walk him back. When he is already inside the held slack the pulse is the
+    // only mechanism there is, and halving each pass geometrically starves it: measured on this
+    // container, three passes at a 0.15m ring left him 2.65m out with most of a 120s budget unspent,
+    // because pass three was handed an eighth of it.
+    // eslint-disable-next-line no-await-in-loop
+    last = await pulseWalkToward(tab, targetX, targetZ, stopWithin,
+      held ? Math.max(1500, (deadline - Date.now()) / 2) : Math.max(1500, deadline - Date.now()));
+  }
+  const finalAway = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+  console.log(`  approach: ${passes} pass(es), ${finalAway.toFixed(2)}m from target `
+    + `against a ${stopWithin}m ring`);
   return last;
 }
 

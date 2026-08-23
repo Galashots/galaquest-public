@@ -50,6 +50,10 @@ import {
 } from '../../public/src/world/quest.js';
 import { ROWAN_LINE_BEACON_FOUND, ROWAN_LINE_CART_SEARCHED } from '../../public/src/world/rowanSpeech.js';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
+// The held-walk primitive, shared with drive-relight, drive-village and drive-village-board. Its
+// module header records the measurement: a walk budgeted in milliseconds gets a fraction of its
+// iterations where every CDP round trip costs a rendered frame, and stops short of its target.
+import { metresOrUnknown, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
 
@@ -262,6 +266,9 @@ async function state(tab) {
       heroPos: [+r.player.position.x.toFixed(3), +r.player.position.z.toFixed(3)],
       serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(3), +net.serverSelf.z.toFixed(3)] : null,
       heading: r.follow.heading,
+      // Authority's own speed, so a walk can wait for the hero to have STOPPED rather than sleeping
+      // a guess and then measuring from a hero who is still coasting.
+      serverSpeed: net.serverSelf?.speed ?? null,
       netStatus: net.status,
       guestId: r.guestId(),
       marks: net.selfId !== null ? (r.rewards()[net.selfId]?.marks ?? null) : null,
@@ -302,11 +309,42 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })),
 });
 
+/** How much further out than the caller's ring the HELD leg may latch. It releases the stick on
+ *  arrival and the hero coasts, so it aims wide on purpose and the pulsed leg places him. Not a
+ *  number that has to be right: the loop below converges whatever it is. */
+const HELD_APPROACH_SLACK_METRES = 3;
+
+/** Hold the stick and decide arrival IN-PAGE, once per rendered frame. The pulsed walker below is
+ *  correct on a developer machine and wrong on a runner with no GPU, where each of its four CDP
+ *  round trips per iteration costs a whole frame and the hero only moves during the pulse. This
+ *  harness's road north is 30m of that. */
+async function heldWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  let walk;
+  try {
+    walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+  } finally {
+    await touch(tab, 'touchEnd', []);
+    await tab.page.eval(STOP_WALK);
+  }
+  console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
+    + `${metresOrUnknown(walk.metres)}, ${walk.arrived
+      ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
+      : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`}`);
+  await sleep(200);
+  return pollUntil(tab, (next) => next.serverPos !== null && next.serverSpeed === 0, 4000);
+}
+
 /** Real touch-stick movement toward a fixed world point -- drive-village.mjs's own walkToward,
  *  copied verbatim including its release-before-every-read discipline. The stick origin is a
  *  FRACTION of THIS tab's viewport, never a shared constant: an origin computed in one orientation
  *  lands off-screen in the other. */
-async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   let last = await state(tab);
   const deadline = deadlineAfter(maxMillis);
@@ -334,6 +372,37 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     await sleep(80);
     last = await state(tab);
   }
+  return last;
+}
+
+// HOLD, THEN PULSE, AND GO ROUND AGAIN IF HE IS NOT THERE YET -- the same convergent shape
+// drive-village.mjs and drive-village-board.mjs use, and for the same reason: one hold plus one
+// pulse is not enough, and no single slack number makes it enough, because any number picked here
+// is picked against one machine. The loop converges instead, bounded by the caller's own budget,
+// and reports its pass count so a slow route says so out loud.
+async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const deadline = deadlineAfter(maxMillis);
+  let last = await state(tab);
+  let passes = 0;
+  const awayFrom = (p) => (p ? Math.hypot(targetX - p[0], targetZ - p[1]) : Infinity);
+  while (Date.now() < deadline) {
+    const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+    if (away <= stopWithin) break;
+    passes += 1;
+    const held = away > stopWithin + HELD_APPROACH_SLACK_METRES;
+    if (held) {
+      last = await heldWalkToward(tab, targetX, targetZ, stopWithin,
+        Math.max(2000, deadline - Date.now()));
+    }
+    // Half the remaining budget only when a held leg ran, because only then is there a second
+    // mechanism to reserve it for. Halving every pass regardless starves the pulse, which is the
+    // only thing that can place a hero on a tight ring.
+    last = await pulseWalkToward(tab, targetX, targetZ, stopWithin,
+      held ? Math.max(1500, (deadline - Date.now()) / 2) : Math.max(1500, deadline - Date.now()));
+  }
+  const finalAway = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+  console.log(`  approach: ${passes} pass(es), ${finalAway.toFixed(2)}m from target `
+    + `against a ${stopWithin}m ring`);
   return last;
 }
 
