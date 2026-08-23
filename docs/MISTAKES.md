@@ -132,7 +132,7 @@ refused, and burned the iteration while the wolf's own timer ran on. Suite fell 
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-002 — A stale file header is a lie the file tells about itself.
-**Status:** RULE · **Hits:** 6 · **First:** 2026-08-14 · **Last:** 2026-08-22
+**Status:** RULE · **Hits:** 7 · **First:** 2026-08-14 · **Last:** 2026-08-23
 **Not enforced because:** a stale comment is prose about intent; verifying it is current requires
 re-deriving what's still true, which no regex can do safely without also re-deriving the design.
 **Rule:** This repo deliberately puts its reasoning in the code; an agent reading a file top-to-bottom
@@ -158,6 +158,14 @@ hit in this file, and the second found by Director audit rather than by the comm
 The sharper form of the rule: when a fix REPLACES a reason, the old reason is more dangerous than an
 old fact, because it still reads as an argument. Grep the file for the abandoned rationale, not just
 the abandoned identifier.
+**Incident (2026-08-23), and it is the costliest form of this rule:** `profileGateViewModel`'s
+own JSDoc listed its heroes as `[{ id, displayName, marks, lanternUnlocked }]`. It also reads
+`hero.avatar`. main.js built its hero objects to match the documented list exactly -- three named
+fields plus the folded state, which has no avatar key -- so every chooser card fell through to the
+id-derived fallback and the stored animal was written and never read. The caller was not careless;
+it satisfied the contract as written. **A parameter a function READS and does not DOCUMENT is a
+defect waiting for its first caller**, and it is worse than an out-of-date sentence because there is
+nothing visibly wrong to notice.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.

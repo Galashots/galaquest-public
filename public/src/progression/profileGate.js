@@ -65,8 +65,14 @@ export function progressPipsFor({ marks = 0, lanternUnlocked = false } = {}) {
 /**
  * Pure. Everything the gate needs to paint itself.
  *
- * @param options.heroes  [{ id, displayName, marks, lanternUnlocked }] -- already folded by the
- *   caller, because deriving a profile's state means reading storage and this half touches none.
+ * @param options.heroes  [{ id, displayName, avatar, marks, lanternUnlocked }] -- already folded by
+ *   the caller, because deriving a profile's state means reading storage and this half touches none.
+ *
+ *   `avatar` WAS MISSING FROM THIS LINE, and main.js built its hero objects to match: three named
+ *   fields plus the folded state, which has no avatar in it. So every card fell through to the
+ *   id-derived fallback and the stored animal was written and never read. The caller satisfied the
+ *   documented contract exactly; the contract was short one field. A parameter this function READS
+ *   and does not DOCUMENT is a defect waiting for its first caller.
  * @param options.activeProfileId  which card reads as the current hero.
  * @param options.namingFirstHero  true on a device whose one hero has never been named, which turns
  *   the screen from a chooser into a single question. A child opening the game for the first time
