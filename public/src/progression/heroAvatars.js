@@ -42,8 +42,18 @@ export function avatarById(id) {
  * A stable animal for a profile that never had one written down.
  *
  * Derived from the profileId ONLY, which is immutable for the life of the profile, so this answer
- * never changes for a given child. Two profiles can land on the same animal -- with six animals and
- * four slots that is unlikely and it is survivable, whereas an animal that moves is not.
+ * never changes for a given child.
+ *
+ * "TWO PROFILES CAN COLLIDE AND THAT IS SURVIVABLE" is what this comment used to say, and it was
+ * wrong twice over. It is not survivable -- for a child who cannot read, the animal is the ONLY
+ * thing on the card telling their save from their brother's, and two identical cards is the feature
+ * failing completely rather than degrading. And it was reachable: createProfile chose against
+ * STORED avatars, so a migrated child's derived Fox looked free and the next sibling was handed Fox.
+ *
+ * createProfile now chooses against every profile's EFFECTIVE animal, through avatarForProfile --
+ * the same law the cards render with. Two derived animals colliding would need two profiles with no
+ * stored avatar, and migrateLegacyGuest only runs on a device holding none, so there is at most one
+ * such profile per tablet.
  */
 export function fallbackAvatarIdFor(profileId) {
   const text = typeof profileId === 'string' ? profileId : '';

@@ -530,6 +530,70 @@ async function run() {
     check('and it is the same animal it was before the reload',
       remembered.avatar === moved.avatar, `${moved.avatar} -> ${remembered.avatar}`);
 
+    // ── a device played on before profiles existed, and the sibling who arrives next ───────────
+    // The Director found this by reading: a migrated profile has no STORED animal and is DRAWN with
+    // the id-derived fallback, so an allocator that chose against stored values only could hand the
+    // new sibling the animal the migrated child was already showing. Two identical cards, and for a
+    // non-reader the animal is the ONLY thing distinguishing their save from their brother's.
+    //
+    // Proved here in a browser as well as in units, because the unit case drives the store and this
+    // drives the CARDS -- the thing a child actually looks at. The two could disagree: the fix is
+    // that allocation and rendering now share one law, and this is what checks they really do.
+    //
+    // The legacy id is planted BEFORE the first boot, through the favicon hop, because booting mints
+    // a profile and migrateLegacyGuest only folds a guest in while the device holds none. That is
+    // GQ-016, which this branch learned the hard way.
+    const LEGACY_GUEST = 'guest-00000004';
+    // A REAL FILE, not /favicon.ico. The usual hop 404s -- nothing serves a favicon -- and this
+    // harness is the one that collects Log.entryAdded, so unlike the others it SEES that 404 and
+    // fails its own console-error check on a request it made itself. vendor/three.module.min.js is
+    // same-origin, exists, and is not the app: navigating to it establishes the origin without
+    // booting a runtime that would mint a profile before the legacy id is planted.
+    await tab.page.send('Page.navigate', { url: `${ORIGIN_UNDER_TEST}/vendor/three.module.min.js` });
+    await new Promise((r) => setTimeout(r, 300));
+    await tab.page.send('Storage.clearDataForOrigin', {
+      origin: ORIGIN_UNDER_TEST, storageTypes: 'local_storage',
+    });
+    await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(LEGACY_GUEST)})`);
+    await load(tab, gameUrl);
+    await waitForRuntime(tab);
+
+    const migrated = await teaching();
+    check('the legacy child is folded into a profile keeping their own id',
+      migrated.name !== null, JSON.stringify({ name: migrated.name, avatar: migrated.avatar }));
+    check('and that migrated profile has no STORED animal, so it is drawn from its id',
+      migrated.avatar === null, `avatar ${JSON.stringify(migrated.avatar)}`);
+
+    // NAME THE MIGRATED CHILD FIRST, which is the real flow rather than a step around one: a
+    // migrated profile arrives with `named: false`, so the gate opens as the question rather than
+    // as the chooser and there is no add button to press yet. A legacy device genuinely does ask
+    // "what is your hero called?" before it will offer a second hero.
+    await typeName(tab, 'Older');
+    await clickSelector(tab, '#profile-gate-confirm');
+    await new Promise((r) => setTimeout(r, 500));
+    await load(tab, gameUrl);
+
+    // Then the sibling, the way a parent does. Creating a hero reloads by design -- the profile id
+    // IS the wire's guestId -- so this follows the same shape the sibling phase above uses.
+    await clickSelector(tab, '#profile-chip');
+    await clickSelector(tab, '.profile-card-add');
+    await typeName(tab, 'Sibling');
+    await clickSelector(tab, '#profile-gate-confirm');
+    await new Promise((r) => setTimeout(r, 500));
+
+    /** The animal each card is actually SHOWING, read off the rendered chooser. */
+    const shownAnimals = async () => JSON.parse(await tab.page.eval(`JSON.stringify(
+      [...document.querySelectorAll('#profile-gate .profile-card-face')].map((el) => el.getAttribute('aria-label'))
+    )`));
+
+    await load(tab, gameUrl);
+    await clickSelector(tab, '#profile-chip');
+    const animals = await shownAnimals();
+    check('the migrated child and the new sibling show DIFFERENT animals, after a reload',
+      animals.length >= 2 && new Set(animals).size === animals.length,
+      JSON.stringify(animals));
+    await capture(tab, '09-migrated-and-sibling');
+
     check('no console errors across the whole run',
       tab.consoleErrors.length === 0,
       tab.consoleErrors.length ? JSON.stringify(tab.consoleErrors.slice(0, 3)) : 'none');

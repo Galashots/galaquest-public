@@ -73,3 +73,41 @@ test('the derived animal spreads across the set rather than piling on one', () =
   for (let i = 0; i < 60; i += 1) seen.add(fallbackAvatarIdFor(`p-${i}-${i * 7}`));
   assert.ok(seen.size >= 4, `only ${seen.size} distinct animals across 60 ids`);
 });
+
+// ── the one that matters: a legacy child and a new sibling ─────────────────────────────────────
+
+test('a migrated child and a new sibling never end up with the SAME animal', () => {
+  // The defect this is written for, found by the Director by reading rather than running.
+  //
+  // A migrated legacy profile has `avatar: null` -- it predates the field -- and is DRAWN using the
+  // id-derived fallback. createProfile chose against stored avatars only, `.filter(Boolean)`, so it
+  // never saw the legacy child's effective Fox and handed Fox straight to the new sibling.
+  //
+  // Two children, one animal. For the non-reader this whole file exists for, that is not a cosmetic
+  // clash: it is the only cue they have for telling their save from their brother's, and both cards
+  // now say the same thing.
+  //
+  // `guest-00000004` is chosen because its derived animal IS the first one the allocator hands out,
+  // so the collision is certain rather than probabilistic -- a test that reproduces a bug only
+  // sometimes is not a test. It is also long enough to survive sanitizeGuestId, which rejected my
+  // first, shorter pick and failed the test on its own premise rather than on the defect.
+  const legacy = { id: 'guest-00000004', avatar: null };
+  assert.equal(avatarForProfile(legacy).id, HERO_AVATARS[0].id,
+    'premise: this legacy id must derive the animal the allocator would otherwise hand out first');
+
+  // What the allocator must be given: EFFECTIVE animals, through the one shared law.
+  const chosen = chooseAvatarId([avatarForProfile(legacy).id]);
+  assert.notEqual(chosen, avatarForProfile(legacy).id,
+    'the new sibling was handed the animal the migrated child is already showing');
+});
+
+test('and the whole tablet stays distinct as siblings are added onto a migrated child', () => {
+  // Walked forward the way a family actually fills a device, each new hero choosing against what is
+  // ALREADY ON SCREEN rather than against what happens to be written down.
+  const profiles = [{ id: 'guest-00000004', avatar: null }];
+  for (let i = 0; i < MAX_PROFILES - 1; i += 1) {
+    profiles.push({ id: `p-new-${i}`, avatar: chooseAvatarId(profiles.map((p) => avatarForProfile(p).id)) });
+  }
+  const shown = profiles.map((p) => avatarForProfile(p).id);
+  assert.equal(new Set(shown).size, shown.length, `two children share an animal: ${shown.join(', ')}`);
+});

@@ -24,6 +24,7 @@ import {
   createProfileStore,
   sanitizeDisplayName,
 } from '../public/src/progression/profiles.js';
+import { avatarForProfile } from '../public/src/progression/heroAvatars.js';
 import { DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import { openRewardStore } from '../net/rewardStore.mjs';
 
@@ -322,4 +323,48 @@ test('one profile cannot read another profile journal', () => {
   assert.equal(store.stateFor(a.id).marks, 3);
   assert.equal(store.stateFor(b.id).marks, 0);
   assert.equal(store.stateFor(b.id).lanternUnlocked, false);
+});
+
+// ── a migrated child and the sibling who arrives next ──────────────────────────────────────────
+
+test('a new sibling never gets the animal the migrated child is already showing', () => {
+  // THE PRODUCER, not the law. test/hero-avatars.test.mjs proves chooseAvatarId picks something
+  // free when it is HANDED the animals in use -- and it passed throughout the defect, because the
+  // bug was never in the law. It was in what createProfile handed it (GQ-015 exactly: a test that
+  // feeds a pure function proves the function, not its caller). So this drives the real store
+  // through the real sequence a family hits: a device played on before profiles existed, then a
+  // second child added.
+  //
+  // A migrated profile has `avatar: null` -- it predates the field -- and is DRAWN with the
+  // id-derived fallback. createProfile chose against stored avatars only, `.filter(Boolean)`, so it
+  // could not see the legacy child's effective animal and handed the same one to the sibling.
+  //
+  // `guest-00000004` derives the first animal the allocator would otherwise hand out, so the collision is
+  // certain rather than probabilistic. A test that reproduces a bug only sometimes is not a test.
+  const storage = fakeStorage({ 'gq-guest-id': 'guest-00000004' });
+  const store = deterministicStore(storage);
+
+  const migrated = store.migrateLegacyGuest();
+  assert.ok(migrated, 'premise: the legacy guest is folded into a profile');
+  assert.equal(migrated.avatar, null, 'premise: a migrated profile has no STORED animal');
+
+  store.createProfile('Sibling');
+
+  const shown = store.listProfiles().map((p) => avatarForProfile(p).id);
+  assert.equal(new Set(shown).size, shown.length,
+    `two children on one tablet are showing the same animal: ${shown.join(', ')}`);
+});
+
+test('...and it survives the keyring being read back from storage', () => {
+  // The same question after a reload, because the migrated profile's animal is derived rather than
+  // written and a rehydrate is where a derived value gets its chance to move.
+  const storage = fakeStorage({ 'gq-guest-id': 'guest-00000004' });
+  const first = deterministicStore(storage);
+  first.migrateLegacyGuest();
+  first.createProfile('Sibling');
+  const before = first.listProfiles().map((p) => avatarForProfile(p).id);
+
+  const reloaded = deterministicStore(storage, 50).listProfiles().map((p) => avatarForProfile(p).id);
+  assert.deepEqual(reloaded, before, 'an animal moved across a reload');
+  assert.equal(new Set(reloaded).size, reloaded.length, `siblings share an animal after reload: ${reloaded}`);
 });

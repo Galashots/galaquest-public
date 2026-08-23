@@ -35,7 +35,7 @@ import { foldFacts, isProfileFact, unionFacts } from './facts.js';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../net/guestId.js';
 
 
-import { chooseAvatarId } from './heroAvatars.js';
+import { avatarForProfile, chooseAvatarId } from './heroAvatars.js';
 export const PROFILES_STORAGE_KEY = 'gq-profiles';
 export const JOURNAL_KEY_PREFIX = 'gq-journal:';
 export const LEGACY_GUEST_ID_KEY = GUEST_ID_STORAGE_KEY;
@@ -351,7 +351,16 @@ export function createProfileStore(options = {}) {
     const profile = freshProfile(id, displayName, nowIso());
     // Chosen once, here, from what is free on this device -- see heroAvatars.js on why it is stored
     // rather than computed from the set every time it is drawn.
-    profile.avatar = chooseAvatarId(keyring.profiles.map((existing) => existing.avatar).filter(Boolean));
+    //
+    // AGAINST WHAT IS ON SCREEN, not against what is written down. A migrated profile predates the
+    // avatar field and has `avatar: null`, but it is DRAWN with the id-derived fallback -- so
+    // filtering the nulls away hid a legacy child's effective Fox and handed Fox to the sibling
+    // arriving next. Two children, one animal, and for the non-reader this feature exists for that
+    // is the only thing on the card telling their save from their brother's.
+    //
+    // avatarForProfile is the same law the cards render with, deliberately, rather than a second
+    // fallback implementation here that could disagree with the one on screen (GQ-007).
+    profile.avatar = chooseAvatarId(keyring.profiles.map((existing) => avatarForProfile(existing).id));
     keyring.profiles.push(profile);
     keyring.activeProfileId = id;
     persist();
