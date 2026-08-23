@@ -994,3 +994,38 @@ test('an ephemeral-only Beacon victory is written down as soon as a durable gues
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── which sword each player is holding rides the snapshot ───────────────────────────────────────
+//
+// net/remotes.js drew every other player with the shipping sword because the wire had no way to say
+// otherwise -- character/weaponLoadout.js named that absence as the reason. The simulation already
+// asks `weaponIdFor` once per player per tick, to resolve swing damage; publishing the same answer
+// costs nothing and is what lets a sibling see the Blade a child just earned.
+
+test('a snapshot says which weapon each player is holding', () => {
+  const equipped = new Map();
+  const sim = createSimulation({ weaponIdFor: (playerId) => equipped.get(playerId) ?? null });
+  const a = sim.addPlayer('a');
+  const b = sim.addPlayer('b');
+  equipped.set(a.id, 'wildwood_blade');
+  equipped.set(b.id, 'starter_sword');
+  sim.step(0.05, 1050);
+
+  const decoded = decode(encode(snapshotMessage(sim.tick, sim.snapshot())));
+  const byId = Object.fromEntries(decoded.players.map((p) => [p.id, p.weaponId]));
+  assert.equal(byId[a.id], 'wildwood_blade');
+  assert.equal(byId[b.id], 'starter_sword');
+});
+
+test('an unwired simulation says nothing about weapons rather than guessing a starter sword', () => {
+  // The default `weaponIdFor` is "nothing to say", and that has to survive to the wire as ABSENCE.
+  // Publishing `starter_sword` here instead would be the simulation inventing an equipment fact it
+  // explicitly does not own -- and a client cannot then tell a real starter sword from a server
+  // that never had an opinion.
+  const sim = createSimulation();
+  sim.addPlayer('kid');
+  sim.step(0.05, 1050);
+
+  const decoded = decode(encode(snapshotMessage(sim.tick, sim.snapshot())));
+  assert.equal('weaponId' in decoded.players[0], false);
+});

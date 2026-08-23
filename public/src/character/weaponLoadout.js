@@ -71,25 +71,44 @@ export function weaponVisibility({ equippedItemId, candidateMounted = false } = 
 }
 
 /**
- * Force a CLONED hero to the shipping sword.
+ * The two sword anchors on a CLONED hero, looked up once.
  *
  * net/remotes.js builds every other player's avatar by SkeletonUtils-cloning the LOCAL hero, and a
- * clone inherits whatever was mounted and whatever was visible at the instant it was taken. Without
- * this, a sibling who joined AFTER you equipped the Blade would appear holding YOUR blade, while one
- * who joined before would be holding the Ironwood -- the same player rendered two different ways
- * depending on join order. The wire carries no per-player equipment (net/protocol.js), so there is no
- * honest way to draw someone else's actual weapon yet; every remote getting the same shipping sword
- * is the one answer that is at least consistent and never a lie about a specific item.
+ * clone has entirely new object identities -- so the anchors are found by NAME, the same way
+ * rigidAnchorName's own comment describes. Returned rather than acted on, and cached by the caller,
+ * because the alternative is walking a whole rig per remote per frame to set two booleans.
  *
- * Works on names rather than on the mount records attach* returned, because a clone has entirely new
- * object identities -- see rigidAnchorName's own comment.
+ * `candidate` is null on the ordinary clone: the Wildwood GLB is fetched lazily, only when the hero
+ * it was cloned from had already equipped the Blade. A caller that can mount one may do so and
+ * replace the field; a caller that cannot gets the honest fallback from showWeaponOnClone below.
  *
  * Takes any object with getObjectByName, so a plain fake exercises it in a unit test.
  */
-export function forceShippingWeaponOnClone(clonedRoot) {
-  const shipping = clonedRoot.getObjectByName(rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME));
-  const candidate = clonedRoot.getObjectByName(rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME));
-  if (shipping) shipping.visible = true;
-  if (candidate) candidate.visible = false;
-  return { shipping: shipping !== null && shipping !== undefined, candidate: candidate !== null && candidate !== undefined };
+export function cloneWeaponAnchors(clonedRoot) {
+  return {
+    shipping: clonedRoot.getObjectByName(rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)) ?? null,
+    candidate: clonedRoot.getObjectByName(rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)) ?? null,
+  };
+}
+
+/**
+ * Draw a cloned hero holding `equippedItemId`, by the same rule the local hero is drawn by.
+ *
+ * THIS REPLACED forceShippingWeaponOnClone, whose comment said exactly why it existed: "The wire
+ * carries no per-player equipment, so there is no honest way to draw someone else's actual weapon
+ * yet; every remote getting the same shipping sword is the one answer that is at least consistent
+ * and never a lie about a specific item." That was right, and it stopped being right when the wire
+ * grew `players[].weaponId`. The old function is gone rather than kept beside this one: a superseded
+ * rule left in place reads as a live alternative, and this repo has paid for that before.
+ *
+ * The invariant it protected is unchanged and is weaponVisibility's, not a second copy of it:
+ * EXACTLY ONE sword, never two out of the same fist, never an empty hand. An unmounted candidate
+ * still resolves to the shipping sword -- so a sibling holding a Blade this client has no mesh for
+ * keeps the sword he was already holding rather than losing one.
+ */
+export function showWeaponOnClone(anchors, equippedItemId) {
+  const visible = weaponVisibility({ equippedItemId, candidateMounted: anchors.candidate !== null });
+  if (anchors.shipping) anchors.shipping.visible = visible.shipping;
+  if (anchors.candidate) anchors.candidate.visible = visible.candidate;
+  return visible;
 }

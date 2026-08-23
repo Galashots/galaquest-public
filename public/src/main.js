@@ -1260,6 +1260,40 @@ async function bootstrap() {
     if (wildwoodBladeMount) wildwoodBladeMount.anchor.visible = visible.candidate;
   }
 
+  /**
+   * Mount the Wildwood Blade on a REMOTE hero's clone, for net/remotes.js.
+   *
+   * The local hero's mount above is lazy on purpose -- the GLB is fetched only when this child
+   * equips the Blade -- which means the ordinary situation at the moment a sibling earns one is that
+   * THIS client has never had any reason to load it. Without this the wire would say "Blade" and
+   * every other screen would still draw an Ironwood: the defect with an extra step.
+   *
+   * `loadGLB` caches by URL, so a dozen siblings and this hero cost one download between them. The
+   * gltf.scene itself is cloned per mount: an Object3D has one parent, and attaching the cached one
+   * to a second hero would silently take it off the first.
+   *
+   * `wildwoodAssetMissing` is SHARED with the local hero's mount deliberately. It is one fact about
+   * one file, and two flags for it would be two answers to "is this asset here" -- one of which
+   * would keep warning after the other had given up.
+   */
+  async function mountWildwoodOnRemote(clonedRoot, meshId) {
+    if (meshId !== WILDWOOD_BLADE_CANDIDATE_ID || wildwoodAssetMissing) return null;
+    const gltf = await loadGLB(WILDWOOD_BLADE_CANDIDATE_URL);
+    if (gltf.userData?.loadError) {
+      if (!wildwoodAssetMissing) {
+        wildwoodAssetMissing = true;
+        console.warn(
+          `[progression] ${WILDWOOD_BLADE_CANDIDATE_URL} is missing -- a sibling holding the Blade `
+          + 'is drawn with the Ironwood sword until the asset lands.',
+        );
+      }
+      return null;
+    }
+    // The anchor only; net/remotes.js decides visibility from the same rule the local hero uses, and
+    // nothing else is allowed to make a sword appear.
+    return attachWildwoodBladeCandidate(clonedRoot, gltf.scene.clone(true)).anchor;
+  }
+
   function ensureLanternMounted(shouldBeUnlocked) {
     if (!shouldBeUnlocked || lanternMounted || lanternMountInFlight || !runtime.hero) return;
     lanternMountInFlight = true;
@@ -2401,10 +2435,20 @@ async function bootstrap() {
       // mixer plays every reaction in slow motion by the ratio -- the defect documented at length
       // on the LOCAL hero further down, and the single easiest thing to reintroduce here by
       // passing one number for two jobs.
-      remotes?.update(net.sampleRemotes(), {
+      //
+      // The weapons come off the SAMPLE, not off a snapshot read separately: net/interpolation.js
+      // carries each player's weaponId through with their position, so the sword changes hands on
+      // the frame the hand it is in arrives rather than an interpolation delay ahead of it.
+      const sampledRemotes = net.sampleRemotes();
+      const remoteWeapons = {};
+      for (const [id, sample] of sampledRemotes) {
+        if (typeof sample.weaponId === 'string') remoteWeapons[id] = sample.weaponId;
+      }
+      remotes?.update(sampledRemotes, {
         deltaSeconds,
         reactionDeltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
         heroes: netStatus === 'online' && serverEncounter?.heroes ? serverEncounter.heroes : {},
+        weapons: remoteWeapons,
       });
       // Read the mode from the speed the locomotion controller is given, not from the run flag, so
       // the status line cannot disagree with the clip actually playing.
@@ -3566,7 +3610,7 @@ async function bootstrap() {
   reactions = createReactionAnimator(hero.root, hero.animations);
   // Remote heroes clone this same loaded asset, so the pool cannot exist before it has arrived. Until
   // then sampleRemotes() is simply never drawn -- snapshots still buffer, so nobody is missed.
-  remotes = createRemotePlayers(scene, hero);
+  remotes = createRemotePlayers(scene, hero, { mountWeapon: mountWildwoodOnRemote });
   status.dataset.fault = hero.failed ? 'true' : 'false';
   status.textContent = hero.failed ? 'hero load failed — placeholder shown' : 'hero standing';
 

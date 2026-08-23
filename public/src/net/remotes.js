@@ -34,7 +34,9 @@
 
 import { clone as cloneSkinned } from '../../vendor/utils/SkeletonUtils.js';
 import { CHARACTER, setLayer } from '../render/layers.js';
-import { forceShippingWeaponOnClone } from '../character/weaponLoadout.js';
+import {
+  cloneWeaponAnchors, showWeaponOnClone, weaponMeshIdFor, WILDWOOD_BLADE_CANDIDATE_ID,
+} from '../character/weaponLoadout.js';
 import { createLocomotionController } from '../character/locomotion.js';
 import { locomotionModeForSpeed } from '../character/speed.js';
 import { createReactionAnimator } from '../character/reactClips.js';
@@ -44,7 +46,13 @@ import { createClipSwingAnimator } from '../character/swingClip.js';
 // reading a presenter is not.
 import { SWING_SECONDS } from '../combat/encounter.js';
 
-export function createRemotePlayers(scene, template) {
+/**
+ * @param mountWeapon  optional `(clonedRoot, meshId) -> Promise<anchor|null>`. Supplied by main.js,
+ *   which owns the loader and the solved transforms; this module holds no handle on either and does
+ *   not want one. Absent (offline, tests, the studio) simply means a sibling keeps whatever sword
+ *   their clone was born with, which is the same honest fallback as an asset that never lands.
+ */
+export function createRemotePlayers(scene, template, { mountWeapon = null } = {}) {
   // template: { root, animations } — the loaded hero. Cloned per remote via SkeletonUtils, because a
   // plain .clone() copies the mesh but leaves it bound to the ORIGINAL bones: every remote would then
   // deform to the local hero's pose. Verified rather than assumed -- see the vendoring commit.
@@ -58,13 +66,15 @@ export function createRemotePlayers(scene, template) {
     root.rotation.set(0, sample.heading, 0);
     root.scale.copy(template.root.scale);
     setLayer(root, CHARACTER);
-    // GP1-C4: a clone inherits whatever sword the LOCAL hero happened to be holding when it was
-    // taken, so without this a sibling who joined after you equipped the Blade would appear carrying
-    // YOUR blade while one who joined before carried the Ironwood -- the same player drawn two ways
-    // depending on join order. The wire has no per-player equipment field, so every remote gets the
-    // shipping sword: consistent, and never a lie about a specific item. See
-    // character/weaponLoadout.js's own comment.
-    forceShippingWeaponOnClone(root);
+    // GP1-C4 was: a clone inherits whatever sword the LOCAL hero happened to be holding when it was
+    // taken, so a sibling who joined after you equipped the Blade appeared carrying YOUR blade while
+    // one who joined before carried the Ironwood -- the same player drawn two ways depending on join
+    // order. The answer then was to force every remote to the shipping sword, because the wire had
+    // no per-player equipment field and consistency was the best available honesty.
+    //
+    // The wire has one now (`players[].weaponId`), so the same bug is closed by KNOWING rather than
+    // by flattening -- and two children who really are holding different swords are allowed to look
+    // different, which is most of the point of earning one. Looked up once here, set every frame.
     root.traverse((object) => {
       if (object.isMesh) {
         object.castShadow = false;
@@ -79,6 +89,8 @@ export function createRemotePlayers(scene, template) {
       id,
       root,
       locomotion: createLocomotionController(root, template.animations),
+      anchors: cloneWeaponAnchors(root),
+      weaponMountInFlight: false,
       // Both degrade per-clip and return null when the rig ships nothing to play, the same contract
       // main.js gets: a remote on a rig with no death clip is still positioned, still walks, and
       // simply cannot be shown falling over.
@@ -107,6 +119,48 @@ export function createRemotePlayers(scene, template) {
     return true;
   }
 
+  // Mount the mesh this sibling's weapon needs, if this clone has not got it and somebody can
+  // fetch it. The Wildwood GLB is loaded lazily -- only when the hero this clone was taken from had
+  // equipped it -- so the common case at the moment a child earns the Blade is that their SIBLING'S
+  // client has never had a reason to load it. Without this the wire would say "Blade" and every
+  // other screen would still draw an Ironwood, which is the defect with an extra step.
+  //
+  // Fire-and-forget, once per remote: `mountWeapon` resolves null for an asset that is missing or
+  // failed, and the in-flight flag is cleared without setting the anchor, so the visibility rule
+  // below keeps returning the shipping sword. It does NOT retry -- a mount that failed once will
+  // fail again every frame, and a hero holding the wrong sword is a small thing next to a fetch
+  // loop at frame rate. loadGLB caches by URL, so a dozen siblings cost one download.
+  function ensureRemoteWeapon(remote, weaponId) {
+    if (mountWeapon
+      && weaponMeshIdFor(weaponId) === WILDWOOD_BLADE_CANDIDATE_ID
+      && remote.anchors.candidate === null
+      && !remote.weaponMountInFlight) {
+      remote.weaponMountInFlight = true;
+      Promise.resolve(mountWeapon(remote.root, WILDWOOD_BLADE_CANDIDATE_ID))
+        .then((anchor) => {
+          // Mounted hidden; showWeaponOnClone is the only thing that ever makes a sword visible, so
+          // an arriving asset cannot show itself before the rule agrees. Same discipline main.js
+          // applies to the local hero's own lazy mount.
+          if (anchor) {
+            anchor.visible = false;
+            remote.anchors.candidate = anchor;
+          }
+        })
+        // WARNED, NOT SWALLOWED. The first version of this was `.catch(() => {})`, in code whose
+        // entire purpose is to make something visible -- and it duly hid the first real failure:
+        // the browser check reported a sibling with no blade and nothing said why. A mount that
+        // throws is a bug in the attach, not weather. Once per remote, because it will not
+        // succeed on a later frame either.
+        .catch((error) => {
+          console.warn(`[remotes] could not mount ${WILDWOOD_BLADE_CANDIDATE_ID} on ${remote.id}:`, error);
+        })
+        // Cleared in both directions, and only after the anchor is stored: clearing it first would
+        // let the next frame start a second fetch for a mount that had already succeeded.
+        .finally(() => { remote.weaponMountInFlight = false; });
+    }
+    showWeaponOnClone(remote.anchors, weaponId);
+  }
+
   /**
    * @param sampled  Map<id, {x, z, heading, speed}> from the interpolator
    * @param deltaSeconds  the CLAMPED frame delta, for locomotion and the swing
@@ -114,6 +168,9 @@ export function createRemotePlayers(scene, template) {
    * @param heroes  encounter.heroes from the newest snapshot, keyed by the same player id the
    *                samples are. Absent or missing entries are fine: a player can be in the players
    *                list before the fight knows about them, and offline there is no encounter at all.
+   * @param weapons  equipped item id per player id, from the same snapshot. Missing means "we have
+   *                not been told", which resolves to the shipping sword -- the same answer
+   *                weaponMeshIdFor gives an unknown id, rather than a second rule about absence.
    *
    * THE TWO DELTAS ARE SEPARATE ARGUMENTS ON PURPOSE. main.js clamps its frame delta so a hitch
    * cannot teleport a hero; an animation mixer has no such hazard, because advancing a clip further
@@ -125,11 +182,16 @@ export function createRemotePlayers(scene, template) {
    * single shared `deltaSeconds`. There is deliberately no default: a caller has to say which is
    * which, because the wrong one is silent.
    */
-  function update(sampled, { deltaSeconds, reactionDeltaSeconds, heroes = {} } = {}) {
+  function update(sampled, { deltaSeconds, reactionDeltaSeconds, heroes = {}, weapons = {} } = {}) {
     for (const [id, sample] of sampled) {
       const remote = remotes.get(id) ?? spawn(id, sample);
       remote.root.position.set(sample.x, 0, sample.z);
       remote.root.rotation.y = sample.heading;
+
+      // WHICH SWORD IS IN THEIR HAND. Every frame rather than on change, because it is two boolean
+      // writes against cached anchors -- there is no state to keep in step and therefore no way for
+      // it to drift out of step, which is worth more here than the two writes cost.
+      ensureRemoteWeapon(remote, weapons[id] ?? null);
 
       const hero = heroes[id] ?? null;
       const downSeconds = hero?.downSeconds ?? -1;

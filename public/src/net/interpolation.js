@@ -36,7 +36,7 @@ export function createSnapshotBuffer(options = {}) {
   const delayMs = options.delayMs ?? INTERPOLATION_DELAY_MS;
   const bufferMs = options.bufferMs ?? BUFFER_MS;
   const decayMs = options.decayMs ?? STARVATION_DECAY_MS;
-  // { receivedAtMs, players: Map<id, {x, z, heading, speed}> }
+  // { receivedAtMs, players: Map<id, {x, z, heading, speed, weaponId}> }
   const snapshots = [];
 
   function record(snapshot, receivedAtMs) {
@@ -44,6 +44,11 @@ export function createSnapshotBuffer(options = {}) {
     for (const player of snapshot.players) {
       players.set(player.id, {
         x: player.x, z: player.z, heading: player.heading, speed: player.speed,
+        // Carried, never blended. Everything else here is a continuous quantity this buffer exists
+        // to smooth; a weapon id is a discrete fact that happens to travel with them, and there is
+        // no value between two swords. Undefined when the server did not say -- "we were not told"
+        // and "they hold nothing" are different, and net/remotes.js resolves only the first.
+        weaponId: player.weaponId,
       });
     }
     snapshots.push({ receivedAtMs, tick: snapshot.tick, players });
@@ -55,7 +60,7 @@ export function createSnapshotBuffer(options = {}) {
 
   /**
    * The set of remote players as they should be drawn right now.
-   * Returns Map<id, { x, z, heading, speed, interpolated, starvedMs }>.
+   * Returns Map<id, { x, z, heading, speed, weaponId, interpolated, starvedMs }>.
    */
   function sample(nowMs) {
     if (snapshots.length === 0) return new Map();
@@ -93,6 +98,11 @@ export function createSnapshotBuffer(options = {}) {
           z: lerp(from.z, to.z, t),
           heading: lerpAngle(from.heading, to.heading, t),
           speed: lerp(from.speed, to.speed, t),
+          // `from`, not `to`. Every other field here describes the delayed moment being drawn, and
+          // the sword should describe it as well: taking the newer one would put a new blade in a
+          // hand that has not arrived yet, a whole interpolation delay before the swap it belongs
+          // to. It changes hands on the frame the body it is attached to gets there.
+          weaponId: from.weaponId,
           interpolated: true,
           starvedMs: 0,
         });
@@ -118,6 +128,9 @@ export function createSnapshotBuffer(options = {}) {
         z: player.z,
         heading: player.heading,
         speed: player.speed * decay,
+        // Held, not decayed: a starving connection is a reason to stop a remote sliding along, not
+        // a reason to take their sword off them.
+        weaponId: player.weaponId,
         interpolated: false,
         starvedMs,
       });

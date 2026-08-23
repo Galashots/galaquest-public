@@ -5,7 +5,9 @@
  * already up on the shared 5201); needs the isolated automation Chrome on 9224.
  * Never attach this to 9223: that is the owner's signed-in browser.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MIN_BODY_SEPARATION } from '../../public/src/combat/encounter.js';
@@ -15,12 +17,24 @@ import {
 } from './automation-timing.mjs';
 import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { openRewardStore } from '../../net/rewardStore.mjs';
+import { WILDWOOD_BLADE_ID } from '../../public/src/progression/items.js';
+import { rigidAnchorName } from '../../public/src/character/gear.js';
+import {
+  SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME, WILDWOOD_BLADE_CANDIDATE_ID,
+} from '../../public/src/character/weaponLoadout.js';
 
 const CHROME_PORT = 9224;
 // Two tabs against ONE server, and it must be a server nobody else is on: this harness's central
 // claim is that tab B converges on tab A's truth, which a third client from another run would
 // quietly invalidate. See owned-server.mjs.
-const server = await startOwnedServer();
+// Its own store under the OS temp dir, never data/rewards.db -- the real children's save must never
+// be touched by a harness (data/README.md). It exists so tab A can be seeded as a child who has
+// already earned and equipped the Wildwood Blade, which is the only way to ask what tab B DRAWS of
+// a sibling holding one.
+const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-two-clients-')), 'rewards.db');
+const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
+
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -162,6 +176,7 @@ const pageA = await pageFor(browser, targetA);
 const pageB = await pageFor(browser, targetB);
 const hostedHeadless = await pageA.eval("navigator.userAgent.includes('HeadlessChrome')");
 const consoleErrors = { a: [], b: [] };
+
 for (const [name, page] of [['a', pageA], ['b', pageB]]) {
   page.ws.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
@@ -195,6 +210,54 @@ for (const [name, page] of [['a', pageA], ['b', pageB]]) {
 }
 
 const bootA = await waitFor(pageA, 'Boolean(window.__galaQuestRuntime?.hero && window.__galaQuestRuntime.netState().status === "online")', 'tab A boots and joins');
+// ── make tab A a child who has earned the Wildwood Blade ────────────────────────────────────────
+//
+// LET THE APP MINT ITS OWN CHILD, THEN GRANT THE BLADE TO THAT CHILD. The first attempt here pinned
+// `gq-guest-id` before boot, the way drive-ranger and drive-hero-screen do -- and the wire came back
+// saying `starter_sword` for a guest whose store row plainly said `wildwood_blade`. The reason is
+// that identity moved: main.js joins with `profiles.activeProfileId()`, and the profile gate mints
+// that, so the pinned key is no longer who a tab is. Pinning it seeds a child the server never
+// hears about, and every claim after that is about the wrong one.
+//
+// So: boot, ask the tab who it turned out to be, grant the Blade to that id, and reload so the
+// server sees it on the next join. A reload is also the honest shape -- equipment is durable, and a
+// child coming back tomorrow is exactly the case this has to survive.
+if (bootA) {
+  const guestA = await pageA.eval('window.__galaQuestRuntime.guestId()');
+  check('tab A has a durable identity to grant a reward to',
+    typeof guestA === 'string' && guestA.length > 0, `guestId ${JSON.stringify(guestA)}`);
+  if (typeof guestA === 'string' && guestA.length > 0) {
+    // Written straight to the store, the way drive-hero-screen.mjs does and for the reason
+    // gameServer's grantOwnership header gives: there is deliberately no client message that grants
+    // ownership. Equipped as a seeded state rather than driven through the Hero screen -- that
+    // button is drive-hero-screen's subject and is proved there; the question here is what the
+    // OTHER tab draws.
+    const store = openRewardStore(REWARD_STORE_PATH);
+    store.apply({
+      guestId: guestA, type: 'gear-owned',
+      eventId: `own:${guestA}:${WILDWOOD_BLADE_ID}`, value: WILDWOOD_BLADE_ID,
+    });
+    store.apply({
+      guestId: guestA, type: 'weapon-equipped',
+      eventId: `equip:${guestA}:seed`, value: WILDWOOD_BLADE_ID, rev: Date.now(),
+    });
+    const equipped = store.equippedWeaponFor(guestA);
+    store.close();
+    check('tab A is now a child who has earned and equipped the Wildwood Blade',
+      equipped === WILDWOOD_BLADE_ID, `equippedWeaponFor -> ${JSON.stringify(equipped)}`);
+    // Reload so the server re-reads this child's equipment on join. Storage is NOT cleared: the
+    // profile has to survive, or the reload comes back as somebody else and the grant is orphaned.
+    await pageA.send('Page.reload');
+    await waitFor(pageA,
+      'Boolean(window.__galaQuestRuntime?.hero && window.__galaQuestRuntime.netState().status === "online")',
+      'tab A rejoins holding the Blade', 60_000);
+    check('tab A is the same child after the reload, not a fresh one',
+      (await pageA.eval('window.__galaQuestRuntime.guestId()')) === guestA,
+      `guestId ${JSON.stringify(await pageA.eval('window.__galaQuestRuntime.guestId()'))}`);
+  }
+}
+
+
 const bootB = await waitFor(pageB, 'Boolean(window.__galaQuestRuntime?.hero && window.__galaQuestRuntime.netState().status === "online")', 'tab B boots and joins');
 if (bootA && bootB) {
   // A background tab can receive snapshots but not run rAF to render its remote. Bring B forward:
@@ -211,6 +274,49 @@ if (bootA && bootB) {
 
   await pageB.send('Page.bringToFront');
   await waitFor(pageB, 'window.__galaQuestRuntime.netState().remoteCount === 1', 'tab B receives tab A as a remote');
+
+  // ── WHICH SWORD TAB B DRAWS IN TAB A'S HAND ───────────────────────────────────────────────────
+  //
+  // Tab A is a child who has earned the Wildwood Blade. Until `players[].weaponId` existed, every
+  // remote was forced to the shipping sword -- weaponLoadout.js's own comment named the missing wire
+  // field as the reason -- so a child who earned the Blade was still drawn holding an Ironwood on
+  // their sibling's screen, which is the one screen where being seen to have earned it matters.
+  //
+  // Read from the SCENE, not from the runtime's own opinion: the anchor's `visible` is what a
+  // renderer obeys. That also makes this the only proof that attachWildwoodBladeCandidate works on a
+  // SkeletonUtils CLONE at all -- it bakes bind-pose bone matrices out of the skeleton's own
+  // boneInverses, and a clone has its own skeleton. No unit test can reach that.
+  const remoteSwords = `(() => {
+    const r = window.__galaQuestRuntime;
+    const remote = r.netState().remotes[0] || null;
+    if (!remote) return { present: false };
+    const body = r.hero && r.hero.parent ? r.hero.parent.getObjectByName('remote-' + remote.id) : null;
+    if (!body) return { present: false };
+    const named = (name) => { const a = body.getObjectByName(name); return a ? a.visible === true : null; };
+    return {
+      present: true,
+      shipping: named(${JSON.stringify(rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME))}),
+      blade: named(${JSON.stringify(rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME))}),
+      // What the WIRE said, beside what the scene did. Without it a failure here is unattributable
+      // between "the server never told us" and "we were told and could not draw it", which are
+      // repairs in different files.
+      toldWeaponId: (r.net.sampleRemotes().get(remote.id) || {}).weaponId ?? null,
+    };
+  })()`;
+  // The mesh is fetched on demand: this client had no reason to load the Blade until it was told a
+  // sibling is holding one, so the first frames legitimately show the Ironwood. Polled rather than
+  // read once, and a timeout here is a real failure rather than a slow machine's fault -- the asset
+  // is local and the budget is generous.
+  const sawBlade = await waitFor(pageB,
+    `(${remoteSwords}).blade === true`, 'tab B mounts and shows the sibling\'s Blade', 15_000);
+  const swords = JSON.parse(await pageB.eval(`JSON.stringify(${remoteSwords})`));
+  check('tab B draws the sibling holding the Wildwood Blade they earned, not the starter sword',
+    sawBlade && swords.blade === true && swords.shipping === false, JSON.stringify(swords));
+  // EXACTLY ONE, never two out of the same fist and never an empty hand -- weaponVisibility's
+  // invariant, asked of a real cloned rig rather than of the pure function that decides it.
+  check('exactly one sword is visible on the sibling',
+    [swords.shipping, swords.blade].filter((v) => v === true).length === 1,
+    JSON.stringify(swords));
   const initialA = await state(pageA);
   const initialB = await state(pageB);
   check('tab B sees exactly one remote hero', initialB.net.remoteCount === 1,

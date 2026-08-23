@@ -5,6 +5,10 @@ import * as THREE from '../public/vendor/three.module.min.js';
 import { createRemotePlayers } from '../public/src/net/remotes.js';
 import { RESPAWN_SECONDS, SWING_SECONDS } from '../public/src/combat/encounter.js';
 import { DEATH_FALL_FRACTION } from '../public/src/character/reactClips.js';
+import { rigidAnchorName } from '../public/src/character/gear.js';
+import {
+  SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME, WILDWOOD_BLADE_CANDIDATE_ID,
+} from '../public/src/character/weaponLoadout.js';
 
 // WHAT A CHILD SEES OF THEIR SIBLING.
 //
@@ -38,12 +42,25 @@ function poseClip(name, seconds, from, to, node = 'hips') {
 // for by their real lowercase-substring names (locomotion: idle/walking/running, reactions:
 // hit/death, swing: sword_slash). Standing is 0, the fall runs to +1, the swing to -1, so no two
 // animators can be mistaken for each other.
-function heroTemplate({ deathSeconds = 2.97 } = {}) {
+function heroTemplate({ deathSeconds = 2.97, withBlade = false } = {}) {
   const root = new THREE.Object3D();
   root.name = 'hero-template';
   const hips = new THREE.Object3D();
   hips.name = 'hips';
   root.add(hips);
+  // The two sword anchors a real clone carries, under the names character/gear.js gives them. The
+  // candidate is present here because `withBlade` decides whether this template was taken from a
+  // hero who had already mounted it -- which is exactly the fork that matters: the Wildwood GLB is
+  // loaded lazily, only when the LOCAL hero equips it, so a clone taken before that has no blade to
+  // show however much the wire says the sibling is holding one.
+  const shipping = new THREE.Object3D();
+  shipping.name = rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME);
+  root.add(shipping);
+  if (withBlade) {
+    const blade = new THREE.Object3D();
+    blade.name = rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME);
+    root.add(blade);
+  }
   return {
     root,
     animations: [
@@ -344,4 +361,104 @@ test('dispose() takes every remote and its mixers with it', () => {
   remotes.dispose();
   assert.equal(remotes.count, 0);
   assert.equal(scene.children.length, 0);
+});
+
+// ── which sword a sibling is drawn holding ──────────────────────────────────────────────────────
+//
+// character/weaponLoadout.js's forceShippingWeaponOnClone said it plainly: "The wire carries no
+// per-player equipment, so there is no honest way to draw someone else's actual weapon yet; every
+// remote getting the same shipping sword is the one answer that is at least consistent and never a
+// lie about a specific item." That was right at the time and it is what these tests replace: the
+// wire now carries it, so the honest answer is available and the fallback is no longer the answer.
+//
+// The invariant weaponVisibility exists to protect holds for a sibling too: EXACTLY ONE sword, never
+// two growing out of the same fist and never an empty hand while an asset loads.
+
+const swordsVisible = (scene, id = 'sib') => {
+  const root = scene.getObjectByName(`remote-${id}`);
+  return [SHIPPING_SWORD_MESH_ID, WILDWOOD_BLADE_CANDIDATE_ID]
+    .map((meshId) => root.getObjectByName(rigidAnchorName(meshId, WEAPON_BONE_NAME)))
+    .filter((anchor) => anchor?.visible === true)
+    .map((anchor) => anchor.name);
+};
+
+const walking = (weaponId) => ({
+  deltaSeconds: 0.05,
+  reactionDeltaSeconds: 0.05,
+  heroes: { sib: { hp: 3, swingSeconds: -1, downSeconds: -1 } },
+  weapons: weaponId === undefined ? {} : { sib: weaponId },
+});
+
+test('a sibling holding the starter sword is drawn holding the starter sword', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
+  remotes.update(sampleOf(), walking('starter_sword'));
+  assert.deepEqual(swordsVisible(scene),
+    [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
+});
+
+test('a sibling who earned the Wildwood Blade is drawn holding it', () => {
+  // The whole point. A child equips the Blade, and the sibling standing next to them sees it.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
+  remotes.update(sampleOf(), walking('wildwood_blade'));
+  assert.deepEqual(swordsVisible(scene),
+    [rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)]);
+});
+
+test('exactly one sword is visible on a sibling, at every step of a swap', () => {
+  // Never two -- a second blade growing out of the same fist for even one frame is the ugliest
+  // possible outcome, and a clone starts life with whatever the local hero happened to have visible.
+  // Never zero either. Same invariant weaponVisibility protects for the local hero.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
+  for (const weaponId of [undefined, 'starter_sword', 'wildwood_blade', 'starter_sword', null]) {
+    remotes.update(sampleOf(), walking(weaponId));
+    assert.equal(swordsVisible(scene).length, 1,
+      `weapon ${JSON.stringify(weaponId)} left ${swordsVisible(scene).length} swords visible`);
+  }
+});
+
+test('a sibling with the Blade on a clone that never mounted one keeps the shipping sword', () => {
+  // The lazy-load fork, and the reason this cannot simply trust the wire. The Wildwood GLB is
+  // fetched only when the LOCAL hero equips it, so a clone taken from a hero who never did has no
+  // blade anchor at all. Drawing an empty hand, or nothing, would both be worse than the sword he
+  // is already holding -- and the fallback here is the same one weaponMeshIdFor gives an unknown id.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: false }));
+  remotes.update(sampleOf(), walking('wildwood_blade'));
+  assert.deepEqual(swordsVisible(scene),
+    [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
+});
+
+test('a sibling who swaps weapons mid-session is redrawn, not frozen at what they joined with', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
+  remotes.update(sampleOf(), walking('starter_sword'));
+  assert.deepEqual(swordsVisible(scene),
+    [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
+  remotes.update(sampleOf(), walking('wildwood_blade'));
+  assert.deepEqual(swordsVisible(scene),
+    [rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)]);
+});
+
+test('two siblings holding different swords are drawn differently', () => {
+  // The join-order bug forceShippingWeaponOnClone was written to prevent, now solved by knowing
+  // rather than by flattening: the same player must be drawn the same way on every screen, and two
+  // different players must be allowed to look different.
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withBlade: true }));
+  remotes.update(new Map([
+    ['sib', { x: 0, z: 0, heading: 0, speed: 0 }],
+    ['other', { x: 3, z: 0, heading: 0, speed: 0 }],
+  ]), {
+    deltaSeconds: 0.05,
+    reactionDeltaSeconds: 0.05,
+    heroes: {},
+    weapons: { sib: 'wildwood_blade', other: 'starter_sword' },
+  });
+  assert.deepEqual(swordsVisible(scene, 'sib'),
+    [rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME)]);
+  assert.deepEqual(swordsVisible(scene, 'other'),
+    [rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME)]);
 });

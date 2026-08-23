@@ -238,3 +238,51 @@ test('the buffer trims without ever dropping what the interpolator still needs',
   }
   assert.ok(buffer.length <= 6, `buffer grew to ${buffer.length} despite a 300ms window`);
 });
+
+// ── weaponId is carried, never blended ──────────────────────────────────────────────────────────
+//
+// A weapon id is a discrete fact sitting in a buffer built to smooth continuous ones. It must
+// survive all three sample paths -- bracketed, just-joined, and starved -- and it must arrive as
+// itself rather than as anything a lerp could produce.
+
+test('an interpolated remote is carried with the weapon it was holding at the drawn moment', () => {
+  const buffer = createSnapshotBuffer({ delayMs: 100 });
+  buffer.record({ tick: 1, players: [{ id: 'a', x: 0, z: 0, heading: 0, speed: 1, weaponId: 'starter_sword' }] }, 1000);
+  buffer.record({ tick: 2, players: [{ id: 'a', x: 2, z: 0, heading: 0, speed: 1, weaponId: 'wildwood_blade' }] }, 1100);
+
+  // Drawn halfway between the two snapshots.
+  const mid = buffer.sample(1150).get('a');
+  assert.equal(mid.interpolated, true);
+  assert.ok(mid.x > 0 && mid.x < 2, 'precondition: this is the bracketed path');
+  // The OLDER one, deliberately: everything in a sample describes the same delayed moment, so the
+  // sword changes hands on the frame the hand it is in gets there, not 100ms ahead of it.
+  assert.equal(mid.weaponId, 'starter_sword');
+});
+
+test('a remote that has only just joined is carried with its weapon too', () => {
+  const buffer = createSnapshotBuffer({ delayMs: 100 });
+  buffer.record({ tick: 1, players: [{ id: 'a', x: 0, z: 0, heading: 0, speed: 0, weaponId: 'starter_sword' }] }, 1000);
+  buffer.record({ tick: 2, players: [
+    { id: 'a', x: 0, z: 0, heading: 0, speed: 0, weaponId: 'starter_sword' },
+    { id: 'b', x: 5, z: 5, heading: 0, speed: 0, weaponId: 'wildwood_blade' },
+  ] }, 1100);
+
+  assert.equal(buffer.sample(1150).get('b').weaponId, 'wildwood_blade');
+});
+
+test('a starved remote keeps its weapon while its speed bleeds away', () => {
+  const buffer = createSnapshotBuffer({ delayMs: 100, decayMs: 200 });
+  buffer.record({ tick: 1, players: [{ id: 'a', x: 0, z: 0, heading: 0, speed: 2, weaponId: 'wildwood_blade' }] }, 1000);
+
+  const starved = buffer.sample(1250).get('a');
+  assert.equal(starved.interpolated, false);
+  assert.ok(starved.speed < 2, 'precondition: this is the starved path');
+  assert.equal(starved.weaponId, 'wildwood_blade');
+});
+
+test('a player the server never sent a weapon for has none, rather than a guessed one', () => {
+  const buffer = createSnapshotBuffer({ delayMs: 100 });
+  buffer.record({ tick: 1, players: [{ id: 'a', x: 0, z: 0, heading: 0, speed: 0 }] }, 1000);
+  buffer.record({ tick: 2, players: [{ id: 'a', x: 1, z: 0, heading: 0, speed: 0 }] }, 1100);
+  assert.equal(buffer.sample(1150).get('a').weaponId, undefined);
+});
