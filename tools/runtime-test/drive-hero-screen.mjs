@@ -1172,6 +1172,33 @@ for (const [orientation, metrics] of [['portrait', PORTRAIT], ['landscape', LAND
     boardClosedBySameButton,
     `closed by its own button ${boardClosedBySameButton}; while open that point belonged to ${boardHitWhileOpen}`);
 
+  // THE SECONDARY ESCAPE HAS TO BE REACHABLE, not merely present in the DOM.
+  //
+  // Game Studio visual QA found the Owner's real close complaint here, and it is not the toggle:
+  // #hero-screen-header reserved `right: 4.25rem` -- one 52px button -- from back when #hero-button
+  // was alone in that corner. #village-board-button now sits at 76-128px from the right edge, so the
+  // header's right edge at 68px put #hero-screen-close directly underneath the map icon. A child
+  // hunting for the X found the map instead.
+  //
+  // Asserted by hit test rather than by existence, because existence is exactly what was already
+  // true while the control was unusable. Both panels, because the Board's header always reserved for
+  // two buttons and is the reference the Hero header now matches.
+  for (const [name, buttonSel, screenSel, closeSel] of [
+    ['Hero', '#hero-button', '#hero-screen', '#hero-screen-close'],
+    ['Village Board', '#village-board-button', '#village-board-screen', '#village-board-close'],
+  ]) {
+    if (!(await shownOf(screenSel))) await tapAt(buttonSel);
+    const at = await hitTest(closeSel);
+    const rect = await rectOf(closeSel);
+    check(`${orientation}: the ${name} X is visible and nothing is sitting on top of it`,
+      at === 'itself' && (rect?.width ?? 0) >= 44 && (rect?.height ?? 0) >= 44,
+      `the point on ${closeSel} belongs to ${at}; ${rect?.width ?? 0}x${rect?.height ?? 0}px`);
+    // And it still does its job from a real finger.
+    await tapAt(closeSel);
+    check(`${orientation}: tapping the ${name} X actually closes the panel`,
+      !(await shownOf(screenSel)), `still shown: ${await shownOf(screenSel)}`);
+  }
+
   const bothShut = !(await shownOf('#hero-screen')) && !(await shownOf('#village-board-screen'));
   check(`${orientation}: after all that, a child is back in the game with neither panel stuck open`,
     bothShut, `hero shut ${!(await shownOf('#hero-screen'))}, board shut ${!(await shownOf('#village-board-screen'))}`);

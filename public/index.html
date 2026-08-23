@@ -475,8 +475,18 @@
          this. */
       #hero-screen[data-shown="false"] { pointer-events: none; }
       #hero-screen[data-shown="false"] * { pointer-events: none; }
+      /* CLEARANCE FOR **BOTH** TOP-RIGHT BUTTONS, which is what that corner now holds.
+         This reserved `right: 4.25rem` -- 68px, exactly one 52px button plus its 0.75rem margin --
+         and was written when #hero-button was the only control up there. #village-board-button has
+         since joined it at `right: calc(0.75rem + 52px + 0.5rem)`, i.e. spanning 76px to 128px from
+         the right edge. The header's own right edge sat at 68px, so #hero-screen-close landed
+         underneath the map button and a child looking for the X found the map icon instead. That is
+         the Owner's real-iPhone report: HERO, map and sword visible, no way out.
+         #village-board-header already reserves for both buttons; this is the same arithmetic, and
+         the two now agree rather than one of them silently predating the second button. */
       #hero-screen-header {
-        position: absolute; top: 0.75rem; left: 0.75rem; right: 4.25rem;
+        position: absolute; top: 0.75rem; left: 0.75rem;
+        right: calc(0.75rem + 52px + 52px + 1rem);
         display: flex; align-items: center; justify-content: space-between;
         padding: 0.4rem 0.7rem; border-radius: 0.5rem;
         background: rgb(12 20 31 / 82%); color: #f2b33d;
