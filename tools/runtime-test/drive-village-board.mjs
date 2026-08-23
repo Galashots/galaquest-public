@@ -332,12 +332,6 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })),
 });
 
-/** Resolves after the page has actually PAINTED, not after a duration. Two frames, because one
- *  requestAnimationFrame can resolve inside the frame already in flight. */
-const afterAFrame = (tab) => tab.page.eval(
-  'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
-);
-
 /** How much further out than the caller's ring the HELD leg is allowed to latch. The held walk
  *  releases the stick on arrival and the hero coasts, so it aims wide on purpose and lets the
  *  pulsed leg place him. This is not a slack constant that has to be right -- the loop below
@@ -402,24 +396,26 @@ async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     try {
       // eslint-disable-next-line no-await-in-loop
       await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
-      // THE PULSE, OR ONE RENDERED FRAME, WHICHEVER IS LONGER.
+      // NOT frame-floored, and this is the second harness to reach that conclusion by measurement.
       //
-      // movementPulseMillis is capped at 300ms and floored at 70ms, which is right on a machine
-      // painting every 17ms and useless on one painting every 300-400ms: main.js samples input only
-      // from its frame loop, so a press that begins and ends between two frames transmits nothing at
-      // all. That is consequence 2 in in-page-driver.mjs's header, and it is why the last metre of
-      // this approach would not close -- as the hero got nearer the pulse got shorter, and below one
-      // frame he simply stopped moving. Hosted at 66cf253 the held walk brought him from 3.26m to
-      // 2.43m of a 2.4m interact radius and the pulsed leg could not find the last three
-      // centimetres.
+      // The reasoning for flooring it is sound: movementPulseMillis caps at 300ms, one hosted frame
+      // is 300-400ms, main.js samples input only from its frame loop, and a press that begins and
+      // ends between two frames transmits nothing. That is consequence 2 in in-page-driver.mjs's
+      // header and it is real.
       //
-      // Waiting on BOTH means the fast machine keeps its measured pulse and the slow one gets a
-      // press that spans a frame, with no constant to pick and nothing to go stale.
+      // The floor is still wrong here, because it trades one failure mode for the opposite one. A
+      // press guaranteed to span a frame moves the hero one frame's travel -- 0.4 to 0.8m at 4fps --
+      // so it cannot place him anywhere finer than that, and it overshoots and oscillates instead of
+      // converging. MEASURED ON THIS APPROACH, hosted: 3.26m with the old pulsed walk, 2.43m with
+      // the held walk and the plain pulse, 3.20m with the held walk and the floored pulse. The floor
+      // made it worse than the thing it was meant to fix. drive-village measured the same trade from
+      // the other side, going from 1.53m short to 2.38m PAST a 0.6m ring.
+      //
+      // What is actually true is in that file's comment: on a machine this slow the placement
+      // resolution is one frame of travel plus the release latency, and only an in-page latch that
+      // releases on the frame it arrives can do better. Pulsing cannot, whichever way it is tuned.
       // eslint-disable-next-line no-await-in-loop
-      await Promise.all([
-        sleep(movementPulseMillis(Math.max(0, distance - stopWithin))),
-        afterAFrame(tab),
-      ]);
+      await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
     } finally {
       // eslint-disable-next-line no-await-in-loop
       await touch(tab, 'touchEnd', []);
