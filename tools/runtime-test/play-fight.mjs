@@ -45,6 +45,9 @@ import {
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import {
+  readWatchSource, startWatch, stopWatchSource, waitForSample,
+} from './in-page-driver.mjs';
 // A node process importing a runtime module directly, with no DOM and no three.js shim. That is the
 // whole point of combat/encounter.js being pure, and this harness is the first thing to cash it in:
 // two checks below used to hardcode `wolf.hp < 3` and would have started failing the moment the
@@ -52,6 +55,7 @@ import { startOwnedServer } from './owned-server.mjs';
 // change was a number going up.
 import {
   MIN_BODY_SEPARATION,
+  HERO_MAX_HP,
   RESPAWN_SECONDS,
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
@@ -634,23 +638,55 @@ check('a wolf bite lands and the capture catches it while the hurt flash is stil
 // took one bite without attacking; three bites is a knockout at HERO_MAX_HP 3, so this needs no new
 // technique and no forced state -- just patience, which is also exactly how a real child gets
 // knocked out. Nothing here touches the rules: the wolf does it.
-const downState = await pollUntil((s) => s.hero.downSeconds >= 0, { intervalMs: 40, timeoutMs: 25000 });
-check('the hero can actually be knocked out by standing and taking bites',
-  downState.hero.downSeconds >= 0, `hp ${downState.hero.hp}, downSeconds ${downState.hero.downSeconds}`);
+// THE WHOLE KNOCKDOWN IS RECORDED, then judged -- because the thing being asserted is a state that
+// lasts RESPAWN_SECONDS (2s) and the reads that used to judge it cost two frames.
+//
+// The veil is event-driven: main.js raises it on `hero-down` and drops it on `hero-respawned`, so
+// it is up for the whole two seconds. Judging that with a point read meant detecting the knockdown
+// late (measured: first seen at downSeconds 1.104, because the poll that found it was itself
+// frame-blocked) and then spending another ~308ms round trip on heroDownShown() -- arriving at
+// ~1.7s of a 2.0s window, and sometimes after it. That is why this check failed in portrait and
+// passed in landscape in the SAME run: landscape happened to catch the knockdown at 0.05s.
+//
+// Recording is also a stronger claim than the one it replaces. "The veil was up at one instant"
+// becomes "the veil was up on EVERY frame the hero was down, and down on the frame he stood up",
+// which is what the promise actually is.
+await page.eval(startWatch('knockdown', `({
+  downSeconds: window.__galaQuestRuntime.encounterState().hero.downSeconds,
+  hp: window.__galaQuestRuntime.encounterState().hero.hp,
+  veil: window.__galaQuestRuntime.heroDownShown(),
+})`));
+const knockedOut = await waitForSample(page, 'knockdown', (sample) => sample.downSeconds >= 0,
+  { intervalMs: 40, timeoutMs: 25000 });
 await shot('hero-down');
-const downShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
-check('going down puts the WHOLE SCREEN into the knocked-out state, not just a banner that fades',
-  downShown === true, `heroDownShown() ${JSON.stringify(downShown)}`);
+const downFrames = knockedOut.samples.filter((sample) => sample.downSeconds >= 0);
+check('the hero can actually be knocked out by standing and taking bites',
+  downFrames.length > 0, `${knockedOut.frames} frames recorded, `
+    + `${downFrames.length} of them down; lowest hp `
+    + `${knockedOut.samples.reduce((low, sample) => Math.min(low, sample.hp), HERO_MAX_HP)}`);
 
 // And the other half of the promise: it has to end, visibly, on its own. A veil that outlived the
 // rules would be worse than no veil -- the child would be looking at a knocked-out screen while
 // holding a hero who can already swing.
-const backUp = await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000 });
-check('the hero gets back up on his own', backUp.hero.downSeconds < 0,
-  `downSeconds ${backUp.hero.downSeconds}`);
-const stillShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+const stoodUp = await waitForSample(page, 'knockdown',
+  (sample) => sample.downSeconds < 0 && sample.hp > 0,
+  { intervalMs: 40, timeoutMs: 8000 });
+await page.eval(stopWatchSource('knockdown'));
+const episode = stoodUp.samples;
+const firstDown = episode.findIndex((sample) => sample.downSeconds >= 0);
+const veilOffWhileDown = episode.filter((sample) => sample.downSeconds >= 0 && sample.veil !== true);
+check('going down puts the WHOLE SCREEN into the knocked-out state, not just a banner that fades',
+  firstDown >= 0 && veilOffWhileDown.length === 0,
+  `${episode.filter((sample) => sample.downSeconds >= 0).length} down frame(s), `
+    + `${veilOffWhileDown.length} of them with the veil already gone`);
+const backUpAt = episode.findIndex((sample, index) => index > firstDown && sample.downSeconds < 0);
+check('the hero gets back up on his own', firstDown >= 0 && backUpAt > firstDown,
+  `down at frame ${firstDown}, up at frame ${backUpAt} of ${episode.length}`);
+const veilAfterStanding = episode.slice(backUpAt).filter((sample) => sample.veil === true);
 check('and the knocked-out state clears when he does, rather than outliving the rules',
-  stillShown === false, `heroDownShown() ${JSON.stringify(stillShown)} after standing up`);
+  backUpAt > 0 && veilAfterStanding.length === 0,
+  `${episode.length - backUpAt} frame(s) after standing up, `
+    + `${veilAfterStanding.length} of them still veiled`);
 
 // Prove the control works before blaming the rules: one tap must start a swing.
 //
@@ -664,11 +700,26 @@ check('and the knocked-out state clears when he does, rather than outliving the 
 // starting, the wait was just shorter than the trip. Polling closes that gap without loosening the
 // assertion itself: it is still exactly `swingSeconds >= 0`, just checked against a state that has
 // had a fair chance to reflect the tap.
+// RECORDED PER FRAME, not polled. The 500ms budget this replaces was itself a fix for a fixed
+// sleep(50), and it was right about the cause -- the tap has to cross the wire and come back -- but
+// it sized the answer on a machine where a frame is 17ms. The full latency is one frame to sample
+// the button, ~66ms on the wire, and one more frame to publish the result. At 60fps that is 100ms
+// and 500 is generous; at 3fps it is about 730ms and 500 cannot be met, which is why this check
+// failed hosted and locally while the very next one -- "tapping ATTACK damages the wolf" -- passed
+// against the same tap. The assertion is unchanged and still exactly `swingSeconds >= 0`; what
+// changed is that a recorder inside the page holds every frame, so a slow read delays the answer
+// instead of missing the event. The window is two whole swings, taken from the rules rather than
+// from a stopwatch: a swing that has not begun within that has not begun.
+await page.eval(startWatch('swing-start', '({ swingSeconds: window.__galaQuestRuntime.encounterState().hero.swingSeconds })'));
 await touch('touchStart', [{ x: attackX, y: attackY }]);
-const mid = await pollUntil((s) => s.hero.swingSeconds >= 0, { timeoutMs: 500 });
+const swingStart = await waitForSample(page, 'swing-start', (sample) => sample.swingSeconds >= 0,
+  { timeoutMs: SWING_SECONDS * 2 * 1000 });
 await touch('touchEnd', []);
-check('tapping ATTACK starts a swing', mid.hero.swingSeconds >= 0,
-  `swingSeconds ${mid.hero.swingSeconds}`);
+await page.eval(stopWatchSource('swing-start'));
+const startedSwinging = swingStart.samples.filter((sample) => sample.swingSeconds >= 0);
+check('tapping ATTACK starts a swing', startedSwinging.length > 0,
+  `${swingStart.frames} frames recorded, best swingSeconds `
+    + `${swingStart.samples.reduce((best, sample) => Math.max(best, sample.swingSeconds), -1)}`);
 
 // The hero swings with a procedural arc, because the rig ships no attack clip. From the chase camera
 // that happens behind his back and cannot be judged, so orbit round to the front and shoot the swing
@@ -700,59 +751,99 @@ async function orbitToFront() {
 // only genuinely safe window is after the wolf is dead: nothing can bite, and no walking happens
 // afterwards, so the orbit cannot break walkToward()'s assumption that the camera is at heading 0.
 
-// Swing until the wolf is down or we run out of patience.
+// SWING ON THE RULES' OWN CLOCK, AND LET A PER-FRAME RECORDER SAY WHAT HAPPENED.
+//
+// What this replaces polled live state twice per iteration -- once for canAttack, once for the
+// wolf's reaction -- and measured 7.5 SECONDS between swings against a rule that allows one every
+// SWING_SECONDS (1.5s, with ATTACK_COOLDOWN_SECONDS at 0). That gap is the whole failure, and the
+// timeline makes the mechanism plain. Design ruling 5 resets the wolf to full health whenever the
+// party wipes, and a solo hero wipes every time he goes down. Recorded here: the hero survives
+// about nine seconds of biting, lands roughly ONE hit per life at a 7.5s cadence, and every
+// knockdown healed the wolf back to 3hp -- four times in one run. The harness reported "the wolf
+// can actually be killed: FAIL" against a fight that is winnable in three swings and 4.5 seconds.
+// Nothing was wrong with the game; the loop was simply slower than the rules it was testing.
+//
+// The dead time was observation. On a browser painting at 3-10fps a Runtime.evaluate waits on the
+// main thread, so `intervalMs: 20` really samples every ~300ms -- and the state it was waiting for,
+// WOLF_HIT_FLASH_SECONDS, lives 0.18s. It was polling for something narrower than the gap between
+// its own samples, then spending the rest of a 916ms budget failing to see it.
+//
+// So observation moves into the page (in-page-driver.mjs) where it costs nothing and cannot be too
+// slow, and the taps go out on a clock derived from the rules instead of from a round trip. The
+// cadence is SWING_SECONDS plus ONE MEASURED FRAME of this machine's own pace: a tap landing one
+// frame after the swing ends is accepted, and a tap that lands early is refused harmlessly. Taps go
+// out in bursts, with the recorder read between bursts rather than between taps, so the read cost
+// stays out of the cadence entirely.
+const FIGHT_SAMPLE = `(() => {
+  const runtime = window.__galaQuestRuntime;
+  const published = runtime.encounterState();
+  return {
+    t: Math.round(performance.now()),
+    heroHp: published.hero.hp,
+    downSeconds: published.hero.downSeconds,
+    swingSeconds: published.hero.swingSeconds,
+    wolfMode: published.wolf.mode,
+    wolfHp: published.wolf.hp,
+  };
+})()`;
+await page.eval(startWatch('fight', FIGHT_SAMPLE));
+
+// The page's own pace, measured rather than assumed -- the same posture drive-village.mjs uses for
+// its animation budget. A second of recording is plenty: at 3fps that is three samples, and at
+// 60fps it is sixty.
+await sleep(1000);
+const readFight = () => page.eval(readWatchSource('fight')).then(JSON.parse);
+const paced = await readFight();
+const gaps = paced.samples.slice(1).map((sample, index) => sample.t - paced.samples[index].t);
+const framePeriodMs = gaps.length ? gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 17;
+const tapEveryMs = Math.round(SWING_SECONDS * 1000 + framePeriodMs);
+console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEveryMs}ms`);
+
+// Four taps per burst is one hero life's worth at this cadence, so a burst that starts while he is
+// down loses only itself and the next one re-syncs. Ten bursts is the same 40 attempts this loop
+// has always allowed.
+const TAPS_PER_BURST = 4;
 let killed = false;
 let sawHit = false;
-for (let swing = 0; swing < 40 && !killed; swing += 1) {
-  // Wait for the hero to actually be free to swing again before re-tapping. The real ATTACK button
-  // is gated on exactly this condition -- main.js drives attack.setReady(canAttack(encounterState))
-  // -- so a child sees it grey out mid-swing and taps again within a couple hundred milliseconds of
-  // it re-lighting, not on a fixed schedule of its own. This loop used to re-tap on a timer shorter
-  // than SWING_SECONDS, landing mid the PREVIOUS swing, getting rejected by the server (a downed or
-  // still-swinging hero cannot attack), and burning that whole iteration's poll doing nothing --
-  // slower than any real player, and under real round-trip latency that was enough for the wolf's
-  // own bite cycle to win races this fight was never meant to lose. RESPAWN_SECONDS bounds the wait
-  // because the hero going down is the longest legitimate reason canAttack stays false.
-  const before = await pollUntil((s) => s.canAttack, { timeoutMs: (RESPAWN_SECONDS + 0.5) * 1000 });
-  // Re-close before each swing. The wolf backs off after a bite and the hero only turns while
-  // walking, so without this the pair drift out of the strike arc and the fight stalls.
-  const gap = Math.hypot(before.heroPos[0] - before.wolf.x, before.heroPos[1] - before.wolf.z);
-  if (gap > 1.5 && before.wolf.mode !== 'dying' && before.wolf.mode !== 'dead') {
-    await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 2500, { faceTarget: true });
-  } else if (before.wolf.mode !== 'dying' && before.wolf.mode !== 'dead') {
-    // The hero turns only while walking. Even inside reach, one short real-stick pulse keeps the
-    // strike arc aimed at a wolf that moved around the hero during its bite cycle.
-    await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 800, { faceTarget: true });
+let shotSwing = false;
+for (let burst = 0; burst < 10 && !killed; burst += 1) {
+  for (let tap = 0; tap < TAPS_PER_BURST; tap += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchStart', [{ x: attackX, y: attackY }]);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(60);
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchEnd', []);
+    if (!shotSwing) {
+      shotSwing = true;
+      // Mid-swing by construction: the clip runs SWING_SECONDS and this is the frame after the tap.
+      // eslint-disable-next-line no-await-in-loop
+      await shot('03-swing');
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(tapEveryMs);
   }
-  await touch('touchStart', [{ x: attackX, y: attackY }]);
-  await sleep(60);
-  await touch('touchEnd', []);
-  // Polled, not a fixed sleep(420): that used to be how long this loop waited before even checking,
-  // which is also why the old fight-04-defeated.png caught the wolf-defeated flash already faded --
-  // see WOLF_DEFEAT_FLASH_SECONDS (0.5s) in combat/feedback.js. This loop's own re-closing above is
-  // what makes it a reliable place to catch WOLF_HIT_FLASH_SECONDS (0.18s) too: a standalone one-shot
-  // swing attempt does not get a second try if the wolf has drifted out of the strike arc, and one
-  // did, silently eating an attack-cooldown window for nothing -- this loop already retries up to 40
-  // times for exactly that reason, so it captures the hit flash as a side effect of the first landed
-  // swing instead of duplicating the retry logic less robustly.
-  const now = await pollUntil(
-    (s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
-    // Derived from the rules, not a fixed 500ms. It WAS a fixed 500ms, chosen when contact happened
-    // at 0.18s of a 0.45s swing. When the swing became the 1.5s sword_slash clip and contact moved to
-    // 0.5167s, this window expired 17ms BEFORE the blow it exists to wait for could possibly land --
-    // so the loop never saw a hit, tapped again while the hero was still mid-swing, had the tap
-    // refused, and burned all 40 iterations. The harness reported "the wolf can actually be killed:
-    // FAIL" against a game in which the wolf dies in 4.4 seconds.
-    { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 },
-  );
-  if (now.wolf.mode === 'hit' && !sawHit) await shot('wolf-hit-flash'); // first landed hit only
-  if (now.wolf.mode === 'hit') sawHit = true;
-  if (swing === 0) await shot('03-swing');
-  killed = now.wolf.mode === 'dying' || now.wolf.mode === 'dead';
-  // Captured at first detection, while the killing blow's flash is still up, rather than after this
-  // loop exits -- the defeat flash is deliberately longer than the hit flash but still only 0.5s.
-  if (killed) await shot('04-defeated');
+  // eslint-disable-next-line no-await-in-loop
+  const log = await readFight();
+  sawHit = log.samples.some((sample) => sample.wolfMode === 'hit');
+  killed = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
 }
+const fight = await readFight();
+await page.eval(stopWatchSource('fight'));
+// The recorder is the evidence for both of these, so report what it actually saw. `dropped` is
+// printed because a truncated log that reads as complete is how a harness says "never happened"
+// about something it merely stopped watching.
+const lowestWolfHp = fight.samples.reduce((low, sample) => Math.min(low, sample.wolfHp), WOLF_MAX_HP);
+const knockdowns = fight.samples.filter((sample, index) =>
+  sample.downSeconds >= 0 && !(fight.samples[index - 1]?.downSeconds >= 0)).length;
+console.log(`  fight: ${fight.frames} frames, ${fight.dropped} dropped, wolf reached ${lowestWolfHp}hp, `
+  + `hero knocked down ${knockdowns}x`);
+// Best-effort, and only best-effort on a starved runner: WOLF_HIT_FLASH_SECONDS is 0.18s and a
+// screenshot round trip is longer than that below ~10fps. The CHECK above reads the recorder, which
+// cannot miss it; this is the picture, which can.
+if (sawHit) await shot('wolf-hit-flash');
+if (killed) await shot('04-defeated');
+
 const afterFight = await state();
 check('tapping ATTACK damages the wolf', afterFight.wolf.hp < WOLF_MAX_HP,
   `wolf on ${afterFight.wolf.hp}hp of ${WOLF_MAX_HP}`);

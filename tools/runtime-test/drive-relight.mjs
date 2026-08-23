@@ -30,6 +30,9 @@ import { headingToward, KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world
 import { SPAWNS, LANDMARKS } from '../../public/src/world/zones/village.js';
 import { KEEPER_LINE_QUEST, KEEPER_LINE_UNLOCKED } from '../../public/src/world/keeperSpeech.js';
 import { pollUntilDeadline } from './automation-timing.mjs';
+import {
+  metresOrUnknown, READ_WALK, startWalk, STOP_WALK,
+} from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 
@@ -229,82 +232,21 @@ async function setCameraDistance(page, distance) {
   await sleep(150);
 }
 
-// THE WALK IS HELD, AND THE DECISION TO STOP IS MADE INSIDE THE PAGE.
-//
-// What this replaces alternated a bounded key-down pulse with a 120ms settle and three CDP round
-// trips, re-aiming each time from what it read back. Measured on this machine, crossing the 6.44m
-// from spawn to Aldric took 7217ms of its 10000ms budget over 26 iterations -- 3105ms of key-down,
-// 3120ms of settle sleeps, and 129ms of actual CDP time. So even where round trips are effectively
-// free the loop finished with 28% of its budget to spare: a threshold nobody chose, one slow
-// machine away from red.
-//
-// The hosted runner is that machine. It has no GPU and paints at 3-5fps, and a Runtime.evaluate
-// there waits on the main thread -- a frame each, not 5ms each. The same three round trips turn a
-// ~277ms iteration into ~770ms, the duty cycle falls by roughly two thirds, and the hero covers
-// 3.1m of the 6.44m before the budget expires. It stops 3.3m from Aldric, outside
-// KEEPER_WAVE_RADIUS_METERS, so the keeper never waves and both line checks fail behind it. That
-// is the four-failure shape the matrix reported at c62dcad: two failures wearing four hats.
-//
-// Raising the budget would only re-decide the same number by drift on a different machine. So the
-// round trips leave the movement path instead. An in-page rAF loop re-aims the camera heading at
-// the target every frame from the runtime's own authoritative position and latches arrival there,
-// at frame resolution, which is what lets the key stay down for the whole walk. Wall clock becomes
-// distance over speed on any machine, and CDP latency now delays only the RELEASE -- late by at
-// most one poll, and since the walker is still aiming at the target when that poll lands, the
-// travel it buys is toward Aldric rather than past him.
-const startWalk = (targetX, targetZ, stopWithin) => `(async () => {
-  const { headingToward } = await import('/src/world/zoneLoader.js');
-  const runtime = window.__galaQuestRuntime;
-  const metresAway = (x, z) => Math.hypot(${targetX} - x, ${targetZ} - z);
-  const walk = {
-    frames: 0,
-    arrived: false,
-    arrivedFrame: null,
-    startMetres: null,
-    closestMetres: null,
-    metres: null,
-    stopped: false,
-  };
-  window.__gqWalk = walk;
-  const step = () => {
-    if (walk.stopped) return;
-    walk.frames += 1;
-    const self = runtime.netState().serverSelf;
-    // Steer by the position the SERVER holds, because that is the one it will snap the hero back
-    // to and the one the caller's check reads. But do not call the walk done until the rendered
-    // hero has caught up as well -- the caller asserts on both, so the latch waits for both.
-    const authority = self ? { x: self.x, z: self.z } : runtime.player.position;
-    const behind = Math.max(
-      metresAway(runtime.player.position.x, runtime.player.position.z),
-      metresAway(authority.x, authority.z),
-    );
-    if (walk.startMetres === null) walk.startMetres = behind;
-    walk.metres = behind;
-    if (walk.closestMetres === null || behind < walk.closestMetres) walk.closestMetres = behind;
-    if (!walk.arrived && behind <= ${stopWithin}) {
-      walk.arrived = true;
-      walk.arrivedFrame = walk.frames;
-    }
-    runtime.follow.setHeading(headingToward(authority.x, authority.z, ${targetX}, ${targetZ}));
-    requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-  return true;
-})()`;
-
-const readWalk = (page) => page.eval('JSON.stringify(window.__gqWalk)').then(JSON.parse);
-const metresOrUnknown = (value) => (Number.isFinite(value) ? `${value.toFixed(2)}m` : 'unknown');
-
+// The walk is held, and arrival is decided inside the page -- see in-page-driver.mjs for the
+// measurement that made that necessary. This harness's own numbers are the ones in that header:
+// 7217ms of a 10000ms budget locally to cross the 6.44m from spawn to Aldric, and 3.1m of it hosted
+// before the budget expired, which left the hero 3.3m away, outside KEEPER_WAVE_RADIUS_METERS, with
+// the keeper silent and both line checks failing behind the two walk checks.
 async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
-  await page.eval(startWalk(targetX, targetZ, stopWithin));
+  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin));
   await forwardKey(page, 'keyDown');
   let walk;
   try {
-    walk = await pollUntilDeadline(() => readWalk(page), (next) => next.arrived,
-      { intervalMs: 100, timeoutMs: maxMillis });
+    walk = await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
   } finally {
     await forwardKey(page, 'keyUp');
-    await page.eval('Boolean(window.__gqWalk) && (window.__gqWalk.stopped = true)');
+    await page.eval(STOP_WALK);
   }
   // Printed whether or not the walk arrived, because the interesting number on a failure is how
   // many frames the page actually painted: a walk that never arrives after 400 frames is a broken

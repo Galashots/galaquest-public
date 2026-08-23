@@ -8,9 +8,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { HARNESSES, SUITES } from '../tools/runtime-test/review-suites.mjs';
 
 const DIR = 'tools/runtime-test';
-// Not harnesses: the shared server module, the suite table, and the runner itself.
+// Not harnesses: the shared helper modules, the suite table, and the runner itself.
 const NOT_A_HARNESS = new Set([
   'automation-timing.mjs',
+  'in-page-driver.mjs',
   'owned-server.mjs',
   'review-suites.mjs',
   'run-review-suite.mjs',
