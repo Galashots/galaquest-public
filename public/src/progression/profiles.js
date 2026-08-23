@@ -306,14 +306,27 @@ export function createProfileStore(options = {}) {
       const minted = sanitizeProfileId(`p-${randomUUID()}`);
       if (minted) return minted;
     }
-    // No crypto: still needs an id that matches the wire pattern. Uniqueness here only has to hold
-    // within one device's keyring, which the explicit collision check below actually enforces.
+    // No crypto: still needs an id that matches the wire pattern. Uniqueness has to hold against the
+    // keyring AND against the tombstones, and the second half is not decoration -- this id is
+    // derived from `keyring.profiles.length` and a counter that restarts every session, so it
+    // repeats across reloads by construction. Delete a hero on a no-crypto device, reload, make a
+    // new one: without this it can be handed the dead hero's id, and the merge in persist() would
+    // then tombstone the child at birth. They would tap GO and get nothing, with no error anywhere.
+    //
+    // Found by re-reading this file after the tombstones landed, not by a failure -- the crypto path
+    // covers every real browser, so no harness would ever have walked into it.
+    const onDevice = readKeyring(storage);
+    const taken = new Set([
+      ...keyring.profiles.map((p) => p.id),
+      ...(onDevice.deleted ?? []),
+      ...deletedHere,
+    ]);
     let candidate = null;
     let attempt = 0;
     do {
       attempt += 1;
       candidate = sanitizeProfileId(`p-local-${keyring.profiles.length + attempt}-${mintCounter += 1}`);
-    } while (candidate && keyring.profiles.some((p) => p.id === candidate));
+    } while (candidate && taken.has(candidate));
     return candidate;
   }
 

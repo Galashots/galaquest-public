@@ -245,3 +245,36 @@ test('a corrupt tombstone list cannot hide every child on the device', () => {
   assert.ok(stored.profiles.some((profile) => profile.id === ada.id),
     'and Ada survives the round trip, not just the read');
 });
+
+// ── the no-crypto id path, which the tombstones made dangerous ───────────────────────────────────
+//
+// mintProfileId falls back to `p-local-<profiles.length + n>-<counter>` when crypto.randomUUID is
+// unavailable, and that counter restarts every session -- so the same id comes back after a reload
+// BY CONSTRUCTION. Once deletes leave tombstones on the device, a reused id means the merge deletes
+// the new child at birth: they tap GO and get nothing, with no error anywhere.
+//
+// Reachable only without crypto, which is why no harness would ever have found it -- every real
+// browser takes the UUID path. Found by re-reading the file after the tombstones landed.
+// `randomUUID: null` does NOT get you here -- `options.randomUUID ?? crypto.randomUUID` falls
+// through on null, so the first version of this helper took the UUID path and the test below passed
+// against the unfixed code. A generator that returns something the id sanitizer rejects is what
+// actually drives the fallback: mintProfileId tries it, gets nothing usable, and derives locally.
+function noCryptoTab(storage) {
+  return createProfileStore({ storage, randomUUID: () => '' });
+}
+
+test('a hero minted after a delete is not handed the dead hero\'s id', () => {
+  const device = deviceStorage();
+  const first = noCryptoTab(device);
+  const doomed = first.createProfile('Ada');
+  first.deleteProfile(doomed.id);
+
+  // A reload: fresh store over the same device, counter back to zero.
+  const afterReload = noCryptoTab(device);
+  const fresh = afterReload.createProfile('Bo');
+
+  assert.notEqual(fresh.id, doomed.id, 'the new child must not inherit a tombstoned id');
+  const stored = JSON.parse(device.getItem(PROFILES_STORAGE_KEY));
+  assert.deepEqual(stored.profiles.map((p) => p.displayName), ['Bo'],
+    'and Bo must actually be on the device, not deleted at birth by their own id');
+});
