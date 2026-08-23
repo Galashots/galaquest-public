@@ -479,7 +479,7 @@ a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a fra
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — A harness written in wall-clock time is driving something that advances in rendered frames.
-**Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
+**Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-23
 **Rule:** On a browser with no GPU the page paints at 2-4 fps and a `Runtime.evaluate` waits on the
 main thread, so a CDP read costs a FRAME, not a millisecond. Three consequences follow, and they are
 one mistake wearing three hats: a loop budgeted in milliseconds gets a fraction of its iterations; a
@@ -500,6 +500,16 @@ is safe at any rate; polling LIVE STATE is not.
   is the tell: a real desync has a direction. Bracket the second read between two of the first.
 - **A slack constant between two phases is a number picked against one machine.** A walk that holds
   for distance then pulses to place itself needs no such number if it simply loops until it arrives.
+- **CONSEQUENCE 2 IS NOT A HYPOTHESIS ANY MORE.** Hit 3. `in-page-driver.mjs`'s header listed "an
+  input pulse can span no rendered frame at all" as the thing
+  `tools/diagnostics/diagnose-movement.mjs` was written to discriminate. It is now a measured cause:
+  `movementPulseMillis` is floored at 70ms and capped at **300ms**, one hosted frame is 300-400ms,
+  and the pulse shrinks as the hero nears his target — so the closer he got the less he moved, and
+  below one frame he stopped entirely. drive-village-board's Workshop approach ended **2.43m from a
+  2.4m radius**: not slow, INERT, and inert in a way that looks exactly like slow. The remedy needs
+  no constant — wait on the pulse OR one rendered frame, whichever is longer
+  (`Promise.all([sleep(pulse), afterAFrame()])`), so the fast machine keeps its measured pulse and
+  the slow one gets a press that spans a frame.
 - **The observation can be SLOWER THAN THE STATE, and then no aim taken during it can work.** Hit 2.
   A `Runtime.evaluate` costs one frame; a `Page.captureScreenshot` on a software rasterizer costs
   eight — measured 1628–2627 ms, against a knockdown that lasts `RESPAWN_SECONDS`, which is 2. Two
@@ -574,6 +584,26 @@ red-capable. It still went in with a baseline that dissolves on a slow device. *
 instrument can see its failure case does not prove it is measuring the right two things.** The
 sabotage answered "would this notice a frozen arm" and never asked "is `!swinging` the same as
 `still`".
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Making one beat of a harness work can break the next one, because they share a world.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A scripted playthrough is a sequence of beats against ONE living world, so every beat
+inherits whatever the last one left behind — an alive or dead enemy, a hero's position, a spent
+cooldown. Fix a beat that was failing and you have changed that inheritance, and the next beat can
+fail for a reason that did not exist before and has nothing to do with your change. **A beat should
+ARRANGE its own preconditions rather than inherit them, and say so in a check**, so the failure
+names the missing precondition instead of blaming the thing being tested.
+**Incident (2026-08-23):** `play-fight`'s landscape hit beat could not reach the wolf, so all thirty
+of its taps missed. Fixed by re-closing on the wolf whenever the recorder said the hero was out of
+reach — and the beat immediately became effective enough to KILL the wolf, because it read the
+recorder only every fourth tap and four taps of overshoot is three more swings into a three-hit-point
+animal. The knockdown beat after it then stood waiting to be bitten by a corpse. Same red, different
+number: `0 down frame(s) of 126` became `0 down frame(s) of 185`. Both were the knockdown beat
+reporting that the hero could not be knocked out, and on neither run was that the question.
+**The tell:** a check whose evidence is a large count of frames in which NOTHING happened is almost
+never about the thing it is named after. 126 frames at full health is not a hero who resists being
+knocked down, it is a hero nothing is attacking.
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — A sentinel that means "no value" will happily do arithmetic, and can carry a check over its own bar.
