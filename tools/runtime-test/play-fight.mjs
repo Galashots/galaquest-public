@@ -66,6 +66,8 @@ import {
   WOLF_RESPAWN_SECONDS,
   canAttack,
 } from '../../public/src/combat/encounter.js';
+// Which bone the sword hangs off, from the rig's own gear table rather than retyped here (GQ-007).
+import { RIGID_TIER2_GEAR } from '../../public/src/character/gear.js';
 // How long the fall itself is given inside the window the hero is down. Imported rather than
 // restated (GQ-007): the capture below aims at the moment the fall FINISHES, and that moment has to
 // move when the design moves it, or this harness quietly goes back to photographing a hero mid-topple.
@@ -295,14 +297,59 @@ async function shot(name) {
 // translation, read without importing THREE -- a harness holds no handle on the game's module graph
 // and does not need one. Both terms are world-space, so the difference is world metres whatever
 // scale the rig was exported at.
-const BODY_HEIGHT = `(() => {
-  const hero = window.__galaQuestRuntime.hero;
-  if (!hero) return null;
-  const base = hero.matrixWorld.elements[13];
+const bodyHeightOf = (subjectExpression) => `(() => {
+  const body = ${subjectExpression};
+  if (!body) return null;
+  const base = body.matrixWorld.elements[13];
   let top = -Infinity;
-  hero.traverse((node) => { if (node.isBone) top = Math.max(top, node.matrixWorld.elements[13]); });
+  body.traverse((node) => { if (node.isBone) top = Math.max(top, node.matrixWorld.elements[13]); });
   return top === -Infinity ? null : Math.round((top - base) * 1000) / 1000;
 })()`;
+const BODY_HEIGHT = bodyHeightOf('window.__galaQuestRuntime.hero');
+
+/** The bone the sword is actually attached to, so "does the arm move" is asked of the arm that
+ *  carries the weapon rather than of whichever bone happened to be convenient. */
+const SWORD_HAND_BONE = RIGID_TIER2_GEAR.find((item) => item.id === 'sword_ironwood')?.boneName ?? null;
+
+// Where the sword hand and the hero himself are, both in world space and on the same frame, so a
+// swing's arm travel can be told apart from the hero simply having walked. A bone read alone cannot
+// make that distinction and would report a stroll as a magnificent swing.
+const SWING_SAMPLE = `(() => {
+  const hero = window.__galaQuestRuntime.hero;
+  const hand = hero && hero.getObjectByName(${JSON.stringify(SWORD_HAND_BONE)});
+  const at = (object) => (object
+    ? [object.matrixWorld.elements[12], object.matrixWorld.elements[13], object.matrixWorld.elements[14]]
+      .map((v) => Math.round(v * 1000) / 1000)
+    : null);
+  return {
+    t: performance.now(),
+    swingSeconds: window.__galaQuestRuntime.encounterState().hero.swingSeconds,
+    hand: at(hand),
+    root: at(hero),
+  };
+})()`;
+
+/** How far a set of recorded points spreads, as the diagonal of the box that contains them. One
+ *  number for "did this thing move", with no dependence on the order frames were sampled in. */
+function travelOf(points) {
+  const live = points.filter((point) => Array.isArray(point) && point.every(Number.isFinite));
+  if (live.length < 2) return null;
+  const range = (axis) => Math.max(...live.map((p) => p[axis])) - Math.min(...live.map((p) => p[axis]));
+  return Math.hypot(range(0), range(1), range(2));
+}
+// By name off the live scene, because the wolf presenter publishes its clip but not its root, and
+// the question here is about the body rather than about what the presenter believes. Re-found every
+// frame on purpose: the wolf is removed and rebuilt across a respawn.
+// Cached across frames, and re-found when the cached one leaves the graph. An instrument has to be
+// cheaper than the thing it measures: this sample is taken once per RENDERED FRAME for the whole
+// fight, and getObjectByName walks the entire scene -- a village, a forest and a lamp-lit road --
+// before it ever reaches the wolf. Paying that 60 times a second to answer a question about a
+// corpse would slow the frame rate the rest of this file measures against.
+const WOLF_HEIGHT = bodyHeightOf(`(() => {
+  const cached = window.__gqWolfBody;
+  if (cached && cached.parent) return cached;
+  return (window.__gqWolfBody = window.__galaQuestRuntime.scene.getObjectByName('wolf') ?? null);
+})()`);
 
 /** When the fall is over and the hero is lying on the clamped last frame -- the part of the window
  *  that actually reads as "you went down", and the moment worth pointing a camera at. */
@@ -990,6 +1037,10 @@ const FIGHT_SAMPLE = `(() => {
     wolfHp: published.wolf.hp,
     // The CLIP, not just the mode, because "stays dead" is a claim about what is being played.
     wolfClip: runtime.wolf()?.getState()?.clip ?? null,
+    // And the BODY, because a clip name is what the presenter believes and this is what a child
+    // sees. The hero's death was starved by a clamped frame delta while every flag stayed correct;
+    // this presenter is handed the same clamped delta, so the same question gets asked of it.
+    wolfHeight: ${WOLF_HEIGHT},
     // So the loop can tell "in the strike arc" from "the wolf backed off", without a second read.
     gap: Math.hypot(runtime.player.position.x - published.wolf.x,
       runtime.player.position.z - published.wolf.z),
@@ -1164,6 +1215,28 @@ check('a dead wolf stays dead rather than looping its death',
   `first dead at frame ${firstDead} of ${corpseLog.samples.length}; `
     + `${stillDead.length} frame(s) dead, ${wrongClip.length} of them not playing the death clip; `
     + `modes after death ${JSON.stringify([...new Set(afterDeath.map((sample) => sample.wolfMode))])}`);
+
+// AND THE CORPSE IS ON THE GROUND. Same question the hero's knockdown gets asked, for the same
+// reason and by the same measurement: `wolfClip === 'death'` says the presenter selected a clip,
+// not that the clip got anywhere. The wolf's death is a one-shot with clampWhenFinished, played at
+// its authored speed off the SAME clamped frame delta that starved the hero's -- the difference is
+// only that it has WOLF_RESPAWN_SECONDS to finish in rather than RESPAWN_SECONDS, which is slack,
+// not safety. Measured rather than assumed either way.
+const wolfHeights = (samples) => samples.map((sample) => sample.wolfHeight).filter(Number.isFinite);
+const aliveHeights = wolfHeights(corpseLog.samples.filter((sample) => sample.wolfMode !== 'dead'
+  && sample.wolfMode !== 'dying'));
+const standingWolf = aliveHeights.length
+  ? aliveHeights.sort((a, b) => a - b)[Math.floor(aliveHeights.length / 2)] : null;
+const deadWolf = wolfHeights(stillDead).length ? Math.min(...wolfHeights(stillDead)) : null;
+check('and the corpse is lying on the ground, not standing in its death clip',
+  standingWolf !== null && deadWolf !== null
+    && deadWolf <= standingWolf * FALLEN_FRACTION_OF_STANDING,
+  standingWolf === null || deadWolf === null
+    ? `no wolf body height was readable -- ${aliveHeights.length} alive and `
+      + `${wolfHeights(stillDead).length} dead frame(s) carried a number, so this proved nothing`
+    : `alive ${standingWolf.toFixed(2)}m, lowest while dead ${deadWolf.toFixed(2)}m `
+      + `(${(deadWolf / standingWolf * 100).toFixed(0)}% of standing, `
+      + `bar ${FALLEN_FRACTION_OF_STANDING * 100}%), over ${wolfHeights(stillDead).length} dead frame(s)`);
 await shot('05-corpse');
 
 // ── the swing, photographed where it is safe to photograph it ───────────────────────────────────
@@ -1172,6 +1245,13 @@ await shot('05-corpse');
 // these three frames are evidence FOR is the shape of the arc, not that it does damage. Damage is
 // already proven above, and the wolf-hit flash is captured mid-fight.
 async function photographTheSwing() {
+  // Recording the ARM through all three swings, because everything asserted below this point is
+  // about timing -- that the frames caught a swing and are spread across it -- and none of it can
+  // see whether the hero's arm actually moved. `swingSeconds >= 0` is a rules fact. It would go on
+  // reading exactly the same if the swing clip failed to load and the hero stood perfectly still
+  // holding his sword out, which is the same class of blindness that let the death clip be starved
+  // for a whole release with every check green.
+  await page.eval(startWatch('swing-arm', SWING_SAMPLE));
   const ready = await pollUntil((s) => s.hero.downSeconds < 0 && s.canAttack, { timeoutMs: 4000 });
   check('the hero is up and able to swing before the arc is photographed',
     ready.hero.downSeconds < 0 && ready.canAttack,
@@ -1222,6 +1302,43 @@ async function photographTheSwing() {
   const spread = Math.max(...frames.map((f) => f.swingSeconds)) - Math.min(...frames.map((f) => f.swingSeconds));
   check('the three frames are spread across the swing rather than three copies of one instant',
     frames.length === 3 && spread > SWING_SECONDS * 0.3, `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`);
+
+  // AND THE ARM MOVED. Measured against the hero's OWN standing-still, not against a distance in
+  // metres: a bar of "at least so many centimetres" is a number picked off one rig, and this rig is
+  // a small child. The idle pose is not perfectly still -- there is breathing in it -- so the claim
+  // is that a swing dwarfs that, which is what "a child can see it happen" means and what a hero
+  // frozen mid-pose would fail.
+  //
+  // SABOTAGE, RUN: main.js's `swing?.update(...)` on the not-down path replaced with a no-op, so the
+  // rules keep running a swing and nothing writes the pose. Result -- `tapping ATTACK starts a
+  // swing` PASS, `tapping ATTACK damages the wolf` PASS, `the swing frames actually caught a swing`
+  // PASS, `the three frames are spread across the swing` PASS, and this one FAIL at 0.9x. A child
+  // would have been shown a statue holding a sword out while the whole suite reported a working
+  // fight. That gap is the reason this check exists, and 33/33 is not the evidence for it -- 32/33
+  // under sabotage is.
+  const SWING_DWARFS_IDLE = 3;
+  const arm = JSON.parse(await page.eval(readWatchSource('swing-arm')));
+  await page.eval(stopWatchSource('swing-arm'));
+  const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);
+  const still = arm.samples.filter((sample) => sample.swingSeconds < 0);
+  const handSwinging = travelOf(swinging.map((sample) => sample.hand));
+  const handStill = travelOf(still.map((sample) => sample.hand));
+  // The hero is not supposed to go anywhere here -- the wolf is dead and nothing walks -- so if he
+  // did, the arm travel above is partly his own stroll and this measurement is not usable. Said out
+  // loud rather than absorbed, because a check that quietly measures the wrong thing is the defect
+  // this whole block exists to catch.
+  const rootTravel = travelOf(arm.samples.map((sample) => sample.root));
+  const stoodStill = rootTravel !== null && rootTravel < MIN_BODY_SEPARATION / 10;
+  check('the sword arm actually moves when the hero swings, rather than the pose holding still',
+    stoodStill && handSwinging !== null && handStill !== null
+      && handSwinging > handStill * SWING_DWARFS_IDLE,
+    handSwinging === null || handStill === null
+      ? `no ${SWORD_HAND_BONE} bone was readable over ${arm.samples.length} frame(s), `
+        + 'so this proved nothing rather than passing'
+      : `hand travelled ${handSwinging.toFixed(2)}m over ${swinging.length} swinging frame(s) `
+        + `against ${handStill.toFixed(2)}m over ${still.length} idle one(s) `
+        + `(${(handSwinging / Math.max(handStill, 1e-6)).toFixed(1)}x, bar ${SWING_DWARFS_IDLE}x); `
+        + `hero himself moved ${rootTravel === null ? 'unreadably' : `${rootTravel.toFixed(3)}m`}`);
 }
 await photographTheSwing();
 

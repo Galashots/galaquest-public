@@ -551,8 +551,13 @@ two hundred lines away for the rescue watch, with its own "THE RAW DELTA, not th
 far the highest bone in the hero's skeleton stands above his own origin, asserted to fall under half
 of standing height while he is down. Not an `ENFORCED` rung: that rung wants a test in `test/` named
 for an ID, and this entry is at its first hit with a guard that only exists in a browser. It went 65% → 9% on the fix. Cost nothing: the recorder was already running,
-and observation from inside the page is free. **The generalisable half:** a check that reads a flag
-proves the rules ran. Only a check that reads the BODY proves a child would see it.
+and observation from inside the page is free. **The generalisable half, and it is not a slogan -- it was
+run:** a check that reads a flag proves the rules ran. Only a check that reads the BODY proves a
+child would see it. With `swing?.update(...)` sabotaged into a no-op -- rules intact, pose never
+written -- `tapping ATTACK starts a swing`, `tapping ATTACK damages the wolf`, `the swing frames
+actually caught a swing` and `the three frames are spread across the swing` **all four passed**,
+while the hero stood frozen holding his sword out. Four checks named for an animation, none of which
+could see one. The only red was a new measurement of how far the sword hand actually travelled.
 **Foreknowledge helped:** no — the ledger had `A render change whose whole purpose is how something
 LOOKS cannot be judged from a container with no GPU`, and the true reading here is nearly its
 inverse: the container's slowness was not an obstacle to the review, it was the only reason the
@@ -1038,7 +1043,11 @@ the tap cadence, not the game. The deterministic engine gives the same fight in 
 detectable from its own output without knowing anything about the game. `0 of 36`, `1.6 s and zero
 taps`, and `3hp -> 3hp with five transitions` are not surprising findings, they are broken
 instruments announcing themselves.
-**Foreknowledge helped:** not yet recorded.
+**Foreknowledge helped:** 2026-08-23 — directly. A new browser check claimed the hero's sword arm
+moves when he swings; rather than believe a green, this entry sent me to sabotage main.js's
+`swing?.update(...)` into a no-op, leaving the rules running and nothing writing the pose. The check
+went red at 0.9x against its 3x bar, so it can see the case it is for. It also turned up the finding
+below, which was not what the sabotage was for.
 
 ### OBSERVED — A trigger radius a child's approach ends AT is decided by drift, not by the child.
 **Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-23
