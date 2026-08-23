@@ -478,6 +478,42 @@ structural coverage in `test/automation-timing.test.mjs` and `test/review-suite.
 a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a frame.
 **Foreknowledge helped:** not yet recorded.
 
+### OBSERVED — A NEW FAILURE against a base is not evidence that this commit caused it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** `ci-diff.py` answers "what is red here that was green there". That is not the same question
+as "what did I break", and the gap between them is every harness that flips on its own. Before
+reverting or chasing a NEW FAILURE, look at how that check has concluded over the last dozen heads.
+A check that flaps is not evidence about a commit, however clean the diff looks.
+
+**The hit.** I shipped a fix for a proven data-loss bug -- two tabs of the game on one device
+silently delete each other's child, demonstrated by unit test -- and `drive-marks` and `drive-touch`
+went red on it, both green on the commit before. "The only difference is mine", so I reverted it.
+`drive-marks` then went red **on the revert as well**:
+
+    $ git diff --quiet 2d0f6b1 07c9905 && echo IDENTICAL
+    IDENTICAL
+
+Byte-identical trees, green at one head and red at the other. Both failures were flakes. The fix was
+innocent and I had thrown it away.
+
+**What makes this worse than bad luck.** I had built a table of exactly which harnesses flap and
+posted it to the PR forty minutes earlier, to make the rotating cast visible. `drive-touch` is in it,
+flapping at `6235d80`. I did not look at the table I had just written. The instrument existed, in my
+own hand, and the failure was not consulting it.
+
+**Enforced as far as it can be.** `ci-diff.py --sha` now prints each new failure's record over the
+last twelve heads (`.X.........X  (3 flips)`), so the diff carries the history instead of asking the
+reader to remember it. Measured honestly: run against the diff that fooled me it flags `drive-touch`
+at three flips, and does **not** flag `drive-marks`, whose previous flap is outside any window --
+that one was only provable by the identical-tree contradiction after the fact. The tool moves this
+from "remember the table" to "read the line", and catches one of the two. It is not a cure.
+
+**The corollary that cost the most.** Reverting is cheap and safe *as an action*, which is exactly
+why the bar for it drifts. It is not cheap as a decision: it threw away a proven fix for a real
+defect on evidence that took four minutes to falsify afterwards. "Revert first, diagnose later" is
+right when the head is red and the cause is plausible; it needs the same "is this check trustworthy"
+question as any other claim.
+
 ### RULE (GQ-021) — A harness written in wall-clock time is driving something that advances in rendered frames.
 **Status:** RULE · **Hits:** 5 · **First/Last:** 2026-08-23
 **Not enforced because:** no test can look at a number and tell whether it was reasoned about in

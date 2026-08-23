@@ -86,6 +86,46 @@ def buckets(path):
     return bucket_names(jobs, lambda j: j['name'], lambda j: j.get('status'), lambda j: j.get('conclusion'))
 
 
+def conclusion_history(name, head_sha, depth=12):
+    """How `name` has concluded on the last `depth` commits leading to head_sha.
+
+    TWELVE, not six, and the number was measured rather than picked. Six was the first draft, and
+    run against the exact diff that fooled me it reported `.....X` for both checks -- "stable, then
+    broke", the same wrong story. The window has to be long enough to contain the previous flap:
+    drive-touch's was five commits further back than six reached. Twelve costs about a minute when
+    there are new failures and nothing at all when there are none.
+
+    A NEW FAILURE IS NOT EVIDENCE OF CAUSATION WHEN THE HARNESS FLAPS, and on 2026-08-23 I reverted
+    a proven bug fix because I forgot that. Two checks went red on my commit having been green on the
+    one before it; I read "the only difference is mine" and reverted. drive-marks then went red on
+    the REVERT as well -- whose tree was byte-identical to a head where it had passed -- and
+    drive-touch came back green. Both were flakes. I had posted a table of exactly which harnesses
+    flap, to this same PR, forty minutes earlier, and did not look at it.
+
+    So the diff carries the history now. A tool that reports "NEW FAILURES: drive-marks" and makes
+    the reader remember whether drive-marks is trustworthy is a tool that will be believed on the day
+    the reader does not remember.
+    """
+    url = f'https://api.github.com/repos/{REPO}/commits?sha={head_sha}&per_page={depth}'
+    request = urllib.request.Request(url, headers={'accept': 'application/vnd.github+json'})
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        request.add_header('authorization', f'Bearer {token}')
+    try:
+        with urllib.request.urlopen(request) as response:
+            commits = [c['sha'] for c in json.load(response)]
+    except Exception as error:                 # history is a courtesy; never fail the diff for it
+        return f'(history unavailable: {error})'
+
+    marks = []
+    for sha in commits:
+        failed, unproven, _ = checks_for(sha)
+        marks.append('X' if name in failed else ('?' if name in unproven else '.'))
+    flaps = sum(1 for a, b in zip(marks, marks[1:]) if a != b)
+    # Oldest first reads like a timeline; the head is the last character.
+    return f"{''.join(reversed(marks))}  ({flaps} flip(s) over {len(marks)} heads, '.'=green X=red ?=unproven)"
+
+
 if sys.argv[1:2] == ['--sha']:
     bf, bu, nb = checks_for(sys.argv[2])
     hf, hu, nh = checks_for(sys.argv[3])
@@ -97,6 +137,11 @@ print(f'base: {len(bf)} failed, {len(bu)} unproven of {nb}')
 print(f'head: {len(hf)} failed, {len(hu)} unproven of {nh}')
 new, fixed = sorted(hf - bf), sorted(bf - hf)
 print('NEW FAILURES :', new or 'none')
+# Each one with its own recent record, so "new against this base" is never read as "caused by this
+# commit" without the reader seeing how often that check flips on its own.
+if new and sys.argv[1:2] == ['--sha']:
+    for name in new:
+        print(f'   {name}: {conclusion_history(name, sys.argv[3])}')
 print('FIXED        :', fixed or 'none')
 if hu:
     print('UNPROVEN     :', sorted(hu), '<- these ran nothing conclusive; re-check before trusting this diff')
