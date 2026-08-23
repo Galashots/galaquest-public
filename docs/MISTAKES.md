@@ -478,6 +478,39 @@ structural coverage in `test/automation-timing.test.mjs` and `test/review-suite.
 a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a frame.
 **Foreknowledge helped:** not yet recorded.
 
+### RULE (GQ-022) — An instrument is not evidence until it has been shown to fail.
+**Status:** RULE · **Hits:** 4 · **First/Last:** 2026-08-23
+**Rule:** A probe that has only ever been seen passing, or only ever seen returning *something*, has
+not been tested -- it has been run. Before believing a reading, make it produce the wrong answer on
+purpose: point it at the broken state, or remove the fix and watch the test go red. A field that
+comes back `null` is the loudest version of this and the easiest to read past, because `null` looks
+like an answer.
+**Not enforced because:** no test can tell a real measurement from a vacuous one; the check is
+whether somebody made it fail. What IS mechanisable is already in place -- red-capability exercises
+next to the new tests, and `test/harness-verdict-semantics.test.mjs` for the verdict shapes.
+
+**Four hits in one day, which is why this is a RULE at first writing rather than an OBSERVED.**
+
+1. **A probe read the wrong object.** A per-frame pip trace in `drive-marks` recorded
+   `marks=null rewardKeys=` on every frame -- it read `encounterState().rewards`, which is not where
+   the pips are painted from. The `pips=1` half was real; the `marks` half never existed. Caught only
+   because the raw key list was printed beside the value.
+2. **A scripted edit whose anchor never matched.** A `str.replace` with no assertion silently did not
+   apply, and the probe then reported `lantern undefined` FAIL for something it had never measured.
+3. **A helper that never reached the branch it existed to test.**
+   `createProfileStore({ randomUUID: null })` does not disable crypto -- `options.randomUUID ?? …`
+   falls through on null -- so the no-crypto test took the UUID path and **passed against the unfixed
+   code**. Found by the red-capability check, which is the only thing that could have found it.
+4. **A test baseline where two subjects were identical.** Two tabs both minted `p-local-1-1`, because
+   a short injected UUID fails the id sanitizer and the fallback derives from `profiles.length`. One
+   assertion passed vacuously comparing an id to itself. Earlier the same day: two animation clips
+   written to the same value, so three of eight new tests passed without exercising anything.
+
+**What they have in common** is not carelessness about the subject -- each of these was written
+carefully, about a real question. It is that the INSTRUMENT was assumed to work because it ran. The
+subject gets scepticism and the tool gets trust, and it is the wrong way round: the subject is the
+thing you already suspect, and the tool is the thing you are about to believe.
+
 ### OBSERVED — A NEW FAILURE against a base is not evidence that this commit caused it.
 **Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
 **Rule:** `ci-diff.py` answers "what is red here that was green there". That is not the same question
