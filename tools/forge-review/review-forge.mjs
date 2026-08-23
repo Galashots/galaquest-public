@@ -215,7 +215,17 @@ try {
   // Animation is an inspection lane. It must advance; the next fit edit must return to bind pose.
   const animationName = await page.eval(`document.querySelector('#animation-select').options[0].value`);
   await page.eval(`(() => { const el = document.querySelector('#animation-select'); el.value = el.options[0].value; el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  await sleep(450);
+  // WAIT FOR THE ANIMATION TO ADVANCE, DO NOT SLEEP AND HOPE. This was `sleep(450)`, and 450ms is a
+  // guess about frames dressed as a guess about time: mixer time advances only when a frame renders,
+  // so on a fast machine that buys about 27 frames and half a second of clip, and on a starved CI
+  // runner it buys one. Measured hosted at 5b5f0aa -- the clip was selected and playing exactly as
+  // asked (`clip=Armature|running|baselayer`) and `time=0.0043`, so the check reported the animation
+  // lane broken because it had looked 4 milliseconds in. Locally the same line reads 0.5545.
+  //
+  // Polling for the condition costs nothing when the machine is quick and simply waits when it is
+  // not, which is the whole difference. Fifth instance of this in the repo; the walks, the animation
+  // clocks and play-fight's settle budget are the others.
+  await waitFor(page, `(${anchorState('sword_dawnwarden_v1', 'RightHand')}).time > 0.05`);
   const animated = await page.eval(anchorState('sword_dawnwarden_v1', 'RightHand'));
   check('animation selection starts playback and advances time', animated.playing === true && animated.clip === animationName && animated.time > 0.05,
     `clip=${animated.clip}; time=${animated.time}`);
