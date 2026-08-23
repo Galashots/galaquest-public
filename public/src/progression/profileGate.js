@@ -77,6 +77,8 @@ export function progressPipsFor({ marks = 0, lanternUnlocked = false } = {}) {
  * @param options.namingFirstHero  true on a device whose one hero has never been named, which turns
  *   the screen from a chooser into a single question. A child opening the game for the first time
  *   should be asked their hero's name, not shown a list of one.
+ * @param options.maxProfiles  how many heroes this tablet holds. Defaults to MAX_PROFILES; a caller
+ *   should almost never pass it, and it is declared because it is read.
  */
 export function profileGateViewModel({
   heroes = [],

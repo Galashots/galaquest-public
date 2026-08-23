@@ -166,6 +166,17 @@ id-derived fallback and the stored animal was written and never read. The caller
 it satisfied the contract as written. **A parameter a function READS and does not DOCUMENT is a
 defect waiting for its first caller**, and it is worse than an out-of-date sentence because there is
 nothing visibly wrong to notice.
+**Partially ENFORCED as of 2026-08-23**, which is new for this entry and worth explaining given
+the 'not enforced because' above. That reason still holds for the rule as a whole -- "is this prose
+still true" needs a reader. But the sub-case is decidable, because both halves are in the source:
+the keys a function destructures, and the names its own `@param` block mentions.
+`test/documented-parameters.test.mjs` compares them. Deliberately narrow -- only exported functions
+that destructure an object AND already carry an `@param` block; a function with no doc at all is a
+different argument and the check takes no view on it. On the sweep that produced it: three
+omissions across `public/src`, zero false positives, and all three now declared
+(`villageBoardViewModel`'s `beaconLit`, `profileGateViewModel`'s `maxProfiles`, `predictionStep`'s
+two bounds). None of the other three was a live defect -- every caller happened to pass them -- so
+the avatar case remains the only one that actually cost anything.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.

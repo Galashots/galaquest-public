@@ -35,6 +35,11 @@ export const VILLAGE_BOARD_NODES = Object.freeze([
  *   unlockedFor/protocol.js's rewards.lanternUnlocked), reused verbatim for the Lantern Tree node's
  *   "current restored state" rather than inventing a second truth for whether it is lit.
  * @param selectedNodeId   which node (if any) is drilled into -- null/undefined for "board only".
+ * @param beaconLit        whether the Old Beacon is burning. Defaulted false, and READ HERE, so it
+ *   has to be declared here: a caller that builds its argument from this list alone would drop it
+ *   and the Board would quietly show a cold Beacon to a child who had just lit one. That is not
+ *   hypothetical -- the same omission in profileGateViewModel's list is what made every chooser card
+ *   ignore its stored animal (GQ-002, hit 7).
  */
 export function villageBoardViewModel({
   village, lanternUnlocked, selectedNodeId, beaconLit = false,
