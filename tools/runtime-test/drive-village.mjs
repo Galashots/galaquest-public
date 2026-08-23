@@ -284,6 +284,17 @@ async function pulseWalkToward(targetX, targetZ, stopWithin, maxMillis) {
       // eslint-disable-next-line no-await-in-loop
       await touch('touchMove', [{ x: stickX + sx * STICK_PX, y: stickY - sy * STICK_PX }]);
       // eslint-disable-next-line no-await-in-loop
+      // DELIBERATELY NOT frame-floored here, unlike drive-village-board's. Guaranteeing each press
+      // spans a rendered frame fixes "the pulse is shorter than a frame so it moves nobody" -- and
+      // creates its opposite, because one frame of travel on a 4fps runner is 0.4-0.8m and this
+      // file's tightest ring is 0.6m. Measured: the lane walk went from 1.53m short to 2.38m PAST,
+      // oscillating around a ring smaller than its own minimum step. The sibling harness's rings are
+      // 1.2m and wider, so the floor is a straight win there and a trade here.
+      //
+      // The honest statement is that on a machine this slow, placement resolution is one frame of
+      // travel plus the release latency, and a ring below that cannot be hit by pulsing at all --
+      // only by an in-page latch that releases on the frame it arrives, which is what the held leg
+      // above does and why the loop leans on it.
       await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
     } finally {
       // eslint-disable-next-line no-await-in-loop
@@ -375,12 +386,19 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
     const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
     if (away <= stopWithin) break;
     passes += 1;
-    if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
+    const held = away > stopWithin + HELD_APPROACH_SLACK_METRES;
+    if (held) {
       // eslint-disable-next-line no-await-in-loop
       last = await heldWalkToward(targetX, targetZ, stopWithin, deadline - Date.now());
     }
     // eslint-disable-next-line no-await-in-loop
-    last = await pulseWalkToward(targetX, targetZ, stopWithin, Math.max(1500, (deadline - Date.now()) / 2));
+    // Half the remaining budget only when a held leg ran -- only then is there a second mechanism
+    // to reserve it FOR, namely walking back an overshoot. Halving on every pass regardless is a
+    // geometric squeeze on the ONLY thing that can place a hero on a tight ring: hosted at 83e1d95
+    // `walking partway up the lane toward the wolf` took three passes and ended 1.53m out with most
+    // of its 12s unspent, because pass three was handed an eighth of it.
+    last = await pulseWalkToward(targetX, targetZ, stopWithin,
+      held ? Math.max(1500, (deadline - Date.now()) / 2) : Math.max(1500, deadline - Date.now()));
   }
   const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
   console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target`);
