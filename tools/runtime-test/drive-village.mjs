@@ -352,8 +352,39 @@ async function heldWalkToward(targetX, targetZ, stopWithin, maxMillis) {
   // hero, and handed the caller one who drifted out the far side of the speech radius while the
   // greeting played -- which cost the wave its handoff to talk in one run out of two.
   await sleep(200);
-  await pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
-  return pulseWalkToward(targetX, targetZ, stopWithin, maxMillis);
+  return pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+}
+
+// HOLD, THEN PULSE, THEN LOOK -- AND GO ROUND AGAIN IF IT IS NOT THERE YET.
+//
+// One hold followed by one pulse is not enough, and hosted at 4656480 it showed: the held leg
+// latched at 4.21m of its 4.5m ring, the pulsed leg got a 10s budget to cover the remaining 2.7m at
+// the metre-a-second a pulsed walk manages there, and `walking back up to the keeper` came up short
+// with the Keeper faded to 0.22 opacity behind it. Two more checks failed behind that one.
+//
+// The fix is not a better slack. Any single number I pick here is a number picked against one
+// machine, which is the mistake this whole family of bugs is made of. Looping converges instead:
+// the held leg closes whatever distance is left quickly, the pulsed leg places him exactly, and if
+// the release carried him past, the next turn round the loop simply walks him back. Bounded by the
+// caller's own budget, and it reports how many passes it took so a slow route says so out loud.
+async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
+  const deadline = deadlineAfter(maxMillis);
+  let last = await state();
+  let passes = 0;
+  while (Date.now() < deadline) {
+    const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+    if (away <= stopWithin) break;
+    passes += 1;
+    if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
+      // eslint-disable-next-line no-await-in-loop
+      last = await heldWalkToward(targetX, targetZ, stopWithin, deadline - Date.now());
+    }
+    // eslint-disable-next-line no-await-in-loop
+    last = await pulseWalkToward(targetX, targetZ, stopWithin, Math.max(1500, (deadline - Date.now()) / 2));
+  }
+  const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+  console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target`);
+  return last;
 }
 
 // ── Task B: the 12/14/16 exploration-camera comparison ─────────────────────────────────────────
@@ -405,7 +436,7 @@ await shot('lane-to-wolf');
 // is evidence the combat-bowl guarantee (no prop within radius 4 of the wolf spawn) is actually
 // walkable, not just a data-module assertion (test/zone-data.test.mjs already checks the data;
 // this checks the loaded scene).
-const laneWalk = await pulseWalkToward(wolfX * 0.4, wolfZ * 0.4, 0.6, 6000);
+const laneWalk = await walkToward(wolfX * 0.4, wolfZ * 0.4, 0.6, 12000);
 check('walking partway up the lane toward the wolf actually closes distance',
   Math.hypot(laneWalk.heroPos[0] - wolfX * 0.4, laneWalk.heroPos[1] - wolfZ * 0.4) < 1.5,
   `hero ${JSON.stringify(laneWalk.heroPos)}, target [${(wolfX * 0.4).toFixed(2)}, ${(wolfZ * 0.4).toFixed(2)}]`);
@@ -453,7 +484,7 @@ const animationStretch = await (async () => {
 /** A timeout for something gated on an animation FINISHING, rather than on wall-clock. */
 const animationBudget = (ms) => Math.round(ms * animationStretch);
 
-const approached = await heldWalkToward(keeperX, keeperZ, 1.5, 10000);
+const approached = await walkToward(keeperX, keeperZ, 1.5, 20000);
 check('walking reaches the keeper',
   Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
   `hero ${JSON.stringify(approached.heroPos)}, keeper [${keeperX}, ${keeperZ}], `
@@ -506,7 +537,7 @@ check('the wave does not restart while the hero holds position, several seconds 
 // Step 5: walking back OUT past the re-arm radius must stop talk and re-arm the latch. Targeting the
 // hero's own spawn -- already proven walkable earlier in this run (the very first leg of this
 // script) -- rather than an arbitrary point.
-const left = await heldWalkToward(0, 0, 1.0, 8000);
+const left = await walkToward(0, 0, 1.0, 16000);
 const leftDistance = Math.hypot(left.heroPos[0] - keeperX, left.heroPos[1] - keeperZ);
 check('walking away clears both the wave and the (wider) re-arm radius',
   leftDistance > KEEPER_GREET_REARM_RADIUS_METERS,
@@ -517,7 +548,7 @@ check('talk stops once the hero is out of range',
 
 // Step 6: re-entering must produce exactly ONE new greeting -- proof the latch actually re-armed
 // rather than staying permanently spent after its first use.
-const reapproached = await heldWalkToward(keeperX, keeperZ, 1.5, 10000);
+const reapproached = await walkToward(keeperX, keeperZ, 1.5, 20000);
 check('walking back up to the keeper closes the distance again',
   Math.hypot(reapproached.heroPos[0] - keeperX, reapproached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
   `hero ${JSON.stringify(reapproached.heroPos)}, keeper [${keeperX}, ${keeperZ}], `

@@ -284,7 +284,7 @@ async function pulseWalkToward(page, targetX, targetZ, stopWithin, maxMillis) {
   return last;
 }
 
-async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
+async function heldWalkToward(page, targetX, targetZ, stopWithin, maxMillis) {
   const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
   await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
   await forwardKey(page, 'keyDown');
@@ -307,11 +307,41 @@ async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
   // Let the release reach the page and the server agree the hero has stopped before the pulsed leg
   // starts measuring from him.
   await sleep(200);
-  await pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
-  await pulseWalkToward(page, targetX, targetZ, stopWithin, maxMillis);
-  // And again after the last pulse, so the captures below are not taken mid-stride.
-  await sleep(200);
   return pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
+}
+
+// HOLD, THEN PULSE, THEN LOOK -- AND GO ROUND AGAIN IF IT IS NOT THERE YET.
+//
+// One hold followed by one pulse is not enough. Any single slack I pick between them is a number
+// picked against one machine, which is the mistake this whole family of bugs is made of; drive-
+// village measured it hosted, where the held leg stopped 4.21m out and the single pulsed leg could
+// not close the rest at the metre-a-second it manages there. Looping converges without a tuned
+// number: the held leg covers whatever distance is left quickly, the pulsed leg places him exactly,
+// and if the release carried him past the mark the next pass simply walks him back.
+async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
+  const deadline = deadlineAfter(maxMillis);
+  let last = await state(page);
+  let passes = 0;
+  const awayFrom = (at) => Math.hypot(targetX - at[0], targetZ - at[1]);
+  while (Date.now() < deadline) {
+    const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+    if (away <= stopWithin) break;
+    passes += 1;
+    if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
+      // eslint-disable-next-line no-await-in-loop
+      last = await heldWalkToward(page, targetX, targetZ, stopWithin, deadline - Date.now());
+    }
+    // eslint-disable-next-line no-await-in-loop
+    last = await pulseWalkToward(page, targetX, targetZ, stopWithin,
+      Math.max(1500, (deadline - Date.now()) / 2));
+  }
+  // Captures downstream must not be taken mid-stride.
+  await sleep(200);
+  last = await pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
+  console.log(`  approach: ${passes} pass(es), rendered `
+    + `${metresOrUnknown(awayFrom(last.heroPos))} and server `
+    + `${metresOrUnknown(awayFrom(last.serverPos ?? last.heroPos))} from the target`);
+  return last;
 }
 
 async function shot(page, name) {
@@ -355,7 +385,7 @@ const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
   await setHeadingToward(page, treeX, treeZ);
   await shot(page, 'fresh-dark-tree');
 
-  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 10000);
+  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 20000);
   check('fresh guest: walking reaches the keeper',
     withinWaveRadius(approached),
     `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}, `
@@ -422,7 +452,7 @@ const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
   await setHeadingToward(page, treeX, treeZ);
   await shot(page, 'unlocked-lit-tree');
 
-  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 10000);
+  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 20000);
   check('unlocked guest: walking reaches the keeper',
     withinWaveRadius(approached),
     `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}, `
