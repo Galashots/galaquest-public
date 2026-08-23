@@ -304,7 +304,63 @@ export function createProfileStore(options = {}) {
     return candidate;
   }
 
+  /** Ids this tab has deliberately deleted, so the merge below cannot resurrect them from another
+   *  tab's older snapshot. Session-scoped on purpose: once the delete has been written, every other
+   *  tab's next read sees it gone and stops carrying it. */
+  const deletedHere = new Set();
+
+  /**
+   * MERGE, DO NOT OVERWRITE -- because a device can have more than one tab of this game open and
+   * they share one localStorage.
+   *
+   * `keyring` is read once, at init, and every persist() used to write that whole snapshot back. Two
+   * tabs is then a textbook lost update:
+   *
+   *   tab A inits, reads []           tab B inits, reads []
+   *   tab A creates Ada  -> [Ada]
+   *                                   tab B creates Bo   -> [Bo]     <- Ada is gone
+   *
+   * Nothing throws and nothing warns. Tab A carries on with a perfectly usable in-memory id that no
+   * longer exists on the device, and finds out on its next reload -- as somebody else, with every
+   * reward the server granted the old id orphaned behind it. Measured in drive-two-clients hosted:
+   * `gq-profiles held p-5714ab7e-… before the reload: FALSE`, for an id the app was still using.
+   *
+   * Two tabs is not an exotic case for the thing this module is FOR. "Two children on one device" is
+   * its whole purpose, and a second tab is an ordinary way for a child to get there -- a sibling
+   * opening the game while the first is still up, or yesterday's tab still sitting in the switcher.
+   *
+   * The merge is a union by id. A profile in both keeps whichever copy was played more recently,
+   * because that is the one whose flags and name are current. `activeProfileId` stays THIS tab's,
+   * always: the other tab's idea of who is playing is about a different screen, and adopting it
+   * would switch a child mid-play. Deletes win over another tab's stale copy via `deletedHere`.
+   */
+  function mergedWithDevice() {
+    const onDevice = readKeyring(storage);
+    const merged = [];
+    // A TIE GOES TO THIS TAB, and getting that backwards broke two existing tests before the suite
+    // caught it. `mine` is always the second occurrence here (device profiles are iterated first),
+    // and most mutations -- setFlags above all -- change a profile without touching lastPlayedAt.
+    // So the common case is a tie between the copy this tab just edited and the copy it read at
+    // init, and resolving that in the device's favour throws the edit away: discovery flags stopped
+    // surviving a reload and the gate started re-asking for a name it had already been given. The
+    // device only wins when another tab genuinely played that profile MORE RECENTLY.
+    const keepOf = (fromDevice, mine) => ((fromDevice.lastPlayedAt ?? '') > (mine.lastPlayedAt ?? '')
+      ? fromDevice
+      : mine);
+    for (const profile of [...onDevice.profiles, ...keyring.profiles]) {
+      if (deletedHere.has(profile.id)) continue;
+      const already = merged.findIndex((p) => p.id === profile.id);
+      if (already === -1) merged.push(profile);
+      else merged[already] = keepOf(merged[already], profile);
+    }
+    const active = merged.some((p) => p.id === keyring.activeProfileId)
+      ? keyring.activeProfileId
+      : (merged[0]?.id ?? null);
+    return { v: PROFILES_SCHEMA_VERSION, activeProfileId: active, profiles: merged };
+  }
+
   function persist() {
+    keyring = mergedWithDevice();
     writeKeyring(storage, keyring);
   }
 
@@ -392,6 +448,8 @@ export function createProfileStore(options = {}) {
     const index = keyring.profiles.findIndex((p) => p.id === profileId);
     if (index === -1) return false;
     keyring.profiles.splice(index, 1);
+    // Remembered so the merge in persist() cannot bring this child back from another tab's snapshot.
+    deletedHere.add(profileId);
     if (keyring.activeProfileId === profileId) {
       keyring.activeProfileId = keyring.profiles[0]?.id ?? null;
     }
