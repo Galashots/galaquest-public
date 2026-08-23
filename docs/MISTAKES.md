@@ -669,7 +669,7 @@ alongside them -- see GQ-015 for why those tests did not catch it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-015 — A test that hand-feeds a pure function proves the function, not where its inputs come from.
-**Status:** RULE · **Hits:** 3 · **First:** 2026-08-21 · **Last:** 2026-08-21
+**Status:** RULE · **Hits:** 4 · **First:** 2026-08-21 · **Last:** 2026-08-23
 **Not enforced because:** the defect is a missing test, and the shape of the missing one depends on
 which input the function is being lied to about. No scanner can tell a legitimately isolated unit
 test from one that isolated away the actual bug; only asking "who really supplies this argument in
@@ -694,6 +694,14 @@ the producer -- and the producer was where the remaining defect lived (GQ-014 in
 give-away was visible and ignored: two of those tests broke the moment the real producer was
 introduced, because the hand-built facts had never been shaped like the real ones. All six now mint
 through `mintEquipFact`.
+(4) 2026-08-23, and the first one outside the equip path, which is what makes it a pattern rather
+than a habit of one file. `test/hero-avatars.test.mjs` proved `chooseAvatarId` thoroughly by handing
+it a list of taken animals. The defect was in what `createProfile` PUT IN that list: it read stored
+`avatar` fields and filtered the nulls away, so a migrated child -- who has no stored avatar and is
+drawn with an id-derived one -- looked as though they had taken nothing, and the next sibling was
+handed the animal already on their brother's card. Every test passed for the whole life of the
+defect. Found by Director audit. The repair drives the real producers: `migrateLegacyGuest()` then
+`createProfile()` over a device holding a legacy guest id.
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — A status a document holds on someone else's behalf goes stale with no commit to catch it.
@@ -821,3 +829,30 @@ UNPROVEN as separate buckets.
 **Foreknowledge helped:** partly. The sweep-every-caller instinct was there and was applied
 thoroughly to `test/`; what was missing was the knowledge that `tools/runtime-test/` imports the same
 module. The fix for that is mechanical rather than remembered, which is what the guard is.
+
+### OBSERVED — A change detector must key on the thing it measures, not on the thing it is named after.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** When something accumulates history about a target and resets when the target changes, the
+reset key has to identify the target at the same granularity the history is measured at. A stable,
+correct, immutable identity for the wrong LEVEL is still the wrong key, and it fails silently: the
+detector keeps a history that no longer describes anything, and every honest reading is judged
+against it. This is not GQ-014 -- nothing here was derived from mutable state, and computing it twice
+gives the same answer both times. The question that catches it is different: **what exactly is the
+quantity I am accumulating measured against, and does my key change whenever THAT does?**
+**Incident (2026-08-23, `guidanceRescue.js`):** the rescue watch accumulated "seconds since this
+child last got nearer" and reset on a change of `objectiveId`. It measured distance to a PLACE. Two
+objectives -- "wake the dark lights" and "N cold seals left" -- keep one id across six lights and
+three seals, so finishing one moved the place without moving the key. A child who walked right up to
+a light and lit it kept a best distance of about a metre, and then the whole correct walk to the next
+light thirty metres away read as never getting nearer. Twelve seconds in, a child going exactly where
+they were sent is offered help finding it -- the game contradicting itself at the moment they had just
+succeeded. Reachable by any child who lights a light, which is the chapter's main verb. Caught by
+Director audit, not by the fifteen unit tests written alongside the module, every one of which used a
+single target.
+**The fix is two keys, and the asymmetry between them is the actual lesson:** a new objective resets
+everything, a new place inside one objective resets only the distance history. Zeroing the clock on
+every target change looks tidier and reintroduces the bug in the mirror: a child standing between two
+unlit lights has a nearest that flips as they drift, and a clock that restarts on every flip never
+reaches the patience. A rescue that can never fire looks exactly like restraint. Both wrong answers
+are now pinned by a test each, because the correct behaviour sits between them.
+**Foreknowledge helped:** not yet recorded.

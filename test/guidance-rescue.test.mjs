@@ -13,18 +13,26 @@ import {
   MAX_CREDITED_SECONDS,
   PROGRESS_EPSILON_METERS,
   createRescueWatch,
+  targetKeyFor,
 } from '../public/src/ui/guidanceRescue.js';
 
 const OBJ = 'find-the-keeper';
 
 /** Feed the watch a run of distances, one per simulated second. Returns the last result. */
-function walk(watch, distances, { objectiveId = OBJ, deltaSeconds = 1 } = {}) {
+function walk(watch, distances, { objectiveId = OBJ, targetKey = null, deltaSeconds = 1 } = {}) {
   let last = null;
   for (const distanceMeters of distances) {
-    last = watch.update({ distanceMeters, objectiveId, deltaSeconds });
+    last = watch.update({ distanceMeters, objectiveId, targetKey, deltaSeconds });
   }
   return last;
 }
+
+/** A child closing on something at one metre a second, from `from` down to `to`. */
+const walkIn = (from, to) => {
+  const steps = [];
+  for (let d = from; d >= to; d -= 1) steps.push(d);
+  return steps;
+};
 
 /** N seconds of standing perfectly still at one distance. */
 const still = (metres, seconds) => Array.from({ length: seconds }, () => metres);
@@ -225,4 +233,97 @@ test('the patience is configurable, so the integrated opening can tune it', () =
   const impatient = createRescueWatch({ patienceSeconds: 3 });
   assert.equal(walk(impatient, still(9, 2)).offering, false);
   assert.equal(walk(impatient, still(9, 1)).offering, true);
+});
+
+// ── one errand, several places ─────────────────────────────────────────────────────────────────
+//
+// "Wake the dark lights" keeps one name across six lights, and "N cold seals left" across three.
+// The objective id a child sees does not change when they finish one, so the id alone cannot tell
+// this watch that the thing it is measuring moved.
+
+test('finishing one light and setting off for the next is NOT being stuck', () => {
+  // The failure this whole seam exists for. A child walks right up to light A -- best distance one
+  // metre -- lights it, and the same objective now points at light B thirty metres away. Every
+  // honest step toward B is further from the thing than their remembered best, so a watch that only
+  // keys on the objective id counts the entire correct walk as being stuck and offers to show them
+  // where to go while they are already going there.
+  const watch = createRescueWatch();
+  walk(watch, walkIn(12, 1), { targetKey: 'light-A' });
+  assert.equal(watch.debugState().bestMeters, 1, 'premise: they got right up to A');
+
+  const towardB = walk(watch, walkIn(30, 2), { targetKey: 'light-B' });
+  assert.equal(towardB.offering, false,
+    `offered help after ${towardB.secondsStuck}s of walking correctly toward the next light`);
+  assert.equal(towardB.bestMeters, 2, 'B is measured from where B started, not from how close A got');
+});
+
+test('...and the same walk WITHOUT the target changing does offer, so the case above can fail', () => {
+  // The pairing that makes the test above worth having. Identical distances, one target: twenty-nine
+  // seconds of never beating a best of one metre is genuinely stuck, and the watch must say so. If
+  // this ever goes quiet, the case above has stopped proving anything.
+  const watch = createRescueWatch();
+  walk(watch, walkIn(12, 1), { targetKey: 'light-A' });
+  const same = walk(watch, walkIn(30, 2), { targetKey: 'light-A' });
+  assert.equal(same.offering, true);
+});
+
+test('a child standing between two lights is still offered help, however the nearest flips', () => {
+  // The other direction, and the reason the stuck clock does NOT restart with the target. A child
+  // stopped halfway between two unlit lights has a nearest that flips with sub-metre drift. If each
+  // flip zeroed the clock the offer could never arrive -- a rescue that never fires, which reads as
+  // restraint rather than as the silent failure it is.
+  const watch = createRescueWatch();
+  let last = null;
+  for (let second = 0; second < DEFAULT_PATIENCE_SECONDS; second += 1) {
+    const flipped = second % 2 === 0;
+    last = watch.update({
+      distanceMeters: flipped ? 14.9 : 15.1,
+      objectiveId: OBJ,
+      targetKey: flipped ? 'light-A' : 'light-B',
+      deltaSeconds: 1,
+    });
+  }
+  assert.equal(last.offering, true, 'a flapping target is a stuck child, not a fresh start');
+});
+
+test('a new errand still restarts everything, target and clock alike', () => {
+  // The asymmetry, asserted rather than left to be inferred from the two cases above.
+  const watch = createRescueWatch();
+  walk(watch, still(15, DEFAULT_PATIENCE_SECONDS), { targetKey: 'the-keeper' });
+  assert.equal(watch.debugState().offering, true);
+
+  const fresh = watch.update({
+    distanceMeters: 40, objectiveId: 'light-the-tree', targetKey: 'the-tree', deltaSeconds: 1,
+  });
+  assert.equal(fresh.offering, false);
+  assert.equal(fresh.secondsStuck, 1, 'the clock restarted, and this frame counted like any other');
+  assert.equal(watch.debugState().watchingTargetKey, 'the-tree');
+});
+
+test('an errand losing its place, and getting it back, does not resume mid-clock', () => {
+  const watch = createRescueWatch();
+  walk(watch, still(15, DEFAULT_PATIENCE_SECONDS - 2), { targetKey: 'a-seal' });
+  walk(watch, [NaN, NaN], { targetKey: null });
+  const back = walk(watch, still(15, 2), { targetKey: 'a-seal' });
+  assert.equal(back.offering, false);
+});
+
+// ── the key itself ─────────────────────────────────────────────────────────────────────────────
+
+test('a place is its coordinate, so the same place resolved twice is the same target', () => {
+  // Load-bearing, not cosmetic. main.js resolves the next unlit light by mapping a filtered list
+  // into FRESH objects every frame, so two frames standing still produce two different objects for
+  // one light. Keying on the object would restart the watch sixty times a second and the offer
+  // would never come.
+  assert.notEqual({ x: 3, z: 20 }, { x: 3, z: 20 }, 'premise: these are different objects');
+  assert.equal(targetKeyFor({ x: 3, z: 20 }), targetKeyFor({ x: 3, z: 20 }));
+  assert.notEqual(targetKeyFor({ x: 3, z: 20 }), targetKeyFor({ x: 3, z: 21 }));
+  assert.equal(targetKeyFor(null), null);
+  assert.equal(targetKeyFor(undefined), null);
+});
+
+test('a placeless objective and an unsupplied dynamic one are one key, because they are one case', () => {
+  // Both arrive here as null and both mean "nothing to point at". Distinguishing them would be a
+  // difference this watch cannot act on -- it has no distance either way.
+  assert.equal(targetKeyFor(null), targetKeyFor(undefined));
 });

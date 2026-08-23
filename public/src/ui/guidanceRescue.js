@@ -44,7 +44,10 @@ export const PROGRESS_EPSILON_METERS = 0.25;
  * @param options.progressEpsilonMeters how much nearer counts as nearer.
  *
  * @returns a watch with:
- *   update({ distanceMeters, objectiveId, deltaSeconds }) -> { offering, secondsStuck, bestMeters }
+ *   update({ distanceMeters, objectiveId, targetKey, deltaSeconds })
+ *              -> { offering, secondsStuck, bestMeters }. `targetKey` is the identity of the
+ *              PLACE, from targetKeyFor -- separate from objectiveId because one objective can
+ *              point at six different lights in turn.
  *   accept()   the child took the help. Silent until they get genuinely stuck again.
  *   dismiss()  the child waved it away. Same, and deliberately not a shorter fuse: someone who has
  *              just said no is the last person to ask again sooner.
@@ -69,6 +72,23 @@ export const PROGRESS_EPSILON_METERS = 0.25;
  */
 export const MAX_CREDITED_SECONDS = 1;
 
+/**
+ * The identity of a PLACE, for a watch that has to know when the thing it is measuring moved.
+ *
+ * BY VALUE, NOT BY REFERENCE, and that is the whole reason this exists as a function rather than as
+ * an `===` on the place itself. The two dynamic destinations -- the next dark light, the next
+ * unbroken seal -- are resolved by mapping a filtered list into fresh `{ x, z }` objects EVERY
+ * FRAME, so reference equality reports a brand-new target sixty times a second and the watch would
+ * restart forever. A fixed destination, by contrast, returns the same frozen object each time. Two
+ * different answers to "is this the same place" for two kinds of place is exactly the sort of split
+ * this repo keeps paying for, so neither caller gets to decide: a place is its coordinate.
+ *
+ * Exported so main.js and the tests cannot each invent a format that agrees today (GQ-007).
+ */
+export function targetKeyFor(place) {
+  return place ? `${place.x},${place.z}` : null;
+}
+
 export function createRescueWatch({
   patienceSeconds = DEFAULT_PATIENCE_SECONDS,
   progressEpsilonMeters = PROGRESS_EPSILON_METERS,
@@ -80,16 +100,18 @@ export function createRescueWatch({
   // is what makes "shut up until something changes" true rather than "shut up for a while".
   let answered = false;
   let watchingObjectiveId = null;
+  let watchingTargetKey = null;
 
-  function startFresh(objectiveId, distanceMeters) {
+  function startFresh(objectiveId, targetKey, distanceMeters) {
     watchingObjectiveId = objectiveId;
+    watchingTargetKey = targetKey;
     bestMeters = Number.isFinite(distanceMeters) ? distanceMeters : Infinity;
     secondsStuck = 0;
     offering = false;
     answered = false;
   }
 
-  function update({ distanceMeters, objectiveId = null, deltaSeconds = 0 }) {
+  function update({ distanceMeters, objectiveId = null, targetKey = null, deltaSeconds = 0 }) {
     // A NEW OBJECTIVE IS A NEW QUESTION. Carrying the old one's stuck clock across would offer help
     // for the previous errand the instant a child finishes it -- the moment they are least lost.
     //
@@ -98,7 +120,38 @@ export function createRescueWatch({
     // "twelve seconds of patience" meaning twelve seconds sometimes and thirteen samples other
     // times, depending on whether the caller had just switched. One frame is nothing; a rule that
     // means two things is not.
-    if (objectiveId !== watchingObjectiveId) startFresh(objectiveId, distanceMeters);
+    if (objectiveId !== watchingObjectiveId) {
+      startFresh(objectiveId, targetKey, distanceMeters);
+    } else if (targetKey !== watchingTargetKey) {
+      // THE ERRAND DID NOT CHANGE BUT THE PLACE DID. "Wake the dark lights" and "N cold seals left"
+      // keep one name across six lights and three seals; the child finishes one and the SAME
+      // objective now points twenty metres away. Carrying the old best across is the defect: a
+      // child who walked right up to light A holds a best of one metre, and then every honest step
+      // toward light B reads as failing to get nearer. They would be offered help for walking
+      // exactly where they were sent -- and offered it at the worst possible moment, seconds after
+      // succeeding at something.
+      //
+      // ONLY THE BEST DISTANCE RESTARTS. The stuck clock does NOT, and the asymmetry with a change
+      // of objective above is deliberate:
+      //
+      //   A new OBJECTIVE means the child finished a whole beat -- there is a banner, a ceremony,
+      //   something the game just said to them. Nagging a second later is the failure the "new
+      //   errand" rule exists to prevent, so everything restarts.
+      //
+      //   A new TARGET inside one objective means the errand pointed somewhere else. The child has
+      //   not finished anything the game made a fuss about, and if they were stuck a moment ago
+      //   they are still stuck -- the thing they are stuck ON simply moved. Zeroing the clock here
+      //   would make "stand between two unlit lights" permanently silent: whichever is nearest
+      //   flips as they drift, and a clock that restarts on every flip never reaches the patience.
+      //   That is a rescue that can never fire, which looks exactly like restraint.
+      //
+      // The clock being kept is safe in the direction that matters, because reaching a light is how
+      // you light it: a child who completed A got nearer to A to do it, and getting nearer is the
+      // one thing that zeroes the clock. So at the moment a target changes by completion, the clock
+      // is already at zero and there is nothing to carry.
+      watchingTargetKey = targetKey;
+      bestMeters = Number.isFinite(distanceMeters) ? distanceMeters : Infinity;
+    }
 
     // No distance to measure against -- an objective with no place, like cutting the bramble in
     // front of you. Not stuck, not offering: this watch has nothing to say about it, and saying
@@ -127,9 +180,11 @@ export function createRescueWatch({
     update,
     accept() { answered = true; offering = false; },
     dismiss() { answered = true; offering = false; },
-    reset() { startFresh(watchingObjectiveId, Infinity); },
+    reset() { startFresh(watchingObjectiveId, watchingTargetKey, Infinity); },
     /** For a harness: observable without being able to drive it, the same posture main.js's runtime
      *  object takes toward the rules. */
-    debugState: () => ({ offering, secondsStuck, bestMeters, answered, watchingObjectiveId }),
+    debugState: () => ({
+      offering, secondsStuck, bestMeters, answered, watchingObjectiveId, watchingTargetKey,
+    }),
   };
 }

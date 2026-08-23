@@ -243,6 +243,10 @@ const STATE_EXPR = `JSON.stringify((() => {
     pointerTarget: r.guidanceRescueState
       ? [r.guidanceRescueState().targetX, r.guidanceRescueState().targetZ]
       : null,
+    // The watch's own reading, not just where it is aimed. Bursting a seal moves the target without
+    // changing the objective the chip shows, so this is the one place in the suite where "the same
+    // errand now points somewhere else" happens in a real browser.
+    rescue: r.guidanceRescueState ? r.guidanceRescueState() : null,
     objectiveShown: document.querySelector('#quest-objective')?.dataset.shown === 'true',
     bossBarShown: document.querySelector('#boss-bar')?.dataset.shown === 'true',
     bossBarText: document.querySelector('#boss-bar')?.textContent ?? '',
@@ -591,6 +595,40 @@ async function run() {
       const gone = done.siege.seals.filter((s) => s.burst).length;
       check(gone === index + 1, `seal ${index + 1} of 3 bursts`, `${gone} gone, chip "${done.objective}"`);
       if (gone !== index + 1) break;
+
+      // THE ERRAND DID NOT CHANGE, BUT THE PLACE DID -- and this is where that actually happens to a
+      // child rather than to a unit test. The chip still says "N cold seals left"; the arrow now
+      // points at a seal seven metres away; and the child is standing about a metre from the one
+      // they just burst.
+      //
+      // A watch keyed on the objective id alone carries that one-metre best across, and then every
+      // step toward the next seal is further away than its remembered best. Twelve seconds later a
+      // child walking exactly where they were sent is offered help finding it. So what is pinned
+      // here is not that the arrow moved -- the check above the seal loop already covers aiming --
+      // but that the watch's HISTORY restarted with it.
+      if (index + 1 < COLD_SEALS.length && done.rescue) {
+        const [tx, tz] = [done.rescue.targetX, done.rescue.targetZ];
+        const [burstX, burstZ] = COLD_SEALS[index];
+        check(tx !== burstX || tz !== burstZ,
+          `the arrow leaves the seal that just burst`,
+          `target [${tx}, ${tz}], burst seal [${burstX}, ${burstZ}]`);
+
+        const [hx, hz] = done.heroPos;
+        const nowMeters = tx === null ? NaN : Math.hypot(tx - hx, tz - hz);
+        // Reset means "measured from here". Carried means "still holding how close they got to the
+        // last one", which at a burst seal is roughly arm's length. Half a metre of slack, because
+        // reconciliation can nudge them nearer between the reset and this sample; the two values it
+        // is telling apart are about seven metres apart.
+        // JSON has no Infinity, so an unmeasured best arrives here as null rather than as a number.
+        // Reported rather than coerced: a null silently comparing as zero would fail this check for
+        // the wrong reason and send whoever reads the log looking for a defect that is not there.
+        const best = done.rescue.bestMeters;
+        check(typeof best === 'number' && best >= nowMeters - 0.5,
+          'and its stuck-clock history restarts at the NEW seal, not at how close the old one got',
+          `best ${typeof best === 'number' ? `${best.toFixed(2)}m` : JSON.stringify(best)}`
+          + `, now ${nowMeters.toFixed(2)}m from [${tx}, ${tz}]`
+          + ` -- the seals are ~7m apart, so a best carried from the burst one reads about 1m`);
+      }
     }
 
     const woken = await pollUntil(tab, (s) => s.siege.warden.mode !== 'dormant', 20000);

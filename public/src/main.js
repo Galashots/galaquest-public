@@ -104,7 +104,7 @@ import {
 import { questObjectiveFor } from './world/quest.js';
 import { destinationFor, nearestPlaceTo } from './world/destinations.js';
 import { edgeIndicatorFor } from './ui/offscreenPointer.js';
-import { createRescueWatch } from './ui/guidanceRescue.js';
+import { createRescueWatch, targetKeyFor } from './ui/guidanceRescue.js';
 import { DEFAULT_RANGE_METERS, minimapPlacement, minimapPolyline } from './ui/minimap.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
@@ -3359,6 +3359,12 @@ async function bootstrap() {
         ? Math.hypot(player.position.x - rescueTarget.x, player.position.z - rescueTarget.z)
         : NaN,
       objectiveId: currentObjective?.id ?? null,
+      // WHICH PLACE, as well as which errand. The objective id is stable across "wake the dark
+      // lights" and "N cold seals left" while the place it points at moves from one light to the
+      // next, so the id alone cannot tell the watch that the thing it is measuring changed. Without
+      // this, a child who walked right up to one light and lit it inherits that one-metre best for
+      // the next light thirty metres away, and every correct step toward it reads as being stuck.
+      targetKey: targetKeyFor(rescueTarget),
       // THE RAW DELTA, not the clamped one. `deltaSeconds` above is clamped to 0.1 so a hitch
       // cannot teleport the hero -- a physics bound. Patience is wall-clock: a child staring at an
       // unchanging screen for twelve seconds has been staring for twelve seconds whether the device
