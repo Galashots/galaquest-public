@@ -106,3 +106,38 @@ test('the ceremony auto-dismisses around 4.5s -- short enough to stay a moment, 
 test('the DOM half exports the factory shape main.js will wire (not exercised here -- browser/harness territory)', () => {
   assert.equal(typeof createUnlockCard, 'function');
 });
+
+// THE CEREMONY HAS TO BE HEARABLE, not just readable. It is the biggest moment in this game -- the
+// thing you were sent for, arriving -- and until now all four of its fields were text, which is the
+// one form the stated audience cannot use. keeperSpeech.js makes the whole argument; these assert
+// that the ear gets its OWN wording rather than the card's, because the card's is wrong out loud.
+test('the ceremony carries a spoken form, and it is not the four strings on the card', () => {
+  const state = unlockCardState({ itemName: 'Wildwood Blade', fromDamage: 1, toDamage: 2 });
+  assert.ok(state.spoken.startsWith('Unlocked!'), state.spoken);
+  assert.ok(state.spoken.includes('Wildwood Blade'),
+    'the spoken name must be the readable one, not the card\'s shout');
+  assert.ok(!state.spoken.includes('WILDWOOD BLADE'), 'a voice should not shout');
+  assert.ok(!state.spoken.includes('→'), 'an arrow read aloud is the word "arrow"');
+  assert.ok(!state.spoken.includes('🗡'), 'the hint is a picture of a button, which cannot be said');
+  assert.ok(state.spoken.includes('2 damage') && state.spoken.includes('1'),
+    `the upgrade must be spoken as a sentence: ${state.spoken}`);
+});
+
+test('an unlock with no damage numbers still says what arrived', () => {
+  const state = unlockCardState({ itemName: 'Belt Lantern' });
+  assert.equal(state.spoken, 'Unlocked! Belt Lantern.');
+  assert.ok(!state.spoken.includes('undefined'), state.spoken);
+  assert.ok(!state.spoken.includes('NaN'), state.spoken);
+});
+
+test('a missing name says something a child can act on, not "Unlocked! ."', () => {
+  const state = unlockCardState({});
+  assert.equal(state.name, '', 'the card itself still shows nothing rather than inventing a name');
+  assert.equal(state.spoken, 'Unlocked! new gear.');
+});
+
+test('sabotage: the spoken form is not a constant -- two different items say different things', () => {
+  const blade = unlockCardState({ itemName: 'Wildwood Blade', fromDamage: 1, toDamage: 2 });
+  const lantern = unlockCardState({ itemName: 'Belt Lantern' });
+  assert.notEqual(blade.spoken, lantern.spoken);
+});

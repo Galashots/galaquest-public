@@ -44,7 +44,11 @@ export const UNLOCK_CARD_SECONDS = 4.5;
  * that says nothing. isUpgrade is computed, never assumed (the sabotage test swaps the numbers).
  */
 export function unlockCardState({ itemName, fromDamage, toDamage } = {}) {
-  const name = typeof itemName === 'string' ? itemName.trim().toUpperCase() : '';
+  const trimmed = typeof itemName === 'string' ? itemName.trim() : '';
+  const name = trimmed.toUpperCase();
+  // The card SHOUTS and a voice should not. Read from the untouched name rather than the display
+  // one, and fall back to something a child can act on rather than saying "Unlocked! ." at them.
+  const spokenName = trimmed === '' ? 'new gear' : trimmed;
   const comparable = Number.isFinite(fromDamage) && Number.isFinite(toDamage);
   return {
     eyebrow: 'UNLOCKED',
@@ -56,6 +60,18 @@ export function unlockCardState({ itemName, fromDamage, toDamage } = {}) {
     // The affordance hint: #hero-button's own 🗡 glyph plus the word #workshop-interact already
     // taught for the same screen -- the pill IS a picture of the button to tap next.
     hint: '🗡 GEAR',
+    // WHAT A CHILD WHO CANNOT READ GETS OUT OF THIS CARD, which until now was nothing. This is the
+    // biggest moment in the game -- the thing you were sent for, arriving -- and all four fields on
+    // it are text. keeperSpeech.js makes the argument in full; the same latch reads this out once a
+    // child has tapped the speaker button, and stays silent for one who never asked.
+    //
+    // Deliberately NOT the displayed strings. `name` is uppercased for the card and the eyebrow is
+    // a label; '1 → 2 DAMAGE' reads the arrow aloud, and '🗡 GEAR' is a picture of a button, which
+    // is the one thing a spoken sentence cannot be. So the ear gets its own wording, and the
+    // comparison becomes the sentence a person would actually say.
+    spoken: comparable
+      ? `Unlocked! ${spokenName}. Now ${toDamage} damage instead of ${fromDamage}.`
+      : `Unlocked! ${spokenName}.`,
   };
 }
 

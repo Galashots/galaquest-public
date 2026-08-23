@@ -145,6 +145,26 @@ for (let i = 0; i < 60 && !heroReady; i += 1) {
 }
 if (!heroReady) throw new Error(`runtime never came up on ${URL_UNDER_TEST}`);
 
+// WHAT THE CHILD HEARS, recorded from the moment the page comes up so nothing can be spoken before
+// anyone is looking. banner() now offers every narrative beat to the same read-aloud latch the
+// speech bubble uses (see keeperSpeech.js for why that latch exists at all), and the latch has two
+// halves that both need proving in a real browser rather than only in a unit test: it must stay
+// silent until a child has asked to be read to, and a real tap must really unlock it. Wrapping
+// speak() rather than replacing speechSynthesis, so the page's own code path is unchanged and the
+// original still runs -- this observes, it does not substitute.
+const speechRecorder = await page.eval(`(() => {
+  window.__gqSpoken = [];
+  const synth = window.speechSynthesis;
+  if (!synth || typeof synth.speak !== 'function') return 'absent';
+  const original = synth.speak.bind(synth);
+  synth.speak = (utterance) => {
+    window.__gqSpoken.push(String(utterance && utterance.text));
+    return original(utterance);
+  };
+  return 'wrapped';
+})()`);
+const spokenSoFar = async () => JSON.parse(await page.eval('JSON.stringify(window.__gqSpoken || [])'));
+
 const players = await page.eval(`(() => {
   const m = (document.querySelector('#runtime-status')?.textContent ?? '').match(/players\\s+(\\d+)/i);
   return m ? Number(m[1]) : 1;
@@ -653,6 +673,40 @@ const waved = waveLog.samples.some((sample) => sample.v === true);
 check('the keeper actually waves when a hero comes within range',
   waved, `waving seen on a recorded frame: ${waved}, over ${waveLog.samples.length} frame(s) from `
     + `before the approach; keeperState now ${JSON.stringify((await state()).keeper)}`);
+
+// ── read-aloud: silent until asked, then not silent ──────────────────────────────────────────────
+// By now the opening hail has fired (`Keeper Aldric is waving you over!`, once per session, a beat
+// after the zone is ready) and the quest line has appeared and changed. Every one of those went
+// through the latch, and the latch must have refused all of them: nothing in this game speaks to a
+// child who has not asked to be read to.
+if (speechRecorder === 'wrapped') {
+  const beforeTap = await spokenSoFar();
+  check('nothing has been read aloud before the child asked to be read to',
+    beforeTap.length === 0, `spoken so far: ${JSON.stringify(beforeTap)}`);
+
+  // And now the asking. A real CDP tap on the speaker button, because the tap is not a formality --
+  // it is iOS's price for making any sound at all, and it has to be a genuine user gesture.
+  const button = JSON.parse(await page.eval(`(() => {
+    const el = document.querySelector('#keeper-speech-speak');
+    if (!el) return 'null';
+    const r = el.getBoundingClientRect();
+    return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height });
+  })()`));
+  if (button === null || button.w === 0) {
+    check('the read-aloud button is on screen for a child standing at the keeper', false,
+      `getBoundingClientRect gave ${JSON.stringify(button)}`);
+  } else {
+    await touch('touchStart', [{ x: button.x, y: button.y }]);
+    await touch('touchEnd', []);
+    const heard = await pollUntilDeadline(spokenSoFar, (list) => list.length > 0,
+      { intervalMs: 100, timeoutMs: 4000 });
+    check('one real tap on the speaker, and the keeper\'s line is read out',
+      heard.length > 0, `spoken: ${JSON.stringify(heard)}`);
+  }
+} else {
+  console.log('  NOTE  this Chrome exposes no speechSynthesis, so the two read-aloud checks did '
+    + 'not run. They are NOT passing -- they are absent, and the count below says 13 not 15.');
+}
 
 // The greeting must END, and it must hand the body back. This half of the gate exists because the
 // half above passed all the way through a real defect: update() used to re-fire the wave on the

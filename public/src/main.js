@@ -764,11 +764,33 @@ async function bootstrap() {
 
   const bannerElement = document.querySelector('#banner');
   let bannerTimer = null;
-  function banner(text, milliseconds) {
+  // THE OTHER HALF OF THE NARRATIVE, AND IT WAS SILENT.
+  //
+  // keeperSpeech.js makes the argument in full for the speech bubble: a child who cannot read was
+  // being handed sentences, and the whole of this game's story reached its stated audience only if a
+  // pre-reader found a 44px grey circle and guessed what it was for. That fix landed on the bubble
+  // and stopped there. The banner is the OTHER surface the game tells its story on -- the wolf
+  // beaten, the tree alight, the gate found, where to go next, all 28 of them -- and every one was
+  // squiggles on a grey bar to the player this game is for.
+  //
+  // Same latch, deliberately: nothing here speaks to a child who never asked. `unlocked` is set by a
+  // real tap on the bubble's speaker button, which is both iOS's price for making a sound at all and
+  // the child's own signal that they want to be read to. One tap, ever, and the game starts reading
+  // itself out -- bubble and banner together, because a child does not know they are two systems.
+  //
+  // It CANCELS whatever is mid-sentence, which is defaultSpeak's existing law and worth stating
+  // rather than discovering: "the line on screen and the line being read have to be the same line".
+  // A banner is the most recent thing the game chose to say, so it wins, and a Keeper line it cuts
+  // off is still on screen with its speaker button still there to replay it.
+  //
+  // `spoken` exists because the screen and the ear want different strings for the same fact:
+  // "LANTERN MARK  2 / 3" is right to look at and reads aloud as "two slash three".
+  function banner(text, milliseconds, spoken = text) {
     bannerElement.textContent = text;
     bannerElement.dataset.shown = 'true';
     window.clearTimeout(bannerTimer);
     bannerTimer = window.setTimeout(() => { bannerElement.dataset.shown = 'false'; }, milliseconds);
+    speakKeeperLineIfUnlocked(spoken);
   }
 
   // Hearts, not the status line's "you Nhp": see combat/feedback.js for the reference research
@@ -895,7 +917,8 @@ async function bootstrap() {
   // mark was already earned, already counted and already persisted a second ago.
   let markIgniteTimer = null;
   function celebrateMarkArrival(totalMarks) {
-    banner(`LANTERN MARK  ${totalMarks} / ${MARKS_TO_UNLOCK}`, 1800);
+    banner(`LANTERN MARK  ${totalMarks} / ${MARKS_TO_UNLOCK}`, 1800,
+      `Lantern mark, ${totalMarks} of ${MARKS_TO_UNLOCK}`);
     const pip = lanternPipElements[Math.min(totalMarks, lanternPipElements.length) - 1];
     // Re-triggering a CSS animation needs the attribute to actually leave and come back, which needs
     // a frame in between -- the same reason popDamageNumber waits a frame before starting its rise.
@@ -2603,13 +2626,18 @@ async function bootstrap() {
         bladeOwnedSeen = ownsBladeNow;
       } else if (ownsBladeNow && !bladeOwnedSeen) {
         bladeOwnedSeen = true;
-        unlockCard.show(unlockCardState({
+        const unlocked = unlockCardState({
           itemName: itemDef(WILDWOOD_BLADE_ID)?.name ?? 'Wildwood Blade',
           // Honest about what it replaces: compared against whatever is actually EQUIPPED right
           // now, read off the same id the hero's own hand is drawn from (GQ-007).
           fromDamage: damageFor(currentEquippedWeaponId),
           toDamage: damageFor(WILDWOOD_BLADE_ID),
-        }));
+        });
+        unlockCard.show(unlocked);
+        // And say it, for the child this card was always least use to. Same latch as the bubble and
+        // the banner -- silent until a real tap has asked for it. See unlockCardState for why the
+        // spoken wording is not the four strings on the card.
+        speakKeeperLineIfUnlocked(unlocked.spoken);
         audio.play('blade-unlock');
       }
 
