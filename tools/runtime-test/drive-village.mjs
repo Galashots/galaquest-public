@@ -324,11 +324,49 @@ check('walking partway up the lane toward the wolf actually closes distance',
 const [keeperX, keeperZ] = SPAWNS.keeper;
 // KEEPER_WAVE_RADIUS_METERS is 2.0 (zoneLoader.js); stop just inside it so the trigger has fired
 // by the time this resolves, not right on the boundary where a float rounding could miss it.
+// HOW MUCH SLOWER THAN AUTHORED DO ANIMATIONS RUN ON THIS MACHINE?
+//
+// The Keeper's greeting ends on the AnimationMixer's own 'finished' event, and the mixer is advanced
+// by main.js's deltaSeconds -- which is CLAMPED TO 0.1s so a hitch cannot teleport the hero. That
+// clamp is right for animation (skipping frames of a wave would look worse than stretching it), and
+// above 10 fps it never bites at all: 10 x 0.1 = 1.0x real time. Below it, animation time slows in
+// exact proportion.
+//
+// Measured on this container: ~3 fps, so 0.30x, so a 2.78s wave clip takes 9.3s of wall clock.
+// Against a fixed 6s budget the harness reported "the keeper stops waving ... rather than looping"
+// -- which is precisely the real defect that check was written for, and precisely NOT what was
+// happening. Recorded frame-by-frame in the page, the wave started at 5045ms and ended at 14319ms,
+// handing over to talk exactly as designed.
+//
+// So the budget is DERIVED from the machine rather than picked. A wave that is genuinely stuck in a
+// loop still never ends, however long the budget, so the check keeps all of its power -- what it
+// loses is the ability to call a slow runner a looping Keeper.
+const animationStretch = await (async () => {
+  const sampled = await page.eval(`new Promise((resolve) => {
+    let frames = 0;
+    const started = performance.now();
+    const tick = () => {
+      frames += 1;
+      if (performance.now() - started >= 1000) resolve(JSON.stringify({ fps: frames }));
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  })`).then(JSON.parse);
+  const fps = Math.max(1, sampled.fps);
+  // 0.1 is main.js's own movement clamp; above 1/0.1 = 10 fps there is no stretch.
+  const stretch = Math.max(1, 10 / fps);
+  console.log(`  PERF  ~${fps} fps, so animations run at ${(1 / stretch).toFixed(2)}x authored speed;`
+    + ` animation-gated waits are scaled by ${stretch.toFixed(1)}x`);
+  return stretch;
+})();
+/** A timeout for something gated on an animation FINISHING, rather than on wall-clock. */
+const animationBudget = (ms) => Math.round(ms * animationStretch);
+
 const approached = await walkToward(keeperX, keeperZ, 1.5, 10000);
 check('walking reaches the keeper',
   Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) < 2.0,
   `hero ${JSON.stringify(approached.heroPos)}, keeper [${keeperX}, ${keeperZ}]`);
-const waved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: 3000 });
+const waved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: animationBudget(3000) });
 check('the keeper actually waves when a hero comes within range',
   waved.keeper?.waving === true, `keeperState ${JSON.stringify(waved.keeper)}`);
 
@@ -339,7 +377,7 @@ check('the keeper actually waves when a hero comes within range',
 // startWave() also clears `talking`, that starved Talk_Passionately forever -- the clip shipped
 // inside keeper.glb and could never play. Asserting the greeting STOPS while the hero is still
 // standing there is what distinguishes "he greeted me" from "he is stuck waving at me".
-const settled = await pollUntil((s) => s.keeper?.waving === false, { timeoutMs: 6000 });
+const settled = await pollUntil((s) => s.keeper?.waving === false, { timeoutMs: animationBudget(6000) });
 check('the keeper stops waving while the hero is still standing there, rather than looping',
   settled.keeper?.waving === false,
   `after the greeting, still in range: keeperState ${JSON.stringify(settled.keeper)}`);
@@ -355,7 +393,7 @@ check('the keeper stops waving while the hero is still standing there, rather th
 // wave radius (2.0 m) and the shared speech radius (the same constant), so keeperSpeech stays
 // visible and wantsTalking stays true across the handoff -- if this doesn't become true, the
 // 'finished' handler's fallback to idleAction is firing instead of the talk branch.
-const talking = await pollUntil((s) => s.keeper?.talking === true, { timeoutMs: 3000 });
+const talking = await pollUntil((s) => s.keeper?.talking === true, { timeoutMs: animationBudget(3000) });
 check('after the greeting, the keeper talks while the hero is still there and the line is visible',
   talking.keeper?.talking === true, `keeperState ${JSON.stringify(talking.keeper)}`);
 
@@ -381,7 +419,7 @@ const leftDistance = Math.hypot(left.heroPos[0] - keeperX, left.heroPos[1] - kee
 check('walking away clears both the wave and the (wider) re-arm radius',
   leftDistance > KEEPER_GREET_REARM_RADIUS_METERS,
   `hero-to-keeper distance ${leftDistance.toFixed(2)}m, re-arm radius ${KEEPER_GREET_REARM_RADIUS_METERS}m`);
-const untalked = await pollUntil((s) => s.keeper?.talking === false, { timeoutMs: 3000 });
+const untalked = await pollUntil((s) => s.keeper?.talking === false, { timeoutMs: animationBudget(3000) });
 check('talk stops once the hero is out of range',
   untalked.keeper?.talking === false, `keeperState ${JSON.stringify(untalked.keeper)}`);
 
@@ -391,16 +429,16 @@ const reapproached = await walkToward(keeperX, keeperZ, 1.5, 10000);
 check('walking back up to the keeper closes the distance again',
   Math.hypot(reapproached.heroPos[0] - keeperX, reapproached.heroPos[1] - keeperZ) < 2.0,
   `hero ${JSON.stringify(reapproached.heroPos)}, keeper [${keeperX}, ${keeperZ}]`);
-const rewaved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: 3000 });
+const rewaved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: animationBudget(3000) });
 check('re-entering after leaving produces exactly one new greeting wave',
   rewaved.keeper?.waving === true, `keeperState ${JSON.stringify(rewaved.keeper)}`);
 
 // Step 7: the second wave must end and hand back to talk too -- the whole cycle repeats cleanly
 // rather than the re-arm producing a wave that gets stuck, or that never reconnects to talk.
-const resettled = await pollUntil((s) => s.keeper?.waving === false, { timeoutMs: 6000 });
+const resettled = await pollUntil((s) => s.keeper?.waving === false, { timeoutMs: animationBudget(6000) });
 check('the second wave also ends while the hero is still there',
   resettled.keeper?.waving === false, `keeperState ${JSON.stringify(resettled.keeper)}`);
-const retalking = await pollUntil((s) => s.keeper?.talking === true, { timeoutMs: 3000 });
+const retalking = await pollUntil((s) => s.keeper?.talking === true, { timeoutMs: animationBudget(3000) });
 check('talk resumes after the second wave, closing the full cycle',
   retalking.keeper?.talking === true, `keeperState ${JSON.stringify(retalking.keeper)}`);
 // 8, not 6: at 6 the hero's own back and the keeper's robe (a simple low-poly trapezoid at this
