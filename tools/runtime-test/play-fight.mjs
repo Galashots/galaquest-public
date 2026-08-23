@@ -1441,19 +1441,50 @@ await shot('landscape-swing-miss');
 check('landscape: the miss ring is thrown from the button in its new corner too',
   landscapeMissShown, `attack button miss state seen: ${landscapeMissShown}`);
 
-// HIT, in landscape.
-await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 15000, { faceTarget: true });
+// HIT, in landscape -- the last beat in this file still on the shape everything above it was moved
+// off. It failed hosted at 66cf253 and took the two checks after it down with it: `hp 2 -> 2, 0 down
+// frame(s) of 126`, a hero standing somewhere the wolf never reached, swinging at nothing for a
+// minute. Two causes, both already solved twenty lines up in the portrait fight.
+//
+// ONE, a walk on a 15s wall budget. When it fell short the hero was outside ATTACK_REACH and every
+// one of the thirty taps missed, so the loop's own failure is silent -- it reports "no hit" whether
+// the swing is broken or the hero is standing in a field. It now re-closes whenever the RECORDER
+// says he is out of reach, the same gap-conditional closeOnWolf the portrait loop uses.
+//
+// TWO, a live poll for wolf.mode === 'hit'. WOLF_HIT_FLASH_SECONDS is 0.18s and a poll written
+// intervalMs 20 really samples every ~300ms here, so it was looking less often than the thing it
+// looks for lasts. The recorder holds every frame whether or not anyone is looking.
+await page.eval(startWatch('landscape-hit', FIGHT_SAMPLE));
+const readLandscapeHit = () => page.eval(readWatchSource('landscape-hit')).then(JSON.parse);
+await closeOnWolf(Infinity, 1.0);
 let landscapeHit = false;
-for (let attempt = 0; attempt < 30 && !landscapeHit; attempt += 1) {
+for (let attempt = 0; attempt < 60 && !landscapeHit; attempt += 1) {
+  const cycleStart = Date.now();
   // eslint-disable-next-line no-await-in-loop
   await tapAttack();
   // eslint-disable-next-line no-await-in-loop
-  const after = await pollUntil((s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
-    { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 });
-  landscapeHit = after.wolf.mode === 'hit';
-  if (landscapeHit) await shot('landscape-wolf-hit-flash');
-  if (after.wolf.mode === 'dying' || after.wolf.mode === 'dead') break;
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+  // EVERY TAP, not every fourth. The portrait loop reads in fours because it is trying to KILL and
+  // a read is pure cost there; this loop wants to stop at the FIRST hit, and four taps of overshoot
+  // is three more swings into a wolf with three hit points. It killed the thing outright, and the
+  // knockdown beat below then stood waiting to be bitten by a corpse -- 185 frames at full health.
+  // eslint-disable-next-line no-await-in-loop
+  const log = await readLandscapeHit();
+  landscapeHit = log.samples.some((sample) => sample.wolfMode === 'hit');
+  const dead = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
+  const gap = log.samples[log.samples.length - 1]?.gap ?? 0;
+  if (dead) break;
+  // eslint-disable-next-line no-await-in-loop
+  if (!landscapeHit && gap > ATTACK_REACH) await closeOnWolf(gap, 1.0);
 }
+const landscapeHitLog = await readLandscapeHit();
+await page.eval(stopWatchSource('landscape-hit'));
+console.log(`  landscape hit: ${landscapeHitLog.frames} frames, closest gap `
+  + `${Math.min(...landscapeHitLog.samples.map((sample) => sample.gap ?? Infinity)).toFixed(2)}m `
+  + `against a ${ATTACK_REACH}m reach`);
+// Best-effort, exactly as in portrait: the CHECK reads the recorder, the picture is a bonus that a
+// shutter longer than a 0.18s flash cannot be promised to catch.
+if (landscapeHit) await shot('landscape-wolf-hit-flash');
 check('landscape: a landed hit was photographed', landscapeHit,
   `wolf caught in its hit reaction: ${landscapeHit}`);
 
@@ -1465,6 +1496,17 @@ check('landscape: a landed hit was photographed', landscapeHit,
 // therefore satisfied by a moment that had already passed, and the shutter fired into the respawn.
 // The portrait block gets this for free by starting its watch before the hero has taken a scratch.
 await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 12000 });
+// A LIVE WOLF, AND THE HERO WITHIN REACH OF IT. Both are preconditions for a knockdown, and
+// neither was checked: hosted at 66cf253 this recorded 126 frames at full health because the hero
+// was standing out of range, and once that was fixed it recorded 185 because the beat above had
+// killed the wolf outright. Standing still and taking bites is still how the knockdown happens --
+// what is being arranged here is only that there is something alive nearby to do the biting.
+const biter = await pollUntil((s) => s.wolf.mode !== 'dead' && s.wolf.hp > 0,
+  { intervalMs: 200, timeoutMs: (WOLF_RESPAWN_SECONDS + 8) * 1000 });
+check('landscape: there is a live wolf to be knocked out by',
+  biter.wolf.mode !== 'dead' && biter.wolf.hp > 0,
+  `mode ${biter.wolf.mode}, hp ${biter.wolf.hp}`);
+await closeOnWolf(Infinity, 1.0);
 const beforeDown = await state();
 await page.eval(startWatch('landscape-knockdown', `({
   t: performance.now(),
