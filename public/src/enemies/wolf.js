@@ -262,7 +262,14 @@ export function createWolfPresenter(root, animations) {
     root.visible = presence > 0;
   }
 
-  function beginFlash(durationSeconds, color) {
+  function beginFlash(durationSeconds, color, kind) {
+    // Counters reset HERE rather than in flashHit(), so a defeat flash cannot pile its frames onto
+    // the last hit's tally. Written the wrong way round first: with the reset in flashHit(), the
+    // 0.5s defeat flash landed on the same counters as the 0.18s hit before it, and the number a
+    // harness read back was the defeat's wearing the hit's label.
+    flashPeak = 0;
+    flashFrames = 0;
+    flashKind = kind;
     flash = {
       durationSeconds: prefersReducedMotion() ? REDUCED_MOTION_FLASH_SECONDS : durationSeconds,
       elapsedSeconds: 0,
@@ -270,11 +277,22 @@ export function createWolfPresenter(root, animations) {
     };
   }
 
+  // WHAT WAS ACTUALLY WRITTEN TO THE MATERIALS, kept so a harness can ask what a child SAW rather
+  // than what the constants say they should have seen. The two are not the same on a starved page:
+  // the flash is authored in seconds (WOLF_HIT_FLASH_SECONDS, 0.18) while combat/feedback.js's own
+  // header describes the technique in FRAMES ("solid white for a couple of frames"), and elapsed
+  // advances by a whole frame delta before this computes anything. Read-only, and a peak rather
+  // than an instant, because a per-frame poll on a page painting three frames a second cannot see
+  // an instant -- the same reason startWatch exists.
+  let flashPeak = 0;
+  let flashFrames = 0;
+  let flashKind = null;
   function tickFlash(deltaSeconds) {
     if (!flash) return;
     flash.elapsedSeconds += deltaSeconds;
     const t = flashIntensity(flash.elapsedSeconds, flash.durationSeconds);
     for (const target of flashTargets) target.material.emissive.lerpColors(target.base, flash.color, t);
+    if (t > 0) { flashFrames += 1; if (t > flashPeak) flashPeak = t; }
     if (t <= 0) flash = null;
   }
 
@@ -308,13 +326,16 @@ export function createWolfPresenter(root, animations) {
     },
     /** Call when encounter.js raises wolf-hit. A quick white flash -- see FLASH_COLOR above. */
     flashHit() {
-      beginFlash(WOLF_HIT_FLASH_SECONDS, FLASH_COLOR);
+      beginFlash(WOLF_HIT_FLASH_SECONDS, FLASH_COLOR, 'hit');
     },
+    /** For a harness: the brightest THIS flash ever actually got, over how many rendered frames, and
+     *  which flash it was. `{ peak: 0, frames: 0 }` means the child saw no flash at all. */
+    flashSeen: () => ({ peak: flashPeak, frames: flashFrames, kind: flashKind }),
     /** Call when encounter.js raises wolf-defeated. Longer than flashHit() AND a different colour --
      *  the length keeps it on screen, the colour is what actually tells the two apart. See
      *  DEFEAT_FLASH_COLOR above for why the original duration-only claim did not survive a capture. */
     flashDefeated() {
-      beginFlash(WOLF_DEFEAT_FLASH_SECONDS, DEFEAT_FLASH_COLOR);
+      beginFlash(WOLF_DEFEAT_FLASH_SECONDS, DEFEAT_FLASH_COLOR, 'defeat');
     },
     getState() {
       return { clip: currentName, presence: +presence.toFixed(3), spark: +sparkStrength.toFixed(3) };

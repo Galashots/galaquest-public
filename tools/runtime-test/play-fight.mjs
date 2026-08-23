@@ -1155,6 +1155,12 @@ const FIGHT_SAMPLE = `(() => {
     wolfHp: published.wolf.hp,
     // The CLIP, not just the mode, because "stays dead" is a claim about what is being played.
     wolfClip: runtime.wolf()?.getState()?.clip ?? null,
+    // WHAT THE CHILD ACTUALLY SAW OF THE HIT FLASH, not what the constant says they should have.
+    // combat/feedback.js's header describes the damage flash in FRAMES ("solid white for a couple of
+    // frames") and WOLF_HIT_FLASH_SECONDS implements it in SECONDS (0.18), and wolf.js advances the
+    // flash by a whole frame delta before it computes an intensity. Whether those agree is a
+    // question about the machine, so it gets measured here rather than derived.
+    flash: runtime.wolf()?.flashSeen() ?? null,
     // And the BODY, because a clip name is what the presenter believes and this is what a child
     // sees. The hero's death was starved by a clamped frame delta while every flag stayed correct;
     // this presenter is handed the same clamped delta, so the same question gets asked of it.
@@ -1293,6 +1299,19 @@ const knockdowns = fight.samples.filter((sample, index) =>
   sample.downSeconds >= 0 && !(fight.samples[index - 1]?.downSeconds >= 0)).length;
 console.log(`  fight: ${fight.frames} frames, ${fight.dropped} dropped, wolf reached ${lowestWolfHp}hp, `
   + `hero knocked down ${knockdowns}x`);
+// REPORTED, NOT JUDGED. How bright a hit reads is combat feel and that belongs to the Director, so
+// this publishes the number and asserts nothing about it. `peak` is the brightest intensity ever
+// written to the wolf's materials since the last hit and `frames` is how many rendered frames got a
+// non-zero one -- `peak 0.00 over 0 frame(s)` would mean a child swung, connected, and saw no flash
+// at all. flashSeen() resets on every flashHit(), so the max across the log is the best any single
+// hit managed on this machine.
+const flashes = fight.samples.map((sample) => sample.flash)
+  .filter((f) => f && f.frames > 0 && f.kind === 'hit');
+const brightest = flashes.reduce((best, f) => (f.peak > best.peak ? f : best), { peak: 0, frames: 0 });
+const longest = flashes.reduce((best, f) => (f.frames > best.frames ? f : best), { peak: 0, frames: 0 });
+console.log(`  hit flash: brightest peak ${brightest.peak.toFixed(2)} over ${brightest.frames} frame(s); `
+  + `longest ${longest.frames} frame(s) at peak ${longest.peak.toFixed(2)}; `
+  + `${flashes.length} of ${fight.samples.length} sampled frames had a flash up`);
 // Best-effort, and only best-effort on a starved runner: WOLF_HIT_FLASH_SECONDS is 0.18s and a
 // screenshot round trip is longer than that below ~10fps. The CHECK above reads the recorder, which
 // cannot miss it; this is the picture, which can.
