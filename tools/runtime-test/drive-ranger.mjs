@@ -422,7 +422,18 @@ async function phaseCharm() {
       `charm ${given.ranger?.charmOwned}`);
 
     // THE WHOLE POINT. Measured off the DOM and off the body, not off the row that was written.
-    const hearted = await pollUntil(tab, (s) => s.heartsDrawn > HERO_MAX_HP, 15000);
+    //
+    // Polled on the CEILING AND THE FILL TOGETHER, because they do not land on the same frame: the
+    // bar grows a fourth pip when the ceiling changes and fills it when the heal arrives a beat
+    // later. Waiting on the ceiling alone and then reading the fill off that one sample caught
+    // `4 pips drawn, 3 of 4 filled` on a hosted runner and reported it as the charm opening a wound.
+    //
+    // This does NOT soften the assertions below, and the difference matters: the budget is bounded,
+    // so a charm that genuinely never heals still times out and still fails with the real numbers
+    // printed. Waiting for a state to settle is not the same as waiting until a check passes.
+    const hearted = await pollUntil(
+      tab, (s) => s.heartsDrawn > HERO_MAX_HP && s.heartsFilled > HERO_MAX_HP, 15000,
+    );
     check(hearted.heartsDrawn === HERO_MAX_HP + 1,
       'and a FOURTH HEART appears on the bar', `${hearted.heartsDrawn} pips drawn`);
     check(hearted.heartsFilled === HERO_MAX_HP + 1,
