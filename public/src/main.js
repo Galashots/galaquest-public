@@ -1876,7 +1876,7 @@ async function bootstrap() {
   // Multiplayer is additive: the socket is never awaited, and every failure path leaves a playable
   // single-player game. A child on a phone with no server still gets a hero that walks.
   let netStatus = 'offline';
-  let lastReconcile = { drift: 0, snapped: false };
+  let lastReconcile = { drift: 0, snapped: false, corrections: 0 };
   /**
    * The reconnect contract, run on EVERY welcome rather than only the first -- a reconnect is a
    * fresh join, and whatever the device missed while it was away arrives here.
@@ -1956,6 +1956,10 @@ async function bootstrap() {
       snapshots: net.snapshotCount,
       drift: lastReconcile.drift,
       snapped: lastReconcile.snapped,
+      // How many snapshots the last reconcile actually consumed. Published so a harness can MEASURE
+      // the correction count instead of modelling it from a frame rate it cannot predict -- the
+      // modelled version is what play-fight's settle budget had to guess at.
+      corrections: lastReconcile.corrections,
       url: net.url,
     }),
     player,

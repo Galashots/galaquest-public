@@ -478,8 +478,12 @@ structural coverage in `test/automation-timing.test.mjs` and `test/review-suite.
 a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a frame.
 **Foreknowledge helped:** not yet recorded.
 
-### OBSERVED — A harness written in wall-clock time is driving something that advances in rendered frames.
-**Status:** OBSERVED · **Hits:** 4 · **First/Last:** 2026-08-23
+### RULE (GQ-021) — A harness written in wall-clock time is driving something that advances in rendered frames.
+**Status:** RULE · **Hits:** 5 · **First/Last:** 2026-08-23
+**Not enforced because:** no test can look at a number and tell whether it was reasoned about in
+milliseconds or in frames -- the mistake lives in the reasoning, not in the syntax. The one half that
+IS mechanisable is enforced: `test/net-client.test.mjs` asserts the same snapshots put the hero in
+the same place whatever the frame rate, which is the product-side statement of this rule.
 **Rule:** On a browser with no GPU the page paints at 2-4 fps and a `Runtime.evaluate` waits on the
 main thread, so a CDP read costs a FRAME, not a millisecond. Three consequences follow, and they are
 one mistake wearing three hats: a loop budgeted in milliseconds gets a fraction of its iterations; a
@@ -510,6 +514,40 @@ term is whichever of two rates is slower. A derivation is only as good as its sl
 offered". Fixed by budgeting in corrections -- `min(rendered frames, elapsed / snapshot interval)` --
 which is what the derivation was always about. 3 of 3 local runs green afterwards, where it had been
 2 of 3.
+
+**Fifth hit, and the first one in the GAME rather than in an instrument -- found by reading my own
+fourth entry back.** The paragraph above contains the sentence "`reconcile()` is applied in the FRAME
+LOOP, so the achieved rate is min(snapshot rate, frame rate)". I wrote that as a fact about the
+machine and used it to calibrate an instrument around. It is a bug report about the game, and I did
+not read it as one.
+
+`net/client.js` gates reconciliation on a BOOLEAN `hasNewSnapshot`. The flag was added for a real
+reason and fixed a real bug -- at 60 fps, six frame-rate calls would otherwise take six bites out of
+one snapshot's drift. But a boolean can only ever say "at least one snapshot arrived", so it fixed
+the fast half and left the slow half wrong: below 10 fps the snapshots keep coming and all but one
+per frame are discarded. `NUDGE_FRACTION`'s own comment promises "under a centimetre in about three
+seconds" at 10 Hz. Measured in a real browser at 40x CPU throttle (~3 fps), the drawn hero closed
+0.26m in **10.5 seconds and had not arrived**:
+
+    t=73744 d=1.26 sd=1.26      rendered and authoritative agree
+    t=74151 d=1.28 sd=1.54      authority jumps; the correction begins
+    t=84250 d=1.49 sd=1.54      ten seconds later, still 5cm out
+
+What that is, to the child this game is for, is their own hero sliding sideways on his own for ten
+seconds after they let go of the stick -- on the cheap tablet that is the target device, not on some
+pathological runner. And every proximity trigger in the world (the Keeper's greeting wave, his speech
+bubble, the quest marker) is decided from the DRAWN hero, so the village reacts ten seconds late too.
+It is the direct cause of `drive-village`'s keeper-talk failure hosted: the hero the harness parked
+1.34m from the Keeper kept creeping outward past the 2.0m speech radius while the check waited.
+
+Fixed by consuming the whole backlog and compounding the same fraction over it: `1-(1-f)^n` IS n
+separate f-sized bites, exactly, so nothing is retuned and at any frame rate at or above the snapshot
+rate every number is unchanged.
+
+**What is new here:** the previous four hits were all instruments. This one was the SUBJECT, and it
+was visible in my own notes for hours before I looked at it. Diagnosing a measurement problem
+correctly and then budgeting around it is a way of writing the bug down and walking past it. When the
+explanation for a flaky instrument is a property of the product, that property is the finding.
 
 **Corollaries, each of which cost a round on 2026-08-23:**
 - **A log is a history.** "Wait until the hero is back up" was satisfied by a frame from before he

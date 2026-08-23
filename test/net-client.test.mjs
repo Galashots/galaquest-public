@@ -172,7 +172,7 @@ test('nothing is sent while offline, and setIntent does not throw', () => {
   assert.equal(client.setIntent(0, 1, 1, false), false);
   assert.equal(socket.sent.length, 0);
   assert.equal(client.status, 'connecting');
-  assert.deepEqual(client.reconcile({ x: 5, z: 5 }), { drift: 0, snapped: false },
+  assert.deepEqual(client.reconcile({ x: 5, z: 5 }), { drift: 0, snapped: false, corrections: 0 },
     'reconciling with no server data must be a no-op, not a snap to the origin');
 });
 
@@ -256,7 +256,7 @@ test('reconcile() only corrects once per new snapshot, not once per call', () =>
   // same correction -- at 60 fps this would otherwise nudge 6x per snapshot instead of once.
   for (let i = 0; i < 10; i += 1) {
     const repeat = client.reconcile(position);
-    assert.deepEqual(repeat, { drift: 0, snapped: false },
+    assert.deepEqual(repeat, { drift: 0, snapped: false, corrections: 0 },
       'a reconcile() with no new snapshot must be a no-op');
   }
   assert.deepEqual(position, afterFirst, 'position must not move without a new snapshot');
@@ -266,6 +266,73 @@ test('reconcile() only corrects once per new snapshot, not once per call', () =>
   const second = client.reconcile(position);
   assert.ok(second.drift > 0, 'a new snapshot must permit another correction');
   assert.notDeepEqual(position, afterFirst, 'the second correction must move the position further');
+});
+
+// THE OTHER HALF OF THE SAME GATE. The test above proves a fast client cannot take six bites out of
+// one snapshot. This one proves a SLOW one still gets all ten bites it was promised, which the flag
+// this replaced could not express: it could only ever say "at least one snapshot arrived", so a page
+// painting 3 frames a second threw away 7 snapshots in 10 and the hero crawled home at a third of
+// the documented rate.
+//
+// Measured in a real browser before the fix (drive-village under 40x CPU throttle, ~3 fps): the
+// drawn hero closed a 0.26m gap from 1.28m to 1.49m over 10.5 SECONDS and had still not arrived,
+// against NUDGE_FRACTION's own promise of "under a centimetre in about three seconds". What that
+// looks like to a child on a cheap tablet is their hero sliding sideways on his own after they have
+// let go of the stick -- and every proximity trigger in the game (the Keeper's wave, his speech
+// bubble, the quest marker) reads the DRAWN hero, so the world reacts ten seconds late too.
+test('a snapshot backlog is corrected per snapshot, not per frame', () => {
+  const { client, socket } = clientWithFake();
+  socket.emit('open', {});
+  socket.deliver(welcomeMessage('p1', 0, []));
+
+  // Three snapshots arrive between two rendered frames -- the normal case at 3 fps against 10 Hz.
+  for (const tick of [1, 2, 3]) {
+    socket.deliver(snapshotMessage(tick, [{ id: 'p1', x: 0.3, z: 0, heading: 0, speed: 0 }]));
+  }
+  const position = { x: 0, z: 0 };
+  const applied = client.reconcile(position);
+  assert.equal(applied.corrections, 3, 'all three snapshots must be consumed, not just the last');
+
+  // 1-(1-f)^3 IS three separate f-sized bites. Asserted against the compounded value rather than a
+  // number typed in by hand, so this test cannot drift away from NUDGE_FRACTION if that ever moves.
+  const expected = 0.3 * (1 - (1 - NUDGE_FRACTION) ** 3);
+  assert.ok(Math.abs(position.x - expected) < 1e-12,
+    `expected ${expected} after three snapshots, got ${position.x}`);
+  // And it is emphatically NOT one bite -- this is the assertion the old flag failed.
+  assert.ok(position.x > 0.3 * NUDGE_FRACTION * 1.5,
+    'three snapshots must move the hero further than one snapshot does');
+});
+
+// The property the compounding exists to give, stated directly: the picture a child ends up looking
+// at depends on the SNAPSHOTS the server sent, not on how many frames their device managed to paint
+// while they arrived. A 60 fps phone and a 3 fps tablet fed the same ten snapshots must draw the
+// hero in the same place.
+test('the same snapshots put the hero in the same place at any frame rate', () => {
+  const authoritative = { id: 'p1', x: 0.3, z: 0, heading: 0, speed: 0 };
+
+  const fast = clientWithFake();
+  fast.socket.emit('open', {});
+  fast.socket.deliver(welcomeMessage('p1', 0, []));
+  const fastPosition = { x: 0, z: 0 };
+  for (let tick = 1; tick <= 10; tick += 1) {
+    fast.socket.deliver(snapshotMessage(tick, [authoritative]));
+    fast.client.reconcile(fastPosition); // one frame per snapshot
+  }
+
+  const slow = clientWithFake();
+  slow.socket.emit('open', {});
+  slow.socket.deliver(welcomeMessage('p1', 0, []));
+  const slowPosition = { x: 0, z: 0 };
+  for (const batch of [3, 3, 4]) { // ten snapshots, three frames
+    for (let i = 0; i < batch; i += 1) {
+      slow.socket.deliver(snapshotMessage(i, [authoritative]));
+    }
+    slow.client.reconcile(slowPosition);
+  }
+
+  assert.ok(Math.abs(fastPosition.x - slowPosition.x) < 1e-12,
+    `3 fps drew the hero at ${slowPosition.x} where 60 fps drew him at ${fastPosition.x}`);
+  assert.ok(Math.abs(fastPosition.z - slowPosition.z) < 1e-12);
 });
 
 test('self is excluded from the remotes, so nobody is drawn twice', () => {
