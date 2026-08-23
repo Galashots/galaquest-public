@@ -16,9 +16,10 @@ import {
   movementPulseMillis,
 } from './automation-timing.mjs';
 import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
-import { startOwnedServer } from './owned-server.mjs';
+import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { WILDWOOD_BLADE_ID } from '../../public/src/progression/items.js';
+import { PROFILES_STORAGE_KEY } from '../../public/src/progression/profiles.js';
 import { rigidAnchorName } from '../../public/src/character/gear.js';
 import {
   SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME, WILDWOOD_BLADE_CANDIDATE_ID,
@@ -37,6 +38,14 @@ const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-two-clients-')), '
 const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
 
 const URL_UNDER_TEST = server.url;
+// TWO CHILDREN, ONE DEVICE -- and they have to be told apart by NAME, not by wiping storage between
+// them. Both tabs share an origin on purpose: that is the whole subject of this file, two siblings
+// on one iPad. Same origin is one localStorage and one profile keyring, so two tabs arriving as the
+// same `?hero=` are correctly resolved to the SAME profile by adoptNamedHero -- measured: tab A's
+// own Blade and lantern came back on the "sibling", because the sibling was tab A. The file used to
+// force them apart by clearing storage once per tab, which is the race that orphaned tab A's grant
+// hosted. Naming the second child is the product's own answer, so use it.
+const SIBLING_URL_UNDER_TEST = gameUrlFor(server.origin, 'Sibling');
 const ORIGIN_UNDER_TEST = server.origin;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 const VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true };
@@ -178,6 +187,9 @@ const pageB = await pageFor(browser, targetB);
 const hostedHeadless = await pageA.eval("navigator.userAgent.includes('HeadlessChrome')");
 const consoleErrors = { a: [], b: [] };
 
+// Once, before either tab navigates. See openTab's own note for why this moved out of it.
+await pageA.send('Storage.clearDataForOrigin', { origin: ORIGIN_UNDER_TEST, storageTypes: 'local_storage' });
+
 for (const [name, page] of [['a', pageA], ['b', pageB]]) {
   page.ws.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
@@ -206,8 +218,14 @@ for (const [name, page] of [['a', pageA], ['b', pageB]]) {
   // harness a server from one shared port pool, so they all share ONE origin and therefore one
   // localStorage -- the isolation that used to come by accident from sitting on different ports is
   // now something each harness has to do for itself.
-  await page.send('Storage.clearDataForOrigin', { origin: ORIGIN_UNDER_TEST, storageTypes: 'local_storage' });
-  await page.send('Page.navigate', { url: URL_UNDER_TEST });
+  // CLEARED ONCE FOR THE ORIGIN, NOT ONCE PER TAB, and the difference is a race this file could not
+  // see. Both tabs are the same origin on purpose -- that is what makes them two children on one
+  // device -- so they share one localStorage, and a per-tab clear means tab B wipes whatever tab A
+  // has written by the time B's turn comes round. Tab A mints its profile during boot; if that lands
+  // between A's clear and B's, A keeps an in-memory id whose storage row no longer exists, and the
+  // reload later in this file comes back as a different child with the granted Blade orphaned. Which
+  // is exactly the hosted failure this note was written under. The clear belongs to the RUN.
+  await page.send('Page.navigate', { url: name === 'b' ? SIBLING_URL_UNDER_TEST : URL_UNDER_TEST });
 }
 
 const bootA = await waitFor(pageA, 'Boolean(window.__galaQuestRuntime?.hero && window.__galaQuestRuntime.netState().status === "online")', 'tab A boots and joins');
@@ -254,10 +272,22 @@ if (bootA) {
       equipped === WILDWOOD_BLADE_ID, `equippedWeaponFor -> ${JSON.stringify(equipped)}`);
     // Reload so the server re-reads this child's equipment on join. Storage is NOT cleared: the
     // profile has to survive, or the reload comes back as somebody else and the grant is orphaned.
+    // WHAT STORAGE ACTUALLY HELD, either side of the reload. When this check failed hosted it said
+    // only that a different id came back, which is consistent with two very different faults: the
+    // profile was never durably written, or it was written and the reload did not find it. One read
+    // each side separates them, and costs one round trip.
+    const storedBefore = await pageA.eval(
+      `JSON.stringify(window.localStorage.getItem(${JSON.stringify(PROFILES_STORAGE_KEY)}))`);
     await pageA.send('Page.reload');
     await waitFor(pageA,
       'Boolean(window.__galaQuestRuntime?.hero && window.__galaQuestRuntime.netState().status === "online")',
       'tab A rejoins holding the Blade', 60_000);
+    const storedAfter = await pageA.eval(
+      `JSON.stringify(window.localStorage.getItem(${JSON.stringify(PROFILES_STORAGE_KEY)}))`);
+    const heldBefore = (JSON.parse(storedBefore) ?? '').includes(guestA);
+    const heldAfter = (JSON.parse(storedAfter) ?? '').includes(guestA);
+    console.log(`  profile durability: ${PROFILES_STORAGE_KEY} held ${guestA} before the reload: `
+      + `${heldBefore}; after: ${heldAfter}`);
     check('tab A is the same child after the reload, not a fresh one',
       (await pageA.eval('window.__galaQuestRuntime.guestId()')) === guestA,
       `guestId ${JSON.stringify(await pageA.eval('window.__galaQuestRuntime.guestId()'))}`);

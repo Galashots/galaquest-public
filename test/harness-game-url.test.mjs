@@ -79,6 +79,25 @@ test('gameUrlFor actually carries a named hero, which is the whole reason it exi
     'without a named hero the game opens its "what is your hero called?" gate over the world');
 });
 
+// TWO CHILDREN ON ONE DEVICE need two names, and this is the seam that gives them one. Same origin
+// is one localStorage and one profile keyring, so two tabs asking for the same hero are correctly
+// resolved to the SAME profile -- which is right for a reload and wrong for a sibling. Measured in
+// drive-two-clients when it stopped clearing storage per tab: tab A's own Blade and lantern came
+// back drawn on the "sibling", because the sibling was tab A.
+test('gameUrlFor can name a second child, so two tabs are two siblings and not one', async () => {
+  const { gameUrlFor } = await import('../tools/runtime-test/owned-server.mjs');
+  const first = new URL(gameUrlFor('http://127.0.0.1:5202'));
+  const second = new URL(gameUrlFor('http://127.0.0.1:5202', 'Sibling'));
+
+  assert.equal(second.searchParams.get('hero'), 'Sibling');
+  assert.notEqual(first.searchParams.get('hero'), second.searchParams.get('hero'),
+    'two tabs on one origin asking for the same name get one profile, not two children');
+  assert.equal(second.origin, first.origin, 'same device, deliberately -- that is the subject');
+  assert.equal(second.pathname, '/', 'still the game root');
+  // A name needing escaping must not break the address, since the gate accepts what a child types.
+  assert.equal(new URL(gameUrlFor('http://127.0.0.1:5202', 'A & B')).searchParams.get('hero'), 'A & B');
+});
+
 test('a harness that owns its own server can reach the same authority', () => {
   // The two that spawn a server on a fixed port import gameUrlFor rather than re-deriving the
   // address. Pinned by name because they are the two that were actually broken by getting this

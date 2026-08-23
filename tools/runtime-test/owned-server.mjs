@@ -52,9 +52,18 @@ const HARNESS_HERO_NAME = 'Harness';
  *
  * So the rule is one function rather than one field, and test/harness-game-url.test.mjs enforces
  * that no harness hand-builds a game root without it.
+ *
+ * `heroName` exists for the ONE case that genuinely needs two children: drive-two-clients puts two
+ * tabs on the same origin, which is what makes them two siblings sharing an iPad rather than two
+ * devices. Same origin means one localStorage and one profile keyring, so two tabs asking for the
+ * same name get the SAME profile -- `adoptNamedHero` finds it and selects it, correctly. The file
+ * used to force them apart by clearing storage per tab, which worked by accident and raced: the
+ * second tab's wipe can take the first tab's freshly minted profile row with it, and then a reload
+ * comes back as a stranger with the granted gear orphaned. Naming the second child is the product's
+ * own answer to "two children, one device", so the harness uses that instead of fighting storage.
  */
-export function gameUrlFor(origin) {
-  return `${origin}/?hero=${encodeURIComponent(HARNESS_HERO_NAME)}`;
+export function gameUrlFor(origin, heroName = HARNESS_HERO_NAME) {
+  return `${origin}/?hero=${encodeURIComponent(heroName)}`;
 }
 
 /**
