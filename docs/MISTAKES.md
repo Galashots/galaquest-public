@@ -552,6 +552,17 @@ explanation for a flaky instrument is a property of the product, that property i
 **Corollaries, each of which cost a round on 2026-08-23:**
 - **A log is a history.** "Wait until the hero is back up" was satisfied by a frame from before he
   ever went down. A recorder needs a `since` index or it answers with the past.
+- **A live read can INVENT a failure, not just miss one.** The rule above says polling live state is
+  unsafe because a short-lived state can slip between two reads. The sharper form, measured in
+  `drive-two-clients` on 2026-08-23: a read that lands BETWEEN two rendered frames sees a state no
+  player is ever shown, and it can be arbitrarily worse than any drawn one. Snapshots arrive on the
+  socket and move `serverSelf` at once; the drawn hero is pulled toward it by `reconcile()`, which
+  runs in the frame loop. So between frames the two are a whole snapshot of travel apart *by
+  construction*. One walk, both numbers from the same run: worst drawn-to-authority gap over 12
+  rendered frames **0.200m**, and the single between-frames sample the check actually judged
+  **1.414m** -- seven times worse, and red, against a 0.3m bar. The check had been failing for a
+  dozen heads and was on the Director's open list as an unexplained product concern. It was an
+  instrument reading a state that does not exist for the player.
 - **A backgrounded tab has not painted, whatever the clock says.** rAF only advances for the
   foregrounded tab, so `bringToFront` plus a sleep is not enough to make one readable; two rendered
   frames is. Half a second there bought one frame or none.
