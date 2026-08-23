@@ -67,8 +67,13 @@ function journalKeyFor(profileId) {
   return `${JOURNAL_KEY_PREFIX}${profileId}`;
 }
 
+/** How many deletions the device remembers. A tombstone only has to outlive the other tabs that
+ *  were open when the delete happened, so this is a small ring rather than a growing ledger --
+ *  and it is capped because it is written to a child's device on every save. */
+const MAX_TOMBSTONES = 24;
+
 function emptyKeyring() {
-  return { v: PROFILES_SCHEMA_VERSION, activeProfileId: null, profiles: [] };
+  return { v: PROFILES_SCHEMA_VERSION, activeProfileId: null, profiles: [], deleted: [] };
 }
 
 function freshProfile(id, displayName, nowIso) {
@@ -141,7 +146,15 @@ function readKeyring(storage) {
     ? parsed.activeProfileId
     : (profiles[0]?.id ?? null);
 
-  return { v: PROFILES_SCHEMA_VERSION, activeProfileId, profiles };
+  // Tombstones. Sanitized like any other id, deduped, and capped -- a corrupt or hostile blob here
+  // could otherwise hide every profile on the device by listing them all.
+  const deleted = [];
+  for (const entry of Array.isArray(parsed.deleted) ? parsed.deleted : []) {
+    const id = sanitizeProfileId(entry);
+    if (id && !deleted.includes(id)) deleted.push(id);
+  }
+
+  return { v: PROFILES_SCHEMA_VERSION, activeProfileId, profiles, deleted: deleted.slice(-MAX_TOMBSTONES) };
 }
 
 function writeKeyring(storage, keyring) {
@@ -304,11 +317,6 @@ export function createProfileStore(options = {}) {
     return candidate;
   }
 
-  /** Ids this tab has deliberately deleted, so the merge below cannot resurrect them from another
-   *  tab's older snapshot. Session-scoped on purpose: once the delete has been written, every other
-   *  tab's next read sees it gone and stops carrying it. */
-  const deletedHere = new Set();
-
   /**
    * MERGE, DO NOT OVERWRITE -- because a device can have more than one tab of this game open and
    * they share one localStorage.
@@ -327,41 +335,64 @@ export function createProfileStore(options = {}) {
    *
    * Two tabs is not an exotic case for the thing this module is FOR. "Two children on one device" is
    * its whole purpose, and a second tab is an ordinary way for a child to get there -- a sibling
-   * opening the game while the first is still up, or yesterday's tab still sitting in the switcher.
+   * opening the game while the first is still up, or yesterday's tab still in the switcher.
    *
-   * The merge is a union by id. A profile in both keeps whichever copy was played more recently,
-   * because that is the one whose flags and name are current. `activeProfileId` stays THIS tab's,
-   * always: the other tab's idea of who is playing is about a different screen, and adopting it
-   * would switch a child mid-play. Deletes win over another tab's stale copy via `deletedHere`.
+   * WHAT DECIDES A CONFLICT IS WHETHER THIS TAB TOUCHED THE PROFILE, not a timestamp. The first
+   * version compared `lastPlayedAt` and got two things wrong. It resolved a tie in the device's
+   * favour, and most mutations -- setFlags above all -- change a profile without touching that
+   * timestamp, so the common case IS a tie and the edit being saved lost to the copy read at init:
+   * discovery flags stopped surviving a reload and the gate started re-asking for a name it already
+   * had. Turning the tie round fixed those and still could not fix rename, because rename does not
+   * move `lastPlayedAt` either, so a stale copy could win by arriving second.
+   *
+   * `dirtyHere` answers it directly. A profile this tab has edited is authoritative here; anything
+   * else comes from the device, which is where another tab's edits are. Cleared after a successful
+   * write, because at that point the device holds them too.
+   *
+   * A PROFILE THIS TAB HAS NOT TOUCHED AND THE DEVICE NO LONGER HAS IS ONE ANOTHER TAB DELETED, so
+   * it is dropped rather than carried forward -- that is how a delete propagates to tabs that were
+   * already open. `deleted` on the stored keyring is the other half: `deletedHere` alone only
+   * protects the tab that pressed delete, and every other tab would write the child straight back.
+   * Deleting also drops the journal, so what came back was a name with no earnings behind it.
    */
+  const deletedHere = new Set();
+  const dirtyHere = new Set();
+
   function mergedWithDevice() {
     const onDevice = readKeyring(storage);
+    const tombstoned = new Set([...(onDevice.deleted ?? []), ...deletedHere]);
+    const mine = new Map(keyring.profiles.map((profile) => [profile.id, profile]));
+
     const merged = [];
-    // A TIE GOES TO THIS TAB, and getting that backwards broke two existing tests before the suite
-    // caught it. `mine` is always the second occurrence here (device profiles are iterated first),
-    // and most mutations -- setFlags above all -- change a profile without touching lastPlayedAt.
-    // So the common case is a tie between the copy this tab just edited and the copy it read at
-    // init, and resolving that in the device's favour throws the edit away: discovery flags stopped
-    // surviving a reload and the gate started re-asking for a name it had already been given. The
-    // device only wins when another tab genuinely played that profile MORE RECENTLY.
-    const keepOf = (fromDevice, mine) => ((fromDevice.lastPlayedAt ?? '') > (mine.lastPlayedAt ?? '')
-      ? fromDevice
-      : mine);
-    for (const profile of [...onDevice.profiles, ...keyring.profiles]) {
-      if (deletedHere.has(profile.id)) continue;
-      const already = merged.findIndex((p) => p.id === profile.id);
-      if (already === -1) merged.push(profile);
-      else merged[already] = keepOf(merged[already], profile);
+    const taken = new Set();
+    for (const profile of onDevice.profiles) {
+      if (tombstoned.has(profile.id)) continue;
+      merged.push(dirtyHere.has(profile.id) ? (mine.get(profile.id) ?? profile) : profile);
+      taken.add(profile.id);
     }
-    const active = merged.some((p) => p.id === keyring.activeProfileId)
+    for (const profile of keyring.profiles) {
+      if (tombstoned.has(profile.id) || taken.has(profile.id)) continue;
+      // Not on the device and not touched here: another tab deleted it while this tab held it.
+      if (!dirtyHere.has(profile.id)) continue;
+      merged.push(profile);
+      taken.add(profile.id);
+    }
+
+    // This tab's own idea of who is playing, always -- the other tab's is about a different screen
+    // and adopting it would switch a child mid-play. Only falls back when that child is gone.
+    const active = merged.some((profile) => profile.id === keyring.activeProfileId)
       ? keyring.activeProfileId
       : (merged[0]?.id ?? null);
-    return { v: PROFILES_SCHEMA_VERSION, activeProfileId: active, profiles: merged };
+    const deleted = [...new Set([...(onDevice.deleted ?? []), ...deletedHere])].slice(-MAX_TOMBSTONES);
+    return { v: PROFILES_SCHEMA_VERSION, activeProfileId: active, profiles: merged, deleted };
   }
 
-  function persist() {
+  /** @param touchedId the profile this tab just changed, so the merge knows to prefer its copy. */
+  function persist(touchedId = null) {
+    if (touchedId) dirtyHere.add(touchedId);
     keyring = mergedWithDevice();
-    writeKeyring(storage, keyring);
+    // Only on a successful write: if storage refused, this tab's edits are still the only copy.
+    if (writeKeyring(storage, keyring)) dirtyHere.clear();
   }
 
   /**
@@ -385,7 +416,7 @@ export function createProfileStore(options = {}) {
     profile.migratedFrom = LEGACY_GUEST_ID_KEY;
     keyring.profiles.push(profile);
     keyring.activeProfileId = legacy;
-    persist();
+    persist(legacy);
     return profile;
   }
 
@@ -419,7 +450,7 @@ export function createProfileStore(options = {}) {
     profile.avatar = chooseAvatarId(keyring.profiles.map((existing) => avatarForProfile(existing).id));
     keyring.profiles.push(profile);
     keyring.activeProfileId = id;
-    persist();
+    persist(id);
     return { ...profile };
   }
 
@@ -428,7 +459,7 @@ export function createProfileStore(options = {}) {
     if (!found) return null;
     keyring.activeProfileId = found.id;
     found.lastPlayedAt = nowIso();
-    persist();
+    persist(found.id);
     return { ...found };
   }
 
@@ -438,7 +469,7 @@ export function createProfileStore(options = {}) {
     // The id never moves. That separation is the whole reason they are two fields: renaming a hero
     // must not orphan the save, and two brothers will absolutely pick the same name.
     found.displayName = sanitizeDisplayName(displayName);
-    persist();
+    persist(profileId);
     return { ...found };
   }
 
@@ -448,13 +479,15 @@ export function createProfileStore(options = {}) {
     const index = keyring.profiles.findIndex((p) => p.id === profileId);
     if (index === -1) return false;
     keyring.profiles.splice(index, 1);
-    // Remembered so the merge in persist() cannot bring this child back from another tab's snapshot.
+    // Recorded BOTH ways. `deletedHere` stops this tab writing the child back; the tombstone on the
+    // stored keyring is what stops every OTHER tab doing it, and that is the half the first version
+    // was missing -- a delete was honoured only by the tab that pressed it.
     deletedHere.add(profileId);
     if (keyring.activeProfileId === profileId) {
       keyring.activeProfileId = keyring.profiles[0]?.id ?? null;
     }
     try { storage.removeItem(journalKeyFor(profileId)); } catch { /* nothing to remove */ }
-    persist();
+    persist(null);
     return true;
   }
 
@@ -463,7 +496,7 @@ export function createProfileStore(options = {}) {
     if (!found) return null;
     if (onboarding) found.onboarding = { ...found.onboarding, ...onboarding };
     if (discovered) found.discovered = { ...found.discovered, ...discovered };
-    persist();
+    persist(profileId);
     return { ...found };
   }
 
