@@ -190,6 +190,7 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
     //  stray one terminates it. That has cost this branch two debugging rounds already.)
     serverMarksKeyed: (net.selfId !== null && net.selfId !== undefined)
       ? (r.rewards()[net.selfId]?.marks ?? null) : null,
+    markHud: r.markHudState ? r.markHudState() : null,
     guestId: r.guestId(),
   };
 })())`).then(JSON.parse).then((s) => ({ ...s, canAttack: canAttack(s) }));
@@ -496,12 +497,25 @@ async function run() {
     const met = await pollUntil(tab, (s) => s.netStatus === 'online' && s.marks > 0, 25000);
     check('THE CHILD STILL HAS THEIR MARK when the server has never seen them',
       met.marks >= 1, `marks ${met.marks}, net ${met.netStatus}`);
-    // BOTH NUMBERS, because this check has failed intermittently and "pips 0" alone cannot say why.
-    // The HUD paints from the server's OWN keyed entry while online; the harness's `marks` above
-    // falls back to any entry in the map. If the keyed one is behind, the child is online, holding
-    // marks locally, and looking at an empty lantern row.
-    check('and the HUD draws it, which is what the child actually sees', met.pipsFilled >= 1,
-      `pips ${met.pipsFilled}, server's own keyed entry ${met.serverMarksKeyed}, harness read ${met.marks}`);
+    // POLL FOR THE THING THIS CHECK IS ABOUT, which the previous version did not.
+    //
+    // The poll above exits the instant the NETWORK says the child has marks. This check asks whether
+    // the HUD DREW them, which is a different event and a later one: the pips are painted inside the
+    // frame loop's hero guard, and after a reload the hero model is still loading when the server's
+    // rewards arrive. Reading pips on the network's frame caught the gap about a third of the time
+    // and reported "pips 0" as though the child's marks had been lost.
+    //
+    // The give-away is in the numbers, which is why they are printed: `marksInTheAir 0,
+    // authoritativeMarksThisFrame 0` beside a keyed server entry of 2 means the pip-drawing line had
+    // not run yet with that data -- not that anything disagreed about how many marks there are.
+    //
+    // Bounded, so this cannot become "wait until it passes": eight seconds after the network has
+    // confirmed the marks is far longer than a hero takes to load, and a HUD still empty then is a
+    // real defect rather than a slow frame.
+    const drawn = await pollUntil(tab, (x) => x.pipsFilled >= 1, 8000, 250);
+    check('and the HUD draws it, which is what the child actually sees', drawn.pipsFilled >= 1,
+      `pips ${drawn.pipsFilled}, server's own keyed entry ${drawn.serverMarksKeyed}, `
+      + `harness read ${drawn.marks}, hud ${JSON.stringify(drawn.markHud)}`);
     // WANT WHAT THE CHILD HOLDS, not a hardcoded 1. Once the diagnostic fight above started
     // landing there were two marks, and a wait for "at least one" returns while the second is
     // still in flight -- proving less than the check's own sentence claims.

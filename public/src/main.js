@@ -1522,9 +1522,17 @@ async function bootstrap() {
    * eventId and are skipped: a fact with no stable name cannot be deduplicated, and guessing one
    * would be worse than not recording it.
    */
+  // Counted rather than inferred, so "does this actually happen" is answerable from a harness rather
+  // than from reading the server. A guard against a case that never occurs is dead weight pretending
+  // to be a fix.
+  let rewardsAlreadyKnown = 0;
   function journalDurableFact(event) {
-    if (typeof event?.eventId !== 'string') return;
-    profiles.recordFacts(profileId, [{
+    // No stable id means it cannot be deduplicated, so this device cannot tell a replay from a first
+    // sighting. Reported as news, which is exactly today's behaviour for such an event -- the
+    // conservative answer, because suppressing a ceremony we are unsure about is a silent loss and
+    // firing one is a visible duplicate.
+    if (typeof event?.eventId !== 'string') return true;
+    const { appended } = profiles.recordFacts(profileId, [{
       eventId: event.eventId,
       type: event.type,
       // Carried when the event has one. A gear-owned fact is worthless without knowing WHICH gear,
@@ -1535,6 +1543,12 @@ async function bootstrap() {
     // offline mark has already refreshed it by this point; an ONLINE one has not, and without this
     // a child who plays online and then loses the network would drop back to a stale count.
     refreshProfileState();
+    // WHETHER THIS WAS NEWS. recordFacts is idempotent by eventId, so `appended` already answers the
+    // only question a ceremony needs to ask: had this device seen this exact fact before? On a
+    // reconnect to a wiped server the device teaches its own marks back and the server announces
+    // them straight to it, and every one of those arrives here having been journalled long ago.
+    if (appended === 0) rewardsAlreadyKnown += 1;
+    return appended > 0;
   }
 
   // Phase D (D4): mark-earned/lantern-unlocked are never raised by combat/encounter.js, so they can
@@ -1547,8 +1561,23 @@ async function bootstrap() {
     // is 1.1rem of dot in a corner they are not looking at while a wolf is biting them. The spark
     // lifts off wherever the wolf went down (its last published position, read here rather than at
     // dispatch time so it is the position the child just watched it die at) and flies to the belt.
-    'mark-earned'(event) {
+    'mark-earned'(event, { firstTimeSeen }) {
       rewardEventLog.push(event);
+      // NOT OWED A SECOND TIME. This handler used to launch a light unconditionally, and on a
+      // reconnect to a server that has never heard of this child, the device teaches its marks back
+      // and the server announces every one of them -- so two marks earned minutes ago each launched
+      // a fresh light from wherever the wolf happens to be standing.
+      //
+      // Worse than the duplicate ceremony: `marksInTheAir` went up by two, and the pips are drawn as
+      // "what the server credits MINUS what is still flying", so the child's lantern row read ZERO
+      // while they were holding two marks. Measured in a browser, at the moment of reconnect:
+      // `pips 0, server's own keyed entry 2, harness read 2`. Their save was intact and the HUD said
+      // they had nothing.
+      //
+      // This is the rule the rest of this table already states in its own comments -- "those diffs
+      // are what make a beat survive a reconnect without replaying, so nothing here may fire one".
+      // These two were the handlers not keeping it.
+      if (!firstTimeSeen) return;
       // GP1-C6: NO BANNER HERE ANY MORE. This fires on the same frame as wolf-defeated, so the two
       // announcements used to overwrite each other -- "The wolf is beaten!" appeared and was replaced
       // by "Lantern Mark!" before it could be read, and both landed under the kill's own gold burst.
@@ -1559,8 +1588,11 @@ async function bootstrap() {
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
     // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
-    'lantern-unlocked'(event) {
+    'lantern-unlocked'(event, { firstTimeSeen }) {
       rewardEventLog.push(event);
+      // Same rule as the mark above: a returning child must not be told to take their marks home
+      // again because the server they just met was told about them.
+      if (!firstTimeSeen) return;
       banner('All three marks! Take them home.', 3200);
     },
     // Currency: DURABILITY ONLY, no ceremony. The pickup's own burst, sound and loot-HUD count
@@ -1999,6 +2031,20 @@ async function bootstrap() {
     // distinction docs/MISTAKES.md GQ-013 is about.
     // The guidance rescue's own reading, for the same reason every zone exposes one: a harness has
     // to be able to ask why the offer did or did not appear, and "it did not" is not an answer.
+    // WHY THE LANTERN ROW LOOKS THE WAY IT DOES. The pips are drawn as "what the child has been
+    // credited MINUS what is still flying to them", and when they read zero beside a credited count
+    // of two there is no way to tell from outside which half is responsible. Same posture as every
+    // other accessor here: readable, not drivable.
+    markHudState: () => ({
+      marksInTheAir,
+      authoritativeMarksThisFrame,
+      pipsShown: lanternPipElements.filter((pip) => pip.dataset.filled === 'true').length,
+      // How many reward announcements arrived that this device had ALREADY journalled. Non-zero
+      // means the server told this child about something they earned before it had ever heard of
+      // them -- which is exactly what a reconnect to a wiped database does, and exactly the case a
+      // one-shot ceremony must not fire for.
+      rewardsAlreadyKnown,
+    }),
     guidanceRescueState: () => ({
       ...rescueWatch.debugState(),
       targetX: rescueTarget?.x ?? null,
@@ -2516,11 +2562,14 @@ async function bootstrap() {
         // recordFacts refuses anything that is not a profile fact, so widening the call cannot
         // journal something it should not -- and a new durable event type stops needing a second
         // edit here to be remembered.
-        journalDurableFact(event);
+        const firstTimeSeen = journalDurableFact(event);
         if (REWARD_EVENT_TYPES.includes(event.type)) {
-          const rewardRecipeName = soundForRewardEvent(event.type);
+          // SILENT AS WELL AS STILL. A replayed reward that suppressed its light but still played
+          // its sparkle would be a beat with no cause -- and on a reconnect carrying three marks it
+          // is three of them, in a row, for nothing the child just did.
+          const rewardRecipeName = firstTimeSeen ? soundForRewardEvent(event.type) : null;
           if (rewardRecipeName) audio.play(rewardRecipeName);
-          onRewardEvent(event);
+          onRewardEvent(event, { firstTimeSeen });
           continue;
         }
         const recipeName = soundForEvent(event.type);

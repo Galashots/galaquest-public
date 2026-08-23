@@ -30,13 +30,24 @@ export function createRewardFeedback(callbacks) {
   if (missing.length > 0) {
     throw new Error(`reward feedback is missing a handler for: ${missing.join(', ')}`);
   }
-  return function onRewardEvent(event) {
+  /**
+   * @param event   the reward event.
+   * @param context what the caller knows that the event itself cannot say. Currently one field:
+   *   `firstTimeSeen` -- false when this device had already journalled this eventId, which happens
+   *   on a reconnect where the device teaches its own facts back to a server that has never heard
+   *   of them and the server announces them straight back. The fact is the same fact; the CEREMONY
+   *   is not owed twice, and a handler that fires one anyway replays a one-shot beat for something
+   *   the child did minutes ago.
+   *
+   *   Defaulted to true so a caller that does not know stays exactly as loud as it was.
+   */
+  return function onRewardEvent(event, context = {}) {
     const handler = callbacks[event.type];
     if (!handler) {
       console.error(`[reward feedback] no handler for reward event "${event.type}"`);
       return;
     }
-    handler(event);
+    handler(event, { firstTimeSeen: context.firstTimeSeen !== false });
   };
 }
 

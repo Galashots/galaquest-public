@@ -74,6 +74,48 @@ test('createRewardFeedback accepts a complete handler table and dispatches by ty
   assert.deepEqual(seen.map((event) => event.type), [...REWARD_EVENT_TYPES]);
 });
 
+// ── a fact seen twice is not a beat owed twice ─────────────────────────────────────────────────
+//
+// Local-first means a device that reconnects to a server which has never heard of it TEACHES that
+// server its own facts -- and the server announces every one of them straight back. Those arrive at
+// this dispatcher looking exactly like something that just happened.
+
+test('every handler is told whether this is the first time this device has seen the fact', () => {
+  const seen = [];
+  const onRewardEvent = createRewardFeedback(
+    completeHandlers((event, context) => seen.push({ type: event.type, context })),
+  );
+  onRewardEvent({ type: 'mark-earned', eventId: 'm1' }, { firstTimeSeen: false });
+  onRewardEvent({ type: 'mark-earned', eventId: 'm2' }, { firstTimeSeen: true });
+  assert.deepEqual(seen.map((s) => s.context.firstTimeSeen), [false, true]);
+});
+
+test('a caller that says nothing gets the loud answer, so nothing goes quiet by omission', () => {
+  // The default matters more than it looks. A ceremony that vanishes because a call site was not
+  // updated is a silent regression -- the child simply stops being told they earned something, and
+  // no test that was not looking for it would notice.
+  const seen = [];
+  const onRewardEvent = createRewardFeedback(
+    completeHandlers((event, context) => seen.push(context.firstTimeSeen)),
+  );
+  onRewardEvent({ type: 'mark-earned' });
+  onRewardEvent({ type: 'mark-earned' }, {});
+  assert.deepEqual(seen, [true, true]);
+});
+
+test('only an explicit false is quiet', () => {
+  // Guards against the shape where a truthy-ish absence (undefined, null, 0) silences a real reward.
+  const seen = [];
+  const onRewardEvent = createRewardFeedback(
+    completeHandlers((event, context) => seen.push(context.firstTimeSeen)),
+  );
+  for (const value of [undefined, null, 0, '', false]) {
+    onRewardEvent({ type: 'mark-earned' }, { firstTimeSeen: value });
+  }
+  assert.deepEqual(seen, [true, true, true, true, false],
+    'only a literal false means "this device already knew"');
+});
+
 test('an event type outside the known set is logged rather than crashing the frame loop', () => {
   const onRewardEvent = createRewardFeedback(completeHandlers());
   assert.doesNotThrow(() => onRewardEvent({ type: 'not-a-real-reward-event' }));
