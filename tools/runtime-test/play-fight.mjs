@@ -1397,23 +1397,27 @@ async function photographTheSwing() {
     frames.length === 3 && caught.length === 3,
     frames.map((f) => `${f.label} ${f.swingSeconds.toFixed(3)}s${f.down ? ' DOWN' : ''}`).join(', '),
     { authoritative: aimable, reason: shutterNote });
-  // Three frames that all caught the same instant would pass the check above and still be useless as
-  // evidence of an arc.
+  // THE SPREAD CLAIM MOVED OFF THE PHOTOGRAPHS, and this is why.
   //
-  // Over the frames that CAUGHT a swing, and requiring all three of them -- because a frame that
-  // missed carries -1, and subtracting -1 from a real reading inflates the spread instead of
-  // shrinking it. Hosted at 9732a1a this passed at `spread 1.911s of 1.5s`, a spread wider than the
-  // swing it is measuring, on a run where one of the three frames caught no swing at all. A check
-  // that a miss makes MORE likely to pass is not a check.
-  const spread = caught.length === 3
-    ? Math.max(...caught.map((f) => f.swingSeconds)) - Math.min(...caught.map((f) => f.swingSeconds))
-    : null;
-  diagnostic('the three frames are spread across the swing rather than three copies of one instant',
-    spread !== null && spread > SWING_SECONDS * 0.3 && spread <= SWING_SECONDS,
-    spread === null
-      ? `only ${caught.length} of 3 frames caught a swing, so there is no spread to measure`
-      : `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`,
-    { authoritative: aimable, reason: shutterNote });
+  // It used to measure the spread of the three photograph timings, gated on `aimable` above. That
+  // gate asks whether the SWING is longer than the shutter; it does not ask whether the three AIMS
+  // can be reached, and those are different questions. Each frame is aimed by leading its target by
+  // the measured shutter -- `at(seconds) = max(0, seconds - shutterSeconds)` -- so once the shutter
+  // passes SWING_CONTACT_SECONDS both `windup` (0.181s) and `contact` (0.517s) lead NEGATIVE and
+  // clamp to zero. All three then fire immediately and land one `state()` round trip in, at the same
+  // instant, whatever they were aiming at.
+  //
+  // Hosted at 641ae02, exactly that: shutter 866ms, so `reachable` was 634ms against a 450ms bar and
+  // the gate judged the run -- while the three frames landed at 0.301s, 0.203s and 0.202s for a
+  // spread of 0.099s. Zero spread BY CONSTRUCTION, reported as a product failure. The gate was
+  // measuring the wrong quantity, so it let through the one case it existed to decline.
+  //
+  // Aiming three photographs at three phases of a 1.5s arc needs a shutter under 181ms, and no
+  // machine this runs on has one. So the photographs are captions -- which is the same conclusion
+  // the knockdown shot reached, for the same reason -- and the claim they were carrying moves to the
+  // recorder that was already running underneath them. `swing-arm` samples every rendered frame
+  // across all three swings and carries swingSeconds on each; whether the evidence spans the arc is
+  // a question about those samples, not about three screenshots. Read below, once the recorder is.
 
   // AND THE ARM MOVED. Measured against the hero's OWN standing-still, not against a distance in
   // metres: a bar of "at least so many centimetres" is a number picked off one rig, and this rig is
@@ -1438,6 +1442,28 @@ async function photographTheSwing() {
   const arm = JSON.parse(await page.eval(readWatchSource('swing-arm')));
   await page.eval(stopWatchSource('swing-arm'));
   const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);
+
+  // ...and here it is: does the recorded evidence span the arc, or is it all one instant?
+  //
+  // Over the recorder's own frames, which is the whole point -- it advances with the page rather
+  // than with a round trip, so it sees the swing at whatever resolution the machine renders it and
+  // never has to aim. A single sample or a hero who never swung leaves nothing to span and the check
+  // says so rather than dividing by it.
+  //
+  // What this does NOT claim: that the arm moved. swingSeconds is the rules clock, and it advances
+  // whether or not anything writes the pose -- a hero frozen mid-swing would span the arc perfectly.
+  // That is the sword-arm check below, which measures the hand and went red at 0.9x under exactly
+  // that sabotage. This one is narrower and honest about it: the evidence covers the swing.
+  const spread = swinging.length >= 2
+    ? Math.max(...swinging.map((f) => f.swingSeconds)) - Math.min(...swinging.map((f) => f.swingSeconds))
+    : null;
+  check('the recorded swing evidence spans the arc rather than one instant of it',
+    spread !== null && spread > SWING_SECONDS * 0.3,
+    spread === null
+      ? `only ${swinging.length} recorded frame(s) caught a swing, so there is no span to measure`
+      : `swingSeconds spanned ${spread.toFixed(3)}s of ${SWING_SECONDS}s over ${swinging.length} `
+        + `recorded frame(s); the three photographs landed at `
+        + `${caught.map((f) => f.swingSeconds.toFixed(3)).join('/')}s`);
   // REST IS THE FRAMES BEFORE THE FIRST SWING, not every frame that was not mid-swing. Those two
   // are the same thing only on a fast machine. Hosted at bc262f8 this check FAILED at 0.7x, because
   // "not swinging" swept up the frames where the arm was still returning to rest between the three

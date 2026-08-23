@@ -2383,7 +2383,29 @@ async function bootstrap() {
       if (!heroIsDown) locomotion?.update(deltaSeconds, player.groundSpeed);
       // Remotes are drawn from interpolated snapshots, not predicted: we have no idea what another
       // child's thumb is doing, and guessing would walk them through scenery.
-      remotes?.update(net.sampleRemotes(), deltaSeconds);
+      //
+      // The party block rides along because a sibling has a body too. The wire has carried every
+      // hero's swingSeconds and downSeconds since the party fight was written -- not just this
+      // one's -- and until this argument existed net/remotes.js drew all of them in idle: a child
+      // watched their sibling glide around while the wolf lost hp from nowhere, and stand upright
+      // through the two seconds they were dead.
+      //
+      // Read off `serverEncounter` rather than `encounterState`, and that is not incidental. The
+      // online rebuild above folds only THIS hero out of the party (`published.heroes[ownHeroId]`
+      // -> `hero`), so `encounterState` has no party on it; and giving it one would put the wire's
+      // four-field hero shape and the rules' full hero shape under a single name, which is the
+      // two-competing-truths problem rather than a convenience. Same `serverEncounter?.x` idiom
+      // `village` uses a few lines up.
+      //
+      // BOTH DELTAS, EXPLICITLY. The clamped one is a movement guard; handing it to a reaction
+      // mixer plays every reaction in slow motion by the ratio -- the defect documented at length
+      // on the LOCAL hero further down, and the single easiest thing to reintroduce here by
+      // passing one number for two jobs.
+      remotes?.update(net.sampleRemotes(), {
+        deltaSeconds,
+        reactionDeltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
+        heroes: netStatus === 'online' && serverEncounter?.heroes ? serverEncounter.heroes : {},
+      });
       // Read the mode from the speed the locomotion controller is given, not from the run flag, so
       // the status line cannot disagree with the clip actually playing.
       // Read from the controller, not from the speed alone: standing now plays a real idle clip on

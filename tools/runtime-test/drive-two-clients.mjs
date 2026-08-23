@@ -13,6 +13,7 @@ import {
   deadlineAfter,
   movementPulseMillis,
 } from './automation-timing.mjs';
+import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
@@ -372,6 +373,45 @@ if (bootA && bootB) {
     `largest frame-to-frame step ${maxJump.toFixed(3)}m against a ${(2 * MIN_BODY_SEPARATION).toFixed(3)}m budget, over ${walkedThrough.positions.length} samples`,
     { authoritative: !hostedHeadless, reason: 'frame-to-frame sampling is not authoritative under hosted-headless frame starvation' });
 
+  // WHAT TAB B ACTUALLY DRAWS OF TAB A'S BODY, once per rendered frame.
+  //
+  // Every other check in this file asks whether tab B has the right NUMBERS about tab A -- position,
+  // wolf hp, remote count. None of them asks whether B draws A as a person doing what A is doing,
+  // and until net/remotes.js grew a reaction and swing animator the answer was no: A could be dead
+  // on the ground on their own screen and standing up straight on their sibling's. That is invisible
+  // to a position check, because the position is right the whole time.
+  //
+  // So this reads the BODY. Highest bone above the root, exactly as play-fight.mjs measures the
+  // local hero falling over, and for the same reason -- a flag proves the state arrived, a height
+  // proves a child would see it. The scene comes off `hero.parent` rather than any new accessor:
+  // remotes are named `remote-<id>` and already in it. getObjectByName walks the whole graph, so at
+  // one call per frame the root is cached and re-found only if it goes away.
+  const REMOTE_BODY_SAMPLE = `(() => {
+    const r = window.__galaQuestRuntime;
+    const remote = r.netState().remotes[0] || null;
+    if (!remote) return { present: false };
+    let body = window.__gqRemoteBody;
+    if (!body || body.name !== 'remote-' + remote.id || !body.parent) {
+      body = r.hero && r.hero.parent ? r.hero.parent.getObjectByName('remote-' + remote.id) : null;
+      window.__gqRemoteBody = body;
+    }
+    if (!body) return { present: false };
+    const base = body.matrixWorld.elements[13];
+    let top = -Infinity;
+    body.traverse((node) => { if (node.isBone) top = Math.max(top, node.matrixWorld.elements[13]); });
+    return {
+      present: true,
+      down: remote.down === true,
+      height: top === -Infinity ? null : Math.round((top - base) * 1000) / 1000,
+    };
+  })()`;
+  // The recorder's default retention is plenty here -- this fight records tens of frames, not
+  // thousands. Raising it explicitly is also forbidden in this file: test/review-suite.test.mjs bans
+  // the literal in movement harnesses, because it used to name a pseudo-timeout (milliseconds
+  // converted into a count of slow CDP samples) and that is the mistake the ban exists for. Same
+  // word, different thing, and the guard cannot tell -- so take the default rather than argue.
+  await pageB.eval(startWatch('remote-body', REMOTE_BODY_SAMPLE));
+
   // -- shared fight: both clients close in and swing until the wolf dies, sampling both tabs'
   // encounterState() each round to prove they agree on the shared truth (convergence). Each read is
   // taken right after that page was foregrounded (rAF only advances for the foregrounded tab, so a
@@ -447,6 +487,34 @@ if (bootA && bootB) {
   check('both tabs converge on the same final dead mode',
     killed,
     `after ${hpSamples.length} rounds: A=${hpSamples.at(-1)?.aMode ?? 'n/a'}, B=${hpSamples.at(-1)?.bMode ?? 'n/a'}`);
+
+  // -- and now: did tab B ever draw tab A lying down?
+  await pageB.send('Page.bringToFront');
+  const bodyLog = JSON.parse(await pageB.eval(readWatchSource('remote-body'))) ?? { samples: [] };
+  await pageB.eval(stopWatchSource('remote-body'));
+  const drawn = bodyLog.samples.filter((sample) => sample?.present && Number.isFinite(sample.height));
+  const downFrames = drawn.filter((sample) => sample.down);
+  const upFrames = drawn.filter((sample) => !sample.down);
+  const lowestDown = downFrames.length ? Math.min(...downFrames.map((s) => s.height)) : null;
+  // The median of the standing frames, not the max: one frame caught mid-stride is not "standing",
+  // and the max of a large set is biased high against the min of a small one -- the estimator
+  // mistake play-fight.mjs's sword-arm check made twice before it was caught.
+  const sortedUp = upFrames.map((s) => s.height).sort((a, b) => a - b);
+  const standing = sortedUp.length ? sortedUp[Math.floor(sortedUp.length / 2)] : null;
+  const detail = `${downFrames.length} down frame(s) and ${upFrames.length} standing of `
+    + `${bodyLog.samples.length} recorded; lowest while down `
+    + `${lowestDown === null ? 'n/a' : `${lowestDown.toFixed(2)}m`}, standing median `
+    + `${standing === null ? 'n/a' : `${standing.toFixed(2)}m`}`;
+  // Judged only when tab B was actually looking while tab A was down. rAF does not advance in a
+  // background tab and this harness has to foreground them alternately to read either, so a fight
+  // where every one of A's knockdowns fell inside one of B's background stretches leaves nothing to
+  // measure. That is an absence of evidence, and it must not read as PASS or as FAIL.
+  diagnostic('tab B draws tab A lying down while tab A is knocked out',
+    lowestDown !== null && standing !== null && lowestDown < standing * 0.65, detail,
+    {
+      authoritative: downFrames.length > 0 && upFrames.length > 0,
+      reason: 'tab B was backgrounded for every frame tab A spent down, so it drew nothing to measure',
+    });
 
   await browser.send('Target.closeTarget', { targetId: targetA });
   const left = await waitFor(pageB, 'window.__galaQuestRuntime.netState().remoteCount === 0', 'closing tab A removes its remote from tab B', 8_000);

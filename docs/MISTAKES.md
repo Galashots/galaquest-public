@@ -1256,3 +1256,29 @@ well-precedented -- the function already takes a radius parameter and the fade m
 exists -- but the change is entirely about appearance, so it was specified and handed over rather
 than made. Recorded here with the numbers so it is a known defect rather than a lost note.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A sabotage that does not go red is a finding about the test, not a pass.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** Sabotage is run to confirm a check can fail. When it comes back green the instinct is to
+shrug and move on, because nothing is broken and the suite is still green -- but a check that stays
+green while the thing it names is deleted has just told you it does not test that thing. Read the
+green as the result it is. Then find out WHY: either the check is aimed wrong, or the mechanism it
+names is not the mechanism doing the work, and both are worth more than the sabotage was.
+**Incident (2026-08-23, `net/remotes.js`, remote hero animation):** four sabotages were run against a
+new nine-check suite. Two went red as intended. Two did not, and each was a different defect:
+(1) *`locomotion does not stand a downed sibling back up` stayed green with the down-skip deleted.*
+The check stood the sibling still. At speed 0 locomotion settles onto idle at a weight that never
+beats the clamped death clip, so the one parameter value the check happened to pick was the one where
+the mechanism is invisible. Re-run at 2.4 m/s the corpse was posed at the run clip's 0.200 instead of
+the death clip's 1.000 -- a dead child drawn sprinting. Which is how a child actually gets bitten:
+mid-charge, not standing politely still. **A check chose the value at which its own subject cannot
+be seen, and passing at that value said nothing.**
+(2) *`a sibling who dies mid-swing collapses` stayed green with the order swap removed.* Here the
+check was fine and the CLAIM was wrong: on this path the stale swing restore never won a frame, so
+the swap is not doing the work its comment says it is. The swap was kept -- it matches main.js, where
+that hazard was measured -- but the comment now says outright that nothing in the file proves it.
+**The general form:** the useful question after a green sabotage is not "is the code still right"
+but "what did I just learn about what this check can see". One of these two was a real gap in
+coverage of a real bug; the other was an unproven claim sitting in a comment as if settled. Neither
+would have surfaced from a green suite.
+**Foreknowledge helped:** not yet recorded.

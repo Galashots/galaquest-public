@@ -343,6 +343,19 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // camera-forward -- the `sy = 1` case the rotation above used to compute.
 async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
   await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  // ASK THE PAGE WHETHER WE ARE ALREADY THERE, BEFORE TOUCHING THE STICK. A walk that starts inside
+  // its own ring cannot improve on where the hero is standing -- it can only hold the key long
+  // enough to notice, release, and let him coast back out. Measured, hosted at 641ae02: the hero was
+  // at 1.46m of a 1.5m ring, this leg ran anyway, latched on its very first frame, held six frames
+  // waiting for a 100ms poll to see it, and the release carried him to 2.36m -- past the 2m radius
+  // the check wants, having started inside it. The walk was the whole defect.
+  const already = JSON.parse(await page.eval(READ_WALK));
+  if (already?.arrived) {
+    console.log(`  walk: already inside ${holdWithin}m `
+      + `(${metresOrUnknown(already.startMetres)}), not walking`);
+    await page.eval(STOP_WALK);
+    return pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+  }
   await touch('touchStart', [{ x: stickX, y: stickY }]);
   await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
   let walk;
@@ -383,6 +396,15 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
   let last = await state();
   let passes = 0;
   while (Date.now() < deadline) {
+    // A FRESH READING EACH TIME ROUND, not the one the previous leg handed back. That leg returns as
+    // soon as the SERVER hero has stopped, and the rendered hero keeps converging onto him for a
+    // while afterwards -- so its parting number is the hero mid-reconciliation, and it reads further
+    // out than where he actually comes to rest. Hosted at 641ae02 that stale number was over the
+    // 1.5m ring while the hero was in fact settling to 1.46m, inside it: the loop took another pass
+    // it did not need, and the pass put him outside the radius the check wanted. The decision to
+    // walk again is worth one round trip.
+    // eslint-disable-next-line no-await-in-loop
+    last = await state();
     const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
     if (away <= stopWithin) break;
     passes += 1;
