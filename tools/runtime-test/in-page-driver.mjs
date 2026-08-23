@@ -106,11 +106,19 @@ export function stopWatchSource(key) {
  * The difference from polling live state is the whole point of this module: every frame since the
  * recording started is in the log, so a slow poll delays the ANSWER but cannot miss the EVENT.
  *
+ * @param since  ignore everything before this sample index. The log is a HISTORY, so a predicate
+ *   describing a state the subject has already passed through is satisfied by the past unless the
+ *   caller says otherwise -- waiting for "the hero is back up" matched a frame from before he ever
+ *   went down, and returned immediately. Samples only ever append, so an index taken from an
+ *   earlier read stays valid against a later one.
  * @returns the whole watch, so a caller can report frames and dropped alongside its verdict.
  */
-export async function waitForSample(page, key, predicate, { intervalMs = 100, timeoutMs = 5000 } = {}) {
+export async function waitForSample(
+  page, key, predicate, { intervalMs = 100, timeoutMs = 5000, since = 0 } = {},
+) {
   const read = () => page.eval(readWatchSource(key)).then(JSON.parse);
-  return pollUntilDeadline(read, (watch) => Boolean(watch) && watch.samples.some(predicate),
+  return pollUntilDeadline(read,
+    (watch) => Boolean(watch) && watch.samples.slice(since).some(predicate),
     { intervalMs, timeoutMs });
 }
 

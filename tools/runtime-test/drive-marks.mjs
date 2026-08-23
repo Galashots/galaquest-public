@@ -404,32 +404,38 @@ const framePeriodMs = paced.frames > 0 ? Math.round(1000 / paced.frames) : 17;
 const tapEveryMs = Math.round(SWING_SECONDS * 1000 + framePeriodMs);
 console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEveryMs}ms`);
 
+// RE-CLOSE BEFORE EVERY SWING, INSIDE THE CADENCE RATHER THAN INSTEAD OF IT.
+//
+// Checking the gap once per pair of taps was still too coarse, and hosted at e68cf54 it showed:
+// `hero knocked down 13 time(s)`, `wolf reached 1hp`. Two hits a life, needing three, over and over,
+// because Design ruling 5 heals the wolf on every knockdown. The wolf backs off after a bite and
+// the hero only turns while walking, so a swing thrown without re-closing is thrown at where the
+// wolf was.
+//
+// The walk now runs before EVERY tap, and the time it takes is subtracted from the wait before the
+// next one rather than added to it -- so re-closing costs position, not cadence, and the cadence is
+// what decides whether three hits fit inside one hero life. In reach, the walker latches on its
+// first frame and the whole thing is a short nudge, which is all that is needed since turning is
+// what it is for.
 let killed = false;
 const killDeadline = Date.now() + 120000;
-// Two taps between look-ups: one hero life is longer than that at this cadence, and a knockdown
-// mid-burst costs only the burst before the gap check below walks him back.
-for (let burst = 0; burst < 30 && !killed && Date.now() < killDeadline; burst += 1) {
-  for (let tap = 0; tap < 2; tap += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchStart', [{ x: attackX, y: attackY }]);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(60);
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', []);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(tapEveryMs);
-  }
+for (let tap = 0; tap < 60 && !killed && Date.now() < killDeadline; tap += 1) {
+  const cycleStart = Date.now();
+  // eslint-disable-next-line no-await-in-loop
+  await heldWalkToward(WOLF_TARGET, 1.0, 8000);
+  // eslint-disable-next-line no-await-in-loop
+  await touch('touchStart', [{ x: attackX, y: attackY }]);
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(60);
+  // eslint-disable-next-line no-await-in-loop
+  await touch('touchEnd', []);
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+  // One read per tap. At a 1.8s cadence that is about a sixth of the cycle even where a round trip
+  // costs a whole frame, and it is what lets the loop stop the moment the wolf goes down.
   // eslint-disable-next-line no-await-in-loop
   const log = await readFight();
   killed = log.samples.some((sample) => sample.hp <= 0 || sample.mode === 'dying' || sample.mode === 'dead');
-  if (killed) break;
-  // Walk whenever the newest frame says to -- which after a knockdown is immediately, because
-  // respawning puts the hero back at spawn.
-  const newest = log.samples[log.samples.length - 1];
-  if (newest && newest.gap > 1.5) {
-    // eslint-disable-next-line no-await-in-loop
-    await heldWalkToward(WOLF_TARGET, 1.2, 15000);
-  }
 }
 const fightLog = await readFight();
 const knockdowns = fightLog.samples.filter((sample, index) =>

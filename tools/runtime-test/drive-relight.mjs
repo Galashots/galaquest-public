@@ -29,7 +29,11 @@ import { openRewardStore } from '../../net/rewardStore.mjs';
 import { headingToward, KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
 import { SPAWNS, LANDMARKS } from '../../public/src/world/zones/village.js';
 import { KEEPER_LINE_QUEST, KEEPER_LINE_UNLOCKED } from '../../public/src/world/keeperSpeech.js';
-import { pollUntilDeadline } from './automation-timing.mjs';
+import {
+  deadlineAfter,
+  movementPulseMillis,
+  pollUntilDeadline,
+} from './automation-timing.mjs';
 import {
   metresOrUnknown, READ_WALK, startWalk, STOP_WALK,
 } from './in-page-driver.mjs';
@@ -237,8 +241,52 @@ async function setCameraDistance(page, distance) {
 // 7217ms of a 10000ms budget locally to cross the 6.44m from spawn to Aldric, and 3.1m of it hosted
 // before the budget expired, which left the hero 3.3m away, outside KEEPER_WAVE_RADIUS_METERS, with
 // the keeper silent and both line checks failing behind the two walk checks.
+// HOW CLOSE THE HELD LEG MAY BE TRUSTED TO GET BEFORE THE PULSED ONE TAKES OVER.
+//
+// A held walk cannot stop on a mark. Arrival latches in-page at frame resolution, but the RELEASE
+// costs a poll and a round trip, and authority keeps integrating real time throughout in the last
+// direction it was sent. This harness went green hosted at e543b62 and red again at e68cf54 without
+// a line of it changing, and the failure says why: hero 1.35m from Aldric, SERVER 2.06m, against a
+// 2.0m radius. The rendered hero was inside and the authoritative one had run six centimetres past
+// the edge. Holding for the distance and pulsing the last leg puts the stop back under the
+// harness's control, at the cost of a few round trips over ground short enough to afford them.
+const HELD_APPROACH_SLACK_METRES = 2;
+
+async function pulseWalkToward(page, targetX, targetZ, stopWithin, maxMillis) {
+  let last = await state(page);
+  const deadline = deadlineAfter(maxMillis);
+  while (Date.now() < deadline) {
+    const authority = last.serverPos ?? last.heroPos;
+    const authorityDistance = Math.hypot(targetX - authority[0], targetZ - authority[1]);
+    const renderedDistance = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+    if (authorityDistance <= stopWithin && renderedDistance <= stopWithin) break;
+
+    const heading = headingToward(authority[0], authority[1], targetX, targetZ);
+    // eslint-disable-next-line no-await-in-loop
+    await page.eval(`window.__galaQuestRuntime.follow.setHeading(${heading})`);
+    // eslint-disable-next-line no-await-in-loop
+    await forwardKey(page, 'keyDown');
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(movementPulseMillis(Math.max(0, authorityDistance - stopWithin), {
+        maxMs: 260,
+        msPerMeter: 65,
+      }));
+    } finally {
+      // eslint-disable-next-line no-await-in-loop
+      await forwardKey(page, 'keyUp');
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(120);
+    // eslint-disable-next-line no-await-in-loop
+    last = await state(page);
+  }
+  return last;
+}
+
 async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
-  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin));
+  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
   await forwardKey(page, 'keyDown');
   let walk;
   try {
@@ -252,12 +300,16 @@ async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
   // many frames the page actually painted: a walk that never arrives after 400 frames is a broken
   // route, and one that never arrives after 9 is a runner that never got to move.
   const reached = walk.arrived
-    ? `inside ${stopWithin}m at frame ${walk.arrivedFrame}`
-    : `NEVER ARRIVED, closest ${metresOrUnknown(walk.closestMetres)}`;
-  console.log(`  walk: ${walk.frames} frames, ${metresOrUnknown(walk.startMetres)} to `
+    ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
+    : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`;
+  console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
     + `${metresOrUnknown(walk.metres)}, ${reached}`);
-  // Let the release reach the page, then wait for the server to agree the hero has stopped, so the
-  // captures below are not taken mid-stride.
+  // Let the release reach the page and the server agree the hero has stopped before the pulsed leg
+  // starts measuring from him.
+  await sleep(200);
+  await pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
+  await pulseWalkToward(page, targetX, targetZ, stopWithin, maxMillis);
+  // And again after the last pulse, so the captures below are not taken mid-stride.
   await sleep(200);
   return pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
 }

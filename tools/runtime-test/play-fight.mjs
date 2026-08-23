@@ -46,7 +46,7 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  readWatchSource, startWatch, stopWatchSource, waitForSample,
+  readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource, waitForSample,
 } from './in-page-driver.mjs';
 // A node process importing a runtime module directly, with no DOM and no three.js shim. That is the
 // whole point of combat/encounter.js being pure, and this harness is the first thing to cash it in:
@@ -668,9 +668,12 @@ check('the hero can actually be knocked out by standing and taking bites',
 // And the other half of the promise: it has to end, visibly, on its own. A veil that outlived the
 // rules would be worse than no veil -- the child would be looking at a knocked-out screen while
 // holding a hero who can already swing.
+// `since` matters here and its absence cost a run: the log is a history, so "the hero is back up"
+// was satisfied by a frame from before he ever went down.
+const firstDownIndex = knockedOut.samples.findIndex((sample) => sample.downSeconds >= 0);
 const stoodUp = await waitForSample(page, 'knockdown',
   (sample) => sample.downSeconds < 0 && sample.hp > 0,
-  { intervalMs: 40, timeoutMs: 8000 });
+  { intervalMs: 40, timeoutMs: 8000, since: firstDownIndex + 1 });
 await page.eval(stopWatchSource('knockdown'));
 const episode = stoodUp.samples;
 const firstDown = episode.findIndex((sample) => sample.downSeconds >= 0);
@@ -784,6 +787,9 @@ const FIGHT_SAMPLE = `(() => {
     swingSeconds: published.hero.swingSeconds,
     wolfMode: published.wolf.mode,
     wolfHp: published.wolf.hp,
+    // So the loop can tell "in the strike arc" from "the wolf backed off", without a second read.
+    gap: Math.hypot(runtime.player.position.x - published.wolf.x,
+      runtime.player.position.z - published.wolf.z),
   };
 })()`;
 await page.eval(startWatch('fight', FIGHT_SAMPLE));
@@ -802,27 +808,60 @@ console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEvery
 // Four taps per burst is one hero life's worth at this cadence, so a burst that starts while he is
 // down loses only itself and the next one re-syncs. Ten bursts is the same 40 attempts this loop
 // has always allowed.
-const TAPS_PER_BURST = 4;
+// RE-CLOSE BEFORE EVERY SWING, INSIDE THE CADENCE RATHER THAN INSTEAD OF IT.
+//
+// The loop this grew from dropped the re-close, and the comment it dropped said exactly why it was
+// there: the wolf backs off after a bite, and the hero only turns while walking, so without it the
+// pair drift out of the strike arc and the fight stalls. Locally that cost nothing -- the wolf
+// stayed in front and the fight was won in three swings. Hosted at e68cf54 it cost everything:
+// `hero knocked down 14x`, `wolf reached 1hp`, 582 frames. Two hits a life, needing three, over and
+// over, because Design ruling 5 healed the wolf on every knockdown.
+//
+// So it comes back, but as a HELD walk on the wolf's live position rather than the pulsed one, and
+// the time it takes is subtracted from the gap before the next tap instead of added to it. When the
+// hero is already in reach the walker latches on its first frame and the whole thing is a short
+// nudge -- which is all that is needed, since turning is what it is for. The cadence stays at
+// SWING_SECONDS plus a frame either way, which is what decides whether three hits fit in one life.
+const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+async function closeOnWolf(stopWithin, maxMillis) {
+  await page.eval(startWalk(WOLF_TARGET, stopWithin));
+  await touch('touchStart', [{ x: stickX, y: stickY }]);
+  await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
+  try {
+    await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+  } finally {
+    await touch('touchEnd', []);
+    await page.eval(STOP_WALK);
+  }
+}
+
+// ONE READ PER TAP, not per burst. Reading in bursts of four was cheaper and it broke the check
+// after this one: the kill went unnoticed for up to four cadences, and WOLF_RESPAWN_SECONDS is 10s,
+// so `a dead wolf stays dead` arrived at the corpse after it had already got back up. At this
+// cadence a read is about a sixth of the cycle even where a round trip costs a whole frame, which
+// is a price worth paying to notice the kill within one swing of it happening.
 let killed = false;
 let sawHit = false;
 let shotSwing = false;
-for (let burst = 0; burst < 10 && !killed; burst += 1) {
-  for (let tap = 0; tap < TAPS_PER_BURST; tap += 1) {
+for (let tap = 0; tap < 40 && !killed; tap += 1) {
+  const cycleStart = Date.now();
+  // eslint-disable-next-line no-await-in-loop
+  await closeOnWolf(1.0, 4000);
+  // eslint-disable-next-line no-await-in-loop
+  await touch('touchStart', [{ x: attackX, y: attackY }]);
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(60);
+  // eslint-disable-next-line no-await-in-loop
+  await touch('touchEnd', []);
+  if (!shotSwing) {
+    shotSwing = true;
+    // Mid-swing by construction: the clip runs SWING_SECONDS and this is the frame after the tap.
     // eslint-disable-next-line no-await-in-loop
-    await touch('touchStart', [{ x: attackX, y: attackY }]);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(60);
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', []);
-    if (!shotSwing) {
-      shotSwing = true;
-      // Mid-swing by construction: the clip runs SWING_SECONDS and this is the frame after the tap.
-      // eslint-disable-next-line no-await-in-loop
-      await shot('03-swing');
-    }
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(tapEveryMs);
+    await shot('03-swing');
   }
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
   // eslint-disable-next-line no-await-in-loop
   const log = await readFight();
   sawHit = log.samples.some((sample) => sample.wolfMode === 'hit');
@@ -934,18 +973,18 @@ check('landscape: a fresh wolf is back to fight, rather than this pass photograp
 
 // MISS, in landscape. Thrown from wherever the hero is standing after the swing photographs, which
 // is well outside reach of a wolf that has only just reappeared at its own spawn.
+// RECORDED, not polled. The miss ring is a pulse cleared on a timer matching its own keyframe, and
+// a loop written `sleep(25)` really samples every ~300ms on a starved runner -- so it was looking
+// less often than the thing it was looking for lasts. It failed hosted at 45ae179 and again locally
+// in one run out of three. The recorder holds every frame from before the tap, so the pulse is in
+// the log whether or not anyone was looking; the assertion is unchanged.
+await page.eval(startWatch('miss-ring',
+  "({ feedback: document.querySelector('#attack-button')?.dataset.feedback ?? '' })"));
 await tapAttack();
-const landscapeMissShown = await (async () => {
-  const deadline = deadlineAfter(3000);
-  while (Date.now() < deadline) {
-    // eslint-disable-next-line no-await-in-loop
-    const shown = await page.eval("document.querySelector('#attack-button')?.dataset.feedback ?? ''");
-    if (shown === 'miss') return true;
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(25);
-  }
-  return false;
-})();
+const missRing = await waitForSample(page, 'miss-ring', (sample) => sample.feedback === 'miss',
+  { intervalMs: 60, timeoutMs: 3000 });
+await page.eval(stopWatchSource('miss-ring'));
+const landscapeMissShown = missRing.samples.some((sample) => sample.feedback === 'miss');
 await shot('landscape-swing-miss');
 check('landscape: the miss ring is thrown from the button in its new corner too',
   landscapeMissShown, `attack button miss state seen: ${landscapeMissShown}`);
@@ -969,35 +1008,59 @@ check('landscape: a landed hit was photographed', landscapeHit,
 // HERO DOWN, in landscape -- the state whose layout is most likely to break when the frame changes
 // shape, because the bar under the message is sized against the viewport width.
 const beforeDown = await state();
+await page.eval(startWatch('landscape-knockdown', `({
+  downSeconds: window.__galaQuestRuntime.encounterState().hero.downSeconds,
+  veil: window.__galaQuestRuntime.heroDownShown(),
+})`));
 const landscapeDown = await pollUntil((s) => s.hero.downSeconds >= 0,
   { intervalMs: 40, timeoutMs: 30000 });
 check('landscape: the hero can still be knocked out', landscapeDown.hero.downSeconds >= 0,
   `hp ${beforeDown.hero.hp} -> ${landscapeDown.hero.hp}, downSeconds ${landscapeDown.hero.downSeconds}`);
 await shot('landscape-hero-down');
-const landscapeDownShown = await page.eval('window.__galaQuestRuntime.heroDownShown()');
+// Recorded across the knockdown rather than read once at the end of it, for the same reason the
+// portrait veil check is: the veil is up for RESPAWN_SECONDS and a point read arrives late enough
+// on a starved runner to miss the tail of it.
+const landscapeVeil = await waitForSample(page, 'landscape-knockdown', (sample) => sample.veil === true,
+  { intervalMs: 40, timeoutMs: 4000 });
+await page.eval(stopWatchSource('landscape-knockdown'));
+const veiledFrames = landscapeVeil.samples.filter((sample) => sample.veil === true);
 check('landscape: the knocked-out state is on screen in this orientation too',
-  landscapeDownShown === true, `heroDownShown() ${JSON.stringify(landscapeDownShown)}`);
+  veiledFrames.length > 0,
+  `${landscapeVeil.samples.filter((sample) => sample.downSeconds >= 0).length} down frame(s), `
+    + `${veiledFrames.length} of them veiled`);
 
 // KILL, in landscape -- the fourth state, and the last one needed to say the cues survive outside
 // portrait. He stands back up on full hearts RESPAWN_SECONDS after going down, so this waits for
 // that rather than swinging at a wolf while downed and having every tap refused.
 await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000 });
+// The same clock and the same recorder the portrait kill uses -- see its header. This loop was the
+// last one left on the old shape and it showed: hosted at e543b62 it spent TWO MINUTES TWENTY-THREE
+// SECONDS between the knockdown capture and its verdict, because each of forty attempts paid a
+// 6000ms pulsed walk plus a 916ms poll for a 0.18s reaction. The wolf comes to the hero here (it
+// re-aggros after the shared reset), so no walking is needed at all; what was needed was to stop
+// asking.
+//
+// Read after every tap rather than in bursts, because unlike the portrait loop this one wants the
+// PICTURE at first detection. That costs one round trip per 1.75s tap, about 14% of the cadence.
+// Hosted the picture is best-effort regardless: a Page.captureScreenshot measured 2.7s there, and
+// the defeat flash is 0.5s. The CHECK reads the recorder, which cannot miss it.
+await page.eval(startWatch('landscape-fight', FIGHT_SAMPLE));
+const readLandscape = () => page.eval(readWatchSource('landscape-fight')).then(JSON.parse);
 let landscapeKilled = false;
-for (let attempt = 0; attempt < 40 && !landscapeKilled; attempt += 1) {
+for (let attempt = 0; attempt < 20 && !landscapeKilled; attempt += 1) {
+  const cycleStart = Date.now();
   // eslint-disable-next-line no-await-in-loop
-  await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 6000, { faceTarget: true });
+  await closeOnWolf(1.0, 4000);
   // eslint-disable-next-line no-await-in-loop
   await tapAttack();
   // eslint-disable-next-line no-await-in-loop
-  const after = await pollUntil(
-    (s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
-    { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 },
-  );
-  landscapeKilled = after.wolf.mode === 'dying' || after.wolf.mode === 'dead';
-  // Caught at first detection, while the defeat flash and its bloom are still up -- the same reason
-  // the portrait kill capture sits inside its own loop rather than after it.
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+  // eslint-disable-next-line no-await-in-loop
+  const log = await readLandscape();
+  landscapeKilled = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
   if (landscapeKilled) await shot('landscape-defeated');
 }
+await page.eval(stopWatchSource('landscape-fight'));
 check('landscape: the finishing blow was photographed too', landscapeKilled,
   `wolf reached its death state: ${landscapeKilled}`);
 
