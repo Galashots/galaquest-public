@@ -741,6 +741,13 @@ async function bootstrap() {
   // up. Never read by canHeroAttack or anything that decides combat truth -- only by the one
   // swing?.update() call in the frame loop.
   let predictedSwingSeconds = -1;
+  // What the swing ANIMATION is being driven by on the frame just drawn -- see swingSecondsForClip
+  // below, which is this same number. Held here so it can be published: a harness reading only
+  // encounterState().hero.swingSeconds sees the AUTHORITATIVE swing, which is -1 for the whole
+  // round trip after a tap, and the hero is visibly winding up during that. Measured hosted at
+  // 9732a1a: the capture named `swing-windup` was rejected as "not during a swing" on a read taken
+  // 530ms into an arc, because the server had not confirmed it yet on a runner painting every 401ms.
+  let swingSecondsShown = -1;
 
   // G3/G4: the two payoff surfaces. Appended to #game after everything else so they paint over the
   // HUD -- see ui/bossBar.js and ui/unlockCard.js, which own their own markup and CSS.
@@ -1943,6 +1950,11 @@ async function bootstrap() {
     // GP1-C5: whether the screen is currently in the knocked-out state, so a harness can assert
     // the state exists rather than inferring it from a banner that has already faded.
     heroDownShown: () => heroDownVeilElement.dataset.shown === 'true',
+    /** The swing the ANIMATION is playing, which online is the local prediction until the server
+     *  confirms and the server's own number afterwards. Read-only, and published for the same
+     *  reason heroDownShown is: a claim about what is on screen has to be answerable from what is
+     *  on screen, not from the rules layer that is still a round trip behind it. */
+    swingSecondsShown: () => swingSecondsShown,
     // GP1-C5: how many impact rings are on screen this instant, so a harness can prove a blow
     // produced a visible event rather than only that the rules said it landed.
     impactBurstsLive: () => impactBursts.liveCount(),
@@ -2532,6 +2544,7 @@ async function bootstrap() {
       const swingSecondsForClip = netStatus === 'online' && hero.swingSeconds < 0 && predictedSwingSeconds >= 0
         ? predictedSwingSeconds
         : hero.swingSeconds;
+      swingSecondsShown = swingSecondsForClip;
       // Between locomotion (the base pose) and the swing (the top priority): reactions write over
       // the stride, and an active swing writes over a reaction, which is the mechanical half of
       // the owner's attack-takes-precedence rule -- reactClips.js's trigger gate is the other half.

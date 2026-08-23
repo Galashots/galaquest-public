@@ -576,23 +576,24 @@ await page.eval(`window.__galaQuestRuntime.follow.setHeading(${headingToward(
   beforeMiss.heroPos[0], beforeMiss.heroPos[1], beforeMiss.wolf.x, beforeMiss.wolf.z,
 )})`);
 await sleep(400);
+// RECORDED, not polled -- the landscape miss check below already learned this and this one was left
+// behind on the old shape. The miss ring is a pulse cleared on a timer matching its own keyframe,
+// and a loop written `sleep(25)` really samples every ~400ms on a starved runner, so it looks less
+// often than the thing it is looking for lasts. It failed hosted at 9732a1a with "never entered its
+// miss state within 3s" while its landscape twin, on the recorder, saw the ring in the same run.
+// The recorder holds every frame from before the tap; the assertion is unchanged.
+await page.eval(startWatch('portrait-miss-ring',
+  "({ feedback: document.querySelector('#attack-button')?.dataset.feedback ?? '' })"));
 await tapAttack();
-const missFeedback = await (async () => {
-  const deadline = deadlineAfter(3000);
-  while (Date.now() < deadline) {
-    // eslint-disable-next-line no-await-in-loop
-    const shown = await page.eval(
-      "document.querySelector('#attack-button')?.dataset.feedback ?? ''",
-    );
-    if (shown === 'miss') return true;
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(25);
-  }
-  return false;
-})();
+const portraitMissRing = await waitForSample(page, 'portrait-miss-ring',
+  (sample) => sample.feedback === 'miss', { intervalMs: 60, timeoutMs: 3000 });
+await page.eval(stopWatchSource('portrait-miss-ring'));
+const missFeedback = portraitMissRing.samples.some((sample) => sample.feedback === 'miss');
 await shot('swing-miss');
 check('the miss capture actually contains the miss feedback, rather than a hero still winding up',
-  missFeedback, 'the attack button never entered its miss state within 3s of the tap');
+  missFeedback, `${portraitMissRing.frames} frame(s) recorded from before the tap, `
+    + `button states seen ${JSON.stringify([...new Set(portraitMissRing.samples
+      .map((sample) => sample.feedback || 'none'))])}`);
 const afterMiss = await state();
 check('a swing thrown well outside reach is a miss, not silent damage',
   afterMiss.wolf.hp === beforeMiss.wolf.hp, `wolf hp ${beforeMiss.wolf.hp} -> ${afterMiss.wolf.hp}`);
@@ -1291,17 +1292,35 @@ async function photographTheSwing() {
     await touch('touchEnd', []);
     await sleep(atMillis);
     const at = await state();
+    // swingSecondsShown, not encounterState's hero.swingSeconds. These captures are evidence about
+    // the PICTURE, and online the picture is driven by the local prediction until the server
+    // confirms -- so the authoritative field reads -1 for a whole round trip while the hero is
+    // plainly winding up. Hosted at 9732a1a that rejected `swing-windup` on a read taken 530ms into
+    // an arc. Asking the rules layer what is on screen is the wrong question, not a slow answer.
+    const shownSwing = Number(await page.eval('window.__galaQuestRuntime.swingSecondsShown()'));
     await shot(`swing-${label}`);
-    frames.push({ label, swingSeconds: at.hero.swingSeconds, down: at.hero.downSeconds >= 0 });
+    frames.push({ label, swingSeconds: shownSwing, down: at.hero.downSeconds >= 0 });
   }
+  const caught = frames.filter((frame) => frame.swingSeconds >= 0 && !frame.down);
   check('the swing frames actually caught a swing, rather than whatever came next',
-    frames.length === 3 && frames.every((frame) => frame.swingSeconds >= 0 && !frame.down),
+    frames.length === 3 && caught.length === 3,
     frames.map((f) => `${f.label} ${f.swingSeconds.toFixed(3)}s${f.down ? ' DOWN' : ''}`).join(', '));
   // Three frames that all caught the same instant would pass the check above and still be useless as
   // evidence of an arc.
-  const spread = Math.max(...frames.map((f) => f.swingSeconds)) - Math.min(...frames.map((f) => f.swingSeconds));
+  //
+  // Over the frames that CAUGHT a swing, and requiring all three of them -- because a frame that
+  // missed carries -1, and subtracting -1 from a real reading inflates the spread instead of
+  // shrinking it. Hosted at 9732a1a this passed at `spread 1.911s of 1.5s`, a spread wider than the
+  // swing it is measuring, on a run where one of the three frames caught no swing at all. A check
+  // that a miss makes MORE likely to pass is not a check.
+  const spread = caught.length === 3
+    ? Math.max(...caught.map((f) => f.swingSeconds)) - Math.min(...caught.map((f) => f.swingSeconds))
+    : null;
   check('the three frames are spread across the swing rather than three copies of one instant',
-    frames.length === 3 && spread > SWING_SECONDS * 0.3, `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`);
+    spread !== null && spread > SWING_SECONDS * 0.3 && spread <= SWING_SECONDS,
+    spread === null
+      ? `only ${caught.length} of 3 frames caught a swing, so there is no spread to measure`
+      : `spread ${spread.toFixed(3)}s of ${SWING_SECONDS}s`);
 
   // AND THE ARM MOVED. Measured against the hero's OWN standing-still, not against a distance in
   // metres: a bar of "at least so many centimetres" is a number picked off one rig, and this rig is
