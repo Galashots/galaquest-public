@@ -2544,11 +2544,28 @@ async function bootstrap() {
       // FIRST when down means any stale restore lands before reactions writes the death pose, so
       // death's write is the one that survives the frame -- "death visually supersedes swing" without
       // touching swingClip.js itself.
+      // THE RAW DELTA for reactions, not the clamped one -- the same distinction the rescue watch
+      // draws further down, and for a related reason. `deltaSeconds` is capped at 0.1 so a hitch
+      // cannot teleport the hero; an animation mixer has no such hazard, because advancing a clip
+      // further is exactly what more elapsed time should do. Under that cap a device rendering
+      // slower than 10fps plays every reaction clip in SLOW MOTION by the ratio, and the death clip
+      // is retimed to only just fit its window at full speed.
+      //
+      // MEASURED, on the GPU-less container this suite runs on, at 3.1fps: the death clip reached
+      // 55% of its length in the two seconds the hero is down, so his hips never got below 65% of
+      // standing height. What a child saw was a hero drop to one knee and pop straight back up --
+      // character/reactClips.js's header describes that exact defect and the rewrite that killed it,
+      // and the clamp had quietly brought it back on precisely the cheap tablet this game is for.
+      // The arithmetic: the fall needs clipSeconds of mixer time inside RESPAWN_SECONDS of wall
+      // clock, so it survives the cap only above 0.1 / DEATH_FALL_FRACTION -- about 5.5fps.
+      // Caught by the body-height check in tools/runtime-test/play-fight.mjs, which measures the
+      // rendered skeleton rather than asking whether a flag was set.
+      const reactionDeltaSeconds = frameDeltaMs === null ? 0 : frameDeltaMs / 1000;
       if (heroIsDown) {
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
-        reactions?.update(deltaSeconds, hero);
+        reactions?.update(reactionDeltaSeconds, hero);
       } else {
-        reactions?.update(deltaSeconds, hero);
+        reactions?.update(reactionDeltaSeconds, hero);
         // AFTER locomotion.update(), which is what writes the walk pose. The swing is an offset on
         // top of that pose, so running it first would be overwritten the same frame.
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);

@@ -66,6 +66,10 @@ import {
   WOLF_RESPAWN_SECONDS,
   canAttack,
 } from '../../public/src/combat/encounter.js';
+// How long the fall itself is given inside the window the hero is down. Imported rather than
+// restated (GQ-007): the capture below aims at the moment the fall FINISHES, and that moment has to
+// move when the design moves it, or this harness quietly goes back to photographing a hero mid-topple.
+import { DEATH_FALL_FRACTION } from '../../public/src/character/reactClips.js';
 // Aiming the world camera at something, so a capture can be made to CONTAIN the thing it is
 // evidence about. Imported rather than re-deriving atan2 by hand in a harness.
 import { headingToward } from '../../public/src/world/zoneLoader.js';
@@ -278,6 +282,157 @@ async function shot(name) {
   console.log(`  captured fight-${name}.png`);
 }
 
+// HOW TALL THE HERO IS STANDING RIGHT NOW, in metres above his own origin.
+//
+// Not a flag about the death clip. reactions.getState() would only say "downSeconds >= 0 and a clip
+// exists", which is the thing already being asserted elsewhere in this file; this says whether the
+// BODY a child is looking at is upright or on the ground. That distinction is not academic -- it is
+// the exact defect character/reactClips.js's own header describes, where a 2.97s death clip inside a
+// 2s window meant the hero staggered and stood back up and no harness could tell.
+//
+// The highest bone rather than a named one: no coupling to the rig's naming, and it degrades to
+// null rather than lying if the skeleton is not there yet. matrixWorld.elements[13] is the world Y
+// translation, read without importing THREE -- a harness holds no handle on the game's module graph
+// and does not need one. Both terms are world-space, so the difference is world metres whatever
+// scale the rig was exported at.
+const BODY_HEIGHT = `(() => {
+  const hero = window.__galaQuestRuntime.hero;
+  if (!hero) return null;
+  const base = hero.matrixWorld.elements[13];
+  let top = -Infinity;
+  hero.traverse((node) => { if (node.isBone) top = Math.max(top, node.matrixWorld.elements[13]); });
+  return top === -Infinity ? null : Math.round((top - base) * 1000) / 1000;
+})()`;
+
+/** When the fall is over and the hero is lying on the clamped last frame -- the part of the window
+ *  that actually reads as "you went down", and the moment worth pointing a camera at. */
+const CORPSE_FROM_SECONDS = RESPAWN_SECONDS * DEATH_FALL_FRACTION;
+
+/**
+ * HOW LONG THIS MACHINE'S SHUTTER IS OPEN, in seconds -- measured, because it decides whether a
+ * two-second state can be photographed at all and it varies by two orders of magnitude.
+ *
+ * The pixels come from the END of that interval, not the beginning. Established by experiment
+ * rather than assumed: a shot fired at downSeconds 1.1 with the shutter open 2200ms came back
+ * showing the hero already back on his feet. So the aim below has to LEAD the moment it wants, the
+ * way you lead a moving target, and by how much is a property of the machine.
+ *
+ * Measured around a capture the run was taking anyway, so it costs nothing. It over-reports by the
+ * one frame the closing read itself spends, which is the safe direction: an over-long estimate aims
+ * earlier and lands earlier, and the end of the down window is the edge that hurts to overshoot.
+ */
+let shutterSeconds = 0;
+
+async function measureShutter(name) {
+  await page.eval(startWatch('shutter', '({ t: performance.now() })'));
+  // Wait for a frame to be IN the recording before taking the baseline. Reading it straight after
+  // startWatch measured 0ms -- the first requestAnimationFrame had not run, so there was no `t` to
+  // subtract from and the aim silently stopped leading anything at all.
+  const before = await waitForSample(page, 'shutter', () => true, { intervalMs: 20, timeoutMs: 3000 });
+  await shot(name);
+  const after = JSON.parse(await page.eval(readWatchSource('shutter')));
+  await page.eval(stopWatchSource('shutter'));
+  const from = before.samples.at(-1)?.t;
+  const to = after.samples.at(-1)?.t;
+  shutterSeconds = Number.isFinite(from) && Number.isFinite(to) ? Math.max(0, (to - from) / 1000) : 0;
+  console.log(`  shutter open ${Math.round(shutterSeconds * 1000)}ms on this machine`
+    + `${shutterSeconds >= RESPAWN_SECONDS ? ' -- longer than the hero stays down, so a knockdown'
+      + ' cannot be photographed inside its own window here; the captions below say where each'
+      + ' shot actually landed' : ''}`);
+}
+
+/** This machine's frame period in seconds, taken from a recording already in hand rather than from
+ *  a separate probe. Median, so one stalled frame does not set the pace. */
+function frameSecondsFrom(samples) {
+  const gaps = samples.slice(1)
+    .map((sample, index) => sample.t - samples[index].t)
+    .filter((gap) => Number.isFinite(gap) && gap > 0)
+    .sort((a, b) => a - b);
+  return gaps.length ? gaps[Math.floor(gaps.length / 2)] / 1000 : 1 / 60;
+}
+
+/**
+ * Photograph a knockdown at the moment the fall finishes, and CAPTION the result with the interval
+ * it was actually taken across.
+ *
+ * WHY THIS EXISTS. Both hero-down captures used to be taken the instant the state first read down,
+ * and neither of them showed a knocked-out hero. Landscape caught downSeconds 0.05; portrait, whose
+ * detection is a poll and therefore lands a frame or more late, caught the RESPAWN banner -- "Back
+ * on your feet". A reviewer opening that one sees an upright hero over a caption saying he is down
+ * and files the bug that is not there. So: aim at CORPSE_FROM_SECONDS, which is the design's own
+ * answer to "when does he look down", rather than at whenever the state first admitted it.
+ *
+ * WHY IT ONLY CAPTIONS, AND DOES NOT ASSERT. The first version of this bracketed the shutter -- read
+ * the recording either side of the capture and require every frame between to be down, so the shot
+ * could not have happened outside an interval it happened inside of. Sound, and unanswerable here:
+ * measured on this GPU-less container, one Page.captureScreenshot spans EIGHT rendered frames, 2.6s
+ * at a 325ms frame. The hero is only down for RESPAWN_SECONDS, which is 2. The observation is slower
+ * than the state it observes, so the bracket always straddles the end of the window and the check
+ * always fails -- not because the photograph is wrong, but because nothing on this machine can prove
+ * it right. A check that can only ever go red is not evidence, and a one-sided one that stays silent
+ * here would read as green. The recording is what makes the claim (see the body-height check on the
+ * fall); this points the camera and then says plainly where the shutter fell.
+ */
+async function photographKnockdown(key, name, recorded) {
+  const frameSeconds = frameSecondsFrom(recorded.samples);
+  // Fire early by the shutter's own latency, so the pixels -- taken at the END of it -- land on the
+  // corpse rather than behind it. Clamped at zero because the earliest a knockdown can be
+  // photographed is the moment it happens: where the latency exceeds the whole window there is no
+  // aim that works, and the caption is what reports that instead of a check pretending otherwise.
+  const fireAt = Math.max(0, CORPSE_FROM_SECONDS - shutterSeconds);
+  const firstDown = Math.max(0, recorded.samples.findIndex((sample) => sample.downSeconds >= 0));
+  const aimed = (watch) => watch.samples.slice(firstDown).some((s) => s.downSeconds >= fireAt);
+  // Against the recording ALREADY IN HAND before polling for it: on a starved runner the detection
+  // that produced it has itself already spent over half the window -- see the measured 1.104s in the
+  // portrait block -- and polling again there would spend the rest chasing a moment already passed.
+  const held = aimed(recorded) ? recorded : await waitForSample(page, key,
+    (sample) => sample.downSeconds >= fireAt,
+    { intervalMs: 40, timeoutMs: RESPAWN_SECONDS * 1000, since: firstDown });
+  const lastKnown = held.samples.at(-1);
+  await shot(name);
+  const after = JSON.parse(await page.eval(readWatchSource(key)));
+  // A capped recording stops appending, so slicing by the length we last saw would silently return
+  // nothing and caption the photograph as unreadable rather than as untrustworthy. Say which.
+  const truncated = after.dropped > 0;
+  const spanned = truncated ? [] : after.samples.slice(held.samples.length);
+  const span = (field) => {
+    const values = spanned.map((sample) => sample[field]).filter(Number.isFinite);
+    return values.length ? [Math.min(...values), Math.max(...values)] : null;
+  };
+  const caption = {
+    capture: `fight-${name}.png`,
+    // Where the pixels were meant to land, and when the shutter was released to put them there.
+    aimedAtDownSeconds: Number(CORPSE_FROM_SECONDS.toFixed(2)),
+    firedAtDownSeconds: Number(fireAt.toFixed(2)),
+    // The frame period the RECORDING ran at, and separately how long the SHUTTER itself was open --
+    // which is not that number times the frame count, because the frames rendered during a capture
+    // are the slow ones. Reporting only the median made a 6-frame shutter read as 100ms when it had
+    // in fact spanned the rest of the knockdown and the respawn after it.
+    recordingFrameMillis: Math.round(frameSeconds * 1000),
+    shutterFrames: spanned.length,
+    shutterMillis: lastKnown && after.samples.at(-1)
+      ? Math.round(after.samples.at(-1).t - lastKnown.t) : null,
+    truncated,
+    downSeconds: span('downSeconds'),
+    bodyHeightMetres: span('bodyHeight'),
+  };
+  // The calibration above ran on the load screen, which rasters faster than a fight does. Every
+  // knockdown photograph is itself another measurement, so take the worst seen -- aiming earlier
+  // than necessary costs a slightly earlier frame, aiming later costs the whole photograph.
+  if (Number.isFinite(caption.shutterMillis)) {
+    shutterSeconds = Math.max(shutterSeconds, caption.shutterMillis / 1000);
+  }
+  const range = (pair, unit) => (pair ? `${pair[0].toFixed(2)}..${pair[1].toFixed(2)}${unit}` : 'unreadable');
+  console.log(`  ${caption.capture}: aimed at downSeconds ${caption.aimedAtDownSeconds} `
+    + `(fired at ${caption.firedAtDownSeconds}), `
+    + `shutter open ${caption.shutterMillis}ms over ${caption.shutterFrames} frame(s) `
+    + `(recording ${caption.recordingFrameMillis}ms/frame)${truncated ? ' TRUNCATED' : ''}, `
+    + `downSeconds ${range(caption.downSeconds, '')}, body ${range(caption.bodyHeightMetres, 'm')}`);
+  return caption;
+}
+
+const captions = [];
+
 // The page publishes state; it does not hand out a handle on the rules. canAttack is then applied
 // HERE, node-side, using the same pure function the game ships -- so this harness checks the real
 // rule against the real state instead of trusting whatever the page says about itself.
@@ -346,7 +501,7 @@ async function pollUntil(predicate, { intervalMs = 25, timeoutMs = 3000 } = {}) 
 const start = await state();
 check('the wolf starts outside its aggro range, so nobody is ambushed on load',
   start.wolf.mode === 'idle', `mode ${start.wolf.mode}, clip ${start.clip}`);
-await shot('01-start');
+await measureShutter('01-start');
 
 // Deliberately thrown from 8+m away, against a 1.7m reach -- a guaranteed miss, with the wolf far too
 // distant to be any part of the frame. Captures swing-missed's own feedback in isolation: the button
@@ -666,13 +821,15 @@ check('a wolf bite lands and the capture catches it while the hurt flash is stil
 // becomes "the veil was up on EVERY frame the hero was down, and down on the frame he stood up",
 // which is what the promise actually is.
 await page.eval(startWatch('knockdown', `({
+  t: performance.now(),
   downSeconds: window.__galaQuestRuntime.encounterState().hero.downSeconds,
   hp: window.__galaQuestRuntime.encounterState().hero.hp,
   veil: window.__galaQuestRuntime.heroDownShown(),
+  bodyHeight: ${BODY_HEIGHT},
 })`));
 const knockedOut = await waitForSample(page, 'knockdown', (sample) => sample.downSeconds >= 0,
   { intervalMs: 40, timeoutMs: 25000 });
-await shot('hero-down');
+captions.push(await photographKnockdown('knockdown', 'hero-down', knockedOut));
 const downFrames = knockedOut.samples.filter((sample) => sample.downSeconds >= 0);
 check('the hero can actually be knocked out by standing and taking bites',
   downFrames.length > 0, `${knockedOut.frames} frames recorded, `
@@ -704,6 +861,36 @@ check('and the knocked-out state clears when he does, rather than outliving the 
   backUpAt > 0 && veilAfterStanding.length === 0,
   `${episode.length - backUpAt} frame(s) after standing up, `
     + `${veilAfterStanding.length} of them still veiled`);
+
+// AND HE ACTUALLY FALLS OVER. Every check above this one is about a flag or a veil; none of them can
+// see the hero. character/reactClips.js's header records what that costs: the death clip ran 2.97s
+// inside a 2s window, so a child watching saw a small stagger and a hero back on his feet, and the
+// whole harness suite said the knockdown worked. It shipped that way. This is the same promise asked
+// of the BODY -- measured every frame, for free, by the recorder that was already running.
+//
+// The bar is a claim about a body, not a number read off a passing run: someone lying on the ground
+// presents about their own thickness, which is nowhere near half their standing height. A hero who
+// merely staggers stays near 1.0 of it and fails. Deliberately generous in the direction that lets
+// an ugly-but-real fall pass, because the defect being guarded is a hero who never goes down at all.
+const FALLEN_FRACTION_OF_STANDING = 0.5;
+const heightsWhile = (down) => episode
+  .filter((sample) => (sample.downSeconds >= 0) === down)
+  .map((sample) => sample.bodyHeight)
+  .filter(Number.isFinite);
+const standingHeights = heightsWhile(false);
+const fallenHeights = heightsWhile(true);
+const standingHeight = standingHeights.length
+  ? standingHeights.sort((a, b) => a - b)[Math.floor(standingHeights.length / 2)] : null;
+const lowest = fallenHeights.length ? Math.min(...fallenHeights) : null;
+check('the hero visibly falls over while he is down, rather than standing through it',
+  standingHeight !== null && lowest !== null
+    && lowest <= standingHeight * FALLEN_FRACTION_OF_STANDING,
+  standingHeight === null || lowest === null
+    ? `no body height was readable -- ${standingHeights.length} standing and ${fallenHeights.length} `
+      + 'down frame(s) carried a number, so this proved nothing rather than passing'
+    : `standing ${standingHeight.toFixed(2)}m, lowest while down ${lowest.toFixed(2)}m `
+      + `(${(lowest / standingHeight * 100).toFixed(0)}% of standing, `
+      + `bar ${FALLEN_FRACTION_OF_STANDING * 100}%), over ${fallenHeights.length} down frame(s)`);
 
 // Prove the control works before blaming the rules: one tap must start a swing.
 //
@@ -1091,16 +1278,32 @@ check('landscape: a landed hit was photographed', landscapeHit,
 
 // HERO DOWN, in landscape -- the state whose layout is most likely to break when the frame changes
 // shape, because the bar under the message is sized against the viewport width.
+// THE RECORDER HAS TO BE RUNNING BEFORE THE TRANSITION IT RECORDS, which is not automatic here:
+// the hit-flash loop above tapping at a biting wolf can knock the hero down on its own. Measured at
+// 32c4a1a, it did -- the recording opened with ONE sample already 1.1s into the window, the aim was
+// therefore satisfied by a moment that had already passed, and the shutter fired into the respawn.
+// The portrait block gets this for free by starting its watch before the hero has taken a scratch.
+await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 12000 });
 const beforeDown = await state();
 await page.eval(startWatch('landscape-knockdown', `({
+  t: performance.now(),
   downSeconds: window.__galaQuestRuntime.encounterState().hero.downSeconds,
+  hp: window.__galaQuestRuntime.encounterState().hero.hp,
   veil: window.__galaQuestRuntime.heroDownShown(),
+  bodyHeight: ${BODY_HEIGHT},
 })`));
-const landscapeDown = await pollUntil((s) => s.hero.downSeconds >= 0,
-  { intervalMs: 40, timeoutMs: 30000 });
-check('landscape: the hero can still be knocked out', landscapeDown.hero.downSeconds >= 0,
-  `hp ${beforeDown.hero.hp} -> ${landscapeDown.hero.hp}, downSeconds ${landscapeDown.hero.downSeconds}`);
-await shot('landscape-hero-down');
+// Detected from the RECORDING rather than by polling live state, for the same reason the portrait
+// block is: a poll on a starved runner arrives late into a window that lasts RESPAWN_SECONDS, and
+// this one then had a screenshot hanging off the end of it. Measured at bd383ed, the live poll
+// caught downSeconds 0.05 and the capture named `landscape-hero-down` showed a hero standing up.
+const landscapeDown = await waitForSample(page, 'landscape-knockdown',
+  (sample) => sample.downSeconds >= 0, { intervalMs: 40, timeoutMs: 30000 });
+const landscapeDownFrames = landscapeDown.samples.filter((sample) => sample.downSeconds >= 0);
+check('landscape: the hero can still be knocked out', landscapeDownFrames.length > 0,
+  `hp ${beforeDown.hero.hp} -> ${landscapeDown.samples.at(-1)?.hp}, `
+    + `${landscapeDownFrames.length} down frame(s) of ${landscapeDown.samples.length}`);
+captions.push(await photographKnockdown(
+  'landscape-knockdown', 'landscape-hero-down', landscapeDown));
 // Recorded across the knockdown rather than read once at the end of it, for the same reason the
 // portrait veil check is: the veil is up for RESPAWN_SECONDS and a point read arrives late enough
 // on a starved runner to miss the tail of it.
@@ -1183,6 +1386,10 @@ writeFileSync(`${OUT}fight-results.json`,
       settledRenderedGap, settledAuthoritativeGap, converged,
     },
     start, closed, settled,
+    // What each knockdown photograph was actually taken across, beside the photographs themselves.
+    // A capture is the only part of this run a human looks at directly, and the one thing it cannot
+    // say for itself is WHEN it was taken.
+    captions,
     // Kept as raw evidence, not as the basis of any check: both are single reads taken after the
     // fight, and by then the wolf can already have respawned. The checks read the recorder.
     afterFight, corpseLog,

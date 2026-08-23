@@ -479,7 +479,7 @@ a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a fra
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — A harness written in wall-clock time is driving something that advances in rendered frames.
-**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
 **Rule:** On a browser with no GPU the page paints at 2-4 fps and a `Runtime.evaluate` waits on the
 main thread, so a CDP read costs a FRAME, not a millisecond. Three consequences follow, and they are
 one mistake wearing three hats: a loop budgeted in milliseconds gets a fraction of its iterations; a
@@ -500,6 +500,16 @@ is safe at any rate; polling LIVE STATE is not.
   is the tell: a real desync has a direction. Bracket the second read between two of the first.
 - **A slack constant between two phases is a number picked against one machine.** A walk that holds
   for distance then pulses to place itself needs no such number if it simply loops until it arrives.
+- **The observation can be SLOWER THAN THE STATE, and then no aim taken during it can work.** Hit 2.
+  A `Runtime.evaluate` costs one frame; a `Page.captureScreenshot` on a software rasterizer costs
+  eight — measured 1628–2627 ms, against a knockdown that lasts `RESPAWN_SECONDS`, which is 2. Two
+  things follow and both were got wrong first. **You cannot bracket it:** a read either side of the
+  shutter always straddles the end of the window, so the check can only ever go red, and a one-sided
+  version that stays silent reads as green. Caption the artifact with the interval it was taken
+  across and let the RECORDING carry the assertion. **And you must lead the target:** the pixels come
+  from the END of the shutter, not the beginning — established by firing at `downSeconds` 1.1 with the
+  shutter open 2200 ms and getting a hero already back on his feet. Fire early by the measured
+  latency, `max(0, wanted − shutter)`, and measure it on a capture the run was taking anyway.
 **Incidents (2026-08-23, one session):** `play-fight` swung every 7.5 s against a rule allowing one
 every 1.5 s, so with Design ruling 5 healing the wolf on each knockdown it reported a fight
 unwinnable that is won in three swings; `drive-marks` 10/21 with 13 knockdowns; `drive-lifecycle`
@@ -516,6 +526,37 @@ the thing it measures keep different clocks, every number the instrument carries
 the ratio between them. Write the number in the units the SUBJECT advances in, or move the decision
 to where those units are counted.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A clamp that protects one subsystem silently degrades every other one sharing the clock.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** `main.js` computes `deltaSeconds = Math.min(gap / 1000, 0.1)` so a hitch cannot teleport
+the hero — a movement guard, correct, and commented as such. It is then passed to everything the
+frame updates, including three animation mixers, for which it is not a guard but a **speed limit**:
+below 10 fps every clip plays in slow motion by the ratio, silently, with no error and no failing
+test. A clip that merely loops survives that. A ONE-SHOT CLIP INSIDE A FIXED WINDOW does not, and
+the death clip is one: `character/reactClips.js` retimes it to only just fit `RESPAWN_SECONDS`, so it
+survives the cap only above `0.1 / DEATH_FALL_FRACTION` — about 5.5 fps. **Ask of any clamp: whose
+hazard is this, and who else is downstream of it?** A value narrowed for one consumer's safety is
+being handed to consumers whose correctness depends on it being wide.
+**Incident (2026-08-23):** measured at 3.1 fps, the hero's death clip reached 55% of its length in
+the two seconds he is down and his hips never got below 65% of standing height. What a child on a
+cheap tablet saw was a hero drop to one knee and pop straight back up — no knockdown at all. That is
+the *identical* defect `reactClips.js`'s own header describes at length and records as fixed on
+2026-08-13, resurrected from the other side by a clamp written for movement, on precisely the slow
+device this game is for. **Nothing in 1533 node tests and 33 browser checks could see it**, because
+every check about the knockdown asked a flag or a DOM veil and none of them looked at the body.
+Fixed by passing the raw `frameDeltaMs` to `reactions.update` — the distinction main.js already draws
+two hundred lines away for the rescue watch, with its own "THE RAW DELTA, not the clamped one" comment.
+**Caught, and now guarded, by** `tools/runtime-test/play-fight.mjs` — a per-frame recording of how
+far the highest bone in the hero's skeleton stands above his own origin, asserted to fall under half
+of standing height while he is down. Not an `ENFORCED` rung: that rung wants a test in `test/` named
+for an ID, and this entry is at its first hit with a guard that only exists in a browser. It went 65% → 9% on the fix. Cost nothing: the recorder was already running,
+and observation from inside the page is free. **The generalisable half:** a check that reads a flag
+proves the rules ran. Only a check that reads the BODY proves a child would see it.
+**Foreknowledge helped:** no — the ledger had `A render change whose whole purpose is how something
+LOOKS cannot be judged from a container with no GPU`, and the true reading here is nearly its
+inverse: the container's slowness was not an obstacle to the review, it was the only reason the
+defect was visible at all. A GPU would have hidden it.
 
 ### OBSERVED — Evidence may name a commit only after executing from that exact clean commit.
 **Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
