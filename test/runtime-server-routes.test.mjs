@@ -23,33 +23,28 @@ async function serving(body) {
   }
 }
 
-test('a browser asking for a favicon is answered, not 404ed', async () => {
-  // Chrome requests /favicon.ico by itself for any document that does not declare an icon. index.html
-  // declares an empty one; every other page on this origin did not, so the request landed on the
-  // static handler, missed, and logged a 404 in a console nobody had asked to pollute.
-  await serving(async (origin) => {
-    const response = await fetch(`${origin}/favicon.ico`);
-    assert.equal(response.status, 200, 'no icon is an answer; not-found is a mistake');
-    assert.match(response.headers.get('content-type') ?? '', /^image\//);
-  });
-});
-
-test('...and it is a real response with a body, because five harnesses NAVIGATE to it', async () => {
-  // THE REGRESSION THIS EXISTS TO STOP RECURRING. The first version of the route answered 204 No
-  // Content, which is the textbook answer and which broke drive-village-board, drive-beacon-siege,
-  // drive-cart-loot, drive-hero-screen and drive-profile-gate in one commit: all five navigate here
-  // on purpose, as a same-origin blank page to set localStorage on before the real load. A 204 tells
-  // the browser to stay where it is, so the waypoint never arrived.
+test('a request for a favicon is a plain 404, which is a decision rather than an oversight', async () => {
+  // THE SERVER DELIBERATELY DOES NOT SERVE ONE, and this records why so nobody "fixes" it twice.
   //
-  // A body length of zero is the shape that breaks them, so that is what this asserts against --
-  // not the status code, which is the thing a future edit would change.
+  // A browser asks for /favicon.ico by itself on any document that does not declare an icon.
+  // index.html declares an empty data-URI one, so the game page is quiet; every other page on this
+  // origin -- a vendored module opened directly, a harness waypoint -- still triggers the request
+  // and logs a cosmetic 404. The repo's answer to that is an allow-list in the harness that can see
+  // it (COSMETIC_404_PATTERNS, in three files now), NOT a route.
+  //
+  // I added a route and it cost five harnesses in one commit. drive-village-board,
+  // drive-beacon-siege, drive-cart-loot, drive-hero-screen and drive-profile-gate all NAVIGATE to
+  // this URL on purpose -- it is their same-origin blank page for setting localStorage on before the
+  // real load, which is what GQ-016's clear-before-pin needs somewhere to stand on. Answering 204
+  // told the browser to stay where it was and the waypoint never arrived.
+  //
+  // So this asserts the 404, deliberately, as the contract those five depend on.
   await serving(async (origin) => {
     const response = await fetch(`${origin}/favicon.ico`);
-    const body = await response.arrayBuffer();
-    assert.ok(body.byteLength > 0,
-      'an empty body does not navigate, and five harnesses need this URL to be somewhere you can go');
-    assert.ok(response.status >= 200 && response.status < 300 && response.status !== 204,
-      `status ${response.status} either is not success or does not navigate`);
+    assert.equal(response.status, 404,
+      'five harnesses navigate here; changing what this answers is changing their waypoint');
+    const body = await response.text();
+    assert.ok(body.length > 0, 'and it must be a page you can actually land on, not an empty reply');
   });
 });
 
@@ -113,6 +108,8 @@ test('a write to a read-only server is refused rather than ignored', async () =>
 test('nothing is cached, which is why an edit shows up on the tablet without a hard reload', async () => {
   await serving(async (origin) => {
     assert.equal((await fetch(`${origin}/index.html`)).headers.get('cache-control'), 'no-store');
-    assert.equal((await fetch(`${origin}/favicon.ico`)).headers.get('cache-control'), 'no-store');
+    // Not the favicon: that path is a 404 by design (see above), and a 404 carries the error
+    // handler's headers rather than the static handler's. A missing file is not a cached file.
+    assert.equal((await fetch(`${origin}/vendor/three.module.min.js`)).headers.get('cache-control'), 'no-store');
   });
 });

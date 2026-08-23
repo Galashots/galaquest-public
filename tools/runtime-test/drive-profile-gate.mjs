@@ -273,6 +273,12 @@ async function grantMarksToActiveProfile(tab, count) {
 /** The game's own origin, needed by Storage.clearDataForOrigin above. Set once the harness-owned
  *  server has picked its port -- every file in this directory owns its own server on an isolated
  *  port, so the origin is not knowable until then (see owned-server.mjs's header). */
+// A browser requests /favicon.ico by itself for any document that does not declare an icon, and the
+// legacy-guest phase below deliberately navigates to a vendored module, which does not. This harness
+// is the only one that collects Log.entryAdded, so it is the only one that SEES the resulting 404.
+// Same list, same reasoning, as drive-cart-loot.mjs and drive-hero-screen.mjs.
+const COSMETIC_404_PATTERNS = ['/favicon.ico'];
+
 let ORIGIN_UNDER_TEST = null;
 
 async function run() {
@@ -545,10 +551,16 @@ async function run() {
     // GQ-016, which this branch learned the hard way.
     const LEGACY_GUEST = 'guest-00000004';
     // A REAL FILE, not /favicon.ico. The usual hop 404s -- nothing serves a favicon -- and this
-    // harness is the one that collects Log.entryAdded, so unlike the others it SEES that 404 and
-    // fails its own console-error check on a request it made itself. vendor/three.module.min.js is
-    // same-origin, exists, and is not the app: navigating to it establishes the origin without
-    // booting a runtime that would mint a profile before the legacy id is planted.
+    // harness is the one that collects Log.entryAdded, so unlike the others it SEES that 404.
+    // vendor/three.module.min.js is same-origin, exists, and is not the app: navigating to it
+    // establishes the origin without booting a runtime that would mint a profile before the legacy
+    // id is planted.
+    //
+    // The 404 still arrives anyway -- the BROWSER asks for a favicon by itself on any document that
+    // does not declare one, and a vendored module does not. That is what COSMETIC_404_PATTERNS below
+    // is for, and it is the answer two other harnesses in this directory already use. I tried
+    // serving a favicon instead and it cost five harnesses in one commit: all five navigate to that
+    // URL on purpose, and changing what it answers changes their waypoint.
     await tab.page.send('Page.navigate', { url: `${ORIGIN_UNDER_TEST}/vendor/three.module.min.js` });
     await new Promise((r) => setTimeout(r, 300));
     await tab.page.send('Storage.clearDataForOrigin', {
@@ -594,9 +606,15 @@ async function run() {
       JSON.stringify(animals));
     await capture(tab, '09-migrated-and-sibling');
 
-    check('no console errors across the whole run',
-      tab.consoleErrors.length === 0,
-      tab.consoleErrors.length ? JSON.stringify(tab.consoleErrors.slice(0, 3)) : 'none');
+    // Cosmetic 404s this harness CAUSES BY ASKING, not defects it found. Same list and same reasoning
+    // as drive-cart-loot.mjs and drive-hero-screen.mjs, which have carried theirs since Phase V.
+    // Deliberately a per-path allow-list rather than a filter on "404": a missing GLB the game
+    // actually needs must still fail this check loudly.
+    const errors = tab.consoleErrors.filter(
+      (entry) => !COSMETIC_404_PATTERNS.some((pattern) => entry.includes(pattern)),
+    );
+    check('no console errors across the whole run', errors.length === 0,
+      errors.length ? JSON.stringify(errors.slice(0, 3)) : 'none');
   } finally {
     await tab.close().catch(() => {});
     server.kill();
