@@ -117,7 +117,23 @@ try {
   await page.send('Page.enable');
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 960, deviceScaleFactor: 1, mobile: false });
   await page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'all' });
-  await page.send('Page.navigate', { url: `${server.url}forge.html` });
+  // ORIGIN, NOT `server.url`. `startOwnedServer().url` is the GAME's address and carries a query
+  // string -- `${origin}/?hero=Harness` -- so `${server.url}forge.html` concatenates into
+  // `${origin}/?hero=Harnessforge.html`: a request for the site root with a nonsense query, which
+  // serves index.html. This tool then waited for a badge that only exists on the forge page and
+  // reported "Forge never reached FORGE READY" for fourteen hours, on a page that was never the
+  // Forge. The game gained its `?hero=` for a good reason (landing on the profile gate instead of
+  // in the world); nothing warned the one tool that builds a DIFFERENT page's address from it.
+  const forgeUrl = `${server.origin}/forge.html`;
+  await page.send('Page.navigate', { url: forgeUrl });
+
+  // WHICH PAGE DID WE ACTUALLY LAND ON. Checked before the badge, because "the badge never appeared"
+  // is the same symptom whether the Forge is broken or whether this never opened the Forge at all --
+  // and those are repairs in different files. A wrong address should say so in one line.
+  const landed = await waitFor(page, `location.pathname === '/forge.html'`, 40, 250);
+  check('the review actually opened the Forge page', Boolean(landed),
+    landed ? forgeUrl : `landed on ${await page.eval('location.href')} instead of ${forgeUrl}`);
+  if (!landed) throw new Error(`the review never reached ${forgeUrl}`);
 
   const ready = await waitFor(page, `document.querySelector('#runtime-badge')?.textContent === 'FORGE READY'`);
   check('Forge boots in the real browser', Boolean(ready));

@@ -91,3 +91,48 @@ test('a harness that owns its own server can reach the same authority', () => {
     assert.match(code, /gameUrlFor\(/, `${file} imports gameUrlFor but never uses it`);
   }
 });
+
+// ── the other half of the same trap: `url` is an ADDRESS, not a prefix ──────────────────────────
+//
+// `startOwnedServer().url` is the GAME's address and ends in a query string (`/?hero=Harness`), so
+// pasting a path onto it does not make a sibling URL -- it makes nonsense. `${server.url}forge.html`
+// resolves to `${origin}/?hero=Harnessforge.html`: a request for the site root, which serves
+// index.html.
+//
+// tools/forge-review/review-forge.mjs did exactly that and spent fourteen hours reporting "Forge
+// never reached FORGE READY" about a page that was never the Forge. The test above could not see it
+// twice over -- it scans only tools/runtime-test/, and it matches addresses ending in `/`, which
+// this one does not.
+//
+// So: no tool anywhere under tools/ may treat a `.url` as a prefix. Build a sibling page from
+// `.origin`, which is exactly what it is for.
+const TOOL_DIRS = ['runtime-test', 'forge-review'];
+const URL_USED_AS_PREFIX = /\$\{[^}]*\burl\}[A-Za-z0-9_./-]/g;
+
+test('no tool pastes a path onto a server url -- that field carries a query string', () => {
+  const offenders = [];
+  for (const dir of TOOL_DIRS) {
+    const base = join(import.meta.dirname, '..', 'tools', dir);
+    for (const file of readdirSync(base).filter((name) => name.endsWith('.mjs'))) {
+      const code = stripComments(readFileSync(join(base, file), 'utf8'));
+      for (const match of code.matchAll(URL_USED_AS_PREFIX)) {
+        offenders.push(`${dir}/${file}: ${match[0]}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'these paste a path onto a URL that ends in a query string, so they request the site root with '
+    + `a nonsense query instead of the page they meant -- build it from .origin:\n  ${offenders.join('\n  ')}`);
+});
+
+test('the prefix rule goes red on the shape that actually shipped', () => {
+  // review-forge.mjs's exact defect, reduced. Without this, a change to the regex could quietly
+  // stop matching and the rule above would read as coverage over zero findings.
+  assert.equal([...'await page.send(\'Page.navigate\', { url: `${server.url}forge.html` });'
+    .matchAll(URL_USED_AS_PREFIX)].length, 1);
+  // ...and does not fire on the correct shape, or on a bare url used as an address.
+  assert.equal([...'await page.send(\'Page.navigate\', { url: `${server.origin}/forge.html` });'
+    .matchAll(URL_USED_AS_PREFIX)].length, 0);
+  assert.equal([...'await page.send(\'Page.navigate\', { url: URL_UNDER_TEST });'
+    .matchAll(URL_USED_AS_PREFIX)].length, 0);
+});
