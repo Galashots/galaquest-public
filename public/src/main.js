@@ -99,7 +99,9 @@ import {
   lanternUnlockedFromRewards,
   loadZone,
 } from './world/zoneLoader.js';
-import { KEEPER_NAME, keeperSpeechState, speakKeeperLine } from './world/keeperSpeech.js';
+import {
+  KEEPER_NAME, keeperSpeechState, speakKeeperLine, speakKeeperLineIfUnlocked,
+} from './world/keeperSpeech.js';
 import { ROWAN_NAME, rowanOwesBlade, rowanSpeechState } from './world/rowanSpeech.js';
 import {
   RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSpeechState,
@@ -1150,6 +1152,11 @@ async function bootstrap() {
     if (next.line !== npcSpeechLine) {
       npcSpeechLine = next.line;
       keeperSpeechTextElement.textContent = next.line ?? '';
+      // AND READ IT, once the child has asked to be read to. Refused until the speaker button has
+      // been tapped once -- see keeperSpeech.js for why that tap is both iOS's price for making a
+      // sound at all and the child's own signal. Fired here, on the line CHANGING, so walking back
+      // to a speaker mid-quest reads the new count rather than repeating the old sentence.
+      speakKeeperLineIfUnlocked(next.line);
     }
     if (next.name !== npcSpeechName) {
       npcSpeechName = next.name;

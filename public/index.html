@@ -345,15 +345,22 @@
       /* >=44px touch target, same discipline as #attack-button. A tap fires speechSynthesis.speak()
          from inside its own click handler -- iOS Safari counts that tap itself as the user gesture,
          so no separate unlock step is needed (see keeperSpeech.js's speakKeeperLine comment). */
+      /* GOLD, like every other control a child is meant to find -- #hero-button, #profile-chip and
+         the ATTACK ring all say "press me" in #f2b33d and this one said it in translucent white.
+         It is the button that matters most on this screen and it was the quietest: read-aloud is
+         the ONLY route by which a child who cannot read receives the quest, the count of marks
+         left, or where to go next, and since keeperSpeech.js's unlock latch it is also the one tap
+         that makes every later line read itself. A control that buys all of that should not be
+         styled below the one that opens the gear screen. */
       #keeper-speech-speak {
         flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
-        border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%;
-        background: rgb(255 255 255 / 14%); color: #fff;
+        border: 2px solid rgb(242 179 61 / 75%); border-radius: 50%;
+        background: rgb(12 20 31 / 75%); color: #f2b33d;
         font-size: 1.3rem; line-height: 1; padding: 0;
         touch-action: none; user-select: none; -webkit-user-select: none;
         transition: background-color 90ms ease-out;
       }
-      #keeper-speech-speak[data-pressed="true"] { background: rgb(255 255 255 / 34%); }
+      #keeper-speech-speak[data-pressed="true"] { background: rgb(242 179 61 / 30%); }
       /* Moved from top:22% to 68%, both steps found by looking at captures rather than by reasoning
          about layout. At 22% the banner sat exactly across the Lantern Tree's canopy, so the one
          moment the whole quest builds to announced itself by covering the thing you are meant to be
