@@ -51,6 +51,7 @@ import {
 import { ROWAN_LINE_BEACON_FOUND, ROWAN_LINE_CART_SEARCHED } from '../../public/src/world/rowanSpeech.js';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -518,10 +519,25 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     // ARRIVAL. Polled for the arrival and the stir TOGETHER: the stir starts on the frame the
     // arrival latches, and a poll that waits for one and then goes looking for the other can miss a
     // 1.6 s response entirely on a runner this slow.
+    // RECORDED ACROSS THE APPROACH, and the comment above was right about the hazard while still
+    // being caught by it. Polling for the arrival and the stir together stopped them being missed
+    // SEQUENTIALLY, but the stir is one breath of about 1.6s and a poll iteration on a runner
+    // painting at 367ms a frame is two round trips, so the pair can still both be true only in
+    // frames nobody sampled. Hosted that read as `beaconStirring false, glow 0.26` -- a cresset
+    // visibly mid-response, reported as one that never stirred. A recorder watching every frame
+    // from before the hero arrives cannot miss it, and "did the Beacon ever stir" is the question.
+    await tab.page.eval(startWatch('beacon-arrival', `({
+      beaconFound: window.__galaQuestRuntime.zoneTrailState().beaconFound,
+      beaconStirring: window.__galaQuestRuntime.zoneTrailState().beaconStirring,
+      beaconGlow: window.__galaQuestRuntime.zoneTrailState().beaconGlow,
+    })`));
     await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1], OLD_BEACON.radiusMeters * 0.8, 60000);
     const arrival = await pollUntil(
       tab, (s) => s.beaconFound === true && (reducedMotion || s.beaconStirring === true), 20000,
     );
+    const approach = await tab.page.eval(readWatchSource('beacon-arrival')).then(JSON.parse);
+    await tab.page.eval(stopWatchSource('beacon-arrival'));
+    const stirred = approach.samples.filter((sample) => sample.beaconStirring === true);
     check(`${label}: reaching the Beacon latches the arrival`, arrival.beaconFound === true,
       `hero ${JSON.stringify(arrival.heroPos)}, beacon ${JSON.stringify(OLD_BEACON.at)}`);
     check(`${label}: the arrival banner names the place and claims nothing else`,
@@ -533,8 +549,10 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
       reducedMotion
         ? `${label}: reduced motion suppresses the stir but keeps the banner and the objective`
         : `${label}: the world answers -- the cold cresset stirs`,
-      reducedMotion ? arrival.beaconStirring === false : arrival.beaconStirring === true,
-      `beaconStirring ${arrival.beaconStirring}, glow ${arrival.beaconGlow}`,
+      reducedMotion ? stirred.length === 0 : stirred.length > 0,
+      `stirred on ${stirred.length} of ${approach.samples.length} recorded frames; `
+        + `at arrival beaconStirring ${arrival.beaconStirring}, glow ${arrival.beaconGlow}, `
+        + `peak glow ${approach.samples.reduce((peak, sample) => Math.max(peak, sample.beaconGlow ?? 0), 0).toFixed(2)}`,
     );
     await shot(tab, `${label}-07-arrival`);
 

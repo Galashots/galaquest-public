@@ -40,6 +40,10 @@ import { openRewardStore } from '../../net/rewardStore.mjs';
 // it went red when the profile gate landed -- straight onto the naming question, world behind a
 // modal, input suspended. See owned-server.mjs's gameUrlFor.
 import { gameUrlFor } from './owned-server.mjs';
+import { pollUntilDeadline } from './automation-timing.mjs';
+import {
+  metresOrUnknown, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource,
+} from './in-page-driver.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
 import { KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
@@ -277,9 +281,45 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })),
 });
 
+// HOW CLOSE THE HELD LEG MAY BE TRUSTED TO GET BEFORE THE PULSED ONE TAKES OVER. A held walk cannot
+// stop on a mark: arrival latches in-page at frame resolution, but the release costs a poll and a
+// round trip while authority keeps walking, and a stick at full deflection runs. Three metres is
+// outside that overshoot and short enough for the pulsed leg to finish exactly.
+const HELD_APPROACH_SLACK_METRES = 3;
+
+// THE LONG LEGS ARE HELD, and on this harness that is about SAFETY as much as speed. Its routes are
+// the longest in the suite -- the road east to the Lodge is minutes of walking through country with
+// a wolf in it -- and a pulsed walk covers about a metre a second on a runner painting at 367ms a
+// frame. Every extra second out there is another chance to be knocked down, which respawns the hero
+// at spawn and starts the walk again. Hosted, that is what "and the banner names the place" was
+// reading when it reported "You went down…". Holding the stick makes the crossing cost
+// distance-over-speed instead of one pulse per round trip; the pulsed leg then places him exactly.
+async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin));
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  let walk;
+  try {
+    walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 150, timeoutMs: maxMillis });
+  } finally {
+    await touch(tab, 'touchEnd', []);
+    await tab.page.eval(STOP_WALK);
+  }
+  console.log(`    walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
+    + `${metresOrUnknown(walk.metres)}`);
+}
+
 async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   let last = await state(tab);
+  const startMetres = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+  if (startMetres > stopWithin + HELD_APPROACH_SLACK_METRES) {
+    await heldLegToward(tab, targetX, targetZ, stopWithin + HELD_APPROACH_SLACK_METRES,
+      Math.max(4000, maxMillis / 2));
+    last = await state(tab);
+  }
   const deadline = deadlineAfter(maxMillis);
   while (Date.now() < deadline) {
     const dx = targetX - last.heroPos[0];
@@ -479,12 +519,28 @@ async function phaseLodge() {
     // Straight out east along the ranger road. The seeded guest has never been in the hollow, so
     // this leg is about the GROUND being there at all -- the chip and the arrival are checked once
     // the hero is standing in it.
+    // The banner is RECORDED across the whole walk, not read at the moment of arrival. It is a
+    // transient -- it fires, then expires -- and this walk is minutes long through country with a
+    // wolf in it, so the single frame the harness happens to read can hold whatever the game said
+    // most recently. Hosted that was "You went down…": a real knockdown, correctly banner-ed, and
+    // nothing whatever to do with whether the road east ends at a named place. "Did the game ever
+    // name the Ranger Lodge on arrival" is the actual question, and only a log can answer it.
+    await tab.page.eval(startWatch('lodge-banner',
+      "({ banner: document.querySelector('#banner')?.textContent ?? '' })"));
     await walkToward(tab, LODGE.at[0], LODGE.at[1], 2.0, 240_000);
     const there = await pollUntil(tab, (s) => s.lodgeFound === true, 20000);
+    const bannerLog = await tab.page.eval(readWatchSource('lodge-banner')).then(JSON.parse);
+    await tab.page.eval(stopWatchSource('lodge-banner'));
     check(there.lodgeFound === true, 'the road east ends somewhere a child can arrive AT',
       `hero ${JSON.stringify(there.heroPos.map((n) => +n.toFixed(1)))}, lodge ${JSON.stringify(LODGE.at)}`);
-    check(/Ranger Lodge/i.test(there.banner ?? ''), 'and the banner names the place',
-      JSON.stringify((there.banner ?? '').trim()));
+    const named = bannerLog.samples.filter((sample) => /Ranger Lodge/i.test(sample.banner ?? ''));
+    check(named.length > 0, 'and the banner names the place',
+      named.length
+        ? `named on ${named.length} of ${bannerLog.samples.length} recorded frames: `
+          + JSON.stringify(named[0].banner.trim())
+        : `never named across ${bannerLog.samples.length} frames; banners seen `
+          + JSON.stringify([...new Set(bannerLog.samples.map((sample) => sample.banner.trim()))]
+            .filter(Boolean).slice(0, 6)));
     // THE WORLD REALLY DID GROW. Standing here at all is the assertion: x = 20.8 was two metres
     // outside the walkable world until this change, and the clamp would have pinned the hero at 13.
     check(there.heroPos[0] > 13, 'and the hero is standing east of where the world used to end',
