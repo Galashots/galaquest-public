@@ -479,7 +479,7 @@ a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a fra
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — A harness written in wall-clock time is driving something that advances in rendered frames.
-**Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-23
+**Status:** OBSERVED · **Hits:** 4 · **First/Last:** 2026-08-23
 **Rule:** On a browser with no GPU the page paints at 2-4 fps and a `Runtime.evaluate` waits on the
 main thread, so a CDP read costs a FRAME, not a millisecond. Three consequences follow, and they are
 one mistake wearing three hats: a loop budgeted in milliseconds gets a fraction of its iterations; a
@@ -489,6 +489,28 @@ the same number against the next machine.** Move the frame-rate-sensitive half i
 record the value once per rendered frame and read the log, so observation costs nothing and cannot
 be too slow, and decide arrival in-page so input can be held rather than pulsed. Polling a RECORDER
 is safe at any rate; polling LIVE STATE is not.
+**Fourth hit, and the one that shows the rule reaches past harnesses into DERIVATIONS.**
+`play-fight`'s settle check gives the rendered hero 6s to converge onto the authoritative one, and
+its comment derives that number properly rather than picking it: `reconcile()` closes 10% of the
+error per snapshot, snapshots are 10Hz, the worst legal start is `SNAP_DRIFT_UNITS` (0.6m), so 29
+snapshots is about 2.8s and 6s is that with room. Every step of that is right except the clock.
+`reconcile()` is applied in the FRAME LOOP, so the achieved rate is min(snapshot rate, frame rate),
+and the frame rate is the term that varies twenty-fold.
+
+Measured on a starved run: `0.623m -> 0.051m over 6257ms` -- 24 corrections at 3.8 per second, not
+10. It needed 29, had room for 24, and reported NEVER CONVERGED at 5.1cm against a 3cm bar, on a run
+where the hero converged perfectly well. Two of four consecutive hosted heads went red on it while
+the game code was byte-identical across all four.
+
+**What is new here:** the previous three hits were harness loops written in milliseconds by habit.
+This one was a budget DERIVED from real constants, in a comment that shows its working, and it was
+still wrong -- because the derivation named the snapshot rate as the limiting term when the limiting
+term is whichever of two rates is slower. A derivation is only as good as its slowest assumption, and
+"how often does this actually get applied" is the question to ask of any rate, not "how often is it
+offered". Fixed by budgeting in corrections -- `min(rendered frames, elapsed / snapshot interval)` --
+which is what the derivation was always about. 3 of 3 local runs green afterwards, where it had been
+2 of 3.
+
 **Corollaries, each of which cost a round on 2026-08-23:**
 - **A log is a history.** "Wait until the hero is back up" was satisfied by a frame from before he
   ever went down. A recorder needs a `since` index or it answers with the past.
