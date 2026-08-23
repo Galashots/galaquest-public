@@ -38,7 +38,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // The wire's own precision, imported rather than restated -- see WIRE_GAP_TOLERANCE_M below.
-import { WIRE_POSITION_QUANTUM } from '../../public/src/net/protocol.js';
+import { SNAPSHOT_HZ, WIRE_POSITION_QUANTUM } from '../../public/src/net/protocol.js';
+// The largest drift net/client.js corrects GRADUALLY rather than snapping. Imported, not restated
+// (GQ-007): the settle budget below is derived from it, and a copy here would be a second constant
+// free to drift from the one reconcile() actually uses.
+import { SNAP_DRIFT_UNITS } from '../../public/src/net/client.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -824,8 +828,29 @@ const gapAtRelease = renderedGap(closed);
 const settleStartedAt = Date.now();
 const settleSamples = [];
 let settled = closed;
-const settleSampleLimit = Math.ceil(SETTLE_TIMEOUT_MS / 100);
-for (let settleSample = 0; settleSample < settleSampleLimit; settleSample += 1) {
+// COUNT THE CORRECTIONS, NOT THE MILLISECONDS.
+//
+// The 6s budget above is derived as "10% per snapshot at 10Hz, so 28 snapshots is 2.8s" -- and the
+// derivation is right about the arithmetic and wrong about the clock. reconcile() is applied in the
+// FRAME LOOP, so the rate is min(snapshot rate, frame rate), and the frame rate is the one that
+// varies by twenty times between runners. Measured here on a starved run: 0.623m closed to 0.051m
+// over 6257ms, which is 24 corrections at 3.8 per second, not 10. It needed 28 and had time for 24,
+// so it reported NEVER CONVERGED at 5.1cm against a 3cm bar -- a check failing because the machine
+// was slow, on a run where the hero converged perfectly well.
+//
+// So the budget is now the thing the derivation was always about: how many corrections have had a
+// chance to land. That is min(rendered frames, snapshots elapsed), because a correction needs both a
+// frame to run in and a snapshot to correct toward. The wall clock stays only as a backstop against
+// a page that has stopped rendering entirely -- it is no longer the thing being budgeted.
+const CORRECTIONS_TO_CONVERGE = Math.ceil(Math.log(CONVERGED_EPSILON / SNAP_DRIFT_UNITS) / Math.log(0.9));
+const CORRECTIONS_BUDGET = CORRECTIONS_TO_CONVERGE * 2;
+const SETTLE_BACKSTOP_MS = 30_000;
+await page.eval(startWatch('settle-frames', '1'));
+const framesRendered = async () => {
+  const watch = JSON.parse(await page.eval(readWatchSource('settle-frames')));
+  return watch?.frames ?? 0;
+};
+for (let settleSample = 0; ; settleSample += 1) {
   // eslint-disable-next-line no-await-in-loop
   const sample = await state();
   const rendered = renderedGap(sample);
@@ -843,11 +868,20 @@ for (let settleSample = 0; settleSample < settleSampleLimit; settleSample += 1) 
   });
   settled = sample;
   if (authoritative !== null && Math.abs(rendered - authoritative) <= CONVERGED_EPSILON) break;
+  const elapsedMs = Date.now() - settleStartedAt;
+  if (elapsedMs >= SETTLE_BACKSTOP_MS) break;
+  // eslint-disable-next-line no-await-in-loop
+  const corrections = Math.min(await framesRendered(), elapsedMs / (1000 / SNAPSHOT_HZ));
+  if (corrections >= CORRECTIONS_BUDGET) break;
   // eslint-disable-next-line no-await-in-loop
   await sleep(100);
 }
+const settleFrames = await framesRendered();
+await page.eval(stopWatchSource('settle-frames'));
 console.log(`  SEPARATION  at movement release (the old one-shot measurement point): ${gapAtRelease.toFixed(3)}m rendered`);
-console.log(`  SEPARATION  ${settleSamples.length} samples over ${Date.now() - settleStartedAt}ms after movement release`);
+console.log(`  SEPARATION  ${settleSamples.length} samples over ${Date.now() - settleStartedAt}ms after movement `
+  + `release; ${settleFrames} frames rendered, budget ${CORRECTIONS_BUDGET} corrections `
+  + `(${CORRECTIONS_TO_CONVERGE} needed from ${SNAP_DRIFT_UNITS}m at 10% each)`);
 for (const s of settleSamples) {
   console.log(`    +${String(s.atMs).padStart(4)}ms  rendered ${s.rendered.toFixed(3)}m  authoritative ${s.authoritative === null ? '  n/a' : s.authoritative.toFixed(3)}m  drift ${s.drift.toFixed(3)}${s.snapped ? ' SNAPPED' : ''}  wolf ${s.wolfMode}  rev ${s.revision}`);
 }
