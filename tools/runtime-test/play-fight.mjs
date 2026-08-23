@@ -839,9 +839,17 @@ let settled = closed;
 // was slow, on a run where the hero converged perfectly well.
 //
 // So the budget is now the thing the derivation was always about: how many corrections have had a
-// chance to land. That is min(rendered frames, snapshots elapsed), because a correction needs both a
-// frame to run in and a snapshot to correct toward. The wall clock stays only as a backstop against
-// a page that has stopped rendering entirely -- it is no longer the thing being budgeted.
+// chance to land. The wall clock stays only as a backstop against a page that has stopped rendering
+// entirely -- it is no longer the thing being budgeted.
+//
+// AND THE min() IS GONE, because the thing it was compensating for was a bug in the game rather than
+// a fact about slow machines. It read min(rendered frames, snapshots elapsed) on the grounds that a
+// correction needs both a frame to run in and a snapshot to correct toward -- true of the client
+// that shipped when this was written, where reconcile() consumed at most one snapshot per frame and
+// silently dropped the rest. net/client.js now consumes the whole backlog on the frame that gets
+// there, so one frame applies every snapshot that has arrived since the last one, and the achieved
+// rate is the SNAPSHOT rate at any frame rate above zero. What is left of the frame count is a
+// liveness guard: a page painting nothing has applied nothing, whatever the clock says.
 const CORRECTIONS_TO_CONVERGE = Math.ceil(Math.log(CONVERGED_EPSILON / SNAP_DRIFT_UNITS) / Math.log(0.9));
 const CORRECTIONS_BUDGET = CORRECTIONS_TO_CONVERGE * 2;
 const SETTLE_BACKSTOP_MS = 30_000;
@@ -871,7 +879,7 @@ for (let settleSample = 0; ; settleSample += 1) {
   const elapsedMs = Date.now() - settleStartedAt;
   if (elapsedMs >= SETTLE_BACKSTOP_MS) break;
   // eslint-disable-next-line no-await-in-loop
-  const corrections = Math.min(await framesRendered(), elapsedMs / (1000 / SNAPSHOT_HZ));
+  const corrections = (await framesRendered()) === 0 ? 0 : elapsedMs / (1000 / SNAPSHOT_HZ);
   if (corrections >= CORRECTIONS_BUDGET) break;
   // eslint-disable-next-line no-await-in-loop
   await sleep(100);

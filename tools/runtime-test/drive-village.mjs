@@ -342,7 +342,8 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // travel is toward the keeper rather than past him. Held straight up, the stick is pure
 // camera-forward -- the `sy = 1` case the rotation above used to compute.
 async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
-  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin,
+    { releaseOnArrival: true }));
   // ASK THE PAGE WHETHER WE ARE ALREADY THERE, BEFORE TOUCHING THE STICK. A walk that starts inside
   // its own ring cannot improve on where the hero is standing -- it can only hold the key long
   // enough to notice, release, and let him coast back out. Measured, hosted at 641ae02: the hero was
@@ -370,7 +371,7 @@ async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis) {
     ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
     : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`;
   console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
-    + `${metresOrUnknown(walk.metres)}, ${reached}`);
+    + `${metresOrUnknown(walk.metres)}, ${reached}, thumb ${walk.released ?? 'still down'}`);
   // Let the release reach the page, then wait for authority to agree the hero has STOPPED before
   // the pulsed leg starts measuring from him. A fixed sleep here handed the next phase a coasting
   // hero, and handed the caller one who drifted out the far side of the speech radius while the
@@ -457,36 +458,33 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
   return last;
 }
 
-// WHAT IS STILL WRONG WITH THIS WALK, measured rather than guessed, so the next person does not have
-// to re-derive it. Recorded and NOT acted on: three attempts to correct this walk on 2026-08-23 all
-// measured worse and were reverted, and a fourth guess is not what it needs.
+// WHAT WAS WRONG WITH THIS WALK, and what closed it. Kept because the measurement is the useful
+// part: three attempts to correct this on 2026-08-23 all measured worse and were reverted, and the
+// thing that finally worked was not a fourth number.
 //
-// From a failing lane walk (1 run in 4, locally):
+// From a failing lane walk (1 run in 4 locally, and red hosted):
 //
 //   walk: 25 frames held, 1.24m to 0.35m, inside 0.6m at frame 25
 //   approach: 2 pass(es), 2.04m from the target
 //
-// The in-page latch saw 0.35m -- comfortably inside its ring -- and the reading afterwards says
-// 2.04m. The hero travelled about 1.7m AFTER the page already knew he had arrived.
+// The in-page latch saw 0.35m -- comfortably inside its ring -- and the reading afterwards said
+// 2.04m. THE PAGE DECIDED ARRIVAL BUT THE HARNESS PERFORMED THE RELEASE: startWalk latched on the
+// frame the hero crossed the ring, and the touchEnd that stopped him was a CDP round trip away,
+// which on a starved page is two frames. Everything the in-page latch bought was spent again on the
+// way back out, and the convergent loop above could not fix it because every pass overshot by more
+// than the ring it was aiming at. Under 40x CPU throttle (~3 fps) that was four passes latching at
+// 0.63m, 0.49m and 0.35m and ending 2.58m from a 2.0m ring -- a walk that got further away the
+// harder it tried.
 //
-// THE PAGE DECIDES ARRIVAL BUT THE HARNESS PERFORMS THE RELEASE. startWalk latches on the frame the
-// hero crosses the ring; the touchEnd that stops him is then a CDP round trip away, and at the run
-// speed 0.7s of round trip is exactly 1.7m. Everything the in-page latch bought is spent again on
-// the way back out. The convergent loop above exists to correct that and normally does -- the walks
-// either side of this one landed at 1.28m and 0.07m -- but its budget is WALL CLOCK, so on a slow
-// runner it gets two passes instead of the four it needed and returns wherever the second one ended.
+// So the release moved into the page too: `startWalk(..., { releaseOnArrival: true })` dispatches
+// the same pointerup the harness's own touchEnd produces, on the same element, on the latch frame.
+// See in-page-driver.mjs for why that is a child lifting their thumb rather than a new power.
 //
-// So there are two candidate repairs, and they are different sizes:
-//   the small one -- budget the loop in rendered frames rather than milliseconds, the same unit fix
-//     play-fight's settle check needed. It does not remove the coast; it buys enough passes to
-//     correct it on any machine.
-//   the real one -- release the input IN THE PAGE, on the latch frame, so there is no coast to
-//     correct. That means giving in-page-driver a way to stop movement, which is a control rather
-//     than a reading, and AGENTS.md is careful about exactly that line -- a harness that can drive
-//     the game can drive it somewhere no child can reach. Camera heading is already set from in-page
-//     on the grounds that it is a control a player owns, so the argument is available, but it is a
-//     change to a primitive ten harnesses share and it wants its own pass rather than a tail-end
-//     edit to a file that already has one fix in flight.
+// Same throttled run afterwards: 15/15 checks, every approach inside its ring (1.06m, 0.41m, 0.98m,
+// 0.29m). What remains is the input-send latency -- the client samples the stick in its own frame
+// loop, so zero intent reaches the server a frame or so after the thumb lifts, and the hero walks
+// about a metre more. That is not a harness artefact: a child on a slow tablet coasts too, and the
+// convergent loop absorbs it in one extra pass.
 
 // ── Task B: the 12/14/16 exploration-camera comparison ─────────────────────────────────────────
 // Same establishing composition (spawn, facing the Lantern Tree), same viewport, same pitch/FOV,

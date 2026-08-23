@@ -135,18 +135,60 @@ export async function waitForSample(
  *   rate the harness could have sampled it.
  * @param stopWithin        metres. Arrival needs BOTH the rendered hero and the authoritative one
  *   inside it, which is the pair a caller's own check reads.
+ * @param releaseOnArrival  lift the thumb IN THE PAGE, on the latch frame, instead of a CDP round
+ *   trip later. See RELEASING THE STICK IN THE PAGE below for why this exists and why it is not a
+ *   new power. Off by default: this primitive is shared by ten harnesses and each should opt in
+ *   with its own measurement, not inherit a timing change it never asked for.
+ *
+ * RELEASING THE STICK IN THE PAGE.
+ *
+ * The latch above decides arrival on the frame it happens. The RELEASE was still a CDP round trip
+ * away, and on a starved page a `Runtime.evaluate` waits on the main thread, so that round trip is
+ * two frames -- about 0.7s at 3 fps, which at the run speed is 1.7m of hero travelled after the page
+ * already knew he was there. Everything the in-page latch buys is spent again on the way back out.
+ * Measured in drive-village at 40x CPU throttle: four convergent passes each latched inside 1.5m
+ * (0.63m, 0.49m, 0.35m) and each fresh reading afterwards put him back outside, ending 2.58m from a
+ * 2.0m ring. The loop cannot converge when every pass overshoots by more than the ring.
+ *
+ * What this dispatches is the SAME `pointerup` the harness's own `touchEnd` produces, on the same
+ * element, through `input/touch.js`'s ordinary public handler -- a child lifting their thumb, one
+ * frame earlier. It reads nothing from `window.__galaQuestRuntime` and writes nothing to it, and the
+ * only state it can reach is "the stick is no longer held", which is not a state no child can reach:
+ * it is the state every child is in most of the time. The pointer id is not guessed -- a
+ * capture-phase listener records the real one from the harness's own `touchStart` before it is used.
  */
-export function startWalk(targetExpression, stopWithin) {
+export function startWalk(targetExpression, stopWithin, { releaseOnArrival = false } = {}) {
   return `(async () => {
   const { headingToward } = await import('/src/world/zoneLoader.js');
   const runtime = window.__galaQuestRuntime;
   const walk = {
     frames: 0, arrived: false, arrivedFrame: null,
-    startMetres: null, closestMetres: null, metres: null, stopped: false,
+    startMetres: null, closestMetres: null, metres: null, stopped: false, released: null,
   };
   ${WALK_STATE} = walk;
+  let held = null;
+  const remember = (event) => {
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+    held = { id: event.pointerId, target: event.target, x: event.clientX, y: event.clientY };
+  };
+  const releasing = ${releaseOnArrival ? 'true' : 'false'};
+  if (releasing) window.addEventListener('pointerdown', remember, true);
+  const stopListening = () => { if (releasing) window.removeEventListener('pointerdown', remember, true); };
+  const liftThumb = () => {
+    if (!held) return 'no pointer was ever recorded';
+    try {
+      held.target.dispatchEvent(new PointerEvent('pointerup', {
+        pointerId: held.id, pointerType: 'touch', isPrimary: true,
+        bubbles: true, cancelable: true, composed: true,
+        clientX: held.x, clientY: held.y,
+      }));
+    } catch (error) {
+      return String(error && error.message ? error.message : error);
+    }
+    return 'released';
+  };
   const step = () => {
-    if (walk.stopped) return;
+    if (walk.stopped) { stopListening(); return; }
     walk.frames += 1;
     const target = (${targetExpression});
     const away = (x, z) => Math.hypot(target.x - x, target.z - z);
@@ -165,6 +207,7 @@ export function startWalk(targetExpression, stopWithin) {
     if (!walk.arrived && behind <= ${stopWithin}) {
       walk.arrived = true;
       walk.arrivedFrame = walk.frames;
+      if (releasing) { walk.released = liftThumb(); stopListening(); }
     }
     runtime.follow.setHeading(headingToward(authority.x, authority.z, target.x, target.z));
     requestAnimationFrame(step);
@@ -176,7 +219,8 @@ export function startWalk(targetExpression, stopWithin) {
 
 /** JS source reading the walk back. */
 export const READ_WALK = `JSON.stringify(${WALK_STATE} || null)`;
-/** JS source stopping the walk. Safe when it was never started. */
+/** JS source stopping the walk. Safe when it was never started. The listener a releasing walk
+ *  installed is removed by its own next frame, or by the arrival that made it unnecessary. */
 export const STOP_WALK = `Boolean(${WALK_STATE}) && (${WALK_STATE}.stopped = true)`;
 
 /** A metre reading for a log line, or 'unknown' when no frame ever painted. */
