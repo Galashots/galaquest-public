@@ -276,25 +276,110 @@ await shot('00-before');
 
 await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 14000);
 
+// RECORD THE ARRIVAL CEREMONY FROM INSIDE THE PAGE, BEFORE THE FIGHT STARTS.
+//
+// The beat this file is here to prove is brief: MARK_IGNITE_MS is 700ms and the toast holds for
+// 1800ms. Catching it by polling from outside cannot work here -- every page.eval is a CDP round
+// trip costing a couple of hundred milliseconds, so a loop written as "poll every 20ms" gets three
+// or four looks at a 700ms window and misses it, and a single read taken afterwards finds the banner
+// already gone (`banner read ""`).
+//
+// A rAF recorder sees every frame and costs nothing, so the three checks below read what actually
+// happened rather than what happened to be on screen when they asked. It also records the pip count
+// AT THE MOMENT THE TOAST WAS SHOWN, which is what "the two numbers must agree" is actually about --
+// the old version read the toast and the pips at two different times and compared them.
+await page.eval(`(() => {
+  const pill = document.querySelector('#lantern-marks');
+  const banner = document.querySelector('#banner');
+  const pipsNow = () => [...document.querySelectorAll('#lantern-marks .mark')]
+    .filter((el) => el.dataset.filled === 'true').length;
+  const log = { justLit: false, banners: [] };
+  window.__markCeremony = log;
+  let previous = '';
+  const tick = () => {
+    if (pill && pill.dataset.justLit === 'true') log.justLit = true;
+    const shown = (banner && banner.dataset.shown === 'true') ? banner.textContent : '';
+    if (shown && shown !== previous) log.banners.push({ text: shown, pips: pipsNow(), maxPips: pipsNow() });
+    // AND THE HIGHEST PIP COUNT REACHED WHILE THAT TOAST WAS STILL UP.
+    //
+    // Sampling only the first frame is too strict, and measurably so: main.js renders the pips
+    // earlier in the frame than it fires the arrival beat, so on the landing frame the toast reads 1
+    // and the row reads 0 -- for exactly one frame. This check is not about frame ordering, it is
+    // about whether a CHILD READING THE TOAST SEES THE SAME NUMBER ON THE ROW. The toast holds for
+    // 1800ms, so the honest question is whether the pips agree within its lifetime.
+    //
+    // Both numbers are kept: the "pips" field is what the row showed the instant the toast appeared,
+    // and "maxPips" is the best it reached before the toast went away. Reporting the first alongside
+    // the second means a genuine one-frame lag stays visible in the log rather than smoothed out.
+    // (No backticks in this comment: the whole block is inside a template literal and a stray one
+    //  terminates it. That has now cost this branch three debugging rounds.)
+    if (shown && log.banners.length > 0) {
+      const current = log.banners[log.banners.length - 1];
+      if (current.text === shown) current.maxPips = Math.max(current.maxPips, pipsNow());
+    }
+    previous = shown;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})()`);
+
+// TAP ON A CLOCK. THE OLD LOOP SPENT ITS BUDGET TALKING TO THE PAGE, NOT SWINGING.
+//
+// Every iteration used to do a full `pollUntil(s => s.canAttack)` state read, then a walkToward
+// (which round-trips per step), then a 20ms-interval poll for the length of a swing -- roughly fifty
+// CDP round trips per swing, forty times over. Locally that is affordable and this file passed
+// 21/21. Hosted it is not: the runner spent FOUR MINUTES FIFTY-TWO SECONDS between the opening
+// capture and `FAIL the wolf can actually be killed`, and the ten mark-dependent checks after it all
+// failed as consequences of that one -- no mark, so no spark, no pip, no toast, no server count, and
+// nothing to survive the reload. Eleven reported failures, one cause.
+//
+// Same fix, same measurements, as drive-recovery's earnAMark: press on a human cadence and look up
+// occasionally. A refused tap is free; asking whether one would be refused costs a round trip, and
+// there are only three or four presses in the whole fight. Measured separately in this browser: four
+// taps, all four connect, wolf down in about seventeen seconds.
+const TAP_GAP_MS = 600;
+// ONE SMALL READ BETWEEN TAPS, and it carries the GAP as well as the wolf.
+//
+// The first version of this rewrite only re-walked every third tap, and that lost something the old
+// slow loop had for free: it walked before EVERY swing, so a knockdown -- which respawns the hero
+// back at spawn, metres away -- was corrected immediately. Without that the hero lay down, got up
+// far from the wolf, tapped at nothing, and was bitten again. The in-page banner recorder caught it
+// exactly: ["You went down…","Back on your feet"] eleven times over, and the wolf never died.
+//
+// So the gap rides along in the cheap read. Still one small eval per tap rather than the full state
+// object plus a walk, and the response to a knockdown is immediate again. Optimising the round trips
+// away was right; optimising the repositioning away was not, and the two were tangled together.
+const fightNow = () => page.eval(`JSON.stringify((() => {
+  const r = window.__galaQuestRuntime;
+  const e = r.encounterState();
+  const net = r.netState();
+  const at = net.serverSelf ? [net.serverSelf.x, net.serverSelf.z] : [r.player.position.x, r.player.position.z];
+  return {
+    hp: e.wolf.hp, mode: e.wolf.mode, heroDown: e.hero.downSeconds >= 0,
+    gap: Math.hypot(at[0] - e.wolf.x, at[1] - e.wolf.z),
+  };
+})())`).then(JSON.parse);
+
 let killed = false;
-for (let swing = 0; swing < 40 && !killed; swing += 1) {
-  const before = await pollUntil((s) => s.canAttack, { timeoutMs: 3000 });
-  const attackPos = before.serverPos ?? before.heroPos;
-  const gap = Math.hypot(attackPos[0] - before.wolf.x, attackPos[1] - before.wolf.z);
-  if (gap > 1.5 && before.wolf.mode !== 'dying' && before.wolf.mode !== 'dead') {
-    await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 2500, { faceTarget: true });
-  } else if (before.wolf.mode !== 'dying' && before.wolf.mode !== 'dead') {
-    await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 800, { faceTarget: true });
-  }
+let knockdowns = 0;
+const killDeadline = Date.now() + 120000;
+for (let swing = 0; swing < 60 && !killed && Date.now() < killDeadline; swing += 1) {
   await touch('touchStart', [{ x: attackX, y: attackY }]);
   await sleep(60);
   await touch('touchEnd', []);
-  const now = await pollUntil(
-    (s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
-    { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 },
-  );
-  killed = now.wolf.mode === 'dying' || now.wolf.mode === 'dead';
+  await sleep(TAP_GAP_MS);
+
+  const f = await fightNow();
+  killed = f.hp <= 0 || f.mode === 'dying' || f.mode === 'dead';
+  if (killed) break;
+  if (f.heroDown) knockdowns += 1;
+  // Walk whenever the gap says to -- which after a knockdown is immediately, because respawning puts
+  // the hero back at spawn.
+  if (f.gap > 1.5) {
+    await walkToward((l) => ({ x: l.wolf.x, z: l.wolf.z }), 1.2, 2500, { faceTarget: true });
+  }
 }
+if (knockdowns > 0) console.log(`  DIAG  the hero was knocked down ${knockdowns} time(s) during the fight`);
 check('the wolf can actually be killed', killed);
 
 // GP1-C6: the reward MOMENT, caught while it is happening rather than after it has finished.
@@ -322,19 +407,13 @@ check(`${ORIENTATION}: the mark's own light was caught in flight, not after it l
 // THE REWARD BEAT ITSELF -- the frame this whole lane is judged on. Triggered off the ignite
 // attribute main.js sets the moment the light reaches the boy, so the capture cannot be taken before
 // the thing it is evidence for has started, and cannot claim an arrival that never happened.
-const ignited = await (async () => {
-  const deadline = deadlineAfter(6000);
-  while (Date.now() < deadline) {
-    // eslint-disable-next-line no-await-in-loop
-    const lit = await page.eval(
-      `document.querySelector('#lantern-marks')?.dataset.justLit === 'true'`,
-    );
-    if (lit) return true;
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(20);
-  }
-  return false;
-})();
+// Give the light time to fly and land, then ask the recorder whether the pill ever ignited. Waiting
+// rather than polling: the recorder is already watching every frame, so the only question is whether
+// enough time has passed for the beat to have happened at all.
+await sleep(4000);
+const ceremony = await page.eval('JSON.stringify(window.__markCeremony ?? { justLit: false, banners: [] })')
+  .then(JSON.parse);
+const ignited = ceremony.justLit === true;
 await shot('05-mark-arrival');
 check(`${ORIENTATION}: the mark ARRIVING is its own moment -- the pip ignites when the light lands`,
   ignited, 'the lantern-marks pill never entered its just-lit state');
@@ -344,21 +423,17 @@ check(`${ORIENTATION}: the mark ARRIVING is its own moment -- the pip ignites wh
 // double-counted a mark that the render had already revealed. Caught by looking at the capture, which
 // is the only reason it was caught -- both numbers were individually plausible. This is the check
 // that makes the capture unnecessary next time.
-const arrival = await page.eval(`(() => {
-  const banner = document.querySelector('#banner');
-  const pips = Array.from(document.querySelectorAll('#lantern-marks .mark'));
-  return JSON.stringify({
-    bannerText: banner?.dataset.shown === 'true' ? banner.textContent : '',
-    pipsFilled: pips.filter((el) => el.dataset.filled === 'true').length,
-  });
-})()`).then(JSON.parse);
-const bannerCount = Number((/LANTERN MARK\s+(\d+)\s*\/\s*(\d+)/.exec(arrival.bannerText) ?? [])[1]);
+const markToast = ceremony.banners.find((b) => /LANTERN MARK/.test(b.text)) ?? { text: '', pips: null };
+const bannerCount = Number((/LANTERN MARK\s+(\d+)\s*\/\s*(\d+)/.exec(markToast.text) ?? [])[1]);
 check(`${ORIENTATION}: the reward toast names the mark AND the progress`,
-  Number.isFinite(bannerCount) && /LANTERN MARK/.test(arrival.bannerText),
-  `banner read ${JSON.stringify(arrival.bannerText)}`);
+  Number.isFinite(bannerCount) && /LANTERN MARK/.test(markToast.text),
+  `banner read ${JSON.stringify(markToast.text)}; every banner seen: `
+  + JSON.stringify(ceremony.banners.map((b) => b.text)));
 check(`${ORIENTATION}: the toast's count and the lit pips are the SAME number`,
-  bannerCount === arrival.pipsFilled,
-  `toast says ${bannerCount}, ${arrival.pipsFilled} pip(s) lit`);
+  bannerCount === markToast.maxPips,
+  `toast says ${bannerCount}; the row reached ${markToast.maxPips} pip(s) while the toast was up`
+  + ` (${markToast.pips} on its very first frame -- main.js paints the pips earlier in the frame`
+  + ` than it fires the arrival beat, so one frame of lag there is ordering, not disagreement)`);
 
 // The mark is awarded server-side off the SAME snapshot cadence combat events ride (net/gameServer.mjs,
 // D3) -- 10 Hz -- so the pip filling and the reward event landing both need a poll, not an instant
