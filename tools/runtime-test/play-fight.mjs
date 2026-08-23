@@ -327,21 +327,48 @@ const BODY_HEIGHT = bodyHeightOf('window.__galaQuestRuntime.hero');
  *  carries the weapon rather than of whichever bone happened to be convenient. */
 const SWORD_HAND_BONE = RIGID_TIER2_GEAR.find((item) => item.id === 'sword_ironwood')?.boneName ?? null;
 
-// Where the sword hand and the hero himself are, both in world space and on the same frame, so a
-// swing's arm travel can be told apart from the hero simply having walked. A bone read alone cannot
-// make that distinction and would report a stroll as a magnificent swing.
+// WHERE THE SWORD HAND IS IN THE HERO'S OWN FRAME, not in the world's.
+//
+// The world-space version of this was wrong twice, and the second time cost a hosted run. A hand
+// read in world coordinates moves when the ARM moves, when the hero WALKS, and when the hero TURNS
+// -- and only the first of those is a swing. Guarding on the hero's root position catches the walk
+// and is blind to the turn, which is the one that actually happened: photographTheSwing calls
+// orbitToFront, the hero comes round to face the camera, and his hand sweeps half a metre through
+// the world without his arm doing anything at all. Hosted at e934546 that put 0.54m into a baseline
+// the swing's own 0.45m was being compared against, and the check reported 0.8x -- a moving arm
+// moving less than a still one, for the second time, from a different cause.
+//
+// Expressed in the hero's local frame it is invariant to both: project the world offset onto the
+// root's own basis vectors, which are the columns of its matrixWorld. Plain arithmetic, so the
+// harness still needs no handle on the game's module graph, and no guard is needed for a hero who
+// walks or turns because neither is visible in the number any more.
 const SWING_SAMPLE = `(() => {
   const hero = window.__galaQuestRuntime.hero;
   const hand = hero && hero.getObjectByName(${JSON.stringify(SWORD_HAND_BONE)});
-  const at = (object) => (object
+  const round = (v) => Math.round(v * 1000) / 1000;
+  const world = (object) => (object
     ? [object.matrixWorld.elements[12], object.matrixWorld.elements[13], object.matrixWorld.elements[14]]
-      .map((v) => Math.round(v * 1000) / 1000)
     : null);
+  const localHand = (() => {
+    if (!hero || !hand) return null;
+    const m = hero.matrixWorld.elements;
+    const w = world(hand);
+    const d = [w[0] - m[12], w[1] - m[13], w[2] - m[14]];
+    // Column i of a Matrix4 is elements[4i..4i+2]: the hero's own x, y and z axes, still carrying
+    // whatever scale the rig was exported at. Dividing by the squared length turns the dot product
+    // into a coordinate rather than a projection length, so the units stay metres.
+    const onAxis = (i) => {
+      const c = [m[i * 4], m[i * 4 + 1], m[i * 4 + 2]];
+      const len2 = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+      return len2 ? round((d[0] * c[0] + d[1] * c[1] + d[2] * c[2]) / len2) : 0;
+    };
+    return [onAxis(0), onAxis(1), onAxis(2)];
+  })();
   return {
     t: performance.now(),
     swingSeconds: window.__galaQuestRuntime.encounterState().hero.swingSeconds,
-    hand: at(hand),
-    root: at(hero),
+    hand: localHand,
+    root: world(hero)?.map(round) ?? null,
   };
 })()`;
 
@@ -1389,10 +1416,12 @@ async function photographTheSwing() {
   // did, the arm travel above is partly his own stroll and this measurement is not usable. Said out
   // loud rather than absorbed, because a check that quietly measures the wrong thing is the defect
   // this whole block exists to catch.
+  // Reported, not asserted on any more. It used to gate the check, as a guard against measuring a
+  // stroll as a swing -- and it was both too weak (blind to a turn) and now unnecessary, since a
+  // hand read in the hero's own frame does not move when the hero does.
   const rootTravel = travelOf(arm.samples.map((sample) => sample.root));
-  const stoodStill = rootTravel !== null && rootTravel < MIN_BODY_SEPARATION / 10;
   check('the sword arm actually moves when the hero swings, rather than the pose holding still',
-    stoodStill && handSwinging !== null && handStill !== null
+    handSwinging !== null && handStill !== null
       && handSwinging > handStill * SWING_DWARFS_IDLE,
     handSwinging === null || handStill === null
       ? `nothing to compare over ${arm.samples.length} recorded frame(s): `

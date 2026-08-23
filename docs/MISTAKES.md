@@ -563,8 +563,8 @@ rather than to the kind of class it was.
 KIND, or the next member of that kind walks straight into it.
 **Foreknowledge helped:** no -- worse than no. The comment was three lines away and was read.
 
-### OBSERVED — "Everything that is not X" is not the opposite of X when the sampling is coarse.
-**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+### OBSERVED — A measurement has to be taken in a frame where only the thing under test can move it.
+**Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
 **Rule:** A comparison against a baseline needs the baseline to be a state the subject was actually
 IN, not the complement of the state under test. Those two are the same set only when the sampling is
 fine enough that transitions cost nothing. At 5 samples per event they are not: every boundary frame
@@ -578,12 +578,26 @@ Locally: 1.32m against 0.18m, 7.2x, comfortable. Hosted at a 317ms frame: **0.38
 0.7x** -- it reported that a moving arm moves less than a still one, and went red. Three swings
 sampled five times each leave a handful of return-to-rest frames in "not swinging", and those few
 frames carried most of an arc. Fixed by taking rest from the frames before the first tap.
+**Hit 2 (2026-08-23, the SAME CHECK, a different contamination, and this is what promotes the
+entry).** With the baseline fixed the check failed hosted again at **0.8x**, and the reason was the
+other half of the same mistake: the hand was read in WORLD coordinates. A hand in world space moves
+when the arm moves, when the hero walks, and when the hero TURNS — and only the first is a swing.
+The guard I had written caught the walk (root travel 0.000m) and was blind to the turn, which is the
+one that happened: `photographTheSwing` calls `orbitToFront`, the hero comes round to face the
+camera, and his hand sweeps half a metre through the world with his arm doing nothing. 0.54m of that
+went into the baseline the swing's own 0.45m was measured against.
+**The general form, which covers both hits:** pick the frame of reference before picking the
+threshold. Expressed in the hero's LOCAL frame — the world offset projected onto his root's own
+basis vectors — the number cannot be moved by his position or his facing, so there is nothing left
+in it but the arm, and the guard against walking becomes unnecessary rather than insufficient. Rest
+fell to 0.19m of breathing against 1.25m of swing. **Every guard you have to add is a hint that the
+quantity is measured in the wrong frame**; the right frame needs no guards.
 **Why it is worth an entry rather than a shrug:** this check was written the same morning, expressly
 to catch a defect that only appears on slow devices, and was sabotage-tested and confirmed
-red-capable. It still went in with a baseline that dissolves on a slow device. **Proving an
+red-capable. It still went in twice with a measurement that dissolves on a slow device. **Proving an
 instrument can see its failure case does not prove it is measuring the right two things.** The
 sabotage answered "would this notice a frozen arm" and never asked "is `!swinging` the same as
-`still`".
+`still`", nor "does anything but the arm move this number".
 **Foreknowledge helped:** not yet recorded.
 
 ### OBSERVED — Making one beat of a harness work can break the next one, because they share a world.
