@@ -26,16 +26,41 @@
  * The current cart is hidden (not removed) while the candidate is composited in, and restored before
  * the harness exits, so it never touches persisted state.
  */
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
-const server = await startOwnedServer();
 const OUT = fileURLToPath(new URL('../../tmp/rowan-camp-audit/whole-camp/', import.meta.url));
+const AUDIT_DIR = fileURLToPath(new URL('../../tmp/rowan-camp-audit/', import.meta.url));
+const CANDIDATE_FILES = ['cart-candidate-mounted.glb', 'campfire-candidate-mounted.glb', 'tangle-candidate-mounted.glb'];
+
+// CHECKED BEFORE ANYTHING IS STARTED, which the other three candidate reviews already do and this
+// one did not. Two things were wrong with reading them where they used to be read:
+//
+// ONE, the message. These files are gitignored, so their absence is the ORDINARY state of a fresh
+// clone and of CI. A bare ENOENT stack for `cart-candidate-mounted.glb` is indistinguishable from a
+// harness that broke, and says nothing about where the file comes from -- review-keeper-idle and its
+// two siblings all name the file and point at the header. This one now does too.
+//
+// TWO, and worse: the read happened AFTER startOwnedServer(), so a missing fixture threw with a
+// server child already running and nothing left to kill it. play-fight.mjs asserts "the harness
+// terminated its own server child, and nothing else" precisely because an orphan server holds a port
+// the next harness in the matrix wants. Nothing starts now until the inputs are known to exist.
+//
+// It still exits 2, and 2 is still a red job: this workflow's own rule is that a measuring instrument
+// says "no automated verdict" by exiting 0 with its evidence, so any non-zero exit is an execution
+// failure and must stay visible. Making the failure legible is not the same as making it pass.
+const missing = CANDIDATE_FILES.filter((name) => !existsSync(`${AUDIT_DIR}${name}`));
+if (missing.length > 0) {
+  console.error(`candidate not found: ${missing.map((name) => AUDIT_DIR + name).join(', ')}`
+    + '\n(the Rowan camp candidates are gitignored -- see this file\'s header for where they come from)');
+  process.exit(2);
+}
+
+const server = await startOwnedServer();
 mkdirSync(OUT, { recursive: true });
 
-const AUDIT_DIR = fileURLToPath(new URL('../../tmp/rowan-camp-audit/', import.meta.url));
 const b64 = (name) => readFileSync(`${AUDIT_DIR}${name}`).toString('base64');
 const CANDIDATES = {
   cart: b64('cart-candidate-mounted.glb'),
