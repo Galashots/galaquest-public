@@ -600,14 +600,30 @@ async function waitForAnimationGated(key, sampleExpression, predicate, budgetSec
   return met;
 }
 
+// THE RECORDER STARTS BEFORE THE WALK, for the reason the re-wave check further down already
+// carries and this one did not. The wave fires the moment the hero crosses the radius and is over in
+// about a second; a poll that begins once walkToward has RETURNED is looking for something that may
+// already have happened, and finds `waving:false, talking:true` -- the wave finished and handed off
+// while nobody was watching.
+//
+// Measured: one run in four, locally, four consecutive runs. And the exposure grew when walkToward
+// started waiting for the server hero to come to rest before returning -- a better walk, which spends
+// its extra certainty in exactly the window this poll needed. Fixing the sibling check and leaving
+// this one was the mistake; they are the same check about two different waves.
+await page.eval(startWatch('keeper-wave',
+  '({ t: performance.now(), v: window.__galaQuestRuntime.zoneKeeperState()?.waving === true })'));
 const approached = await walkToward(keeperX, keeperZ, 1.5, 20000);
 check('walking reaches the keeper',
   Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
   `hero ${JSON.stringify(approached.heroPos)}, keeper [${keeperX}, ${keeperZ}], `
     + `radius ${KEEPER_WAVE_RADIUS_METERS}m`);
-const waved = await pollUntil((s) => s.keeper?.waving === true, { timeoutMs: animationBudget(3000) });
+const waveLog = await waitForSample(page, 'keeper-wave', (sample) => sample.v === true,
+  { intervalMs: 60, timeoutMs: 6000 });
+await page.eval(stopWatchSource('keeper-wave'));
+const waved = waveLog.samples.some((sample) => sample.v === true);
 check('the keeper actually waves when a hero comes within range',
-  waved.keeper?.waving === true, `keeperState ${JSON.stringify(waved.keeper)}`);
+  waved, `waving seen on a recorded frame: ${waved}, over ${waveLog.samples.length} frame(s) from `
+    + `before the approach; keeperState now ${JSON.stringify((await state()).keeper)}`);
 
 // The greeting must END, and it must hand the body back. This half of the gate exists because the
 // half above passed all the way through a real defect: update() used to re-fire the wave on the
