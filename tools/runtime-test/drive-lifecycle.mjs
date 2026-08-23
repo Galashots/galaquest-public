@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import {
   DEATH_SECONDS,
   SWING_CONTACT_SECONDS,
+  SWING_SECONDS,
   WOLF_MAX_HP,
   WOLF_RESPAWN_SECONDS,
   canAttack,
@@ -46,6 +47,9 @@ import {
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import {
+  readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource,
+} from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -382,25 +386,56 @@ try {
     `mode ${closed.wolf.mode}, hp ${closed.wolf.hp}/${WOLF_MAX_HP}, gap ${Math.hypot(closed.heroPos[0] - closed.wolf.x, closed.heroPos[1] - closed.wolf.z).toFixed(2)}m`);
 
   // ── 10. the wolf can be killed ───────────────────────────────────────────────────────────────────
+  //
+  // Swung on the rules' own clock, with the fight recorded per frame -- the same shape play-fight
+  // and drive-marks now use, and for the same reasons, which their headers carry in full. In short:
+  // this loop polled live state twice a swing, once for canAttack and once on a 916ms budget for a
+  // reaction that lasts WOLF_HIT_FLASH_SECONDS (0.18s), and on a runner painting at ~367ms a frame
+  // that is looking less often than the thing it looks for lasts. The swings came out slower than
+  // SWING_SECONDS allows, and since Design ruling 5 heals the wolf to full on every knockdown, a
+  // hero landing fewer than three hits between knockdowns can never finish it. The re-close stays,
+  // because the wolf backs off after a bite and the hero only turns while walking, but it is a held
+  // walk on the wolf's live position and its cost comes out of the wait before the next tap rather
+  // than being added to it.
+  const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+  await page.eval(startWatch('lifecycle-fight', `({
+    mode: window.__galaQuestRuntime.encounterState().wolf.mode,
+    hp: window.__galaQuestRuntime.encounterState().wolf.hp,
+  })`));
+  const readFight = () => page.eval(readWatchSource('lifecycle-fight')).then(JSON.parse);
+  // A second of recording, so the frame count is the frame rate.
+  await sleep(1000);
+  const paced = await readFight();
+  const framePeriodMs = paced.frames > 0 ? Math.round(1000 / paced.frames) : 17;
+  const tapEveryMs = Math.round(SWING_SECONDS * 1000 + framePeriodMs);
+
+  async function closeOnWolf(stopWithin, maxMillis) {
+    await page.eval(startWalk(WOLF_TARGET, stopWithin));
+    await touch('touchStart', [{ x: stickX, y: stickY }]);
+    await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
+    try {
+      await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+        (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+    } finally {
+      await touch('touchEnd', []);
+      await page.eval(STOP_WALK);
+    }
+  }
+
   let killed = false;
   for (let swing = 0; swing < 40 && !killed; swing += 1) {
+    const cycleStart = Date.now();
     // eslint-disable-next-line no-await-in-loop
-    const before = await pollUntil((s) => s.canAttack, { timeoutMs: 4000 });
-    const attackPos = before.serverPos ?? before.heroPos;
-    const gap = Math.hypot(attackPos[0] - before.wolf.x, attackPos[1] - before.wolf.z);
-    if (gap > 1.5 && before.wolf.mode !== 'dying' && before.wolf.mode !== 'dead') {
-      // eslint-disable-next-line no-await-in-loop
-      await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 2500, { faceTarget: true });
-    }
+    await closeOnWolf(1.0, 4000);
     // eslint-disable-next-line no-await-in-loop
     await tapAttack();
     // eslint-disable-next-line no-await-in-loop
-    const now = await pollUntil(
-      (s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
-      { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 },
-    );
-    killed = now.wolf.mode === 'dying' || now.wolf.mode === 'dead';
+    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+    // eslint-disable-next-line no-await-in-loop
+    const log = await readFight();
+    killed = log.samples.some((sample) => sample.mode === 'dying' || sample.mode === 'dead');
   }
+  await page.eval(stopWatchSource('lifecycle-fight'));
   check('10. the wolf can actually be killed', killed);
 
   // ── 11. the wolf really respawns after the rules' own threshold ────────────────────────────────
