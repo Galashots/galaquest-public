@@ -801,6 +801,8 @@ const FIGHT_SAMPLE = `(() => {
     swingSeconds: published.hero.swingSeconds,
     wolfMode: published.wolf.mode,
     wolfHp: published.wolf.hp,
+    // The CLIP, not just the mode, because "stays dead" is a claim about what is being played.
+    wolfClip: runtime.wolf()?.getState()?.clip ?? null,
     // So the loop can tell "in the strike arc" from "the wolf backed off", without a second read.
     gap: Math.hypot(runtime.player.position.x - published.wolf.x,
       runtime.player.position.z - published.wolf.z),
@@ -927,7 +929,6 @@ for (let tap = 0; tap < 200 && !killed; tap += 1) {
   if (!killed && lastGap > ATTACK_REACH) await closeOnWolf(lastGap, 1.0);
 }
 const fight = await readFight();
-await page.eval(stopWatchSource('fight'));
 // The recorder is the evidence for both of these, so report what it actually saw. `dropped` is
 // printed because a truncated log that reads as complete is how a harness says "never happened"
 // about something it merely stopped watching.
@@ -942,16 +943,40 @@ console.log(`  fight: ${fight.frames} frames, ${fight.dropped} dropped, wolf rea
 if (sawHit) await shot('wolf-hit-flash');
 if (killed) await shot('04-defeated');
 
-const afterFight = await state();
-check('tapping ATTACK damages the wolf', afterFight.wolf.hp < WOLF_MAX_HP,
-  `wolf on ${afterFight.wolf.hp}hp of ${WOLF_MAX_HP}`);
+// FROM THE RECORDER, because by the time the loop notices the kill and this line runs, the wolf can
+// already have respawned on full health -- WOLF_RESPAWN_SECONDS is 10s and a tap costs about two
+// hosted. Seen locally: `wolf on 3hp of 3` after a fight the same recorder proves it lost. The
+// lowest health the wolf was ever recorded at is the honest answer to "did tapping damage it".
+check('tapping ATTACK damages the wolf', lowestWolfHp < WOLF_MAX_HP,
+  `wolf reached ${lowestWolfHp}hp of ${WOLF_MAX_HP} across ${fight.samples.length} recorded frames`);
 check('a struck wolf plays its hit reaction', sawHit);
-check('the wolf can actually be killed', killed, `mode ${afterFight.wolf.mode}`);
+check('the wolf can actually be killed', killed,
+  `wolf reached ${lowestWolfHp}hp; modes seen `
+    + `${JSON.stringify([...new Set(fight.samples.map((sample) => sample.wolfMode))])}`);
 
+// JUDGED FROM RECORDED FRAMES, because a sleep-then-read races a ten-second respawn with an unknown
+// head start. The loop above notices the kill within a few taps, and hosted a tap costs about two
+// seconds -- so `sleep(2200)` could land eleven seconds after the wolf actually died, past
+// WOLF_RESPAWN_SECONDS, and read `mode idle, clip idle` off a wolf that had died, stayed dead the
+// whole time, and got back up exactly as the rules say. That is a harness arriving late reported as
+// a game looping its death.
+//
+// The claim itself is unchanged and now stated over a span rather than an instant: from the frame
+// the wolf first reads 'dead', every recorded frame until the respawn says 'dead' and plays the
+// death clip. A wolf looping its death would break that on the first loop.
 await sleep(2200);
-const corpse = await state();
+const afterFight = await state();
+const corpseLog = await readFight();
+await page.eval(stopWatchSource('fight'));
+const firstDead = corpseLog.samples.findIndex((sample) => sample.wolfMode === 'dead');
+const afterDeath = firstDead >= 0 ? corpseLog.samples.slice(firstDead) : [];
+const stillDead = afterDeath.filter((sample) => sample.wolfMode === 'dead');
+const wrongClip = stillDead.filter((sample) => sample.wolfClip !== 'death');
 check('a dead wolf stays dead rather than looping its death',
-  corpse.wolf.mode === 'dead' && corpse.clip === 'death', `mode ${corpse.wolf.mode}, clip ${corpse.clip}`);
+  firstDead >= 0 && stillDead.length > 0 && wrongClip.length === 0,
+  `first dead at frame ${firstDead} of ${corpseLog.samples.length}; `
+    + `${stillDead.length} frame(s) dead, ${wrongClip.length} of them not playing the death clip; `
+    + `modes after death ${JSON.stringify([...new Set(afterDeath.map((sample) => sample.wolfMode))])}`);
 await shot('05-corpse');
 
 // ── the swing, photographed where it is safe to photograph it ───────────────────────────────────
@@ -1107,7 +1132,8 @@ await page.eval(startWatch('landscape-fight', FIGHT_SAMPLE));
 const readLandscape = () => page.eval(readWatchSource('landscape-fight')).then(JSON.parse);
 let landscapeKilled = false;
 let landscapeGap = 0;
-for (let attempt = 0; attempt < 120 && !landscapeKilled; attempt += 1) {
+const landscapeDeadline = Date.now() + 180_000;
+for (let attempt = 0; attempt < 120 && !landscapeKilled && Date.now() < landscapeDeadline; attempt += 1) {
   const cycleStart = Date.now();
   // eslint-disable-next-line no-await-in-loop
   await tapAttack();
@@ -1156,7 +1182,10 @@ writeFileSync(`${OUT}fight-results.json`,
       gapAtRelease, settleSamples,
       settledRenderedGap, settledAuthoritativeGap, converged,
     },
-    start, closed, settled, afterFight, corpse,
+    start, closed, settled,
+    // Kept as raw evidence, not as the basis of any check: both are single reads taken after the
+    // fight, and by then the wolf can already have respawned. The checks read the recorder.
+    afterFight, corpseLog,
   }, null, 2));
 console.log(`\n${results.length - failures}/${results.length} checks passed`);
 process.exit(failures === 0 ? 0 : 1);
