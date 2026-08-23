@@ -563,6 +563,33 @@ rather than to the kind of class it was.
 KIND, or the next member of that kind walks straight into it.
 **Foreknowledge helped:** no -- worse than no. The comment was three lines away and was read.
 
+### OBSERVED — The maximum of a set is biased toward the set with more samples in it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A peak is an extreme value, and how extreme a value you find depends on how many draws you
+took. Comparing `max(A)` against `max(B)` when A has four samples and B has fifty-six is not
+comparing A against B -- it is comparing four draws against fifty-six draws, and the larger set wins
+part of the margin for free. **Before comparing extremes of two sets, compare their sizes.** Either
+sample them comparably, use a statistic that is not an extreme (a median, an integral), or say the
+comparison cannot be made and report why.
+**Incident (2026-08-23):** the third formulation of `the sword arm actually moves` compared the peak
+hand speed while swinging against the peak while at rest. Locally 18 swinging frames against 66 at
+rest gave 4.5x and passed. Hosted at `3f2d45a`, where the frame period is 189ms, the same check drew
+**4 swinging frames against 56 at rest** and read **3.0x against a 3x bar** -- failing on the
+rounding. The swing's real peak falls between frames at that spacing while rest gets fourteen times
+as many chances at its own, so the number that went red was mostly the sample-count ratio.
+**What it became, and the more useful half:** not a fourth formulation. The previous commit had
+already written down that a fourth hosted failure would make this `diagnostic()` rather than another
+revision, so it did -- gated on a MEASURED property of the run, that the swing was sampled at least
+four times per swing. Where it is not, the honest verdict is that this runner cannot separate a
+swing from breathing. **Deciding what a future red will mean, before seeing it, is what stops the
+third revision becoming a fourth**; without that written down first, the pull toward one more tweak
+until the bar is cleared is very strong, and every tweak is a threshold fitted to one machine.
+**Sibling entries:** this is the same CHECK as the frame-of-reference entry below, failing a third
+time for a third unrelated reason -- contaminated baseline, wrong frame, biased estimator. A check
+worth having can be wrong in more ways than one, and each of them only showed on a machine other
+than the one it was written on.
+**Foreknowledge helped:** not yet recorded.
+
 ### OBSERVED — A measurement has to be taken in a frame where only the thing under test can move it.
 **Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
 **Rule:** A comparison against a baseline needs the baseline to be a state the subject was actually
