@@ -299,8 +299,9 @@ if (bootA && bootB) {
       blade: named(${JSON.stringify(rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME))}),
       // What the WIRE said, beside what the scene did. Without it a failure here is unattributable
       // between "the server never told us" and "we were told and could not draw it", which are
-      // repairs in different files.
-      toldWeaponId: (r.net.sampleRemotes().get(remote.id) || {}).weaponId ?? null,
+      // repairs in different files. Read from the rewards block, which is where a hero's equipped
+      // weapon has always ridden -- main.js reads the same field for the same reason.
+      toldWeaponId: remote.weaponId ?? null,
     };
   })()`;
   // The mesh is fetched on demand: this client had no reason to load the Blade until it was told a

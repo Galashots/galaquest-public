@@ -2436,15 +2436,22 @@ async function bootstrap() {
       // on the LOCAL hero further down, and the single easiest thing to reintroduce here by
       // passing one number for two jobs.
       //
-      // The weapons come off the SAMPLE, not off a snapshot read separately: net/interpolation.js
-      // carries each player's weaponId through with their position, so the sword changes hands on
-      // the frame the hand it is in arrives rather than an interpolation delay ahead of it.
-      const sampledRemotes = net.sampleRemotes();
+      // The weapons come off the REWARDS block, which already carries `equippedWeaponId` per hero on
+      // every snapshot. The first version of this added `players[].weaponId` to the wire, plumbed it
+      // through protocol.js and all three of interpolation.js's sample paths, and only then noticed
+      // the fact was already there -- a second source for one truth, which is the shape half this
+      // repo's ledger is about. Withdrawn. The one thing the withdrawn version had that this does not
+      // is that the sword travelled WITH the interpolated body, so a swap landed on the frame the
+      // hand arrived rather than an interpolation delay ahead of it; that is a hundred milliseconds
+      // on a once-a-session event, and it is not worth a duplicate wire field. `heroes` above is read
+      // the same way, for the far more timing-sensitive knockdown.
       const remoteWeapons = {};
-      for (const [id, sample] of sampledRemotes) {
-        if (typeof sample.weaponId === 'string') remoteWeapons[id] = sample.weaponId;
+      if (netStatus === 'online' && serverEncounter?.rewards) {
+        for (const [id, reward] of Object.entries(serverEncounter.rewards)) {
+          if (typeof reward?.equippedWeaponId === 'string') remoteWeapons[id] = reward.equippedWeaponId;
+        }
       }
-      remotes?.update(sampledRemotes, {
+      remotes?.update(net.sampleRemotes(), {
         deltaSeconds,
         reactionDeltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
         heroes: netStatus === 'online' && serverEncounter?.heroes ? serverEncounter.heroes : {},

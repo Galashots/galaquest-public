@@ -158,6 +158,10 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
         // let the next frame start a second fetch for a mount that had already succeeded.
         .finally(() => { remote.weaponMountInFlight = false; });
     }
+    // Recorded so describe() can report what this remote was TOLD, beside what its anchors show.
+    // A harness seeing the wrong sword otherwise cannot tell "the server never said" from "it said
+    // and we could not draw it" -- repairs in different files. One string, no traversal.
+    remote.weaponId = weaponId;
     showWeaponOnClone(remote.anchors, weaponId);
   }
 
@@ -264,6 +268,7 @@ export function createRemotePlayers(scene, template, { mountWeapon = null } = {}
         // to the flag because a rig with no death clip has no animator to ask, and it is still down.
         down: remote.reactions?.getState().death ?? remote.down === true,
         swinging: remote.swing?.isSwinging() === true,
+        weaponId: remote.weaponId ?? null,
         visible: remote.root.visible,
       }));
     },

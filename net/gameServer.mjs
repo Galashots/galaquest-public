@@ -1093,30 +1093,17 @@ export function createSimulation(options = {}) {
   }
 
   function snapshot() {
-    return [...players.values()].map((player) => {
-      // WHICH SWORD IS IN THEIR HAND, asked of the same lookup the tick already asks for damage --
-      // one question, one answer, rather than a second source that can disagree with what the swing
-      // actually hits for.
-      //
-      // ABSENT when the lookup has nothing to say, not `starter_sword`. The default `weaponIdFor`
-      // is "nothing to say" (see its comment above), and turning that into a specific item here
-      // would be the simulation inventing an equipment fact it explicitly does not own -- and would
-      // leave a client unable to tell a real starter sword from a server that never had an opinion.
-      const weaponId = weaponIdFor(player.id);
-      return {
-        id: player.id,
-        // Rounded to the millimetre by protocol.js's roundToWire -- three decimals is far below what
-        // a 90-CSS-px hero can express, and it keeps a snapshot's JSON from tripling in size on
-        // irrational float tails. That rule used to be written out four times here and a fifth time
-        // as a private roundToWire(); it is a property of the WIRE, so it lives in protocol.js now
-        // (GQ-007).
-        x: roundToWire(player.x),
-        z: roundToWire(player.z),
-        heading: roundToWire(player.heading),
-        speed: roundToWire(player.speed),
-        ...(typeof weaponId === 'string' ? { weaponId } : {}),
-      };
-    });
+    return [...players.values()].map((player) => ({
+      id: player.id,
+      // Rounded to the millimetre by protocol.js's roundToWire -- three decimals is far below what a
+      // 90-CSS-px hero can express, and it keeps a snapshot's JSON from tripling in size on
+      // irrational float tails. That rule used to be written out four times here and a fifth time as
+      // a private roundToWire(); it is a property of the WIRE, so it lives in protocol.js now (GQ-007).
+      x: roundToWire(player.x),
+      z: roundToWire(player.z),
+      heading: roundToWire(player.heading),
+      speed: roundToWire(player.speed),
+    }));
   }
 
   // The wire's encounter block (protocol.js's decodeEncounter/decodeWolf/decodeHeroes): rounded

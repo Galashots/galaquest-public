@@ -333,29 +333,13 @@ function decodePlayers(players) {
   if (!Array.isArray(players)) fail('players must be an array');
   return players.map((player, index) => {
     if (player === null || typeof player !== 'object') fail(`players[${index}] must be an object`);
-    const decoded = {
+    return {
       id: requireString(player.id, `players[${index}].id`),
       x: requireFiniteNumber(player.x, `players[${index}].x`),
       z: requireFiniteNumber(player.z, `players[${index}].z`),
       heading: requireFiniteNumber(player.heading, `players[${index}].heading`),
       speed: requireFiniteNumber(player.speed, `players[${index}].speed`),
     };
-    // WHICH SWORD IS IN THEIR HAND. Optional, the same additive shape wolf.modeSeconds and
-    // heroes[].maxHp use above, and for the same stated reason: every pre-v-this caller and fixture
-    // decodes byte-identically, so it is additive validation rather than a version bump.
-    //
-    // It is here rather than in the encounter block because it is a fact about a PLAYER, not about a
-    // fight -- an equipped weapon outlives any particular wolf, and heroes[] is documented as
-    // carrying only what a client needs to predict its own attack button and render hearts.
-    //
-    // A progression item id, not a mesh id: the wire has no business knowing which GLB draws what,
-    // and character/weaponLoadout.js already owns that mapping for the local hero. Absent stays
-    // ABSENT rather than decoding to null -- "we were not told" and "they hold nothing" are
-    // different, and only the first is true of a pre-upgrade server.
-    if (player.weaponId !== undefined) {
-      decoded.weaponId = requireString(player.weaponId, `players[${index}].weaponId`);
-    }
-    return decoded;
   });
 }
 
