@@ -447,7 +447,17 @@
         position: absolute; inset: 0; pointer-events: none;
         opacity: 0; transition: opacity 180ms ease-out;
       }
-      #hero-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+            /* SHOWN CHANGES OPACITY, NOT HIT-TESTING. This rule used to add `pointer-events: auto`, which
+         made the container a solid full-viewport tap target the instant it opened -- contradicting
+         the paragraph above, which promises the opposite, and costing two things a child can feel:
+         the top-right button that OPENED this panel became untappable (the Owner found exactly that
+         on a real iPhone with his son -- the panel swallowed the tap, so the only way out was the
+         small X), and the "centre stays clickable straight through to #game" camera drag stopped
+         working while the panel was up.
+         The container does not need it. Every piece of chrome below sets `pointer-events: auto` on
+         itself, and in CSS a descendant re-enables hit-testing under a `none` ancestor -- which is
+         the same mechanism the DESCENDANT RULE comment is about, read the other way round. */
+      #hero-screen[data-shown="true"] { opacity: 1; }
       /* THE DESCENDANT RULE IS NOT OPTIONAL. `pointer-events: none` on this container does NOT make
          the screen inert, because every piece of its chrome below sets `pointer-events: auto` on
          itself -- and in CSS a descendant may re-enable hit-testing under a `none` ancestor. So a
@@ -577,7 +587,17 @@
         background: radial-gradient(ellipse at center, transparent 32%, rgb(12 20 31 / 62%) 100%);
         opacity: 0; transition: opacity 180ms ease-out;
       }
-      #village-board-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+            /* SHOWN CHANGES OPACITY, NOT HIT-TESTING. This rule used to add `pointer-events: auto`, which
+         made the container a solid full-viewport tap target the instant it opened -- contradicting
+         the paragraph above, which promises the opposite, and costing two things a child can feel:
+         the top-right button that OPENED this panel became untappable (the Owner found exactly that
+         on a real iPhone with his son -- the panel swallowed the tap, so the only way out was the
+         small X), and the "centre stays clickable straight through to #game" camera drag stopped
+         working while the panel was up.
+         The container does not need it. Every piece of chrome below sets `pointer-events: auto` on
+         itself, and in CSS a descendant re-enables hit-testing under a `none` ancestor -- which is
+         the same mechanism the DESCENDANT RULE comment is about, read the other way round. */
+      #village-board-screen[data-shown="true"] { opacity: 1; }
       #village-board-screen[data-shown="false"] { pointer-events: none; }
       /* Same defect, same fix -- see #hero-screen's own comment above. This screen's chrome sets
          pointer-events: auto on itself too, so a closed Board would go on catching taps over the

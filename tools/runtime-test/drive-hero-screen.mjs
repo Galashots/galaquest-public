@@ -1072,6 +1072,113 @@ for (const orientation of ['portrait', 'landscape']) {
     `height spread ${spread(heights).toFixed(4)}, centreY spread ${spread(centres).toFixed(4)} over ${frames.length} contexts`);
 }
 
+// ── the two top-right panels are TOGGLES, proved with a real finger ─────────────────────────────
+//
+// The Owner found this on an actual iPhone with his son: tapping the Hero button opened the screen,
+// and tapping it again did nothing. Both presenters were mechanically open-only
+// (`button -> setShown(true)`), so the only way out was the small X in the corner. On a phone the
+// control that opened a panel is the control a person reaches for to close it, and a child who
+// cannot read has no other way to guess.
+//
+// REAL TOUCH, not element.click(). clickSelector() above is a JS-level click and is right for the
+// item strip, whose innerHTML is rebuilt every frame. It is the wrong instrument HERE, because what
+// the Owner hit is exactly the class of defect a synthetic click cannot see: a tap that lands on the
+// wrong element, on a target too small for a thumb, or on something an overlay is covering. So this
+// dispatches touchStart/touchEnd at the button's real screen position.
+//
+// BOTH ORIENTATIONS, because the top-right corner is where a landscape thumb and the notch fight.
+async function tapAt(selector) {
+  const rect = await rectOf(selector);
+  if (!rect) throw new Error(`tapAt: ${selector} not found`);
+  await page.send('Input.dispatchTouchEvent', {
+    type: 'touchStart', touchPoints: [{ x: rect.x, y: rect.y, id: 0 }],
+  });
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(120);
+  return rect;
+}
+
+const shownOf = (selector) => page.eval(
+  `(document.querySelector(${JSON.stringify(selector)})?.dataset.shown === 'true')`,
+).then((v) => v === true || v === 'true');
+
+/**
+ * WHAT IS ACTUALLY UNDER THAT POINT -- the check this file already learned it needs the hard way.
+ *
+ * The comment on #hero-screen in index.html records the precedent: `data-suspended` was correct
+ * while the button underneath was unreachable, and only document.elementFromPoint at the real
+ * coordinate found it. A tap that does nothing and a button that is covered are the same
+ * observation from Node, and only different from inside the page.
+ */
+const hitTest = (selector) => page.eval(`(() => {
+  const el = document.querySelector(${JSON.stringify(selector)});
+  if (!el) return 'MISSING';
+  const r = el.getBoundingClientRect();
+  const at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+  if (!at) return 'nothing';
+  return at === el ? 'itself' : (at.id || at.className || at.tagName);
+})()`);
+
+async function hitTestWhileOpen(buttonSel, screenSel) {
+  const wasOpen = await shownOf(screenSel);
+  if (!wasOpen) { await tapAt(buttonSel); }
+  const at = await hitTest(buttonSel);
+  if (!wasOpen && await shownOf(screenSel)) await clickSelector(`${screenSel}-close`);
+  return at;
+}
+
+for (const [orientation, metrics] of [['portrait', PORTRAIT], ['landscape', LANDSCAPE]]) {
+  await page.send('Emulation.setDeviceMetricsOverride', metrics);
+  await sleep(200);
+  // Start from a known-closed pair, whatever the passes above left behind.
+  // Named in pairs rather than derived from each other: deriving the screen id from the close
+  // button's id gave '#village-board' for a screen actually called '#village-board-screen', so the
+  // reset silently never fired and the landscape pass started with the Board still covering
+  // everything. A wrong selector reads exactly like a panel that was already shut.
+  for (const [screenSel, closeSel] of [
+    ['#hero-screen', '#hero-screen-close'],
+    ['#village-board-screen', '#village-board-close'],
+  ]) {
+    if (await shownOf(screenSel)) await clickSelector(closeSel);
+  }
+
+  await tapAt('#hero-button');
+  const heroOpened = await shownOf('#hero-screen');
+  await tapAt('#hero-button');
+  const heroClosedBySameButton = !(await shownOf('#hero-screen'));
+  await tapAt('#hero-button');
+  const heroReopened = await shownOf('#hero-screen');
+  check(`${orientation}: the Hero button is a toggle -- one tap opens, the SAME tap closes, and it opens again`,
+    heroOpened && heroClosedBySameButton && heroReopened,
+    `opened ${heroOpened}, closed by the same button ${heroClosedBySameButton}, `
+    + `reopened ${heroReopened}; while open the point on #hero-button belongs to `
+    + `${await hitTestWhileOpen('#hero-button', '#hero-screen')}`);
+
+  // Switching panels must not strand the first one open -- two full-screen overlays at once is the
+  // state main.js's mutual exclusion exists to prevent, and a child who taps both buttons in a row
+  // is the likeliest way to reach it.
+  const heroWasOpen = await shownOf('#hero-screen');
+  await tapAt('#village-board-button');
+  const boardOpen = await shownOf('#village-board-screen');
+  const heroGaveWay = !(await shownOf('#hero-screen'));
+  check(`${orientation}: opening the Village Board closes the Hero screen instead of stacking on it`,
+    heroWasOpen && boardOpen && heroGaveWay,
+    `hero was open ${heroWasOpen}, board open ${boardOpen}, hero closed ${heroGaveWay}`);
+
+  const boardHitWhileOpen = await hitTest('#village-board-button');
+  await tapAt('#village-board-button');
+  const boardClosedBySameButton = !(await shownOf('#village-board-screen'));
+  check(`${orientation}: the Village Board button is a toggle too`,
+    boardClosedBySameButton,
+    `closed by its own button ${boardClosedBySameButton}; while open that point belonged to ${boardHitWhileOpen}`);
+
+  const bothShut = !(await shownOf('#hero-screen')) && !(await shownOf('#village-board-screen'));
+  check(`${orientation}: after all that, a child is back in the game with neither panel stuck open`,
+    bothShut, `hero shut ${!(await shownOf('#hero-screen'))}, board shut ${!(await shownOf('#village-board-screen'))}`);
+}
+await page.send('Emulation.setDeviceMetricsOverride', PORTRAIT);
+await sleep(200);
+
 // ── errors ───────────────────────────────────────────────────────────────────────────────────────
 const isCosmetic404 = (text) => COSMETIC_404_PATTERNS.some((pattern) => text.includes(pattern));
 const realErrors = consoleErrors.filter((text) => !isCosmetic404(text));

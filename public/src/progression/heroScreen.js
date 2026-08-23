@@ -208,7 +208,17 @@ export function createHeroScreen(options = {}) {
     renderCard(view.selected, view.comparison);
   }
 
-  button.addEventListener('click', () => setShown(true));
+  // A TOGGLE, because that is what a button in the top-right corner of a phone means.
+  //
+  // This was `setShown(true)` -- open-only -- and the Owner found it with his son on a real iPhone:
+  // tapping #hero-button again did nothing, so the only way out was to find the small X. On a
+  // phone, the control that opened a panel is the control a person expects to close it, and a child
+  // who cannot read has no other way to guess.
+  //
+  // setShown already no-ops when the state is unchanged, and the mutual-exclusion in main.js's
+  // onOpenChange only fires on OPEN, so toggling shut cannot disturb the other panel. The explicit
+  // X stays: it is a second, obvious way out, not the only one.
+  button.addEventListener('click', () => setShown(!shown));
   closeButton.addEventListener('click', () => setShown(false));
   equipButton.addEventListener('click', () => {
     if (lastView?.selected && !lastView.selected.isEquipped) onEquip(lastView.selected.id);
