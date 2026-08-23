@@ -558,6 +558,28 @@ written -- `tapping ATTACK starts a swing`, `tapping ATTACK damages the wolf`, `
 actually caught a swing` and `the three frames are spread across the swing` **all four passed**,
 while the hero stood frozen holding his sword out. Four checks named for an animation, none of which
 could see one. The only red was a new measurement of how far the sword hand actually travelled.
+**THE SWEEP, so nobody has to redo it.** 23 things in `main.js`'s frame take the clamped
+`deltaSeconds`. The hazard needs BOTH halves: the consumer accumulates that delta into a one-shot,
+AND the moment it ends is decided by a clock that is not that delta. An effect that counts its own
+elapsed time and ends on its own count is merely slowed, self-consistently, and completes. Sorted:
+- **Truncated** — `reactions` (the death clip; fixed here). Ended by `downSeconds`, which is rules
+  time, while the clip advanced in clamped time.
+- **Immune, and both by the same trick** — `swing` places `action.time` from progress and calls
+  `mixer.update(0)`; `zoneWarden` is re-handed the rules' own `modeSeconds` every frame by `setMode`
+  and poses as a pure function of it. **The codebase already contained the correct pattern twice.**
+  The fix is not really "unclamp the delta" — it is "place the pose from the rules clock" — and the
+  one module that accumulated instead is the one that broke.
+- **Measured and clear** — `wolfPresenter`. Same accumulate-a-one-shot shape as the hero's death, and
+  it survives only because it has `WOLF_RESPAWN_SECONDS` to finish in rather than `RESPAWN_SECONDS`.
+  Slack, not safety; now measured every run (corpse at 19% of standing height).
+- **Degraded, not broken, unfixed** — `locomotion` accumulates the clamped delta into a LOOP, so
+  below 10 fps the walk cycle plays at a fraction of speed while the hero travels at full speed. He
+  moonwalks. Not measured, not touched: a loop self-corrects rather than failing inside a window,
+  and that module's restore-then-reapply path carries its own warnings.
+- **Self-clocked, no rules window** — the remaining effects (sparks, bursts, flashes, seals,
+  brambles, presence and stir ticks). Slowed together with everything else and consistent with it.
+**A separate gap the sweep turned up:** `net/remotes.js` has locomotion and no reaction animator at
+all, so a sibling watching another child's hero go down never sees it fall, at any frame rate.
 **Foreknowledge helped:** no — the ledger had `A render change whose whole purpose is how something
 LOOKS cannot be judged from a container with no GPU`, and the true reading here is nearly its
 inverse: the container's slowness was not an obstacle to the review, it was the only reason the
