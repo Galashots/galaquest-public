@@ -932,14 +932,24 @@
            NOT top-left: #hero-health, #lantern-marks and #quest-objective already stack there, and
            a chip in that column would push the child's own objective further down the screen. */
         position: absolute; top: 0.75rem; right: calc(0.75rem + 52px + 0.5rem + 52px + 0.5rem);
-        max-width: min(40vw, 11rem);
-        min-height: 44px; padding: 0 0.85rem;
-        overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        max-width: min(46vw, 13rem);
+        min-height: 44px; padding: 0 0.85rem 0 0.35rem;
+        overflow: hidden; white-space: nowrap;
         display: flex; align-items: center; gap: 0.4rem;
         border: 2px solid rgb(242 179 61 / 45%); border-radius: 999px;
         background: rgb(12 20 31 / 78%); color: #f2b33d;
         font: 800 0.9rem/1 system-ui, sans-serif; letter-spacing: 0.02em;
       }
+      /* The animal, at chip scale. Its own class and not .profile-card-face -- see GQ-020 in
+         docs/MISTAKES.md and the comment at the append site: a chip is not a card, and the readers
+         that count cards by their faces must not find this one. The clipping moved onto the NAME so
+         a long name ellipsizes and the face never does. */
+      .profile-chip-face {
+        flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+        display: grid; place-items: center; font-size: 1.2rem; line-height: 1;
+        box-shadow: inset 0 0 0 2px rgb(255 255 255 / 22%);
+      }
+      .profile-chip-name { overflow: hidden; text-overflow: ellipsis; }
       #game[data-hero-screen-open="true"] #profile-chip,
       #game[data-village-board-open="true"] #profile-chip { opacity: 0; pointer-events: none; }
       /* Same list the other two overlays hide, plus the chip and the two HUD buttons: this screen is

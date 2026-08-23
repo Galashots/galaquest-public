@@ -58,6 +58,9 @@ import { createWolfPresenter, loadWolf, WOLF_SPARK_HEIGHT_METERS } from './enemi
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
 import { createReactionAnimator } from './character/reactClips.js';
+// The same function the chooser draws its cards with, so the chip and the card cannot disagree
+// about which animal a child is. progression/heroAvatars.js is the one place that decides.
+import { avatarForProfile } from './progression/heroAvatars.js';
 import {
   ATTACK_REACH,
   HERO_MAX_HP,
@@ -1433,7 +1436,31 @@ async function bootstrap() {
 
   function paintProfileChip() {
     if (profileChipElement) {
-      profileChipElement.textContent = profiles.activeProfile()?.displayName ?? 'Hero';
+      // THE ANIMAL, then the name. This chip used to be the name alone, and its own CSS comment gave
+      // the reason -- "the child's own hero name is the most recognisable thing that could sit
+      // there". That was true when it was written and stopped being true the day the chooser grew
+      // animals, which exist precisely because a child who cannot read does not recognise their
+      // name. The rationale outlived the decision it was reasoning about, and nobody went back to
+      // it: the one screen a child spends all their time on was the one that still said "who you
+      // are" in letters. The name stays beside it for the adult in the room, exactly as on a card.
+      const active = profiles.activeProfile();
+      const avatar = active ? avatarForProfile(active) : null;
+      profileChipElement.replaceChildren();
+      if (avatar) {
+        // NOT .profile-card-face (GQ-020): this is not a card, and everything that counts cards by
+        // their faces would count this one.
+        const face = document.createElement('span');
+        face.className = 'profile-chip-face';
+        face.textContent = avatar.emoji;
+        face.style.background = avatar.colour;
+        face.setAttribute('role', 'img');
+        face.setAttribute('aria-label', avatar.name);
+        profileChipElement.append(face);
+      }
+      const label = document.createElement('span');
+      label.className = 'profile-chip-name';
+      label.textContent = active?.displayName ?? 'Hero';
+      profileChipElement.append(label);
     }
   }
 

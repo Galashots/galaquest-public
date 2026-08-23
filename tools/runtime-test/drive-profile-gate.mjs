@@ -234,7 +234,11 @@ async function gateState(tab) {
       addFace: addButton?.querySelector('.profile-card-add-face')?.textContent ?? null,
       nameRowShown: document.querySelector('#profile-gate-name-row')?.dataset.shown === 'true',
       notice: document.querySelector('#profile-gate-notice')?.textContent ?? '',
-      chip: document.querySelector('#profile-chip')?.textContent ?? null,
+      // The NAME half specifically. The chip carries an animal now too, and reading its whole
+      // textContent would fold the emoji into every name assertion in this file -- the same class of
+      // break GQ-020 is about, anticipated this time instead of discovered.
+      chip: document.querySelector('#profile-chip .profile-chip-name')?.textContent ?? null,
+      chipFace: document.querySelector('#profile-chip .profile-chip-face')?.textContent ?? null,
     };
   })())`));
 }
@@ -399,6 +403,23 @@ async function run() {
     await load(tab, gameUrl);
     state = await gateState(tab);
     check('switching back returns to Rowan', state.chip === 'Rowan', `chip ${JSON.stringify(state.chip)}`);
+    // AND THE CHIP SAYS SO IN A PICTURE. The chooser has animals because a child who cannot read
+    // cannot tell two saves apart by name -- and until 760188f the one screen they spend all their
+    // time on identified them by name alone, with a CSS comment giving the reason it had been true
+    // before the animals existed. Asserted against the STORED animal through the product's own
+    // avatarForProfile, not against "there is an emoji": the chip and the card agreeing is the whole
+    // claim, and two independent answers to "which animal is this child" is the defect.
+    const chipShould = JSON.parse(await tab.page.eval(`(async () => {
+      const { createProfileStore } = await import('/src/progression/profiles.js');
+      const { avatarForProfile } = await import('/src/progression/heroAvatars.js');
+      const store = createProfileStore();
+      const active = store.listProfiles().find((p) => p.id === store.activeProfileId()) ?? null;
+      return JSON.stringify(active ? avatarForProfile(active) : null);
+    })()`));
+    check('and the chip identifies that hero with their animal, not only their name',
+      Boolean(state.chipFace) && state.chipFace === chipShould?.emoji,
+      `chip drew ${JSON.stringify(state.chipFace)}, this profile's stored animal is `
+        + `${JSON.stringify(chipShould?.emoji ?? null)} (${chipShould?.name ?? 'none'})`);
 
     const recovered = JSON.parse(await tab.page.eval(`(async () => {
       const { createProfileStore } = await import('/src/progression/profiles.js');
