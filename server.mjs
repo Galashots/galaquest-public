@@ -33,6 +33,17 @@ function safePath(requestUrl) {
   return full;
 }
 
+/**
+ * A 1x1 transparent GIF: the smallest thing that is unambiguously an image to every browser.
+ *
+ * Shipped as bytes rather than as a file so there is no asset to lose, and as a GIF rather than as
+ * the empty SVG index.html uses because this answers a request for `.ico` -- a real raster body is
+ * what every browser will accept there without argument.
+ */
+const EMPTY_FAVICON = Buffer.from(
+  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64',
+);
+
 export function createRuntimeServer() {
   return createServer(async (request, response) => {
     try {
@@ -50,17 +61,30 @@ export function createRuntimeServer() {
       // A BROWSER ASKS FOR THIS WITHOUT BEING TOLD TO, on any document that does not declare an
       // icon. index.html declares an empty one, so the game itself is quiet; every OTHER page on
       // this origin -- a vendored module opened directly, a harness hop, a parent poking at a URL --
-      // still triggers the automatic request and logs a 404 nobody asked for. 204 is the standard
-      // answer for "there is no icon, stop asking": no asset to ship, no bytes on the wire.
+      // still triggers the automatic request and logs a 404 nobody asked for.
       //
       // Found by drive-profile-gate, which is the one harness that collects Log.entryAdded and so is
-      // the only one that can see this. It navigates same-origin to a real vendored file to plant a
-      // legacy guest id before the app boots (GQ-016), and failed its own console-error check on a
-      // request the BROWSER made, not the harness. Allowlisting it was the older habit here; this
-      // removes the cause instead, for every page rather than for the one that noticed.
+      // the only one that can see it. Allowlisting it was the older habit here; this removes the
+      // cause instead, for every page rather than for the one that noticed.
+      //
+      // A REAL 200 WITH A BODY, NOT A 204, AND THAT IS NOT A STYLE CHOICE. My first version answered
+      // 204 No Content, which is the textbook answer for "there is no icon" -- and it broke five
+      // harnesses at once. `drive-village-board`, `drive-beacon-siege`, `drive-cart-loot`,
+      // `drive-hero-screen` and `drive-profile-gate` all navigate to /favicon.ico deliberately, as a
+      // same-origin blank page to set localStorage on before the real load (GQ-016's clear-before-pin
+      // needs somewhere to stand). A 204 tells the browser to STAY WHERE IT IS, so the waypoint never
+      // arrived and the harness threw after three attempts.
+      //
+      // The lesson is not about favicons: a route added to silence a log line is still a route, and
+      // five callers already depended on this one's navigation behaviour. Grep before you answer
+      // differently, even when the new answer is more correct in the abstract.
       if (request.url === '/favicon.ico') {
-        response.writeHead(204, { 'cache-control': 'no-store' });
-        response.end();
+        response.writeHead(200, {
+          'cache-control': 'no-store',
+          'content-length': EMPTY_FAVICON.byteLength,
+          'content-type': 'image/gif',
+        });
+        response.end(request.method === 'HEAD' ? undefined : EMPTY_FAVICON);
         return;
       }
 

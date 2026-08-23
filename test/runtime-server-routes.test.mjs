@@ -29,8 +29,27 @@ test('a browser asking for a favicon is answered, not 404ed', async () => {
   // static handler, missed, and logged a 404 in a console nobody had asked to pollute.
   await serving(async (origin) => {
     const response = await fetch(`${origin}/favicon.ico`);
-    assert.equal(response.status, 204, 'no icon is an answer; not-found is a mistake');
-    assert.equal(await response.text(), '', '204 carries no body');
+    assert.equal(response.status, 200, 'no icon is an answer; not-found is a mistake');
+    assert.match(response.headers.get('content-type') ?? '', /^image\//);
+  });
+});
+
+test('...and it is a real response with a body, because five harnesses NAVIGATE to it', async () => {
+  // THE REGRESSION THIS EXISTS TO STOP RECURRING. The first version of the route answered 204 No
+  // Content, which is the textbook answer and which broke drive-village-board, drive-beacon-siege,
+  // drive-cart-loot, drive-hero-screen and drive-profile-gate in one commit: all five navigate here
+  // on purpose, as a same-origin blank page to set localStorage on before the real load. A 204 tells
+  // the browser to stay where it is, so the waypoint never arrived.
+  //
+  // A body length of zero is the shape that breaks them, so that is what this asserts against --
+  // not the status code, which is the thing a future edit would change.
+  await serving(async (origin) => {
+    const response = await fetch(`${origin}/favicon.ico`);
+    const body = await response.arrayBuffer();
+    assert.ok(body.byteLength > 0,
+      'an empty body does not navigate, and five harnesses need this URL to be somewhere you can go');
+    assert.ok(response.status >= 200 && response.status < 300 && response.status !== 204,
+      `status ${response.status} either is not success or does not navigate`);
   });
 });
 

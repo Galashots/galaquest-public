@@ -908,3 +908,46 @@ detectable from its own output without knowing anything about the game. `0 of 36
 taps`, and `3hp -> 3hp with five transitions` are not surprising findings, they are broken
 instruments announcing themselves.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A trigger radius a child's approach ends AT is decided by drift, not by the child.
+**Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-23
+**Rule:** When an interaction is gated on "is the player within R metres", the deciding question is
+not what R is -- it is where an approach actually STOPS. A walk that aims at the thing itself ends
+wherever momentum, reconciliation and the poll cadence leave it, and if that resting place sits
+within a few centimetres of R then whether the interaction happens is decided by sub-metre drift
+rather than by anything the player did. It fails intermittently, which is the worst way to fail: the
+same approach works and then does not, and there is nothing on screen to explain the difference.
+**Incidents,** all measured on the same day, in three unrelated places, which is what makes it a
+shape rather than three bugs:
+(1) `drive-ranger`, Wren's arrival bubble: `hero 1.99m from Wren, radius 2m`. It PASSED -- by one
+centimetre. On the runs where the same walk lands at 2.01 m the NPC silently stops talking to a child
+standing right in front of her, and the harness reports an empty speech bubble as a content defect.
+(2) `drive-village-board`, the Workshop after a server restart: `metresFromInteractPoint 2.65,
+interactRadius 2.4`. A rotating red that predates the branch.
+(3) the opening wolf, before it was understood: bodies are held `MIN_BODY_SEPARATION` = 1 m apart and
+the reach is 1.7 m, so the whole band a child can press from is 0.70 m wide. That one turned out NOT
+to bite -- the wolf always closes -- but the arithmetic was the same and it was believed for an hour.
+**What it is not:** a call to widen radii. Two of the three are Owner/Director product numbers, and
+widening `KEEPER_WAVE_RADIUS_METERS` moves the Keeper and Rowan too. The reusable part is the
+DIAGNOSIS: when an interaction check flaps, measure the resting distance against the radius before
+reaching for the poll budget, because a timing fix applied to a geometry problem hides a defect a
+child would meet with a thumb on a virtual stick.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A render change whose whole purpose is how something LOOKS cannot be judged from a container with no GPU.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** Geometry, coverage and draw counts are all measurable here. "Does this read as the tree
+getting out of the way, or as the tree glitching" is not, and no amount of arithmetic converts one
+into the other. Measure and specify the change, then hand the appearance judgement to someone who
+can see it -- and say plainly which half you did.
+**Incident (2026-08-23, the Lantern Tree):** the canopy is 3.14 m in radius and 5.5 m tall, and the
+camera sits 15.29 m behind the child. Sweeping all 360 degrees of camera heading: at **2 m from the
+tree -- which is where the opening quest sends a child -- 50% of headings put the canopy between the
+camera and the hero.** The whole frame is leaves: no hero, no village, no ground. `occlusionOpacity()`
+in `world/zoneLoader.js` is a real, tested per-object fade, and an exhaustive grep for callers returns
+exactly ONE: the Keeper's own update, at a 1.1 m radius that its comment describes as "about a body's
+width". The one occlusion system in the game fades the one object that is a body's width. The fix is
+well-precedented -- the function already takes a radius parameter and the fade machinery already
+exists -- but the change is entirely about appearance, so it was specified and handed over rather
+than made. Recorded here with the numbers so it is a known defect rather than a lost note.
+**Foreknowledge helped:** not yet recorded.
