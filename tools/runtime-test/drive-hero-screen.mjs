@@ -261,6 +261,29 @@ async function clickSelector(selector) {
   return rect;
 }
 
+/** Wait for the card to actually show `itemId` as the selected one before acting on it.
+ *
+ * THE EQUIP BUTTON ACTS ON WHATEVER IS SELECTED. Tapping it 100ms after tapping an item is a bet
+ * that the re-render finished, and on a software renderer that bet loses: the button then equips the
+ * PREVIOUS selection, or nothing, and the poll that follows correctly reports that nothing changed
+ * -- eight seconds later, blaming the equip.
+ *
+ * Bounded, so a selection that never lands is still a failure rather than a wait.
+ */
+async function selectItem(itemId) {
+  await clickSelector(`[data-item-id="${itemId}"]`);
+  for (let i = 0; i < 20; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const selected = await page.eval(
+      `document.querySelector('[data-item-id="${itemId}"]')?.dataset.selected === 'true'`,
+    );
+    if (selected === true || selected === 'true') return true;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(100);
+  }
+  return false;
+}
+
 async function heroRuntimeState() {
   return page.eval(`JSON.stringify({
     open: window.__galaQuestRuntime.heroScreenOpen(),
@@ -730,8 +753,9 @@ await sleep(200);
 // ── switching back ──
 await clickSelector('#hero-button');
 await sleep(200);
-await clickSelector(`[data-item-id="${STARTER_SWORD_ID}"]`);
-await sleep(100);
+const starterSelected = await selectItem(STARTER_SWORD_ID);
+check('GP1-C4: the Starter Sword is actually SELECTED before the equip button is tapped',
+  starterSelected === true, `selected ${starterSelected}`);
 await clickSelector('#hero-equip-button');
 const revertedMesh = await pollUntil(weaponMeshState,
   (s) => s.equippedItemId === STARTER_SWORD_ID && s.shipping.visible, { timeoutMs: 8000 });
