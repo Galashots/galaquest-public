@@ -43,6 +43,7 @@ import { gameUrlFor } from './owned-server.mjs';
 import { pollUntilDeadline } from './automation-timing.mjs';
 import {
   metresOrUnknown, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource,
+  waitForSample,
 } from './in-page-driver.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
@@ -241,6 +242,92 @@ const STATE_EXPR = `JSON.stringify((() => {
 const state = (tab) => tab.page.eval(STATE_EXPR).then(JSON.parse);
 
 /**
+ * EVERY FRAME OF THE WALK-UP AND THE WAIT, recorded in-page.
+ *
+ * Written because the hosted failure for Wren's arrival line read, in full, `""` and `"🔊"` -- an
+ * empty name and the speaker button alone -- and named nothing about WHY. Four different faults
+ * produce that same pair of strings and they want four different fixes:
+ *
+ *   the hero never got inside the two-metre radius at all;
+ *   he got inside and reconciliation dragged him back out while the harness stood still;
+ *   the bubble opened and shut again between two 220ms polls, which on a runner painting three
+ *     frames a second is most of them;
+ *   the wolf caught him.
+ *
+ * Distance alone separates the first three and hearts separate the fourth, so this records both, on
+ * requestAnimationFrame rather than over CDP: a poll from Node delays the answer, but a frame the
+ * poll was not awake for is gone.
+ *
+ * THE FOURTH ONE IS NOT HYPOTHETICAL, and what it found is a game defect rather than a harness one.
+ * It is recorded here because this recorder is what measures it, and it will keep printing in the
+ * detail line above until somebody rules on it:
+ *
+ *   WOLF_AGGRO_RANGE is 6m. SPAWNS.wolf is 4.76m from Wren and two of the three patrol nodes are
+ *   inside 6m of her ([2.5, 8] at 4.76m, [-5.5, 5] at 4.30m). So a child standing close enough to
+ *   READ Wren -- inside KEEPER_WAVE_RADIUS_METERS, two metres -- is always inside the wolf's aggro
+ *   radius, from the wolf's own spawn point, at every moment of the game.
+ *
+ *   A hero who goes down does not move: stepEncounter's respawn sets `hp = maxHp` and calls
+ *   resetWolf(), and touches no position. He stands up after RESPAWN_SECONDS exactly where he fell,
+ *   the wolf is put back at its spawn 4.76m away, and it is on him again immediately.
+ *
+ *   Measured, standing still at Wren's feet at 12x CPU throttle: hearts 3->2->1->0->3 three times in
+ *   about 25 seconds, hero position constant at 0.34m from her the whole time, drawn and
+ *   authoritative agreeing to the centimetre. Not drift, and not this harness: an unescapable death
+ *   loop at the feet of the character a child has to stand still in front of to hear.
+ *
+ * Every ordinary local run of this phase now reports "KNOCKED DOWN" in passing, because the child is
+ * bitten during the arrival beat every single time. That is why the checks above are judged from the
+ * recording rather than from a poll that has to survive twelve seconds of it.
+ */
+function startApproachRecorder(tab, key) {
+  return tab.page.eval(startWatch(key, `(() => {
+    const runtime = window.__galaQuestRuntime;
+    const position = runtime.player.position;
+    return {
+      m: Number(Math.hypot(position.x - (${RANGER.at[0]}), position.z - (${RANGER.at[1]})).toFixed(2)),
+      shown: document.querySelector('#keeper-speech')?.dataset.shown === 'true',
+      name: document.querySelector('#keeper-speech-name')?.textContent?.trim() ?? null,
+      // The whole bubble's text, exactly as the live probe read it, so the prose comparisons below
+      // are the same comparisons they always were. Truncated because this is per frame.
+      line: (document.querySelector('#keeper-speech')?.textContent ?? '')
+        .replace(/\\s+/g, ' ').trim().slice(0, 90),
+      hp: Array.from(document.querySelectorAll('#hero-health .heart'))
+        .filter((heart) => heart.hidden !== true && heart.dataset.filled === 'true').length,
+      snapped: runtime.netState().snapped === true,
+    };
+  })()`));
+}
+
+/** Read the recording back and stop it: every frame, plus one line saying which fault this was. */
+async function approachStory(tab, key) {
+  const watch = JSON.parse(await tab.page.eval(readWatchSource(key)));
+  await tab.page.eval(stopWatchSource(key));
+  const samples = watch?.samples ?? [];
+  const summary = summarise(samples);
+  return { frames: samples, summary };
+}
+
+/** The one-line verdict on a recording: how close, how long open, and what it cost in hearts. */
+function summarise(samples) {
+  const metres = samples.map((sample) => sample.m).filter((m) => Number.isFinite(m));
+  // A recorder that caught nothing must SAY so rather than report a tidy zero: "closest 0.00m" off
+  // an empty log is the most confident wrong answer this function could give (GQ-022).
+  if (metres.length === 0) return 'the recorder caught no frames -- this detail is blind, fix it';
+  const hearts = samples.map((sample) => sample.hp).filter((hp) => Number.isFinite(hp));
+  const lowest = hearts.length > 0 ? Math.min(...hearts) : null;
+  return [
+    `${samples.length} frame(s) recorded`,
+    `closest ${Math.min(...metres).toFixed(2)}m of ${KEEPER_WAVE_RADIUS_METERS}m`,
+    `ended ${metres[metres.length - 1].toFixed(2)}m`,
+    `bubble open on ${samples.filter((sample) => sample.shown).length}`,
+    lowest === null ? 'hearts unread'
+      : lowest < HERO_MAX_HP ? `KNOCKED DOWN, hearts fell to ${lowest}` : 'hearts held',
+    `${samples.filter((sample) => sample.snapped).length} snap(s)`,
+  ].join(' · ');
+}
+
+/**
  * Why the bubble says what it says -- written because the hosted failure for Wren's post-charm line
  * read, in full, `"🔊"`.
  *
@@ -417,19 +504,41 @@ async function phaseArrival() {
       `${here.heartsDrawn} pips, ${here.heartsFilled} filled`);
     await shot(tab, 'ranger-01-somebody-came');
 
-    // WALK UP TO HER. Five metres, on the stick, the way a child arrives.
+    // WALK UP TO HER. Five metres, on the stick, the way a child arrives -- recorded from before
+    // the first step, so a failure below can say which of the four faults it was.
+    await startApproachRecorder(tab, 'wren-arrival');
     await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
-    const spoke = await pollUntil(tab, (s) => s.npcShown === true && /Wren/.test(s.npcName ?? ''), 12000);
-    check(/Wren/.test(spoke.npcName ?? ''), 'walking up to her opens a bubble with her NAME on it',
-      JSON.stringify(spoke.npcName));
+    // JUDGED FROM EVERY FRAME OF THE WALK-UP, not from a live sample taken after it.
+    //
+    // What these three checks ask is "walking up to her opens a bubble" -- an EVENT. Reading that
+    // off a poll asks something else: "is the bubble open at the arbitrary moment the poll happens
+    // to look", which on a runner painting three frames a second samples about one frame in two and
+    // can miss the beat outright. waitForSample polls the RECORDING instead, so the wait is still
+    // bounded but every frame since the first step is in scope. Strictly more sensitive than the
+    // poll it replaces: there is no open it misses that the poll would have caught.
+    await waitForSample(tab.page, 'wren-arrival',
+      (sample) => sample.shown === true && /Wren/.test(sample.name ?? ''),
+      { intervalMs: 200, timeoutMs: 12_000 });
+    const { frames, summary } = await approachStory(tab, 'wren-arrival');
+    const spoke = frames.filter((frame) => frame.shown === true && /Wren/.test(frame.name ?? ''));
+    check(spoke.length > 0, 'walking up to her opens a bubble with her NAME on it', summary);
     // The line is compared against the EXPORTED prose, not against a copy of it typed here: a
     // harness that restates a line can only ever prove the harness and the game were edited on the
     // same day (GQ-007).
     const intro = RANGER_LINE_INTRO.slice(0, 40);
-    check(spoke.npcLine.includes(intro), 'and she says the line for a stranger who has brought her nothing',
-      JSON.stringify(spoke.npcLine.replace(/\s+/g, ' ').trim().slice(0, 80)));
-    check(!spoke.npcLine.includes(RANGER_LINE_SATCHEL_GIVEN.slice(0, 20)),
-      'and NOT the line that thanks a child for a satchel they never found');
+    check(spoke.some((frame) => frame.line.includes(intro)),
+      'and she says the line for a stranger who has brought her nothing',
+      JSON.stringify(spoke[0]?.line ?? ''));
+    // GATED ON HAVING SEEN THE BUBBLE AT ALL, and that is half the point of the rewrite. As
+    // `!line.includes(...)` alone this passed on an EMPTY line, so the hosted run that never got
+    // Wren to speak still reported this as a PASS -- a green sitting directly under two reds about
+    // the same bubble, reading as though at least that part had worked. A bubble nobody ever saw is
+    // not evidence that she said the right thing; it is the absence of evidence.
+    check(spoke.length > 0
+      && !spoke.some((frame) => frame.line.includes(RANGER_LINE_SATCHEL_GIVEN.slice(0, 20))),
+      'and NOT the line that thanks a child for a satchel they never found',
+      spoke.length > 0 ? `${spoke.length} frame(s) of her line, none of them the thank-you`
+        : 'VACUOUS: her bubble never opened, so this check knows nothing');
     await shot(tab, 'ranger-02-the-stranger-speaks');
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
