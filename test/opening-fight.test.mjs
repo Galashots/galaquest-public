@@ -30,8 +30,10 @@ import test from 'node:test';
 import {
   ATTACK_HALF_ARC_RADIANS,
   ATTACK_REACH,
+  HERO_MAX_HP,
   MIN_BODY_SEPARATION,
   SWING_SECONDS,
+  WOLF_BITE_COOLDOWN_SECONDS,
   WOLF_MAX_HP,
   WOLF_SPEED,
   canAttack,
@@ -67,7 +69,11 @@ function childFightsTheWolf({
   const step = 1 / 60;
   let hero = { x: 0, z: 0 };
   const headings = [];
-  const tally = { swings: 0, hits: 0, misses: 0, drops: 0, bites: 0, downs: 0 };
+  const tally = { swings: 0, hits: 0, misses: 0, drops: 0, bites: 0, downs: 0, wolfHeals: 0 };
+  // Design ruling 5 restores the wolf to full whenever the party wipes, and a solo hero wipes
+  // every time they go down. Counted here because it is the difference between a fight that is
+  // slow and one that cannot be finished, and neither `hits` nor `downs` shows it on its own.
+  let wolfHpLastFrame = WOLF_MAX_HP;
   let seconds = 0;
   let sinceLastPress = Infinity;
 
@@ -104,6 +110,8 @@ function childFightsTheWolf({
       if (event.type === 'hero-hurt') tally.bites += 1;
       if (event.type === 'hero-down') tally.downs += 1;
     }
+    if (state.wolf.hp > wolfHpLastFrame) tally.wolfHeals += 1;
+    wolfHpLastFrame = state.wolf.hp;
     seconds += step;
   }
   return { won: state.wolf.hp <= 0, seconds: +seconds.toFixed(2), heroHp: state.hero.hp, ...tally };
@@ -184,6 +192,82 @@ test('a slow thumb is still a winning thumb', () => {
     assert.equal(fight.won, true, `pressing every ${pressEvery}s lost: ${JSON.stringify(fight)}`);
     assert.equal(fight.downs, 0, `pressing every ${pressEvery}s got them knocked down`);
   }
+});
+
+// THE CADENCE A CHILD MUST KEEP, AND WHAT IS ON THE OTHER SIDE OF IT.
+//
+// The sweep above stops at one press a second, which is comfortably inside the safe zone and so
+// says nothing about where the zone ENDS. It ends abruptly, and the shape of the failure past it is
+// the worst one available to a small child.
+//
+// Measured over this same helper, holding at 1.3m, with a ten-minute budget:
+//
+//     press every 3.7s  -> WON in 16.7s, 5 swings, 4 hits, 1 knockdown
+//     press every 3.8s  -> NEVER won: 135 swings, 134 hits, 67 knockdowns, 67 wolf heals
+//
+// One tenth of a second apart. Past it the child is not losing slowly, they are landing a hundred
+// and thirty-four hits on a three-health wolf and finishing nothing, forever. Standing further out
+// (1.65m, the far edge of the band) moves the cliff not at all.
+//
+// The mechanism is arithmetic rather than mystery. A hero holds HERO_MAX_HP hearts and the wolf
+// takes one every WOLF_BITE_COOLDOWN_SECONDS, so a life lasts that product; Design ruling 5 then
+// restores the wolf to full on the wipe, so every hit landed before the knockdown is discarded. The
+// child must therefore land all WOLF_MAX_HP hits inside ONE life, and the cadence that demands is
+// the product divided by the hit count.
+//
+// WHAT THIS FILE ASSERTS is a REQUIREMENT ABOUT CHILDREN, deliberately not a value derived from the
+// combat constants. The first draft of this test set its bar to
+// `HERO_MAX_HP * WOLF_BITE_COOLDOWN_SECONDS / WOLF_MAX_HP` -- which reads like rigour and is the
+// opposite: a bar computed from the constants under test moves with them, so a sabotage run
+// dropping HERO_MAX_HP to 2 broke four other tests in this file and left this one green. That is
+// docs/MISTAKES.md's own "a test that derives its probe from the constant under test", made twice
+// in one session, the second time by me while writing the entry.
+//
+// So the number below is a statement about a four-year-old's thumb and nothing else. It is slow
+// enough that the child WILL be knocked down once on the way -- which no other test here covers,
+// since they all assert `downs === 0` -- and that is exactly the regime Design ruling 5 threatens.
+// Moving it is Owner and Director territory; what it refuses is a change to any combat constant
+// that quietly puts a slow child on the wrong side of the cliff.
+//
+// It deliberately does NOT assert the cliff itself. The cliff is the design question, and pinning
+// it would make a fix look like a regression.
+//
+// SABOTAGE, run before this was committed, because a test nobody has seen fail is a test nobody has
+// seen work:
+//   HERO_MAX_HP 3 -> 2                 caught (this test and four others in this file)
+//   WOLF_BITE_COOLDOWN_SECONDS 2.6->1.9  NOT caught -- 27% off the wolf's pace is absorbed
+//   WOLF_BITE_COOLDOWN_SECONDS 2.6->1.5  caught
+// Recorded rather than tuned away. The slack is real and it is where it should be: a child's first
+// fight ought to survive the wolf being somewhat quicker, and this file's job is the cliff edge,
+// not the whole gradient.
+const SLOW_CHILD_PRESSES_EVERY_SECONDS = 2.5;
+
+test('a child slow enough to be knocked down once still finishes the fight', () => {
+  const fight = childFightsTheWolf({ pressEvery: SLOW_CHILD_PRESSES_EVERY_SECONDS });
+  assert.equal(fight.won, true,
+    `pressing every ${SLOW_CHILD_PRESSES_EVERY_SECONDS}s did not finish: ${JSON.stringify(fight)}`);
+  assert.ok(fight.downs > 0,
+    'premise: this cadence is meant to be slow enough to be bitten down at least once, and was not');
+  // The failure past the cliff is not "slower", it is hits piling up that never add to a kill,
+  // because every knockdown hands the wolf its health back. A win may cost one reset; it may not
+  // cost an unbounded number of them.
+  assert.ok(fight.wolfHeals <= 1,
+    `the wolf was healed ${fight.wolfHeals} times, which is the unwinnable shape rather than a slow `
+    + `win: ${JSON.stringify(fight)}`);
+});
+
+test('guards the guard: one press and then nothing is a loss, and this helper can see it', () => {
+  // A file whose losing case never occurs proves nothing by winning. This one depends on no design
+  // ruling, so it keeps working whatever is decided about the wolf healing on a wipe.
+  //
+  // ONE press, not none, and that is the helper being honest rather than a typo. `sinceLastPress`
+  // starts at Infinity, which means "ready now", so even an infinite cadence spends its opening
+  // press on the first frame and never gets another. That is also a real four-year-old: they try it
+  // once, it does not obviously do anything, and they stop.
+  const pressedOnce = childFightsTheWolf({ pressEvery: Infinity });
+  assert.equal(pressedOnce.swings, 1, 'premise: exactly the one opening press, and no more');
+  assert.equal(pressedOnce.won, false, 'a hero who swung once somehow beat a three-health wolf');
+  assert.ok(pressedOnce.downs > 0, 'and standing there not swinging really does get them bitten down');
 });
 
 test('the wolf being FASTER does not make the first fight harder, and that is not a gap in this file', () => {
