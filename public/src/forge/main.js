@@ -21,6 +21,9 @@ const fitKey = (assetId) => `gq-forge-fit:${FORGE_FIT_SCHEMA}:${sourceSha}:${ass
 
 let sourceSha = 'unbound';
 let studioScene;
+// Set once the scene exists; called whenever the layout over the stage changes, not just on a
+// window resize. See toggleDrawer below.
+let refreshViewport = () => {};
 let current = null;
 let dynamicMount = null;
 let dynamicObjectUrl = null;
@@ -493,6 +496,7 @@ async function bootstrap() {
 
   const resize = () => studioScene.resize(canvas.clientWidth, canvas.clientHeight);
   window.addEventListener('resize', resize);
+  refreshViewport = resize;
   resize();
 }
 
@@ -637,8 +641,23 @@ $('#meshy-kind').addEventListener('change', () => {
 });
 $('#meshy-generate').addEventListener('click', generateCandidate);
 
-$('#mobile-assets').addEventListener('click', () => document.body.classList.toggle('show-assets'));
-$('#mobile-fit').addEventListener('click', () => document.body.classList.toggle('show-fit'));
+/**
+ * Open or close one of the narrow-viewport panels.
+ *
+ * The renderer only ever hears about WINDOW resizes, but a drawer sliding over the stage -- or the
+ * fit sheet taking the bottom half of a phone -- changes what the Owner can actually see of the
+ * Hero without the window changing size at all. Tell the scene the layout moved, once when the
+ * class flips and once after the 140ms slide settles, so the viewport is never left showing a
+ * stale frame behind a panel that just moved.
+ */
+function toggleDrawer(className) {
+  document.body.classList.toggle(className);
+  requestAnimationFrame(() => refreshViewport());
+  setTimeout(() => refreshViewport(), 200);
+}
+
+$('#mobile-assets').addEventListener('click', () => toggleDrawer('show-assets'));
+$('#mobile-fit').addEventListener('click', () => toggleDrawer('show-fit'));
 
 bootstrap().catch((error) => {
   console.error('[forge] failed to boot', error);
