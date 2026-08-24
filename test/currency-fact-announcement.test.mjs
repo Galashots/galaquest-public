@@ -226,7 +226,9 @@ test('every profile fact type the coordinator can write is one the client can ro
     // Minted by the DEVICE at the equip action and journalled there, so it never arrives as a
     // server announcement (docs/MISTAKES.md GQ-014).
     type !== 'weapon-equipped'
-    // Does not exist yet anywhere in the codebase; it is CP3 work.
+    // Durable and recordable since P1 (the XP/Level authority package), but nothing AWARDS XP yet --
+    // no quest, combat or learning source mints one, so there is nothing for the server to announce.
+    // The client handler arrives with the first real XP source, which is a later package's job.
     && type !== 'xp-earned'
   ));
 

@@ -30,7 +30,7 @@ import {
 // One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
 // and the server consumes it rather than keeping a second list that drifts.
-import { isProfileFact } from '../public/src/progression/facts.js';
+import { isProfileFact, parseXpFactAmount } from '../public/src/progression/facts.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
@@ -688,6 +688,12 @@ export function createRewardCoordinator(options = {}) {
         isProfileFact(fact)
         && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
         && !(fact.type === 'weapon-equipped' && !isKnownWeapon(fact.value))
+        // Checked through the same reader the fold and the store use, so a device cannot restore an
+        // amount that would later be counted differently -- or, before this check existed, counted
+        // NEGATIVELY. Filtered rather than thrown on, exactly like the two lines above it: a device
+        // handing back a journal with one bad row is confused, not hostile, and losing the other
+        // fifty facts over it would be the worse answer.
+        && !(fact.type === 'xp-earned' && parseXpFactAmount(fact.value) === null)
       ));
 
       // What this profile owns once the restore lands: what the store already knows, plus whatever
@@ -698,14 +704,25 @@ export function createRewardCoordinator(options = {}) {
         if (fact.type === 'gear-owned') ownedAfter.add(fact.value);
       }
 
-      let restored = 0;
+      // ACCEPTED FIRST, WRITTEN SECOND, and that order is the whole repair.
+      //
+      // This loop used to call store.apply() per fact, so the set was decided and committed at the
+      // same time: anything that threw part way through -- a refusal, a disk error, a lock -- left
+      // every fact before it durably on disk and every fact after it missing. An append-only table
+      // cannot take those rows back, so the profile stayed a fragment that is neither what the
+      // device sent nor what the server had, with nothing recording that it is one.
+      //
+      // Now the whole accepted set is decided here and handed to the store as one batch, which
+      // validates all of it before writing any of it and writes the rest inside a transaction. A
+      // request either lands completely or leaves the durable state exactly as it found it.
       let refused = 0;
+      const accepted = [];
       for (const fact of candidates) {
         if (fact.type === 'weapon-equipped' && !ownedAfter.has(fact.value)) {
           refused += 1;
           continue;
         }
-        const result = store.apply({
+        accepted.push({
           guestId,
           heroId,
           type: fact.type,
@@ -714,11 +731,15 @@ export function createRewardCoordinator(options = {}) {
           ...(Number.isInteger(fact.rev) ? { rev: fact.rev } : {}),
           origin: 'client',
         });
-        // A fact the store already held is not a failure -- restoring twice has to be the same as
-        // restoring once, which is the INSERT OR IGNORE the whole design rests on.
-        if (result.applied) restored += 1;
       }
-      return { restored, refused: refused + ((Array.isArray(facts) ? facts.length : 0) - candidates.length) };
+      // Facts the store already held are not failures and are not counted -- restoring twice has to
+      // be the same as restoring once, which is the INSERT OR IGNORE the whole design rests on, so
+      // `applied` is rows actually added rather than rows offered.
+      const { applied } = store.applyAll(accepted);
+      return {
+        restored: applied,
+        refused: refused + ((Array.isArray(facts) ? facts.length : 0) - candidates.length),
+      };
     },
     recordBeaconLit,
     beaconLit,
