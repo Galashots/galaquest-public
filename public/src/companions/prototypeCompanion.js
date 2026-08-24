@@ -110,6 +110,7 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
         -((clientY - rect.top) / rect.height) * 2 + 1,
       );
       const raycaster = new THREE.Raycaster();
+      raycaster.layers.mask = camera.layers.mask;
       raycaster.setFromCamera(pointer, camera);
       return raycaster.intersectObject(root, true).length > 0;
     },
