@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import * as THREE from '../public/vendor/three.module.min.js';
 import {
+  PITCH_RADIANS_PER_PX,
+  YAW_RADIANS_PER_PX,
   isInStickRegion,
   orbitDeltaForDrag,
   pinchSeparation,
@@ -29,11 +31,11 @@ test('the stick owns the lower-left area and nothing else', () => {
   assert.equal(isInStickRegion(1, h / 2, w, h), false, 'left edge midpoint');
 });
 
-test('dragging right turns right, and dragging up looks further down', () => {
-  assert.ok(orbitDeltaForDrag(100, 0).yaw > 0, 'drag right yaws positive');
-  assert.ok(orbitDeltaForDrag(-100, 0).yaw < 0, 'drag left yaws negative');
-  assert.ok(orbitDeltaForDrag(0, -100).pitch > 0, 'drag up raises the camera');
-  assert.ok(orbitDeltaForDrag(0, 100).pitch < 0, 'drag down lowers the camera');
+test('dragging reverses both orbit axes without changing sensitivity', () => {
+  assert.equal(orbitDeltaForDrag(100, 0).yaw, -100 * YAW_RADIANS_PER_PX, 'drag right yaws negative');
+  assert.equal(orbitDeltaForDrag(-100, 0).yaw, 100 * YAW_RADIANS_PER_PX, 'drag left yaws positive');
+  assert.equal(orbitDeltaForDrag(0, -100).pitch, -100 * PITCH_RADIANS_PER_PX, 'drag up lowers the camera');
+  assert.equal(orbitDeltaForDrag(0, 100).pitch, 100 * PITCH_RADIANS_PER_PX, 'drag down raises the camera');
 });
 
 test('spreading the fingers pulls the camera in', () => {
