@@ -4,7 +4,7 @@ This workflow applies to the public active repository. It is deliberately recove
 
 ## Start from live authority
 
-1. Orient from the current checkout with the commands in `AGENTS.md`.
+1. Orient from the current checkout using the orientation sequence below.
 2. Confirm the repository is `Galashots/galaquest-public`, refresh public `main`, and record the exact starting SHA.
 3. Read `AGENTS.md`, then only the public authorities relevant to the task (`docs/GUIDANCE.md`, `docs/MISTAKES.md`, visual/pipeline docs, tests, workflows, contracts).
 4. Refresh live GitHub branch/PR/CI/deployment state before trusting a handoff or prior chat report.
