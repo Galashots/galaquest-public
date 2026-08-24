@@ -56,6 +56,7 @@ import { createMarkSparks } from './rewards/markSpark.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
 import { createWolfPresenter, loadWolf, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
+import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
 import { createReactionAnimator } from './character/reactClips.js';
@@ -714,6 +715,7 @@ async function bootstrap() {
   let locomotion = null;
   let remotes = null;
   let wolfPresenter = null;
+  let companionPresenter = null;
   let swing = null;
   let reactions = null;
   follow.update(player.position);
@@ -1968,6 +1970,9 @@ async function bootstrap() {
     // this object could drive the fight down a path no child can reach; reading state cannot.
     encounterState: () => encounterState,
     wolf: () => wolfPresenter,
+    // Checkpoint 0's companion is a cosmetic presenter only. The state is read-only evidence for
+    // the follow harness; it is never sent through net, combat, rewards, quests, or persistence.
+    companion: () => companionPresenter?.getState() ?? null,
     net,
     remotes: () => remotes,
     netState: () => ({
@@ -2749,6 +2754,11 @@ async function bootstrap() {
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
       }
       wolfPresenter?.update(deltaSeconds, wolf);
+      companionPresenter?.update(deltaSeconds, {
+        x: player.position.x,
+        z: player.position.z,
+        heading: player.heading,
+      });
       // The single event-dispatch point (ruling 5): both the online (server-mirrored) and offline
       // (locally stepped) paths above funnel their events through this one loop, which is exactly
       // why sound attaches here and nowhere else -- no reaching into encounterState, only the
@@ -3679,8 +3689,28 @@ async function bootstrap() {
   status.dataset.fault = hero.failed ? 'true' : 'false';
   status.textContent = hero.failed ? 'hero load failed — placeholder shown' : 'hero standing';
 
-  // The wolf is loaded after the hero and never awaited alongside it. A missing or broken wolf must
-  // leave a walkable world rather than an empty screen -- the same rule the socket follows.
+  // The temporary companion is loaded after the hero and never awaited alongside it. A missing or
+  // broken stand-in must leave a walkable world rather than an empty screen.
+  try {
+    const companion = await loadPrototypeCompanion();
+    if (!companion.failed) {
+      scene.add(companion.root);
+      companionPresenter = createPrototypeCompanionPresenter(companion.root, companion.animations);
+      companionPresenter.update(0, {
+        x: player.position.x,
+        z: player.position.z,
+        heading: player.heading,
+      });
+    } else {
+      console.warn('[runtime] prototype companion load failed — continuing without the temporary stand-in');
+    }
+  } catch (error) {
+    console.warn('[runtime] prototype companion load threw — continuing without the temporary stand-in', error);
+  }
+
+  // The wolf is loaded after the hero and companion. A missing or broken wolf must leave a walkable
+  // world rather than an empty screen -- the same rule the socket follows. The companion used a
+  // SkeletonUtils clone, so this load still owns the cached GLTF scene and enemy presenter.
   try {
     const wolf = await loadWolf();
     if (!wolf.failed) {
