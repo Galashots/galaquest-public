@@ -172,6 +172,38 @@ function requiredObject(root, name, kind) {
 }
 
 /**
+ * The bone's matrixWorld AS AUTHORED, not as the clip currently has it.
+ *
+ * Every rest transform in this file is root-relative, so mounting one means solving
+ * `inverse(bone.matrixWorld) x rigRoot.matrixWorld x rest` -- and the answer depends entirely on
+ * WHICH bone.matrixWorld. All of them were baked against the bind pose (the fit-*.mjs tools pose the
+ * skeleton before measuring), so a mount that reads the LIVE bone bakes the delta between bind and
+ * whatever pose happened to be playing into the anchor's local transform permanently: a rigid child
+ * inherits that error every subsequent frame. attachRigidTier2Gear never notices because its only
+ * caller is loadHero(), which runs before the AnimationMixer's first update. The lazy mounts below
+ * -- a reward unlocking mid-play, a sibling's gear arriving over the network, a Studio loadout swap
+ * -- always land mid-clip, and on the shipped rig the Hips bone leaves bind in EVERY clip (least in
+ * `idle`, 3.57 units and 12.20 degrees at its extreme; most in `death`, 80.03 and 97.03).
+ *
+ * Computed from the skeleton's own boneInverses (matrixWorld = invert(boneInverse), exactly what
+ * Skeleton.pose() does internally) rather than by calling skeleton.pose(): pose() OVERWRITES every
+ * bone's live position/quaternion/scale, and on this rig doing that visibly destroys the character
+ * -- confirmed directly, not assumed. Reading boneInverses never touches a live bone, so there is
+ * nothing to restore afterwards.
+ *
+ * Degrades to the live matrix on a rig with no SkinnedMesh (the synthetic heroes in the unit tests),
+ * where bind is the only pose there is.
+ */
+function bindPoseMatrixWorld(heroRoot, bone) {
+  let skinned = null;
+  heroRoot.traverse((object) => { if (!skinned && object.isSkinnedMesh) skinned = object; });
+  if (!skinned) return bone.matrixWorld;
+  const boneIndex = skinned.skeleton.bones.indexOf(bone);
+  if (boneIndex === -1) return bone.matrixWorld;
+  return new THREE.Matrix4().copy(skinned.skeleton.boneInverses[boneIndex]).invert();
+}
+
+/**
  * Parent the merged-atlas gear nodes to their live three.js hand Bones.
  *
  * The tracer records a rest matrix relative to Armature, which is the GLTF rig
@@ -273,9 +305,14 @@ export function attachBeltLantern(heroRoot, lanternRoot) {
   }
   heroRoot.updateMatrixWorld(true);
 
+  // Bind, never the live Hips -- see bindPoseMatrixWorld. NEITHER caller of this function mounts at
+  // load time: main.js's ensureLanternMounted fires when the reward unlocks mid-play, and its
+  // mountGearOnRemote fires when a sibling's gear arrives, both after an await. Reading the live
+  // bone here put the lantern 18.24 units and 30.04 degrees off its authored seat under a bone
+  // perturbation no larger than the idle loop's own (test/lazy-mount-bind-frame.test.mjs).
   const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_BELT_LANTERN.restRelativeToHeroRoot);
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
-  const local = new THREE.Matrix4().copy(bone.matrixWorld).invert().multiply(world);
+  const local = new THREE.Matrix4().copy(bindPoseMatrixWorld(heroRoot, bone)).invert().multiply(world);
   const anchor = new THREE.Group();
   anchor.name = rigidAnchorName(RIGID_BELT_LANTERN.id, RIGID_BELT_LANTERN.boneName);
   local.decompose(anchor.position, anchor.quaternion, anchor.scale);
@@ -373,29 +410,12 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   // matrices -- the same assumption attachRigidTier2Gear gets for free by running inside loadHero()
   // before the AnimationMixer's first update() ever runs. This mount is lazy (Character Studio's
   // on-demand loadout swap, scene.js's setLoadout), so by the time it actually runs the skeleton is
-  // almost always already mid-animation. Reading bone.matrixWorld in that state bakes the DELTA
-  // between bind pose and whatever pose happened to be active at mount time into the anchor's local
-  // transform permanently (a rigid child inherits that error every subsequent frame) -- caught by
+  // almost always already mid-animation. Reading bone.matrixWorld in that state was caught by
   // comparing this candidate's own live, pre-bake fit-tool screenshots (good) against a fresh-page
-  // reload of the same baked value at the same animation time (blade floating off the hand entirely).
-  //
-  // The bind-pose matrixWorld is computed directly from the skeleton's own boneInverses (exactly
-  // what Skeleton.pose() does internally: matrixWorld = invert(boneInverse)) rather than by calling
-  // skeleton.pose() itself -- pose() OVERWRITES every bone's live position/quaternion/scale, and on
-  // this rig that visibly SHRINKS the whole character (fit-sword.mjs's own header documents the
-  // same ~100x glTF-inverseBindMatrix/Armature-unit collapse): confirmed directly, calling pose()
-  // here made the entire hero disappear from every subsequent frame, because the animation clip has
-  // no scale track to restore what pose() overwrote. Reading boneInverses instead never touches a
-  // single live bone, so there is nothing to restore afterward.
-  let bindMatrixWorld = bone.matrixWorld;
-  let skinned = null;
-  heroRoot.traverse((o) => { if (!skinned && o.isSkinnedMesh) skinned = o; });
-  if (skinned) {
-    const boneIndex = skinned.skeleton.bones.indexOf(bone);
-    if (boneIndex !== -1) {
-      bindMatrixWorld = new THREE.Matrix4().copy(skinned.skeleton.boneInverses[boneIndex]).invert();
-    }
-  }
+  // reload of the same baked value at the same animation time (blade floating off the hand
+  // entirely). bindPoseMatrixWorld is the shared answer -- see its comment for the arithmetic and
+  // for why calling skeleton.pose() is not it.
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
 
   const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_WILDWOOD_BLADE_CANDIDATE.restRelativeToHeroRoot);
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
