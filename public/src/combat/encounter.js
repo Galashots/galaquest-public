@@ -526,7 +526,11 @@ export function requestPartyAttack(state, heroId, commandId = null) {
  * are their own command (requestPartyAttack) for exactly the reason requestAttack's comment gives.
  */
 export function stepParty(state, command = {}) {
-  const { deltaSeconds = 0, heroes: commandHeroes = {} } = command;
+  // `wolfHostile` is one more thing the CALLER knows and the rules do not, carried exactly the way
+  // hero position, weapon damage and targetability already are. The rules layer must not learn what
+  // a quest is; it only learns whether this wolf is allowed to fight right now. Defaults to hostile,
+  // so every caller written before the first-wolf gate existed keeps the fight it has always had.
+  const { deltaSeconds = 0, heroes: commandHeroes = {}, wolfHostile = true } = command;
 
   const heroIds = Object.keys(state.heroes);
   const heroes = {};
@@ -537,7 +541,8 @@ export function stepParty(state, command = {}) {
   // respawn can move it, and the move has to reach published state.
   const spawn = spawnDraft(state);
 
-  advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSeconds, spawn, state.heroes);
+  advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSeconds, spawn, state.heroes,
+    wolfHostile !== false);
 
   return { state: publishParty(state, wolf, heroes, spawn), events };
 }
@@ -584,7 +589,8 @@ function healTheStanding(heroes, heroIds, events) {
   }
 }
 
-function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSeconds, spawn, heroesAtStepStart) {
+function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSeconds, spawn, heroesAtStepStart,
+  wolfHostile = true) {
   /** @param moveOn true when a wolf was BEATEN, so the next one prowls the next spot on the patrol.
    *                False when the party simply wiped: that is a reset, not a victory, and moving the
    *                wolf would reward being knocked down with a shorter walk next time. */
@@ -768,7 +774,12 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
   // No living hero at all (everyone down, or nobody in the party) -- nothing to chase or bite.
   if (nearestId === null) { wolf.mode = 'idle'; return; }
 
-  if (nearestDistance <= WOLF_BITE_RANGE && wolf.biteCooldown === 0) {
+  // THE GATE, and it has to be here as well as on the approach below. Checkpoint 0 verified the
+  // trap by reading the order: this bite check RETURNS, so a gate applied only to the aggro branch
+  // never executes for a wolf that is already standing next to the child. That wolf would look
+  // dormant -- no chase, no walk animation -- and still take a heart every 2.6 s. Gating one of the
+  // two is worse than gating neither, because it looks fixed.
+  if (wolfHostile && nearestDistance <= WOLF_BITE_RANGE && wolf.biteCooldown === 0) {
     wolf.mode = 'bite';
     wolf.modeSeconds = 0;
     wolf.biteLanded = false;
@@ -778,7 +789,7 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
     return;
   }
 
-  if (nearestDistance <= WOLF_AGGRO_RANGE && nearestDistance > WOLF_BITE_RANGE * 0.9) {
+  if (wolfHostile && nearestDistance <= WOLF_AGGRO_RANGE && nearestDistance > WOLF_BITE_RANGE * 0.9) {
     const moved = stepTowards(wolf, commandHeroes[nearestId]?.position ?? { x: 0, z: 0 }, WOLF_SPEED, deltaSeconds);
     wolf.x = moved.x;
     wolf.z = moved.z;
@@ -906,6 +917,9 @@ export function stepEncounter(state, command = {}) {
     // One more thing the caller knows and the rules do not, carried exactly as position and weapon
     // damage are. Defaults to targetable so every existing caller fights unchanged.
     heroTargetable = true,
+    // Carried through to the party engine exactly like the three above. The solo wrapper knows no
+    // more about quests than the rules do; it only forwards what its caller said.
+    wolfHostile = true,
     attack = false,
   } = command;
 
@@ -922,6 +936,7 @@ export function stepEncounter(state, command = {}) {
 
   const stepped = stepParty(partyState, {
     deltaSeconds,
+    wolfHostile,
     heroes: {
       [SOLO_HERO_ID]: {
         position: heroPosition,
