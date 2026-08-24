@@ -603,7 +603,11 @@ async function bootstrap() {
   // pointers and camera drags are explicitly left to their existing owners.
   const companionTapPointers = new Map();
   gameSurface.addEventListener('pointerdown', (event) => {
-    if (event.target !== canvas || touch.ownsPointer(event) || attack.ownsPointer(event)) return;
+    const targetElement = event.target instanceof Element ? event.target : null;
+    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen');
+    const targetIsVisibleOverlay = targetLayer?.dataset.shown === 'true';
+    if (targetElement?.closest('button, [data-thumb-surface]') || targetIsVisibleOverlay
+      || touch.ownsPointer(event) || attack.ownsPointer(event)) return;
     companionTapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   }, { passive: true });
   gameSurface.addEventListener('pointerup', (event) => {
