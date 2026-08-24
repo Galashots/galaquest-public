@@ -350,7 +350,7 @@ started it had already printed a successful result and exited. Root cause identi
 `owned-server.mjs`'s `kill()`: it races `child.kill()` against a 5-second timeout and resolves `false`
 on timeout without ever escalating (e.g. a force-kill), and `closeStudioPage()` discards that boolean.
 Initially routed around locally rather than fixed, since `owned-server.mjs` is shared infrastructure
-outside SR5's own narrow scope (CLAUDE.md rule 3) — flagged as a standalone follow-up task instead.
+outside SR5's own narrow scope under the then-current worker/brief scope — flagged as a standalone follow-up task instead.
 2026-08-16, SR5 closeout pass (Sol's own direct instruction, same session: "fix the owned-server
 teardown leak now as the separate follow-up already identified"). `kill()` rewritten to escalate with a
 stronger kill signal against ONLY its own child PID if the graceful attempt times out, and to never
