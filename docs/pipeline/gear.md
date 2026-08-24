@@ -51,6 +51,65 @@ for mounting and running-game acceptance.
    plus the relevant fit/combat/progression harnesses, and inspect their captures. Do not preserve
    historical pass counts as current acceptance criteria.
 
+## Forge acceptance loop — reference-anchored
+
+For a piece that already has an accepted same-family sibling, this is the shortest path that has
+actually produced an Owner-accepted fit. It does not replace the fit loop above; it is what to reach
+for when GalaQuest already contains a good example of the thing you are fitting. README rules 3
+(reference first) and 5 (running-game pixels are final appearance authority) both apply unchanged —
+this is how they are executed for gear, not an exception to them.
+
+1. **Anchor on approved GalaQuest pixels, same family, before anything else.** An accepted sibling
+   already in this game outranks external convention references for how a piece of this kind is
+   carried. Capture the reference and the piece under review from the SAME camera, pose and framing;
+   a comparison across different views is not a comparison.
+
+2. **State the visual relationship in words before touching a number.** What crosses the palm, where
+   the guard sits relative to the fingers, what is beyond it, what is behind it. This is what you are
+   solving for, and it is what an Owner accepts or rejects. Geometry will happily produce a
+   perfectly self-consistent wrong convention.
+
+3. **Fit independently. Do not paste a sibling's transform.** Different meshes carry different
+   origins and normalization, so the same numbers mean different things. Reuse the sibling's
+   *geometry* — the direction its blade points, where its grip meets the hand — and solve this
+   mesh's own values against it. Deriving the world rotation that lands this piece on the accepted
+   piece's direction is reference use; copying its `ownerFit` is not.
+
+4. **Solve in the order the rig forces: aim, then seat, then scale.** State the seating you want
+   first (step 2), but solve orientation before position — the anchor rotates about its own origin,
+   so re-aiming moves the seat and re-seating first just relocates the error. This is the 2026-08-14
+   re-grip lesson recorded in `gear.js`'s own Tier 2 header; read it before reversing the order.
+   Leave scale alone unless the piece is the wrong size — a fit is usually a move and a turn.
+
+5. **Review the fit pose plus idle, run and attack, at more than one bearing.** The deterministic fit
+   pose is the authoring frame; the animations are where torso, thigh and forearm intersections show
+   up. A slash has motion to hide a bad mount; idle has nowhere to hide.
+
+6. **The Owner accepts on pixels, and good enough is a finishing condition.** Convincing grip and
+   guard placement, nothing floating, no gross wrist/forearm or torso/thigh intersection, a readable
+   silhouette at gameplay distance. When those hold, **stop.** Continuing to nudge an accepted fit is
+   how a good result becomes a worse one, and this rig's open fingers mean some compromises are
+   permanent rather than unfinished.
+
+7. **Bake through the canonical path, never by hand.** The Forge authors a bone-local anchor; the
+   runtime stores a rig-root-relative rest transform, and converting between them consumes a bone
+   matrix. `public/src/forge/runtimeBake.js` is that conversion and is the exact inverse of
+   `attachRigidTier2Gear`; it reads the bind pose from the skeleton's own `boneInverses`, so the
+   number is the same whether it is exported from the fit pose or mid-clip. A transform measured in
+   whatever pose happened to be on screen is the 2026-08-17 remediation's failure repeated.
+
+8. **Runtime correctness never depends on browser storage.** A saved Forge fit is authoring state.
+   The accepted value belongs in `public/src/character/gear.js`, and the proof it landed is a fresh
+   page load with zero authoring delta reproducing it.
+
+9. **Capture the shipped result after the bake, not the live authoring session.** Running game,
+   portrait and landscape, plus the gear screen where the piece is presented as a reward. This is
+   README rule 5; a Forge preview is not the game.
+
+10. **An accepted fit is frozen.** Reopen it only when new visual evidence — an Owner rejection, a
+    running-game capture, a rig change — says to. Re-deriving a settled transform because a
+    measurement looks improvable is how accepted work regresses.
+
 ## Character Studio
 
 Character Studio is now a public, tested review/fit surface. Use it for the loadouts, camera presets,
