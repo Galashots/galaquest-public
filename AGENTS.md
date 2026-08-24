@@ -20,7 +20,7 @@ If the current directory is not a Git checkout, **do not recursively search the 
 - Work from public `main` on a task branch and through a pull request. **Do not push directly to `main`.**
 - Do not force-push, rewrite shared history, squash/amend shared commits, merge, or close PRs unless the
   Owner explicitly authorizes that action.
-- Keep one coherent product objective per branch/PR; `docs/WORKFLOW.md` owns package sizing, checkpoints,
+- Keep one coherent objective per branch/PR; `docs/WORKFLOW.md` owns package sizing, checkpoints,
   scope reforecast, writer topology, context health, and handoff detail.
 - Every material test, browser observation, review conclusion, and acceptance claim names the **exact
   public SHA** it proves.

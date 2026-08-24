@@ -32,7 +32,7 @@ Before a writer begins, frame every implementation package as:
 
 `objective -> size -> included surfaces -> explicit exclusions -> acceptance gates -> checkpoint plan -> side-quest destination`
 
-Use `none` when a field genuinely has no entry. The frame makes the work legible without creating ceremony.
+Keep the frame explicit and low-ceremony; do not require filler text for fields that do not apply.
 
 ### Package classes
 
@@ -78,7 +78,8 @@ Director instead of broadening the PR.
 
 ## One coherent objective per public branch/PR
 
-- Branch from current public `main`; use one coherent product objective per branch and pull request.
+- Branch from current public `main`; use one coherent objective per branch and pull request, whether the
+  package is product-facing or engineering/process work.
 - Do not push directly to `main` or rewrite shared history.
 - Keep the package size and included surfaces explicit. Commits should separate generated/public assets from
   unrelated runtime logic when practical.
@@ -86,7 +87,7 @@ Director instead of broadening the PR.
 
 ### Large PRs are reviewed by checkpoint, not by wishful thinking
 
-When the owner explicitly chooses a long-running, larger PR, keep the **product objective singular** even if implementation spans many commits.
+When the owner explicitly chooses a long-running, larger PR, keep the **coherent objective singular** even if implementation spans many commits.
 
 - Publish exact-SHA checkpoints that are runnable and reviewable on their own.
 - At each checkpoint, run the required unit gate plus the evidence relevant to the surface changed so far.

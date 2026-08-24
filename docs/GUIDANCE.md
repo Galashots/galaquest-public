@@ -43,8 +43,11 @@ runtime-specific settings. These may provide capability, but they are not GalaQu
 unless the repository's actual authority explicitly says so.
 
 Access is not authorization: a credential proves access, an installed connector proves capability, and
-local memory or prompts do not override checked-in GalaQuest rules. Durable rules should be recoverable
-from the public repository and live GitHub state rather than a particular runtime's private state.
+local memory or prompts do not override checked-in GalaQuest rules. When the repository reserves a
+decision to the Owner, a current explicit Owner instruction remains authoritative for that decision;
+runtime-local state cannot manufacture, supersede, or revoke that authority. Durable rules should be
+recoverable from the public repository and live GitHub state rather than a particular runtime's private
+state.
 
 ## Checked-in skill discovery
 
