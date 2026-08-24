@@ -1,0 +1,73 @@
+name: Product idea
+description: Capture a GalaQuest product possibility without treating it as an approved commitment.
+title: "[IDEA] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a product possibility worth preserving. Candidate ideas are not Owner decisions. After the GalaQuest product labels exist, apply `product`, `type:idea`, and normally `stage:inbox`.
+  - type: input
+    id: origin_date
+    attributes:
+      label: Origin date
+      description: Date the idea was first captured or observed.
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: dropdown
+    id: origin_type
+    attributes:
+      label: Origin type
+      options:
+        - Owner direction or brainstorm
+        - Child/player observation
+        - Playtest
+        - Research/reference
+        - Agent suggestion
+        - Implementation discovery
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: source_context
+    attributes:
+      label: Source/context
+      description: Concise origin context; do not paste a whole chat or include unnecessary personal information.
+      placeholder: Owner planning conversation about pet progression
+    validations:
+      required: true
+  - type: textarea
+    id: record
+    attributes:
+      label: Idea
+      description: What is the product possibility?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it may matter
+      description: State the product hypothesis without presenting it as proven.
+    validations:
+      required: true
+  - type: dropdown
+    id: decision_state
+    attributes:
+      label: Decision state
+      options:
+        - Candidate - not decided
+        - Needs Owner decision
+        - Owner direction already given - link or summarize evidence below
+        - Superseded - historical capture only
+    validations:
+      required: true
+  - type: textarea
+    id: open_questions
+    attributes:
+      label: Open questions
+      description: What could materially change whether or how this idea should be pursued?
+  - type: textarea
+    id: related
+    attributes:
+      label: Related records
+      description: Link relevant Issues, PRs, briefs, research, or evidence.
