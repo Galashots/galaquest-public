@@ -28,7 +28,7 @@
  *   2. Solve a grip point on the hilt side of that crossguard (parameterised by --grip-frac, the
  *      fraction of the crossguard-to-pommel-extreme distance to walk inward) and a target world
  *      transform that seats it exactly the way sword_ironwood is already seated: 0.055m past the
- *      RightHand bone along the forearm's own direction (gear.js's own documented, Sol-approved
+ *      RightHand bone along the forearm's own direction (gear.js's own documented
  *      convention -- re-measured live off the shipping sword's own current anchor, not copied as a
  *      literal, so a future re-tune of the shipping sword is picked up automatically). Orientation is
  *      solved as a full local-to-world basis change (blade axis -> measured shipping blade direction,

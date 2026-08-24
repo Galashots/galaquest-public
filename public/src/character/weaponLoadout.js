@@ -13,7 +13,8 @@
 //
 // NOTHING HERE MOVES A MESH. The Wildwood transform was solved by tools/runtime-test/
 // fit-wildwood-blade.mjs and baked into gear.js's RIGID_WILDWOOD_BLADE_CANDIDATE; the shipping
-// sword's was solved by fit-carry.mjs and is Sol-approved. This file only ever decides which of two
+// sword's was re-fitted in the Forge on 2026-08-24 after the Owner rejected the earlier carry. This
+// file only ever decides which of two
 // already-solved anchors is VISIBLE.
 
 import {
