@@ -16,16 +16,21 @@ Use the narrowest authority that actually governs the question:
    binding, visual acceptance, spend/licensing boundaries.
 2. **`docs/product/PRODUCT_VISION.md` — settled product direction.** Owner-level product principles and
    decisions that should survive chats and implementation cycles.
-3. **`docs/product/PRODUCT_SYSTEM.md` — live product-memory protocol.** How GitHub Issues preserve ideas,
+3. **Current product design contracts — selected cross-system design authority.** Read a live contract when
+   the current product push names one. For the current progression push, use
+   `docs/product/PROGRESSION_CONTRACT_V0.md` for shared Hero/gear/POWER/enemy/learning progression
+   constraints and provisional tuning. A design contract may add implementation-shaping detail but may not
+   silently override Product Vision.
+4. **`docs/product/PRODUCT_SYSTEM.md` — live product-memory protocol.** How GitHub Issues preserve ideas,
    signals, provenance, initiatives, lifecycle state, and links to implementation.
-4. **`docs/WORKFLOW.md` — development lifecycle.** Branch/PR shape, verification surfaces,
+5. **`docs/WORKFLOW.md` — development lifecycle.** Branch/PR shape, verification surfaces,
    incremental review, PASS/FAIL/UNKNOWN semantics, task closeout.
-5. **Domain guidance — how to do a class of work.** `docs/pipeline/`,
+6. **Domain guidance — how to do a class of work.** `docs/pipeline/`,
    `docs/GALAQUEST_VISUAL_AUTHORITY.md`, `docs/public-playtest.md`, `docs/review-guides/`, and
    `.agents/skills/`.
-6. **Code, contracts, tests, and checked-in workflows — mechanical truth.** A runbook cannot make a
+7. **Code, contracts, tests, and checked-in workflows — mechanical truth.** A runbook cannot make a
    nonexistent command exist or override a live contract/test/workflow.
-7. **`docs/MISTAKES.md` — historical lessons.** It preserves what went wrong and why. It is not a
+8. **`docs/MISTAKES.md` — historical lessons.** It preserves what went wrong and why. It is not a
    current command index and may discuss superseded implementations.
 
 A lower layer may add detail but must not silently contradict a higher one. If two active sources
@@ -33,7 +38,9 @@ disagree, stop using the stale one and repair the conflict rather than choosing 
 
 GitHub Issues governed by the product system carry live product state that is intentionally too dynamic
 for a committed Markdown snapshot. The Product Vision remains the authority for settled Owner direction;
-Issues provide provenance and lifecycle for ideas, signals, and initiatives.
+Issues provide provenance and lifecycle for ideas, signals, and initiatives. A current product design
+contract sits between those layers and implementation: it coordinates one selected cross-system push but
+does not become a second backlog or replace the owning Issues.
 
 ## Runtime-local capability is not project authority
 
@@ -153,6 +160,8 @@ In the PR that changes a stable surface, ask:
 - Did a new verification surface land? Update `docs/WORKFLOW.md` or the relevant domain guide.
 - Did settled Owner product direction change? Update `docs/product/PRODUCT_VISION.md` and the owning
   product Issue so live provenance and durable direction agree.
+- Did a selected cross-system push gain or change a shared design contract? Keep that contract reachable
+  from `AGENTS.md`/this hierarchy, and keep provisional tuning visibly distinct from Owner-locked direction.
 - Did a provider client or spend shape change? Update its guarded tool README and pipeline runbook,
   but keep authorization outside durable budget numbers.
 - Did a reusable failure mode appear? Record it once in `docs/MISTAKES.md` and promote only the stable
