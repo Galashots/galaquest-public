@@ -12,6 +12,8 @@ export const COMPANION_FORMATION = Object.freeze({
   recoveryLateralMeters: 0.65,
 });
 const MOTION_EPSILON_METERS = 0.0001;
+const MOTION_CONFIRM_FRAMES = 3;
+const SETTLE_FRAMES = 6;
 
 function finite(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
@@ -71,6 +73,11 @@ function stateAtPoint(point, hero, extra = {}) {
     initialized: true,
     distanceToSlot: extra.distanceToSlot ?? 0,
     distanceToHero: distanceBetween(point, hero),
+    phase: extra.phase ?? 'settled',
+    motionFrames: extra.motionFrames ?? 0,
+    settleFrames: extra.settleFrames ?? 0,
+    motionTrendX: extra.motionTrendX ?? 0,
+    motionTrendZ: extra.motionTrendZ ?? 0,
     lastHeroX: finite(extra.lastHeroX, finite(hero?.x)),
     lastHeroZ: finite(extra.lastHeroZ, finite(hero?.z)),
     lastSlotX: finite(extra.lastSlotX, point.x),
@@ -98,6 +105,10 @@ export function nextCompanionState({ hero, companion, deltaSeconds }) {
   const slot = companionSlotForHero(safeHero);
   const distanceToSlot = distanceBetween(current, slot);
   const stepSeconds = Math.max(0, Math.min(finite(deltaSeconds), 0.25));
+  const previousPhase = companion?.phase
+    ?? (companion?.mode === 'walk' || companion?.mode === 'run' ? 'moving' : 'settled');
+  const previousMotionFrames = Math.max(0, finite(companion?.motionFrames));
+  const previousSettleFrames = Math.max(0, finite(companion?.settleFrames));
   const hasPreviousMotionState = companion?.initialized === true
     && Number.isFinite(companion?.lastHeroX)
     && Number.isFinite(companion?.lastHeroZ)
@@ -112,10 +123,37 @@ export function nextCompanionState({ hero, companion, deltaSeconds }) {
     slot,
   ) > MOTION_EPSILON_METERS;
   // Carry the previous hero/slot positions in the pure state so the idle band only holds when the
-  // hero has actually settled. Without this seam, a moving slot repeatedly crosses the band and
-  // produces the visible hold -> dart -> hold cadence the checkpoint is meant to avoid.
-  const heroMoving = heroMoved || slotMoved;
+  // hero has actually settled. A few consecutive motion observations are required to leave the
+  // settled phase; this is a stateful seam, not a larger idle band, and filters one-frame position
+  // noise from reconciliation or floating-point drift without delaying real movement perceptibly.
+  const observedMotion = heroMoved || slotMoved;
+  const motionDeltaX = heroMoved
+    ? safeHero.x - companion.lastHeroX
+    : slot.x - companion.lastSlotX;
+  const motionDeltaZ = heroMoved
+    ? safeHero.z - companion.lastHeroZ
+    : slot.z - companion.lastSlotZ;
+  const trendContinues = previousMotionFrames > 0
+    && (motionDeltaX * finite(companion?.motionTrendX)
+      + motionDeltaZ * finite(companion?.motionTrendZ)) > 0;
+  const motionFrames = observedMotion
+    ? (trendContinues ? previousMotionFrames + 1 : 1)
+    : 0;
+  const settleFrames = observedMotion ? 0 : previousSettleFrames + 1;
+  const confirmedMotion = previousPhase === 'moving'
+    ? observedMotion
+    : motionFrames >= MOTION_CONFIRM_FRAMES;
+  const phase = confirmedMotion
+    ? 'moving'
+    : (previousPhase === 'moving' || (previousPhase === 'settling' && settleFrames < SETTLE_FRAMES))
+      ? 'settling'
+      : 'settled';
   const motionState = {
+    phase,
+    motionFrames,
+    settleFrames,
+    motionTrendX: observedMotion ? motionDeltaX : 0,
+    motionTrendZ: observedMotion ? motionDeltaZ : 0,
     lastHeroX: safeHero.x,
     lastHeroZ: safeHero.z,
     lastSlotX: slot.x,
@@ -136,8 +174,15 @@ export function nextCompanionState({ hero, companion, deltaSeconds }) {
     };
   }
 
-  if (distanceToSlot <= COMPANION_FORMATION.idleBandMeters && !heroMoving) {
+  if (distanceToSlot <= COMPANION_FORMATION.idleBandMeters && phase === 'settled') {
     return stateAtPoint(current, safeHero, { distanceToSlot, ...motionState });
+  }
+
+  if (distanceToSlot <= Number.EPSILON) {
+    return {
+      ...stateAtPoint(current, safeHero, { distanceToSlot, ...motionState }),
+      mode: phase === 'moving' ? 'walk' : 'idle',
+    };
   }
 
   const dx = slot.x - current.x;

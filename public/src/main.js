@@ -598,6 +598,27 @@ async function bootstrap() {
   const cameraGesture = createCameraGesture(gameSurface, cameraTarget, {
     isStickPointer: (event) => touch.ownsPointer(event) || attack.ownsPointer(event),
   });
+  // Companion taps are a narrow pointer seam layered after the existing stick/attack/camera seams.
+  // A short, stationary pointer-up on the canvas can ask the companion presenter to react; thumb
+  // pointers and camera drags are explicitly left to their existing owners.
+  const companionTapPointers = new Map();
+  gameSurface.addEventListener('pointerdown', (event) => {
+    if (event.target !== canvas || touch.ownsPointer(event) || attack.ownsPointer(event)) return;
+    companionTapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }, { passive: true });
+  gameSurface.addEventListener('pointerup', (event) => {
+    const start = companionTapPointers.get(event.pointerId);
+    companionTapPointers.delete(event.pointerId);
+    if (!start || event.target !== canvas || heroScreen.isOpen() || villageBoard.isOpen()) return;
+    if (touch.ownsPointer(event) || attack.ownsPointer(event)) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
+    if (companionPresenter?.hitTest(event.clientX, event.clientY, canvas, camera)) {
+      companionPresenter.triggerHappyReaction();
+    }
+  }, { passive: true });
+  gameSurface.addEventListener('pointercancel', (event) => {
+    companionTapPointers.delete(event.pointerId);
+  }, { passive: true });
 
   // GP1: the Hero screen's "actual 3D equipped hero preview" (plan section 8) is the running game
   // itself -- the REAL live hero with whatever it is actually wearing -- rather than a second
@@ -716,6 +737,7 @@ async function bootstrap() {
   let remotes = null;
   let wolfPresenter = null;
   let companionPresenter = null;
+  let companionReactionElement = null;
   let swing = null;
   let reactions = null;
   follow.update(player.position);
@@ -2754,11 +2776,27 @@ async function bootstrap() {
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
       }
       wolfPresenter?.update(deltaSeconds, wolf);
-      companionPresenter?.update(deltaSeconds, {
+      const companionState = companionPresenter?.update(deltaSeconds, {
         x: player.position.x,
         z: player.position.z,
         heading: player.heading,
       });
+      if (companionReactionElement) {
+        const reactionVisible = companionState?.reactionActive === true;
+        if (reactionVisible) {
+          const cuePoint = new THREE.Vector3(companionState.x, 1.15, companionState.z).project(camera);
+          const surfaceRect = gameSurface.getBoundingClientRect();
+          const cueX = (cuePoint.x * 0.5 + 0.5) * surfaceRect.width;
+          const cueY = (-cuePoint.y * 0.5 + 0.5) * surfaceRect.height;
+          companionReactionElement.style.left = `${cueX}px`;
+          companionReactionElement.style.top = `${cueY}px`;
+          companionReactionElement.style.opacity = '1';
+          companionReactionElement.style.transform = `translate(-50%, -100%) scale(${0.75 + (1 - companionState.reactionProgress) * 0.35})`;
+        } else {
+          companionReactionElement.style.opacity = '0';
+          companionReactionElement.style.transform = 'translate(-50%, -100%) scale(0.75)';
+        }
+      }
       // The single event-dispatch point (ruling 5): both the online (server-mirrored) and offline
       // (locally stepped) paths above funnel their events through this one loop, which is exactly
       // why sound attaches here and nowhere else -- no reaching into encounterState, only the
@@ -3707,6 +3745,24 @@ async function bootstrap() {
   } catch (error) {
     console.warn('[runtime] prototype companion load threw — continuing without the temporary stand-in', error);
   }
+
+  // The cue is deliberately one local primitive rather than a new asset or UI system. The presenter
+  // supplies the bounce; this DOM heart simply keeps the tap readable at normal gameplay framing.
+  companionReactionElement = document.createElement('div');
+  companionReactionElement.textContent = '♥';
+  companionReactionElement.setAttribute('aria-hidden', 'true');
+  Object.assign(companionReactionElement.style, {
+    position: 'absolute',
+    zIndex: '3',
+    pointerEvents: 'none',
+    opacity: '0',
+    transform: 'translate(-50%, -100%) scale(0.75)',
+    color: '#ff7897',
+    font: '900 2rem/1 system-ui, sans-serif',
+    textShadow: '0 2px 0 rgb(12 20 31 / 88%), 0 0 12px rgb(255 120 151 / 80%)',
+    transition: 'opacity 90ms ease-out, transform 120ms ease-out',
+  });
+  gameSurface.appendChild(companionReactionElement);
 
   // The wolf is loaded after the hero and companion. A missing or broken wolf must leave a walkable
   // world rather than an empty screen -- the same rule the socket follows. The companion used a

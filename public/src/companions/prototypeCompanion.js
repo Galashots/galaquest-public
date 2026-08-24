@@ -4,6 +4,12 @@ import { normaliseCharacterMaterial } from '../character/hero.js';
 import { loadGLB } from '../world/assets.js';
 import { CHARACTER, setLayer } from '../render/layers.js';
 import { nextCompanionState } from './follow.js';
+import {
+  advanceHappyReaction,
+  createHappyReactionState,
+  happyReactionProgress,
+  requestHappyReaction,
+} from './bondReaction.js';
 
 // Temporary Checkpoint 0 stand-in only. The wolf is never imported as an enemy presenter or rules
 // object here: this module owns a cosmetic model, a cosmetic mixer, and the pure follow state.
@@ -57,6 +63,7 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
   }
 
   let state = { x: 0, z: 0, heading: 0, initialized: false };
+  let reaction = createHappyReactionState();
   let activeClip = null;
   let activeAction = null;
 
@@ -74,7 +81,12 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
   return {
     update(deltaSeconds, hero) {
       state = nextCompanionState({ hero, companion: state, deltaSeconds });
-      root.position.set(state.x, 0, state.z);
+      reaction = advanceHappyReaction(reaction, deltaSeconds);
+      const reactionProgress = happyReactionProgress(reaction);
+      const bounce = Math.sin(reactionProgress * Math.PI) * 0.16;
+      const scaleBeat = 1 + Math.sin(reactionProgress * Math.PI) * 0.08;
+      root.position.set(state.x, bounce, state.z);
+      root.scale.setScalar(PROTOTYPE_COMPANION_SCALE * scaleBeat);
       root.rotation.y = state.heading;
       switchMode(state.mode);
       if (activeAction) {
@@ -84,10 +96,31 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
       mixer.update(Math.max(0, Math.min(Number.isFinite(deltaSeconds) ? deltaSeconds : 0, 0.25)));
       return this.getState();
     },
+    triggerHappyReaction() {
+      const next = requestHappyReaction(reaction);
+      reaction = next.state;
+      return next.accepted;
+    },
+    hitTest(clientX, clientY, canvas, camera) {
+      if (!root.visible || !canvas || !camera) return false;
+      const rect = canvas.getBoundingClientRect();
+      if (!(rect.width > 0 && rect.height > 0)) return false;
+      const pointer = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(pointer, camera);
+      return raycaster.intersectObject(root, true).length > 0;
+    },
     getState() {
       return {
         ...state,
         clip: activeClip,
+        reactionActive: reaction.activeSeconds > 0,
+        reactionProgress: happyReactionProgress(reaction),
+        reactionCooldownSeconds: reaction.cooldownSeconds,
+        reactionCount: reaction.triggerCount,
       };
     },
     dispose() {
