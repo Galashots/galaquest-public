@@ -41,6 +41,32 @@ test('ordinary movement catches the companion toward the slot instead of telepor
   assert.ok(next.speed > 0);
 });
 
+test('sustained hero travel stays in locomotion and fully settles after stopping', () => {
+  const deltaSeconds = 1 / 60;
+  const heroSpeed = 2.8;
+  let movingHero = hero();
+  let state = nextCompanionState({
+    hero: movingHero,
+    companion: { ...companionSlotForHero(movingHero), initialized: false },
+    deltaSeconds,
+  });
+  const sustainedModes = [];
+
+  for (let frame = 0; frame < 180; frame += 1) {
+    movingHero = hero(0, (frame + 1) * heroSpeed * deltaSeconds, 0);
+    state = nextCompanionState({ hero: movingHero, companion: state, deltaSeconds });
+    sustainedModes.push(state.mode);
+  }
+
+  assert.ok(sustainedModes.slice(30).every((mode) => mode !== 'idle'), 'steady travel must not stutter into idle');
+
+  for (let frame = 0; frame < 30; frame += 1) {
+    state = nextCompanionState({ hero: movingHero, companion: state, deltaSeconds });
+  }
+  assert.equal(state.mode, 'idle');
+  assert.ok(state.distanceToSlot < 0.001, 'a stopped hero should leave the companion on its slot');
+});
+
 test('a companion inside the idle band holds position without foot shuffling', () => {
   const slot = companionSlotForHero(hero());
   const next = nextCompanionState({

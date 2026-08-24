@@ -11,6 +11,7 @@ export const COMPANION_FORMATION = Object.freeze({
   recoveryBehindMeters: 1.8,
   recoveryLateralMeters: 0.65,
 });
+const MOTION_EPSILON_METERS = 0.0001;
 
 function finite(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
@@ -70,6 +71,10 @@ function stateAtPoint(point, hero, extra = {}) {
     initialized: true,
     distanceToSlot: extra.distanceToSlot ?? 0,
     distanceToHero: distanceBetween(point, hero),
+    lastHeroX: finite(extra.lastHeroX, finite(hero?.x)),
+    lastHeroZ: finite(extra.lastHeroZ, finite(hero?.z)),
+    lastSlotX: finite(extra.lastSlotX, point.x),
+    lastSlotZ: finite(extra.lastSlotZ, point.z),
   };
 }
 
@@ -93,23 +98,46 @@ export function nextCompanionState({ hero, companion, deltaSeconds }) {
   const slot = companionSlotForHero(safeHero);
   const distanceToSlot = distanceBetween(current, slot);
   const stepSeconds = Math.max(0, Math.min(finite(deltaSeconds), 0.25));
+  const hasPreviousMotionState = companion?.initialized === true
+    && Number.isFinite(companion?.lastHeroX)
+    && Number.isFinite(companion?.lastHeroZ)
+    && Number.isFinite(companion?.lastSlotX)
+    && Number.isFinite(companion?.lastSlotZ);
+  const heroMoved = hasPreviousMotionState && distanceBetween(
+    { x: companion.lastHeroX, z: companion.lastHeroZ },
+    safeHero,
+  ) > MOTION_EPSILON_METERS;
+  const slotMoved = hasPreviousMotionState && distanceBetween(
+    { x: companion.lastSlotX, z: companion.lastSlotZ },
+    slot,
+  ) > MOTION_EPSILON_METERS;
+  // Carry the previous hero/slot positions in the pure state so the idle band only holds when the
+  // hero has actually settled. Without this seam, a moving slot repeatedly crosses the band and
+  // produces the visible hold -> dart -> hold cadence the checkpoint is meant to avoid.
+  const heroMoving = heroMoved || slotMoved;
+  const motionState = {
+    lastHeroX: safeHero.x,
+    lastHeroZ: safeHero.z,
+    lastSlotX: slot.x,
+    lastSlotZ: slot.z,
+  };
 
   if (companion?.initialized !== true) {
     return {
-      ...stateAtPoint(slot, safeHero, { distanceToSlot }),
+      ...stateAtPoint(slot, safeHero, { distanceToSlot, ...motionState }),
       snapped: true,
     };
   }
 
   if (distanceToSlot >= COMPANION_FORMATION.snapDistanceMeters) {
     return {
-      ...stateAtPoint(nearHeroRecoverySlot(safeHero), safeHero, { distanceToSlot }),
+      ...stateAtPoint(nearHeroRecoverySlot(safeHero), safeHero, { distanceToSlot, ...motionState }),
       snapped: true,
     };
   }
 
-  if (distanceToSlot <= COMPANION_FORMATION.idleBandMeters) {
-    return stateAtPoint(current, safeHero, { distanceToSlot });
+  if (distanceToSlot <= COMPANION_FORMATION.idleBandMeters && !heroMoving) {
+    return stateAtPoint(current, safeHero, { distanceToSlot, ...motionState });
   }
 
   const dx = slot.x - current.x;
@@ -129,5 +157,6 @@ export function nextCompanionState({ hero, companion, deltaSeconds }) {
     initialized: true,
     distanceToSlot: distanceBetween(next, slot),
     distanceToHero: distanceBetween(next, safeHero),
+    ...motionState,
   };
 }
