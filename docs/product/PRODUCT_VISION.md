@@ -44,10 +44,15 @@ upgrading, exploring, helping another player, solving a world problem, or earnin
 The educational layer should be measured and intentional even when the child experiences it simply as
 part of the adventure.
 
+## Current coordinated progression direction
+
+The current major gameplay/progression direction is a coordinated push across **pet companions**, **Hero XP/levels**, **meaningful visible gear progression**, and **supporting enemy variety** in the existing playable slice. These systems should be designed against one shared progression/scaling and reward contract rather than independently inventing unrelated number economies. This shared design does not imply one giant implementation PR; delivery should use bounded PRs and checkpoints where appropriate.
+
+Enemy variety exists to make becoming stronger observable and to support the progression loop, not to justify a large world or content expansion. **Ranger Lodge / Wildwood geography expansion is not the current engagement bottleneck and remains deferred.**
+
 ## Current pet direction
 
-Pets are the current major engagement direction because they can combine attachment, collection,
-identity, visible power, progression, rarity, and eventually social play.
+Pets remain a major engagement surface because they can combine attachment, collection, identity, visible power, progression, rarity, and eventually social play.
 
 Settled direction for the first pet system:
 
@@ -59,9 +64,9 @@ Settled direction for the first pet system:
 - pets should feel like meaningful companions, not only stat cards;
 - the player can **own many and equip one**.
 
-Rarity economy, long-term pet power curves, eggs/hatching, trading/gifting, and other social/economic
-systems remain product candidates until separately decided and recorded through the product-memory
-system.
+Pet rarity economy, eggs/hatching, trading/gifting, broad social/economic systems, and a derived global
+Power/brag number remain product candidates until separately decided and recorded through the
+product-memory system.
 
 ## Decision discipline
 
