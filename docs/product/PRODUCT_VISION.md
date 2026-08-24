@@ -46,7 +46,8 @@ part of the adventure.
 
 Meaningful learning should be one of the strongest progression/reward sources, but it should not be
 trivially farmable. Ordinary combat may still award repeatable XP so grinding remains legitimate MMO play,
-while authored progression and learning provide stronger and more reliable advancement.
+while authored progression and learning provide stronger and more reliable advancement. Badly outleveled
+combat should not remain an optimal leveling strategy merely because the player can defeat it instantly.
 
 ## Current coordinated progression direction
 
