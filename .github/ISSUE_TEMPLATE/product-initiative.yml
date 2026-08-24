@@ -1,0 +1,61 @@
+name: Product initiative
+description: Track an Owner-selected product outcome across bounded implementation increments and validation.
+title: "[INITIATIVE] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this only for a product outcome the Owner has selected for active or upcoming work. After the GalaQuest product labels exist, apply `product`, `type:initiative`, and the appropriate `stage:*` label.
+  - type: input
+    id: origin_date
+    attributes:
+      label: Origin date
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: input
+    id: source_context
+    attributes:
+      label: Owner decision / source context
+      description: Summarize where the initiative was selected and the relevant Owner direction.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Product outcome
+      description: What player-facing outcome are we trying to create?
+    validations:
+      required: true
+  - type: textarea
+    id: why_now
+    attributes:
+      label: Why now
+      description: Why is this worth active attention relative to other candidates?
+    validations:
+      required: true
+  - type: textarea
+    id: settled
+    attributes:
+      label: Settled product decisions
+      description: Record only decisions already made by the Owner; link durable vision authority when applicable.
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Not decided / out of scope
+      description: Keep unresolved candidates and explicitly excluded scope separate from settled direction.
+  - type: textarea
+    id: success
+    attributes:
+      label: Product success signal
+      description: What observable player behavior, playtest result, or shipped outcome would make this initiative successful?
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Current implementation links
+      description: Link active briefs, branches, PRs, checkpoints, or evidence. Keep exact implementation state in those records rather than copying it here.
+  - type: textarea
+    id: related
+    attributes:
+      label: Related ideas and signals
+      description: Link candidate ideas, observations, research, or dependencies that inform this initiative.
