@@ -505,7 +505,7 @@ await touch('touchEnd', [{ x: camPoint.x + 120, y: camPoint.y }]);
 await sleep(100);
 check('dragging outside the region turns the camera', Math.abs(dragged.heading - beforeDrag.heading) > 0.2,
   `heading ${beforeDrag.heading.toFixed(3)} -> ${dragged.heading.toFixed(3)}`);
-check('drag right turns right (positive yaw)', dragged.heading > beforeDrag.heading,
+check('drag right turns left (negative yaw)', dragged.heading < beforeDrag.heading,
   `delta ${(dragged.heading - beforeDrag.heading).toFixed(3)} rad`);
 // The property is that camera input does not COMMAND movement. Stick input over this drag would
 // travel ~0.5 units at a walk; anything at this scale is settled reconciliation, not steering.
@@ -574,7 +574,7 @@ if (guidance.noObjectivePlace) {
   }
 }
 
-// Pitch: drag up should raise the camera.
+// Pitch: drag up should lower the camera.
 const beforePitch = await state();
 await touch('touchStart', [camPoint]);
 await sleep(60);
@@ -585,7 +585,7 @@ for (let i = 1; i <= 6; i++) {
 const pitched = await state();
 await touch('touchEnd', [{ x: camPoint.x, y: camPoint.y - 120 }]);
 await sleep(100);
-check('drag up raises the camera (pitch increases)', pitched.pitch > beforePitch.pitch,
+check('drag up lowers the camera (pitch decreases)', pitched.pitch < beforePitch.pitch,
   `pitch ${beforePitch.pitch.toFixed(3)} -> ${pitched.pitch.toFixed(3)}`);
 await shot('06-pitched.png');
 
