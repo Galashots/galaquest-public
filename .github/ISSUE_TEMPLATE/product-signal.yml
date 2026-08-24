@@ -1,11 +1,12 @@
 name: Product signal
 description: Capture a playtest, player, research, or implementation observation that may affect product judgment.
 title: "[SIGNAL] "
+labels: ["product", "type:signal", "stage:inbox"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this for evidence or observation. A signal is not automatically a product decision. After the GalaQuest product labels exist, apply `product`, `type:signal`, and normally `stage:inbox`.
+        Use this for evidence or observation that deserves independent search/lifecycle. If the signal only matters to an existing Requirement or Initiative, prefer a concise comment there instead. A signal is not automatically a product decision.
   - type: input
     id: origin_date
     attributes:
@@ -61,4 +62,4 @@ body:
     id: related
     attributes:
       label: Related records
-      description: Link relevant Issues, PRs, initiatives, briefs, or research.
+      description: Link relevant Issues, PRs, requirements, initiatives, briefs, or research.
