@@ -67,14 +67,34 @@ export function createRewardLedger() {
  * contact branch pushes either wolf-hit OR wolf-defeated, never both), so it must be credited here or
  * a solo killing blow would earn nothing.
  *
- * eventIds are derived as `mark:<heroId>:<lifeIndex>` -- deterministic and reproducible from the same
- * inputs, which is what makes them usable as D2's idempotency keys: two servers (or one server
- * restarted) folding the same true history of a guest's kills produce the same eventId for the same
- * life, so INSERT OR IGNORE at the store layer is the actual no-op enforcement; this fold's own
- * processedEvents guard is the belt to that store's braces, catching a double-fold before it ever
- * reaches the wire.
+ * eventIds are derived as `mark:<heroId>:<lifeId>`, where lifeId identifies THE WOLF-LIFE rather
+ * than the hero's own count of them. That distinction is the whole point, and it was learned twice:
+ *
+ *   - A life INDEX (this fold's `livesCompleted`) is reproducible, but only WITHIN one process: it
+ *     restarts at 0, and so does createSimulation's `p<n>`, so the first kill after a restart
+ *     recomputes an eventId already on record and INSERT OR IGNORE silently swallows a real kill.
+ *   - Deriving the durable key from the STORE's current count instead (the fix that replaced it)
+ *     cured that but was not idempotent at all: two heroIds mapped to one guestId -- two tabs in one
+ *     browser share localStorage, so they share a guestId -- produce two awards for one wolf-life,
+ *     and the count is re-read BETWEEN them, so the second computes a different key and inserts.
+ *     One kill, two marks. See test/profile-identity.test.mjs, which fails against that version.
+ *
+ * What both attempts were reaching for is a name for the FACT being paid for. `mintLifeId` supplies
+ * it: called exactly once per wolf-defeated, so every contributor to that life carries the SAME
+ * lifeId. Two heroes of one guest then derive one identical durable key and the store's INSERT OR
+ * IGNORE does its job; two different guests derive different keys and are both paid, which is the
+ * participation-credit rule this file exists to keep. A server passes randomUUID, which cannot
+ * collide across a restart the way an index could.
+ *
+ * The default keeps the historical `String(lifeIndex)` so a caller that does not care about
+ * durability -- the offline fallback in main.js, and every existing test -- gets byte-identical
+ * eventIds to before. This fold's own processedEvents guard is unchanged: it still catches a
+ * double-fold of the same event objects before anything reaches the wire.
+ *
+ * @param options.mintLifeId  (lifeIndex) => string, called once per completed wolf-life.
  */
-export function foldEvents(ledger, events) {
+export function foldEvents(ledger, events, options = {}) {
+  const mintLifeId = options.mintLifeId ?? ((lifeIndex) => String(lifeIndex));
   const start = ledger ?? createRewardLedger();
   let livesCompleted = start.livesCompleted;
   let contributors = new Set(start.contributors);
@@ -92,9 +112,11 @@ export function foldEvents(ledger, events) {
 
     if (event.type === 'wolf-defeated') {
       if (event.heroId != null) contributors.add(event.heroId);
-      const lifeIndex = livesCompleted;
+      // Once per LIFE, not once per contributor: every hero credited with this kill has to carry
+      // the same lifeId, or the durable key stops naming the kill and starts naming the payee.
+      const lifeId = mintLifeId(livesCompleted);
       for (const heroId of contributors) {
-        awards.push({ heroId, type: 'mark-earned', eventId: `mark:${heroId}:${lifeIndex}` });
+        awards.push({ heroId, type: 'mark-earned', lifeId, eventId: `mark:${heroId}:${lifeId}` });
       }
       livesCompleted += 1;
       contributors = new Set();

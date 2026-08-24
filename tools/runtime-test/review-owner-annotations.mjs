@@ -97,7 +97,7 @@ async function openStudio(viewport) {
   await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
   await page.send('Page.navigate', {
-    url: `${server.url}studio.html?ref=owner-review-ci&sourceSha=${SOURCE_SHA}`,
+    url: `${server.origin}/studio.html?ref=owner-review-ci&sourceSha=${SOURCE_SHA}`,
   });
   let ready = false;
   for (let attempt = 0; attempt < 60 && !ready; attempt += 1) {

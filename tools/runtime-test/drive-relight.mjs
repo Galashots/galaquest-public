@@ -26,7 +26,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
-import { headingToward } from '../../public/src/world/zoneLoader.js';
+import {
+  headingToward, KEEPER_GREET_REARM_RADIUS_METERS, KEEPER_WAVE_RADIUS_METERS,
+} from '../../public/src/world/zoneLoader.js';
 import { SPAWNS, LANDMARKS } from '../../public/src/world/zones/village.js';
 import { KEEPER_LINE_QUEST, KEEPER_LINE_UNLOCKED } from '../../public/src/world/keeperSpeech.js';
 import {
@@ -34,7 +36,11 @@ import {
   movementPulseMillis,
   pollUntilDeadline,
 } from './automation-timing.mjs';
+import {
+  metresOrUnknown, READ_WALK, startWalk, STOP_WALK,
+} from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 
 const CHROME_PORT = 9224;
 // Spawns and owns its own server on an isolated port rather than using the shared 5201 (Phase H1).
@@ -232,7 +238,23 @@ async function setCameraDistance(page, distance) {
   await sleep(150);
 }
 
-async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
+// The walk is held, and arrival is decided inside the page -- see in-page-driver.mjs for the
+// measurement that made that necessary. This harness's own numbers are the ones in that header:
+// 7217ms of a 10000ms budget locally to cross the 6.44m from spawn to Aldric, and 3.1m of it hosted
+// before the budget expired, which left the hero 3.3m away, outside KEEPER_WAVE_RADIUS_METERS, with
+// the keeper silent and both line checks failing behind the two walk checks.
+// HOW CLOSE THE HELD LEG MAY BE TRUSTED TO GET BEFORE THE PULSED ONE TAKES OVER.
+//
+// A held walk cannot stop on a mark. Arrival latches in-page at frame resolution, but the RELEASE
+// costs a poll and a round trip, and authority keeps integrating real time throughout in the last
+// direction it was sent. This harness went green hosted at e543b62 and red again at e68cf54 without
+// a line of it changing, and the failure says why: hero 1.35m from Aldric, SERVER 2.06m, against a
+// 2.0m radius. The rendered hero was inside and the authoritative one had run six centimetres past
+// the edge. Holding for the distance and pulsing the last leg puts the stop back under the
+// harness's control, at the cost of a few round trips over ground short enough to afford them.
+const HELD_APPROACH_SLACK_METRES = 2;
+
+async function pulseWalkToward(page, targetX, targetZ, stopWithin, maxMillis) {
   let last = await state(page);
   const deadline = deadlineAfter(maxMillis);
   while (Date.now() < deadline) {
@@ -241,10 +263,6 @@ async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
     const renderedDistance = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
     if (authorityDistance <= stopWithin && renderedDistance <= stopWithin) break;
 
-    // W is camera-forward. Re-aim from the newest released position before every pulse, then release
-    // the key before the next Runtime.evaluate. The old continuous hold left W down while a slow CDP
-    // read was in flight, so hosted-runner latency became several metres of unobserved movement and
-    // overshot Aldric all the way to the south boundary.
     const heading = headingToward(authority[0], authority[1], targetX, targetZ);
     // eslint-disable-next-line no-await-in-loop
     await page.eval(`window.__galaQuestRuntime.follow.setHeading(${heading})`);
@@ -260,14 +278,72 @@ async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
       // eslint-disable-next-line no-await-in-loop
       await forwardKey(page, 'keyUp');
     }
-    // Let the release reach the page and one authoritative tick settle before observing again.
     // eslint-disable-next-line no-await-in-loop
     await sleep(120);
     // eslint-disable-next-line no-await-in-loop
     last = await state(page);
   }
+  return last;
+}
+
+async function heldWalkToward(page, targetX, targetZ, stopWithin, maxMillis) {
+  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+  await page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await forwardKey(page, 'keyDown');
+  let walk;
+  try {
+    walk = await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+  } finally {
+    await forwardKey(page, 'keyUp');
+    await page.eval(STOP_WALK);
+  }
+  // Printed whether or not the walk arrived, because the interesting number on a failure is how
+  // many frames the page actually painted: a walk that never arrives after 400 frames is a broken
+  // route, and one that never arrives after 9 is a runner that never got to move.
+  const reached = walk.arrived
+    ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
+    : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`;
+  console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
+    + `${metresOrUnknown(walk.metres)}, ${reached}`);
+  // Let the release reach the page and the server agree the hero has stopped before the pulsed leg
+  // starts measuring from him.
   await sleep(200);
   return pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
+}
+
+// HOLD, THEN PULSE, THEN LOOK -- AND GO ROUND AGAIN IF IT IS NOT THERE YET.
+//
+// One hold followed by one pulse is not enough. Any single slack I pick between them is a number
+// picked against one machine, which is the mistake this whole family of bugs is made of; drive-
+// village measured it hosted, where the held leg stopped 4.21m out and the single pulsed leg could
+// not close the rest at the metre-a-second it manages there. Looping converges without a tuned
+// number: the held leg covers whatever distance is left quickly, the pulsed leg places him exactly,
+// and if the release carried him past the mark the next pass simply walks him back.
+async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
+  const deadline = deadlineAfter(maxMillis);
+  let last = await state(page);
+  let passes = 0;
+  const awayFrom = (at) => Math.hypot(targetX - at[0], targetZ - at[1]);
+  while (Date.now() < deadline) {
+    const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+    if (away <= stopWithin) break;
+    passes += 1;
+    if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
+      // eslint-disable-next-line no-await-in-loop
+      last = await heldWalkToward(page, targetX, targetZ, stopWithin, deadline - Date.now());
+    }
+    // eslint-disable-next-line no-await-in-loop
+    last = await pulseWalkToward(page, targetX, targetZ, stopWithin,
+      Math.max(1500, (deadline - Date.now()) / 2));
+  }
+  // Captures downstream must not be taken mid-stride.
+  await sleep(200);
+  last = await pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
+  console.log(`  approach: ${passes} pass(es), rendered `
+    + `${metresOrUnknown(awayFrom(last.heroPos))} and server `
+    + `${metresOrUnknown(awayFrom(last.serverPos ?? last.heroPos))} from the target`);
+  return last;
 }
 
 async function shot(page, name) {
@@ -278,6 +354,15 @@ async function shot(page, name) {
 
 const [treeX, treeZ] = LANDMARKS[0].at;
 const [keeperX, keeperZ] = SPAWNS.keeper;
+
+// The radius is imported, not restated (docs/MISTAKES.md GQ-007), and the comparison is the same
+// one keeperSpeechState makes: it hides the line when `distance > radiusMeters`, so standing
+// exactly on the radius is INSIDE. This check used to say `< 2.0` in two places -- a second copy
+// of the number that would have kept passing if the real radius ever moved, while the keeper
+// stayed silent. drive-ranger.mjs already imports the same constant for the same question.
+const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
+  (p) => p !== null && Math.hypot(p[0] - keeperX, p[1] - keeperZ) <= KEEPER_WAVE_RADIUS_METERS,
+);
 
 // ── 1. Fresh guest: dark tree, quest line, speaker present ─────────────────────────────────────
 {
@@ -302,11 +387,11 @@ const [keeperX, keeperZ] = SPAWNS.keeper;
   await setHeadingToward(page, treeX, treeZ);
   await shot(page, 'fresh-dark-tree');
 
-  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 10000);
+  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 20000);
   check('fresh guest: walking reaches the keeper',
-    Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) < 2.0
-      && Math.hypot(approached.serverPos[0] - keeperX, approached.serverPos[1] - keeperZ) < 2.0,
-    `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}`);
+    withinWaveRadius(approached),
+    `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}, `
+      + `radius ${KEEPER_WAVE_RADIUS_METERS}m`);
   const speaking = await pollUntil(page, (s) => s.keeperLine.shown === 'true');
   check('fresh guest: the keeper line shows and matches the quest line verbatim',
     speaking.keeperLine.shown === 'true' && speaking.keeperLine.text === KEEPER_LINE_QUEST,
@@ -314,10 +399,63 @@ const [keeperX, keeperZ] = SPAWNS.keeper;
   const speakerRect = await page.eval(`(() => {
     const b = document.querySelector('#keeper-speech-speak');
     const r = b.getBoundingClientRect();
-    return JSON.stringify({ width: r.width, height: r.height });
+    return JSON.stringify({ width: r.width, height: r.height, x: r.x, y: r.y });
   })()`).then(JSON.parse);
-  check('fresh guest: the speaker button meets the >=44px touch target',
-    speakerRect.width >= 44 && speakerRect.height >= 44, JSON.stringify(speakerRect));
+  check(`fresh guest: the speaker button meets the >=${TAP_TARGET_FLOOR_PX}px touch target`,
+    speakerRect.width >= TAP_TARGET_FLOOR_PX && speakerRect.height >= TAP_TARGET_FLOOR_PX,
+    JSON.stringify(speakerRect));
+
+  // READ-ALOUD, PROVEN IN A BROWSER.
+  //
+  // keeperSpeech.js's unit tests prove the latch: nothing speaks before the button is tapped, and
+  // every line after it does. They cannot prove main.js is WIRED to it, and that wiring is the
+  // whole feature -- the quest, the count of marks left and where to go next reach a child who
+  // cannot read through this route and no other. A module that works and a caller that never calls
+  // it look identical from node, which is the same gap the body-height checks in play-fight exist
+  // for.
+  //
+  // The sink is replaced, not the speaker: window.speechSynthesis.speak keeps being the thing
+  // main.js calls, and the real utterance still goes through. Recording what passes through it is
+  // the only way to hear a headless browser.
+  await page.eval(`(() => {
+    window.__gqSpoken = [];
+    const real = window.speechSynthesis.speak.bind(window.speechSynthesis);
+    window.speechSynthesis.speak = (utterance) => {
+      window.__gqSpoken.push(utterance.text);
+      return real(utterance);
+    };
+    return true;
+  })()`);
+  const spokenSoFar = () => page.eval('JSON.stringify(window.__gqSpoken)').then(JSON.parse);
+  check('fresh guest: nothing has been read aloud before the child asks for it',
+    (await spokenSoFar()).length === 0,
+    JSON.stringify(await spokenSoFar()));
+
+  // A real tap on the real button, at its real position.
+  const speakAt = { x: speakerRect.x + speakerRect.width / 2, y: speakerRect.y + speakerRect.height / 2 };
+  await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: speakAt.x, y: speakAt.y, id: 0 }] });
+  await sleep(60);
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  const afterTap = await pollUntilDeadline(spokenSoFar, (lines) => lines.length > 0,
+    { intervalMs: 100, timeoutMs: 4000 });
+  check('fresh guest: tapping the speaker reads the line the child is looking at',
+    afterTap.length === 1 && afterTap[0] === KEEPER_LINE_QUEST,
+    JSON.stringify(afterTap));
+
+  // And the half that only exists because of the latch: walk out of the speech radius and back, so
+  // the line goes away and returns, and it should read ITSELF this time with no second tap. Out and
+  // back rather than a forced state change, because "the line changed" is exactly what main.js
+  // watches for and a child gets there by walking.
+  await walkToward(page, keeperX + KEEPER_GREET_REARM_RADIUS_METERS + 4, keeperZ, 1.5, 20000);
+  await pollUntil(page, (s) => s.keeperLine.shown !== 'true');
+  await walkToward(page, keeperX, keeperZ, 0.75, 20000);
+  const returned = await pollUntil(page, (s) => s.keeperLine.shown === 'true');
+  const afterReturn = await pollUntilDeadline(spokenSoFar, (lines) => lines.length > 1,
+    { intervalMs: 100, timeoutMs: 6000 });
+  check('fresh guest: after that one tap, a line that comes back reads itself with no second tap',
+    afterReturn.length >= 2 && afterReturn[afterReturn.length - 1] === KEEPER_LINE_QUEST,
+    `${afterReturn.length} utterance(s) ${JSON.stringify(afterReturn)}, `
+      + `line on screen ${JSON.stringify(returned.keeperLine.text)}`);
 
   await setCameraDistance(page, 8);
   await setHeadingToward(page, keeperX, keeperZ);
@@ -368,11 +506,11 @@ const [keeperX, keeperZ] = SPAWNS.keeper;
   await setHeadingToward(page, treeX, treeZ);
   await shot(page, 'unlocked-lit-tree');
 
-  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 10000);
+  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 20000);
   check('unlocked guest: walking reaches the keeper',
-    Math.hypot(approached.heroPos[0] - keeperX, approached.heroPos[1] - keeperZ) < 2.0
-      && Math.hypot(approached.serverPos[0] - keeperX, approached.serverPos[1] - keeperZ) < 2.0,
-    `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}`);
+    withinWaveRadius(approached),
+    `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}, `
+      + `radius ${KEEPER_WAVE_RADIUS_METERS}m`);
   const speaking = await pollUntil(page, (s) => s.keeperLine.shown === 'true');
   check('unlocked guest: the keeper line shows and matches the congratulation line verbatim',
     speaking.keeperLine.shown === 'true' && speaking.keeperLine.text === KEEPER_LINE_UNLOCKED,

@@ -34,18 +34,24 @@ import {
   attachBeltLantern,
   attachWildwoodBladeCandidate,
   BELT_LANTERN_URL,
+  RIGID_BELT_LANTERN,
   WILDWOOD_BLADE_CANDIDATE_URL,
 } from './character/gear.js';
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
   from './character/weaponLoadout.js';
-import { createRewardLedger, foldEvents, MARKS_TO_UNLOCK } from './rewards/marks.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID, swingDamageFor } from './progression/items.js';
+import { MARKS_TO_UNLOCK } from './rewards/marks.js';
+import {
+  OFFLINE_HERO_ID,
+  createLifeIdMinter,
+  createOfflineProgress,
+} from './rewards/offlineProgress.js';
+import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS, swingDamageFor } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
 import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
-import { createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
+import { REWARD_EVENT_TYPES, createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
 import { createMarkSparks } from './rewards/markSpark.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
@@ -53,6 +59,9 @@ import { createWolfPresenter, loadWolf, WOLF_SPARK_HEIGHT_METERS } from './enemi
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
 import { createReactionAnimator } from './character/reactClips.js';
+// The same function the chooser draws its cards with, so the chip and the card cannot disagree
+// about which animal a child is. progression/heroAvatars.js is the one place that decides.
+import { avatarForProfile } from './progression/heroAvatars.js';
 import {
   ATTACK_REACH,
   HERO_MAX_HP,
@@ -64,10 +73,15 @@ import {
 } from './combat/encounter.js';
 import { createAttackInput } from './input/attackButton.js';
 import { createKeyboardInput } from './input/keyboard.js';
+import { pointerModeFor } from './input/pointerMode.js';
+import { firstHurtCoachingLine } from './ui/coaching.js';
 import { createTouchInput } from './input/touch.js';
 import { createCameraGesture } from './input/cameraGesture.js';
 import { createDiagnostics } from './debug/diagnostics.js';
 import { createNetClient } from './net/client.js';
+import { createProfileStore } from './progression/profiles.js';
+import { createProfileGate, profileGateViewModel } from './progression/profileGate.js';
+import { foldFacts } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
 import { CHARACTER, WORLD } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
@@ -86,12 +100,18 @@ import {
   lanternUnlockedFromRewards,
   loadZone,
 } from './world/zoneLoader.js';
-import { KEEPER_NAME, keeperSpeechState, speakKeeperLine } from './world/keeperSpeech.js';
+import {
+  KEEPER_NAME, keeperSpeechState, speakKeeperLine, speakKeeperLineIfUnlocked,
+} from './world/keeperSpeech.js';
 import { ROWAN_NAME, rowanOwesBlade, rowanSpeechState } from './world/rowanSpeech.js';
 import {
-  RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSpeechState,
+  RANGER_NAME, rangerIsHere, rangerOwesCharm, rangerSanctuaryHolds, rangerSpeechState,
 } from './world/rangerSpeech.js';
 import { questObjectiveFor } from './world/quest.js';
+import { destinationFor, nearestPlaceTo } from './world/destinations.js';
+import { edgeIndicatorFor } from './ui/offscreenPointer.js';
+import { createRescueWatch, targetKeyFor } from './ui/guidanceRescue.js';
+import { DEFAULT_RANGE_METERS, minimapPlacement, minimapPolyline } from './ui/minimap.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
   bramblesCut,
@@ -167,9 +187,19 @@ const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
 // landed the hit, read off event.heroId -- but the OFFLINE solo path's events (combat/encounter.js's
 // stripHeroId, the same shape createEncounter()'s old stateful surface always produced) never carry
 // one, since there has only ever been exactly one hero to mean. This fixed id is stamped on before
-// folding, purely locally, so the offline loop is demonstrable with no server at all; it is never
-// sent anywhere and never confused with a real playerId (net/gameServer.mjs's ids are `p<n>`).
-const OFFLINE_HERO_ID = 'offline-hero';
+// folding, purely locally, so the offline loop works with no server at all; it is never sent
+// anywhere and never confused with a real playerId (net/gameServer.mjs's ids are `p<n>`). It DOES
+// now appear inside durable mark ids (`mark:offline-hero:<lifeId>`), which is deliberate: it names
+// which hero earned the mark, and offline there is exactly one. rewards/offlineProgress.js owns the
+// constant so the id in the journal and the id stamped before folding cannot drift apart.
+// What a device journals under when it could not mint a durable profile id (no crypto, and the
+// fallback minting path also unavailable). Never sent as the wire's guestId -- see durableProfileId
+// -- because a constant on the wire would collapse every such device onto one save server-side.
+const SESSION_ONLY_PROFILE_ID = 'p-session-only';
+
+// Roughly a hero's chest, so the arrow aims at a person rather than at the ground under them. The
+// hero measures 1.479 m; a destination is a place on the map and has no height of its own.
+const POINTER_TARGET_HEIGHT_METERS = 1.0;
 
 const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
@@ -180,6 +210,17 @@ const attackButtonElement = document.querySelector('#attack-button');
 // why. Read once at startup, not reactively: this is a boot-time opt-in for a runtime-test harness's
 // own navigation, not a setting a child ever toggles mid-session.
 perfHud.dataset.debug = new URLSearchParams(location.search).get('debug') === '1' ? 'true' : 'false';
+// #runtime-status carries the same telemetry problem and therefore the same switch, read from the
+// same param in the same place -- two elements, one decision, rather than two decisions that have
+// to be kept agreeing. Its fault states override this in CSS; see index.html's rule.
+status.dataset.debug = perfHud.dataset.debug;
+
+// WHICH CONTROLS THIS DEVICE GETS. Read once at startup for the same reason the debug switch is:
+// a device does not grow a touchscreen mid-session, and re-deciding this on a resize would make the
+// stick appear and vanish under a thumb that is already on it. input/pointerMode.js owns the rule
+// and records why it is deliberately biased towards keeping the stick.
+const POINTER_MODE = pointerModeFor(navigator.maxTouchPoints);
+document.querySelector('#game').dataset.pointer = POINTER_MODE;
 
 async function bootstrap() {
   const scene = new THREE.Scene();
@@ -195,8 +236,8 @@ async function bootstrap() {
   camera.lookAt(0, 0.7, 0);
 
   const runtimeRenderer = createRenderer(canvas, {
-    onContextLost: () => { status.textContent = 'rendering paused — WebGL context lost'; },
-    onContextRestored: () => { status.textContent = 'WebGL restored — hero standing'; },
+    onContextLost: () => { status.dataset.fault = 'true'; status.textContent = 'rendering paused — WebGL context lost'; },
+    onContextRestored: () => { status.dataset.fault = 'false'; status.textContent = 'WebGL restored — hero standing'; },
   });
   const quality = createQualityLadder({
     onLevelChange: ({ level }) => {
@@ -569,10 +610,12 @@ async function bootstrap() {
   // ENTIRELY invisible, the camera being inside a wall and inside a trunk respectively. It is now a
   // dedicated render pass over a cleared depth buffer (render/heroPreview.js's own header carries the
   // full before/after). Nothing dollies, so there is no saved camera to restore.
-  // Offline fallback (Phase D's own pattern, see OFFLINE_HERO_ID / offlineMarks below): with no
-  // server there is no rewards mirror to read an equip choice off, so this is progression's own
-  // small piece of local state, applied instead of net.sendEquip when netStatus is not 'online'.
-  let offlineEquippedWeaponId = DEFAULT_EQUIPPED_WEAPON_ID;
+  // Equip has no session-only fallback any more. It used to keep one -- a plain `let` holding the
+  // offline choice -- and that variable WAS the bug: a child who equipped a sword with no server was
+  // holding the starter sword again after a refresh, because the only record of the choice was a
+  // binding in this closure. The choice is now journalled the moment it is made (see onEquip below)
+  // and read back from `profileState`, so offline and online differ in who ADJUDICATES, not in
+  // whether the child's own decision survives.
   // Which weapon is highlighted in the owned-item strip, independent of which is actually equipped --
   // null until the child taps one, at which point heroScreenViewModel's own fallback (unowned/null
   // resolves to the equipped item) stops applying.
@@ -588,8 +631,18 @@ async function bootstrap() {
     onSelect: (itemId) => { selectedHeroItemId = itemId; },
     onEquip: (itemId) => {
       if (!canEquip(itemId)) return;
-      if (netStatus === 'online') net.sendEquip(itemId);
-      else offlineEquippedWeaponId = itemId;
+      // ONE act, ONE identity. The device mints the fact -- eventId and durable revision together --
+      // at the moment the child chose, journals it, and then tells the server about that same fact
+      // rather than asking the server to invent a second one. Both copies therefore carry the same
+      // name and the same place in the order, which is what makes holding two copies a union rather
+      // than a disagreement (docs/MISTAKES.md GQ-014).
+      //
+      // Journalled BEFORE it is sent, and sent only when there is a server: a child who equips a
+      // sword with no network has equipped a sword. The send is how the server finds out, not how it
+      // becomes true -- and if it never gets sent, the reconnect path below delivers it.
+      const fact = profiles.mintEquipFact(profileId, itemId);
+      refreshProfileState();
+      if (netStatus === 'online') net.sendEquip(itemId, fact ?? undefined);
       selectedHeroItemId = itemId;
     },
     // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
@@ -694,6 +747,13 @@ async function bootstrap() {
   // up. Never read by canHeroAttack or anything that decides combat truth -- only by the one
   // swing?.update() call in the frame loop.
   let predictedSwingSeconds = -1;
+  // What the swing ANIMATION is being driven by on the frame just drawn -- see swingSecondsForClip
+  // below, which is this same number. Held here so it can be published: a harness reading only
+  // encounterState().hero.swingSeconds sees the AUTHORITATIVE swing, which is -1 for the whole
+  // round trip after a tap, and the hero is visibly winding up during that. Measured hosted at
+  // 9732a1a: the capture named `swing-windup` was rejected as "not during a swing" on a read taken
+  // 530ms into an arc, because the server had not confirmed it yet on a runner painting every 401ms.
+  let swingSecondsShown = -1;
 
   // G3/G4: the two payoff surfaces. Appended to #game after everything else so they paint over the
   // HUD -- see ui/bossBar.js and ui/unlockCard.js, which own their own markup and CSS.
@@ -704,11 +764,33 @@ async function bootstrap() {
 
   const bannerElement = document.querySelector('#banner');
   let bannerTimer = null;
-  function banner(text, milliseconds) {
+  // THE OTHER HALF OF THE NARRATIVE, AND IT WAS SILENT.
+  //
+  // keeperSpeech.js makes the argument in full for the speech bubble: a child who cannot read was
+  // being handed sentences, and the whole of this game's story reached its stated audience only if a
+  // pre-reader found a 44px grey circle and guessed what it was for. That fix landed on the bubble
+  // and stopped there. The banner is the OTHER surface the game tells its story on -- the wolf
+  // beaten, the tree alight, the gate found, where to go next, all 28 of them -- and every one was
+  // squiggles on a grey bar to the player this game is for.
+  //
+  // Same latch, deliberately: nothing here speaks to a child who never asked. `unlocked` is set by a
+  // real tap on the bubble's speaker button, which is both iOS's price for making a sound at all and
+  // the child's own signal that they want to be read to. One tap, ever, and the game starts reading
+  // itself out -- bubble and banner together, because a child does not know they are two systems.
+  //
+  // It CANCELS whatever is mid-sentence, which is defaultSpeak's existing law and worth stating
+  // rather than discovering: "the line on screen and the line being read have to be the same line".
+  // A banner is the most recent thing the game chose to say, so it wins, and a Keeper line it cuts
+  // off is still on screen with its speaker button still there to replay it.
+  //
+  // `spoken` exists because the screen and the ear want different strings for the same fact:
+  // "LANTERN MARK  2 / 3" is right to look at and reads aloud as "two slash three".
+  function banner(text, milliseconds, spoken = text) {
     bannerElement.textContent = text;
     bannerElement.dataset.shown = 'true';
     window.clearTimeout(bannerTimer);
     bannerTimer = window.setTimeout(() => { bannerElement.dataset.shown = 'false'; }, milliseconds);
+    speakKeeperLineIfUnlocked(spoken);
   }
 
   // Hearts, not the status line's "you Nhp": see combat/feedback.js for the reference research
@@ -724,6 +806,14 @@ async function bootstrap() {
   // What the bar is currently SHOWING, so the per-frame read in the loop repaints on a change rather
   // than rewriting four dataset attributes sixty times a second.
   let heartsShown = { hp: HERO_MAX_HP, maxHp: HERO_MAX_HP };
+  // ── The teaching latches ────────────────────────────────────────────────────────────────────
+  // Three things a child learns ONCE and must never be taught again: that the Keeper gave them a
+  // quest, that they can move, that they can swing. All three are declared here and HYDRATED from
+  // the active profile further down, once durableProfileId exists -- not at the declaration, because
+  // that runs long before the profile store is read and a hydrate up here would be reading a
+  // variable that does not exist yet. This branch has already shipped one temporal dead zone.
+  let combatCoached = false;
+  let movementTaught = false;
   function renderHearts(hp, maxHp = heartCeiling) {
     heartCeiling = Math.max(1, Math.min(HERO_MAX_HP_CEILING, Math.round(maxHp)));
     const filled = heartsForHp(hp, heartCeiling);
@@ -827,7 +917,8 @@ async function bootstrap() {
   // mark was already earned, already counted and already persisted a second ago.
   let markIgniteTimer = null;
   function celebrateMarkArrival(totalMarks) {
-    banner(`LANTERN MARK  ${totalMarks} / ${MARKS_TO_UNLOCK}`, 1800);
+    banner(`LANTERN MARK  ${totalMarks} / ${MARKS_TO_UNLOCK}`, 1800,
+      `Lantern mark, ${totalMarks} of ${MARKS_TO_UNLOCK}`);
     const pip = lanternPipElements[Math.min(totalMarks, lanternPipElements.length) - 1];
     // Re-triggering a CSS animation needs the attribute to actually leave and come back, which needs
     // a frame in between -- the same reason popDamageNumber waits a frame before starting its rise.
@@ -894,11 +985,202 @@ async function bootstrap() {
     questObjectiveElement.dataset.shown = String(line !== null);
     if (line !== null) questObjectiveElement.textContent = line;
   }
+  // WHICH WAY TO TURN. The chip says what to do; this says where it is.
+  //
+  // Measured before it was written: from the spawn the Keeper is on screen at NDC (0.37, 0.25), and
+  // one 200px thumb-drag -- 69 degrees -- puts him at NDC x 1.5 with the chip still reading "Talk to
+  // Keeper Aldric" and nothing at all indicating which way he went.
+  //
+  // The DOM half of a pure/DOM split: ui/offscreenPointer.js decides where the arrow goes and which
+  // way it faces and is unit tested; this does the projection, which needs a camera and therefore a
+  // browser, and is proved by a harness instead.
+  // THE TWO PLACES ONLY THE RUNNING GAME KNOWS. "The next dark light" is not a fixed coordinate --
+  // it is whichever is nearest and still out, which depends on where the child is standing and on
+  // what they have already done. destinations.js cannot know either, so it asks.
+  //
+  // GETTERS, so nothing is computed for an objective that does not want it: destinationFor reads at
+  // most one of these per frame, and building both lists every frame to throw one away is work a
+  // starved device cannot spare. Built ONCE, out here rather than in the frame loop, for the same
+  // reason -- the getters close over the live bindings, so a hoisted object still reads this frame's
+  // state while allocating nothing per frame.
+  //
+  // The trail's positions and its lit flags are parallel arrays and so are the seals', which is why
+  // this filters by index. That join is sound by construction: trailLit is built as
+  // noTrailLightsLit(TRAIL_LIGHTS.length) and sealsSeen as COLD_SEALS.map(...).
+  const pointerContext = {
+    get nearestUnlitLight() {
+      return nearestPlaceTo(
+        VILLAGE.TRAIL_LIGHTS
+          .filter((_, index) => trailLit[index] !== true)
+          .map(([x, z]) => ({ x, z })),
+        player.position.x, player.position.z,
+      );
+    },
+    get nearestUnbrokenSeal() {
+      return nearestPlaceTo(
+        VILLAGE.COLD_SEALS
+          .filter((_, index) => siegeState.seals[index]?.burst !== true)
+          .map(([x, z]) => ({ x, z })),
+        player.position.x, player.position.z,
+      );
+    },
+  };
+  const objectivePointerElement = document.querySelector('#objective-pointer');
+  const objectivePointerArrowElement = document.querySelector('#objective-pointer-arrow');
+  const pointerTarget = new THREE.Vector3();
+  const pointerForward = new THREE.Vector3();
+  function renderObjectivePointer(objective, context) {
+    const place = destinationFor(objective, context);
+    if (!place) {
+      // No objective, no place for it, or a dynamic place the caller could not supply. All three are
+      // the same answer to "where do I point", which is: nowhere, so say nothing.
+      objectivePointerElement.dataset.shown = 'false';
+      return { pointing: false };
+    }
+
+    // BEHIND THE CAMERA IS COMPUTED, NOT INFERRED, and this is the whole reason offscreenPointer.js
+    // takes it as an argument. project() performs the perspective divide without clipping, so a
+    // point behind the camera comes back mirrored through the origin -- a plausible on-screen
+    // coordinate pointing exactly the wrong way. The sign of the depth along the camera's forward
+    // axis is the only thing that distinguishes them.
+    pointerTarget.set(place.x, POINTER_TARGET_HEIGHT_METERS, place.z);
+    pointerForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    // The dot product written out rather than `pointerTarget.clone().sub(...).dot(...)`. The clone
+    // allocated a Vector3 on EVERY FRAME of a game that has to run on a tablet, which is exactly the
+    // kind of steady garbage that shows up as stutter rather than as a bug. Three multiplies.
+    const behindCamera =
+      (place.x - camera.position.x) * pointerForward.x
+      + (POINTER_TARGET_HEIGHT_METERS - camera.position.y) * pointerForward.y
+      + (place.z - camera.position.z) * pointerForward.z < 0;
+
+    pointerTarget.project(camera);
+    const indicator = edgeIndicatorFor({
+      ndcX: pointerTarget.x,
+      ndcY: pointerTarget.y,
+      behindCamera,
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    });
+
+    // An arrow over a thing the child can already see is noise, and noise is how a child learns to
+    // stop looking at the screen.
+    objectivePointerElement.dataset.shown = String(!indicator.onScreen);
+    if (indicator.onScreen) return { pointing: false };
+    objectivePointerElement.style.transform = `translate(${indicator.x}px, ${indicator.y}px)`;
+    objectivePointerArrowElement.style.transform = `rotate(${indicator.angle}rad)`;
+    // Reported so the rescue offer can stay quiet while the errand is already in frame: see the
+    // call site. A caller that only wants the arrow drawn can ignore this.
+    return { pointing: true };
+  }
+  // THE DIAL. Hero at the centre, camera forward pointing up; ui/minimap.js owns the maths and the
+  // reasoning, including why it is camera-up rather than north-up and why it is not enemy radar.
+  //
+  // REDRAWN AT MOST TWELVE TIMES A SECOND, not every frame. A map is not an animation: at a walk of
+  // 1.4 m/s a child covers 12 cm between redraws on a 22 m dial, which is a third of a pixel. Sixty
+  // redraws a second would spend the difference on nothing, and this is a tablet game whose frame
+  // budget is already the thing that decides whether the opening fight is winnable.
+  const MINIMAP_REDRAW_INTERVAL_MS = 1000 / 12;
+  const minimapCanvas = document.querySelector('#minimap');
+  const minimapCtx = minimapCanvas.getContext('2d');
+  const minimapRadiusPx = minimapCanvas.width / 2;
+  let minimapDrawnAt = 0;
+  function renderMinimap(now, objectivePlace) {
+    if (now - minimapDrawnAt < MINIMAP_REDRAW_INTERVAL_MS) return;
+    minimapDrawnAt = now;
+    const shared = {
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      heading: follow.heading,
+      rangeMeters: DEFAULT_RANGE_METERS,
+      radiusPx: minimapRadiusPx,
+    };
+    const size = minimapCanvas.width;
+    minimapCtx.clearRect(0, 0, size, size);
+
+    // THE ROAD. Drawn as one path with out-of-range vertices kept in their true positions rather
+    // than pinned to the rim -- a road whose far ends are all on the rim stops being a road and
+    // becomes a starburst. The circular clip is what keeps it inside the dial.
+    minimapCtx.save();
+    minimapCtx.beginPath();
+    minimapCtx.arc(minimapRadiusPx, minimapRadiusPx, minimapRadiusPx, 0, Math.PI * 2);
+    minimapCtx.clip();
+    const road = minimapPolyline(VILLAGE.ROAD.points, shared);
+    minimapCtx.beginPath();
+    road.forEach((point, index) => {
+      if (index === 0) minimapCtx.moveTo(point.x, point.y);
+      else minimapCtx.lineTo(point.x, point.y);
+    });
+    minimapCtx.strokeStyle = 'rgba(214, 178, 122, 0.85)';
+    minimapCtx.lineWidth = 7;
+    minimapCtx.lineJoin = 'round';
+    minimapCtx.lineCap = 'round';
+    minimapCtx.stroke();
+    minimapCtx.restore();
+
+    // THE ERRAND, pinned to the rim when it is beyond the range -- the opposite rule to the road,
+    // and for the same reason the off-screen pointer exists: a marker that vanishes at the range
+    // boundary makes the dial go blank exactly when a child most needs to know which way to go.
+    if (objectivePlace) {
+      const marker = minimapPlacement({ ...shared, worldX: objectivePlace.x, worldZ: objectivePlace.z });
+      minimapCtx.beginPath();
+      minimapCtx.arc(marker.x, marker.y, marker.withinRange ? 9 : 7, 0, Math.PI * 2);
+      minimapCtx.fillStyle = '#f2b33d';
+      minimapCtx.fill();
+    }
+
+    // THE CHILD, always dead centre, always pointing up. The triangle is what makes "up is where you
+    // are facing" legible without a word of explanation.
+    minimapCtx.save();
+    minimapCtx.translate(minimapRadiusPx, minimapRadiusPx);
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(0, -11);
+    minimapCtx.lineTo(8, 8);
+    minimapCtx.lineTo(0, 3);
+    minimapCtx.lineTo(-8, 8);
+    minimapCtx.closePath();
+    minimapCtx.fillStyle = '#ffffff';
+    minimapCtx.fill();
+    minimapCtx.restore();
+  }
+
+  // OFFERING HELP, and mostly not offering it. The arrow only helps a child who looks at it.
+  //
+  // ui/guidanceRescue.js decides when one has stopped getting CLOSER -- not when they have stopped
+  // moving, and not when they are heading away. Both of those are wrong in opposite directions: a
+  // child rounding a house walks away for four seconds and is fine, and a child circling two metres
+  // from the Keeper never gets far away and is completely stuck.
+  //
+  // `rescueTarget` is held here rather than read in the handler because the objective is recomputed
+  // per frame inside the loop and a click arrives between frames. Storing the PLACE rather than the
+  // objective means the tap cannot aim at an errand that has since changed.
+  const guidanceRescueElement = document.querySelector('#guidance-rescue');
+  const rescueWatch = createRescueWatch();
+  let rescueTarget = null;
+  function renderRescueOffer(offering) {
+    guidanceRescueElement.dataset.shown = String(offering === true);
+  }
+  guidanceRescueElement.addEventListener('click', () => {
+    // Turn to face it. Not walk to it, and not a camera that turns by itself: camera/follow.js says
+    // the player owns the camera, so this is the one frame in the game where the game aims it, and
+    // only because a child asked it to.
+    if (rescueTarget) {
+      follow.setHeading(headingToward(player.position.x, player.position.z, rescueTarget.x, rescueTarget.z));
+    }
+    // Accepting quiets the watch until real progress, not until a timer expires. A child who has
+    // just been shown where to go and is now walking there must not be asked again on the way.
+    rescueWatch.accept();
+    renderRescueOffer(false);
+  });
   function renderNpcSpeech(next) {
     keeperSpeechElement.dataset.shown = String(next.visible);
     if (next.line !== npcSpeechLine) {
       npcSpeechLine = next.line;
       keeperSpeechTextElement.textContent = next.line ?? '';
+      // AND READ IT, once the child has asked to be read to. Refused until the speaker button has
+      // been tapped once -- see keeperSpeech.js for why that tap is both iOS's price for making a
+      // sound at all and the child's own signal. Fired here, on the line CHANGING, so walking back
+      // to a speaker mid-quest reads the new count rather than repeating the old sentence.
+      speakKeeperLineIfUnlocked(next.line);
     }
     if (next.name !== npcSpeechName) {
       npcSpeechName = next.name;
@@ -927,14 +1209,17 @@ async function bootstrap() {
   }
 
   // Offline fallback (brief D4): the SAME pure fold the server runs (rewards/marks.js), run locally
-  // against OFFLINE_HERO_ID-stamped events, so the mark-per-kill loop is demonstrable with no server
-  // at all. Deliberately session-only -- no sqlite, no guestId sent anywhere, nothing survives a
-  // refresh -- and that is not a bug to fix here: it is the honest, visible difference between this
-  // fallback and the real, persisted, online loop. A refresh while offline resets these three
-  // variables along with everything else in this closure, which is exactly the point.
-  let offlineRewardLedger = createRewardLedger();
-  let offlineMarks = 0;
-  let offlineLanternUnlocked = false;
+  // against OFFLINE_HERO_ID-stamped events, so the mark-per-kill loop works with no server at all.
+  //
+  // It used to be session-only, and this file argued that was honest rather than a defect. Director
+  // correction 4 retired that: a same-device family save must recover a child's progression whether
+  // or not a server was ever reachable, and Lantern Marks are named in the list. What a child earns
+  // on a tablet with no network is now journalled like everything else -- see rewards/offlineProgress.js,
+  // which also owns the reason the durable id could not just be the fold's own life index.
+  // Created below, immediately after the profile store it journals into -- see the offline
+  // progress block there. Declared here only so this section still reads in the order the loop
+  // runs in; a `let` rather than a const because the construction genuinely happens later.
+  let offlineProgress = null;
 
   // Belt-lantern mount state (brief D4). `lanternMounted` only ever flips true after a REAL attach
   // succeeds; a missing asset or an unloaded hero must not latch it, or a legitimately-unlocked
@@ -999,6 +1284,59 @@ async function bootstrap() {
     if (wildwoodBladeMount) wildwoodBladeMount.anchor.visible = visible.candidate;
   }
 
+  /**
+   * Mount a piece of gear on a REMOTE hero's clone, for net/remotes.js.
+   *
+   * The local hero's mounts above are lazy on purpose -- an asset is fetched only when THIS child
+   * earns the thing -- which means the ordinary situation at the moment a sibling earns one is that
+   * this client has never had a reason to load it. Without this the wire would say "Blade" or
+   * "lantern" and every other screen would still draw the old body: the defect with an extra step.
+   *
+   * `loadGLB` caches by URL, so a dozen siblings and this hero cost one download between them. The
+   * gltf.scene is cloned per mount: an Object3D has one parent, and attaching the cached one to a
+   * second hero would silently take it off the first.
+   *
+   * The asset-missing flags are SHARED with the local hero's mounts deliberately. Each is one fact
+   * about one file, and two flags for it would be two answers to "is this asset here" -- one of
+   * which would keep warning after the other had given up.
+   *
+   * Returns the anchor, never makes it visible: net/remotes.js decides that from the same rules the
+   * local hero is drawn by, and nothing else is allowed to show a piece of gear.
+   */
+  async function mountGearOnRemote(clonedRoot, gearId) {
+    if (gearId === WILDWOOD_BLADE_CANDIDATE_ID) {
+      if (wildwoodAssetMissing) return null;
+      const gltf = await loadGLB(WILDWOOD_BLADE_CANDIDATE_URL);
+      if (gltf.userData?.loadError) {
+        if (!wildwoodAssetMissing) {
+          wildwoodAssetMissing = true;
+          console.warn(
+            `[progression] ${WILDWOOD_BLADE_CANDIDATE_URL} is missing -- a sibling holding the Blade `
+            + 'is drawn with the Ironwood sword until the asset lands.',
+          );
+        }
+        return null;
+      }
+      return attachWildwoodBladeCandidate(clonedRoot, gltf.scene.clone(true)).anchor;
+    }
+    if (gearId === RIGID_BELT_LANTERN.id) {
+      if (lanternAssetMissingLogged) return null;
+      const gltf = await loadGLB(BELT_LANTERN_URL);
+      if (gltf.userData?.loadError) {
+        if (!lanternAssetMissingLogged) {
+          lanternAssetMissingLogged = true;
+          console.warn(
+            `[rewards] ${BELT_LANTERN_URL} is missing -- a sibling who has earned the lantern is `
+            + 'drawn with a bare belt until the asset lands.',
+          );
+        }
+        return null;
+      }
+      return attachBeltLantern(clonedRoot, gltf.scene.clone(true)).anchor;
+    }
+    return null;
+  }
+
   function ensureLanternMounted(shouldBeUnlocked) {
     if (!shouldBeUnlocked || lanternMounted || lanternMountInFlight || !runtime.hero) return;
     lanternMountInFlight = true;
@@ -1042,6 +1380,306 @@ async function bootstrap() {
   // `spawned` flag says the cart has actually been searched; see lootPickups.js's own header.
   const lootPickups = createLootPickups(scene, VILLAGE.CART_SEARCH.at);
 
+  // Who is playing, and the device's own durable copy of what they have earned. Created before the
+  // socket because the profile id IS what identifies this child on the wire: it travels in the
+  // guestId field (it is minted in that alphabet on purpose), so the server needs no change and
+  // PROTOCOL_VERSION stays where it is. A device that has only the old gq-guest-id migrates on this
+  // first read, reusing that string verbatim as the profile id, so every reward row already on the
+  // server stays attached without a backfill.
+  const profiles = createProfileStore();
+  // A hero named in the URL wins over whatever this device last had active. `.../?hero=Sam` is
+  // Sam's link -- the README's own "players join by URL" model, applied to a shared tablet -- and
+  // following it must put Sam's save on screen rather than the last child's. Done BEFORE the id is
+  // read, because it can change which profile is active. Unusable or unhonourable names return null
+  // and fall through to the ordinary gate.
+  try {
+    const wanted = new URLSearchParams(window.location.search).get('hero');
+    if (wanted) profiles.adoptNamedHero(wanted);
+  } catch (error) {
+    console.warn('[profiles] could not read the hero from the URL:', error?.message ?? error);
+  }
+  // The DURABLE id, or null when a device could not mint one at all. Only this may go on the wire:
+  // it is what ties a child to their rows in the server's store.
+  const durableProfileId = profiles.activeProfileId();
+  // What this session JOURNALS under. Falls back to a session-only id so a device that could not
+  // mint a durable one still plays a coherent session -- equip, marks and inventory all work, they
+  // simply are not there next time. Deliberately NOT sent as the guestId: a fixed fallback id on the
+  // wire would make every such device share one save on the server.
+  const profileId = durableProfileId ?? SESSION_ONLY_PROFILE_ID;
+  const profileName = profiles.activeProfile()?.displayName ?? 'player';
+
+  // WHAT THIS CHILD HAS ALREADY BEEN TAUGHT, read back from their own profile.
+  //
+  // The store has carried onboarding.{questGiven, movementTaught, attackTaught} since it was
+  // written; nothing has ever set them but `named`. So every latch reset on every reload: a child
+  // who came back tomorrow was a stranger who had never met the Keeper, and any hint keyed on these
+  // would have fired again at somebody who already knew. Durable teaching state is the difference
+  // between a save file and a session.
+  const taught = profiles.activeProfile()?.onboarding ?? {};
+  questGiven = taught.questGiven === true;
+  movementTaught = taught.movementTaught === true;
+  combatCoached = taught.attackTaught === true;
+
+  /** Write a latch down the first time it flips. No-op without a durable profile: a session-only
+   *  device still plays a coherent session, it simply has nowhere to remember into (see profileId
+   *  above), and silently doing nothing is the honest behaviour rather than inventing a home. */
+  function rememberTeaching(flags) {
+    if (!durableProfileId) return;
+    profiles.setFlags(durableProfileId, { onboarding: flags });
+  }
+
+  /**
+   * This device's own folded copy of the active profile's durable state.
+   *
+   * A CACHE of the journal and never a second authority -- every write path recomputes it from
+   * storage rather than mutating it in place, so the two cannot drift. That distinction is the whole
+   * GQ-014 lesson: a number kept alongside the record it is derived from eventually disagrees with
+   * it. It exists only because the frame loop reads the equipped weapon every frame and folding a
+   * JSON journal sixty times a second would be real work for a value that changes when a child taps
+   * a button.
+   *
+   * Shaped exactly like the wire's own rewards block (progression/facts.js's foldFacts says why), so
+   * the offline and online branches below feed one renderer rather than two.
+   */
+  let profileState = foldFacts([], {
+    equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
+    ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
+  });
+
+  function refreshProfileState() {
+    profileState = profiles.stateFor(profileId);
+    return profileState;
+  }
+  refreshProfileState();
+
+  // The offline reward loop, built HERE because it journals into the profile above and reads the
+  // durable count back to decide the lantern -- so it cannot exist before the profile does. It was
+  // first written further up, beside the frame-loop code that drives it, and that was a temporal
+  // dead zone: `profiles` is not initialised until this point and the page failed to boot with
+  // "Cannot access 'profiles' before initialization". Nothing under test/ loads main.js, so the
+  // unit suite could not see it; the browser found it on the first load.
+  offlineProgress = createOfflineProgress({
+    profiles,
+    profileId,
+    // Unique across page loads, not merely within one. See createLifeIdMinter: on the LAN http the
+    // tablets actually use, crypto.randomUUID is absent, and a counter there would recompute an id
+    // the journal already holds and silently swallow the first kill after every refresh.
+    mintLifeId: createLifeIdMinter(),
+  });
+
+  // ── WHO IS PLAYING ───────────────────────────────────────────────────────────────────────────
+  //
+  // A shared tablet with per-child saves needs a place to say which child this is. Everything under
+  // progression/ already keeps two siblings apart; without this the answer was decided silently by
+  // whatever localStorage happened to hold, which is fine for one child and wrong for two.
+  //
+  // SWITCHING RELOADS THE PAGE, deliberately. The profile id IS the wire's guestId and it is read
+  // once at bootstrap, so changing it mid-session would mean re-joining under a new identity while
+  // a fully built world, an open socket, a prediction buffer and a frame loop all still hold the old
+  // one. A reload is the only way to be certain nothing keeps a stale half of the previous child --
+  // and it costs a second on a game with no build step. It also gets the ceremony question right for
+  // free: the new session HYDRATES from the journal rather than replaying, so a sibling who already
+  // lit the lantern does not watch it be unlocked again (docs/MISTAKES.md, "Hydration restores
+  // state; it must not replay the ceremony that created it").
+  //
+  // Renaming does NOT reload: the id never moves, so nothing about the session is stale. That
+  // asymmetry is the id/name split made visible -- see progression/profiles.js's renameProfile.
+  const profileChipElement = document.querySelector('#profile-chip');
+
+  function heroesForGate() {
+    // Each sibling's own folded state, so the cards can say how far each has got. Read here rather
+    // than in the view model because deriving it means touching storage, and that half is pure.
+    return profiles.listProfiles().map((profile) => ({
+      id: profile.id,
+      displayName: profile.displayName,
+      // THE STORED ANIMAL, CARRIED THROUGH. It was missing, and because this object is built field
+      // by field rather than spread, nothing said so: `hero.avatar` was simply undefined and
+      // avatarForProfile fell through to its id-derived fallback for EVERY card. The stored value
+      // was written correctly and then never read, so a new sibling's animal was decided by their
+      // random uuid rather than by what was free -- which is the collision the allocator was fixed
+      // to prevent, arriving one layer further out.
+      //
+      // It hid because the id-derived answer is a legitimate-looking animal: six of them, so two
+      // profiles agree about one time in six, and the browser check that was supposed to catch this
+      // asked "are they different" and passed on luck four runs in a row.
+      avatar: profile.avatar,
+      ...profiles.stateFor(profile.id),
+    }));
+  }
+
+  function gateView() {
+    return profileGateViewModel({
+      heroes: heroesForGate(),
+      activeProfileId: profileId,
+      // Asked once, on a device whose only hero has never been given a name. A returning child gets
+      // the chooser; a brand-new one gets the question, because a list of one is not a choice.
+      namingFirstHero: profiles.listProfiles().length <= 1
+        && profiles.activeProfile()?.onboarding?.named !== true,
+    });
+  }
+
+  function paintProfileChip() {
+    if (profileChipElement) {
+      // THE ANIMAL, then the name. This chip used to be the name alone, and its own CSS comment gave
+      // the reason -- "the child's own hero name is the most recognisable thing that could sit
+      // there". That was true when it was written and stopped being true the day the chooser grew
+      // animals, which exist precisely because a child who cannot read does not recognise their
+      // name. The rationale outlived the decision it was reasoning about, and nobody went back to
+      // it: the one screen a child spends all their time on was the one that still said "who you
+      // are" in letters. The name stays beside it for the adult in the room, exactly as on a card.
+      const active = profiles.activeProfile();
+      const avatar = active ? avatarForProfile(active) : null;
+      profileChipElement.replaceChildren();
+      if (avatar) {
+        // NOT .profile-card-face (GQ-020): this is not a card, and everything that counts cards by
+        // their faces would count this one.
+        const face = document.createElement('span');
+        face.className = 'profile-chip-face';
+        face.textContent = avatar.emoji;
+        face.style.background = avatar.colour;
+        face.setAttribute('role', 'img');
+        face.setAttribute('aria-label', avatar.name);
+        profileChipElement.append(face);
+      }
+      const label = document.createElement('span');
+      label.className = 'profile-chip-name';
+      label.textContent = active?.displayName ?? 'Hero';
+      profileChipElement.append(label);
+    }
+  }
+
+  function switchToProfile(profileId_) {
+    profiles.selectProfile(profileId_);
+    // Reload WITHOUT the `hero` parameter, and this is not tidiness -- it is the difference between
+    // the switch working and silently not happening. `?hero=Sam` is adopted on every boot, so a
+    // plain reload would re-select Sam and undo the choice the child just made. The gate would look
+    // like it did nothing, forever, for anyone who followed a named link.
+    //
+    // Only `hero` is dropped; anything else in the query is somebody's and stays.
+    let target = null;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('hero');
+      target = url.toString();
+    } catch {
+      target = null;
+    }
+    if (target && target !== window.location.href) window.location.replace(target);
+    else window.location.reload();
+  }
+
+  const profileGate = createProfileGate({
+    onSelect: (id) => {
+      // Choosing the hero already playing is not a switch; closing is the honest response to it, and
+      // reloading would make a child who tapped their own card watch the game restart for nothing.
+      if (id === profileId) {
+        profiles.setFlags(id, { onboarding: { named: true } });
+        profileGate.close();
+        return;
+      }
+      switchToProfile(id);
+    },
+    onCreate: (displayName) => {
+      try {
+        const created = profiles.createProfile(displayName);
+        profiles.setFlags(created.id, { onboarding: { named: true } });
+        switchToProfile(created.id);
+      } catch (error) {
+        // The only real cause is the MAX_PROFILES cap, which the gate already refuses to offer a
+        // button for -- so reaching here means the view and the store disagreed. Re-render from the
+        // store, which is the side that is right.
+        console.warn('[profiles] could not create a hero:', error?.message ?? error);
+        profileGate.render(gateView());
+      }
+    },
+    onRename: (id, displayName) => {
+      profiles.renameProfile(id, displayName);
+      // Named, so the gate stops asking. Recorded against the profile rather than in a variable
+      // here for the obvious reason: the question must not come back on the next page load.
+      profiles.setFlags(id, { onboarding: { named: true } });
+      paintProfileChip();
+      profileGate.render(gateView());
+      profileGate.close();
+    },
+    onDelete: (id) => {
+      profiles.deleteProfile(id);
+      // Deleting the hero currently playing leaves this session holding an id with no profile and no
+      // journal behind it, which is not a state to keep rendering from -- reload into whoever is
+      // left, or into the naming question if that was the last one.
+      if (id === profileId) {
+        window.location.reload();
+        return;
+      }
+      profileGate.render(gateView());
+    },
+    onOpenChange: (open) => {
+      // The same input-suspend contract the other two overlays have. Movement and attack must not
+      // be drivable behind a screen that is asking whose game this is.
+      touchStickElement.dataset.suspended = String(open);
+      attackButtonElement.dataset.suspended = String(open);
+      // And the same HUD-hiding attribute, for a reason a capture made obvious: a dimmed backdrop
+      // still leaves the hearts and the objective looking tappable, and behind a modal they are not.
+      gameSurface.dataset.profileGateOpen = String(open);
+      if (open) {
+        heroScreen.close();
+        villageBoard?.close();
+      }
+    },
+  });
+
+  paintProfileChip();
+  profileChipElement?.addEventListener('click', () => {
+    profileGate.render(gateView());
+    profileGate.open();
+  });
+
+  // A brand-new hero is asked their name before anything else. Not gated on the socket or the
+  // world: the question is answerable while the village is still loading, and a child staring at a
+  // half-built village with no idea what to do is the failure this whole checkpoint is about.
+  if (gateView().mode === 'naming') {
+    profileGate.render(gateView());
+    profileGate.open();
+  }
+
+  /**
+   * Write a durable fact into this device's own journal as it is announced.
+   *
+   * The server is still the one that DECIDES a mark was earned -- this only keeps a second copy of
+   * the decision, under the same id the server used, so a family's progress does not live solely in
+   * a database that can be wiped or replaced (progression/facts.js's union law is what makes two
+   * copies safe rather than ambiguous). Events that predate the id riding the wire simply carry no
+   * eventId and are skipped: a fact with no stable name cannot be deduplicated, and guessing one
+   * would be worse than not recording it.
+   */
+  // Counted rather than inferred, so "does this actually happen" is answerable from a harness rather
+  // than from reading the server. A guard against a case that never occurs is dead weight pretending
+  // to be a fix.
+  let rewardsAlreadyKnown = 0;
+  function journalDurableFact(event) {
+    // No stable id means it cannot be deduplicated, so this device cannot tell a replay from a first
+    // sighting. Reported as news, which is exactly today's behaviour for such an event -- the
+    // conservative answer, because suppressing a ceremony we are unsure about is a silent loss and
+    // firing one is a visible duplicate.
+    if (typeof event?.eventId !== 'string') return true;
+    const { appended } = profiles.recordFacts(profileId, [{
+      eventId: event.eventId,
+      type: event.type,
+      // Carried when the event has one. A gear-owned fact is worthless without knowing WHICH gear,
+      // and dropping it here would journal an item the fold cannot name.
+      ...(typeof event.value === 'string' ? { value: event.value } : {}),
+    }]);
+    // The cache is derived, so it is recomputed rather than incremented -- see profileState. An
+    // offline mark has already refreshed it by this point; an ONLINE one has not, and without this
+    // a child who plays online and then loses the network would drop back to a stale count.
+    refreshProfileState();
+    // WHETHER THIS WAS NEWS. recordFacts is idempotent by eventId, so `appended` already answers the
+    // only question a ceremony needs to ask: had this device seen this exact fact before? On a
+    // reconnect to a wiped server the device teaches its own marks back and the server announces
+    // them straight to it, and every one of those arrives here having been journalled long ago.
+    if (appended === 0) rewardsAlreadyKnown += 1;
+    return appended > 0;
+  }
+
   // Phase D (D4): mark-earned/lantern-unlocked are never raised by combat/encounter.js, so they can
   // never enter createEncounterFeedback's table (see rewards/feedback.js's header for why that is a
   // hard boundary, not an oversight) -- this is their own dispatcher, same discipline.
@@ -1052,8 +1690,23 @@ async function bootstrap() {
     // is 1.1rem of dot in a corner they are not looking at while a wolf is biting them. The spark
     // lifts off wherever the wolf went down (its last published position, read here rather than at
     // dispatch time so it is the position the child just watched it die at) and flies to the belt.
-    'mark-earned'(event) {
+    'mark-earned'(event, { firstTimeSeen }) {
       rewardEventLog.push(event);
+      // NOT OWED A SECOND TIME. This handler used to launch a light unconditionally, and on a
+      // reconnect to a server that has never heard of this child, the device teaches its marks back
+      // and the server announces every one of them -- so two marks earned minutes ago each launched
+      // a fresh light from wherever the wolf happens to be standing.
+      //
+      // Worse than the duplicate ceremony: `marksInTheAir` went up by two, and the pips are drawn as
+      // "what the server credits MINUS what is still flying", so the child's lantern row read ZERO
+      // while they were holding two marks. Measured in a browser, at the moment of reconnect:
+      // `pips 0, server's own keyed entry 2, harness read 2`. Their save was intact and the HUD said
+      // they had nothing.
+      //
+      // This is the rule the rest of this table already states in its own comments -- "those diffs
+      // are what make a beat survive a reconnect without replaying, so nothing here may fire one".
+      // These two were the handlers not keeping it.
+      if (!firstTimeSeen) return;
       // GP1-C6: NO BANNER HERE ANY MORE. This fires on the same frame as wolf-defeated, so the two
       // announcements used to overwrite each other -- "The wolf is beaten!" appeared and was replaced
       // by "Lantern Mark!" before it could be read, and both landed under the kill's own gold burst.
@@ -1064,7 +1717,29 @@ async function bootstrap() {
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
     // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
-    'lantern-unlocked'(event) { rewardEventLog.push(event); banner('All three marks! Take them home.', 3200); },
+    'lantern-unlocked'(event, { firstTimeSeen }) {
+      rewardEventLog.push(event);
+      // Same rule as the mark above: a returning child must not be told to take their marks home
+      // again because the server they just met was told about them.
+      if (!firstTimeSeen) return;
+      banner('All three marks! Take them home.', 3200);
+    },
+    // Currency: DURABILITY ONLY, no ceremony. The pickup's own burst, sound and loot-HUD count
+    // already told the child what happened, and every one of those is diffed off the rewards block
+    // as before. These handlers exist so the fact is journalled under the store's own id by the
+    // dispatch loop below -- a count cannot be journalled, only a named fact can. They are present
+    // rather than absent because createRewardFeedback throws at construction for a missing handler,
+    // which is the guarantee that a new reward type cannot be half-added.
+    'coin-earned'(event) { rewardEventLog.push(event); },
+    'shard-earned'(event) { rewardEventLog.push(event); },
+    // Gear, satchel and charm: durability only, for the same reason as currency. Each already has
+    // its own ceremony fired by DIFFING the rewards block -- the Blade's unlock card, the satchel
+    // lift, Wren's fourth heart -- and those diffs are what make a beat survive a reconnect without
+    // replaying, so nothing here may fire one. What these add is the NAMED fact, journalled by the
+    // dispatch loop under the id the store wrote it with.
+    'gear-owned'(event) { rewardEventLog.push(event); },
+    'satchel-taken'(event) { rewardEventLog.push(event); },
+    'charm-earned'(event) { rewardEventLog.push(event); },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See
@@ -1145,6 +1820,20 @@ async function bootstrap() {
       flashHeroHurt();
       renderHearts(event.remaining);
       reactions?.triggerHit({ swinging: swing?.isSwinging() === true });
+      // THE ONE SENTENCE THE GAME NEVER SAID. Measured against the real rules: a child who freezes
+      // and never swings takes 7 knockouts in a minute and never scratches the wolf, while a child
+      // who mashes the button kills it in 3.85 seconds. The whole distance between those is whether
+      // they found the verb, and nothing -- not the Keeper, not a banner, not a hint -- had ever
+      // named it. combat/coaching.js carries the measurement and picks the line for this device.
+      //
+      // Once, on the FIRST bite. A child who has been told and is now fighting does not need telling
+      // again, and a game that repeats itself is a game they stop reading. Held a little longer than
+      // an ordinary banner because it is the only instruction in the game.
+      if (!combatCoached) {
+        combatCoached = true;
+        rememberTeaching({ attackTaught: true });
+        banner(firstHurtCoachingLine(POINTER_MODE), 3200);
+      }
     },
     // The wolf's jaws visibly close on nothing; that already reads without extra feedback.
     'bite-missed'() {},
@@ -1210,10 +1899,53 @@ async function bootstrap() {
   // Multiplayer is additive: the socket is never awaited, and every failure path leaves a playable
   // single-player game. A child on a phone with no server still gets a hero that walks.
   let netStatus = 'offline';
-  let lastReconcile = { drift: 0, snapped: false };
+  let lastReconcile = { drift: 0, snapped: false, corrections: 0 };
+  /**
+   * The reconnect contract, run on EVERY welcome rather than only the first -- a reconnect is a
+   * fresh join, and whatever the device missed while it was away arrives here.
+   *
+   * Two halves, in this order, and the order is the point:
+   *
+   * 1. Ingest. progression/profiles.js journals every fact the server knows and settles each one's
+   *    revision durably before deriving. Local progression must not mint above history it has not
+   *    written down yet, or a new choice gets numbered beneath an old one it was told about in this
+   *    very message (docs/MISTAKES.md GQ-014).
+   *
+   * 2. Restore what the server has not got. A child who played offline holds marks, gear and a
+   *    weapon the server never saw; it is about to publish a rewards block saying otherwise and
+   *    silently take them back. The ORIGINAL facts are sent, identities and revisions intact, so the
+   *    server records what the child actually did at the moment they did it -- and because every
+   *    fact carries its own id, a resend is an INSERT OR IGNORE no-op rather than a second earning.
+   *
+   *    The whole missing set rather than just the equip, and that is not thoroughness for its own
+   *    sake: net/gameServer.mjs refuses an equip for a weapon the guest does not own, so against a
+   *    store that has lost this profile, sending the choice without the ownership it depends on is
+   *    rejected and the hero snaps back to a weapon the child stopped holding. The two have to
+   *    arrive together, which is why this is one message and not a sequence of them.
+   */
+  function ingestWelcome(message) {
+    const serverFacts = Array.isArray(message?.profileFacts) ? message.profileFacts : [];
+    profileState = profiles.ingestServerFacts(profileId, serverFacts);
+
+    // Everything this device holds that the server does not. Empty on an ordinary reconnect to a
+    // store that still knows this child, so the common case sends nothing at all.
+    const knownToServer = new Set(serverFacts.map((fact) => fact.eventId));
+    const missing = profiles.journalFor(profileId).filter((fact) => !knownToServer.has(fact.eventId));
+    // Only worth sending when this device HAS a durable identity. Without one the server treats the
+    // connection as ephemeral and refuses the restore outright -- correctly, it has no profile to
+    // restore into -- so an unguarded send would push the device's whole journal on every single
+    // reconnect, forever, to be thrown away every time. Harmless per message and wasteful in the
+    // exact situation that produces it: a device whose storage is failing, reconnecting repeatedly.
+    if (durableProfileId && missing.length > 0) net.sendRestoreProfile(missing);
+  }
+
   const net = createNetClient({
-    name: 'player',
+    name: profileName,
+    // Only a DURABLE id goes on the wire -- see profileId's own comment for why the session-only
+    // fallback must not.
+    guestId: durableProfileId ?? undefined,
     onStatus: (next) => { netStatus = next; },
+    onWelcome: (message) => ingestWelcome(message),
     onLeave: (id) => remotes?.remove(id),
     // Snapshots arrive at 10 Hz on their own schedule, independent of the frame loop, so the
     // block is captured here and the events queued; the frame loop mirrors/drains both once per
@@ -1247,6 +1979,10 @@ async function bootstrap() {
       snapshots: net.snapshotCount,
       drift: lastReconcile.drift,
       snapped: lastReconcile.snapped,
+      // How many snapshots the last reconcile actually consumed. Published so a harness can MEASURE
+      // the correction count instead of modelling it from a frame rate it cannot predict -- the
+      // modelled version is what play-fight's settle budget had to guess at.
+      corrections: lastReconcile.corrections,
       url: net.url,
     }),
     player,
@@ -1268,7 +2004,7 @@ async function bootstrap() {
     // a harness does not need to know gear.js's node-naming convention to ask "did it mount".
     rewards: () => (netStatus === 'online'
       ? (serverEncounter?.rewards ?? {})
-      : { [OFFLINE_HERO_ID]: { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked } }),
+      : { [OFFLINE_HERO_ID]: profileState }),
     lanternMounted: () => lanternMounted,
     // GP1: "observable without seeing it" once more (see zoneKeeperState's own comment for the
     // pattern) -- a harness can confirm the Hero screen actually opened/closed and read what it is
@@ -1276,7 +2012,7 @@ async function bootstrap() {
     heroScreenOpen: () => heroScreen.isOpen(),
     heroScreenEquippedWeaponId: () => equippedWeaponIdFromRewards(netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { equippedWeaponId: offlineEquippedWeaponId }),
+      : profileState),
     // GP1-C3: the showcase pass's own state -- whether it is drawing, which accent the equipped
     // weapon put on its kickers, the framing it solved for this viewport, and the live hero's bounds
     // PROJECTED THROUGH THE PREVIEW CAMERA into normalized screen space. Same "observable without
@@ -1329,6 +2065,11 @@ async function bootstrap() {
     // GP1-C5: whether the screen is currently in the knocked-out state, so a harness can assert
     // the state exists rather than inferring it from a banner that has already faded.
     heroDownShown: () => heroDownVeilElement.dataset.shown === 'true',
+    /** The swing the ANIMATION is playing, which online is the local prediction until the server
+     *  confirms and the server's own number afterwards. Read-only, and published for the same
+     *  reason heroDownShown is: a claim about what is on screen has to be answerable from what is
+     *  on screen, not from the rules layer that is still a round trip behind it. */
+    swingSecondsShown: () => swingSecondsShown,
     // GP1-C5: how many impact rings are on screen this instant, so a harness can prove a blow
     // produced a visible event rather than only that the rules said it landed.
     impactBurstsLive: () => impactBursts.liveCount(),
@@ -1426,6 +2167,27 @@ async function bootstrap() {
     // this body actually have. Reported as OBSERVABLE facts rather than as the flags behind them --
     // `rangerHere` is whether the mesh is drawn, not whether the Beacon is lit, which is the
     // distinction docs/MISTAKES.md GQ-013 is about.
+    // The guidance rescue's own reading, for the same reason every zone exposes one: a harness has
+    // to be able to ask why the offer did or did not appear, and "it did not" is not an answer.
+    // WHY THE LANTERN ROW LOOKS THE WAY IT DOES. The pips are drawn as "what the child has been
+    // credited MINUS what is still flying to them", and when they read zero beside a credited count
+    // of two there is no way to tell from outside which half is responsible. Same posture as every
+    // other accessor here: readable, not drivable.
+    markHudState: () => ({
+      marksInTheAir,
+      authoritativeMarksThisFrame,
+      pipsShown: lanternPipElements.filter((pip) => pip.dataset.filled === 'true').length,
+      // How many reward announcements arrived that this device had ALREADY journalled. Non-zero
+      // means the server told this child about something they earned before it had ever heard of
+      // them -- which is exactly what a reconnect to a wiped database does, and exactly the case a
+      // one-shot ceremony must not fire for.
+      rewardsAlreadyKnown,
+    }),
+    guidanceRescueState: () => ({
+      ...rescueWatch.debugState(),
+      targetX: rescueTarget?.x ?? null,
+      targetZ: rescueTarget?.z ?? null,
+    }),
     zoneRangerState: () => ({
       rangerHere: zoneRanger?.isHere() === true,
       rangerBuilt: zoneRanger !== null,
@@ -1525,9 +2287,12 @@ async function bootstrap() {
     // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
     // and the showcase pass needs the current equipped id the frame the screen OPENS, so it can pick
     // up mid-frame whatever the DOM render below just set rather than painting one frame stale.
+    // Offline this is the device's own journal, folded -- the same shape the wire's rewards block
+    // has, which is what lets one renderer read either. It carries real owned items too, so an
+    // offline child's Hero screen shows what they have actually earned rather than the starter set.
     const ownRewards = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { equippedWeaponId: offlineEquippedWeaponId };
+      : profileState;
     const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
     if (heroScreenOpen) {
       heroScreen.render(heroScreenViewModel({
@@ -1562,6 +2327,15 @@ async function bootstrap() {
     const input = anyOverlayOpen ? touchInput : (touchInput.active ? touchInput : keyboard.read());
     const inputMagnitude = Math.hypot(input.screen.x, input.screen.y);
     player.groundSpeed = groundSpeedForInput(inputMagnitude, input.run);
+    // MOVEMENT IS LEARNED BY DOING IT. There is no movement tutorial to have been shown, so the
+    // honest latch is that this child has driven themselves at least once -- which is the thing any
+    // future "use the stick" hint would need to know, and the thing that must not un-learn itself on
+    // reload. Gated on a real push rather than any non-zero reading, so a resting thumb or a
+    // fractional drift does not count as having learned.
+    if (!movementTaught && inputMagnitude > 0.25) {
+      movementTaught = true;
+      rememberTeaching({ movementTaught: true });
+    }
     // One direction, used for both the local integration and the wire, so the server can never be
     // told a different heading from the one the hero is walking.
     const worldDirection = worldDirectionForInput(input.screen, follow.heading);
@@ -1690,7 +2464,40 @@ async function bootstrap() {
       if (!heroIsDown) locomotion?.update(deltaSeconds, player.groundSpeed);
       // Remotes are drawn from interpolated snapshots, not predicted: we have no idea what another
       // child's thumb is doing, and guessing would walk them through scenery.
-      remotes?.update(net.sampleRemotes(), deltaSeconds);
+      //
+      // The party block rides along because a sibling has a body too. The wire has carried every
+      // hero's swingSeconds and downSeconds since the party fight was written -- not just this
+      // one's -- and until this argument existed net/remotes.js drew all of them in idle: a child
+      // watched their sibling glide around while the wolf lost hp from nowhere, and stand upright
+      // through the two seconds they were dead.
+      //
+      // Read off `serverEncounter` rather than `encounterState`, and that is not incidental. The
+      // online rebuild above folds only THIS hero out of the party (`published.heroes[ownHeroId]`
+      // -> `hero`), so `encounterState` has no party on it; and giving it one would put the wire's
+      // four-field hero shape and the rules' full hero shape under a single name, which is the
+      // two-competing-truths problem rather than a convenience. Same `serverEncounter?.x` idiom
+      // `village` uses a few lines up.
+      //
+      // BOTH DELTAS, EXPLICITLY. The clamped one is a movement guard; handing it to a reaction
+      // mixer plays every reaction in slow motion by the ratio -- the defect documented at length
+      // on the LOCAL hero further down, and the single easiest thing to reintroduce here by
+      // passing one number for two jobs.
+      //
+      // The weapons come off the REWARDS block, which already carries `equippedWeaponId` per hero on
+      // every snapshot. The first version of this added `players[].weaponId` to the wire, plumbed it
+      // through protocol.js and all three of interpolation.js's sample paths, and only then noticed
+      // the fact was already there -- a second source for one truth, which is the shape half this
+      // repo's ledger is about. Withdrawn. The one thing the withdrawn version had that this does not
+      // is that the sword travelled WITH the interpolated body, so a swap landed on the frame the
+      // hand arrived rather than an interpolation delay ahead of it; that is a hundred milliseconds
+      // on a once-a-session event, and it is not worth a duplicate wire field. `heroes` above is read
+      // the same way, for the far more timing-sensitive knockdown.
+      remotes?.update(net.sampleRemotes(), {
+        deltaSeconds,
+        reactionDeltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
+        heroes: netStatus === 'online' && serverEncounter?.heroes ? serverEncounter.heroes : {},
+        rewards: netStatus === 'online' && serverEncounter?.rewards ? serverEncounter.rewards : {},
+      });
       // Read the mode from the speed the locomotion controller is given, not from the run flag, so
       // the status line cannot disagree with the clip actually playing.
       // Read from the controller, not from the speed alone: standing now plays a real idle clip on
@@ -1776,27 +2583,32 @@ async function bootstrap() {
           // re-derived). Resolved to a number on this side of the seam, exactly as
           // net/gameServer.mjs does for the online fight.
           heroWeaponDamage: swingDamageFor(equippedWeaponIdThisFrame),
+          // THE SAME QUESTION net/gameServer.mjs asks per player, asked here for the offline hero
+          // and answered by the same function against the same RANGER_CLAIM radius. A child playing
+          // with no socket gets the identical sanctuary; two answers to "may the wolf have this
+          // child" would be two things to keep in step, which is the whole of GQ-007.
+          heroTargetable: !rangerSanctuaryHolds({
+            heroX: player.position.x,
+            heroZ: player.position.z,
+            rangerX: VILLAGE.RANGER_CLAIM.at[0],
+            rangerZ: VILLAGE.RANGER_CLAIM.at[1],
+            claimRadiusMeters: VILLAGE.RANGER_CLAIM.radiusMeters,
+            beaconLit: siegeState.beaconLit,
+          }),
         });
         encounterState = stepped.state;
         events.push(...stepped.events);
 
         // Offline fallback reward loop (brief D4): the same D1 fold net/gameServer.mjs runs online,
-        // run here against the solo hero's own (heroId-less) events, stamped with OFFLINE_HERO_ID so
-        // foldEvents has someone to credit. See offlineRewardLedger's own comment above for why this
-        // is session-only by construction.
-        const offlineFolded = foldEvents(
-          offlineRewardLedger,
-          stepped.events.map((event) => ({ ...event, heroId: OFFLINE_HERO_ID })),
-        );
-        offlineRewardLedger = offlineFolded.ledger;
-        for (const award of offlineFolded.awards) {
-          if (award.type !== 'mark-earned') continue;
-          offlineMarks += 1;
-          events.push({ type: 'mark-earned' });
-        }
-        if (!offlineLanternUnlocked && offlineMarks >= MARKS_TO_UNLOCK) {
-          offlineLanternUnlocked = true;
-          events.push({ type: 'lantern-unlocked' });
+        // run here against the solo hero's own (heroId-less) events -- see rewards/offlineProgress.js
+        // for the stamping, the durable id, and why the two cannot be done separately.
+        // Each raised event carries the durable eventId it was recorded under, so the dispatcher's
+        // journalDurableFact writes the same named fact an online mark writes rather than a
+        // nameless one -- which is what lets the two origins merge instead of double-count.
+        const earned = offlineProgress.recordKills(stepped.events);
+        if (earned.length > 0) {
+          refreshProfileState();
+          events.push(...earned);
         }
       }
 
@@ -1806,7 +2618,7 @@ async function bootstrap() {
       // state -- pips and the lantern mount always read whichever of these two is live right now.
       const ownRewards = netStatus === 'online'
         ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-        : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
+        : profileState;
       renderLanternPips(markProgressToShow(ownRewards?.marks ?? 0));
       ensureLanternMounted(ownRewards?.lanternUnlocked === true);
 
@@ -1826,13 +2638,18 @@ async function bootstrap() {
         bladeOwnedSeen = ownsBladeNow;
       } else if (ownsBladeNow && !bladeOwnedSeen) {
         bladeOwnedSeen = true;
-        unlockCard.show(unlockCardState({
+        const unlocked = unlockCardState({
           itemName: itemDef(WILDWOOD_BLADE_ID)?.name ?? 'Wildwood Blade',
           // Honest about what it replaces: compared against whatever is actually EQUIPPED right
           // now, read off the same id the hero's own hand is drawn from (GQ-007).
           fromDamage: damageFor(currentEquippedWeaponId),
           toDamage: damageFor(WILDWOOD_BLADE_ID),
-        }));
+        });
+        unlockCard.show(unlocked);
+        // And say it, for the child this card was always least use to. Same latch as the bubble and
+        // the banner -- silent until a real tap has asked for it. See unlockCardState for why the
+        // spoken wording is not the four strings on the card.
+        speakKeeperLineIfUnlocked(unlocked.spoken);
         audio.play('blade-unlock');
       }
 
@@ -1892,6 +2709,7 @@ async function bootstrap() {
       const swingSecondsForClip = netStatus === 'online' && hero.swingSeconds < 0 && predictedSwingSeconds >= 0
         ? predictedSwingSeconds
         : hero.swingSeconds;
+      swingSecondsShown = swingSecondsForClip;
       // Between locomotion (the base pose) and the swing (the top priority): reactions write over
       // the stride, and an active swing writes over a reaction, which is the mechanical half of
       // the owner's attack-takes-precedence rule -- reactClips.js's trigger gate is the other half.
@@ -1904,11 +2722,28 @@ async function bootstrap() {
       // FIRST when down means any stale restore lands before reactions writes the death pose, so
       // death's write is the one that survives the frame -- "death visually supersedes swing" without
       // touching swingClip.js itself.
+      // THE RAW DELTA for reactions, not the clamped one -- the same distinction the rescue watch
+      // draws further down, and for a related reason. `deltaSeconds` is capped at 0.1 so a hitch
+      // cannot teleport the hero; an animation mixer has no such hazard, because advancing a clip
+      // further is exactly what more elapsed time should do. Under that cap a device rendering
+      // slower than 10fps plays every reaction clip in SLOW MOTION by the ratio, and the death clip
+      // is retimed to only just fit its window at full speed.
+      //
+      // MEASURED, on the GPU-less container this suite runs on, at 3.1fps: the death clip reached
+      // 55% of its length in the two seconds the hero is down, so his hips never got below 65% of
+      // standing height. What a child saw was a hero drop to one knee and pop straight back up --
+      // character/reactClips.js's header describes that exact defect and the rewrite that killed it,
+      // and the clamp had quietly brought it back on precisely the cheap tablet this game is for.
+      // The arithmetic: the fall needs clipSeconds of mixer time inside RESPAWN_SECONDS of wall
+      // clock, so it survives the cap only above 0.1 / DEATH_FALL_FRACTION -- about 5.5fps.
+      // Caught by the body-height check in tools/runtime-test/play-fight.mjs, which measures the
+      // rendered skeleton rather than asking whether a flag was set.
+      const reactionDeltaSeconds = frameDeltaMs === null ? 0 : frameDeltaMs / 1000;
       if (heroIsDown) {
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
-        reactions?.update(deltaSeconds, hero);
+        reactions?.update(reactionDeltaSeconds, hero);
       } else {
-        reactions?.update(deltaSeconds, hero);
+        reactions?.update(reactionDeltaSeconds, hero);
         // AFTER locomotion.update(), which is what writes the walk pose. The swing is an offset on
         // top of that pose, so running it first would be overwritten the same frame.
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
@@ -1927,10 +2762,20 @@ async function bootstrap() {
       // breaking that guard's own regression test. Same "every event accounted for, sound decided
       // explicitly" discipline, just addressed through its own two small tables.
       for (const event of events) {
-        if (event.type === 'mark-earned' || event.type === 'lantern-unlocked') {
-          const rewardRecipeName = soundForRewardEvent(event.type);
+        // Journalled HERE rather than inside the two reward handlers that used to do it, so the
+        // device keeps a copy of every durable fact it is told about rather than of the two types
+        // somebody remembered to wire. journalDurableFact ignores anything with no stable id, and
+        // recordFacts refuses anything that is not a profile fact, so widening the call cannot
+        // journal something it should not -- and a new durable event type stops needing a second
+        // edit here to be remembered.
+        const firstTimeSeen = journalDurableFact(event);
+        if (REWARD_EVENT_TYPES.includes(event.type)) {
+          // SILENT AS WELL AS STILL. A replayed reward that suppressed its light but still played
+          // its sparkle would be a beat with no cause -- and on a reconnect carrying three marks it
+          // is three of them, in a row, for nothing the child just did.
+          const rewardRecipeName = firstTimeSeen ? soundForRewardEvent(event.type) : null;
           if (rewardRecipeName) audio.play(rewardRecipeName);
-          onRewardEvent(event);
+          onRewardEvent(event, { firstTimeSeen });
           continue;
         }
         const recipeName = soundForEvent(event.type);
@@ -1973,7 +2818,7 @@ async function bootstrap() {
     // decides "lit or not" from that shape; see zoneLoader.js.
     const rewardsForRelight = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
-      : { marks: offlineMarks, lanternUnlocked: offlineLanternUnlocked };
+      : profileState;
     const lanternUnlockedNow = lanternUnlockedFromRewards(rewardsForRelight);
     // GP3: the Village Board's own render, reusing lanternUnlockedNow just computed above rather
     // than re-deriving a second "is the tree lit" answer -- see village/boardScreen.js's own
@@ -2145,7 +2990,10 @@ async function bootstrap() {
     if (rowanSpeech.visible) rowanMet = true;
     // He has told you, so the objective chip can stop telling you first. Latched rather than read
     // live, so the instruction does not vanish again the moment the child steps out of his radius.
-    if (keeperSpeech.visible) questGiven = true;
+    if (keeperSpeech.visible && !questGiven) {
+      questGiven = true;
+      rememberTeaching({ questGiven: true });
+    }
     // And the "!" over his head goes out with it. Shown only while he is the thing to do: a child
     // who has already been told, or who came back tomorrow with two marks on record, is not sent to
     // queue at an old man again. Keyed on the same latch the objective chip reads, so the floating
@@ -2720,7 +3568,14 @@ async function bootstrap() {
     }
 
 
-    renderQuestObjective(questObjectiveFor(
+    // ONE objective, read once, rendered two ways. The chip shows its words and the pointer shows
+    // where it is -- and because they are the same value rather than two calls, the arrow can never
+    // point at a different errand from the one named above it. That is the whole reason an objective
+    // became a thing with a NAME instead of a sentence.
+    //
+    // The optional chain keeps the null branch working: questObjectiveFor returns null before there
+    // are any rewards to reason about, and both renderers treat null as "show nothing".
+    const currentObjective = questObjectiveFor(
       rewardsKnown ? rewardsForRelight : null, treeLitNow, gateFound, questGiven,
       {
         lights: VILLAGE.TRAIL_LIGHTS.length,
@@ -2742,7 +3597,44 @@ async function bootstrap() {
         hollowFound,
         lodgeFound,
       },
-    ));
+    );
+    renderQuestObjective(currentObjective?.text ?? null);
+    // The two dynamic destinations -- the next dark light, the next unbroken seal -- are not supplied
+    // yet, so those objectives draw no arrow rather than a wrong one. destinationFor returns null for
+    // a place the caller could not name, which is the same answer as "this one has nowhere", and the
+    // pointer treats both as nothing to say. Wiring them is its own slice.
+    const pointer = renderObjectivePointer(currentObjective, pointerContext);
+    // NaN when the errand has no place -- "cut the bramble" is the thing in front of you and has no
+    // coordinate to be far from. The watch treats that as nothing to measure rather than as a child
+    // standing still, so a placeless stretch cannot accumulate a stuck clock.
+    rescueTarget = destinationFor(currentObjective, pointerContext);
+    renderMinimap(frameStart, rescueTarget);
+    renderRescueOffer(rescueWatch.update({
+      distanceMeters: rescueTarget
+        ? Math.hypot(player.position.x - rescueTarget.x, player.position.z - rescueTarget.z)
+        : NaN,
+      objectiveId: currentObjective?.id ?? null,
+      // WHICH PLACE, as well as which errand. The objective id is stable across "wake the dark
+      // lights" and "N cold seals left" while the place it points at moves from one light to the
+      // next, so the id alone cannot tell the watch that the thing it is measuring changed. Without
+      // this, a child who walked right up to one light and lit it inherits that one-metre best for
+      // the next light thirty metres away, and every correct step toward it reads as being stuck.
+      targetKey: targetKeyFor(rescueTarget),
+      // THE RAW DELTA, not the clamped one. `deltaSeconds` above is clamped to 0.1 so a hitch
+      // cannot teleport the hero -- a physics bound. Patience is wall-clock: a child staring at an
+      // unchanging screen for twelve seconds has been staring for twelve seconds whether the device
+      // manages sixty frames a second or two. Feeding the physics clamp here made the clock run at
+      // 40% of real time on a starved device, measured, and the offer simply never arrived.
+      // guidanceRescue.js applies its own bound for the backgrounded-tab case.
+      deltaSeconds: frameDeltaMs === null ? 0 : frameDeltaMs / 1000,
+    }).offering
+      // ONLY WHEN TURNING WOULD HELP. Tapping this aims the camera at the errand and does nothing
+      // else, so offering it while the errand is already in frame offers a button that cannot change
+      // anything. A control that does nothing when pressed teaches a child to stop pressing things,
+      // which is the opposite of what a rescue is for. The clock keeps running underneath -- a child
+      // who is stuck while looking straight at the thing is still stuck, and the moment they turn
+      // away the offer is there immediately rather than twelve seconds later.
+      && pointer.pointing === true);
     follow.update(player.position);
     rimLight.update(player.position);
     runtimeRenderer.renderer.render(scene, camera);
@@ -2783,7 +3675,8 @@ async function bootstrap() {
   reactions = createReactionAnimator(hero.root, hero.animations);
   // Remote heroes clone this same loaded asset, so the pool cannot exist before it has arrived. Until
   // then sampleRemotes() is simply never drawn -- snapshots still buffer, so nobody is missed.
-  remotes = createRemotePlayers(scene, hero);
+  remotes = createRemotePlayers(scene, hero, { mountGear: mountGearOnRemote });
+  status.dataset.fault = hero.failed ? 'true' : 'false';
   status.textContent = hero.failed ? 'hero load failed — placeholder shown' : 'hero standing';
 
   // The wolf is loaded after the hero and never awaited alongside it. A missing or broken wolf must
@@ -2803,5 +3696,6 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
   console.error('[runtime] bootstrap failed', error);
+  status.dataset.fault = 'true';
   status.textContent = 'runtime failed — see console';
 });

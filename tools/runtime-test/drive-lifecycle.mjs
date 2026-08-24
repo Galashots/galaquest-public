@@ -34,6 +34,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  ATTACK_REACH,
   DEATH_SECONDS,
   SWING_CONTACT_SECONDS,
   WOLF_MAX_HP,
@@ -46,6 +47,9 @@ import {
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import {
+  readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource, waitForSample,
+} from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -372,34 +376,126 @@ try {
     afterGesture.audio.contextState === 'running', `contextState ${afterGesture.audio.contextState}`);
 
   // ── 8/9. movement changes world position; the hero engages the real wolf ───────────────────────
+  // The recorder starts HERE rather than at the kill loop, because "the hero engages the real wolf"
+  // is the first thing in this file a point read gets wrong. A wolf in combat cycles bite -> idle ->
+  // bite, so a single sample taken at the end of the approach catches `idle` perfectly often and
+  // reports a wolf that is actively biting as one that never noticed. Asking whether it was EVER
+  // roused during the approach is both the real question and one a log can answer.
+  await page.eval(startWatch('lifecycle-fight', `(() => {
+    const runtime = window.__galaQuestRuntime;
+    const wolf = runtime.encounterState().wolf;
+    return {
+      // Wall clock from inside the page, so the respawn interval below is measured between two
+      // RECORDED FRAMES rather than between two harness reads that arrive whenever they arrive.
+      t: Date.now(),
+      mode: wolf.mode,
+      hp: wolf.hp,
+      gap: Math.hypot(runtime.player.position.x - wolf.x, runtime.player.position.z - wolf.z),
+    };
+  })()`));
   const beforeWalk = await state();
   const closed = await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 14000);
   const moved = Math.hypot(closed.heroPos[0] - beforeWalk.heroPos[0], closed.heroPos[1] - beforeWalk.heroPos[1]);
   check('8. hero movement changes world position (measured, not a status string)',
     moved > 1.0, `moved ${moved.toFixed(3)}m: ${JSON.stringify(beforeWalk.heroPos)} -> ${JSON.stringify(closed.heroPos)}`);
+  const roused = await waitForSample(page, 'lifecycle-fight',
+    (sample) => sample.mode !== 'idle' || sample.hp < WOLF_MAX_HP, { timeoutMs: 6000 });
+  const rousedFrames = roused.samples.filter((sample) => sample.mode !== 'idle' || sample.hp < WOLF_MAX_HP);
   check('9. the hero engages the real wolf',
-    closed.wolf.mode !== 'idle' || closed.wolf.hp < WOLF_MAX_HP,
-    `mode ${closed.wolf.mode}, hp ${closed.wolf.hp}/${WOLF_MAX_HP}, gap ${Math.hypot(closed.heroPos[0] - closed.wolf.x, closed.heroPos[1] - closed.wolf.z).toFixed(2)}m`);
+    rousedFrames.length > 0,
+    `${rousedFrames.length} of ${roused.samples.length} recorded frames had the wolf roused; `
+      + `modes ${JSON.stringify([...new Set(roused.samples.map((sample) => sample.mode))])}, `
+      + `gap ${Math.hypot(closed.heroPos[0] - closed.wolf.x, closed.heroPos[1] - closed.wolf.z).toFixed(2)}m`);
 
   // ── 10. the wolf can be killed ───────────────────────────────────────────────────────────────────
-  let killed = false;
-  for (let swing = 0; swing < 40 && !killed; swing += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    const before = await pollUntil((s) => s.canAttack, { timeoutMs: 4000 });
-    const attackPos = before.serverPos ?? before.heroPos;
-    const gap = Math.hypot(attackPos[0] - before.wolf.x, attackPos[1] - before.wolf.z);
-    if (gap > 1.5 && before.wolf.mode !== 'dying' && before.wolf.mode !== 'dead') {
-      // eslint-disable-next-line no-await-in-loop
-      await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 2500, { faceTarget: true });
+  //
+  // Swung on the rules' own clock, with the fight recorded per frame -- the same shape play-fight
+  // and drive-marks now use, and for the same reasons, which their headers carry in full. In short:
+  // this loop polled live state twice a swing, once for canAttack and once on a 916ms budget for a
+  // reaction that lasts WOLF_HIT_FLASH_SECONDS (0.18s), and on a runner painting at ~367ms a frame
+  // that is looking less often than the thing it looks for lasts. The swings came out slower than
+  // SWING_SECONDS allows, and since Design ruling 5 heals the wolf to full on every knockdown, a
+  // hero landing fewer than three hits between knockdowns can never finish it. The re-close stays,
+  // because the wolf backs off after a bite and the hero only turns while walking, but it is a held
+  // walk on the wolf's live position and its cost comes out of the wait before the next tap rather
+  // than being added to it.
+  const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+  const readFight = () => page.eval(readWatchSource('lifecycle-fight')).then(JSON.parse);
+  // A second of recording, so the frame count is the frame rate.
+  await sleep(1000);
+  const paced = await readFight();
+// TAP ONCE PER RENDERED FRAME, NOT ONCE PER SWING.
+//
+// Pacing taps at SWING_SECONDS plus a frame looked like deriving the cadence from the rules and was
+// actually half the swing rate. The swing does not start when the tap is dispatched: it starts when
+// authority receives it, a frame plus the wire later, and runs SWING_SECONDS from there -- so it
+// ends about 1.9s after the tap, and a tap sent at 1.8s is refused for being early. The next one
+// then comes at 3.6s. One swing every 3.6 seconds against a hero who survives about nine.
+//
+// A refused tap costs nothing -- the rules simply ignore it -- so the right rate is the fastest the
+// game can even notice: main.js samples input once per rendered frame, so tapping faster than the
+// frame period cannot help and tapping slower wastes eligibility. In practice the two CDP round
+// trips a tap costs put the real rate near 0.7s, which is what the original 600ms here had by
+// instinct. The recorder is read every few taps rather than every one, so noticing the kill stays
+// prompt without paying a round trip per press.
+  const framePeriodMs = paced.frames > 0 ? Math.round(1000 / paced.frames) : 17;
+  const tapEveryMs = framePeriodMs;
+
+  // THE RE-CLOSE PULSES UNLESS THERE IS REAL GROUND TO COVER. A held walk cannot stop on a mark --
+  // the release costs a poll and a round trip while authority keeps walking, which at a full-deflection
+  // stick is a metre and a half. Ask it to stop at 1.0m from the wolf and it hands back a hero 2.5m
+  // away, outside ATTACK_REACH, so the swing that follows hits nothing. Hosted at 3c43815 that read as
+  // a hero knocked down sixteen times with the wolf never below 1hp, with the re-close present and
+  // doing harm. The pulsed walker is slow per metre and exact, and exact is what matters here: the
+  // wolf brings itself to about a metre, and what the walk is really for is turning the hero, since he
+  // only turns while moving. The held leg is kept for the one case with actual distance in it --
+  // coming back from a knockdown, which respawns him at spawn.
+  const HELD_APPROACH_SLACK_METRES = 3;
+
+  async function heldLegToWolf(stopWithin, maxMillis) {
+    await page.eval(startWalk(WOLF_TARGET, stopWithin));
+    await touch('touchStart', [{ x: stickX, y: stickY }]);
+    await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
+    try {
+      await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+        (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+    } finally {
+      await touch('touchEnd', []);
+      await page.eval(STOP_WALK);
     }
+  }
+  async function closeOnWolf(gapMetres, stopWithin) {
+    if (gapMetres > stopWithin + HELD_APPROACH_SLACK_METRES) {
+      await heldLegToWolf(stopWithin + HELD_APPROACH_SLACK_METRES, 8000);
+    }
+    await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), stopWithin, 900,
+      { faceTarget: true });
+  }
+
+  let killed = false;
+  let lastGap = 0;
+  // WHAT THE LOOP SPENDS ITS FIGHT ON IS ROUND TRIPS, so the tap path has as few as it can. Walking
+  // before every swing was measured at 4.4 SECONDS a tap in drive-marks -- against a hero who is
+  // knocked down every nine or ten seconds, and a wolf that Design ruling 5 heals to full each time.
+  // The gap log said the repositioning was not even needed: every swing went out from between 1.0m
+  // and 1.6m, inside ATTACK_REACH, because the wolf brings itself to MIN_BODY_SEPARATION and stays
+  // there. So the tap path is two touches and nothing else, and the walk happens only when the
+  // recorder says the hero is actually out of reach -- which is what a knockdown does, since
+  // respawning puts him back at spawn.
+  const REACH_CHECK_EVERY = 4;
+  for (let swing = 0; swing < 200 && !killed; swing += 1) {
+    const cycleStart = Date.now();
     // eslint-disable-next-line no-await-in-loop
     await tapAttack();
     // eslint-disable-next-line no-await-in-loop
-    const now = await pollUntil(
-      (s) => s.wolf.mode === 'hit' || s.wolf.mode === 'dying' || s.wolf.mode === 'dead',
-      { intervalMs: 20, timeoutMs: (SWING_CONTACT_SECONDS + 0.4) * 1000 },
-    );
-    killed = now.wolf.mode === 'dying' || now.wolf.mode === 'dead';
+    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+    if (swing % REACH_CHECK_EVERY !== 0) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const log = await readFight();
+    killed = log.samples.some((sample) => sample.mode === 'dying' || sample.mode === 'dead');
+    lastGap = log.samples[log.samples.length - 1]?.gap ?? 0;
+    // eslint-disable-next-line no-await-in-loop
+    if (!killed && lastGap > ATTACK_REACH) await closeOnWolf(lastGap, 1.0);
   }
   check('10. the wolf can actually be killed', killed);
 
@@ -407,22 +503,45 @@ try {
   // Waits for the TRUE 'dead' mode (not 'dying', which lasts DEATH_SECONDS on its own) before
   // starting the stopwatch -- modeSeconds resets to 0 exactly on entry to 'dead' (encounter.js), so
   // that transition is the real zero point the respawn timer measures from.
-  const dead = await pollUntil((s) => s.wolf.mode === 'dead', { timeoutMs: (DEATH_SECONDS + 2) * 1000 });
+  // BOTH ENDS OF THE STOPWATCH COME FROM RECORDED FRAMES, not from when a harness read happened to
+  // land. Starting it at `Date.now()` after a poll noticed the corpse measured the interval from
+  // the NOTICING, and the kill loop above only looks up every few taps, so it reported "respawned
+  // after 4.84s against a 10s rule" about a wolf that had died five seconds before anyone asked.
+  // The recorder has been watching every frame since before the killing blow, so the transition
+  // into 'dead' and the one back out of it are both in the log with the page's own clock on them.
+  // Two waits, in order, and the second one needs `since`: the wolf was idle on full health for the
+  // whole approach, so "idle and full again" is satisfied by the start of the run unless the search
+  // begins after the corpse.
+  const died = await waitForSample(page, 'lifecycle-fight', (sample) => sample.mode === 'dead',
+    { intervalMs: 200, timeoutMs: (DEATH_SECONDS + 4) * 1000 });
+  const deadIndex = died.samples.findIndex((sample) => sample.mode === 'dead');
+  if (deadIndex >= 0) {
+    await waitForSample(page, 'lifecycle-fight',
+      (sample) => sample.mode === 'idle' && sample.hp === WOLF_MAX_HP,
+      {
+        intervalMs: 200,
+        timeoutMs: RESPAWN_POLL_TIMEOUT_MS + (WOLF_RESPAWN_SECONDS * 1000),
+        since: deadIndex + 1,
+      });
+  }
+  const cycle = await readFight();
+  await page.eval(stopWatchSource('lifecycle-fight'));
   check('the wolf reaches true "dead" mode before the respawn stopwatch starts',
-    dead.wolf.mode === 'dead', `mode ${dead.wolf.mode}`);
-  const deadAt = Date.now();
-  const respawned = await pollUntil(
-    (s) => s.wolf.mode === 'idle' && s.wolf.hp === WOLF_MAX_HP,
-    { intervalMs: 200, timeoutMs: RESPAWN_POLL_TIMEOUT_MS },
-  );
-  const respawnElapsedMs = Date.now() - deadAt;
-  const respawnedInWindow = respawned.wolf.mode === 'idle' && respawned.wolf.hp === WOLF_MAX_HP
-    && respawnElapsedMs >= (WOLF_RESPAWN_SECONDS * 1000) - RESPAWN_TOLERANCE_MS
+    deadIndex >= 0,
+    deadIndex >= 0
+      ? `first seen dead at frame ${deadIndex} of ${cycle.samples.length}`
+      : `never seen dead; modes ${JSON.stringify([...new Set(cycle.samples.map((s) => s.mode))])}`);
+  const backIndex = cycle.samples.findIndex((sample, index) =>
+    index > deadIndex && deadIndex >= 0 && sample.mode === 'idle' && sample.hp === WOLF_MAX_HP);
+  const respawnElapsedMs = deadIndex >= 0 && backIndex > deadIndex
+    ? cycle.samples[backIndex].t - cycle.samples[deadIndex].t
+    : -1;
+  const respawnedInWindow = respawnElapsedMs >= (WOLF_RESPAWN_SECONDS * 1000) - RESPAWN_TOLERANCE_MS
     && respawnElapsedMs <= (WOLF_RESPAWN_SECONDS * 1000) + RESPAWN_POLL_TIMEOUT_MS;
   check('11. the wolf really respawns after WOLF_RESPAWN_SECONDS (imported from encounter.js, not hand-copied)',
     respawnedInWindow,
     `respawned after ${(respawnElapsedMs / 1000).toFixed(2)}s against a ${WOLF_RESPAWN_SECONDS}s rule, `
-    + `mode ${respawned.wolf.mode}, hp ${respawned.wolf.hp}/${WOLF_MAX_HP}`);
+    + `dead at frame ${deadIndex}, back at frame ${backIndex} of ${cycle.samples.length}`);
 
   // ── 12. the harness terminates ONLY its own server child ────────────────────────────────────────
   // This is also the trigger for the online->offline handover checks 13-16: the socket has nowhere

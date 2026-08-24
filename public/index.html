@@ -26,6 +26,21 @@
         font: 700 0.8rem/1.2 system-ui, sans-serif; text-align: center;
         touch-action: none; pointer-events: none;
       }
+      /* DEVELOPER TELEMETRY, hidden in play -- the same data-debug convention #perf-hud already uses,
+         because a second mechanism for "show this only to a developer" is a second thing to keep
+         true. This line read `you (14.2,-3.1) · wolf 3hp · you 4hp · players 1` permanently, over
+         the game, for the whole session. None of it is for a child: their health is the hearts, the
+         wolf's is the bar over the wolf, and the coordinates and player count are for me.
+
+         BUT NOT WHEN IT IS A FAULT. The same element carries the four things that get said when the
+         game breaks -- context lost, hero load failed, bootstrap failed. Those are the one case
+         where the text is worth more than the clutter, so data-fault overrides the hide. They are
+         still developer-worded, and making them child-readable is a real error screen and a
+         separate piece of work; hiding them would be shipping LESS than that, not more.
+
+         Harnesses are unaffected: eighteen of them read this element's textContent, which CSS does
+         not touch. #perf-hud's own comment records that same check being made before it was hidden. */
+      #runtime-status[data-debug="false"]:not([data-fault="true"]) { display: none; }
       /* Mirrors the stick: same size, same inset, opposite corner. Microsoft's touch-layout guidance,
          drawn from over 200 streamed titles, reserves the right inner wheel for exactly ONE control —
          the most frequent action — with a large hit area, and warns that thumbs cannot reach far
@@ -63,6 +78,21 @@
       #game[data-hero-screen-open="true"] #loot-hud {
         opacity: 0 !important; pointer-events: none !important;
       }
+      /* MODAL ISOLATION, SECOND HALF: the navigation layer gets out of the way too.
+         The rule above already hid the transient TEXT callouts. Exact-SHA browser captures at the
+         frozen child baseline still showed the minimap and "Show me where" sitting behind a
+         full-screen panel, and the OTHER panel's button competing in the same top-right row -- so a
+         child looking at the Hero screen still had a map, an arrow, a rescue button and a second
+         menu icon arguing with it. Subtracting competing HUD, not adding any.
+         The inactive sibling button goes with them: while Hero owns the screen the map button is not
+         an escape, it is the thing that was covering the X. The ACTIVE panel keeps its own toggle
+         (so the button that opened it still closes it) and its own X. */
+      #game[data-hero-screen-open="true"] #minimap,
+      #game[data-hero-screen-open="true"] #objective-pointer,
+      #game[data-hero-screen-open="true"] #guidance-rescue,
+      #game[data-hero-screen-open="true"] #village-board-button {
+        opacity: 0 !important; pointer-events: none !important;
+      }
       /* GP3: the Village Board hides the identical set of transient HUD text, for the identical
          reason -- a second full-screen overlay competing with keeper-speech/quest-objective for the
          same on-screen space. Its own attribute rather than folding into [data-hero-screen-open]
@@ -75,6 +105,21 @@
       #game[data-village-board-open="true"] #hero-health,
       #game[data-village-board-open="true"] #lantern-marks,
       #game[data-village-board-open="true"] #loot-hud {
+        opacity: 0 !important; pointer-events: none !important;
+      }
+      /* MODAL ISOLATION, SECOND HALF: the navigation layer gets out of the way too.
+         The rule above already hid the transient TEXT callouts. Exact-SHA browser captures at the
+         frozen child baseline still showed the minimap and "Show me where" sitting behind a
+         full-screen panel, and the OTHER panel's button competing in the same top-right row -- so a
+         child looking at the Hero screen still had a map, an arrow, a rescue button and a second
+         menu icon arguing with it. Subtracting competing HUD, not adding any.
+         The inactive sibling button goes with them: while Hero owns the screen the map button is not
+         an escape, it is the thing that was covering the X. The ACTIVE panel keeps its own toggle
+         (so the button that opened it still closes it) and its own X. */
+      #game[data-village-board-open="true"] #minimap,
+      #game[data-village-board-open="true"] #objective-pointer,
+      #game[data-village-board-open="true"] #guidance-rescue,
+      #game[data-village-board-open="true"] #hero-button {
         opacity: 0 !important; pointer-events: none !important;
       }
       /* Greyed while the swing is on cooldown, so mashing it reads as "not yet" rather than "broken". */
@@ -330,15 +375,22 @@
       /* >=44px touch target, same discipline as #attack-button. A tap fires speechSynthesis.speak()
          from inside its own click handler -- iOS Safari counts that tap itself as the user gesture,
          so no separate unlock step is needed (see keeperSpeech.js's speakKeeperLine comment). */
+      /* GOLD, like every other control a child is meant to find -- #hero-button, #profile-chip and
+         the ATTACK ring all say "press me" in #f2b33d and this one said it in translucent white.
+         It is the button that matters most on this screen and it was the quietest: read-aloud is
+         the ONLY route by which a child who cannot read receives the quest, the count of marks
+         left, or where to go next, and since keeperSpeech.js's unlock latch it is also the one tap
+         that makes every later line read itself. A control that buys all of that should not be
+         styled below the one that opens the gear screen. */
       #keeper-speech-speak {
         flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
-        border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%;
-        background: rgb(255 255 255 / 14%); color: #fff;
+        border: 2px solid rgb(242 179 61 / 75%); border-radius: 50%;
+        background: rgb(12 20 31 / 75%); color: #f2b33d;
         font-size: 1.3rem; line-height: 1; padding: 0;
         touch-action: none; user-select: none; -webkit-user-select: none;
         transition: background-color 90ms ease-out;
       }
-      #keeper-speech-speak[data-pressed="true"] { background: rgb(255 255 255 / 34%); }
+      #keeper-speech-speak[data-pressed="true"] { background: rgb(242 179 61 / 30%); }
       /* Moved from top:22% to 68%, both steps found by looking at captures rather than by reasoning
          about layout. At 22% the banner sat exactly across the Lantern Tree's canopy, so the one
          moment the whole quest builds to announced itself by covering the thing you are meant to be
@@ -425,7 +477,17 @@
         position: absolute; inset: 0; pointer-events: none;
         opacity: 0; transition: opacity 180ms ease-out;
       }
-      #hero-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+            /* SHOWN CHANGES OPACITY, NOT HIT-TESTING. This rule used to add `pointer-events: auto`, which
+         made the container a solid full-viewport tap target the instant it opened -- contradicting
+         the paragraph above, which promises the opposite, and costing two things a child can feel:
+         the top-right button that OPENED this panel became untappable (the Owner found exactly that
+         on a real iPhone with his son -- the panel swallowed the tap, so the only way out was the
+         small X), and the "centre stays clickable straight through to #game" camera drag stopped
+         working while the panel was up.
+         The container does not need it. Every piece of chrome below sets `pointer-events: auto` on
+         itself, and in CSS a descendant re-enables hit-testing under a `none` ancestor -- which is
+         the same mechanism the DESCENDANT RULE comment is about, read the other way round. */
+      #hero-screen[data-shown="true"] { opacity: 1; }
       /* THE DESCENDANT RULE IS NOT OPTIONAL. `pointer-events: none` on this container does NOT make
          the screen inert, because every piece of its chrome below sets `pointer-events: auto` on
          itself -- and in CSS a descendant may re-enable hit-testing under a `none` ancestor. So a
@@ -443,16 +505,31 @@
          this. */
       #hero-screen[data-shown="false"] { pointer-events: none; }
       #hero-screen[data-shown="false"] * { pointer-events: none; }
+      /* CLEARANCE FOR **BOTH** TOP-RIGHT BUTTONS, which is what that corner now holds.
+         This reserved `right: 4.25rem` -- 68px, exactly one 52px button plus its 0.75rem margin --
+         and was written when #hero-button was the only control up there. #village-board-button has
+         since joined it at `right: calc(0.75rem + 52px + 0.5rem)`, i.e. spanning 76px to 128px from
+         the right edge. The header's own right edge sat at 68px, so #hero-screen-close landed
+         underneath the map button and a child looking for the X found the map icon instead. That is
+         the Owner's real-iPhone report: HERO, map and sword visible, no way out.
+         #village-board-header already reserves for both buttons; this is the same arithmetic, and
+         the two now agree rather than one of them silently predating the second button. */
       #hero-screen-header {
-        position: absolute; top: 0.75rem; left: 0.75rem; right: 4.25rem;
+        position: absolute; top: 0.75rem; left: 0.75rem;
+        right: calc(0.75rem + 52px + 52px + 1rem);
         display: flex; align-items: center; justify-content: space-between;
         padding: 0.4rem 0.7rem; border-radius: 0.5rem;
         background: rgb(12 20 31 / 82%); color: #f2b33d;
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
+      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
+         and these two were the only controls in the game under that floor -- flagged in the
+         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
+         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
+         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
       #hero-screen-close {
-        width: 36px; height: 36px; display: grid; place-items: center;
+        width: 44px; height: 44px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
         background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
       }
@@ -550,7 +627,17 @@
         background: radial-gradient(ellipse at center, transparent 32%, rgb(12 20 31 / 62%) 100%);
         opacity: 0; transition: opacity 180ms ease-out;
       }
-      #village-board-screen[data-shown="true"] { opacity: 1; pointer-events: auto; }
+            /* SHOWN CHANGES OPACITY, NOT HIT-TESTING. This rule used to add `pointer-events: auto`, which
+         made the container a solid full-viewport tap target the instant it opened -- contradicting
+         the paragraph above, which promises the opposite, and costing two things a child can feel:
+         the top-right button that OPENED this panel became untappable (the Owner found exactly that
+         on a real iPhone with his son -- the panel swallowed the tap, so the only way out was the
+         small X), and the "centre stays clickable straight through to #game" camera drag stopped
+         working while the panel was up.
+         The container does not need it. Every piece of chrome below sets `pointer-events: auto` on
+         itself, and in CSS a descendant re-enables hit-testing under a `none` ancestor -- which is
+         the same mechanism the DESCENDANT RULE comment is about, read the other way round. */
+      #village-board-screen[data-shown="true"] { opacity: 1; }
       #village-board-screen[data-shown="false"] { pointer-events: none; }
       /* Same defect, same fix -- see #hero-screen's own comment above. This screen's chrome sets
          pointer-events: auto on itself too, so a closed Board would go on catching taps over the
@@ -564,8 +651,13 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
+      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
+         and these two were the only controls in the game under that floor -- flagged in the
+         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
+         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
+         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
       #village-board-close {
-        width: 36px; height: 36px; display: grid; place-items: center;
+        width: 44px; height: 44px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
         background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
       }
@@ -653,6 +745,100 @@
         #village-board-nodes { top: 4.5rem; left: 0.75rem; right: 0.75rem; justify-content: center; }
         #village-board-detail { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; }
       }
+      /* ── Touch controls, and the devices that should not see them ──────────────────────────
+         The stick and ATTACK shipped on EVERY device. On a desktop that is a large obvious control
+         that does nothing: input/touch.js listens for touch events, so a click never drives it and
+         falls through to the camera drag underneath -- you push the joystick and the world spins.
+         A visible control that lies is worse than no control.
+
+         Only a device reporting ZERO touch points loses them; see input/pointerMode.js for why the
+         rule is asymmetric and why it is maxTouchPoints rather than a (pointer: coarse) query.
+         Nothing on screen had ever said the words WASD, Space, drag or scroll, so the hint takes
+         the space the stick vacates rather than being one more thing competing for a corner. */
+      #game[data-pointer="mouse"] #touch-stick,
+      #game[data-pointer="mouse"] #attack-button { display: none; }
+      #desktop-keys {
+        position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%);
+        margin: 0; padding: 0.4rem 0.7rem;
+        color: rgb(255 255 255 / 82%); background: rgb(12 20 31 / 62%); border-radius: 0.35rem;
+        font: 600 0.78rem/1.2 system-ui, sans-serif; white-space: nowrap;
+        pointer-events: none; touch-action: none;
+      }
+      /* Hidden by default rather than shown by default: the attribute is set by main.js at startup,
+         and a tablet must never flash a line about a keyboard it does not have while that runs. */
+      #desktop-keys { display: none; }
+      /* ── Which way to turn ─────────────────────────────────────────────────────────────────
+         Measured, not assumed: from the spawn the Keeper sits at NDC (0.37, 0.25) -- comfortably on
+         screen -- and ONE 200px thumb-drag, 69 degrees of camera, puts him at NDC x 1.5 and gone.
+         The chip still reads "Talk to Keeper Aldric" and the banner still says he is waving, with
+         nothing anywhere indicating which way to turn. Swiping to look around is the first thing
+         anybody does with a 3D world, so that is not an edge case, it is second three.
+
+         ui/offscreenPointer.js decides where this goes and which way it faces; the header there is
+         mostly about why a target BEHIND the camera has to be handled explicitly rather than trusted
+         to project sensibly. Hidden whenever the objective is already on screen: an arrow pointing
+         at something the child can see is noise, and noise is how a child learns to stop looking. */
+      #objective-pointer {
+        position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+        display: grid; place-items: center;
+        pointer-events: none; touch-action: none;
+        transition: opacity 140ms ease-out;
+      }
+      /* ── The dial ───────────────────────────────────────────────────────────────────────────
+         Hero at the centre, camera forward pointing UP. Not north-up: a north-up map asks the reader
+         to hold a rotation in their head and apply it to their own body, which is a skill children
+         get years after they can play this game. Camera-up means a thing drawn to the right of the
+         dot is to the child's right, with nothing to work out.
+
+         It draws the ROAD and the current errand. It is NOT enemy radar -- a dial that shows where
+         the wolf is turns an encounter a child is supposed to look up and see into a chart they read
+         instead. ui/minimap.js owns the maths and says all of this at more length.
+
+         Under the objective chip, in the same left-hand information column, and clear of both thumb
+         zones. 110 CSS px backed by a 220 px canvas so it is not soft on a 2x tablet. */
+      #minimap {
+        position: absolute; left: 0.75rem; top: 7.5rem;
+        width: 110px; height: 110px; border-radius: 50%;
+        border: 2px solid rgb(242 179 61 / 45%);
+        background: rgb(12 20 31 / 62%);
+        pointer-events: none; touch-action: none;
+      }
+      /* ── Offering help, and mostly not offering it ──────────────────────────────────────────
+         The arrow only helps a child who looks at it. ui/guidanceRescue.js decides when one has
+         stopped getting closer -- not when they have stopped moving, and not when they are walking
+         AWAY, because a child rounding a house walks away for four seconds and is not lost while a
+         child circling two metres from the Keeper never gets far and is completely lost. It measures
+         whether they have ever been nearer than they are now.
+
+         Tapping it turns the camera to face the errand and nothing else. It does not walk them
+         there, and it does not turn the camera on its own: camera/follow.js says "the player owns
+         the camera" and a rescue that seizes it would be the game taking the one thing a child had
+         learned to control. Player-initiated, once, on a tap.
+
+         Above the stick and the ATTACK button rather than between them, and clear of #desktop-keys
+         on a desktop. 44 px floor like everything else -- ui/tapTargets.js owns that number. */
+      #guidance-rescue {
+        position: absolute; left: 50%; bottom: 5rem; transform: translateX(-50%);
+        min-height: 44px; padding: 0.55rem 1rem;
+        border: 2px solid rgb(242 179 61 / 70%); border-radius: 1.4rem;
+        background: rgb(12 20 31 / 88%); color: #fff;
+        font: 700 0.92rem/1.1 system-ui, sans-serif; white-space: nowrap;
+        transition: opacity 180ms ease-out;
+      }
+      #guidance-rescue[data-shown="false"] { display: none; }
+      #guidance-rescue[data-shown="true"] { display: block; pointer-events: auto; }
+      #objective-pointer[data-shown="false"] { opacity: 0; }
+      #objective-pointer[data-shown="true"] { opacity: 1; }
+      #objective-pointer-arrow {
+        display: block; font-size: 1.7rem; line-height: 1; color: #f2b33d;
+        text-shadow: 0 0 0.35rem rgb(12 20 31 / 95%), 0 0 0.9rem rgb(12 20 31 / 75%);
+      }
+      #game[data-pointer="mouse"] #desktop-keys { display: block; }
+      /* Both live at bottom-centre, and on a desktop both can be on screen at once -- with ?debug=1,
+         or on a fault, which is the one time #runtime-status shows without it. The DEVELOPER line is
+         the one that moves: the child-facing hint keeps the natural position. Harmless when the
+         status line is hidden, which is almost always. */
+      #game[data-pointer="mouse"] #runtime-status { bottom: 3.2rem; }
       #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 112px; height: 112px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
       #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / 72%); transform: translate(-50%, -50%); pointer-events: none; }
       /* RUNNING. younger players told us at the first child playtest that their character moved too slowly,
@@ -665,6 +851,187 @@
       #touch-stick[data-run="true"] { border-color: rgb(255 208 130 / 95%); box-shadow: 0 0 0.8rem 0.1rem rgb(255 190 96 / 55%); }
       #touch-stick-knob { transition: width 90ms ease-out, height 90ms ease-out, background-color 90ms ease-out; }
       #touch-stick[data-run="true"] #touch-stick-knob { width: 54px; height: 54px; background: rgb(255 224 170 / 92%); }
+      /* ── The family profile gate ────────────────────────────────────────────────────────────
+         Tablet-first and child-first. Every interactive target here is at or above the 44 px floor
+         -- deliberately including the close and remove controls, which is where #hero-screen-close
+         and #village-board-close (both 36 px, flagged in the Checkpoint 0 audit) fall short. A
+         5-year-old's tap lands within about a centimetre of where they meant it.
+
+         Unlike the Hero screen and the Village Board this one is OPAQUE rather than a vignette over
+         the world: it is a question that has to be answered, not an overlay on play, and a
+         half-visible village behind it invites a child to try to tap the village. */
+      #profile-gate {
+        position: absolute; inset: 0; pointer-events: none;
+        display: grid; place-items: center;
+        background: rgb(9 15 24 / 96%);
+        /* Above the HUD, not merely above the world. Found by looking at a capture: the backdrop
+           dimmed the village correctly and the hearts, the objective chip, the Hero/Board buttons
+           and the loading line all still sat ON TOP of the question. A stacking context is the half
+           of "opaque" that a background colour does not give you. */
+        z-index: 20;
+        opacity: 0; transition: opacity 160ms ease-out;
+      }
+      #profile-gate[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      /* Same closed-overlay trap #hero-screen and #village-board-screen both had to fix: chrome
+         inside sets pointer-events auto, so without this a closed gate keeps eating taps aimed at
+         the touch stick underneath it. */
+      #profile-gate[data-shown="false"] { pointer-events: none; }
+      #profile-gate[data-shown="false"] * { pointer-events: none; }
+      #profile-gate-panel {
+        width: min(92vw, 560px); max-height: 88vh; overflow-y: auto;
+        padding: 1.1rem 1.1rem 1.3rem;
+        display: flex; flex-direction: column; gap: 0.9rem;
+      }
+      /* Deliberately bigger than .profile-card-face's 52px: on the chooser the animal identifies one
+         hero among several, here it IS the screen's subject and the only thing on it a pre-reader
+         can hold on to. Centred, so a child looking at a mostly-empty panel looks at it first. */
+      #profile-gate-face {
+        width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 0.15rem;
+        display: grid; place-items: center; font-size: 3.1rem; line-height: 1;
+        box-shadow: inset 0 0 0 3px rgb(255 255 255 / 22%);
+      }
+      #profile-gate-face[data-shown="false"] { display: none; }
+      #profile-gate-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+      #profile-gate-title {
+        margin: 0; color: #f2b33d;
+        font: 800 1.5rem/1.15 system-ui, sans-serif; letter-spacing: 0.02em;
+      }
+      #profile-gate-close {
+        flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+      }
+      /* Hidden outright while a first hero is being named: there is nowhere to go back to, and a
+         dismissable question a child cannot answer any other way is a dead end. */
+      #profile-gate-close[data-shown="false"] { display: none; }
+      #profile-gate-list { display: flex; flex-direction: column; gap: 0.6rem; }
+      .profile-card {
+        display: flex; align-items: stretch; gap: 0.5rem;
+        border: 2px solid rgb(255 255 255 / 18%); border-radius: 0.7rem;
+        background: rgb(20 31 46 / 88%);
+      }
+      .profile-card[data-active="true"] { border-color: #f2b33d; background: rgb(242 179 61 / 14%); }
+      .profile-card-choose {
+        flex: 1 1 auto; min-height: 64px; padding: 0.6rem 0.9rem;
+        display: flex; flex-direction: row; align-items: center; gap: 0.7rem;
+        border: 0; border-radius: 0.6rem; background: transparent; color: #fff;
+        text-align: left; font: 800 1.15rem/1.2 system-ui, sans-serif;
+      }
+      /* THE ANIMAL. The largest thing on the card and the first in reading order, because for the
+         child this screen is designed for it is the ONLY thing on it they can decode -- the name is
+         letters and the badge is a sentence. Its colour is its own, so two cards differ by more than
+         a glyph at a glance. progression/heroAvatars.js says why the animal is stored on the profile
+         and therefore never changes when a sibling's save is deleted. */
+      .profile-card-face, .profile-card-add-face {
+        flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%;
+        display: grid; place-items: center; font-size: 1.7rem; line-height: 1;
+        box-shadow: inset 0 0 0 2px rgb(255 255 255 / 22%);
+      }
+      .profile-card-words { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+      .profile-card-name { display: block; }
+      /* The same three pips, in the same order, as the HUD's own Lantern Marks row -- a child
+         matches a shape they already know instead of reading a count. The lantern is appended
+         rather than being a fourth pip: it is what the three were FOR. */
+      .profile-card-pips { display: flex; align-items: center; gap: 0.28rem; margin-top: 0.1rem; }
+      .profile-card-pip {
+        width: 11px; height: 11px; border-radius: 50%;
+        border: 2px solid rgb(242 179 61 / 55%); background: transparent;
+      }
+      .profile-card-pip[data-filled="true"] { background: #f2b33d; border-color: #f2b33d; }
+      .profile-card-lantern { font-size: 0.95rem; line-height: 1; margin-left: 0.15rem; }
+      /* The line that lets a child tell their hero from their sibling's. Quieter than the name but
+         never small enough to be decoration -- it is doing real work on this screen. */
+      .profile-card-badge {
+        display: block; color: rgb(255 255 255 / 72%);
+        font: 600 0.82rem/1.2 system-ui, sans-serif; letter-spacing: 0.02em;
+      }
+      .profile-card-remove {
+        flex: 0 0 auto; min-width: 44px; min-height: 44px; align-self: center;
+        margin-right: 0.5rem; padding: 0 0.7rem;
+        border: 2px solid rgb(255 255 255 / 20%); border-radius: 0.5rem;
+        background: transparent; color: rgb(255 255 255 / 70%);
+        font: 700 0.78rem/1 system-ui, sans-serif;
+      }
+      /* Armed, and saying so in words rather than in colour alone -- the child who most needs this
+         warning is the one least able to read a red tint as a meaning. */
+      .profile-card-remove[data-armed="true"] {
+        border-color: #e2564d; color: #ff9c95; background: rgb(226 86 77 / 16%);
+      }
+      /* Looks like a card, is not one -- see profileGate.js's makeButton call for why it does not
+         share the .profile-card class. The shared look is repeated here rather than inherited,
+         which is the cost of that separation and is worth it. */
+      .profile-card-add {
+        display: flex; align-items: center; gap: 0.85rem;
+        min-height: 64px; width: 100%; padding: 0.6rem 0.9rem;
+        border: 2px dashed rgb(242 179 61 / 50%); border-radius: 0.7rem;
+        background: transparent; color: #f2b33d;
+        font: 800 1.05rem/1.2 system-ui, sans-serif; text-align: left;
+      }
+      /* The waiting hero's face, dimmed: it is the animal a new hero WOULD get, offered rather than
+         owned, and it has to read as different from the four that already exist or the row becomes
+         a list of five heroes one of which is a lie. Same size and same shape as theirs, because
+         the point is that a child recognises it as the same kind of thing. */
+      .profile-card-add-face { opacity: 0.55; filter: saturate(0.8); }
+      .profile-card-add-words { min-width: 0; }
+      #profile-gate-name-row { display: none; gap: 0.5rem; }
+      #profile-gate-name-row[data-shown="true"] { display: flex; }
+      #profile-gate-name {
+        flex: 1 1 auto; min-height: 52px; padding: 0 0.8rem;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 0.6rem;
+        background: rgb(12 20 31 / 90%); color: #fff;
+        font: 800 1.15rem/1.2 system-ui, sans-serif;
+      }
+      #profile-gate-confirm {
+        flex: 0 0 auto; min-width: 96px; min-height: 52px; padding: 0 1rem;
+        border: 0; border-radius: 0.6rem; background: #f2b33d; color: #14202f;
+        font: 900 1.05rem/1 system-ui, sans-serif; letter-spacing: 0.06em;
+      }
+      #profile-gate-notice {
+        margin: 0; color: rgb(255 255 255 / 70%);
+        font: 600 0.85rem/1.35 system-ui, sans-serif;
+      }
+      #profile-gate-notice[data-shown="false"] { display: none; }
+      /* The HUD's own "who is playing" chip, and the only way back into the gate once a hero is
+         chosen. Named rather than an icon: the child's own hero name is the most recognisable
+         thing that could sit there. */
+      #profile-chip {
+        /* Third in the top-right control row, left of the Board (52px) and Hero (52px) buttons.
+           NOT top-left: #hero-health, #lantern-marks and #quest-objective already stack there, and
+           a chip in that column would push the child's own objective further down the screen. */
+        position: absolute; top: 0.75rem; right: calc(0.75rem + 52px + 0.5rem + 52px + 0.5rem);
+        max-width: min(46vw, 13rem);
+        min-height: 44px; padding: 0 0.85rem 0 0.35rem;
+        overflow: hidden; white-space: nowrap;
+        display: flex; align-items: center; gap: 0.4rem;
+        border: 2px solid rgb(242 179 61 / 45%); border-radius: 999px;
+        background: rgb(12 20 31 / 78%); color: #f2b33d;
+        font: 800 0.9rem/1 system-ui, sans-serif; letter-spacing: 0.02em;
+      }
+      /* The animal, at chip scale. Its own class and not .profile-card-face -- see GQ-020 in
+         docs/MISTAKES.md and the comment at the append site: a chip is not a card, and the readers
+         that count cards by their faces must not find this one. The clipping moved onto the NAME so
+         a long name ellipsizes and the face never does. */
+      .profile-chip-face {
+        flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+        display: grid; place-items: center; font-size: 1.2rem; line-height: 1;
+        box-shadow: inset 0 0 0 2px rgb(255 255 255 / 22%);
+      }
+      .profile-chip-name { overflow: hidden; text-overflow: ellipsis; }
+      #game[data-hero-screen-open="true"] #profile-chip,
+      #game[data-village-board-open="true"] #profile-chip { opacity: 0; pointer-events: none; }
+      /* Same list the other two overlays hide, plus the chip and the two HUD buttons: this screen is
+         a question that has to be answered, so nothing behind it should look tappable. */
+      #game[data-profile-gate-open="true"] #keeper-speech,
+      #game[data-profile-gate-open="true"] #quest-objective,
+      #game[data-profile-gate-open="true"] #banner,
+      #game[data-profile-gate-open="true"] #hero-health,
+      #game[data-profile-gate-open="true"] #lantern-marks,
+      #game[data-profile-gate-open="true"] #loot-hud,
+      #game[data-profile-gate-open="true"] #runtime-status,
+      #game[data-profile-gate-open="true"] #workshop-interact,
+      #game[data-profile-gate-open="true"] #hero-button,
+      #game[data-profile-gate-open="true"] #village-board-button,
+      #game[data-profile-gate-open="true"] #profile-chip { opacity: 0; pointer-events: none; }
     </style>
   </head>
   <body>
@@ -735,10 +1102,14 @@
         </div>
         <button id="keeper-speech-speak" type="button" aria-label="Hear this line aloud">🔊</button>
       </div>
-      <div id="runtime-status" role="status">loading hero…</div>
+      <div id="runtime-status" role="status" data-debug="false" data-fault="false">loading hero…</div>
       <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
+      <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
+      <div id="objective-pointer" data-shown="false" aria-hidden="true"><span id="objective-pointer-arrow">➤</span></div>
+      <button id="guidance-rescue" type="button" data-shown="false">👀 Show me where</button>
+      <canvas id="minimap" width="220" height="220" aria-hidden="true"></canvas>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
       <!-- GP1: the Hero screen. aria-pressed mirrors data-shown on #hero-screen -- one boolean, two
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/
@@ -773,6 +1144,9 @@
            village/boardScreen.js's own header). Same aria-pressed/data-shown pairing as the Hero
            button/screen above. -->
       <button id="village-board-button" type="button" aria-label="Village Board" aria-pressed="false">🗺</button>
+      <!-- Who is playing, and the way back to the gate. The hero's own NAME rather than an icon:
+           it is the most recognisable thing that could sit here for the child it belongs to. -->
+      <button id="profile-chip" type="button" aria-label="Change who is playing"></button>
       <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false">
         <div id="village-board-header">
           <span id="village-board-title">VILLAGE</span>
@@ -820,6 +1194,29 @@
           </div>
           <div id="village-board-detail-future" data-shown="false">Not yet.</div>
           <button id="village-board-upgrade-button" type="button" data-shown="false">UPGRADE</button>
+        </div>
+      </div>
+      <!-- The family profile gate. A shared tablet, per-child saves: this is where a child says
+           which hero is theirs. Cards are BUILT by progression/profileGate.js rather than declared
+           here, because the number of heroes genuinely varies from one to four and markup for four
+           with three hidden is a shape that lies about what is on screen. -->
+      <div id="profile-gate" role="dialog" aria-modal="true" aria-label="Who is playing" data-shown="false">
+        <div id="profile-gate-panel">
+          <!-- Only on the naming screen, where there are no cards and therefore nothing else a child
+               who cannot read can look at. Above the question, because it is the part they can
+               actually use and the question is for the grown-up beside them. -->
+          <div id="profile-gate-face" data-shown="false" role="img" aria-label=""></div>
+          <div id="profile-gate-header">
+            <h2 id="profile-gate-title">Who is playing?</h2>
+            <button id="profile-gate-close" type="button" aria-label="Close" data-shown="true">✕</button>
+          </div>
+          <div id="profile-gate-list" role="list" aria-label="Heroes on this tablet"></div>
+          <div id="profile-gate-name-row" data-shown="false">
+            <input id="profile-gate-name" type="text" maxlength="16" autocomplete="off"
+                   spellcheck="false" aria-label="Hero name" placeholder="Hero" />
+            <button id="profile-gate-confirm" type="button" data-intent="create">START</button>
+          </div>
+          <p id="profile-gate-notice" data-shown="false"></p>
         </div>
       </div>
     </main>

@@ -9,6 +9,7 @@ import { normaliseCharacterMaterial } from '../character/hero.js';
 import { cameraPositionFor } from '../review/cameraPresets.js';
 import { loadGLB } from '../world/assets.js';
 import { createFitSession, FORGE_FIT_SCHEMA } from './fitAuthoring.js';
+import { runtimeRestTransform, runtimeRestSource } from './runtimeBake.js';
 import {
   clearPendingTask, isTerminalMeshyStatus, loadPendingTask,
   MAX_CONSECUTIVE_POLL_FAILURES, savePendingTask, shouldAbandonPolling,
@@ -21,6 +22,9 @@ const fitKey = (assetId) => `gq-forge-fit:${FORGE_FIT_SCHEMA}:${sourceSha}:${ass
 
 let sourceSha = 'unbound';
 let studioScene;
+// Set once the scene exists; called whenever the layout over the stage changes, not just on a
+// window resize. See toggleDrawer below.
+let refreshViewport = () => {};
 let current = null;
 let dynamicMount = null;
 let dynamicObjectUrl = null;
@@ -67,8 +71,26 @@ function currentPacket() {
     baseline: shot.baseline,
     reference: shot.reference,
     effective: shot.effective,
+    // What character/gear.js actually stores. `effective` is bone-local, which is what the Forge
+    // authors in; the runtime keeps a rig-root-relative rest transform instead, and converting
+    // between them consumes a bone matrix. runtimeRestTransform reads BIND for that, so this block
+    // is the same number whether the Owner exports from the fit pose or mid-clip, and it is the
+    // exact inverse of the attach (test/forge-runtime-bake.test.mjs).
+    runtime: runtimeBlock(),
     savedAt: new Date().toISOString(),
   };
+}
+
+function runtimeBlock() {
+  if (!current?.anchor || !studioScene?.hero?.root) return null;
+  try {
+    const rest = runtimeRestTransform(studioScene.hero.root, current.anchor);
+    return { restRelativeToHeroRoot: rest, source: runtimeRestSource(rest) };
+  } catch (error) {
+    // A candidate mounted somewhere the runtime has no rest-transform contract for still fits and
+    // still exports; it just has nothing to bake into gear.js. Say so rather than emitting nothing.
+    return { unavailable: error.message };
+  }
 }
 
 function refreshFit(snapshot = current?.fit?.snapshot()) {
@@ -84,7 +106,9 @@ function refreshFit(snapshot = current?.fit?.snapshot()) {
   $('#scale-delta').value = cleanNumber(snapshot.delta.scale, 3);
   $('#fit-asset-name').textContent = current.displayName;
   $('#fit-bone').textContent = `${current.boneName} anchor`;
-  $('#fit-provenance').textContent = current.meshyTaskId ? 'MESHY TASK' : 'CANDIDATE';
+  // Never label shipped gear a candidate: the rack now carries both, and the Owner has to be able
+  // to tell at a glance whether the thing under the cursor is already in a child's hands.
+  $('#fit-provenance').textContent = current.meshyTaskId ? 'MESHY TASK' : (current.provenance ?? 'CANDIDATE');
   $('#coverage-chips').replaceChildren(...(current.hiddenAnatomy?.length
     ? current.hiddenAnatomy.map((name) => {
       const chip = document.createElement('span'); chip.textContent = name; return chip;
@@ -165,6 +189,7 @@ async function selectRackCandidate(button) {
     displayName: button.querySelector('strong').textContent,
     boneName: button.dataset.bone,
     loadout: button.dataset.loadout,
+    provenance: button.dataset.provenance ?? 'CANDIDATE',
     fitProfile: anchor.userData?.gqFitProfile ?? null,
     hiddenAnatomy: descriptor?.hideAnatomy ?? studioScene.hiddenAnatomy,
     anchor,
@@ -493,6 +518,7 @@ async function bootstrap() {
 
   const resize = () => studioScene.resize(canvas.clientWidth, canvas.clientHeight);
   window.addEventListener('resize', resize);
+  refreshViewport = resize;
   resize();
 }
 
@@ -637,8 +663,23 @@ $('#meshy-kind').addEventListener('change', () => {
 });
 $('#meshy-generate').addEventListener('click', generateCandidate);
 
-$('#mobile-assets').addEventListener('click', () => document.body.classList.toggle('show-assets'));
-$('#mobile-fit').addEventListener('click', () => document.body.classList.toggle('show-fit'));
+/**
+ * Open or close one of the narrow-viewport panels.
+ *
+ * The renderer only ever hears about WINDOW resizes, but a drawer sliding over the stage -- or the
+ * fit sheet taking the bottom half of a phone -- changes what the Owner can actually see of the
+ * Hero without the window changing size at all. Tell the scene the layout moved, once when the
+ * class flips and once after the 140ms slide settles, so the viewport is never left showing a
+ * stale frame behind a panel that just moved.
+ */
+function toggleDrawer(className) {
+  document.body.classList.toggle(className);
+  requestAnimationFrame(() => refreshViewport());
+  setTimeout(() => refreshViewport(), 200);
+}
+
+$('#mobile-assets').addEventListener('click', () => toggleDrawer('show-assets'));
+$('#mobile-fit').addEventListener('click', () => toggleDrawer('show-fit'));
 
 bootstrap().catch((error) => {
   console.error('[forge] failed to boot', error);

@@ -12,7 +12,8 @@ import {
   SHIPPING_SWORD_MESH_ID,
   WEAPON_BONE_NAME,
   WILDWOOD_BLADE_CANDIDATE_ID,
-  forceShippingWeaponOnClone,
+  cloneWeaponAnchors,
+  showWeaponOnClone,
   weaponMeshIdFor,
   weaponVisibility,
 } from '../public/src/character/weaponLoadout.js';
@@ -74,25 +75,33 @@ function fakeClone(names) {
   return { objects, getObjectByName: (name) => objects.get(name) ?? undefined };
 }
 
-test('a cloned remote is forced to the shipping sword whatever the local hero was holding', () => {
+test('a cloned remote is drawn holding the sword the wire says they hold', () => {
   const shippingName = rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME);
   const candidateName = rigidAnchorName(WILDWOOD_BLADE_CANDIDATE_ID, WEAPON_BONE_NAME);
   const clone = fakeClone([shippingName, candidateName]);
-  const found = forceShippingWeaponOnClone(clone);
+  const anchors = cloneWeaponAnchors(clone);
 
-  assert.deepEqual(found, { shipping: true, candidate: true });
+  assert.deepEqual(showWeaponOnClone(anchors, WILDWOOD_BLADE_ID), { shipping: false, candidate: true });
+  assert.equal(clone.objects.get(shippingName).visible, false);
+  assert.equal(clone.objects.get(candidateName).visible, true);
+
+  // ...and back, on the same anchors: a sibling who swaps is redrawn, not frozen at what they joined
+  // holding. This is the case the old forceShippingWeaponOnClone could not express at all.
+  assert.deepEqual(showWeaponOnClone(anchors, STARTER_SWORD_ID), { shipping: true, candidate: false });
   assert.equal(clone.objects.get(shippingName).visible, true);
   assert.equal(clone.objects.get(candidateName).visible, false);
 });
 
 // The ordinary case: a remote cloned before anyone ever equipped the Blade has no candidate anchor
-// in its hierarchy at all. That must be a no-op, not a crash on the join path.
-test('a clone with no Blade anchor is left alone rather than throwing', () => {
+// in its hierarchy at all. That must be a no-op, not a crash on the join path -- and the sibling
+// keeps the sword he is already holding rather than being handed an empty fist.
+test('a clone with no Blade anchor keeps the shipping sword rather than throwing', () => {
   const shippingName = rigidAnchorName(SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME);
   const clone = fakeClone([shippingName]);
-  const found = forceShippingWeaponOnClone(clone);
+  const anchors = cloneWeaponAnchors(clone);
 
-  assert.deepEqual(found, { shipping: true, candidate: false });
+  assert.equal(anchors.candidate, null);
+  assert.deepEqual(showWeaponOnClone(anchors, WILDWOOD_BLADE_ID), { shipping: true, candidate: false });
   assert.equal(clone.objects.get(shippingName).visible, true);
 });
 

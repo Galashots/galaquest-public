@@ -35,6 +35,11 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
+// The game URL a harness must land on. Imported rather than hand-built: this file spawns its
+// own server on a fixed port and so never saw startOwnedServer's `?hero=`, which is exactly how
+// it went red when the profile gate landed -- straight onto the naming question, world behind a
+// modal, input suspended. See owned-server.mjs's gameUrlFor.
+import { gameUrlFor } from './owned-server.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
 import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
@@ -232,6 +237,16 @@ const STATE_EXPR = `JSON.stringify((() => {
       return e?.hero ? { hp: e.hero.hp, swingSeconds: e.hero.swingSeconds, cooldown: e.hero.cooldown, downSeconds: e.hero.downSeconds } : null;
     })(),
     objective: document.querySelector('#quest-objective')?.textContent ?? '',
+    // Where the arrow is actually aimed, read off the runtime rather than off the DOM: the pointer
+    // is pinned to a screen EDGE, so its pixel position says nothing about which world thing it
+    // means. guidanceRescueState resolves the same destination the arrow uses.
+    pointerTarget: r.guidanceRescueState
+      ? [r.guidanceRescueState().targetX, r.guidanceRescueState().targetZ]
+      : null,
+    // The watch's own reading, not just where it is aimed. Bursting a seal moves the target without
+    // changing the objective the chip shows, so this is the one place in the suite where "the same
+    // errand now points somewhere else" happens in a real browser.
+    rescue: r.guidanceRescueState ? r.guidanceRescueState() : null,
     objectiveShown: document.querySelector('#quest-objective')?.dataset.shown === 'true',
     bossBarShown: document.querySelector('#boss-bar')?.dataset.shown === 'true',
     bossBarText: document.querySelector('#boss-bar')?.textContent ?? '',
@@ -437,7 +452,7 @@ async function run() {
     // file played the whole game as an unseeded stranger: no marks, a dark Lantern Tree, and a chip
     // still saying "Talk to Keeper Aldric" while the hero stood at the Old Beacon.
     await tab.page.eval(`localStorage.setItem(${JSON.stringify(GUEST_ID_STORAGE_KEY)}, ${JSON.stringify(guestId)})`);
-    await tab.page.send('Page.navigate', { url: `http://127.0.0.1:${port}/` });
+    await tab.page.send('Page.navigate', { url: gameUrlFor(origin) });
     const ready = await pollUntil(tab, (s) => s.ready && s.zone?.loaded >= s.zone?.requested, 60000);
     if (!ready.ready) throw new Error('runtime never came up');
     // THE FIXTURE HAS TO ACTUALLY BE THIS PLAYER. Checked at the seam rather than inferred from a
@@ -472,6 +487,27 @@ async function run() {
     check(arrived.siege?.sealsBuilt === 3, 'three cold seals stand around its base', `built ${arrived.siege?.sealsBuilt}`);
     check(arrived.siege?.wardenBuilt === true, 'and something is kneeling beside it');
     check(/cold seal/i.test(arrived.objective), 'the chip names the seals rather than asking a question', JSON.stringify(arrived.objective));
+
+    // AND THE ARROW AGREES WITH THE CHIP. "N cold seals left" is one of only two objectives whose
+    // place is not a fixed coordinate -- it is whichever seal is nearest and still standing, which
+    // depends on where the child is and on what they have already broken. world/destinations.js
+    // cannot know either, so main.js supplies it. This is the only place in the suite that proves
+    // that supply line in a browser rather than in a unit test with a hand-written list.
+    {
+      const [tx, tz] = arrived.pointerTarget ?? [null, null];
+      const standing = COLD_SEALS.filter((_, i) => arrived.siege?.seals?.[i]?.burst !== true);
+      check(standing.some(([x, z]) => x === tx && z === tz),
+        'and the arrow is aimed at a seal that is really still standing',
+        `target [${tx}, ${tz}] against standing ${JSON.stringify(standing)}`);
+
+      const [hx, hz] = arrived.heroPos;
+      const closest = standing
+        .map(([x, z]) => ({ x, z, m: Math.hypot(x - hx, z - hz) }))
+        .sort((a, b) => a.m - b.m)[0];
+      check(closest !== undefined && tx === closest.x && tz === closest.z,
+        'and it is the NEAREST one, not the first one written down',
+        `target [${tx}, ${tz}], nearest [${closest?.x}, ${closest?.z}] at ${closest?.m?.toFixed(2)}m from [${hx.toFixed(1)}, ${hz.toFixed(1)}]`);
+    }
     await aimAt(tab, OLD_BEACON.at[0], OLD_BEACON.at[1]);
     await shot(tab, 'portrait-01-the-cold-beacon');
 
@@ -559,6 +595,40 @@ async function run() {
       const gone = done.siege.seals.filter((s) => s.burst).length;
       check(gone === index + 1, `seal ${index + 1} of 3 bursts`, `${gone} gone, chip "${done.objective}"`);
       if (gone !== index + 1) break;
+
+      // THE ERRAND DID NOT CHANGE, BUT THE PLACE DID -- and this is where that actually happens to a
+      // child rather than to a unit test. The chip still says "N cold seals left"; the arrow now
+      // points at a seal seven metres away; and the child is standing about a metre from the one
+      // they just burst.
+      //
+      // A watch keyed on the objective id alone carries that one-metre best across, and then every
+      // step toward the next seal is further away than its remembered best. Twelve seconds later a
+      // child walking exactly where they were sent is offered help finding it. So what is pinned
+      // here is not that the arrow moved -- the check above the seal loop already covers aiming --
+      // but that the watch's HISTORY restarted with it.
+      if (index + 1 < COLD_SEALS.length && done.rescue) {
+        const [tx, tz] = [done.rescue.targetX, done.rescue.targetZ];
+        const [burstX, burstZ] = COLD_SEALS[index];
+        check(tx !== burstX || tz !== burstZ,
+          `the arrow leaves the seal that just burst`,
+          `target [${tx}, ${tz}], burst seal [${burstX}, ${burstZ}]`);
+
+        const [hx, hz] = done.heroPos;
+        const nowMeters = tx === null ? NaN : Math.hypot(tx - hx, tz - hz);
+        // Reset means "measured from here". Carried means "still holding how close they got to the
+        // last one", which at a burst seal is roughly arm's length. Half a metre of slack, because
+        // reconciliation can nudge them nearer between the reset and this sample; the two values it
+        // is telling apart are about seven metres apart.
+        // JSON has no Infinity, so an unmeasured best arrives here as null rather than as a number.
+        // Reported rather than coerced: a null silently comparing as zero would fail this check for
+        // the wrong reason and send whoever reads the log looking for a defect that is not there.
+        const best = done.rescue.bestMeters;
+        check(typeof best === 'number' && best >= nowMeters - 0.5,
+          'and its stuck-clock history restarts at the NEW seal, not at how close the old one got',
+          `best ${typeof best === 'number' ? `${best.toFixed(2)}m` : JSON.stringify(best)}`
+          + `, now ${nowMeters.toFixed(2)}m from [${tx}, ${tz}]`
+          + ` -- the seals are ~7m apart, so a best carried from the burst one reads about 1m`);
+      }
     }
 
     const woken = await pollUntil(tab, (s) => s.siege.warden.mode !== 'dormant', 20000);

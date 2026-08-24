@@ -42,11 +42,20 @@ import {
 import { WORLD_LIMIT_NORTH } from '../../public/src/world/bounds.js';
 import { BEACON_GLOW_REST } from '../../public/src/world/oldBeacon.js';
 import {
+  // `.text` AT EVERY COMPARISON BELOW. An objective is a value object now, not a sentence, and
+  // `s.objective` is the chip's textContent. `string === object` is always false, which broke three
+  // checks -- and `string !== object` is always TRUE, which is worse: two guards here went vacuous
+  // and would have reported PASS forever while checking nothing.
   OBJECTIVE_BEACON_IS_COLD, OBJECTIVE_FIND_THE_BEACON, objectiveBreakSeals,
 } from '../../public/src/world/quest.js';
 import { ROWAN_LINE_BEACON_FOUND, ROWAN_LINE_CART_SEARCHED } from '../../public/src/world/rowanSpeech.js';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
+// The held-walk primitive, shared with drive-relight, drive-village and drive-village-board. Its
+// module header records the measurement: a walk budgeted in milliseconds gets a fraction of its
+// iterations where every CDP round trip costs a rendered frame, and stops short of its target.
+import { metresOrUnknown, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -257,6 +266,9 @@ async function state(tab) {
       heroPos: [+r.player.position.x.toFixed(3), +r.player.position.z.toFixed(3)],
       serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(3), +net.serverSelf.z.toFixed(3)] : null,
       heading: r.follow.heading,
+      // Authority's own speed, so a walk can wait for the hero to have STOPPED rather than sleeping
+      // a guess and then measuring from a hero who is still coasting.
+      serverSpeed: net.serverSelf?.speed ?? null,
       netStatus: net.status,
       guestId: r.guestId(),
       marks: net.selfId !== null ? (r.rewards()[net.selfId]?.marks ?? null) : null,
@@ -297,11 +309,42 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })),
 });
 
+/** How much further out than the caller's ring the HELD leg may latch. It releases the stick on
+ *  arrival and the hero coasts, so it aims wide on purpose and the pulsed leg places him. Not a
+ *  number that has to be right: the loop below converges whatever it is. */
+const HELD_APPROACH_SLACK_METRES = 3;
+
+/** Hold the stick and decide arrival IN-PAGE, once per rendered frame. The pulsed walker below is
+ *  correct on a developer machine and wrong on a runner with no GPU, where each of its four CDP
+ *  round trips per iteration costs a whole frame and the hero only moves during the pulse. This
+ *  harness's road north is 30m of that. */
+async function heldWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  let walk;
+  try {
+    walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
+  } finally {
+    await touch(tab, 'touchEnd', []);
+    await tab.page.eval(STOP_WALK);
+  }
+  console.log(`  walk: ${walk.frames} frames held, ${metresOrUnknown(walk.startMetres)} to `
+    + `${metresOrUnknown(walk.metres)}, ${walk.arrived
+      ? `inside ${holdWithin}m at frame ${walk.arrivedFrame}`
+      : `NEVER GOT WITHIN ${holdWithin}m, closest ${metresOrUnknown(walk.closestMetres)}`}`);
+  await sleep(200);
+  return pollUntil(tab, (next) => next.serverPos !== null && next.serverSpeed === 0, 4000);
+}
+
 /** Real touch-stick movement toward a fixed world point -- drive-village.mjs's own walkToward,
  *  copied verbatim including its release-before-every-read discipline. The stick origin is a
  *  FRACTION of THIS tab's viewport, never a shared constant: an origin computed in one orientation
  *  lands off-screen in the other. */
-async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   let last = await state(tab);
   const deadline = deadlineAfter(maxMillis);
@@ -329,6 +372,37 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     await sleep(80);
     last = await state(tab);
   }
+  return last;
+}
+
+// HOLD, THEN PULSE, AND GO ROUND AGAIN IF HE IS NOT THERE YET -- the same convergent shape
+// drive-village.mjs and drive-village-board.mjs use, and for the same reason: one hold plus one
+// pulse is not enough, and no single slack number makes it enough, because any number picked here
+// is picked against one machine. The loop converges instead, bounded by the caller's own budget,
+// and reports its pass count so a slow route says so out loud.
+async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+  const deadline = deadlineAfter(maxMillis);
+  let last = await state(tab);
+  let passes = 0;
+  const awayFrom = (p) => (p ? Math.hypot(targetX - p[0], targetZ - p[1]) : Infinity);
+  while (Date.now() < deadline) {
+    const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+    if (away <= stopWithin) break;
+    passes += 1;
+    const held = away > stopWithin + HELD_APPROACH_SLACK_METRES;
+    if (held) {
+      last = await heldWalkToward(tab, targetX, targetZ, stopWithin,
+        Math.max(2000, deadline - Date.now()));
+    }
+    // Half the remaining budget only when a held leg ran, because only then is there a second
+    // mechanism to reserve it for. Halving every pass regardless starves the pulse, which is the
+    // only thing that can place a hero on a tight ring.
+    last = await pulseWalkToward(tab, targetX, targetZ, stopWithin,
+      held ? Math.max(1500, (deadline - Date.now()) / 2) : Math.max(1500, deadline - Date.now()));
+  }
+  const finalAway = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
+  console.log(`  approach: ${passes} pass(es), ${finalAway.toFixed(2)}m from target `
+    + `against a ${stopWithin}m ring`);
   return last;
 }
 
@@ -452,7 +526,7 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     if (full) {
       atCamp = await reachTheCartBeat(tab);
       check(`${label}: finishing the cart points the objective at the Beacon`,
-        atCamp.objective === OBJECTIVE_FIND_THE_BEACON,
+        atCamp.objective === OBJECTIVE_FIND_THE_BEACON.text,
         `chip reads ${JSON.stringify(atCamp.objective)}`);
       check(`${label}: Rowan's directions name the road rather than saying the Beacon must wait`,
         (atCamp.npcLine ?? '').includes(ROWAN_LINE_CART_SEARCHED),
@@ -514,10 +588,25 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     // ARRIVAL. Polled for the arrival and the stir TOGETHER: the stir starts on the frame the
     // arrival latches, and a poll that waits for one and then goes looking for the other can miss a
     // 1.6 s response entirely on a runner this slow.
+    // RECORDED ACROSS THE APPROACH, and the comment above was right about the hazard while still
+    // being caught by it. Polling for the arrival and the stir together stopped them being missed
+    // SEQUENTIALLY, but the stir is one breath of about 1.6s and a poll iteration on a runner
+    // painting at 367ms a frame is two round trips, so the pair can still both be true only in
+    // frames nobody sampled. Hosted that read as `beaconStirring false, glow 0.26` -- a cresset
+    // visibly mid-response, reported as one that never stirred. A recorder watching every frame
+    // from before the hero arrives cannot miss it, and "did the Beacon ever stir" is the question.
+    await tab.page.eval(startWatch('beacon-arrival', `({
+      beaconFound: window.__galaQuestRuntime.zoneTrailState().beaconFound,
+      beaconStirring: window.__galaQuestRuntime.zoneTrailState().beaconStirring,
+      beaconGlow: window.__galaQuestRuntime.zoneTrailState().beaconGlow,
+    })`));
     await walkToward(tab, OLD_BEACON.at[0], OLD_BEACON.at[1], OLD_BEACON.radiusMeters * 0.8, 60000);
     const arrival = await pollUntil(
       tab, (s) => s.beaconFound === true && (reducedMotion || s.beaconStirring === true), 20000,
     );
+    const approach = await tab.page.eval(readWatchSource('beacon-arrival')).then(JSON.parse);
+    await tab.page.eval(stopWatchSource('beacon-arrival'));
+    const stirred = approach.samples.filter((sample) => sample.beaconStirring === true);
     check(`${label}: reaching the Beacon latches the arrival`, arrival.beaconFound === true,
       `hero ${JSON.stringify(arrival.heroPos)}, beacon ${JSON.stringify(OLD_BEACON.at)}`);
     check(`${label}: the arrival banner names the place and claims nothing else`,
@@ -529,8 +618,10 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
       reducedMotion
         ? `${label}: reduced motion suppresses the stir but keeps the banner and the objective`
         : `${label}: the world answers -- the cold cresset stirs`,
-      reducedMotion ? arrival.beaconStirring === false : arrival.beaconStirring === true,
-      `beaconStirring ${arrival.beaconStirring}, glow ${arrival.beaconGlow}`,
+      reducedMotion ? stirred.length === 0 : stirred.length > 0,
+      `stirred on ${stirred.length} of ${approach.samples.length} recorded frames; `
+        + `at arrival beaconStirring ${arrival.beaconStirring}, glow ${arrival.beaconGlow}, `
+        + `peak glow ${approach.samples.reduce((peak, sample) => Math.max(peak, sample.beaconGlow ?? 0), 0).toFixed(2)}`,
     );
     await shot(tab, `${label}-07-arrival`);
 
@@ -559,10 +650,10 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
     // never actually check. OBJECTIVE_BEACON_IS_COLD stays imported and asserted in the reload phase
     // below, where it is still the floor for a child who has not walked up yet.
     const after = await pollUntil(
-      tab, (s) => s.sealsLeft > 0 && s.objective === objectiveBreakSeals(s.sealsLeft), 5000,
+      tab, (s) => s.sealsLeft > 0 && s.objective === objectiveBreakSeals(s.sealsLeft).text, 5000,
     );
     check(`${label}: the post-arrival objective is the honest one`,
-      after.sealsLeft > 0 && after.objective === objectiveBreakSeals(after.sealsLeft),
+      after.sealsLeft > 0 && after.objective === objectiveBreakSeals(after.sealsLeft).text,
       `chip reads ${JSON.stringify(after.objective)} with ${after.sealsLeft} seal(s) unbroken`);
     check(`${label}: and every seal it names is really standing there`,
       after.sealsLeft === after.sealsStanding,
@@ -644,7 +735,7 @@ async function runReloadPhase() {
       && Math.abs((first.beaconGlow ?? 0) - BEACON_GLOW_REST) < 1e-6,
       `built ${first.beaconBuilt}, stirring ${first.beaconStirring}, glow ${first.beaconGlow}`);
     check('reload: and has not been told it arrived somewhere it has not been',
-      first.beaconFound === false && first.objective !== OBJECTIVE_BEACON_IS_COLD,
+      first.beaconFound === false && first.objective !== OBJECTIVE_BEACON_IS_COLD.text,
       `beaconFound ${first.beaconFound}, chip ${JSON.stringify(first.objective)}`);
 
     await tab.page.send('Page.reload', { ignoreCache: false });
@@ -655,7 +746,7 @@ async function runReloadPhase() {
       && Math.abs((after.beaconGlow ?? 0) - BEACON_GLOW_REST) < 1e-6,
       `built ${after.beaconBuilt}, stirring ${after.beaconStirring}, glow ${after.beaconGlow}`);
     check('reload: the objective after a reload is truthful for a client that has not walked yet',
-      after.objective !== OBJECTIVE_BEACON_IS_COLD && after.objective !== OBJECTIVE_FIND_THE_BEACON,
+      after.objective !== OBJECTIVE_BEACON_IS_COLD.text && after.objective !== OBJECTIVE_FIND_THE_BEACON.text,
       `chip ${JSON.stringify(after.objective)}`);
     check('reload: no console errors', tab.consoleErrors.length === 0,
       tab.consoleErrors.slice(0, 3).join(' | '));

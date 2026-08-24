@@ -25,8 +25,10 @@ names a test file that actually exists, every `GQ-NNN` ID is unique and never re
 ---
 
 ### GQ-007 — Never restate a constant. Import it.
-**Status:** ENFORCED · **Hits:** 6 · **First:** 2026-08-11 · **Last:** 2026-08-20
-**Enforced by:** `test/shared-constants.test.mjs`
+**Status:** ENFORCED · **Hits:** 8 · **First:** 2026-08-11 · **Last:** 2026-08-24
+**Enforced by:** `test/shared-constants.test.mjs` — the spawn-literal guard, plus (hit 8) a
+fingerprint scan of `public/src`, `tools`, `net` and `test` for any Tier 2 gear transform typed
+outside `public/src/character/gear.js`.
 **Rule:** A value used by two modules lives in one importable module. If a module cannot import it,
 that is the thing to fix. **Hit 6's addition: a constant DERIVED from other modules' numbers is the
 same defect wearing a hat.** A literal that only happens to satisfy a relationship is not satisfying
@@ -42,6 +44,26 @@ literal in `world/ground.js`. Growing the world north for the Beacon road (`ZONE
 end's edge inward by half the growth, and the SOUTH horizon regressed from an edit that never went
 near it. The world ended on a hard line of 29.8% grass against open sky, in the shipped capture the
 visual gate had already passed. Three separate comments asserted the invariant; nothing checked it.
+**Hit 7, 2026-08-22:** the same defect in its purest form -- not a restated NUMBER but a restated
+LAW. "Which weapon is equipped" was implemented twice: once in SQL as `ORDER BY rowid DESC` and once
+in JS as highest `rev` with an eventId tiebreak. Both were defensible in isolation and they answered
+differently the moment a newer choice reached the table first. A rule with two implementations is a
+constant with two copies; the fix was to export the comparator from `progression/facts.js` and have
+the store import it, so there is one law and the database is just where the rows live.
+**Hit 8, 2026-08-24 — a duplicate does not fail when it is written, it fails when the original
+changes, and it blames the change.** `tools/runtime-test/fit-shield.mjs` bakes the sword next to the
+shield and compares it against gear.js, so that a drifted bake method cannot quietly produce a bad
+shield number. Good guard. Its reference was a hand-typed COPY of `sword_ironwood`'s rest transform,
+under a comment that already called itself "the sword already in gear.js" — the entry's own "prose in
+a comment is neither" clause, written out in full. The copy was silent for ten days because the
+constant did not move. When the Owner rejected the sword's carry and it was re-fitted, the guard
+compared a CORRECT bake against a retired value, reported a 2.73954 rig-unit error — exactly the
+magnitude of the re-fit — and declared its own good output UNTRUSTWORTHY, failing CI on the one
+commit that had fixed the thing it was guarding. **The new shape here is WHERE it hid:** every prior
+incident was in shipped code, and the existing enforcement is a fixed file list that only knows about
+spawn literals, so a copy in `tools/` was outside everything that looks. The scan added with this hit
+is keyed on the transforms themselves rather than on a list of files, so the next copy is caught
+wherever someone types it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-008 — A harness that navigates to the game must start from a known guest.
@@ -126,7 +148,7 @@ refused, and burned the iteration while the wolf's own timer ran on. Suite fell 
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-002 — A stale file header is a lie the file tells about itself.
-**Status:** RULE · **Hits:** 3 · **First:** 2026-08-14 · **Last:** 2026-08-14
+**Status:** RULE · **Hits:** 7 · **First:** 2026-08-14 · **Last:** 2026-08-23
 **Not enforced because:** a stale comment is prose about intent; verifying it is current requires
 re-deriving what's still true, which no regex can do safely without also re-deriving the design.
 **Rule:** This repo deliberately puts its reasoning in the code; an agent reading a file top-to-bottom
@@ -138,7 +160,39 @@ would move there "when reconciled". `combat/encounter.js:68-72` argued splitting
 `WOLF_BITE_COOLDOWN_SECONDS` "was not worth doing" thirteen lines above the split that had already
 shipped. `net/protocol.js:1` said "GalaQuest wire protocol v1" three lines above
 `PROTOCOL_VERSION = 3`, and its `EMPTY_ENCOUNTER` comment named a "Task B3" as not-yet-landed after B3
-had landed.
+had landed. **Hit 4, 2026-08-21:** `progression/facts.js`'s `unionFacts` doc still explained how the union treats `seq` after the field had been renamed to `rev` and given a tiebreak, in the same file whose header had just been rewritten to explain why the ordering works -- so the file argued for the new design at the top and described the old one in the middle. Caught by Director audit, not by the rename. The rule earns its keep on rename commits specifically: grep the file for the old identifier before calling the rename done. **Hit 5, 2026-08-22:** `rewardStore.mjs` still
+asserted "Latest INSERT wins... event ids are no longer overloaded as an ordering mechanism" nine
+lines below a schema header introducing the column that had just replaced that rule. The comment was
+not merely stale, it was the clearest statement of the bug, sitting directly above it. **Hit 6,
+2026-08-22:** `progression/facts.js` again -- its header still argued the equip revision "has to come
+from ... the device's own journal, which is the only participant present on both sides of a server
+wipe", after `rev` had become action-time epoch millis minted at the choice. The prose did not merely
+lag the code; it preserved the SUPERSEDED rationale, and that rationale is the one the fix disproved
+-- two devices that have not spoken both start from an empty journal, so journal-derived numbering
+ties exactly where it must not. A reader trusting the header would have rebuilt the defect. Second
+hit in this file, and the second found by Director audit rather than by the commit that caused it.
+The sharper form of the rule: when a fix REPLACES a reason, the old reason is more dangerous than an
+old fact, because it still reads as an argument. Grep the file for the abandoned rationale, not just
+the abandoned identifier.
+**Incident (2026-08-23), and it is the costliest form of this rule:** `profileGateViewModel`'s
+own JSDoc listed its heroes as `[{ id, displayName, marks, lanternUnlocked }]`. It also reads
+`hero.avatar`. main.js built its hero objects to match the documented list exactly -- three named
+fields plus the folded state, which has no avatar key -- so every chooser card fell through to the
+id-derived fallback and the stored animal was written and never read. The caller was not careless;
+it satisfied the contract as written. **A parameter a function READS and does not DOCUMENT is a
+defect waiting for its first caller**, and it is worse than an out-of-date sentence because there is
+nothing visibly wrong to notice.
+**Partially ENFORCED as of 2026-08-23**, which is new for this entry and worth explaining given
+the 'not enforced because' above. That reason still holds for the rule as a whole -- "is this prose
+still true" needs a reader. But the sub-case is decidable, because both halves are in the source:
+the keys a function destructures, and the names its own `@param` block mentions.
+`test/documented-parameters.test.mjs` compares them. Deliberately narrow -- only exported functions
+that destructure an object AND already carry an `@param` block; a function with no doc at all is a
+different argument and the check takes no view on it. On the sweep that produced it: three
+omissions across `public/src`, zero false positives, and all three now declared
+(`villageBoardViewModel`'s `beaconLit`, `profileGateViewModel`'s `maxProfiles`, `predictionStep`'s
+two bounds). None of the other three was a live defect -- every caller happened to pass them -- so
+the avatar case remains the only one that actually cost anything.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-003 — A test-count or CI-shape claim written in a document goes stale immediately.
@@ -412,19 +466,423 @@ about a second before hiding them. Fixed by passing the initial collection state
 starting collected pickups at `gone`; pinned by `test/loot-pickups.test.mjs`.
 **Foreknowledge helped:** not yet recorded.
 
-### OBSERVED — Automation timeouts are wall-clock budgets, not sample counts.
-**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
-**Rule:** A browser driver that promises “try for N milliseconds” must compare against a monotonic
+### GQ-019 — Automation timeouts are wall-clock budgets, not sample counts — and the fix for that has its own floor.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-17 · **Last:** 2026-08-23
+**Not enforced because:** the defect is a budget being too small for a machine nobody has measured,
+and no test can know what machine the next one is. `test/automation-timing.test.mjs` pins the helper;
+what it cannot pin is a caller's choice of number. The countermeasure is the successor entry below --
+stop spending the budget on reads at all.
+**Rule:** A browser driver that promises "try for N milliseconds" must compare against a monotonic
 wall-clock deadline. Never convert milliseconds into a fixed number of CDP reads: each read can take
-hundreds of milliseconds under hosted 3D load. Release movement input before every slow observation,
-so instrumentation latency cannot become unobserved travel.
-**Incidents:** Several full-matrix harnesses used names such as `maxSamples`/`maxSteps` as if one CDP
-state read cost one millisecond, while keeping movement held during each read. Under GitHub-hosted
-load nominal ten-second walks and fight polls expanded into multi-minute overshoots and false red
-gates. Fixed by `tools/runtime-test/automation-timing.mjs`, wall-clock deadlines, pulse/release/read
-movement, and structural coverage in `test/automation-timing.test.mjs` and
-`test/review-suite.test.mjs`.
+hundreds of milliseconds under hosted 3D load.
+**Hit 2's correction, and it is a correction to this entry's own remedy.** The original said "release
+movement input before every slow observation, so instrumentation latency cannot become unobserved
+travel." That is right about the hazard and, below roughly 5 fps, wrong about the cure: releasing per
+read makes the duty cycle the read rate, and the walk then never arrives at all. Measured 2026-08-23,
+`drive-relight`: the pulse/release/read walk spent **7217 ms of a 10000 ms budget** locally to cross
+6.44 m -- 3120 ms of it the per-iteration settle sleep, only 129 ms actual CDP -- finishing with 28%
+to spare on a machine where round trips are effectively free. Hosted, at a measured mean frame of
+**367 ms**, the same loop covered 3.1 m and stopped 3.3 m short. Release-per-read is correct only
+while a read is cheap relative to a frame. When it is not, the stop condition has to move into the
+page instead, which is what the successor entry is about.
+**Incidents:** (1) 2026-08-17 -- several full-matrix harnesses used names such as `maxSamples`/
+`maxSteps` as if one CDP state read cost one millisecond, while keeping movement held during each
+read; nominal ten-second walks expanded into multi-minute overshoots. Fixed by
+`tools/runtime-test/automation-timing.mjs`, wall-clock deadlines, pulse/release/read movement, and
+structural coverage in `test/automation-timing.test.mjs` and `test/review-suite.test.mjs`.
+(2) 2026-08-23 -- eight harnesses red hosted and green locally, every one of them a budget sized on
+a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a frame.
 **Foreknowledge helped:** not yet recorded.
+
+### RULE (GQ-022) — An instrument is not evidence until it has been shown to fail.
+**Status:** RULE · **Hits:** 4 · **First/Last:** 2026-08-23
+**Rule:** A probe that has only ever been seen passing, or only ever seen returning *something*, has
+not been tested -- it has been run. Before believing a reading, make it produce the wrong answer on
+purpose: point it at the broken state, or remove the fix and watch the test go red. A field that
+comes back `null` is the loudest version of this and the easiest to read past, because `null` looks
+like an answer.
+**Not enforced because:** no test can tell a real measurement from a vacuous one; the check is
+whether somebody made it fail. What IS mechanisable is already in place -- red-capability exercises
+next to the new tests, and `test/harness-verdict-semantics.test.mjs` for the verdict shapes.
+
+**Four hits in one day, which is why this is a RULE at first writing rather than an OBSERVED.**
+
+1. **A probe read the wrong object.** A per-frame pip trace in `drive-marks` recorded
+   `marks=null rewardKeys=` on every frame -- it read `encounterState().rewards`, which is not where
+   the pips are painted from. The `pips=1` half was real; the `marks` half never existed. Caught only
+   because the raw key list was printed beside the value.
+2. **A scripted edit whose anchor never matched.** A `str.replace` with no assertion silently did not
+   apply, and the probe then reported `lantern undefined` FAIL for something it had never measured.
+3. **A helper that never reached the branch it existed to test.**
+   `createProfileStore({ randomUUID: null })` does not disable crypto -- `options.randomUUID ?? …`
+   falls through on null -- so the no-crypto test took the UUID path and **passed against the unfixed
+   code**. Found by the red-capability check, which is the only thing that could have found it.
+4. **A test baseline where two subjects were identical.** Two tabs both minted `p-local-1-1`, because
+   a short injected UUID fails the id sanitizer and the fallback derives from `profiles.length`. One
+   assertion passed vacuously comparing an id to itself. Earlier the same day: two animation clips
+   written to the same value, so three of eight new tests passed without exercising anything.
+
+**What they have in common** is not carelessness about the subject -- each of these was written
+carefully, about a real question. It is that the INSTRUMENT was assumed to work because it ran. The
+subject gets scepticism and the tool gets trust, and it is the wrong way round: the subject is the
+thing you already suspect, and the tool is the thing you are about to believe.
+
+### OBSERVED — A NEW FAILURE against a base is not evidence that this commit caused it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** `ci-diff.py` answers "what is red here that was green there". That is not the same question
+as "what did I break", and the gap between them is every harness that flips on its own. Before
+reverting or chasing a NEW FAILURE, look at how that check has concluded over the last dozen heads.
+A check that flaps is not evidence about a commit, however clean the diff looks.
+
+**The hit.** I shipped a fix for a proven data-loss bug -- two tabs of the game on one device
+silently delete each other's child, demonstrated by unit test -- and `drive-marks` and `drive-touch`
+went red on it, both green on the commit before. "The only difference is mine", so I reverted it.
+`drive-marks` then went red **on the revert as well**:
+
+    $ git diff --quiet 2d0f6b1 07c9905 && echo IDENTICAL
+    IDENTICAL
+
+Byte-identical trees, green at one head and red at the other. Both failures were flakes. The fix was
+innocent and I had thrown it away.
+
+**What makes this worse than bad luck.** I had built a table of exactly which harnesses flap and
+posted it to the PR forty minutes earlier, to make the rotating cast visible. `drive-touch` is in it,
+flapping at `6235d80`. I did not look at the table I had just written. The instrument existed, in my
+own hand, and the failure was not consulting it.
+
+**Enforced as far as it can be.** `ci-diff.py --sha` now prints each new failure's record over the
+last twelve heads (`.X.........X  (3 flips)`), so the diff carries the history instead of asking the
+reader to remember it. Measured honestly: run against the diff that fooled me it flags `drive-touch`
+at three flips, and does **not** flag `drive-marks`, whose previous flap is outside any window --
+that one was only provable by the identical-tree contradiction after the fact. The tool moves this
+from "remember the table" to "read the line", and catches one of the two. It is not a cure.
+
+**The corollary that cost the most.** Reverting is cheap and safe *as an action*, which is exactly
+why the bar for it drifts. It is not cheap as a decision: it threw away a proven fix for a real
+defect on evidence that took four minutes to falsify afterwards. "Revert first, diagnose later" is
+right when the head is red and the cause is plausible; it needs the same "is this check trustworthy"
+question as any other claim.
+
+### RULE (GQ-021) — A harness written in wall-clock time is driving something that advances in rendered frames.
+**Status:** RULE · **Hits:** 5 · **First/Last:** 2026-08-23
+**Not enforced because:** no test can look at a number and tell whether it was reasoned about in
+milliseconds or in frames -- the mistake lives in the reasoning, not in the syntax. The one half that
+IS mechanisable is enforced: `test/net-client.test.mjs` asserts the same snapshots put the hero in
+the same place whatever the frame rate, which is the product-side statement of this rule.
+**Rule:** On a browser with no GPU the page paints at 2-4 fps and a `Runtime.evaluate` waits on the
+main thread, so a CDP read costs a FRAME, not a millisecond. Three consequences follow, and they are
+one mistake wearing three hats: a loop budgeted in milliseconds gets a fraction of its iterations; a
+short-lived state can live and die between two reads; and a read taken after an act can land before
+the frame that applies it, or after the state has moved on again. **Enlarging the timeout re-decides
+the same number against the next machine.** Move the frame-rate-sensitive half into the page instead:
+record the value once per rendered frame and read the log, so observation costs nothing and cannot
+be too slow, and decide arrival in-page so input can be held rather than pulsed. Polling a RECORDER
+is safe at any rate; polling LIVE STATE is not.
+**Fourth hit, and the one that shows the rule reaches past harnesses into DERIVATIONS.**
+`play-fight`'s settle check gives the rendered hero 6s to converge onto the authoritative one, and
+its comment derives that number properly rather than picking it: `reconcile()` closes 10% of the
+error per snapshot, snapshots are 10Hz, the worst legal start is `SNAP_DRIFT_UNITS` (0.6m), so 29
+snapshots is about 2.8s and 6s is that with room. Every step of that is right except the clock.
+`reconcile()` is applied in the FRAME LOOP, so the achieved rate is min(snapshot rate, frame rate),
+and the frame rate is the term that varies twenty-fold.
+
+Measured on a starved run: `0.623m -> 0.051m over 6257ms` -- 24 corrections at 3.8 per second, not
+10. It needed 29, had room for 24, and reported NEVER CONVERGED at 5.1cm against a 3cm bar, on a run
+where the hero converged perfectly well. Two of four consecutive hosted heads went red on it while
+the game code was byte-identical across all four.
+
+**What is new here:** the previous three hits were harness loops written in milliseconds by habit.
+This one was a budget DERIVED from real constants, in a comment that shows its working, and it was
+still wrong -- because the derivation named the snapshot rate as the limiting term when the limiting
+term is whichever of two rates is slower. A derivation is only as good as its slowest assumption, and
+"how often does this actually get applied" is the question to ask of any rate, not "how often is it
+offered". Fixed by budgeting in corrections -- `min(rendered frames, elapsed / snapshot interval)` --
+which is what the derivation was always about. 3 of 3 local runs green afterwards, where it had been
+2 of 3.
+
+**Fifth hit, and the first one in the GAME rather than in an instrument -- found by reading my own
+fourth entry back.** The paragraph above contains the sentence "`reconcile()` is applied in the FRAME
+LOOP, so the achieved rate is min(snapshot rate, frame rate)". I wrote that as a fact about the
+machine and used it to calibrate an instrument around. It is a bug report about the game, and I did
+not read it as one.
+
+`net/client.js` gates reconciliation on a BOOLEAN `hasNewSnapshot`. The flag was added for a real
+reason and fixed a real bug -- at 60 fps, six frame-rate calls would otherwise take six bites out of
+one snapshot's drift. But a boolean can only ever say "at least one snapshot arrived", so it fixed
+the fast half and left the slow half wrong: below 10 fps the snapshots keep coming and all but one
+per frame are discarded. `NUDGE_FRACTION`'s own comment promises "under a centimetre in about three
+seconds" at 10 Hz. Measured in a real browser at 40x CPU throttle (~3 fps), the drawn hero closed
+0.26m in **10.5 seconds and had not arrived**:
+
+    t=73744 d=1.26 sd=1.26      rendered and authoritative agree
+    t=74151 d=1.28 sd=1.54      authority jumps; the correction begins
+    t=84250 d=1.49 sd=1.54      ten seconds later, still 5cm out
+
+What that is, to the child this game is for, is their own hero sliding sideways on his own for ten
+seconds after they let go of the stick -- on the cheap tablet that is the target device, not on some
+pathological runner. And every proximity trigger in the world (the Keeper's greeting wave, his speech
+bubble, the quest marker) is decided from the DRAWN hero, so the village reacts ten seconds late too.
+It is the direct cause of `drive-village`'s keeper-talk failure hosted: the hero the harness parked
+1.34m from the Keeper kept creeping outward past the 2.0m speech radius while the check waited.
+
+Fixed by consuming the whole backlog and compounding the same fraction over it: `1-(1-f)^n` IS n
+separate f-sized bites, exactly, so nothing is retuned and at any frame rate at or above the snapshot
+rate every number is unchanged.
+
+**What is new here:** the previous four hits were all instruments. This one was the SUBJECT, and it
+was visible in my own notes for hours before I looked at it. Diagnosing a measurement problem
+correctly and then budgeting around it is a way of writing the bug down and walking past it. When the
+explanation for a flaky instrument is a property of the product, that property is the finding.
+
+**Corollaries, each of which cost a round on 2026-08-23:**
+- **A log is a history.** "Wait until the hero is back up" was satisfied by a frame from before he
+  ever went down. A recorder needs a `since` index or it answers with the past.
+- **A live read can INVENT a failure, not just miss one.** The rule above says polling live state is
+  unsafe because a short-lived state can slip between two reads. The sharper form, measured in
+  `drive-two-clients` on 2026-08-23: a read that lands BETWEEN two rendered frames sees a state no
+  player is ever shown, and it can be arbitrarily worse than any drawn one. Snapshots arrive on the
+  socket and move `serverSelf` at once; the drawn hero is pulled toward it by `reconcile()`, which
+  runs in the frame loop. So between frames the two are a whole snapshot of travel apart *by
+  construction*. One walk, both numbers from the same run: worst drawn-to-authority gap over 12
+  rendered frames **0.200m**, and the single between-frames sample the check actually judged
+  **1.414m** -- seven times worse, and red, against a 0.3m bar. The check had been failing for a
+  dozen heads and was on the Director's open list as an unexplained product concern. It was an
+  instrument reading a state that does not exist for the player.
+- **A backgrounded tab has not painted, whatever the clock says.** rAF only advances for the
+  foregrounded tab, so `bringToFront` plus a sleep is not enough to make one readable; two rendered
+  frames is. Half a second there bought one frame or none.
+- **Two things read sequentially cannot be compared.** Two tabs' wolf health "disagreed" — and the
+  direction of the disagreement FLIPPED between environments (A=2 B=1 locally, A=1 B=2 hosted), which
+  is the tell: a real desync has a direction. Bracket the second read between two of the first.
+- **A slack constant between two phases is a number picked against one machine.** A walk that holds
+  for distance then pulses to place itself needs no such number if it simply loops until it arrives.
+- **CONSEQUENCE 2 IS NOT A HYPOTHESIS ANY MORE.** Hit 3. `in-page-driver.mjs`'s header listed "an
+  input pulse can span no rendered frame at all" as the thing
+  `tools/diagnostics/diagnose-movement.mjs` was written to discriminate. It is now a measured cause:
+  `movementPulseMillis` is floored at 70ms and capped at **300ms**, one hosted frame is 300-400ms,
+  and the pulse shrinks as the hero nears his target — so the closer he got the less he moved, and
+  below one frame he stopped entirely. drive-village-board's Workshop approach ended **2.43m from a
+  2.4m radius**: not slow, INERT, and inert in a way that looks exactly like slow. The remedy needs
+  no constant — wait on the pulse OR one rendered frame, whichever is longer
+  (`Promise.all([sleep(pulse), afterAFrame()])`), so the fast machine keeps its measured pulse and
+  the slow one gets a press that spans a frame.
+- **The observation can be SLOWER THAN THE STATE, and then no aim taken during it can work.** Hit 2.
+  A `Runtime.evaluate` costs one frame; a `Page.captureScreenshot` on a software rasterizer costs
+  eight — measured 1628–2627 ms, against a knockdown that lasts `RESPAWN_SECONDS`, which is 2. Two
+  things follow and both were got wrong first. **You cannot bracket it:** a read either side of the
+  shutter always straddles the end of the window, so the check can only ever go red, and a one-sided
+  version that stays silent reads as green. Caption the artifact with the interval it was taken
+  across and let the RECORDING carry the assertion. **And you must lead the target:** the pixels come
+  from the END of the shutter, not the beginning — established by firing at `downSeconds` 1.1 with the
+  shutter open 2200 ms and getting a hero already back on his feet. Fire early by the measured
+  latency, `max(0, wanted − shutter)`, and measure it on a capture the run was taking anyway.
+**Incidents (2026-08-23, one session):** `play-fight` swung every 7.5 s against a rule allowing one
+every 1.5 s, so with Design ruling 5 healing the wolf on each knockdown it reported a fight
+unwinnable that is won in three swings; `drive-marks` 10/21 with 13 knockdowns; `drive-lifecycle`
+timed a 10 s respawn at 0.26 s because the stopwatch started when a poll NOTICED the corpse;
+`play-fight` read `wolf on 3hp of 3` after a fight the recorder proves it lost, because the wolf had
+respawned before the read; `tapping ATTACK starts a swing` failed while the very next check passed
+against the SAME tap. Matrix went 12 red to 7, with the remaining chaseable two being genuine
+environment limits rather than bugs. Shared primitives in
+`tools/runtime-test/in-page-driver.mjs`; the hosted frame rate and the refutation of the competing
+"input never reaches authority" hypothesis are in that file's header, measured by
+`.github/workflows/movement-diagnostic-probe.yml`.
+**The general form, worth stating separately because the three hats hide it:** when an instrument and
+the thing it measures keep different clocks, every number the instrument carries is a claim about
+the ratio between them. Write the number in the units the SUBJECT advances in, or move the decision
+to where those units are counted.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-020 — A presentational class is an identity. Reusing it for the look makes every reader that queries it wrong.
+**Status:** RULE · **Hits:** 2 · **First:** earlier · **Last:** 2026-08-23
+**Not enforced because:** the offence is a class on the wrong element, and only the reader's INTENT
+says which elements belong. `.profile-card-face` on a row that is not a card is indistinguishable,
+to any scanner, from `.profile-card-face` on a card -- the wrongness is entirely in what the queries
+elsewhere mean by it. A rule about naming, checkable only by whether the queries still answer right,
+which is what those queries' own tests are for.
+**Rule:** When something must LOOK like a member of a set without BEING one, give it its own class
+and repeat the CSS. The shared class is not styling, it is the answer to "how many of these are
+there" for every `querySelectorAll` in the codebase and every harness reading the DOM. Copying six
+lines of CSS is the cost of that separation and it is always cheaper than the alternative, which is
+a count that is quietly wrong in a place nobody is looking at.
+**Incidents:** (1) The chooser's "New hero" row was first built as a `.profile-card`, because it
+looks like one. The browser harness immediately read three heroes on a two-hero device. Fixed by
+giving it `.profile-card-add`, with a comment in `progression/profileGate.js` saying exactly why --
+"shared look, separate identity". (2) 2026-08-23, and this is the interesting one: giving that same
+row an animal face, I reached for `.profile-card-face`. **Three lines below a comment explaining why
+the row does not share `.profile-card`, for the identical reason.** One run later, `every card shows
+the animal that profile actually has stored` read three faces on a two-hero device and reported
+"New hero, the Owl" as a stored animal. The lesson was written down, in the right file, at the right
+place, by someone who had just been bitten -- and it was scoped to the class it had been bitten on
+rather than to the kind of class it was.
+**The general form:** a warning about one identifier teaches the identifier. Write it about the
+KIND, or the next member of that kind walks straight into it.
+**Foreknowledge helped:** no -- worse than no. The comment was three lines away and was read.
+
+### OBSERVED — The maximum of a set is biased toward the set with more samples in it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A peak is an extreme value, and how extreme a value you find depends on how many draws you
+took. Comparing `max(A)` against `max(B)` when A has four samples and B has fifty-six is not
+comparing A against B -- it is comparing four draws against fifty-six draws, and the larger set wins
+part of the margin for free. **Before comparing extremes of two sets, compare their sizes.** Either
+sample them comparably, use a statistic that is not an extreme (a median, an integral), or say the
+comparison cannot be made and report why.
+**Incident (2026-08-23):** the third formulation of `the sword arm actually moves` compared the peak
+hand speed while swinging against the peak while at rest. Locally 18 swinging frames against 66 at
+rest gave 4.5x and passed. Hosted at `3f2d45a`, where the frame period is 189ms, the same check drew
+**4 swinging frames against 56 at rest** and read **3.0x against a 3x bar** -- failing on the
+rounding. The swing's real peak falls between frames at that spacing while rest gets fourteen times
+as many chances at its own, so the number that went red was mostly the sample-count ratio.
+**What it became, and the more useful half:** not a fourth formulation. The previous commit had
+already written down that a fourth hosted failure would make this `diagnostic()` rather than another
+revision, so it did -- gated on a MEASURED property of the run, that the swing was sampled at least
+four times per swing. Where it is not, the honest verdict is that this runner cannot separate a
+swing from breathing. **Deciding what a future red will mean, before seeing it, is what stops the
+third revision becoming a fourth**; without that written down first, the pull toward one more tweak
+until the bar is cleared is very strong, and every tweak is a threshold fitted to one machine.
+**Sibling entries:** this is the same CHECK as the frame-of-reference entry below, failing a third
+time for a third unrelated reason -- contaminated baseline, wrong frame, biased estimator. A check
+worth having can be wrong in more ways than one, and each of them only showed on a machine other
+than the one it was written on.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A measurement has to be taken in a frame where only the thing under test can move it.
+**Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
+**Rule:** A comparison against a baseline needs the baseline to be a state the subject was actually
+IN, not the complement of the state under test. Those two are the same set only when the sampling is
+fine enough that transitions cost nothing. At 5 samples per event they are not: every boundary frame
+carries part of the event into the baseline it is being measured against, and the contamination
+scales with the frame period -- so the test is tightest exactly where the machine is fastest and
+worthless where it is slowest. Take the baseline from a stretch where the subject is unambiguously
+at rest, before the first event, and say in the code why that stretch and not the complement.
+**Incident (2026-08-23):** a new check comparing how far the hero's sword hand travels while
+swinging against how far it travels while not, to prove the swing animation is not a frozen pose.
+Locally: 1.32m against 0.18m, 7.2x, comfortable. Hosted at a 317ms frame: **0.38m against 0.54m,
+0.7x** -- it reported that a moving arm moves less than a still one, and went red. Three swings
+sampled five times each leave a handful of return-to-rest frames in "not swinging", and those few
+frames carried most of an arc. Fixed by taking rest from the frames before the first tap.
+**Hit 2 (2026-08-23, the SAME CHECK, a different contamination, and this is what promotes the
+entry).** With the baseline fixed the check failed hosted again at **0.8x**, and the reason was the
+other half of the same mistake: the hand was read in WORLD coordinates. A hand in world space moves
+when the arm moves, when the hero walks, and when the hero TURNS — and only the first is a swing.
+The guard I had written caught the walk (root travel 0.000m) and was blind to the turn, which is the
+one that happened: `photographTheSwing` calls `orbitToFront`, the hero comes round to face the
+camera, and his hand sweeps half a metre through the world with his arm doing nothing. 0.54m of that
+went into the baseline the swing's own 0.45m was measured against.
+**The general form, which covers both hits:** pick the frame of reference before picking the
+threshold. Expressed in the hero's LOCAL frame — the world offset projected onto his root's own
+basis vectors — the number cannot be moved by his position or his facing, so there is nothing left
+in it but the arm, and the guard against walking becomes unnecessary rather than insufficient. Rest
+fell to 0.19m of breathing against 1.25m of swing. **Every guard you have to add is a hint that the
+quantity is measured in the wrong frame**; the right frame needs no guards.
+**Why it is worth an entry rather than a shrug:** this check was written the same morning, expressly
+to catch a defect that only appears on slow devices, and was sabotage-tested and confirmed
+red-capable. It still went in twice with a measurement that dissolves on a slow device. **Proving an
+instrument can see its failure case does not prove it is measuring the right two things.** The
+sabotage answered "would this notice a frozen arm" and never asked "is `!swinging` the same as
+`still`", nor "does anything but the arm move this number".
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Making one beat of a harness work can break the next one, because they share a world.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A scripted playthrough is a sequence of beats against ONE living world, so every beat
+inherits whatever the last one left behind — an alive or dead enemy, a hero's position, a spent
+cooldown. Fix a beat that was failing and you have changed that inheritance, and the next beat can
+fail for a reason that did not exist before and has nothing to do with your change. **A beat should
+ARRANGE its own preconditions rather than inherit them, and say so in a check**, so the failure
+names the missing precondition instead of blaming the thing being tested.
+**Incident (2026-08-23):** `play-fight`'s landscape hit beat could not reach the wolf, so all thirty
+of its taps missed. Fixed by re-closing on the wolf whenever the recorder said the hero was out of
+reach — and the beat immediately became effective enough to KILL the wolf, because it read the
+recorder only every fourth tap and four taps of overshoot is three more swings into a three-hit-point
+animal. The knockdown beat after it then stood waiting to be bitten by a corpse. Same red, different
+number: `0 down frame(s) of 126` became `0 down frame(s) of 185`. Both were the knockdown beat
+reporting that the hero could not be knocked out, and on neither run was that the question.
+**The tell:** a check whose evidence is a large count of frames in which NOTHING happened is almost
+never about the thing it is named after. 126 frames at full health is not a hero who resists being
+knocked down, it is a hero nothing is attacking.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A sentinel that means "no value" will happily do arithmetic, and can carry a check over its own bar.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** `-1` for "not swinging", `null` for "not measured", `0` for "never arrived" — every codebase
+has them, and they are fine until one reaches a comparison. Then the check does not merely tolerate
+the missing reading, **the missing reading is what makes it pass**, and the check is now most
+reliable exactly when its evidence is worst. Two questions catch it: does my sentinel survive into
+the arithmetic, and if a reading were MISSING would that push this number toward the bar or away
+from it? Filter to the readings that exist, require the count you meant, and bound the result on
+both sides — a spread wider than the thing it spans is as wrong as one narrower.
+**Incident (2026-08-23):** `play-fight`'s `the three frames are spread across the swing rather than
+three copies of one instant` measured `max - min` of three `swingSeconds` against a bar of
+`SWING_SECONDS * 0.3`. A frame that caught no swing carries `-1`, and `0.911 - (-1.000)` is `1.911`
+— so hosted it reported `spread 1.911s of 1.5s`, **a spread wider than the swing it was measuring**,
+on the very run where a third of its evidence was missing. It sat one line below the check that had
+just gone red for that same missing frame, and passed. Fixed by computing over the frames that
+caught a swing, requiring all three, and adding the upper bound that would have made the impossible
+number impossible to report.
+**The tell, worth naming:** the number was NOT PHYSICALLY POSSIBLE and nobody read it. A spread
+cannot exceed the interval it lies in, a fraction cannot exceed one, a distance cannot be negative.
+An evidence string is not decoration — it is where an unfalsifiable check announces itself, and this
+one had been announcing itself in every hosted log it appeared in.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A clamp that protects one subsystem silently degrades every other one sharing the clock.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** `main.js` computes `deltaSeconds = Math.min(gap / 1000, 0.1)` so a hitch cannot teleport
+the hero — a movement guard, correct, and commented as such. It is then passed to everything the
+frame updates, including three animation mixers, for which it is not a guard but a **speed limit**:
+below 10 fps every clip plays in slow motion by the ratio, silently, with no error and no failing
+test. A clip that merely loops survives that. A ONE-SHOT CLIP INSIDE A FIXED WINDOW does not, and
+the death clip is one: `character/reactClips.js` retimes it to only just fit `RESPAWN_SECONDS`, so it
+survives the cap only above `0.1 / DEATH_FALL_FRACTION` — about 5.5 fps. **Ask of any clamp: whose
+hazard is this, and who else is downstream of it?** A value narrowed for one consumer's safety is
+being handed to consumers whose correctness depends on it being wide.
+**Incident (2026-08-23):** measured at 3.1 fps, the hero's death clip reached 55% of its length in
+the two seconds he is down and his hips never got below 65% of standing height. What a child on a
+cheap tablet saw was a hero drop to one knee and pop straight back up — no knockdown at all. That is
+the *identical* defect `reactClips.js`'s own header describes at length and records as fixed on
+2026-08-13, resurrected from the other side by a clamp written for movement, on precisely the slow
+device this game is for. **Nothing in 1533 node tests and 33 browser checks could see it**, because
+every check about the knockdown asked a flag or a DOM veil and none of them looked at the body.
+Fixed by passing the raw `frameDeltaMs` to `reactions.update` — the distinction main.js already draws
+two hundred lines away for the rescue watch, with its own "THE RAW DELTA, not the clamped one" comment.
+**Caught, and now guarded, by** `tools/runtime-test/play-fight.mjs` — a per-frame recording of how
+far the highest bone in the hero's skeleton stands above his own origin, asserted to fall under half
+of standing height while he is down. Not an `ENFORCED` rung: that rung wants a test in `test/` named
+for an ID, and this entry is at its first hit with a guard that only exists in a browser. It went 65% → 9% on the fix. Cost nothing: the recorder was already running,
+and observation from inside the page is free. **The generalisable half, and it is not a slogan -- it was
+run:** a check that reads a flag proves the rules ran. Only a check that reads the BODY proves a
+child would see it. With `swing?.update(...)` sabotaged into a no-op -- rules intact, pose never
+written -- `tapping ATTACK starts a swing`, `tapping ATTACK damages the wolf`, `the swing frames
+actually caught a swing` and `the three frames are spread across the swing` **all four passed**,
+while the hero stood frozen holding his sword out. Four checks named for an animation, none of which
+could see one. The only red was a new measurement of how far the sword hand actually travelled.
+**THE SWEEP, so nobody has to redo it.** 23 things in `main.js`'s frame take the clamped
+`deltaSeconds`. The hazard needs BOTH halves: the consumer accumulates that delta into a one-shot,
+AND the moment it ends is decided by a clock that is not that delta. An effect that counts its own
+elapsed time and ends on its own count is merely slowed, self-consistently, and completes. Sorted:
+- **Truncated** — `reactions` (the death clip; fixed here). Ended by `downSeconds`, which is rules
+  time, while the clip advanced in clamped time.
+- **Immune, and both by the same trick** — `swing` places `action.time` from progress and calls
+  `mixer.update(0)`; `zoneWarden` is re-handed the rules' own `modeSeconds` every frame by `setMode`
+  and poses as a pure function of it. **The codebase already contained the correct pattern twice.**
+  The fix is not really "unclamp the delta" — it is "place the pose from the rules clock" — and the
+  one module that accumulated instead is the one that broke.
+- **Measured and clear** — `wolfPresenter`. Same accumulate-a-one-shot shape as the hero's death, and
+  it survives only because it has `WOLF_RESPAWN_SECONDS` to finish in rather than `RESPAWN_SECONDS`.
+  Slack, not safety; now measured every run (corpse at 19% of standing height).
+- **Degraded, not broken, unfixed** — `locomotion` accumulates the clamped delta into a LOOP, so
+  below 10 fps the walk cycle plays at a fraction of speed while the hero travels at full speed. He
+  moonwalks. Not measured, not touched: a loop self-corrects rather than failing inside a window,
+  and that module's restore-then-reapply path carries its own warnings.
+- **Self-clocked, no rules window** — the remaining effects (sparks, bursts, flashes, seals,
+  brambles, presence and stir ticks). Slowed together with everything else and consistent with it.
+**A separate gap the sweep turned up:** `net/remotes.js` has locomotion and no reaction animator at
+all, so a sibling watching another child's hero go down never sees it fall, at any frame rate.
+**Foreknowledge helped:** no — the ledger had `A render change whose whole purpose is how something
+LOOKS cannot be judged from a container with no GPU`, and the true reading here is nearly its
+inverse: the container's slowness was not an obstacle to the review, it was the only reason the
+defect was visible at all. A GPU would have hidden it.
 
 ### OBSERVED — Evidence may name a commit only after executing from that exact clean commit.
 **Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-17
@@ -604,4 +1062,469 @@ EMBERS, which sit inside an openEnded cresset 0.17 m below a 1.14 m rim; `isLit(
 banner said "The Old Beacon is burning!", and the capture of the winning moment is a black basket
 against a blue sky. Both fixed in the same change, and both gates rewritten to measure the effect:
 blows-to-kill for the Blade, metres of visible flame for the Beacon.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-014 — An identity derived from mutable state is not an identity.
+**Status:** ENFORCED · **Hits:** 6 · **First:** 2026-08-21 · **Last:** 2026-08-22
+**Enforced by:** `test/equip-recovery-order.test.mjs` (and `test/profile-identity.test.mjs` for the
+first incident, which is the same defect in the idempotency-key half of this rule)
+**Rule:** A durable fact needs a name, and an ordering needs a number. Neither may be derived from
+something that the act of recording changes, or that resets when a process, a page or a database
+does. The test is one question: **if I compute this twice, at two different moments, from two
+different survivors, do I get the same answer?** A count you re-read while paying it out, an
+in-memory counter, and an index over whichever store is readable right now all fail that question,
+and all three look durable in the diff. The give-away is that the number is computed at the moment
+of USE rather than carried from the moment of the FACT -- so write it down when the thing happens,
+and never let a later read re-derive it.
+**Incidents:** all four on 2026-08-21, in one branch, three of them in code written to fix the one
+before it. (1) `applyMarkAward` keyed a durable mark on `store.marksFor(guestId)`, read fresh per
+call; one guest with two connections got two marks for one wolf, because the count moved between the
+two awards for the same kill -- an idempotency key derived from a total that paying it out increments.
+Reachable by a child opening a second tab, and it unlocked the lantern in two kills instead of three.
+(2) the repair gave `weapon-equipped` an explicit order, then sourced it from a counter initialised
+to 0 in `createProfileStore`, so every page load began numbering beneath the history already on
+record and a NEW equip lost to an OLD one. (3) the same field was also synthesised server-side from
+each row's array index for the current read, which restarts when the database is replaced -- the
+exact event local-first exists to survive. (4) with both fixed, `stateFor()` still stamped revisions
+onto unseen server facts *for the duration of one read* without persisting them, so an unchanged
+remote equip aged forward every time the journal grew around it and could overtake a newer local one.
+(5) the repair for (4) made observation durable but still derived the order at observation, so an
+older equip DELIVERED late outranked a newer offline one -- arrival is not chronology, and a device
+that has not heard about an equip yet numbers its own first offline choice 0 exactly as the unheard
+one was. Two writers who have not spoken cannot be ordered by independent counters at all; the fix
+was to stop counting and record WHEN the child chose, carried with the fact through both copies
+(rewardStore schema v3's `rev` column, minted on the device at the equip action).
+(6) with the order finally created at the equip action and persisted, the SERVER'S READ SIDE was
+still `ORDER BY rowid DESC LIMIT 1` -- so the device resolved the equipped weapon by the order the
+child chose in and the store resolved it by the order the rows arrived in, from the same rows. The
+rewards block and live combat damage could name a weapon the recovered profile did not. Fixing the
+WRITE side is only half of a chronology change; every reader has to consume the new authority, and
+the one that was not converted was the one nobody had a test for.
+**The shape of the whole entry is the lesson:** five of the six incidents were introduced by the
+repair for the one before it, each time by moving WHERE the number came from instead of moving WHEN
+it was decided. If a fix relocates a derivation rather than eliminating it, it is the same bug in a
+new place. (2), (4), (5) and (6) were caught by independent Director audit, not by the tests written
+alongside them -- see GQ-015 for why those tests did not catch it.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-015 — A test that hand-feeds a pure function proves the function, not where its inputs come from.
+**Status:** RULE · **Hits:** 4 · **First:** 2026-08-21 · **Last:** 2026-08-23
+**Not enforced because:** the defect is a missing test, and the shape of the missing one depends on
+which input the function is being lied to about. No scanner can tell a legitimately isolated unit
+test from one that isolated away the actual bug; only asking "who really supplies this argument in
+production, and is that path covered?" can.
+**Rule:** When a pure function takes a value that something else computes, a test that supplies that
+value by hand has tested half the system, and the half it skipped is where the interesting failures
+live. Cover the SOURCE at least once end-to-end -- construct the real producer, let it produce, and
+assert on the result -- or state in the test's own header that the producer is covered elsewhere and
+where. Corollary, which is how this gets discovered late: **a test that keeps passing after the field
+it is named for stops existing is not a passing test, it is an unread one.** When a rename or a
+redesign moves a field, grep the tests for the old name in the same change.
+**Incidents:** 2026-08-21, both in Checkpoint 1b. (1) `foldFacts`'s equip-ordering test passed
+throughout, because it fed hand-written `seq` values; the two places that actually produced that
+number in production were both broken (GQ-014, incidents 2 and 3), and an independent audit found it
+rather than the suite. (2) after the fold moved from `seq` to `rev`, the same test kept passing while
+asserting nothing about ordering at all -- both facts now tied at "no revision", and the eventId
+tiebreak happened to return the item the assertion expected. Its name still said "latest-wins by
+sequence". Rewritten to name `rev` and to choose ids under which the tiebreak would return the WRONG
+weapon, so it now fails if the revision is ignored. (3) the regression suite written FOR the
+ordering bug still built its equip facts by hand, so it covered the fold and the journal but never
+the producer -- and the producer was where the remaining defect lived (GQ-014 incident 5). The
+give-away was visible and ignored: two of those tests broke the moment the real producer was
+introduced, because the hand-built facts had never been shaped like the real ones. All six now mint
+through `mintEquipFact`.
+(4) 2026-08-23, and the first one outside the equip path, which is what makes it a pattern rather
+than a habit of one file. `test/hero-avatars.test.mjs` proved `chooseAvatarId` thoroughly by handing
+it a list of taken animals. The defect was in what `createProfile` PUT IN that list: it read stored
+`avatar` fields and filtered the nulls away, so a migrated child -- who has no stored avatar and is
+drawn with an id-derived one -- looked as though they had taken nothing, and the next sibling was
+handed the animal already on their brother's card. Every test passed for the whole life of the
+defect. Found by Director audit. The repair drives the real producers: `migrateLegacyGuest()` then
+`createProfile()` over a device holding a legacy guest id.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A status a document holds on someone else's behalf goes stale with no commit to catch it.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-22
+**Rule:** GQ-002 and GQ-003 both go stale because YOU changed something -- the rename, the test count,
+the schema -- so the causing commit is also the natural place to catch them. A field recording an
+EXTERNAL authority's verdict has no such moment. Nothing in the tree changes when a reviewer rules,
+so no diff, no test, and no file-header pass will ever look at it. Two consequences worth acting on:
+a provisional word (`awaiting`, `pending`, `in review`, `TBD`) is the one value guaranteed to become
+false, and it becomes false somewhere you are not looking; and a document that declares itself
+*canonical* about such a status has promised to be re-read on an event, not on an edit. So treat
+receiving the verdict as the trigger -- ratchet the record in the same turn you read the ruling, not
+in the next commit that happens to touch the file, because there may not be one.
+**Incidents (2026-08-22, Checkpoint 1b):** PR #31's body declares itself the canonical checkpoint
+ledger. The Director recorded `1b-core.3` as **PASS** at `7abbed1`, and the ledger row still read
+"COMPLETE — awaiting Director re-audit" against the superseded SHA `60f466b` -- the very SHA the
+Director had ruled **NOT PASS** on. Two commits landed in between (`7abbed1`, `a212957`) and neither
+touched the row, because neither had any reason to: the row was wrong about an event that happened on
+GitHub. Found by the Director, not by the branch. The failure is mild here -- a stale word in a brief
+-- but the surface is the project's own gate history, which is the one record that is supposed to be
+harder to drift than the code.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Nothing under `test/` loads `main.js`, so a bootstrap-fatal edit passes the whole gate.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-22
+**Rule:** `public/src/main.js` is the only module the unit suite structurally cannot import — it
+touches `document` at load, so no `node --test` file has ever required it, and none can without a
+DOM. Every other rule in this ledger assumes a test COULD have caught the defect and asks why it did
+not. This one is the class where no test can: the wiring file is the largest module in the repo, it
+is where every subsystem is joined, and the required gate cannot see a single line of it. A green
+`node --test test/*.test.mjs` therefore says nothing whatever about whether the game boots.
+
+The practical rule is not "unit test main.js" — that is what the harnesses are for. It is: **any
+change that moves code IN `main.js` is unproven until something loads the page**, and the cheapest
+such proof is a bare CDP navigation that asserts the runtime object exists and the console is clean.
+That takes seconds and is worth running before the commit, not after the push. The lesson generalises
+past this repo: the gate you trust most is the one with the largest blind spot, because its
+greenness is what stops you looking.
+**Incident (2026-08-22, Checkpoint 1b-wire):** the durable-offline-marks change constructed
+`createOfflineProgress({ profiles, ... })` at `main.js:962` while `const profiles` is initialised at
+`main.js:1083`. A textbook temporal dead zone: `bootstrap failed ReferenceError: Cannot access
+'profiles' before initialization`, thrown on the first line of the first frame. **The page did not
+render at all.** The full unit suite passed — 1369 tests, 1366 pass, 0 fail — and the commit was
+pushed on the strength of it. It was found on the next action, the first browser load, and only
+because that load happened; nothing else in the workflow would have said a word until hosted CI ran
+the runtime bundle. The fix was to construct it after the store it reads from, which is where the
+ordering constraint always was.
+
+A second, quieter half worth recording: the placement was first patched in by matching a nearby line
+of source text, and that string occurred twice, so the construction landed inside the equip handler
+— still bootable, but rebuilding the reward ledger on every EQUIP tap. Anchoring an edit on a string
+that is not unique is a silent way to write working code in the wrong place; the second edit matched
+on the enclosing function instead and asserted the anchor occurred exactly once.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-016 — Booting the app mints an identity, so a harness that seeds one must do it before the first boot.
+**Status:** ENFORCED · **Hits:** 2 · **First/Last:** 2026-08-22
+**Enforced by:** `test/harness-seeded-identity.test.mjs`
+**Rule:** Several harnesses reach the state they exist to test by writing a known `gq-guest-id` and
+letting the server hand back rewards seeded under it. That worked for as long as the guest id WAS
+the durable identity. It is not any more: `progression/profiles.js` folds a legacy guest id into a
+profile whose id is that same string, but only while the device holds no profiles yet —
+`migrateLegacyGuest()` returns null the moment one exists. Booting the app creates one. So a guest
+id written after the first boot is not an identity at all, it is a dead string sitting beside a
+profile the boot already minted, and the seeded rows stay on the server under a name nothing on the
+device points at. The repair is one line and it is the CLEAR, not the write: put the device back to
+"no profiles" before pinning, which is the only state the migration is defined for.
+
+What makes this worth a rule rather than a comment is **how it reports**. Nothing says "identity".
+The harness fails wherever the seeded state was supposed to show up, so the message names whichever
+subsystem happened to be downstream: `drive-ranger` reported an empty speech bubble and a ranger who
+would not talk; `fit-lantern` reported `lantern mesh never appeared under its anchor -- is this
+profile unlocked (3 marks) and the GLB shipped?`, which is a question about the asset pipeline. Both
+were one defect wearing the costume of whatever the seed unlocked. **A failure that names the wrong
+subsystem is more expensive than one that names nothing, because it is followed.**
+
+The generalisation past this repo: when a system starts minting identity at startup, every fixture
+that used to inject identity is now racing the startup, and none of them will say so.
+**Incident 1 (2026-08-22, `aa633c2`):** adding `?hero=` to the harness URL to get past the new
+profile gate created a second profile beside the seeded guest in `drive-ranger` and
+`drive-beacon-siege`; the seeded guest's owned Wildwood Blade vanished. Repaired by making
+`adoptNamedHero()` migrate before it creates — correct, and it fixed only the harnesses that pin
+before the first boot.
+**Incident 2 (2026-08-22, found at `4e792b3`):** `fit-lantern` pins after its first navigate, so
+the migration had already been skipped; it went SUCCESS at base `82478ea` to FAILURE, and was found
+by diffing the CI job list against the base run rather than by reading the failure, which pointed at
+the GLB. This is the second consecutive regression of mine that only a job-list diff caught, which
+is itself the lesson in GQ-003's neighbourhood: a remembered failing set is not a diffed one.
+**Foreknowledge helped:** no — the class was known and written down in `adoptNamedHero()`'s own
+comment ("the seeded guest's owned Blade vanished because ?hero= had created a second profile beside
+it") one commit before it recurred in a different file. A lesson recorded at the site of the first
+fix is invisible from the site of the second; that is what the mechanical guard is for.
+
+### GQ-017 — Changing a type is not done when the tests pass. The readers are not all in one directory.
+**Status:** ENFORCED · **Hits:** 1 · **First/Last:** 2026-08-22
+**Enforced by:** `test/objective-comparisons.test.mjs`
+**Rule:** The CP2 keystone turned an objective from a string into `{ id, text }`. Every consumer
+under `test/` was found and updated, the full gate went green, and the change was pushed. The
+harnesses in `tools/runtime-test/` were never looked at, because one directory had been swept and
+that felt like the sweep. **A gate that cannot see a caller cannot tell you the caller is broken**,
+and this repo has two suites for exactly that reason -- which is precisely why finishing one of them
+is not finishing.
+
+**One direction of the breakage is silent, and that is the part worth the rule.** Against a value
+object:
+
+    domString === OBJECTIVE_FIND_THE_BEACON     always FALSE -> the check fails, loudly
+    domString !== OBJECTIVE_BEACON_IS_COLD      always TRUE  -> the check PASSES, forever, checking nothing
+
+Two of `drive-old-beacon`'s guards were the second kind. They did not go red; they went vacuous, and
+would have reported PASS for the rest of the project's life while asserting a tautology. That is
+GQ-015's corollary in a new costume: a test that keeps passing after the thing it names stops
+existing is not a passing test, it is an unread one. **When a type changes, the failures you can see
+are not the problem. The assertions that quietly became tautologies are.**
+
+**Incident (2026-08-22, `73ce88b`):** `drive-old-beacon` went from success to three failing checks
+and two vacuous ones. Found five commits later, and only because a job-list diff was run.
+**Corollary, and its own small lesson: the diff tool hid it for two of those runs.** `ci-diff.py`
+counted `conclusion == "failure"`, and the job had been CANCELLED -- superseded by the next push --
+so the run read as clean. Worse, because the tool computed "fixed" as `base_failures - head_failures`,
+two harnesses that were merely cancelled were REPORTED TO THE DIRECTOR AS FIXED. A cancelled job has
+said nothing about the code: it is not a failure and it is not a pass, and collapsing it into either
+is how a tool built to prevent confident wrong answers produces one. It now reports FAILED and
+UNPROVEN as separate buckets.
+**Foreknowledge helped:** partly. The sweep-every-caller instinct was there and was applied
+thoroughly to `test/`; what was missing was the knowledge that `tools/runtime-test/` imports the same
+module. The fix for that is mechanical rather than remembered, which is what the guard is.
+
+### OBSERVED — A change detector must key on the thing it measures, not on the thing it is named after.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** When something accumulates history about a target and resets when the target changes, the
+reset key has to identify the target at the same granularity the history is measured at. A stable,
+correct, immutable identity for the wrong LEVEL is still the wrong key, and it fails silently: the
+detector keeps a history that no longer describes anything, and every honest reading is judged
+against it. This is not GQ-014 -- nothing here was derived from mutable state, and computing it twice
+gives the same answer both times. The question that catches it is different: **what exactly is the
+quantity I am accumulating measured against, and does my key change whenever THAT does?**
+**Incident (2026-08-23, `guidanceRescue.js`):** the rescue watch accumulated "seconds since this
+child last got nearer" and reset on a change of `objectiveId`. It measured distance to a PLACE. Two
+objectives -- "wake the dark lights" and "N cold seals left" -- keep one id across six lights and
+three seals, so finishing one moved the place without moving the key. A child who walked right up to
+a light and lit it kept a best distance of about a metre, and then the whole correct walk to the next
+light thirty metres away read as never getting nearer. Twelve seconds in, a child going exactly where
+they were sent is offered help finding it -- the game contradicting itself at the moment they had just
+succeeded. Reachable by any child who lights a light, which is the chapter's main verb. Caught by
+Director audit, not by the fifteen unit tests written alongside the module, every one of which used a
+single target.
+**The fix is two keys, and the asymmetry between them is the actual lesson:** a new objective resets
+everything, a new place inside one objective resets only the distance history. Zeroing the clock on
+every target change looks tidier and reintroduces the bug in the mirror: a child standing between two
+unlit lights has a nearest that flips as they drift, and a clock that restarts on every flip never
+reaches the patience. A rescue that can never fire looks exactly like restraint. Both wrong answers
+are now pinned by a test each, because the correct behaviour sits between them.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-018 — A test that derives its probe input from the constant under test cannot fail on that constant.
+**Status:** RULE · **Hits:** 2 · **First:** 2026-08-23 · **Last:** 2026-08-23
+**Not enforced because:** deciding which constant a given case is "under test" for is a judgement no
+static check can make -- the same import is correct as an expected value and wrong as a probe input,
+and nothing in the source distinguishes them. What IS mechanical is the countermeasure, and it is
+cheap: sabotage the constant and watch the case go red before committing it. Both incidents below
+were caught that way and neither would have been caught any other way.
+**Rule:** Importing a constant is right for an **expected value** and wrong for the **input you probe
+its boundary with**. If the input scales with the thing under test, the boundary moves with the probe
+and the case is green forever. The probe input has to come from the PRODUCT CLAIM instead -- a
+statement about the player, the device or the world, which the constant then has to satisfy. That is
+not a second copy of the constant; it is the requirement the constant exists to meet, and the two
+being separate is the entire point.
+**Incident 1 (2026-08-23, `test/opening-fight.test.mjs`):** the case proving a child facing off to one
+side still hits the wolf aimed at `ATTACK_HALF_ARC_RADIANS * 0.5`. A sabotage run narrowed the arc
+from 152 degrees to 29 and the case stayed green, because the probe narrowed with it. Rewritten to
+aim at a flat 45 degrees -- what "roughly facing the wolf" means for a four-year-old with a thumb on
+a stick -- plus an assertion that the constant is at least that wide. Now: 29 degrees fails, and 108
+degrees passes, which is the right answer for a legitimate tuning change.
+**Incident 2 (2026-08-23, the same file, hours later, by the agent writing incident 1):** a new case
+asking whether a slow child can still win the first fight set its cadence to
+`HERO_MAX_HP * WOLF_BITE_COOLDOWN_SECONDS / WOLF_MAX_HP` -- the cadence the rules themselves imply.
+That reads like the opposite of restating a constant and is this defect exactly: dropping
+`HERO_MAX_HP` from 3 to 2 broke four other cases in the file and left the new one green, because its
+bar had dropped with it. Rewritten to a flat 2.5 s, declared as a statement about a four-year-old's
+thumb. Now the same sabotage fails it.
+
+That the second hit came from inside the entry's own first write-up is the finding. Knowing the rule
+in the abstract did not help; the shape is seductive precisely because deriving-from-the-rules looks
+like rigour, and it wears GQ-007's clothes while doing the opposite of what GQ-007 asks. **The tell
+is not the import. It is asking whether the number would move if the constant moved -- and if it
+would, the case cannot see that constant at all.**
+**Note the tension with GQ-007, because it is easy to read this as its opposite.** GQ-007 says never
+restate a constant. This says the probe input is not a restatement of the constant -- it is a
+different fact, about people rather than about the rules, and collapsing the two is what makes the
+test vacuous. When they happen to be equal today, that is a property worth asserting, not a
+duplication worth removing.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Prove the instrument can see a known-good case before believing what it says about the product.
+**Status:** OBSERVED · **Hits:** 5 · **First/Last:** 2026-08-23
+**Rule:** A probe built to measure the product will happily measure itself, and the reading looks
+exactly the same. Before reporting anything surprising, drive the probe at an outcome already known
+to be true; if it cannot see that, it cannot see anything. The give-away, every time, was that the
+numbers were internally inconsistent -- and the inconsistency was visible in the same output as the
+claim, which is the part worth learning.
+**Incidents:** four in one night, all in browser probes of the opening wolf fight, and **all four were
+reported to the Director as facts about the game before being caught**:
+(1) the attack button's coordinates were invented as `(w-92, h-128)` when `play-fight.mjs` had been
+using the real `(w-68, h-68)` all along -- **0 of 36 taps landed**, which read as a brutally hard
+fight and was a probe tapping empty screen.
+(2) one server reused across fights, so the second fight walked up to the corpse the first had left
+and reported a **1.6-second rout with zero taps**. The wolf is server-authoritative; a fresh server
+per fight is not optional.
+(3) the button was sampled 250 ms after each press when contact is at **0.5167 s** -- it saw no miss
+rings and reported that whiffs are silent. That is the absence of a thing that had not happened yet,
+which reads identically to the thing not existing.
+(4) a fixed 45-second mash window against a fight that takes a fraction of that: the wolf died,
+respawned ten seconds later (`WOLF_RESPAWN_SECONDS`) and was fought again, and the run reported
+**"wolf 3hp -> 3hp" alongside five hp transitions**. A window longer than the thing inside it
+measures the window.
+**What it cost:** a reported hurt-loop P0 that does not exist. Corrected measurement, same browser:
+**four taps, all four connect, the wolf is down in about seventeen seconds** -- and the seventeen is
+the tap cadence, not the game. The deterministic engine gives the same fight in 5.1 s.
+**The through-line:** every one of the four made the probe report on itself, and every one was
+detectable from its own output without knowing anything about the game. `0 of 36`, `1.6 s and zero
+taps`, and `3hp -> 3hp with five transitions` are not surprising findings, they are broken
+instruments announcing themselves.
+**Foreknowledge helped:** 2026-08-23 — directly. A new browser check claimed the hero's sword arm
+moves when he swings; rather than believe a green, this entry sent me to sabotage main.js's
+`swing?.update(...)` into a no-op, leaving the rules running and nothing writing the pose. The check
+went red at 0.9x against its 3x bar, so it can see the case it is for. It also turned up the finding
+below, which was not what the sabotage was for.
+
+**Fifth incident (2026-08-23, `drive-two-clients`, the sibling's weapon), and it went further than the
+other four.** The harness read a tab's identity back through `runtime.net.guestId`, got `undefined`,
+and concluded the seeded guest had not taken. The published accessor is `runtime.guestId()`. So the
+reading was a fact about the probe -- the same shape as (1) through (4).
+
+What was new is what I did with it: I generalised from that one bad reading to **four other harnesses
+I never ran**, and told the Director I would not trust the identity half of what they assert. They
+were fine. Pinning `gq-guest-id` still controls the joined identity by two independent paths --
+`profiles.migrateLegacyGuest()` reuses the id verbatim as the profile id, and `client.js` falls back
+to `getOrCreateGuestId()` whenever there is no durable profile.
+
+**And the disconfirming evidence was already green.** `drive-hero-screen` seeds a Blade-owning fixture
+guest and then asserts that guest can compare and equip the Blade. Those checks pass, in CI, and they
+could not if the pin were being ignored. A passing test whose assertions depend on the thing you are
+about to declare broken is not a coincidence to be stepped over -- it is the known-good case this
+rule says to drive the probe at, sitting there already run.
+
+The operative addition: **the blast radius of a bad instrument is not the file it is in.** A reading
+you have not confirmed justifies a claim about the thing you measured and nothing else; the moment a
+conclusion reaches files you did not run, it needs evidence from those files. Retracted on the PR
+within the hour, which is the only part of this that went right.
+
+### OBSERVED — A trigger radius a child's approach ends AT is decided by drift, not by the child.
+**Status:** OBSERVED · **Hits:** 3 · **First/Last:** 2026-08-23
+**Rule:** When an interaction is gated on "is the player within R metres", the deciding question is
+not what R is -- it is where an approach actually STOPS. A walk that aims at the thing itself ends
+wherever momentum, reconciliation and the poll cadence leave it, and if that resting place sits
+within a few centimetres of R then whether the interaction happens is decided by sub-metre drift
+rather than by anything the player did. It fails intermittently, which is the worst way to fail: the
+same approach works and then does not, and there is nothing on screen to explain the difference.
+**Incidents,** all measured on the same day, in three unrelated places, which is what makes it a
+shape rather than three bugs:
+(1) `drive-ranger`, Wren's arrival bubble: `hero 1.99m from Wren, radius 2m`. It PASSED -- by one
+centimetre. On the runs where the same walk lands at 2.01 m the NPC silently stops talking to a child
+standing right in front of her, and the harness reports an empty speech bubble as a content defect.
+(2) `drive-village-board`, the Workshop after a server restart: `metresFromInteractPoint 2.65,
+interactRadius 2.4`. A rotating red that predates the branch.
+(3) the opening wolf, before it was understood: bodies are held `MIN_BODY_SEPARATION` = 1 m apart and
+the reach is 1.7 m, so the whole band a child can press from is 0.70 m wide. That one turned out NOT
+to bite -- the wolf always closes -- but the arithmetic was the same and it was believed for an hour.
+**What it is not:** a call to widen radii. Two of the three are Owner/Director product numbers, and
+widening `KEEPER_WAVE_RADIUS_METERS` moves the Keeper and Rowan too. The reusable part is the
+DIAGNOSIS: when an interaction check flaps, measure the resting distance against the radius before
+reaching for the poll budget, because a timing fix applied to a geometry problem hides a defect a
+child would meet with a thumb on a virtual stick.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A render change whose whole purpose is how something LOOKS cannot be judged from a container with no GPU.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** Geometry, coverage and draw counts are all measurable here. "Does this read as the tree
+getting out of the way, or as the tree glitching" is not, and no amount of arithmetic converts one
+into the other. Measure and specify the change, then hand the appearance judgement to someone who
+can see it -- and say plainly which half you did.
+**Incident (2026-08-23, the Lantern Tree):** the canopy is 3.14 m in radius and 5.5 m tall, and the
+camera sits 15.29 m behind the child. Sweeping all 360 degrees of camera heading: at **2 m from the
+tree -- which is where the opening quest sends a child -- 50% of headings put the canopy between the
+camera and the hero.** The whole frame is leaves: no hero, no village, no ground. `occlusionOpacity()`
+in `world/zoneLoader.js` is a real, tested per-object fade, and an exhaustive grep for callers returns
+exactly ONE: the Keeper's own update, at a 1.1 m radius that its comment describes as "about a body's
+width". The one occlusion system in the game fades the one object that is a body's width. The fix is
+well-precedented -- the function already takes a radius parameter and the fade machinery already
+exists -- but the change is entirely about appearance, so it was specified and handed over rather
+than made. Recorded here with the numbers so it is a known defect rather than a lost note.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A sabotage that does not go red is a finding about the test, not a pass.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** Sabotage is run to confirm a check can fail. When it comes back green the instinct is to
+shrug and move on, because nothing is broken and the suite is still green -- but a check that stays
+green while the thing it names is deleted has just told you it does not test that thing. Read the
+green as the result it is. Then find out WHY: either the check is aimed wrong, or the mechanism it
+names is not the mechanism doing the work, and both are worth more than the sabotage was.
+**Incident (2026-08-23, `net/remotes.js`, remote hero animation):** four sabotages were run against a
+new nine-check suite. Two went red as intended. Two did not, and each was a different defect:
+(1) *`locomotion does not stand a downed sibling back up` stayed green with the down-skip deleted.*
+The check stood the sibling still. At speed 0 locomotion settles onto idle at a weight that never
+beats the clamped death clip, so the one parameter value the check happened to pick was the one where
+the mechanism is invisible. Re-run at 2.4 m/s the corpse was posed at the run clip's 0.200 instead of
+the death clip's 1.000 -- a dead child drawn sprinting. Which is how a child actually gets bitten:
+mid-charge, not standing politely still. **A check chose the value at which its own subject cannot
+be seen, and passing at that value said nothing.**
+(2) *`a sibling who dies mid-swing collapses` stayed green with the order swap removed.* Here the
+check was fine and the CLAIM was wrong: on this path the stale swing restore never won a frame, so
+the swap is not doing the work its comment says it is. The swap was kept -- it matches main.js, where
+that hazard was measured -- but the comment now says outright that nothing in the file proves it.
+**The general form:** the useful question after a green sabotage is not "is the code still right"
+but "what did I just learn about what this check can see". One of these two was a real gap in
+coverage of a real bug; the other was an unproven claim sitting in a comment as if settled. Neither
+would have surfaced from a green suite.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — Before adding a field to a protocol, read what the producer already publishes.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A new wire field is a new source of truth, and a second source for a fact that already
+travels is worse than no field at all -- the two can disagree, and nothing says which is right. The
+cost of checking is one read of the producer; the cost of not checking is a duplicate that has to be
+found later by somebody who no longer remembers which was added when.
+**Incident (2026-08-23, `players[].weaponId`):** to draw a sibling's sword I added a per-player
+weapon field to the snapshot, validated it in `protocol.js`, and carried it through all three of
+`interpolation.js`'s sample paths. Two hours later, while looking for the next thing a sibling cannot
+see, I read `rewardsFor` and found `equippedWeaponId` -- per hero, on every snapshot, decoded and
+validated since long before the branch. The whole addition was withdrawn, three files and eight tests
+with it, and the client reads `serverEncounter.rewards[id].equippedWeaponId` instead.
+**What made it findable and what made it avoidable are the same thing:** the fact I needed was one
+function away in a file I had already opened for something else. I designed the transport before
+reading the producer, and the design was fine -- it was just second.
+**The one thing the duplicate had:** the weapon travelled WITH the interpolated body, so a swap
+landed on the frame the hand arrived rather than an interpolation delay ahead of it. About a hundred
+milliseconds, on a once-a-session event. That is what a duplicate wire field buys, and it is not
+enough. `heroes`, which drives the far more timing-sensitive knockdown, is already read the same
+newest-snapshot way one line above.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A scripted edit that is not asserted is a change you have not made.
+**Status:** OBSERVED · **Hits:** 2 · **First/Last:** 2026-08-23
+**Rule:** `str.replace` on a pattern that does not match returns the string unchanged and reports
+nothing. Every scripted edit therefore needs an assertion that its anchor was found -- before the
+write, so a miss is a crash rather than a silent no-op. Without one, the next green run reads as
+confirmation of a change that was never applied.
+**Incidents, both 2026-08-23:**
+(1) a python heredoc whose assertion threw BEFORE `open(p, 'w')`, so nothing was written at all -- and
+the harness run that followed was briefly read as validating a patch that did not exist.
+(2) a browser probe gained two new fields and a check that reads them. The `check` call applied; the
+FIELDS did not, because that replacement had no assert and its anchor text had shifted under an
+earlier edit. The run then reported `lantern undefined` and a FAIL for a lantern that had never been
+asked about -- an instrument reporting on a measurement it was not taking, which is the family
+"prove the instrument can see a known-good case" is about, arriving this time through the editor
+rather than through the probe.
+**The tell in (2):** the check printed `body undefined, lantern undefined, blade undefined` while the
+JSON beside it simply had no such keys. Undefined everywhere, including for a field that could not be
+undefined if the code had run, is not a measurement -- it is the absence of one.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — An instrument that covers a subset reports on the subset, and reads as covering the whole.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-23
+**Rule:** A checker built against one source answers about that source. Nothing in its output says
+so, and the answer looks identical to an answer about everything -- so the moment a second source
+exists, every clean report it prints is silently narrower than it reads. Either widen the instrument
+to the whole, or make it name its own scope in the output. Preferably both.
+**Incident (2026-08-23, `browser-proof`):** `tools/ci-diff.py` diffs a full-playtest-matrix job list,
+because that is the workflow it was written for. `forge-review` is a different workflow, so its
+`browser-proof` check was not passing or failing in the diff -- it was ABSENT. It sat red from 01:40
+to 15:30 while I published several reports saying the head was clean with no new failures. The head
+had nine failing checks; the tool said eight, and I read eight as all.
+**What it was hiding was not cosmetic.** The forge review's job is to prove the asset-review page
+cannot spend Meshy credits in CI. It timed out before reaching that check, so for fourteen hours the
+guard that exists to prevent unauthorised provider spend ran and proved nothing. **A safety gate that
+is red is a safety gate that is not gating.** That is worth more than the fourteen hours: a red check
+whose failure is not diagnosed has been silently downgraded to no check.
+**And the failure itself was one line.** `${server.url}forge.html` -- where `url` is the GAME's
+address and ends in `?hero=Harness` -- resolves to a request for the site root. The tool waited for a
+badge that only exists on forge.html, on a page that was index.html, and reported "Forge never
+reached FORGE READY". The symptom named the Forge; the cause was the address.
+**Repairs, all three levels:** the address (`server.origin`); the tool now checks WHICH PAGE it
+landed on before checking the badge, so a wrong address costs one line rather than a day; and
+`ci-diff.py --sha` reads `/commits/{sha}/check-runs`, which returns every check on a commit whatever
+workflow raised it. The file mode still exists and now prints "one workflow only" beside its answer.
 **Foreknowledge helped:** not yet recorded.

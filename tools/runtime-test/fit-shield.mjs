@@ -20,12 +20,14 @@
  *   - skeleton.pose() collapses the whole skeleton by exactly 100x, because the glTF
  *     inverseBindMatrices are in metres while the bones live in Armature units. The collapse is a
  *     uniform scale, so rotations survive it untouched and positions come back with a x100. The bake
- *     below relies on that and is checked against the sword, whose value in gear.js is known good.
+ *     below relies on that and is checked against the sword, whose value is READ FROM gear.js so the
+ *     check cannot go stale when the sword is re-fitted.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { startOwnedServer } from './owned-server.mjs';
+import { RIGID_TIER2_GEAR } from '../../public/src/character/gear.js';
 
 const CHROME_PORT = 9224;
 // Spawns and owns its own server on an isolated port rather than using the shared 5201 (Phase H1).
@@ -246,12 +248,14 @@ await shot('gameplay');
 
 // ── bake, and check the method against the sword ───────────────────────────────────────────────
 const baked = await page.eval('JSON.stringify(window.__bakeBoth())').then(JSON.parse);
-const SWORD_IN_FILE = {
-  // Updated 2026-08-14 with the re-grip: the 2026-08-13 re-pitch left the hilt 0.172 m off the hand
-  // because it rotated the anchor about its own origin and left position alone. See gear.js.
-  position: [-63.70592, 99.06745, 1.00951],
-  quaternion: [0.74529070327, -0.562439008148, -0.180036303612, -0.309501307129],
-};
+// IMPORTED, not copied. This used to hold a hand-typed duplicate of the sword's transform, which
+// is two independently-maintained laws for one quantity (GQ-007) -- and on 2026-08-24 the sword was
+// re-fitted and the copy silently went stale, so this harness declared its own correct bake
+// UNTRUSTWORTHY and exited 1. The comment above it had always said "the sword already in gear.js";
+// now it is. The check itself is unchanged and still does its real job: prove the bake METHOD
+// reproduces a value that is known good before anyone pastes the shield number next to it.
+const SWORD_IN_FILE = RIGID_TIER2_GEAR
+  .find((item) => item.boneName === 'RightHand').restRelativeToHeroRoot;
 const dp = Math.hypot(...baked.sword.position.map((v, i) => v - SWORD_IN_FILE.position[i]));
 const dq = Math.abs(baked.sword.quaternion.reduce((a, v, i) => a + v * SWORD_IN_FILE.quaternion[i], 0));
 

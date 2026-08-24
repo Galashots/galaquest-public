@@ -68,6 +68,9 @@ jobs:
           - drive-old-beacon
           - drive-beacon-siege
           - drive-ranger
+          - drive-profile-gate
+          - drive-recovery
+          - drive-guidance-rescue
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

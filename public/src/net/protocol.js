@@ -35,12 +35,17 @@ export const PROTOCOL_VERSION = 3;
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
+  'restore-profile',
 ];
 
 // Mirrors requireString's own default cap. Item ids are short snake_case tokens
 // (progression/items.js), never player-authored text, so this is a sanity ceiling rather than a
 // UI constraint -- 32 comfortably covers every id that file defines today.
 const ITEM_ID_MAX_LENGTH = 32;
+// An equip eventId is `equip:<profileId>:<rev>:<uuid>`: a 64-char profile id ceiling plus the
+// prefix, the order and a UUID. Bounded like every other wire string so a client cannot make the
+// server store an arbitrarily long primary key.
+const EVENT_ID_MAX_LENGTH = 160;
 // GP2 pickup ids look like "cart-loot:shard:1" -- world/cartLoot.js's own table entries -- longer
 // than an item id but still a short, caller-built token, never player-authored text.
 const PICKUP_ID_MAX_LENGTH = 48;
@@ -173,6 +178,10 @@ export function decode(text) {
         tick: requireInteger(raw.tick, 'tick'),
         players: decodePlayers(raw.players),
         encounter: decodeEncounter(raw.encounter),
+        // Additive, same reasoning as guestId on join and equippedWeaponId on the rewards block:
+        // absent entirely (a pre-1b server, or an ephemeral connection) decodes to `[]` rather than
+        // failing, so this is not the version bump. PROTOCOL_VERSION stays 3.
+        profileFacts: decodeProfileFacts(raw.profileFacts),
       };
 
     case 'attack': {
@@ -188,7 +197,30 @@ export function decode(text) {
     case 'equip': {
       const itemId = requireString(raw.itemId, 'itemId', ITEM_ID_MAX_LENGTH);
       if (itemId.length === 0) fail('itemId must not be empty');
-      return { v: PROTOCOL_VERSION, type: 'equip', itemId };
+      // The equip's own identity and order, minted by the device at the moment the child chose --
+      // see docs/MISTAKES.md GQ-014. Optional, and additive rather than a version bump: a caller
+      // that sends neither (an older client, a harness, a test) still equips, and the server mints
+      // an identity above that guest's history instead. What it must never do is let a supplied
+      // identity through unvalidated, so both fields are checked exactly as strictly as any other.
+      const message = { v: PROTOCOL_VERSION, type: 'equip', itemId };
+      if (raw.eventId !== undefined) {
+        const eventId = requireString(raw.eventId, 'eventId', EVENT_ID_MAX_LENGTH);
+        if (eventId.length === 0) fail('eventId must not be empty');
+        message.eventId = eventId;
+      }
+      if (raw.rev !== undefined) {
+        if (!Number.isInteger(raw.rev) || raw.rev < 0) {
+          fail(`rev must be a non-negative integer, got ${JSON.stringify(raw.rev)}`);
+        }
+        message.rev = raw.rev;
+      }
+      // Half an identity is not one: an eventId with no order would be stored with a NULL rev and
+      // silently fall back to being ordered by when it was seen, which is the defect this carries
+      // an order to avoid.
+      if ((message.eventId === undefined) !== (message.rev === undefined)) {
+        fail('equip must carry both eventId and rev, or neither');
+      }
+      return message;
     }
 
     // Client -> server only, no payload: whoever sends this first (per the shared physical cart)
@@ -220,6 +252,15 @@ export function decode(text) {
       return { v: PROTOCOL_VERSION, type: 'claim-satchel' };
     case 'claim-charm':
       return { v: PROTOCOL_VERSION, type: 'claim-charm' };
+
+    // Client -> server. A device handing back the durable facts it still holds, for a store that
+    // no longer has them -- see net/gameServer.mjs's restoreProfileFacts for what is and is not
+    // accepted, and test/empty-server-recovery.test.mjs for why re-sending only the equip cannot
+    // work. Reuses decodeProfileFacts, the SAME validation the welcome direction uses: this is
+    // literally the same fact shape travelling the other way, and two validators for one shape is
+    // the GQ-007 defect in its usual form.
+    case 'restore-profile':
+      return { v: PROTOCOL_VERSION, type: 'restore-profile', facts: decodeProfileFacts(raw.facts) };
 
     // Client -> server only, same direction as 'attack'/'equip'. Shape validation only -- whether
     // pickupId names a real, unclaimed, in-reach pickup is world/cartLoot.js's own business rule,
@@ -370,6 +411,56 @@ function decodeHeroes(heroes) {
 // decoder-strictness test asks to check for first. A client only ever needs to read its OWN entry;
 // nothing here filters that down, the same way heroes carries every hero and main.js does the
 // filtering.
+/**
+ * The joining profile's DURABLE facts -- the rows behind the rewards block, each with the stable
+ * eventId that makes a second copy mergeable instead of double counted.
+ *
+ * This is deliberately not the same thing as `encounter.rewards`, and the difference is the whole
+ * reason it exists. The rewards block is DERIVED: counts and a resolved weapon id. A device cannot
+ * journal a count -- a fact with no stable name cannot be deduplicated, so folding "marks: 2" into a
+ * grow-only set would add two more marks every reconnect. These are the named facts themselves, so
+ * ingesting the same welcome twice is a no-op (progression/facts.js's union law).
+ *
+ * SHAPE only, exactly the boundary decodeRewards draws for itemIds: this layer does not know which
+ * fact types exist. progression/facts.js's isProfileFact owns that list and already drops anything
+ * it does not recognise, so a new durable fact type is a progression change and not a wire change.
+ * Restating the list here would be a second copy of a rule that has an authority (GQ-007).
+ *
+ * Not length-capped on purpose. The array grows with a profile's whole history, and the only thing a
+ * cap could do to an unusually long-lived save is refuse the join or silently truncate it -- both
+ * strictly worse than a large welcome. Worth revisiting if a real profile ever gets big enough to
+ * matter; at Stage 1 volumes it is tens of facts.
+ */
+function decodeProfileFacts(facts) {
+  if (facts === undefined || facts === null) return [];
+  if (!Array.isArray(facts)) fail('profileFacts must be an array');
+  return facts.map((fact, index) => {
+    if (fact === null || typeof fact !== 'object') fail(`profileFacts[${index}] must be an object`);
+    const decoded = {
+      eventId: requireString(fact.eventId, `profileFacts[${index}].eventId`, EVENT_ID_MAX_LENGTH),
+      type: requireString(fact.type, `profileFacts[${index}].type`),
+    };
+    if (decoded.eventId.length === 0) fail(`profileFacts[${index}].eventId must not be empty`);
+    if (fact.value !== undefined && fact.value !== null) {
+      decoded.value = requireString(fact.value, `profileFacts[${index}].value`, ITEM_ID_MAX_LENGTH);
+    }
+    // Absent rather than null when the row has no order -- a fact given a made-up revision here
+    // would be claiming a place in a chronology it was never part of, which is the GQ-014 defect.
+    if (fact.rev !== undefined && fact.rev !== null) {
+      decoded.rev = requireInteger(fact.rev, `profileFacts[${index}].rev`);
+    }
+    // Who attested this fact. Present only on a row a DEVICE handed back for a store that had lost
+    // it; a fact the server adjudicated carries nothing, so the label means something rather than
+    // being on everything. Carried in both directions: the device is told which of its facts the
+    // server only knows because it was told, which is what makes the attestation visible rather
+    // than merely recorded.
+    if (fact.origin !== undefined && fact.origin !== null) {
+      decoded.origin = requireString(fact.origin, `profileFacts[${index}].origin`);
+    }
+    return decoded;
+  });
+}
+
 function decodeRewards(rewards) {
   if (rewards === undefined) return {};
   if (rewards === null || typeof rewards !== 'object' || Array.isArray(rewards)) {
@@ -590,6 +681,10 @@ const EMPTY_ENCOUNTER = Object.freeze({
   siege: EMPTY_SIEGE,
 });
 const NO_EVENTS = Object.freeze([]);
+// An ephemeral connection (no guestId) owns no durable facts, and neither does a caller that predates
+// the field. Its own frozen constant rather than a shared one with NO_EVENTS: they are different
+// kinds of empty, and sharing the binding would make a later change to one silently change the other.
+const NO_PROFILE_FACTS = Object.freeze([]);
 
 // Builders, so no call site hand-assembles an object shape the decoder would reject.
 
@@ -602,8 +697,8 @@ export function joinMessage(name, guestId) {
   return message;
 }
 
-export function welcomeMessage(id, tick, players, encounter = EMPTY_ENCOUNTER) {
-  return { v: PROTOCOL_VERSION, type: 'welcome', id, tick, players, encounter };
+export function welcomeMessage(id, tick, players, encounter = EMPTY_ENCOUNTER, profileFacts = NO_PROFILE_FACTS) {
+  return { v: PROTOCOL_VERSION, type: 'welcome', id, tick, players, encounter, profileFacts };
 }
 
 export function inputMessage(seq, dirX, dirZ, magnitude, run) {
@@ -614,8 +709,17 @@ export function attackMessage(seq) {
   return { v: PROTOCOL_VERSION, type: 'attack', seq };
 }
 
-export function equipMessage(itemId) {
-  return { v: PROTOCOL_VERSION, type: 'equip', itemId };
+export function restoreProfileMessage(facts) {
+  return { v: PROTOCOL_VERSION, type: 'restore-profile', facts: facts ?? NO_PROFILE_FACTS };
+}
+
+export function equipMessage(itemId, identity) {
+  const message = { v: PROTOCOL_VERSION, type: 'equip', itemId };
+  if (identity?.eventId !== undefined && identity?.rev !== undefined) {
+    message.eventId = identity.eventId;
+    message.rev = identity.rev;
+  }
+  return message;
 }
 
 export function searchCartMessage() {

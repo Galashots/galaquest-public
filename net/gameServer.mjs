@@ -25,8 +25,12 @@ import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessa
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
 import {
-  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownWeapon, swingDamageFor,
+  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownItem, isKnownWeapon, swingDamageFor,
 } from '../public/src/progression/items.js';
+// One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
+// imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
+// and the server consumes it rather than keeping a second list that drifts.
+import { isProfileFact } from '../public/src/progression/facts.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
@@ -50,7 +54,7 @@ import {
   WOLF_SPAWNS,
 } from '../public/src/world/zones/village.js';
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
-import { rangerOwesCharm } from '../public/src/world/rangerSpeech.js';
+import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
 import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
@@ -166,11 +170,29 @@ export function createRewardCoordinator(options = {}) {
    * table equip/marks/lantern use); an ephemeral one has no durable path to grant into and this is a
    * no-op for it, consistent with ownedItemIdsFor's own treatment of ephemeral connections.
    */
+  /**
+   * Announce a durable fact the store has just accepted, under the id it was written with.
+   *
+   * One helper rather than the same three lines in five grant paths, because the rule is one rule:
+   * a profile fact the device is not TOLD about is one it can only learn from the next welcome, and
+   * a reward database lost in between takes it with it. A count on the rewards block cannot stand in
+   * -- fold a count into a grow-only set and every reconnect adds it again. Only a named fact merges.
+   *
+   * Returns an array so a caller can hand it straight to simulation.announceRewardFacts, and an
+   * EMPTY one when the write was a replay: re-claiming is not a second grant and must not announce
+   * one. Announcing is deliberately separate from writing -- the store decides what is true, this
+   * only decides who hears about it.
+   */
+  function announcementFor(result, fact) {
+    return result.applied ? [fact] : [];
+  }
+
   function grantOwnership(playerId, itemId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return;
+    if (!guestId) return [];
     const eventId = `own:${guestId}:${itemId}`;
-    store.apply({ guestId, heroId: playerId, type: 'gear-owned', eventId, value: itemId });
+    const result = store.apply({ guestId, heroId: playerId, type: 'gear-owned', eventId, value: itemId });
+    return announcementFor(result, { type: 'gear-owned', heroId: playerId, eventId, value: itemId });
   }
 
   /**
@@ -189,7 +211,7 @@ export function createRewardCoordinator(options = {}) {
    */
   function claimWildwoodBlade(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: false };
+    if (!guestId) return { granted: false, facts: [] };
     const result = store.apply({
       guestId,
       heroId: playerId,
@@ -197,7 +219,15 @@ export function createRewardCoordinator(options = {}) {
       eventId: `own:${guestId}:${WILDWOOD_BLADE_ID}`,
       value: WILDWOOD_BLADE_ID,
     });
-    return { granted: result.applied };
+    return {
+      granted: result.applied,
+      facts: announcementFor(result, {
+        type: 'gear-owned',
+        heroId: playerId,
+        eventId: `own:${guestId}:${WILDWOOD_BLADE_ID}`,
+        value: WILDWOOD_BLADE_ID,
+      }),
+    };
   }
 
   /**
@@ -208,12 +238,17 @@ export function createRewardCoordinator(options = {}) {
    */
   function claimSatchel(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: false };
+    if (!guestId) return { granted: false, facts: [] };
     const result = store.apply({
       guestId, heroId: playerId, type: 'satchel-taken',
       eventId: `satchel:${guestId}`, value: null,
     });
-    return { granted: result.applied };
+    return {
+      granted: result.applied,
+      facts: announcementFor(result, {
+        type: 'satchel-taken', heroId: playerId, eventId: `satchel:${guestId}`,
+      }),
+    };
   }
 
   /**
@@ -226,12 +261,17 @@ export function createRewardCoordinator(options = {}) {
    */
   function claimCharm(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: false };
+    if (!guestId) return { granted: false, facts: [] };
     const result = store.apply({
       guestId, heroId: playerId, type: 'charm-earned',
       eventId: `charm:${guestId}`, value: null,
     });
-    return { granted: result.applied };
+    return {
+      granted: result.applied,
+      facts: announcementFor(result, {
+        type: 'charm-earned', heroId: playerId, eventId: `charm:${guestId}`,
+      }),
+    };
   }
 
   /**
@@ -247,19 +287,22 @@ export function createRewardCoordinator(options = {}) {
    */
   function applyHollowCache(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return { granted: 0 };
+    if (!guestId) return { granted: 0, facts: [] };
     let granted = 0;
+    const facts = [];
     for (let index = 1; index <= HOLLOW_CACHE_SHARDS; index += 1) {
+      const eventId = `hollow-cache:${guestId}:${index}`;
       const result = store.apply({
         guestId,
         heroId: playerId,
         type: 'shard-earned',
-        eventId: `hollow-cache:${guestId}:${index}`,
+        eventId,
         value: null,
       });
       if (result.applied) granted += 1;
+      facts.push(...announcementFor(result, { type: 'shard-earned', heroId: playerId, eventId }));
     }
-    return { granted };
+    return { granted, facts };
   }
 
   /** G3: write down that the Old Beacon is burning. A WORLD fact, so the row is not what makes it
@@ -364,7 +407,7 @@ export function createRewardCoordinator(options = {}) {
    * client can never produce this message -- this is the same "stale or hostile client" posture
    * attack/input already take on a message that is shaped correctly but makes no sense.
    */
-  function applyEquip(playerId, itemId) {
+  function applyEquip(playerId, itemId, identity) {
     if (!isKnownWeapon(itemId)) {
       throw new Error(`applyEquip got an unknown weapon id ${JSON.stringify(itemId)}`);
     }
@@ -373,13 +416,32 @@ export function createRewardCoordinator(options = {}) {
     }
     const guestId = guestIdByPlayer.get(playerId);
     if (guestId) {
-      // The old process-local sequence restarted at 1 on every server boot, repeating a durable
-      // primary key and making INSERT OR IGNORE silently discard the new choice. A UUID is an actual
-      // cross-process idempotency key; rewardStore orders equip choices by SQLite insertion order,
-      // not by trying to smuggle chronology into this identifier.
-      const eventId = `equip:${guestId}:${randomUUID()}`;
-      const result = store.apply({ guestId, heroId: playerId, type: 'weapon-equipped', eventId, value: itemId });
-      if (!result.applied) throw new Error(`applyEquip failed to record a new durable event for ${guestId}`);
+      // WHEN the child chose this weapon is a fact about the choice, so it is created with the
+      // choice -- on the device, before the message is sent -- and merely persisted here. Deriving
+      // it on this side instead was wrong four separate ways (docs/MISTAKES.md GQ-014); the last of
+      // them, ordering by arrival, cannot tell an older equip delivered late from a newer one,
+      // because arrival is not chronology.
+      //
+      // Trusting a client number is safe here and nowhere near as broad as it sounds: `rev` orders
+      // this profile's own equips against each other and nothing else. Ownership is still re-checked
+      // above, the weapon must still be real, and the worst a lie achieves is choosing which of the
+      // child's OWN swords their hero draws. The identity is still bounded and validated on the wire
+      // (net/protocol.js), and the PRIMARY KEY still makes a replay a no-op.
+      //
+      // A caller that supplies nothing -- an older client, a harness, a test -- still equips, and the
+      // server mints an identity ABOVE this guest's existing history so it cannot land in the middle
+      // of it. That fallback is a compatibility path, not the product path.
+      const eventId = identity?.eventId ?? `equip:${guestId}:${randomUUID()}`;
+      const rev = Number.isInteger(identity?.rev) ? identity.rev : store.maxEquipRevFor(guestId) + 1;
+      const result = store.apply({
+        guestId, heroId: playerId, type: 'weapon-equipped', eventId, value: itemId, rev,
+      });
+      // A repeated equip identity is a replay, not a failure: the child's choice is already on
+      // record with the order it was made, and re-sending it must be the no-op INSERT OR IGNORE
+      // already makes it. Only a server-minted identity is expected to be new every time.
+      if (!result.applied && !identity?.eventId) {
+        throw new Error(`applyEquip failed to record a new durable event for ${guestId}`);
+      }
     } else {
       ephemeralEquipped.set(playerId, itemId);
     }
@@ -406,8 +468,16 @@ export function createRewardCoordinator(options = {}) {
       if (result.applied) {
         if (kind === COIN_KIND) villageCoinsEarned += 1;
         else villageShardsEarned += 1;
+        // Announced with the id the row was keyed on, the same way applyMarkAward announces a mark.
+        // Until this existed the device learned its coins only as a COUNT on the rewards block, and
+        // a count cannot be journalled -- fold "coins: 3" into a grow-only set and every reconnect
+        // adds three more. The pickup id is already globally unique by construction (see this
+        // function's header), so there is no identity to mint here, only one that was kept private.
+        //
+        // Only on `applied`: a replayed collect is not a second coin, and must not announce one.
+        return [{ type, heroId: playerId, eventId: pickupId }];
       }
-      return;
+      return [];
     }
     // No durable path for an ephemeral connection (same caveat ownedItemIdsFor's own comment gives) --
     // in-memory only, lost on disconnect. The simulation-layer lootState check is still what prevents
@@ -415,6 +485,10 @@ export function createRewardCoordinator(options = {}) {
     const state = ephemeralLoot.get(playerId) ?? { coins: 0, shards: 0 };
     if (kind === COIN_KIND) state.coins += 1; else state.shards += 1;
     ephemeralLoot.set(playerId, state);
+    // Nothing durable happened, so nothing durable is announced. An ephemeral connection's HUD
+    // still updates from the rewards block exactly as before; what it does not get is a named fact,
+    // because there is no row anywhere for that name to refer to.
+    return [];
   }
 
   /** One mark-earned award, applied durably or in-memory, plus the lantern-unlocked check that
@@ -423,33 +497,45 @@ export function createRewardCoordinator(options = {}) {
    * lantern:<guestId> insert actually take, so "exactly once, ever" holds even across a restart
    * (D2's own close+reopen guarantee is what this is built on).
    *
-   * DELIBERATE DEVIATION from using award.eventId verbatim as the durable key, found by a failing
-   * test (test/reward-wiring.test.mjs, "the third kill unlocks the lantern... across a store
-   * restart") rather than assumed: D1's `mark:<heroId>:<lifeIndex>` is only unique WITHIN one
-   * server process's lifetime. Both of its components reset on a real restart -- `lifeIndex` comes
-   * from marks.js's own in-memory ledger (starts at 0 again), and heroId is `p<n>` off
-   * createSimulation's own nextPlayerNumber (also starts at 0 again) -- so a kill immediately after
-   * a restart recomputes an eventId ALREADY on record from a previous run, and INSERT OR IGNORE
-   * silently swallows it as a replay. It is not a replay; it is a new kill that never gets its mark.
-   * The durable key instead anchors on guestId (the one identity that genuinely survives a restart)
-   * plus the store's OWN current count for that guest, read immediately before applying -- a value
-   * that can only ever grow, so it can never collide with a row already on record. D1's own
-   * award.eventId keeps its documented job for the ephemeral (guestId-less) fallback below, where
-   * per-process state is exactly right since that state does not survive a restart either.
+   * The durable key is `mark:<guestId>:<lifeId>` -- the guest who is owed, and the wolf-life they
+   * are owed FOR. Both halves matter and each replaced a broken predecessor:
+   *
+   *   - `mark:<heroId>:<lifeIndex>` (the fold's own id) is unique only within one process. Both
+   *     components reset on a restart, so the first kill after one recomputes an id already on
+   *     record and INSERT OR IGNORE swallows a real kill. Found by a failing test
+   *     (test/reward-wiring.test.mjs, "the third kill unlocks the lantern... across a store restart").
+   *   - Reading `store.marksFor(guestId)` here instead cured the restart case but was not idempotent:
+   *     two heroIds can map to ONE guestId (two tabs share localStorage, hence the guestId), the
+   *     fold credits each contributor separately, and this count was re-read BETWEEN the two awards
+   *     -- so the second computed a different key and inserted. One kill, two marks, and the lantern
+   *     unlocking in two kills instead of three. Proved by test/profile-identity.test.mjs.
+   *
+   * marks.js now mints one lifeId per wolf-defeated, so every contributor to a life carries the same
+   * one: one guest's two bodies collapse to a single durable key, while two different guests keep
+   * their own -- participation credit intact, duplication impossible. The count is not read at all
+   * any more; nothing here derives an identity from a number that the act of paying changes.
+   *
+   * D1's own award.eventId keeps its documented job for the ephemeral (guestId-less) fallback below,
+   * where per-process state is exactly right since that state does not survive a restart either.
    */
   function applyMarkAward(award) {
     const guestId = guestIdByPlayer.get(award.heroId);
     const events = [];
 
     if (guestId) {
-      const durableEventId = `mark:${guestId}:${store.marksFor(guestId)}`;
+      const durableEventId = `mark:${guestId}:${award.lifeId}`;
       const result = store.apply({ guestId, heroId: award.heroId, type: 'mark-earned', eventId: durableEventId });
-      if (result.applied) events.push({ type: 'mark-earned', heroId: award.heroId });
+      // The durable eventId rides the event so the client can journal THIS fact under the same id
+      // the store used. That is what makes the device's copy mergeable with this one rather than a
+      // second opinion -- see public/src/progression/facts.js's union law.
+      if (result.applied) events.push({ type: 'mark-earned', heroId: award.heroId, eventId: durableEventId });
       if (store.marksFor(guestId) >= MARKS_TO_UNLOCK) {
         const unlocked = store.apply({
           guestId, heroId: award.heroId, type: 'lantern-unlocked', eventId: `lantern:${guestId}`,
         });
-        if (unlocked.applied) events.push({ type: 'lantern-unlocked', heroId: award.heroId });
+        if (unlocked.applied) {
+          events.push({ type: 'lantern-unlocked', heroId: award.heroId, eventId: `lantern:${guestId}` });
+        }
       }
       return events;
     }
@@ -474,7 +560,10 @@ export function createRewardCoordinator(options = {}) {
    * mark-earned/lantern-unlocked "the way they hear wolf-defeated" -- one array, one broadcast.
    */
   function processTick(events) {
-    const folded = foldEvents(ledger, events);
+    // randomUUID, not the fold's own life index: the index restarts at 0 with the process and would
+    // recompute an eventId already on disk. See rewards/marks.js's header for both halves of that
+    // lesson and for why the id is minted per LIFE rather than per contributor.
+    const folded = foldEvents(ledger, events, { mintLifeId: () => randomUUID() });
     ledger = folded.ledger;
     const rewardEvents = [];
     for (const award of folded.awards) rewardEvents.push(...applyMarkAward(award));
@@ -545,6 +634,91 @@ export function createRewardCoordinator(options = {}) {
     charmEarnedFor(heroId) {
       const guestId = guestIdByPlayer.get(heroId);
       return guestId ? store.charmEarnedFor(guestId) : false;
+    },
+    /** Every durable fact this hero's profile owns, for the client to merge into its own local
+     *  journal. Facts, not totals: a device that keeps its own copy of family progress has to be
+     *  able to union the two sets by id (public/src/progression/facts.js), and a count cannot be
+     *  unioned with anything -- it can only overwrite or be overwritten, which is precisely the
+     *  ambiguity local-first is supposed to remove. Empty for an ephemeral, guestId-less hero,
+     *  which genuinely owns nothing durable. */
+    profileFactsFor(heroId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      return guestId ? store.profileFactsFor(guestId) : [];
+    },
+    /**
+     * Take back the durable facts a DEVICE still holds, for a store that has lost them.
+     *
+     * This is the empty-store half of local-first recovery, and it exists because re-sending the
+     * equip alone provably cannot work: applyEquip refuses a weapon the guest does not own, and
+     * against a wiped store the child owns nothing but the starter sword. The recovered choice is
+     * rejected and the hero snaps back to a weapon the child stopped holding. The ownership has to
+     * arrive with the choice that depends on it, which is why this takes the whole set at once
+     * rather than one fact at a time -- the two are validated against each other below.
+     *
+     * WHAT A DEVICE MAY SAY, precisely:
+     *   - only about the guest THIS CONNECTION claimed; an ephemeral connection has no profile to
+     *     restore into and is refused outright;
+     *   - only the fact types public/src/progression/facts.js already recognises as a profile's own
+     *     earnings, so a device cannot restore a WORLD fact (beacon-lit, village-upgrade) and change
+     *     something every other child shares;
+     *   - only real items, checked the same way the store checks an adjudicated award;
+     *   - and only a weapon-equipped whose item the profile will actually own once this restore
+     *     lands. Without that last check the derived state contradicts itself: a hero holding a
+     *     weapon the same rows say they do not own.
+     *
+     * WHAT IT IS NOT. It is not live adjudication and does not touch it. The server still decides
+     * every question asked in the present tense -- did that hit land, is this affordable, is this
+     * claim in range -- and nothing here is consulted for any of them. Every row written is stamped
+     * `origin: 'client'` and stays distinguishable from an adjudicated one forever.
+     *
+     * The residual trust is real and worth naming rather than burying: a device can assert it earned
+     * marks it did not. For a same-device family game with no accounts and no competitive stakes,
+     * that is the trade AGENTS.md already records, and the alternative -- refusing -- costs a child
+     * their sword because a database file was replaced. Tightening it (a signed journal, a
+     * server-side high-water mark) is a product decision, not something to smuggle in here.
+     */
+    restoreProfileFacts(heroId, facts) {
+      const guestId = guestIdByPlayer.get(heroId);
+      // Nothing durable to restore into, and no way to know whose facts these are. Refused rather
+      // than thrown: a device that lost its storage mid-session is confused, not hostile, and
+      // dropping its connection over it would be a worse answer than ignoring the message.
+      if (!guestId) return { restored: 0, refused: Array.isArray(facts) ? facts.length : 0 };
+
+      const candidates = (Array.isArray(facts) ? facts : []).filter((fact) => (
+        isProfileFact(fact)
+        && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
+        && !(fact.type === 'weapon-equipped' && !isKnownWeapon(fact.value))
+      ));
+
+      // What this profile owns once the restore lands: what the store already knows, plus whatever
+      // ownership this message brings. Computed BEFORE anything is written so the equip check below
+      // sees the same final picture regardless of the order the facts happen to be listed in.
+      const ownedAfter = new Set(store.ownedItemIdsFor(guestId));
+      for (const fact of candidates) {
+        if (fact.type === 'gear-owned') ownedAfter.add(fact.value);
+      }
+
+      let restored = 0;
+      let refused = 0;
+      for (const fact of candidates) {
+        if (fact.type === 'weapon-equipped' && !ownedAfter.has(fact.value)) {
+          refused += 1;
+          continue;
+        }
+        const result = store.apply({
+          guestId,
+          heroId,
+          type: fact.type,
+          eventId: fact.eventId,
+          value: fact.value,
+          ...(Number.isInteger(fact.rev) ? { rev: fact.rev } : {}),
+          origin: 'client',
+        });
+        // A fact the store already held is not a failure -- restoring twice has to be the same as
+        // restoring once, which is the INSERT OR IGNORE the whole design rests on.
+        if (result.applied) restored += 1;
+      }
+      return { restored, refused: refused + ((Array.isArray(facts) ? facts.length : 0) - candidates.length) };
     },
     recordBeaconLit,
     beaconLit,
@@ -887,6 +1061,22 @@ export function createSimulation(options = {}) {
         // a child can be handed Wren's charm mid-session, and a value copied at join would mean the
         // fourth heart only appeared after a reconnect.
         maxHp: maxHpFor(player.id),
+        // ...and whether the wolf may pick this hero at all. Derived HERE, on the side of the seam
+        // that knows both where everyone is standing and whether the Beacon is burning, from the
+        // same RANGER_CLAIM radius the charm handover is already adjudicated against. Nothing new
+        // goes on the wire for it: the authoritative server owns both inputs already, so a client
+        // could not tell it anything about this that it does not know better.
+        //
+        // Per hero, deliberately. A sibling out in the open is still a target on the very same
+        // tick, and the wolf keeps hunting them -- this is a sanctuary, not a truce.
+        targetable: !rangerSanctuaryHolds({
+          heroX: player.x,
+          heroZ: player.z,
+          rangerX: RANGER_CLAIM.at[0],
+          rangerZ: RANGER_CLAIM.at[1],
+          claimRadiusMeters: RANGER_CLAIM.radiusMeters,
+          beaconLit: siegeState.beaconLit,
+        }),
       };
     }
     // The handoff runs BEFORE either engine steps, so a hero is never simulated for a tick by the
@@ -1033,6 +1223,24 @@ export function createSimulation(options = {}) {
   }
 
   /**
+   * Put an already-recorded durable fact onto the next snapshot.
+   *
+   * Deliberately narrow, and the narrowness is the point. Everything else that reaches
+   * `pendingEvents` is raised BY the rules -- a swing, a bite, a defeat -- and this repo is careful
+   * that a caller holding the simulation gets published state rather than a handle on those rules
+   * (see the runtime object's own comment in main.js). This does not move the fight: it carries a
+   * fact the reward store has ALREADY written, so the client can journal it under the store's id
+   * instead of waiting for the next welcome to hear about it.
+   *
+   * Used by the reward paths that run off a message rather than off the tick -- loot collection
+   * lands in a WebSocket handler, whereas a mark is folded inside the tick and can push directly.
+   */
+  function announceRewardFacts(events) {
+    if (!Array.isArray(events) || events.length === 0) return;
+    pendingEvents.push(...events);
+  }
+
+  /**
    * G4: is this player standing close enough to Rowan, under a lit Beacon, to be owed the Wildwood
    * Blade right now?
    *
@@ -1097,6 +1305,7 @@ export function createSimulation(options = {}) {
     atHollowClue,
     rangerClaimState,
     drainEvents,
+    announceRewardFacts,
     get tick() {
       return tick;
     },
@@ -1173,8 +1382,15 @@ export function attachGameServer(httpServer, options = {}) {
         // mid-fight wolf correctly (Design ruling 7). Now including that guest's own persisted
         // marks, so a reconnect (same guestId, new playerId) sees them immediately on welcome --
         // the "marks survive a refresh" acceptance the brief's D6 harness exercises live.
+        // ...and that guest's DURABLE facts, each with the eventId the store keyed it on. The
+        // rewards block above is derived -- counts and a resolved weapon -- which a device cannot
+        // journal, because a fact with no stable name cannot be deduplicated. These are what
+        // progression/profiles.js's ingestServerFacts needs to recover a profile whose device has
+        // never seen it, and to settle each fact's revision BEFORE local progression mints above it.
+        // Ephemeral connections get [] from profileFactsFor, so nobody is handed anyone else's save.
         client.send(encode(welcomeMessage(
           player.id, simulation.tick, simulation.snapshot(), encounterSnapshotWithRewards(),
+          rewards.profileFactsFor(player.id),
         )));
         return;
       }
@@ -1195,6 +1411,15 @@ export function attachGameServer(httpServer, options = {}) {
         return;
       }
 
+      if (message.type === 'restore-profile') {
+        // Same before-join posture as every other durable action: refusing is honest, silently
+        // dropping is not. Past that, restoreProfileFacts decides -- including refusing an
+        // ephemeral connection, which is a legitimate state rather than a protocol error.
+        if (!client.data.playerId) throw new ProtocolError('restore-profile before join');
+        rewards.restoreProfileFacts(client.data.playerId, message.facts);
+        return;
+      }
+
       if (message.type === 'equip') {
         // Same reasoning as input-before-join: refusing is honest, silently dropping is not.
         if (!client.data.playerId) throw new ProtocolError('equip before join');
@@ -1202,7 +1427,10 @@ export function attachGameServer(httpServer, options = {}) {
         // ProtocolError comment above this handler) for an itemId nobody defined. GP1's real client
         // only ever sends an id it already has loaded from progression/items.js, so this only ever
         // fires for a stale or hostile client, the same posture attack/input already take.
-        rewards.applyEquip(client.data.playerId, message.itemId);
+        // The device's own identity for this choice rides through when it sent one; protocol.js
+        // has already validated both halves, or refused the message.
+        rewards.applyEquip(client.data.playerId, message.itemId,
+          message.eventId === undefined ? undefined : { eventId: message.eventId, rev: message.rev });
         return;
       }
 
@@ -1230,7 +1458,7 @@ export function attachGameServer(httpServer, options = {}) {
         // The client's own ask and this allow are the SAME function (world/rowanSpeech.js), so the
         // two can never drift into "the game offered it and the server refused".
         if (!rowanOwesBlade({ inRange, beaconLit, bladeOwned })) return;
-        rewards.claimWildwoodBlade(playerId);
+        simulation.announceRewardFacts(rewards.claimWildwoodBlade(playerId).facts);
         return;
       }
 
@@ -1246,7 +1474,7 @@ export function attachGameServer(httpServer, options = {}) {
         const playerId = client.data.playerId;
         if (!rewards.hasDurableIdentity(playerId)) return;
         if (!simulation.atHollowChest(playerId)) return;
-        rewards.applyHollowCache(playerId);
+        simulation.announceRewardFacts(rewards.applyHollowCache(playerId).facts);
         return;
       }
 
@@ -1264,7 +1492,7 @@ export function attachGameServer(httpServer, options = {}) {
         // it, so the chest and the satchel are guarded the same way rather than one of them pretending
         // to a check the server cannot actually make.
         if (!simulation.atHollowClue(playerId)) return;
-        rewards.claimSatchel(playerId);
+        simulation.announceRewardFacts(rewards.claimSatchel(playerId).facts);
         return;
       }
 
@@ -1279,7 +1507,7 @@ export function attachGameServer(httpServer, options = {}) {
           satchelCarried: rewards.satchelTakenFor(playerId),
           charmOwned: rewards.charmEarnedFor(playerId),
         })) return;
-        rewards.claimCharm(playerId);
+        simulation.announceRewardFacts(rewards.claimCharm(playerId).facts);
         return;
       }
 
@@ -1296,7 +1524,13 @@ export function attachGameServer(httpServer, options = {}) {
         // and no error either: same "a rejected command is a clean no, not a disconnect" posture
         // requestPartyAttack's own accepted:false already takes for a swing outside reach.
         const { accepted, kind } = simulation.applyCollectLoot(client.data.playerId, message.pickupId);
-        if (accepted) rewards.applyLootAward(client.data.playerId, message.pickupId, kind);
+        if (accepted) {
+          // The award's own announcement rides the next snapshot, so the device journals this coin
+          // under the store's id as it happens rather than learning it from the next welcome.
+          simulation.announceRewardFacts(
+            rewards.applyLootAward(client.data.playerId, message.pickupId, kind),
+          );
+        }
         return;
       }
 

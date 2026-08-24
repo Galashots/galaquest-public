@@ -69,7 +69,6 @@
       .spend-gate { display:flex; align-items:flex-start; gap:.45rem; border:1px solid #e7bb5840; background:#e7bb5809; border-radius:.48rem; padding:.55rem; margin:.55rem 0; color:#d9c995; font-size:.69rem; line-height:1.35; }
       #meshy-generate:disabled { opacity:.45; cursor:not-allowed; } #task-progress { display:none; margin-top:.5rem; } #task-progress.active { display:block; } progress { width:100%; accent-color:var(--gold); }
       @media(max-width:980px){#forge{grid-template-columns:230px minmax(0,1fr) 300px}.brand{min-width:auto}}
-      @media(max-width:760px){#forge{grid-template-columns:1fr;grid-template-rows:48px minmax(0,1fr)}#left-panel,#right-panel{position:absolute;z-index:10;top:48px;bottom:0;width:min(88vw,340px);box-shadow:0 0 35px #000a}#left-panel{left:0;transform:translateX(-100%)}#right-panel{right:0;transform:translateX(100%)}body.show-assets #left-panel{transform:translateX(0)}body.show-fit #right-panel{transform:translateX(0)}#stage{grid-column:1}.mobile-toggle{display:inline-block!important}.top-meta .badge{display:none}}
       .mobile-toggle { display:none; }
     </style>
   </head>
@@ -84,10 +83,14 @@
 
       <aside id="left-panel" class="panel">
         <section class="section">
-          <h2>Candidate Rack</h2>
+          <h2>Gear Rack</h2>
+          <button class="card candidate-button" data-loadout="shipping-sword-only" data-asset="sword_ironwood" data-bone="RightHand" data-provenance="SHIPPED"><div class="card-title"><strong>Starter Sword (Ironwood)</strong><span class="tier">SHIPPED</span></div><div class="meta">RightHand · in the game now · shield hidden for silhouette</div></button>
           <button class="card candidate-button active" data-loadout="candidate-dawnwarden-helmet" data-asset="helmet_dawnwarden_v1" data-bone="Head"><div class="card-title"><strong>Dawnwarden Helmet</strong><span class="tier">T4</span></div><div class="meta">Head · locked fit reference · hides hair + ears</div></button>
           <button class="card candidate-button" data-loadout="candidate-dawnwarden-sword" data-asset="sword_dawnwarden_v1" data-bone="RightHand"><div class="card-title"><strong>Dawnwarden Sword</strong><span class="tier">T4</span></div><div class="meta">RightHand · candidate · rigid gear</div></button>
-          <div class="micro">Dawnwarden Helmet is the owner-locked open-face headgear reference. Candidate status still means visual/animation qualification is separate from fit placement.</div>
+          <button class="card candidate-button" data-loadout="shipping" data-asset="shield_ironwood" data-bone="LeftHand" data-provenance="SHIPPED"><div class="card-title"><strong>Ironwood Shield</strong><span class="tier">SHIPPED</span></div><div class="meta">LeftHand · in the game now · strapped to the forearm</div></button>
+          <button class="card candidate-button" data-loadout="candidate-with-lantern" data-asset="lantern_belt" data-bone="Hips" data-provenance="SHIPPED"><div class="card-title"><strong>Belt Lantern</strong><span class="tier">SHIPPED</span></div><div class="meta">Hips · in the game now · earned at three Marks</div></button>
+          <button class="card candidate-button" data-loadout="candidate-wildwood-blade" data-asset="sword_wildwood_w1a" data-bone="RightHand"><div class="card-title"><strong>Wildwood Blade</strong><span class="tier">W1-A</span></div><div class="meta">RightHand · candidate · replaces the starter sword</div></button>
+          <div class="micro">Starter Sword is SHIPPED gear the game draws today — fitting it changes what a child sees. Dawnwarden Helmet is the owner-locked open-face headgear reference. Candidate status still means visual/animation qualification is separate from fit placement.</div>
         </section>
         <section class="section">
           <h2>Meshy Lane</h2>

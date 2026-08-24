@@ -16,13 +16,29 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { isKnownItem, isKnownWeapon } from '../public/src/progression/items.js';
+import { latestEquippedWeaponId } from '../public/src/progression/facts.js';
 
 // v2, GP1: one nullable `value` column added for 'weapon-equipped' events, which need to carry
 // WHICH weapon rather than just count -- the mark/lantern events only ever needed COUNT, so the
-// column did not exist until an event type needed a payload. A v1 store ALTERs in place (below);
-// a fresh store creates the v2 shape directly, so there is exactly one column layout to reason
-// about once a store has ever been opened under this code.
-export const SCHEMA_VERSION = 2;
+// column did not exist until an event type needed a payload.
+//
+// v3, Stage 1: one nullable `rev` column, the ordering an equip is given AT THE MOMENT IT HAPPENS.
+// Added rather than derived because every derived version of this number was wrong: a count that the
+// act of paying changes, an in-memory counter that a page load resets, an index over whichever store
+// is readable now, and a stamp applied when a fact was first SEEN -- which cannot tell an older equip
+// delivered late from a newer one, because it is measuring delivery. See docs/MISTAKES.md GQ-014.
+// Only 'weapon-equipped' carries it; every other award type is additive and needs no order at all.
+//
+// v4, Stage 1: one nullable `origin` column, naming WHO ATTESTED the row. NULL -- every row ever
+// written before this and every row since that the server itself adjudicated -- means the server
+// decided it. 'client' means a device handed it back for a store that had lost it (net/gameServer.mjs's
+// restoreProfileFacts). The distinction has to live in the record rather than in anyone's memory of
+// how a row got there, and it has to stay narrow to mean anything: if every row were labelled the
+// label would say nothing.
+//
+// An older store ALTERs in place (below); a fresh store creates the v4 shape directly, so there is
+// exactly one column layout to reason about once a store has ever been opened under this code.
+export const SCHEMA_VERSION = 4;
 
 function transaction(db, work) {
   db.exec('BEGIN IMMEDIATE;');
@@ -106,25 +122,41 @@ export function openRewardStore(path) {
           guest_id TEXT NOT NULL,
           type TEXT NOT NULL,
           created_at TEXT NOT NULL,
-          value TEXT
+          value TEXT,
+          rev INTEGER,
+          origin TEXT
         );
       `);
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
-  } else if (currentVersion === 1) {
-    // A real v1 store (marks/lantern-unlocked only, no value column) from before GP1. ALTER, not
-    // recreate -- every existing mark/lantern row is untouched, `value` reads NULL for all of them,
-    // which is exactly right: they never had a payload. The column check also repairs the precise
-    // interrupted-migration state where ALTER committed but the old two-statement migration crashed
-    // before user_version advanced: retrying that state must finish, not fail on a duplicate column.
+  } else if (currentVersion >= 1 && currentVersion < SCHEMA_VERSION) {
+    // A real older store: v1 predates GP1 and has neither `value` nor `rev`; v2 has `value` only;
+    // v3 has both but no `origin`.
+    //
+    // The branch is a RANGE rather than an enumeration of versions, which is the repair the v3
+    // migration's own comment argued for and then did not take: it listed `1 || 2`, so adding v4
+    // meant editing the condition, and the version that forgets to edit it is the one that throws
+    // "schema version 3, this code expects 4" at a store it could have migrated in place. The
+    // per-column inspection below already makes the repair version-independent; the condition
+    // should be too.
+    // ALTER, not recreate -- every existing row is untouched, and the new columns read NULL for all
+    // of them, which is exactly right: they never had a payload or an order. Both versions are
+    // handled by the same branch because the repair is identical in kind, "add whichever columns are
+    // missing", and enumerating that per-version is how the second migration forgets the first.
+    //
+    // Adding columns one-by-one on inspection also repairs the precise interrupted-migration state
+    // where an ALTER committed but the process died before user_version advanced: retrying must
+    // finish, not fail on a duplicate column.
     transaction(db, () => {
       // Read the table shape only AFTER BEGIN IMMEDIATE has acquired the migration lock. Reading it
-      // beforehand creates a classic check-then-act race: two processes can both observe a v1 table
+      // beforehand creates a classic check-then-act race: two processes can both observe a store
       // without `value`, then one migrates while the other is waiting, and the second wakes up and
-      // retries the stale ALTER against the now-v2 table. The transaction makes the inspection and
-      // repair one serialized decision.
+      // retries the stale ALTER against the now-migrated table. The transaction makes the inspection
+      // and repair one serialized decision.
       const columns = db.prepare('PRAGMA table_info(reward_events)').all().map((row) => row.name);
       if (!columns.includes('value')) db.exec('ALTER TABLE reward_events ADD COLUMN value TEXT;');
+      if (!columns.includes('rev')) db.exec('ALTER TABLE reward_events ADD COLUMN rev INTEGER;');
+      if (!columns.includes('origin')) db.exec('ALTER TABLE reward_events ADD COLUMN origin TEXT;');
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   } else if (currentVersion !== SCHEMA_VERSION) {
@@ -137,7 +169,7 @@ export function openRewardStore(path) {
   // INSERT OR IGNORE against the PRIMARY KEY on id: the whole idempotency guarantee lives in this one
   // line plus the schema's PRIMARY KEY constraint, not in application code that could drift from it.
   const insertStmt = db.prepare(
-    'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value) VALUES (?, ?, ?, ?, ?)',
+    'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value, rev, origin) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
   const marksStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE guest_id = ? AND type = 'mark-earned'");
   // GP2: coins and Wildwood Shards, counted exactly like marks -- one row per pickup ever credited to
@@ -164,14 +196,24 @@ export function openRewardStore(path) {
   const charmStmt = db.prepare(
     "SELECT 1 AS found FROM reward_events WHERE guest_id = ? AND type = 'charm-earned' LIMIT 1",
   );
-  // Latest INSERT wins, unlike marks/unlocked which are counted: equipping is a CHOICE, not an
-  // accumulation, so the current state is "whatever was equipped most recently". rowid is SQLite's
-  // own insertion order for this ordinary table, and therefore remains correct across process
-  // restarts, same-millisecond writes and wall-clock rollback. Event ids remain idempotency keys;
-  // they are no longer overloaded as an ordering mechanism.
-  const equippedWeaponStmt = db.prepare(
-    "SELECT value FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped' "
-    + 'ORDER BY rowid DESC LIMIT 1',
+  // Equipping is a CHOICE, not an accumulation, so the current state is "whatever was equipped most
+  // recently" -- but "most recently" is decided by public/src/progression/facts.js's
+  // latestEquippedWeaponId, NOT by this table's own arrival order, and every equip row is fetched so
+  // that shared law can be applied to them.
+  //
+  // This used to be `ORDER BY rowid DESC LIMIT 1`, on the reasoning that SQLite's insertion order is
+  // the one thing that survives restarts and same-millisecond writes. That was true and still beside
+  // the point: rowid records when a row REACHED this table, and a newer choice can reach it first --
+  // two tabs share one profile id, WebSocket ordering holds only per connection, and recovery writes
+  // facts long after the moment they describe. The device already resolved this by the order the
+  // child chose in, so keeping a second law here meant the rewards block and live combat damage
+  // could name a different weapon from the profile the device had recovered, from these same rows.
+  // Arrival is not chronology; see docs/MISTAKES.md GQ-014, and GQ-007 on why this is imported.
+  //
+  // A handful of rows per guest, so fetching them all costs nothing worth a second definition.
+  const equipFactsStmt = db.prepare(
+    "SELECT id, value, rev FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped' "
+    + 'ORDER BY rowid ASC',
   );
   // GP1-C1: ownership is a SET (has this guest ever been granted item X), unlike equip's latest-wins
   // read above -- DISTINCT because the same durable grant could in principle be applied more than
@@ -189,6 +231,24 @@ export function openRewardStore(path) {
   // have no other source today (public/src/world/cartLoot.js's CART_LOOT_TABLE is the only thing
   // that ever calls applyLootAward), so this doubles as exactly "which cart-loot:* ids are already
   // spent" without this file needing to know that table exists.
+  // Every durable fact one profile owns, as facts rather than as derived totals. The client keeps
+  // its own local journal so a family's progress survives this database being wiped or unavailable
+  // (see public/src/progression/profiles.js), and a journal can only be merged with this store if
+  // both sides hold the SAME facts under the same ids -- handing over a count would give the client
+  // a number it could not reconcile, only overwrite. Ordered by rowid so `weapon-equipped`, the one
+  // latest-wins field, arrives in the order it was written rather than in whatever order SQLite
+  // finds convenient.
+  const profileFactsStmt = db.prepare(
+    'SELECT id, type, value, rev, origin FROM reward_events WHERE guest_id = ? ORDER BY rowid ASC',
+  );
+
+  // The highest order any equip of this guest's has ever been given. Used only when the server has
+  // to mint an identity itself (a caller that supplied none), so that a server-minted equip still
+  // lands ABOVE the guest's existing history rather than colliding with the middle of it.
+  const maxEquipRevStmt = db.prepare(
+    "SELECT MAX(rev) AS m FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped'",
+  );
+
   const creditedLootIdsStmt = db.prepare(
     "SELECT id FROM reward_events WHERE type IN ('coin-earned', 'shard-earned')",
   );
@@ -249,12 +309,44 @@ export function openRewardStore(path) {
     }
     const result = insertStmt.run(
       award.eventId, award.guestId, award.type, new Date().toISOString(), award.value ?? null,
+      Number.isInteger(award.rev) ? award.rev : null,
+      // Only ever the literal 'client'. Not a free-text provenance field: an attestation nobody can
+      // enumerate is one nobody can query, and this exists to be queried.
+      award.origin === 'client' ? 'client' : null,
     );
     return { applied: result.changes > 0 };
   }
 
   function marksFor(guestId) {
     return marksStmt.get(guestId).c;
+  }
+
+  /** This profile's durable facts, shaped for public/src/progression/facts.js's union: `eventId` is
+   *  the same idempotency key apply() writes, so merging these into a local journal that already
+   *  holds some of them is a no-op for the overlap.
+   *
+   *  Deliberately carries NO ordering number. An index over these rows would look like an authority
+   *  and not be one: it is recomputed from whichever database is readable now, so a store that has
+   *  been wiped and rebuilt hands back low indices for facts the device already knows under high
+   *  ones, and "latest equipped" resolves to the weapon the child stopped holding. The row ORDER is
+   *  real (rowid ascending, below) and is the honest thing to publish; the client stamps a durable
+   *  revision from its own journal, which is the only record that survives this file being deleted. */
+  function profileFactsFor(guestId) {
+    return profileFactsStmt.all(guestId).map((row) => ({
+      eventId: row.id,
+      type: row.type,
+      value: row.value ?? undefined,
+      // Carried, never reconstructed. A row written before v3, or one of the additive types that
+      // has no order, reads NULL and is returned without the field rather than with a made-up one.
+      ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
+      // Absent for everything the server adjudicated, which is almost everything -- see the v4 note.
+      ...(row.origin ? { origin: row.origin } : {}),
+    }));
+  }
+
+  function maxEquipRevFor(guestId) {
+    const m = maxEquipRevStmt.get(guestId)?.m;
+    return Number.isInteger(m) ? m : -1;
   }
 
   function coinsFor(guestId) {
@@ -283,7 +375,12 @@ export function openRewardStore(path) {
    *  the caller (progression/state.js, mirrored through net/gameServer.mjs) is what knows the
    *  default to fall back to; this store only ever reports what actually happened. */
   function equippedWeaponFor(guestId) {
-    return equippedWeaponStmt.get(guestId)?.value ?? null;
+    return latestEquippedWeaponId(equipFactsStmt.all(guestId).map((row) => ({
+      eventId: row.id,
+      type: 'weapon-equipped',
+      value: row.value ?? undefined,
+      ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
+    }))) ?? null;
   }
 
   /** Every item this guest has been durably granted, NOT including the starter sword (see this
@@ -324,6 +421,8 @@ export function openRewardStore(path) {
   return {
     apply,
     marksFor,
+    profileFactsFor,
+    maxEquipRevFor,
     unlockedFor,
     satchelTakenFor,
     charmEarnedFor,

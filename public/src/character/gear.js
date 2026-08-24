@@ -106,6 +106,32 @@ export const RIG_ROOT_NAME = 'Armature';
 // not a measured fact, and this file already records one case where a self-consistent derivation was
 // simply wrong until six World of Warcraft screenshots settled it. Search for how equipped weapon
 // meshes are authored and confirm the hand is part of the weapon before anyone models one that way.
+// SUPERSEDED 2026-08-24 BY OWNER VISUAL REJECTION. Everything above is the history of how this
+// mount was derived; it is kept because it records what was tried and why, and because two of its
+// lessons still hold (aim first then seat; this rig's arm chain ends at the wrist). But its
+// MEASUREMENTS -- 0.055 m past the bone, 68.8 degrees below horizontal, tip at y=0.414 -- describe
+// the RETIRED sword transform and are no longer true of the value below. Nor is the word
+// "Sol-approved" authority for it any more: the Owner looked at the shipping sword on a real iPhone
+// and on the Forge and rejected the carry. Running-game pixels outrank a prior review.
+//
+// What the rejection actually was, photographed rather than inferred: in the Forge's bind fit pose
+// the blade pointed [-0.999, -0.026, -0.026] -- straight out along the arm -- so the sword lay FLAT
+// ACROSS THE BACK OF THE HAND with the guard behind the knuckles. It was not held; it was balanced.
+// At idle it read as an unidentifiable stub at the hip.
+//
+// The re-fit, made in the Forge against the Owner-approved Dawnwarden carry as the visual reference:
+// rack entry "Starter Sword (Ironwood)" -> loadout shipping-sword-only (shield hidden so the
+// silhouette reads) -> world-XYZ delta position [-0.0115, -0.0192, 0.0158] m, rotation
+// [-63.57, 64.18, 49.26] degrees, scale unchanged. The rotation was not guessed and not copied: both
+// meshes carry the +Y-blade, origin-at-grip convention (see normalizeSwordPayload), so the delta is
+// the world rotation that lands this blade on the direction the Owner already accepted for
+// Dawnwarden. The position is a small seat down and outboard so the guard clears the fingers.
+// Dawnwarden's own ownerFit was NOT touched; it was read as a reference and nothing else.
+//
+// Baked through forge/runtimeBake.js, which is the exact inverse of attachRigidTier2Gear and reads
+// the bind pose out of the skeleton's boneInverses -- so unlike the 2026-08-17 remediation this
+// number was not measured in whatever pose happened to be on screen. See
+// test/forge-runtime-bake.test.mjs and test/gear-bake-frame-contract.test.mjs.
 export const RIGID_TIER2_GEAR = Object.freeze([
   Object.freeze({
     id: 'sword_ironwood',
@@ -114,8 +140,10 @@ export const RIGID_TIER2_GEAR = Object.freeze([
       // Carried to twelve places and normalised on purpose. Rounded to six, the quaternion is
       // 1.0000003 long, and Matrix4.decompose reads that surplus as scale -- enough to miss the
       // attachment test's 1e-6 tolerance on a magnitude-29 local scale.
-      position: Object.freeze([-63.70592, 99.06745, 1.00951]),
-      quaternion: Object.freeze([0.74529070327, -0.562439008148, -0.180036303612, -0.309501307129]),
+      position: Object.freeze([-64.85592, 97.14747, 2.5895]),
+      quaternion: Object.freeze([-0.560465386086, 0.623437925195, 0.475258689008, -0.267082165168]),
+      // Unchanged: the fit moved and rotated the sword, it did not resize it. The bake reported
+      // 47.00001 on two axes, which is decompose noise, not a decision.
       scale: Object.freeze([47, 47, 47]),
     }),
   }),
@@ -169,6 +197,38 @@ function requiredObject(root, name, kind) {
     throw new Error(`Cannot attach Tier 2 gear: missing ${kind} ${name}.`);
   }
   return object;
+}
+
+/**
+ * The bone's matrixWorld AS AUTHORED, not as the clip currently has it.
+ *
+ * Every rest transform in this file is root-relative, so mounting one means solving
+ * `inverse(bone.matrixWorld) x rigRoot.matrixWorld x rest` -- and the answer depends entirely on
+ * WHICH bone.matrixWorld. All of them were baked against the bind pose (the fit-*.mjs tools pose the
+ * skeleton before measuring), so a mount that reads the LIVE bone bakes the delta between bind and
+ * whatever pose happened to be playing into the anchor's local transform permanently: a rigid child
+ * inherits that error every subsequent frame. attachRigidTier2Gear never notices because its only
+ * caller is loadHero(), which runs before the AnimationMixer's first update. The lazy mounts below
+ * -- a reward unlocking mid-play, a sibling's gear arriving over the network, a Studio loadout swap
+ * -- always land mid-clip, and on the shipped rig the Hips bone leaves bind in EVERY clip (least in
+ * `idle`, 3.57 units and 12.20 degrees at its extreme; most in `death`, 80.03 and 97.03).
+ *
+ * Computed from the skeleton's own boneInverses (matrixWorld = invert(boneInverse), exactly what
+ * Skeleton.pose() does internally) rather than by calling skeleton.pose(): pose() OVERWRITES every
+ * bone's live position/quaternion/scale, and on this rig doing that visibly destroys the character
+ * -- confirmed directly, not assumed. Reading boneInverses never touches a live bone, so there is
+ * nothing to restore afterwards.
+ *
+ * Degrades to the live matrix on a rig with no SkinnedMesh (the synthetic heroes in the unit tests),
+ * where bind is the only pose there is.
+ */
+export function bindPoseMatrixWorld(heroRoot, bone) {
+  let skinned = null;
+  heroRoot.traverse((object) => { if (!skinned && object.isSkinnedMesh) skinned = object; });
+  if (!skinned) return bone.matrixWorld;
+  const boneIndex = skinned.skeleton.bones.indexOf(bone);
+  if (boneIndex === -1) return bone.matrixWorld;
+  return new THREE.Matrix4().copy(skinned.skeleton.boneInverses[boneIndex]).invert();
 }
 
 /**
@@ -273,9 +333,14 @@ export function attachBeltLantern(heroRoot, lanternRoot) {
   }
   heroRoot.updateMatrixWorld(true);
 
+  // Bind, never the live Hips -- see bindPoseMatrixWorld. NEITHER caller of this function mounts at
+  // load time: main.js's ensureLanternMounted fires when the reward unlocks mid-play, and its
+  // mountGearOnRemote fires when a sibling's gear arrives, both after an await. Reading the live
+  // bone here put the lantern 18.24 units and 30.04 degrees off its authored seat under a bone
+  // perturbation no larger than the idle loop's own (test/lazy-mount-bind-frame.test.mjs).
   const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_BELT_LANTERN.restRelativeToHeroRoot);
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
-  const local = new THREE.Matrix4().copy(bone.matrixWorld).invert().multiply(world);
+  const local = new THREE.Matrix4().copy(bindPoseMatrixWorld(heroRoot, bone)).invert().multiply(world);
   const anchor = new THREE.Group();
   anchor.name = rigidAnchorName(RIGID_BELT_LANTERN.id, RIGID_BELT_LANTERN.boneName);
   local.decompose(anchor.position, anchor.quaternion, anchor.scale);
@@ -324,7 +389,7 @@ export const RIGID_WILDWOOD_BLADE_CANDIDATE = Object.freeze({
     // (blade direction, flat-face normal, grip-to-tip length) rather than hardcoded angles, so a
     // future re-tune of sword_ironwood's own mount is picked up automatically by re-running this tool.
     // The grip point is seated 0.055m past the RightHand bone along the forearm's own direction --
-    // sword_ironwood's own already-Sol-approved convention (gear.js's Tier 2 header, "THE SWORD WAS
+    // sword_ironwood's own documented convention (gear.js's Tier 2 header, "THE SWORD WAS
     // RE-GRIPPED 2026-08-14").
     //
     // Verified visually against real Character Studio captures (gameplay + inspection, front +
@@ -373,29 +438,12 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   // matrices -- the same assumption attachRigidTier2Gear gets for free by running inside loadHero()
   // before the AnimationMixer's first update() ever runs. This mount is lazy (Character Studio's
   // on-demand loadout swap, scene.js's setLoadout), so by the time it actually runs the skeleton is
-  // almost always already mid-animation. Reading bone.matrixWorld in that state bakes the DELTA
-  // between bind pose and whatever pose happened to be active at mount time into the anchor's local
-  // transform permanently (a rigid child inherits that error every subsequent frame) -- caught by
+  // almost always already mid-animation. Reading bone.matrixWorld in that state was caught by
   // comparing this candidate's own live, pre-bake fit-tool screenshots (good) against a fresh-page
-  // reload of the same baked value at the same animation time (blade floating off the hand entirely).
-  //
-  // The bind-pose matrixWorld is computed directly from the skeleton's own boneInverses (exactly
-  // what Skeleton.pose() does internally: matrixWorld = invert(boneInverse)) rather than by calling
-  // skeleton.pose() itself -- pose() OVERWRITES every bone's live position/quaternion/scale, and on
-  // this rig that visibly SHRINKS the whole character (fit-sword.mjs's own header documents the
-  // same ~100x glTF-inverseBindMatrix/Armature-unit collapse): confirmed directly, calling pose()
-  // here made the entire hero disappear from every subsequent frame, because the animation clip has
-  // no scale track to restore what pose() overwrote. Reading boneInverses instead never touches a
-  // single live bone, so there is nothing to restore afterward.
-  let bindMatrixWorld = bone.matrixWorld;
-  let skinned = null;
-  heroRoot.traverse((o) => { if (!skinned && o.isSkinnedMesh) skinned = o; });
-  if (skinned) {
-    const boneIndex = skinned.skeleton.bones.indexOf(bone);
-    if (boneIndex !== -1) {
-      bindMatrixWorld = new THREE.Matrix4().copy(skinned.skeleton.boneInverses[boneIndex]).invert();
-    }
-  }
+  // reload of the same baked value at the same animation time (blade floating off the hand
+  // entirely). bindPoseMatrixWorld is the shared answer -- see its comment for the arithmetic and
+  // for why calling skeleton.pose() is not it.
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
 
   const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_WILDWOOD_BLADE_CANDIDATE.restRelativeToHeroRoot);
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
