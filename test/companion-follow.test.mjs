@@ -5,6 +5,7 @@ import {
   companionSlotForHero,
   nextCompanionState,
 } from '../public/src/companions/follow.js';
+import { selectPrototypeCompanionClips } from '../public/src/companions/prototypeCompanion.js';
 
 const hero = (x = 0, z = 0, heading = 0) => ({ x, z, heading });
 const companion = (x = 0, z = 0, heading = 0, initialized = true) => ({
@@ -72,4 +73,14 @@ test('follow heading points into the slot, so turns do not slide sideways', () =
   });
   assert.notEqual(next.heading, 0);
   assert.ok(Number.isFinite(next.heading));
+});
+
+test('prototype presenter maps the shipped wolf movement clip to walk and run', () => {
+  const animations = ['idle', 'walk', 'bite', 'hit', 'death'].map((name) => ({ name }));
+  const clips = selectPrototypeCompanionClips(animations);
+
+  assert.equal(clips.idle.name, 'idle');
+  assert.equal(clips.walk.name, 'walk');
+  assert.strictEqual(clips.run, clips.walk, 'run intentionally reuses the shipped walk clip');
+  assert.equal(selectPrototypeCompanionClips([{ name: 'idle' }, { name: 'walking' }]).walk, null);
 });

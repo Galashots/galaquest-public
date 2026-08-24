@@ -13,7 +13,15 @@ const CROSSFADE_SECONDS = 0.16;
 
 function clipNamed(animations, fragment) {
   const needle = fragment.toLowerCase();
-  return animations.find((clip) => clip.name.toLowerCase().includes(needle)) ?? null;
+  return animations.find((clip) => clip.name.toLowerCase() === needle) ?? null;
+}
+
+// wolf.glb's shipped contract is idle, walk, bite, hit, death. Checkpoint 0 has no separate run
+// clip, so run intentionally reuses walk; the presenter raises its time scale for the faster state.
+export function selectPrototypeCompanionClips(animations = []) {
+  const idle = clipNamed(animations, 'idle') ?? clipNamed(animations, 'walk');
+  const walk = clipNamed(animations, 'walk');
+  return { idle, walk, run: walk };
 }
 
 export async function loadPrototypeCompanion() {
@@ -39,11 +47,7 @@ export async function loadPrototypeCompanion() {
 
 export function createPrototypeCompanionPresenter(root, animations = []) {
   const mixer = new THREE.AnimationMixer(root);
-  const clips = {
-    idle: clipNamed(animations, 'idle') ?? clipNamed(animations, 'walking'),
-    walk: clipNamed(animations, 'walking') ?? clipNamed(animations, 'running'),
-    run: clipNamed(animations, 'running') ?? clipNamed(animations, 'walking'),
-  };
+  const clips = selectPrototypeCompanionClips(animations);
   const actions = new Map();
   for (const [mode, clip] of Object.entries(clips)) {
     if (!clip || actions.has(mode)) continue;
@@ -53,7 +57,7 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
   }
 
   let state = { x: 0, z: 0, heading: 0, initialized: false };
-  let activeMode = null;
+  let activeClip = null;
   let activeAction = null;
 
   function switchMode(mode) {
@@ -61,7 +65,7 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
     const nextAction = actions.get(nextMode);
     if (!nextAction || nextAction === activeAction) return;
     const previous = activeAction;
-    activeMode = nextMode;
+    activeClip = nextAction.getClip().name;
     activeAction = nextAction;
     activeAction.reset().play();
     if (previous) previous.crossFadeTo(activeAction, CROSSFADE_SECONDS, false);
@@ -83,7 +87,7 @@ export function createPrototypeCompanionPresenter(root, animations = []) {
     getState() {
       return {
         ...state,
-        clip: activeMode,
+        clip: activeClip,
       };
     },
     dispose() {
