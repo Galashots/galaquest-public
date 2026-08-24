@@ -131,7 +131,13 @@ function everyFileUnder(relative) {
 
 test('no file outside gear.js restates a Tier 2 gear transform', () => {
   const files = TREES.flatMap(everyFileUnder)
-    .filter((f) => f.rel !== GEAR_SOURCE && !f.rel.endsWith('shared-constants.test.mjs'));
+    // owner-accepted-fits.test.mjs is the ONE deliberate exception. It carries the sword's transform
+    // on purpose: it is the record of an Owner decision whose whole job is to disagree with gear.js
+    // when someone changes the value. Excluding it here is not a hole in the scan -- a duplicate that
+    // is SUPPOSED to fail on divergence is the opposite of the defect this scan exists for.
+    .filter((f) => f.rel !== GEAR_SOURCE
+      && !f.rel.endsWith('shared-constants.test.mjs')
+      && !f.rel.endsWith('owner-accepted-fits.test.mjs'));
 
   // The quaternion components are twelve significant places of solved fit data: distinctive enough
   // that a match is a copy, never a coincidence.
