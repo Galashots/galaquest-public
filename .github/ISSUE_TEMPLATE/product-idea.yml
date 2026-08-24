@@ -1,11 +1,12 @@
 name: Product idea
 description: Capture a GalaQuest product possibility without treating it as an approved commitment.
 title: "[IDEA] "
+labels: ["product", "type:idea", "stage:inbox"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this for a product possibility worth preserving. Candidate ideas are not Owner decisions. After the GalaQuest product labels exist, apply `product`, `type:idea`, and normally `stage:inbox`.
+        Use this for a product possibility worth preserving but not yet selected. If the Owner has already selected the outcome, use a Product requirement or Product initiative instead.
   - type: input
     id: origin_date
     attributes:
@@ -19,7 +20,7 @@ body:
     attributes:
       label: Origin type
       options:
-        - Owner direction or brainstorm
+        - Owner brainstorm
         - Child/player observation
         - Playtest
         - Research/reference
@@ -57,7 +58,6 @@ body:
       options:
         - Candidate - not decided
         - Needs Owner decision
-        - Owner direction already given - link or summarize evidence below
         - Superseded - historical capture only
     validations:
       required: true
