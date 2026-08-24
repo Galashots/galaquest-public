@@ -42,7 +42,7 @@ Pets remain important, but the Hero/gear spine comes first.
 
 - Level 2 should normally occur within roughly 2-3 minutes of active progression.
 - Levels 1-5 are deliberately fast; after Level 5, the curve begins lengthening.
-- The first 15 minutes should contain roughly 3-10 gear reward events, with about 4-6 actual useful upgrades as a useful initial tuning target rather than a hard quota.
+- The first 15 minutes should contain roughly 4-8 gear reward events, with about 4-6 actual useful upgrades as a useful initial tuning target rather than a hard quota.
 - Several equipped rewards should visibly change the Hero once qualified armor assets are integrated.
 - A child in an active combat area should rarely spend long stretches unable to find a reachable ordinary enemy; safe/social spaces remain intentionally calmer.
 
