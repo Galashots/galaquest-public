@@ -134,6 +134,13 @@ test('active guidance corpus is explicit and substantial', () => {
   }
 });
 
+test('Claude bootstrap imports the canonical root authority exactly', () => {
+  const claude = join(REPO, 'CLAUDE.md');
+  assert.ok(existsSync(claude), 'root CLAUDE.md is missing');
+  assert.equal(readFileSync(claude, 'utf8'), '@AGENTS.md\n',
+    'root CLAUDE.md must remain the exact pointer-only bootstrap');
+});
+
 test('active guidance has no broken relative Markdown links', () => {
   const failures = [];
   for (const rel of guidanceFiles) failures.push(...brokenRelativeLinks(rel, readFileSync(join(REPO, rel), 'utf8')));

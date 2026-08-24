@@ -35,6 +35,27 @@ GitHub Issues governed by the product system carry live product state that is in
 for a committed Markdown snapshot. The Product Vision remains the authority for settled Owner direction;
 Issues provide provenance and lifecycle for ideas, signals, and initiatives.
 
+## Runtime-local capability is not project authority
+
+Runtime-local state may include model/runtime memory, user or global instructions, local hooks,
+MCP/connector configuration, browser/session state, local credentials, machine-local prompts, and
+runtime-specific settings. These may provide capability, but they are not GalaQuest project authority
+unless the repository's actual authority explicitly says so.
+
+Access is not authorization: a credential proves access, an installed connector proves capability, and
+local memory or prompts do not override checked-in GalaQuest rules. When the repository reserves a
+decision to the Owner, a current explicit Owner instruction remains authoritative for that decision;
+runtime-local state cannot manufacture, supersede, or revoke that authority. Durable rules should be
+recoverable from the public repository and live GitHub state rather than a particular runtime's private
+state.
+
+## Checked-in skill discovery
+
+Checked-in skill content has one canonical repository location: `.agents/skills/`. A runtime that
+auto-discovers that directory may use the discovery; a runtime that does not must explicitly read or
+load the relevant canonical skill when the task requires it. Do not mirror skill prose into `.claude/skills/`
+or create another skill tree merely to satisfy a runtime discovery convention.
+
 ## What durable guidance should contain
 
 Prefer statements that survive a new branch, agent, machine, and month:

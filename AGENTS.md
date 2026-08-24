@@ -10,28 +10,23 @@ This file is intentionally short. It defines where work happens and the hard bou
 
 ## Startup: orient, do not hunt
 
-Start from the current checkout only:
-
-```bash
-git rev-parse --show-toplevel
-git status -sb
-git remote -v
-git rev-parse HEAD
-git worktree list
-```
-
-For normal development, confirm that the working repository is the public repository and record the exact HEAD SHA. Refresh live GitHub state before relying on remembered branch, PR, CI, deployment, or merge status.
+Work only from the known current checkout. Confirm the public repository and exact head before relying
+on branch, PR, CI, deployment, or prior-chat state; `docs/WORKFLOW.md` owns the orientation sequence.
 
 If the current directory is not a Git checkout, **do not recursively search the machine** for repositories, old worktrees, Downloads, Desktop folders, or historical clones. Use a known path supplied by the owner, or use live GitHub authority until the intended checkout is known.
 
 ## Branch, PR, and evidence policy
 
-- Normal agent work starts from current public `main` on a task branch and goes through a pull request.
-- **Do not push directly to `main`.** Do not force-push, rewrite shared history, squash/amend shared commits, merge, or close PRs unless the owner explicitly authorizes that action.
-- Keep one coherent product objective per branch/PR. Small tasks should stay small. An owner-authorized large PR may be reviewed at multiple exact-SHA checkpoints; `docs/WORKFLOW.md` defines that model.
-- Every material test, browser observation, review conclusion, and acceptance claim names the **exact public SHA** it proves.
-- Behaviour fixes should have a red-capable reproduction/test before the fix when practical. Do not tune gameplay or prediction constants merely to make hosted CI pass.
-- Run the relevant tests from the actual checkout. Do not trust stale test counts copied into docs or chat.
+- Work from public `main` on a task branch and through a pull request. **Do not push directly to `main`.**
+- Do not force-push, rewrite shared history, squash/amend shared commits, merge, or close PRs unless the
+  Owner explicitly authorizes that action.
+- Keep one coherent objective per branch/PR; `docs/WORKFLOW.md` owns package sizing, checkpoints,
+  scope reforecast, writer topology, context health, and handoff detail.
+- Every material test, browser observation, review conclusion, and acceptance claim names the **exact
+  public SHA** it proves.
+- Behaviour fixes should have a red-capable reproduction/test before the fix when practical. Do not tune
+  gameplay or prediction constants merely to make hosted CI pass.
+- Run relevant tests from the actual checkout. Do not trust stale test counts copied into docs or chat.
 
 ## Guidance is part of the product
 
@@ -55,6 +50,7 @@ If the current directory is not a Git checkout, **do not recursively search the 
 - Player-visible changes require human inspection in the running game at gameplay framing and, where useful, inspection scale. Automated harnesses are necessary evidence for behaviour but do not substitute for human visual judgment.
 - **Reference first.** Before deciding how something should look, sit, hang, pose, or be held, inspect real reference images. The owner's GalaQuest reference art outranks external examples. Record the visual convention before tuning numbers.
 - Do not silently change a hero or important character's rig, skeleton, fingers, body, topology, or anatomy to make gear or placement pass. If the defect is in the body/rig rather than the attachment, stop and report it.
+- Asset promotion into shipped production remains Owner-controlled; qualification and evidence are not approval.
 - No paid Meshy or other provider spend without explicit owner authorization for that **specific current work**. A budget, historical spend, old delegation, credit ceiling, or presence of a guarded `--go` tool is never authorization by itself.
 - Read `ASSET-LICENSES.md` before adding, replacing, or reclassifying shipped assets. Do not call paid-plan Meshy gear CC0 unless the recorded licence actually says CC0.
 
