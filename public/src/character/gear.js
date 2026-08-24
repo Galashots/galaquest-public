@@ -132,6 +132,34 @@ export const RIG_ROOT_NAME = 'Armature';
 // the bind pose out of the skeleton's boneInverses -- so unlike the 2026-08-17 remediation this
 // number was not measured in whatever pose happened to be on screen. See
 // test/forge-runtime-bake.test.mjs and test/gear-bake-frame-contract.test.mjs.
+//
+// SEATED IN THE HAND 2026-08-24, second Owner rejection of the same carry. The re-fit above got the
+// ANGLE right and left the sword in the wrong PLACE: the Owner's shipping-hero and Studio captures
+// showed the blade hanging off the fingertips with the guard outboard of the fingers -- held by
+// nobody, "dangling", against a Dawnwarden reference that plainly reads as gripped.
+//
+// This time the relationship was measured rather than eyeballed, in the Forge's bind fit pose,
+// against the Owner-approved Dawnwarden carry -- the SAME hand, the SAME pose, so the two numbers
+// are directly comparable. Distances are from the RightHand bone (the wrist; this rig has no finger
+// joints) to the middle of each sword's own handle segment, where a fist would close:
+//
+//                            handle midpoint      guard        pommel     blade axis
+//   Dawnwarden (approved)         0.065 m        0.163 m      0.111 m     reference
+//   Starter Sword (rejected)      0.175 m        0.147 m      0.217 m     1.15 deg off Dawnwarden
+//   Starter Sword (this fit)      0.065 m        0.112 m      0.080 m     unchanged
+//
+// The hand mesh reaches 0.188 m from the wrist, so 0.175 m WAS the fingertips: the measurement and
+// the photograph agree, which is why this is a seat correction and not another angle experiment.
+// Dawnwarden's own grip sits at 0.12 of its length from the pommel -- the middle of its handle --
+// and that is the point this fit reproduces for a handle of a different length.
+//
+// So the change is a PURE TRANSLATION and deliberately nothing else. The blade axis was already
+// within 1.15 degrees of the Owner-approved Dawnwarden direction (the re-fit above did that part
+// correctly), and re-aiming a sword whose angle is already accepted is how the 2026-08-14 re-grip
+// moved its own error somewhere else. Forge rack entry "Starter Sword (Ironwood)" -> loadout
+// shipping-sword-only -> world-XYZ delta position [0.026, -0.015, 0.1377] m, rotation [0, 0, 0],
+// scale unchanged; baked through forge/runtimeBake.js exactly as above. Only `position` below moved.
+// Dawnwarden's ownerFit was read as the reference and NOT touched -- candidateGear.js is unchanged.
 export const RIGID_TIER2_GEAR = Object.freeze([
   Object.freeze({
     id: 'sword_ironwood',
@@ -140,10 +168,12 @@ export const RIGID_TIER2_GEAR = Object.freeze([
       // Carried to twelve places and normalised on purpose. Rounded to six, the quaternion is
       // 1.0000003 long, and Matrix4.decompose reads that surplus as scale -- enough to miss the
       // attachment test's 1e-6 tolerance on a magnitude-29 local scale.
-      position: Object.freeze([-64.85592, 97.14747, 2.5895]),
+      position: Object.freeze([-62.25592, 95.64749, 16.35949]),
       quaternion: Object.freeze([-0.560465386086, 0.623437925195, 0.475258689008, -0.267082165168]),
-      // Unchanged: the fit moved and rotated the sword, it did not resize it. The bake reported
-      // 47.00001 on two axes, which is decompose noise, not a decision.
+      // Unchanged, twice over: the 2026-08-24 seat correction is a pure translation, so the bake
+      // returned this quaternion back to within 1e-8 and it is kept at its normalised twelve places
+      // rather than re-pasted with round-trip noise. The bake reported 47.00001 on two axes, which
+      // is decompose noise, not a decision.
       scale: Object.freeze([47, 47, 47]),
     }),
   }),
