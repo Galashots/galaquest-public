@@ -609,7 +609,11 @@ async function bootstrap() {
   gameSurface.addEventListener('pointerup', (event) => {
     const start = companionTapPointers.get(event.pointerId);
     companionTapPointers.delete(event.pointerId);
-    if (!start || event.target !== canvas || heroScreen.isOpen() || villageBoard.isOpen()) return;
+    const targetElement = event.target instanceof Element ? event.target : null;
+    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen');
+    const targetIsVisibleOverlay = targetLayer?.dataset.shown === 'true';
+    if (!start || targetElement?.closest('button, [data-thumb-surface]') || targetIsVisibleOverlay
+      || heroScreen.isOpen() || villageBoard.isOpen()) return;
     if (touch.ownsPointer(event) || attack.ownsPointer(event)) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
     if (companionPresenter?.hitTest(event.clientX, event.clientY, canvas, camera)) {
