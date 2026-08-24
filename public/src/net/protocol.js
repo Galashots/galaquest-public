@@ -30,6 +30,14 @@
 // GP3's `village-upgrade-purchase` and the encounter block's new `village` field are additive for
 // the same reason again -- one more client->server type, one more optional field an old client never
 // sends and an old fixture decodes past unchanged.
+
+// The first import this file has ever had, and deliberately a narrow one: two pure predicates from
+// the progression authority, no runtime, no state. It stays importable by the browser and by node
+// exactly as before -- progression/facts.js keeps the same no-DOM/no-storage/no-clock discipline
+// this module does. The alternative was a second copy of the durable fact vocabulary living here,
+// which is the drift docs/MISTAKES.md GQ-007 exists to stop.
+import { isDurableFactType, parseXpFactAmount } from '../progression/facts.js';
+
 export const PROTOCOL_VERSION = 3;
 
 export const MESSAGE_TYPES = [
@@ -441,8 +449,27 @@ function decodeProfileFacts(facts) {
       type: requireString(fact.type, `profileFacts[${index}].type`),
     };
     if (decoded.eventId.length === 0) fail(`profileFacts[${index}].eventId must not be empty`);
+    // The type has to be one the game actually has, checked against the progression authority rather
+    // than a list kept here -- a second hand-maintained vocabulary in the protocol is the same defect
+    // net/rewardStore.mjs already had (docs/MISTAKES.md GQ-007).
+    //
+    // The DURABLE set, not the profile subset: this decoder is shared by `restore-profile` coming IN
+    // and the `welcome` facts going OUT, and a child who lit the Beacon or bought the Workshop has
+    // guest-stamped WORLD rows among their own. Narrowing this to profile facts alone would make a
+    // returning child's own welcome message undecodable. Which types a DEVICE may restore is a
+    // different and stricter question, and net/gameServer.mjs answers it where the writing happens.
+    if (!isDurableFactType(decoded.type)) {
+      fail(`profileFacts[${index}].type is not a durable fact type: ${JSON.stringify(decoded.type)}`);
+    }
     if (fact.value !== undefined && fact.value !== null) {
       decoded.value = requireString(fact.value, `profileFacts[${index}].value`, ITEM_ID_MAX_LENGTH);
+    }
+    // An XP amount is checked HERE, at the boundary, for the reason the file header already gives:
+    // rejecting malformed input where it arrives keeps the failure local and nameable instead of
+    // letting it become a wrong number somewhere downstream. A negative or fractional amount reaching
+    // the fold is a hero's XP quietly moving the wrong way (see parseXpFactAmount).
+    if (decoded.type === 'xp-earned' && parseXpFactAmount(decoded.value) === null) {
+      fail(`profileFacts[${index}].value is not a valid xp amount: ${JSON.stringify(decoded.value)}`);
     }
     // Absent rather than null when the row has no order -- a fact given a made-up revision here
     // would be claiming a place in a chronology it was never part of, which is the GQ-014 defect.

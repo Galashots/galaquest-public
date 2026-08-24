@@ -38,9 +38,9 @@
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
-/** Mirrors net/rewardStore.mjs's KNOWN_AWARD_TYPES for the per-profile subset, plus xp-earned.
- *  `village-upgrade` and `beacon-lit` are deliberately absent: those are world facts, not one
- *  profile's earnings, and folding them into a personal state would be a category error. */
+/** One profile's own earnings. `village-upgrade` and `beacon-lit` are deliberately absent: those are
+ *  world facts, not one profile's earnings, and folding them into a personal state would be a
+ *  category error. */
 export const PROFILE_FACT_TYPES = Object.freeze([
   'mark-earned',
   'lantern-unlocked',
@@ -53,7 +53,66 @@ export const PROFILE_FACT_TYPES = Object.freeze([
   'xp-earned',
 ]);
 
+/** Facts about the WORLD rather than about one child. Durable and guest-stamped (the row records who
+ *  did it), but shared: two brothers stand under one lit Beacon, not two. A device may not restore
+ *  one -- see net/gameServer.mjs's restoreProfileFacts -- but the server publishes them on welcome,
+ *  because a guest's rows are selected by guest id and these are among them. */
+export const WORLD_FACT_TYPES = Object.freeze([
+  'village-upgrade',
+  'beacon-lit',
+]);
+
+/**
+ * EVERY durable fact type, and the one list of them.
+ *
+ * net/rewardStore.mjs used to keep its own hand-written copy of this under the name
+ * KNOWN_AWARD_TYPES, and the two lists disagreed about exactly one entry: this file recognised and
+ * folded `xp-earned` while the store refused it as unknown, so XP could be named by the client and
+ * never written to disk. Nobody noticed because nothing awarded XP yet -- a placeholder that looks
+ * like a working durable fact is worse than a missing one, because every reader assumes it works.
+ *
+ * Derived rather than restated (docs/MISTAKES.md GQ-007) so that split cannot come back: adding a
+ * type to either list above now adds it to the store, the wire, and the fold in one edit.
+ */
+export const DURABLE_FACT_TYPES = Object.freeze([...PROFILE_FACT_TYPES, ...WORLD_FACT_TYPES]);
+
 const PROFILE_FACT_TYPE_SET = new Set(PROFILE_FACT_TYPES);
+const DURABLE_FACT_TYPE_SET = new Set(DURABLE_FACT_TYPES);
+
+/** Whether this is a durable fact type at all -- profile or world. The check the wire boundary makes,
+ *  where a world fact riding a welcome message is legitimate and an invented type is not. */
+export function isDurableFactType(type) {
+  return typeof type === 'string' && DURABLE_FACT_TYPE_SET.has(type);
+}
+
+/** The largest total XP that can be counted exactly. Past this, integers stop being integers. */
+export const MAX_TOTAL_XP = Number.MAX_SAFE_INTEGER;
+
+/**
+ * THE one reading of what an `xp-earned` fact's value means. Returns the amount, or null.
+ *
+ * XP rides in the same TEXT `value` column every other payload fact uses, so it arrives as a string
+ * and has to be READ rather than assumed. It used to be read with `Number.parseInt(value, 10)`,
+ * which is not a validator and never was: it reads "12abc" as 12, "1e6" as 1, "2.5" as 2 and -- the
+ * one that matters -- "-40" as -40. A durable progression currency that accepts a negative amount is
+ * one a corrupt or hand-edited journal can run BACKWARDS, and it would present as a child losing
+ * levels they had earned, with nothing anywhere logging why.
+ *
+ * So the rules are narrow and stated in one place, and every layer that folds or accepts XP calls
+ * this rather than parsing for itself:
+ *
+ *   - a canonical decimal integer with no sign, no leading zero, no fraction, no exponent, no
+ *     whitespace -- one amount has exactly one spelling, which is what lets two stores compare
+ *     copies of the same fact without normalising first;
+ *   - strictly positive, because a fact recording that nothing was earned is not a fact;
+ *   - within exact integer range, so a total can be counted rather than approximated.
+ */
+export function parseXpFactAmount(value) {
+  if (typeof value !== 'string') return null;
+  if (!/^[1-9][0-9]*$/.test(value)) return null;
+  const amount = Number(value);
+  return Number.isSafeInteger(amount) ? amount : null;
+}
 
 /** Whether this is a fact a profile can durably own. Anything else -- a world fact, a transient
  *  combat event, a malformed row recovered from storage -- is refused rather than folded, so a
@@ -215,10 +274,16 @@ export function foldFacts(facts, defaults = {}) {
         if (typeof fact.value === 'string' && fact.value.length > 0) ownedItemIds.add(fact.value);
         break;
       case 'xp-earned': {
-        // Stored as text in the same `value` column every other award uses (rewardStore's
-        // SCHEMA_VERSION 2 added it for weapon-equipped), so it is parsed, not assumed numeric.
-        const amount = Number.parseInt(fact.value, 10);
-        if (Number.isFinite(amount)) xp += amount;
+        // Read through the one shared parser, never with parseInt -- see parseXpFactAmount for the
+        // four ways that quietly went wrong. A malformed amount is DROPPED rather than counted or
+        // thrown on: this fold runs against a journal recovered from device storage, so a single
+        // corrupt row must degrade to "slightly less XP" and not to a hero who cannot be loaded.
+        const amount = parseXpFactAmount(fact.value);
+        // Saturating rather than wrapping into float territory: two enormous valid amounts can sum
+        // past exact integer range, and a total that stops being an integer stops being countable.
+        // Clamping keeps the total monotone and keeps it a legal input to progression/levels.js,
+        // which refuses anything that is not a safe integer.
+        if (amount !== null) xp = Math.min(MAX_TOTAL_XP, xp + amount);
         break;
       }
       // weapon-equipped is resolved by latestEquippedWeaponId below, not here: it is the one field

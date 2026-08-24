@@ -16,7 +16,11 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { isKnownItem, isKnownWeapon } from '../public/src/progression/items.js';
-import { latestEquippedWeaponId } from '../public/src/progression/facts.js';
+import {
+  DURABLE_FACT_TYPES,
+  latestEquippedWeaponId,
+  parseXpFactAmount,
+} from '../public/src/progression/facts.js';
 
 // v2, GP1: one nullable `value` column added for 'weapon-equipped' events, which need to carry
 // WHICH weapon rather than just count -- the mark/lantern events only ever needed COUNT, so the
@@ -278,17 +282,26 @@ export function openRewardStore(path) {
     "SELECT 1 AS found FROM reward_events WHERE type = 'beacon-lit' LIMIT 1",
   );
 
-  const KNOWN_AWARD_TYPES = new Set([
-    'mark-earned', 'lantern-unlocked', 'weapon-equipped', 'gear-owned', 'coin-earned', 'shard-earned',
-    'village-upgrade', 'beacon-lit', 'satchel-taken', 'charm-earned',
-  ]);
+  /**
+   * What this store may record, IMPORTED rather than restated.
+   *
+   * This was a hand-written list here, and it had drifted: it did not contain 'xp-earned' while
+   * public/src/progression/facts.js recognised and folded that type, so XP was a fact the client
+   * could name and the disk would refuse -- apply() threw on the way in. Nothing had caught it
+   * because nothing awarded XP yet. Two lists of one vocabulary is docs/MISTAKES.md GQ-007, and the
+   * repair is the one GQ-007 always asks for: keep the vocabulary where it is already defined and
+   * import it, so a type added there cannot fail to exist here.
+   */
+  const KNOWN_AWARD_TYPES = new Set(DURABLE_FACT_TYPES);
 
   /**
-   * Append one award, once, ever. Returns { applied: false } on a replay of an eventId already on
-   * record -- the caller (net/gameServer.mjs) never has to ask "have I seen this?" first; the store
-   * answers it atomically as part of the write.
+   * Everything that makes an award legal, with no side effects.
+   *
+   * Split out of apply() so applyAll() can check an ENTIRE batch before writing any of it. Validation
+   * that only runs interleaved with writes cannot express "all or nothing", because by the time the
+   * third award is judged the first two are already on disk.
    */
-  function apply(award) {
+  function assertAppliable(award) {
     if (!award || typeof award.guestId !== 'string' || award.guestId.length === 0) {
       throw new Error(`reward store apply() requires a non-empty guestId, got ${JSON.stringify(award?.guestId)}`);
     }
@@ -307,6 +320,17 @@ export function openRewardStore(path) {
     if (award.type === 'gear-owned' && !isKnownItem(award.value)) {
       throw new Error(`reward store apply() got an unknown item id ${JSON.stringify(award.value)}`);
     }
+    if (award.type === 'xp-earned' && parseXpFactAmount(award.value) === null) {
+      // Same posture as the two above, through the same shared reader the fold uses. A durable XP
+      // row whose amount is negative, fractional or "12abc" is not progression the game can ever
+      // count correctly, so it must not reach the disk in the first place -- once written, an
+      // append-only table has no way to take it back.
+      throw new Error(`reward store apply() got a malformed xp amount ${JSON.stringify(award.value)}`);
+    }
+  }
+
+  /** The write itself, once the award is known to be legal. */
+  function insertAward(award) {
     const result = insertStmt.run(
       award.eventId, award.guestId, award.type, new Date().toISOString(), award.value ?? null,
       Number.isInteger(award.rev) ? award.rev : null,
@@ -315,6 +339,54 @@ export function openRewardStore(path) {
       award.origin === 'client' ? 'client' : null,
     );
     return { applied: result.changes > 0 };
+  }
+
+  /**
+   * Append one award, once, ever. Returns { applied: false } on a replay of an eventId already on
+   * record -- the caller (net/gameServer.mjs) never has to ask "have I seen this?" first; the store
+   * answers it atomically as part of the write.
+   */
+  function apply(award) {
+    assertAppliable(award);
+    return insertAward(award);
+  }
+
+  /**
+   * Append a whole set of awards, ALL of them or NONE of them.
+   *
+   * This exists for one caller and one failure. net/gameServer.mjs's restoreProfileFacts takes a
+   * device's whole journal when the server's own database has been replaced, and it used to apply
+   * the facts one at a time in a plain loop. Anything that threw part way through -- a business-rule
+   * refusal, a disk error, a lock -- left every fact BEFORE it durably written and every fact after
+   * it missing. The result is a profile that is neither what the device sent nor what the server
+   * had, with no record anywhere that it is a fragment.
+   *
+   * Two mechanisms, because they answer different failures and neither covers the other:
+   *
+   *   - validate the entire batch FIRST, so a knowably-bad member costs nothing at all;
+   *   - write the survivors inside one transaction, so an UNEXPECTED failure mid-write (the case
+   *     validation by definition cannot predict) rolls back rather than half-lands.
+   *
+   * Replay stays a no-op exactly as it is for apply(): the INSERT OR IGNORE and the PRIMARY KEY are
+   * doing the idempotency here too, so a device re-sending a journal the store already holds commits
+   * an empty transaction rather than double-counting. `applied` counts rows actually added.
+   */
+  function applyAll(awards) {
+    const batch = [...awards];
+    for (const award of batch) assertAppliable(award);
+    // Nothing to write takes no write lock. A device whose every fact was refused upstream, or which
+    // sent an empty journal, should not make every other writer wait on an empty BEGIN IMMEDIATE.
+    if (batch.length === 0) return { applied: 0 };
+    let applied = 0;
+    transaction(db, () => {
+      // Reset inside the transaction body: if this rolls back and a caller retries, the count must
+      // describe the attempt that succeeded rather than accumulating across attempts.
+      applied = 0;
+      for (const award of batch) {
+        if (insertAward(award).applied) applied += 1;
+      }
+    });
+    return { applied };
   }
 
   function marksFor(guestId) {
@@ -420,6 +492,7 @@ export function openRewardStore(path) {
 
   return {
     apply,
+    applyAll,
     marksFor,
     profileFactsFor,
     maxEquipRevFor,
