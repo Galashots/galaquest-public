@@ -25,8 +25,10 @@ names a test file that actually exists, every `GQ-NNN` ID is unique and never re
 ---
 
 ### GQ-007 — Never restate a constant. Import it.
-**Status:** ENFORCED · **Hits:** 7 · **First:** 2026-08-11 · **Last:** 2026-08-22
-**Enforced by:** `test/shared-constants.test.mjs`
+**Status:** ENFORCED · **Hits:** 8 · **First:** 2026-08-11 · **Last:** 2026-08-24
+**Enforced by:** `test/shared-constants.test.mjs` — the spawn-literal guard, plus (hit 8) a
+fingerprint scan of `public/src`, `tools`, `net` and `test` for any Tier 2 gear transform typed
+outside `public/src/character/gear.js`.
 **Rule:** A value used by two modules lives in one importable module. If a module cannot import it,
 that is the thing to fix. **Hit 6's addition: a constant DERIVED from other modules' numbers is the
 same defect wearing a hat.** A literal that only happens to satisfy a relationship is not satisfying
@@ -48,6 +50,20 @@ in JS as highest `rev` with an eventId tiebreak. Both were defensible in isolati
 differently the moment a newer choice reached the table first. A rule with two implementations is a
 constant with two copies; the fix was to export the comparator from `progression/facts.js` and have
 the store import it, so there is one law and the database is just where the rows live.
+**Hit 8, 2026-08-24 — a duplicate does not fail when it is written, it fails when the original
+changes, and it blames the change.** `tools/runtime-test/fit-shield.mjs` bakes the sword next to the
+shield and compares it against gear.js, so that a drifted bake method cannot quietly produce a bad
+shield number. Good guard. Its reference was a hand-typed COPY of `sword_ironwood`'s rest transform,
+under a comment that already called itself "the sword already in gear.js" — the entry's own "prose in
+a comment is neither" clause, written out in full. The copy was silent for ten days because the
+constant did not move. When the Owner rejected the sword's carry and it was re-fitted, the guard
+compared a CORRECT bake against a retired value, reported a 2.73954 rig-unit error — exactly the
+magnitude of the re-fit — and declared its own good output UNTRUSTWORTHY, failing CI on the one
+commit that had fixed the thing it was guarding. **The new shape here is WHERE it hid:** every prior
+incident was in shipped code, and the existing enforcement is a fixed file list that only knows about
+spawn literals, so a copy in `tools/` was outside everything that looks. The scan added with this hit
+is keyed on the transforms themselves rather than on a list of files, so the next copy is caught
+wherever someone types it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-008 — A harness that navigates to the game must start from a known guest.
