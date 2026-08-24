@@ -1,8 +1,8 @@
 # GalaQuest guidance system
 
 GalaQuest has a strong documentation shape: a short root authority, one development workflow, focused
-domain runbooks and skills, and a separate historical lessons ledger. This document defines how that
-system stays useful as the game and its tooling move quickly.
+domain runbooks and skills, a durable product layer, and a separate historical lessons ledger. This
+document defines how that system stays useful as the game and its tooling move quickly.
 
 The goal is **high signal, low ceremony**. Guidance should let a fresh contributor act correctly from
 the public checkout without needing old chat context, a private archive, a particular machine, or a
@@ -14,18 +14,26 @@ Use the narrowest authority that actually governs the question:
 
 1. **`AGENTS.md` — hard repository boundaries.** Where work happens, owner-only transitions, evidence
    binding, visual acceptance, spend/licensing boundaries.
-2. **`docs/WORKFLOW.md` — development lifecycle.** Branch/PR shape, verification surfaces,
+2. **`docs/product/PRODUCT_VISION.md` — settled product direction.** Owner-level product principles and
+   decisions that should survive chats and implementation cycles.
+3. **`docs/product/PRODUCT_SYSTEM.md` — live product-memory protocol.** How GitHub Issues preserve ideas,
+   signals, provenance, initiatives, lifecycle state, and links to implementation.
+4. **`docs/WORKFLOW.md` — development lifecycle.** Branch/PR shape, verification surfaces,
    incremental review, PASS/FAIL/UNKNOWN semantics, task closeout.
-3. **Domain guidance — how to do a class of work.** `docs/pipeline/`,
+5. **Domain guidance — how to do a class of work.** `docs/pipeline/`,
    `docs/GALAQUEST_VISUAL_AUTHORITY.md`, `docs/public-playtest.md`, `docs/review-guides/`, and
    `.agents/skills/`.
-4. **Code, contracts, tests, and checked-in workflows — mechanical truth.** A runbook cannot make a
+6. **Code, contracts, tests, and checked-in workflows — mechanical truth.** A runbook cannot make a
    nonexistent command exist or override a live contract/test/workflow.
-5. **`docs/MISTAKES.md` — historical lessons.** It preserves what went wrong and why. It is not a
+7. **`docs/MISTAKES.md` — historical lessons.** It preserves what went wrong and why. It is not a
    current command index and may discuss superseded implementations.
 
 A lower layer may add detail but must not silently contradict a higher one. If two active sources
 disagree, stop using the stale one and repair the conflict rather than choosing whichever is convenient.
+
+GitHub Issues governed by the product system carry live product state that is intentionally too dynamic
+for a committed Markdown snapshot. The Product Vision remains the authority for settled Owner direction;
+Issues provide provenance and lifecycle for ideas, signals, and initiatives.
 
 ## What durable guidance should contain
 
@@ -75,6 +83,9 @@ The test automatically walks the active guidance roots named in its `GUIDANCE_DI
 core guidance files in `GUIDANCE_FILES`. New Markdown added under an existing guidance directory is
 picked up automatically.
 
+Product guidance under `docs/product/` is a first-class guidance root. Its Markdown must therefore obey
+the same live-path and relative-link rules as other active runbooks.
+
 When a genuinely new guidance area is created elsewhere, add its directory to the test in the same PR.
 Do not copy the same rule into several files merely so the scanner can see it.
 
@@ -109,12 +120,18 @@ When guidance causes a real failure, fix two things:
 Do not respond to a documentation failure by making the prose louder. Do not respond to one typo by
 building a generalized style framework.
 
+For product planning, the parallel ratchet is defined in `docs/product/PRODUCT_SYSTEM.md`: preserve
+meaningful ideas, signals, decisions, and initiatives in the smallest durable authority instead of
+requiring future agents to reconstruct a chat transcript.
+
 ## Update discipline
 
 In the PR that changes a stable surface, ask:
 
 - Did a command or path move? Update the active runbook that points to it.
 - Did a new verification surface land? Update `docs/WORKFLOW.md` or the relevant domain guide.
+- Did settled Owner product direction change? Update `docs/product/PRODUCT_VISION.md` and the owning
+  product Issue so live provenance and durable direction agree.
 - Did a provider client or spend shape change? Update its guarded tool README and pipeline runbook,
   but keep authorization outside durable budget numbers.
 - Did a reusable failure mode appear? Record it once in `docs/MISTAKES.md` and promote only the stable
@@ -123,4 +140,5 @@ In the PR that changes a stable surface, ask:
   guidance; do not leave two "current" answers.
 
 The fixed point is simple: a fresh contributor should be able to start from public `main`, follow the
-active Markdown, and reach the same executable surfaces the repository actually contains.
+active Markdown plus live product Issues, and reach the same product and executable surfaces the
+repository actually contains.

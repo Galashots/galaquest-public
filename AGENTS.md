@@ -40,6 +40,15 @@ If the current directory is not a Git checkout, **do not recursively search the 
 - When a tool, path, workflow, or evidence surface changes, update the guidance that points to it in the same PR when practical.
 - `test/guidance-integrity.test.mjs` continuously checks objective guidance integrity inside the required unit suite. Do not weaken it to preserve stale prose; repair the guidance or make an intentional exception explicit in `docs/GUIDANCE.md`.
 
+## Product authority
+
+- `docs/product/PRODUCT_VISION.md` records settled Owner-level product direction. Do not promote an agent suggestion or isolated observation into it without an Owner decision.
+- `docs/product/PRODUCT_SYSTEM.md` defines how product ideas, signals, provenance, initiatives, lifecycle stages, and implementation links are captured.
+- GitHub Issues governed by that system are the canonical live product-memory/backlog records. Search them before claiming an idea is new, selected, rejected, or currently prioritized.
+- GitHub Projects may present those Issues visually, but Project-only fields are not independent authority. If the Project view drifts from an Issue, repair the view from the Issue.
+- Product chats are temporary thinking surfaces. Ratchet durable ideas, meaningful signals, Owner decisions, and selected initiatives into the product system rather than requiring a future agent to recover an old conversation.
+- A bounded implementation worker must not silently expand a PR because it discovers another good product idea. Capture/report the candidate separately under the authorization rules in `docs/product/PRODUCT_SYSTEM.md`.
+
 ## Visual and product acceptance
 
 - **Running-game pixels are final appearance authority.** A render, GLB inspection, screenshot of an asset, or machine metric can reject a bad result; none of them can visually accept the running game.
@@ -64,6 +73,8 @@ Do not bulk-copy private branches or preserve duplicate active implementations. 
 Read these when relevant; do not invent missing private prerequisites:
 
 - `docs/GUIDANCE.md` — guidance hierarchy, maintenance, and linting policy
+- `docs/product/PRODUCT_VISION.md` — settled product direction
+- `docs/product/PRODUCT_SYSTEM.md` — product-memory, provenance, board, and issue lifecycle
 - `docs/MISTAKES.md` — durable lessons ledger
 - `docs/WORKFLOW.md` — public branch/PR and verification flow
 - `docs/GALAQUEST_VISUAL_AUTHORITY.md` — visual direction and acceptance
