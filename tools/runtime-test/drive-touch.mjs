@@ -328,12 +328,39 @@ check('releasing the stick stops the hero', released.speed === 0 && !released.to
 // question left is whether the hero slides on afterwards, which is what a child would actually see.
 // Measured over a real snapshot interval rather than instantaneously, because a slide is a
 // displacement over time and a single sample cannot show one.
+//
+// GQ-021, and the same defect the release check three blocks up already had repaired: this measured
+// from the instant SPEED reached zero, which is not the instant POSITION stops moving. Speed is the
+// input/animation state; position is still being reconciled toward the server's authority at
+// NUDGE_FRACTION (10%) per snapshot, and that backlog drains on RENDERED FRAMES while `sleep` counts
+// wall clock. So the check was sampling the reconciliation tail and reporting it as a slide.
+//
+// It showed up exactly as that predicts -- bimodal, never in between. Four local runs at one commit:
+// 0.0000, 0.0000, 0.0000, 0.0491. Hosted, where the runner is frame-starved and the backlog is far
+// bigger, 1.9827 with the hero pinned against the world clamp. A real slide is not bimodal.
+//
+// The repair is the one the neighbouring comment already argues for and is NOT a relaxed threshold:
+// the epsilon is untouched. Instead the two halves are separated the same way the release check
+// separates them.
+//   LIVENESS -- does the position converge at all? A timeout here IS a failure, and it is a
+//               regression this check could not previously even express.
+//   PROPERTY -- having converged, does it stay put? Any movement then is a slide a child would see.
+// A hero that slid forever would never converge and fail LIVENESS; one that converged and then crept
+// would fail PROPERTY. Both real failures survive; only the reconciliation tail stops being counted.
+const settleBudgetMs = Math.ceil(20 * (1000 / SNAPSHOT_HZ));
+const settled = await waitForPositionSettled(settleBudgetMs);
+check('the hero\'s position converges after the thumb comes off', settled.converged,
+  settled.converged
+    ? `settled after ${settled.samples} samples`
+    : `still moving ${settled.lastStep.toFixed(4)} units per sample after ${settleBudgetMs} ms`
+      + ' -- the hero never stopped being corrected');
+
 const restingAt = await state();
 await sleep(Math.round(1000 / SNAPSHOT_HZ) * 3);
 const stillResting = await state();
 const slid = Math.hypot(stillResting.px - restingAt.px, stillResting.pz - restingAt.pz);
 check('and stays stopped -- no slide after the thumb comes off',
-  released.speed === 0 && slid < SETTLE_EPSILON_UNITS,
+  released.speed === 0 && settled.converged && slid < SETTLE_EPSILON_UNITS,
   `drifted ${slid.toFixed(4)} units over 3 snapshot intervals`
   + ` (epsilon ${SETTLE_EPSILON_UNITS.toFixed(4)})`);
 await shot('04-released-idle.png');
@@ -369,6 +396,34 @@ check('re-grabbing the stick immediately still drives the hero',
  * called it report the real speed it saw, which is the honest failure ("the hero never stopped at
  * 2.80 m/s") instead of a harness stack trace that says nothing about the product.
  */
+/**
+ * Wait until the hero's POSITION stops changing between consecutive samples.
+ *
+ * Deliberately a different quantity from waitForStop's: that one waits for the client to report
+ * speed 0, this one waits for the prediction/reconciliation backlog to finish draining. Returns
+ * whether it converged rather than asserting, so the caller can make the timeout its own named
+ * failure instead of hiding it inside a settle.
+ */
+async function waitForPositionSettled(budgetMs) {
+  // Two consecutive samples this close together mean the corrections have drained -- when they have,
+  // the reconciler writes the same value and the step is exactly 0. Well under the slide epsilon the
+  // property check uses, so convergence can never be mistaken for the property it precedes.
+  const STEP_EPSILON_UNITS = 1e-4;
+  const deadline = Date.now() + budgetMs;
+  let previous = await state();
+  let samples = 1;
+  let lastStep = Infinity;
+  while (Date.now() < deadline) {
+    await sleep(Math.round(1000 / SNAPSHOT_HZ));
+    const next = await state();
+    samples += 1;
+    lastStep = Math.hypot(next.px - previous.px, next.pz - previous.pz);
+    previous = next;
+    if (lastStep < STEP_EPSILON_UNITS) return { converged: true, samples, lastStep };
+  }
+  return { converged: false, samples, lastStep };
+}
+
 async function waitForStop(budgetMs) {
   const deadline = Date.now() + budgetMs;
   let last = await state();
