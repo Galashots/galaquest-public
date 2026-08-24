@@ -38,6 +38,7 @@ If the current directory is not a Git checkout, **do not recursively search the 
 ## Product authority
 
 - `docs/product/PRODUCT_VISION.md` records settled Owner-level product direction. Do not promote an agent suggestion or isolated observation into it without an Owner decision.
+- `docs/product/PROGRESSION_CONTRACT_V0.md` is the current shared design contract for the selected progression push. When working on Hero XP/levels, gear, POWER, enemy scaling/population, progression-linked learning, or pet contribution, read it after Product Vision and before fixing implementation package shape.
 - `docs/product/PRODUCT_SYSTEM.md` defines how product ideas, signals, provenance, initiatives, lifecycle stages, and implementation links are captured.
 - GitHub Issues governed by that system are the canonical live product-memory/backlog records. Search them before claiming an idea is new, selected, rejected, or currently prioritized.
 - GitHub Projects may present those Issues visually, but Project-only fields are not independent authority. If the Project view drifts from an Issue, repair the view from the Issue.
@@ -70,6 +71,7 @@ Read these when relevant; do not invent missing private prerequisites:
 
 - `docs/GUIDANCE.md` — guidance hierarchy, maintenance, and linting policy
 - `docs/product/PRODUCT_VISION.md` — settled product direction
+- `docs/product/PROGRESSION_CONTRACT_V0.md` — shared Hero/gear/POWER/enemy/learning progression design contract for the current push
 - `docs/product/PRODUCT_SYSTEM.md` — product-memory, provenance, board, and issue lifecycle
 - `docs/MISTAKES.md` — durable lessons ledger
 - `docs/WORKFLOW.md` — public branch/PR and verification flow
