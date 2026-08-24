@@ -1,11 +1,12 @@
 name: Product initiative
-description: Track an Owner-selected product outcome across bounded implementation increments and validation.
+description: Track a broader Owner-selected product outcome across bounded implementation increments and validation.
 title: "[INITIATIVE] "
+labels: ["product", "type:initiative", "stage:inbox"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this only for a product outcome the Owner has selected for active or upcoming work. After the GalaQuest product labels exist, apply `product`, `type:initiative`, and the appropriate `stage:*` label.
+        Use this only for a broader product outcome the Owner has selected for active or upcoming work. New records enter Inbox so capture cannot silently prioritize them; the Production Director mirrors the actual selected stage after triage.
   - type: input
     id: origin_date
     attributes:
@@ -52,10 +53,10 @@ body:
   - type: textarea
     id: implementation
     attributes:
-      label: Current implementation links
-      description: Link active briefs, branches, PRs, checkpoints, or evidence. Keep exact implementation state in those records rather than copying it here.
+      label: Implementation history / current state
+      description: Link active or historical briefs, branches, PRs, checkpoints, or evidence. Use dated/history-safe wording rather than letting a merged PR remain described as current.
   - type: textarea
     id: related
     attributes:
-      label: Related ideas and signals
-      description: Link candidate ideas, observations, research, or dependencies that inform this initiative.
+      label: Related records
+      description: Link candidate ideas, requirements, signals, research, or dependencies that inform this initiative.
