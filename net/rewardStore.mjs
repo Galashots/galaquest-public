@@ -341,8 +341,8 @@ export function openRewardStore(path) {
     }
     // H1 defence in depth: restoreProfileFacts filters this boundary before batching, but the store
     // must not rely on one caller forever. A client-attested row may recover personal history only;
-    // it may neither author shared currency nor reserve a server-authored shared-world identity.
-    if (award.origin === 'client' && !isClientRestorableProfileFact(award)) {
+    // it may neither author shared currency nor reserve shared-world/another-profile identities.
+    if (award.origin === 'client' && !isClientRestorableProfileFact(award, award.guestId)) {
       throw new Error(
         `reward store apply() refuses client-restored fact ${JSON.stringify(award.type)} under eventId ${JSON.stringify(award.eventId)}`,
       );

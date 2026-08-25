@@ -249,11 +249,10 @@ export function isProfileFact(fact) {
 }
 
 // H1: local-first recovery is allowed to trust PERSONAL history, but that trust stops before facts
-// that author the shared world. Currency rows fund the communal Village and determine whether
-// physical loot is already spent, so a device may never restore them. The namespace check is the
-// other half of the boundary: a personal fact of an otherwise-allowed type (for example XP) may not
-// occupy an id the server uses for shared-world state. Keep legitimate personal ids unchanged -- the
-// local/server union above depends on the SAME eventId naming the SAME fact exactly once.
+// that author the shared world or occupy another profile's durable identity. Currency rows fund the
+// communal Village and determine whether physical loot is already spent, so a device may never
+// restore them. Shared-world ids are reserved outright; profile-scoped ids remain byte-identical
+// for the rightful profile so its local/server copies still reconcile exactly once.
 const CLIENT_RESTORE_REFUSED_TYPES = new Set(['coin-earned', 'shard-earned']);
 const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
   'cart-loot:',
@@ -262,10 +261,38 @@ const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
   'beacon-lit:',
 ]);
 
-export function isClientRestorableProfileFact(fact) {
-  return isProfileFact(fact)
-    && !CLIENT_RESTORE_REFUSED_TYPES.has(fact.type)
-    && !SERVER_SHARED_WORLD_EVENT_ID_PREFIXES.some((prefix) => fact.eventId.startsWith(prefix));
+// These are current personal durable identity families whose id embeds the owning profile. They are
+// server-authored except equip (also minted locally with the same profile id). Offline marks are the
+// one deliberate exception: rewards/offlineProgress.js uses `mark:offline-hero:<lifeId>` before a
+// server identity exists, so that client-only domain remains restorable by whichever profile owns it.
+const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
+  'own:',
+  'satchel:',
+  'charm:',
+  'lantern:',
+  'equip:',
+  'xp:lantern:',
+  'mark:',
+]);
+
+function reservedProfileEventOwner(eventId) {
+  for (const prefix of PROFILE_SCOPED_EVENT_ID_PREFIXES) {
+    if (!eventId.startsWith(prefix)) continue;
+    const remainder = eventId.slice(prefix.length);
+    const separator = remainder.indexOf(':');
+    const owner = separator === -1 ? remainder : remainder.slice(0, separator);
+    if (prefix === 'mark:' && owner === 'offline-hero') return null;
+    return owner;
+  }
+  return null;
+}
+
+export function isClientRestorableProfileFact(fact, profileId) {
+  if (!isProfileFact(fact) || typeof profileId !== 'string' || profileId.length === 0) return false;
+  if (CLIENT_RESTORE_REFUSED_TYPES.has(fact.type)) return false;
+  if (SERVER_SHARED_WORLD_EVENT_ID_PREFIXES.some((prefix) => fact.eventId.startsWith(prefix))) return false;
+  const owner = reservedProfileEventOwner(fact.eventId);
+  return owner === null || owner === profileId;
 }
 
 export function isEquipmentFact(fact) {

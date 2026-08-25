@@ -758,7 +758,7 @@ export function createRewardCoordinator(options = {}) {
       if (!guestId) return { restored: 0, refused: Array.isArray(facts) ? facts.length : 0 };
 
       const candidates = (Array.isArray(facts) ? facts : []).filter((fact) => (
-        isClientRestorableProfileFact(fact)
+        isClientRestorableProfileFact(fact, guestId)
         && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !isKnownItem(fact.value))
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')

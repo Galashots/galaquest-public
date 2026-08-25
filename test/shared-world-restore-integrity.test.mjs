@@ -36,10 +36,28 @@ function xpFact(eventId, value = '1') {
   return { eventId, type: 'xp-earned', value };
 }
 
-test('H1 recovery authority refuses shared-world currencies and current shared-world event namespaces', () => {
-  assert.equal(isClientRestorableProfileFact(xpFact('xp:device:one')), true);
-  assert.equal(isClientRestorableProfileFact({ eventId: 'device:coin', type: 'coin-earned' }), false);
-  assert.equal(isClientRestorableProfileFact({ eventId: 'device:shard', type: 'shard-earned' }), false);
+test('H1 recovery authority refuses shared-world and cross-profile event namespaces', () => {
+  assert.equal(isClientRestorableProfileFact(xpFact('xp:device:one'), ATTACKER), true);
+  assert.equal(isClientRestorableProfileFact({ eventId: 'device:coin', type: 'coin-earned' }, ATTACKER), false);
+  assert.equal(isClientRestorableProfileFact({ eventId: 'device:shard', type: 'shard-earned' }, ATTACKER), false);
+  assert.equal(
+    isClientRestorableProfileFact({
+      eventId: `own:${ATTACKER}:${WILDWOOD_BLADE_ID}`, type: 'gear-owned', value: WILDWOOD_BLADE_ID,
+    }, ATTACKER),
+    true,
+  );
+  assert.equal(
+    isClientRestorableProfileFact({
+      eventId: `own:${SIBLING}:${WILDWOOD_BLADE_ID}`, type: 'gear-owned', value: WILDWOOD_BLADE_ID,
+    }, ATTACKER),
+    false,
+  );
+  assert.equal(isClientRestorableProfileFact(xpFact(`xp:lantern:${SIBLING}`), ATTACKER), false);
+  assert.equal(
+    isClientRestorableProfileFact({ eventId: 'mark:offline-hero:device-life', type: 'mark-earned' }, ATTACKER),
+    true,
+    'offline marks have no server profile identity yet and remain recoverable',
+  );
 
   for (const eventId of [
     'cart-loot:coin:0',
@@ -48,7 +66,7 @@ test('H1 recovery authority refuses shared-world currencies and current shared-w
     'beacon-lit:old-beacon',
   ]) {
     assert.equal(
-      isClientRestorableProfileFact(xpFact(eventId)),
+      isClientRestorableProfileFact(xpFact(eventId), ATTACKER),
       false,
       `${eventId} is reserved for server-authored shared-world state`,
     );
@@ -117,15 +135,15 @@ test('H1 legitimate local-first profile recovery remains exactly-once and siblin
     rewards.join('hero-b', SIBLING);
 
     const facts = [
-      { eventId: 'mark:device:one', type: 'mark-earned' },
-      { eventId: 'lantern-unlocked:device', type: 'lantern-unlocked' },
-      xpFact('xp:device:earned', '100'),
+      { eventId: 'mark:offline-hero:device-one', type: 'mark-earned' },
+      { eventId: `lantern-unlocked:${ATTACKER}`, type: 'lantern-unlocked' },
+      xpFact(`xp:lantern-unlocked:${ATTACKER}`, '100'),
       { eventId: `own:${ATTACKER}:${WILDWOOD_BLADE_ID}`, type: 'gear-owned', value: WILDWOOD_BLADE_ID },
-      { eventId: 'equip:device:weapon', type: 'weapon-equipped', value: WILDWOOD_BLADE_ID, rev: 10 },
+      { eventId: `equip:${ATTACKER}:10:device-weapon`, type: 'weapon-equipped', value: WILDWOOD_BLADE_ID, rev: 10 },
       { eventId: `own:${ATTACKER}:${HELMET_SILVERGUARD_ID}`, type: 'gear-owned', value: HELMET_SILVERGUARD_ID },
-      { eventId: 'equip:device:helmet', type: 'gear-equipped', value: HELMET_SILVERGUARD_ID, rev: 11 },
-      { eventId: 'satchel:device', type: 'satchel-taken' },
-      { eventId: 'charm:device', type: 'charm-earned' },
+      { eventId: `equip:${ATTACKER}:11:device-helmet`, type: 'gear-equipped', value: HELMET_SILVERGUARD_ID, rev: 11 },
+      { eventId: `satchel:${ATTACKER}`, type: 'satchel-taken' },
+      { eventId: `charm:${ATTACKER}`, type: 'charm-earned' },
       xpFact('xp:malformed', '-5'),
       { eventId: 'device:coin', type: 'coin-earned' },
       xpFact('village-upgrade:workshop:1', '1'),
@@ -210,6 +228,92 @@ test('H1 cross-type cart ID attack survives restart as collectible loot and the 
     assert.equal(restarted.villageSnapshot().coins, 1, 'the legitimate award, not the attacker, funds the shared Village');
   } finally {
     restarted.close();
+    fixture.cleanup();
+  }
+});
+
+test('H1 reward store independently rejects cross-profile client identity reservation', () => {
+  const fixture = tempStorePath();
+  const store = openRewardStore(fixture.path);
+  try {
+    const siblingOwnId = `own:${SIBLING}:${WILDWOOD_BLADE_ID}`;
+    assert.throws(
+      () => store.apply({
+        guestId: ATTACKER, type: 'xp-earned', eventId: siblingOwnId, value: '1', origin: 'client',
+      }),
+      /client-restored fact/i,
+    );
+    const serverAward = store.apply({
+      guestId: SIBLING, type: 'gear-owned', eventId: siblingOwnId, value: WILDWOOD_BLADE_ID,
+    });
+    assert.equal(serverAward.applied, true, 'the rightful profile server award must still own its id');
+  } finally {
+    store.close();
+    fixture.cleanup();
+  }
+});
+
+test('H1 one profile cannot reserve another profile server-authored personal identities', () => {
+  const fixture = tempStorePath();
+  const rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
+  try {
+    rewards.join('hero-a', ATTACKER);
+    rewards.join('hero-b', SIBLING);
+
+    const siblingOwnId = `own:${SIBLING}:${WILDWOOD_BLADE_ID}`;
+    const siblingCharmId = `charm:${SIBLING}`;
+    const siblingLanternXpId = `xp:lantern:${SIBLING}`;
+    assert.deepEqual(rewards.restoreProfileFacts('hero-a', [
+      xpFact(siblingOwnId),
+      { eventId: siblingCharmId, type: 'charm-earned' },
+      xpFact(siblingLanternXpId, '100'),
+    ]), { restored: 0, refused: 3 });
+
+    const blade = rewards.claimWildwoodBlade('hero-b');
+    assert.equal(blade.granted, true, 'the sibling legitimate Blade award must not be poisoned');
+    assert.equal(blade.facts[0]?.eventId, siblingOwnId);
+    const charm = rewards.claimCharm('hero-b');
+    assert.equal(charm.granted, true, 'the sibling legitimate Charm award must not be poisoned');
+    assert.equal(charm.facts[0]?.eventId, siblingCharmId);
+  } finally {
+    rewards.close();
+    fixture.cleanup();
+  }
+});
+
+test('H1 rightful profile restores its own server-announced personal identities exactly once', () => {
+  const fixture = tempStorePath();
+  const rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
+  try {
+    rewards.join('hero-b', SIBLING);
+    const facts = [
+      { eventId: `mark:${SIBLING}:server-life`, type: 'mark-earned' },
+      { eventId: `lantern:${SIBLING}`, type: 'lantern-unlocked' },
+      xpFact(`xp:lantern:${SIBLING}`, '100'),
+      { eventId: `own:${SIBLING}:${WILDWOOD_BLADE_ID}`, type: 'gear-owned', value: WILDWOOD_BLADE_ID },
+      {
+        eventId: `equip:${SIBLING}:1700000000000:device`,
+        type: 'weapon-equipped',
+        value: WILDWOOD_BLADE_ID,
+        rev: 1_700_000_000_000,
+      },
+      { eventId: `satchel:${SIBLING}`, type: 'satchel-taken' },
+      { eventId: `charm:${SIBLING}`, type: 'charm-earned' },
+    ];
+
+    assert.deepEqual(rewards.restoreProfileFacts('hero-b', facts), { restored: 7, refused: 0 });
+    assert.deepEqual(rewards.restoreProfileFacts('hero-b', facts), { restored: 0, refused: 0 });
+
+    const own = rewards.rewardsFor(['hero-b'])['hero-b'];
+    assert.equal(own.marks, 1);
+    assert.equal(own.lanternUnlocked, true);
+    assert.equal(own.xp, 100);
+    assert.ok(own.ownedItemIds.includes(WILDWOOD_BLADE_ID));
+    assert.equal(own.equippedWeaponId, WILDWOOD_BLADE_ID);
+    assert.equal(own.satchelCarried, true);
+    assert.equal(own.charmOwned, true);
+  } finally {
+    rewards.close();
     fixture.cleanup();
   }
 });
