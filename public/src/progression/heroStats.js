@@ -40,7 +40,13 @@
 // pin the relationship in a test. Prose in a comment is neither."
 
 import { HERO_MAX_HP } from '../combat/encounter.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, swingDamageFor } from './items.js';
+import {
+  DEFAULT_EQUIPPED_ITEM_IDS,
+  DEFAULT_EQUIPPED_WEAPON_ID,
+  STARTER_SWORD_ID,
+  damageReductionPercentFor,
+  swingDamageFor,
+} from './items.js';
 import { LEVEL_ONE, levelStateForXp } from './levels.js';
 
 /** The body a hero has at Level 1, before any level, charm or other durable bonus. THE SAME NUMBER
@@ -147,6 +153,18 @@ export function resolvedHeroDamage(level, equippedWeaponId = DEFAULT_EQUIPPED_WE
   );
 }
 
+/** Resolve the one canonical defensive stat from what is EQUIPPED, never from ownership. */
+export function damageReductionPercentForEquipment(equippedItemIds = DEFAULT_EQUIPPED_ITEM_IDS) {
+  const values = equippedItemIds && typeof equippedItemIds === 'object'
+    ? Object.values(equippedItemIds)
+    : [];
+  const reduction = values.reduce((total, itemId) => total + damageReductionPercentFor(itemId), 0);
+  if (!Number.isFinite(reduction) || reduction < 0 || reduction >= 100) {
+    throw new TypeError(`damageReductionPercent must be finite and in [0, 100), got ${reduction}`);
+  }
+  return reduction;
+}
+
 /**
  * EVERYTHING about how strong a hero is, from one call, off their durable state.
  *
@@ -162,18 +180,32 @@ export function resolvedHeroDamage(level, equippedWeaponId = DEFAULT_EQUIPPED_WE
  * number back into the fight.
  *
  * @param state.totalXp          the folded durable XP total (progression/facts.js's foldFacts).
- * @param state.equippedWeaponId what they are holding.
+ * @param state.equippedWeaponId compatibility weapon field.
+ * @param state.equippedItemIds current item per slot.
  * @param state.charmOwned       whether they carry Wren's charm.
  */
-export function resolveHeroStats({ totalXp = 0, equippedWeaponId = DEFAULT_EQUIPPED_WEAPON_ID, charmOwned = false } = {}) {
+export function resolveHeroStats({
+  totalXp = 0,
+  equippedWeaponId,
+  equippedItemIds = DEFAULT_EQUIPPED_ITEM_IDS,
+  charmOwned = false,
+} = {}) {
   // Through the P1 authority, never re-derived. levelStateForXp also refuses a malformed total,
   // which is the check this function would otherwise have to invent a second copy of.
   const levelState = levelStateForXp(totalXp);
+  const resolvedWeaponId = equippedWeaponId ?? equippedItemIds?.weapon ?? DEFAULT_EQUIPPED_WEAPON_ID;
+  const resolvedEquipment = {
+    ...DEFAULT_EQUIPPED_ITEM_IDS,
+    ...(equippedItemIds ?? {}),
+    weapon: resolvedWeaponId,
+  };
   return {
     level: levelState.level,
     levelState,
     maxHp: resolvedMaxHp(levelState.level, { charmOwned }),
-    heroDamage: resolvedHeroDamage(levelState.level, equippedWeaponId),
+    heroDamage: resolvedHeroDamage(levelState.level, resolvedWeaponId),
+    damageReductionPercent: damageReductionPercentForEquipment(resolvedEquipment),
+    equippedItemIds: resolvedEquipment,
   };
 }
 
@@ -216,4 +248,5 @@ export function levelUpTransition(seenLevel, nextLevel) {
 export const LEVEL_1_STARTER_STATS = Object.freeze({
   maxHp: LEVEL_1_BASE_MAX_HP,
   heroDamage: LEVEL_1_STARTER_DAMAGE,
+  damageReductionPercent: 0,
 });

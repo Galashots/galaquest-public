@@ -1,5 +1,7 @@
 // Pure ordinary-enemy combat authority. No three.js, DOM, progression, or world imports.
 //
+import { resolveIncomingDamage } from './damage.js';
+
 // E1 replaces the old mutable `wolf` slot with one canonical `enemies` collection. Every ordinary
 // enemy carries a stable enemyId plus a kind discriminator, its own patrol cursor, and its own
 // combat/lifecycle clocks. The temporary `.wolf` / wolfSpawn* properties exposed below are derived
@@ -475,7 +477,10 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
       const stillTargetable = targetId == null || commandHeroes[targetId]?.targetable !== false;
       if (target && target.downSeconds < 0 && stillTargetable
         && isWithinStrike(enemy, enemy.heading, targetPosition, WOLF_BITE_RANGE)) {
-        target.hp -= WOLF_BITE_DAMAGE;
+        target.hp -= resolveIncomingDamage(
+          WOLF_BITE_DAMAGE,
+          commandHeroes[targetId]?.damageReductionPercent,
+        );
         events.push(enemyEvent({ type: 'hero-hurt', remaining: Math.max(0, target.hp) }, enemy, targetId));
         if (target.hp <= 0) {
           target.downSeconds = 0;

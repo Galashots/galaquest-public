@@ -36,6 +36,7 @@ import {
   BASE_HERO_DAMAGE,
   isWithinStrike,
 } from '../combat/encounter.js';
+import { resolveIncomingDamage } from '../combat/damage.js';
 
 // ---------------------------------------------------------------------------
 // The seals
@@ -688,8 +689,8 @@ function strikeWarden(draft, heroId, events, damage) {
 
 // ── the Warden's own clock ──────────────────────────────────────────────────────────────────────
 
-function hurtHero(hero, heroId, events) {
-  hero.hp -= WARDEN_DAMAGE_PER_HIT;
+function hurtHero(hero, heroId, events, damageReductionPercent) {
+  hero.hp -= resolveIncomingDamage(WARDEN_DAMAGE_PER_HIT, damageReductionPercent);
   // warden-hurt-hero, as distinct from warden-hit: the names are one letter of carelessness away
   // from each other in a lesser scheme, so both say who did what to whom in full. Here heroId is
   // the hero who WAS struck; on warden-hit it is the hero who struck.
@@ -860,7 +861,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
       const position = targetId == null ? null : (commandHeroes[targetId]?.position ?? { x: 0, z: 0 });
       if (target && target.downSeconds < 0
         && isWithinStrike(warden, warden.heading, position, WARDEN_MELEE_RANGE)) {
-        hurtHero(target, targetId, events);
+        hurtHero(target, targetId, events, commandHeroes[targetId]?.damageReductionPercent);
       }
     }
     if (warden.modeSeconds >= WARDEN_OVERHEAD_SECONDS) endAttack(warden);
@@ -877,7 +878,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
         if (hero.downSeconds >= 0) continue;
         const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
         if (isWithinStrike(warden, warden.heading, position, WARDEN_MELEE_RANGE, WARDEN_SWEEP_HALF_ARC_RADIANS)) {
-          hurtHero(hero, heroId, events);
+          hurtHero(hero, heroId, events, commandHeroes[heroId]?.damageReductionPercent);
         }
       }
     }
@@ -895,7 +896,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
         if (hero.downSeconds >= 0) continue;
         const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
         if (Math.hypot(position.x - warden.x, position.z - warden.z) <= WARDEN_PULSE_RANGE) {
-          hurtHero(hero, heroId, events);
+          hurtHero(hero, heroId, events, commandHeroes[heroId]?.damageReductionPercent);
         }
       }
     }

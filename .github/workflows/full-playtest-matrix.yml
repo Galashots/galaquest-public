@@ -52,6 +52,7 @@ jobs:
           - fit-sword
           - fit-shield
           - fit-lantern
+          - fit-helmet
           - fit-wildwood-blade
           - review-keeper-idle
           - review-hero-attack
@@ -72,6 +73,7 @@ jobs:
           - drive-recovery
           - drive-guidance-rescue
           - drive-first-level-up
+          - drive-helmet-vertical
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

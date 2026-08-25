@@ -488,6 +488,75 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   return { id: RIGID_WILDWOOD_BLADE_CANDIDATE.id, anchor, bone, gear: bladeRoot };
 }
 
+// ---------------------------------------------------------------------------
+// G1-C3: the Silverguard Helmet (progression-g1-first-visible-armor)
+// ---------------------------------------------------------------------------
+//
+// The first piece of earned armour. Mounted on the Head bone the same independently-loaded-GLB way
+// the belt lantern is -- a separate file, loaded only when THIS child equips the helmet, never baked
+// into the hero's own merged atlas. Anatomy occlusion (hair/ears hidden while equipped) is handled
+// by main.js calling hero.setAnatomyCoverage; this module only owns the geometry.
+export const SILVERGUARD_HELMET_BONE_NAME = 'Head';
+export const SILVERGUARD_HELMET_URL = 'assets/gear/helmet_silverguard.glb';
+export const SILVERGUARD_HELMET_ID = 'helmet_silverguard';
+
+// What an open-face helmet hides so the hair and ears do not poke through it -- the shipping
+// Silverguard's own occlusion, stated here with the rest of its geometry authority rather than
+// borrowed from the studio's Dawnwarden candidate profile (gearFitProfiles.js), which happens to
+// hide the same two regions but is a different, owner-locked mesh. main.js and net/remotes.js both
+// import THIS when they toggle coverage for the local hero and for siblings; the region names are
+// validated against the baked anatomy by hero.setAnatomyCoverage at the seam (it throws on an
+// unknown region), so a typo here cannot pass silently.
+export const SILVERGUARD_HELMET_HIDES_ANATOMY = Object.freeze(['hair', 'ears']);
+
+export const RIGID_SILVERGUARD_HELMET = Object.freeze({
+  id: SILVERGUARD_HELMET_ID,
+  boneName: SILVERGUARD_HELMET_BONE_NAME,
+  restRelativeToHeroRoot: Object.freeze({
+    // Measured 2026-08-25 by tools/runtime-test/fit-helmet.mjs --up 0.12 --fwd 0.01 --height 0.26,
+    // baked from the live game the same bind-frame way the sword, shield and lantern were. The Head
+    // bone sits at the base of the skull, not its centre, so the seat is raised 0.12m to cap the
+    // crown rather than swallow the face; height 0.26m matches the head and leaves the face open, the
+    // open-face read the anatomy occlusion (hair/ears) is authored for. Judged in head-framed captures
+    // from four angles: crown covered, face clear, no clip through the shoulders, Shield unregressed.
+    position: Object.freeze([-0.4735, 122.46235, 1.66404]),
+    quaternion: Object.freeze([-0.084336314711, 0.000883790884, 0.006155776196, 0.9964179401]),
+    scale: Object.freeze([32.71, 32.71, 32.71]),
+  }),
+});
+
+/**
+ * Mount an already-loaded Silverguard helmet root onto the hero's Head bone -- the same
+ * independently-loaded-GLB pattern attachBeltLantern uses. Unlike the Tier 2 gear baked into the
+ * atlas, this is loaded and parented in only when a child equips the helmet, not at hero load time.
+ */
+export function attachSilverguardHelmet(heroRoot, helmetRoot) {
+  const rigRoot = requiredObject(heroRoot, RIG_ROOT_NAME, 'rig root');
+  const bone = heroRoot.getObjectByName(RIGID_SILVERGUARD_HELMET.boneName);
+  if (!bone) {
+    throw new Error(`Cannot attach the Silverguard Helmet: missing bone ${RIGID_SILVERGUARD_HELMET.boneName}.`);
+  }
+  if (!bone.isBone) {
+    throw new Error(`Cannot attach the Silverguard Helmet: ${RIGID_SILVERGUARD_HELMET.boneName} is not a Bone.`);
+  }
+
+  heroRoot.updateMatrixWorld(true);
+
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
+
+  const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_SILVERGUARD_HELMET.restRelativeToHeroRoot);
+  const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
+  const local = new THREE.Matrix4().copy(bindMatrixWorld).invert().multiply(world);
+  const anchor = new THREE.Group();
+  anchor.name = rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, RIGID_SILVERGUARD_HELMET.boneName);
+  local.decompose(anchor.position, anchor.quaternion, anchor.scale);
+
+  bone.add(anchor);
+  anchor.add(helmetRoot);
+
+  return { id: RIGID_SILVERGUARD_HELMET.id, anchor, bone, gear: helmetRoot };
+}
+
 // The reward is a LANTERN, and it shipped dark. Looked at in the running game at the plaza camera
 // (.local/runtime-test/moment-13-after-closer.png) it reads as a small grey box on the hero's hip:
 // the one thing the whole quest is for, and nothing about it says light. One additive sprite fixes
