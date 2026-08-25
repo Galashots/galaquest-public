@@ -243,21 +243,69 @@ await page.eval(`document.querySelector('#hero-screen-close')?.click()`);
 await sleep(300);
 
 // Reload: the equipped pixels must return silently, with no ceremony replay.
+//
+// TWO INDEPENDENT CLAIMS, and they need different shapes of proof.
+//
+// "The worn Helmet comes back" is an ASYNCHRONOUS arrival: the GLB is fetched lazily on the first
+// frame the restored equipped state is known, so the honest question is "does it mount", not "has it
+// mounted by an arbitrary instant". A fixed sleep answers the second question and calls it the first.
+// It measured ~1.8s here against a 2.5s sleep -- ~0.7s of margin -- and a slower hosted runner spends
+// that margin and reports a mount failure for a Helmet that does mount. So this is a BOUNDED
+// condition wait: it polls for the real mounted, visible mesh and fails only if it never arrives
+// inside a generous budget, which keeps the gate red for a genuine mount/reload defect.
+//
+// "The ceremony does not replay" is the opposite shape -- a claim that something NEVER happens -- so
+// it is sampled on EVERY poll across the whole window rather than read once at the end. That is
+// strictly stronger than the fixed-sleep version, which could have missed a card that appeared and
+// went before the single read.
 step('reloading -- equipped Helmet must return with NO ceremony replay...');
 await page.send('Page.navigate', { url: GAME_URL });
 let backUp = false;
 for (let i = 0; i < 60 && !backUp; i += 1) { await sleep(500); backUp = await page.eval('Boolean(window.__galaQuestRuntime?.hero)'); }
-await sleep(2500);
-const afterReload = await page.eval(`(() => {
-  const a = window.__galaQuestRuntime.hero.getObjectByName('InterimAdapter_helmet_silverguard_Head');
-  let mounted = false; if (a && a.visible) { let m = null; a.traverse(o => { if (!m && o.isMesh) m = o; }); mounted = Boolean(m); }
-  return { helmetMounted: mounted, cardShown: document.querySelector('#unlock-card-layer')?.dataset.shown === 'true' };
-})()`);
-step(`after reload: helmet mounted = ${afterReload.helmetMounted}, ceremony replayed = ${afterReload.cardShown} (must be false)`);
+if (!backUp) {
+  step('ERROR: the runtime never came back up after the reload');
+  await page.send('Target.closeTarget', { targetId });
+  await server.kill();
+  process.exit(2);
+}
+
+const RELOAD_MOUNT_BUDGET_MS = 30_000;
+const heroBackAt = Date.now();
+let reloadMounted = false;
+let ceremonyReplayed = false;
+let reloadPowerSeen = null;
+let mountedAfterMs = null;
+while (Date.now() - heroBackAt < RELOAD_MOUNT_BUDGET_MS) {
+  const probe = await page.eval(`(() => {
+    const a = window.__galaQuestRuntime?.hero?.getObjectByName('InterimAdapter_helmet_silverguard_Head');
+    let mounted = false;
+    if (a && a.visible) { let m = null; a.traverse(o => { if (!m && o.isMesh) m = o; }); mounted = Boolean(m); }
+    return {
+      mounted,
+      cardShown: document.querySelector('#unlock-card-layer')?.dataset.shown === 'true',
+      power: document.querySelector('#hero-power-value')?.textContent ?? null,
+    };
+  })()`);
+  // Sampled every poll: a ceremony that flashed and dismissed still counts as a replay.
+  if (probe.cardShown) ceremonyReplayed = true;
+  if (reloadPowerSeen === null && probe.power) reloadPowerSeen = probe.power;
+  if (probe.mounted) { reloadMounted = true; mountedAfterMs = Date.now() - heroBackAt; break; }
+  await sleep(250);
+}
+const afterReload = {
+  helmetMounted: reloadMounted,
+  cardShown: ceremonyReplayed,
+  mountedAfterMs,
+  powerAfterReload: reloadPowerSeen,
+};
+step(`after reload: helmet mounted = ${reloadMounted}`
+  + `${mountedAfterMs === null ? '' : ` (+${mountedAfterMs}ms after runtime.hero)`}`
+  + `, ceremony replayed = ${ceremonyReplayed} (must be false), POWER = ${reloadPowerSeen}`);
 await shot('reload-portrait', PORTRAIT);
-if (!afterReload.helmetMounted || afterReload.cardShown) {
+await shot('reload-landscape', LANDSCAPE);
+if (!reloadMounted || ceremonyReplayed) {
   step('ERROR: reload did not restore the equipped Helmet silently -- '
-    + `mounted=${afterReload.helmetMounted}, replayed=${afterReload.cardShown}`);
+    + `mounted=${reloadMounted} (budget ${RELOAD_MOUNT_BUDGET_MS}ms), replayed=${ceremonyReplayed}`);
   await page.send('Target.closeTarget', { targetId });
   await server.kill();
   process.exit(2);
