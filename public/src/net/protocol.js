@@ -13,23 +13,13 @@
 // position maths until everything is NaN. Rejecting at the boundary keeps the failure local and
 // nameable.
 
-// 3, not 2 -- 2 was burned by claude/phase-2-tracer's incompatible identity handshake (Phase B
-// brief, Design ruling 2). v1's five messages plus `attack` (client->server) and an `encounter`
-// block riding `welcome`/`snapshot`. A stale tab fails loudly at decode instead of half-working.
+// 4, not 3: E1 replaces the singular `encounter.wolf` wire field with the canonical
+// `encounter.enemies[]` collection. That is a breaking shape change, so a stale v3 tab must fail
+// loudly at decode instead of half-working against a server whose ordinary-enemy authority no longer
+// has a singular slot. v2 remains the burned phase-2-tracer handshake and v1 the original wire.
 //
-// `equip` (GP1) does NOT bump this to 4: it is additive the same way modeSeconds/rewards were --
-// a new client->server message type an old server simply never receives, and a new optional field
-// on the existing rewards block (decodeRewards' equippedWeaponId) that an old client never sends and
-// an old fixture decodes past unchanged. See decodeRewards' own comment for the precedent this
-// follows.
-//
-// GP2's `search-cart`/`collect-loot` and the encounter block's new `loot`/`coins`/`shards` fields are
-// additive for the identical reason -- two more client->server types an old server never receives,
-// and optional fields an old client never sends and an old fixture decodes past unchanged.
-//
-// GP3's `village-upgrade-purchase` and the encounter block's new `village` field are additive for
-// the same reason again -- one more client->server type, one more optional field an old client never
-// sends and an old fixture decodes past unchanged.
+// Earlier GP1/GP2/GP3 additions remained additive inside v3. E1 is intentionally different: stable
+// enemy identity is now part of the protocol contract, not an optional decoration on the old Wolf.
 
 // The first import this file has ever had, and deliberately a narrow one: two pure predicates from
 // the progression authority, no runtime, no state. It stays importable by the browser and by node
@@ -38,7 +28,7 @@
 // which is the drift docs/MISTAKES.md GQ-007 exists to stop.
 import { isDurableFactType, parseXpFactAmount } from '../progression/facts.js';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
@@ -58,10 +48,15 @@ const EVENT_ID_MAX_LENGTH = 160;
 // than an item id but still a short, caller-built token, never player-authored text.
 const PICKUP_ID_MAX_LENGTH = 48;
 
-// The wolf's mode is a small closed set on the wire, same as it is in encounter.js -- anything
-// else is either a typo or a client running rules the server does not, and either way the frame
-// is not trustworthy.
-const WOLF_MODES = ['idle', 'walk', 'bite', 'hit', 'dying', 'dead'];
+// E1 ordinary-enemy identity is explicit on the wire. The collection is bounded like every other
+// wire aggregate/string so a malformed frame cannot turn validation itself into unbounded work.
+// Only Wolf is implemented in E1; later archetypes extend this closed set deliberately rather than
+// smuggling an unknown kind into a presenter that has no visuals or rules for it.
+const ENEMY_ID_MAX_LENGTH = 64;
+const ENEMY_KIND_MAX_LENGTH = 32;
+const ENEMY_COLLECTION_MAX_LENGTH = 128;
+const ENEMY_KINDS = ['wolf'];
+const ENEMY_MODES = ['idle', 'walk', 'bite', 'hit', 'dying', 'dead'];
 
 // Inputs are sent at 15 Hz while the stick is live, plus exactly one zero-magnitude message on
 // release so the server stops immediately rather than waiting for the stale-input timeout.
@@ -165,8 +160,8 @@ export function decode(text) {
       const decoded = { v: PROTOCOL_VERSION, type: 'join', name: requireString(raw.name, 'name') };
       // Additive, not a version bump: absent entirely (a pre-D3 client, or a private-browsing
       // client that could not use localStorage) decodes exactly as it always did -- no `guestId`
-      // key at all -- so this server keeps decoding a v3 client's join message unchanged, and a
-      // v3-only server ignores this field on a new client's join the same way it ignores any other
+      // key at all -- so this server keeps decoding a v4 client's join message unchanged, and a
+      // v4-only server ignores this field on a new client's join the same way it ignores any other
       // property it does not read off `raw`. The server then treats the connection as ephemeral:
       // marks still count for the session, in memory, they just do not survive a reconnect.
       if (raw.guestId !== undefined && raw.guestId !== null) {
@@ -188,7 +183,7 @@ export function decode(text) {
         encounter: decodeEncounter(raw.encounter),
         // Additive, same reasoning as guestId on join and equippedWeaponId on the rewards block:
         // absent entirely (a pre-1b server, or an ephemeral connection) decodes to `[]` rather than
-        // failing, so this is not the version bump. PROTOCOL_VERSION stays 3.
+        // failing, so it is additive within v4 rather than another protocol-version change.
         profileFacts: decodeProfileFacts(raw.profileFacts),
       };
 
@@ -351,39 +346,63 @@ function decodePlayers(players) {
   });
 }
 
-// The encounter block mirrors encounter.js's party state (public/src/combat/encounter.js), but
-// only the fields the wire actually needs -- canHeroAttack's BINDING note there names exactly
-// heroes[id].{downSeconds, swingSeconds, cooldown} as what a client needs to predict its own
-// attack button, plus hp to render hearts. Internal-only fields (biteCooldown, biteLanded,
-// swingLanded, lastCommandId) never leave the server.
+// The encounter block mirrors encounter.js's ordinary-enemy collection and party hero state, but
+// only the fields the wire actually needs. Every ordinary enemy carries stable `enemyId` + `kind`;
+// array order is presentation/transport order only and must never become identity.
 //
-// modeSeconds is the one exception (Task B4.5): enemies/wolf.js's presenter reads it to decide
-// whether a one-shot clip (bite/hit/death) re-entering the same mode needs restarting -- e.g. a
-// second hero's swing landing while the wolf is already staggering from a first hit. B2 left it
-// off the wire and the restart-on-reentry re-flinch silently never fired online. It rides as an
-// OPTIONAL field -- validated (finite, >= 0) when present, simply absent from the decoded wolf
-// when not -- specifically so every pre-B4.5 caller and fixture that never carried it keeps
-// decoding byte-identically; gameServer.mjs's real snapshots always populate it.
-function decodeWolf(wolf) {
-  if (wolf === null || typeof wolf !== 'object') fail('encounter.wolf must be an object');
-  if (!WOLF_MODES.includes(wolf.mode)) {
-    fail(`encounter.wolf.mode must be one of ${WOLF_MODES.join(', ')}, got ${JSON.stringify(wolf.mode)}`);
+// modeSeconds remains optional for the same presenter reason it had on the singular Wolf: a one-shot
+// clip (bite/hit/death) re-entering the same mode needs to restart. gameServer.mjs's real snapshots
+// populate it, while an older fixture within protocol v4 may omit it without inventing a clock.
+function decodeEnemy(enemy, index) {
+  const field = `encounter.enemies[${index}]`;
+  if (enemy === null || typeof enemy !== 'object' || Array.isArray(enemy)) {
+    fail(`${field} must be an object`);
   }
-  const targetId = wolf.targetId === null ? null : requireString(wolf.targetId, 'encounter.wolf.targetId');
+
+  const enemyId = requireString(enemy.enemyId, `${field}.enemyId`, ENEMY_ID_MAX_LENGTH);
+  if (enemyId.length === 0) fail(`${field}.enemyId must not be empty`);
+  const kind = requireString(enemy.kind, `${field}.kind`, ENEMY_KIND_MAX_LENGTH);
+  if (kind.length === 0) fail(`${field}.kind must not be empty`);
+  if (!ENEMY_KINDS.includes(kind)) {
+    fail(`${field}.kind must be one of ${ENEMY_KINDS.join(', ')}, got ${JSON.stringify(kind)}`);
+  }
+  if (!ENEMY_MODES.includes(enemy.mode)) {
+    fail(`${field}.mode must be one of ${ENEMY_MODES.join(', ')}, got ${JSON.stringify(enemy.mode)}`);
+  }
+
+  const targetId = enemy.targetId === null
+    ? null
+    : requireString(enemy.targetId, `${field}.targetId`);
   const decoded = {
-    x: requireFiniteNumber(wolf.x, 'encounter.wolf.x'),
-    z: requireFiniteNumber(wolf.z, 'encounter.wolf.z'),
-    heading: requireFiniteNumber(wolf.heading, 'encounter.wolf.heading'),
-    hp: requireInteger(wolf.hp, 'encounter.wolf.hp'),
-    mode: wolf.mode,
+    enemyId,
+    kind,
+    x: requireFiniteNumber(enemy.x, `${field}.x`),
+    z: requireFiniteNumber(enemy.z, `${field}.z`),
+    heading: requireFiniteNumber(enemy.heading, `${field}.heading`),
+    hp: requireInteger(enemy.hp, `${field}.hp`),
+    mode: enemy.mode,
     targetId,
   };
-  if (wolf.modeSeconds !== undefined) {
-    const modeSeconds = requireFiniteNumber(wolf.modeSeconds, 'encounter.wolf.modeSeconds');
-    if (modeSeconds < 0) fail(`encounter.wolf.modeSeconds must be >= 0, got ${modeSeconds}`);
+  if (enemy.modeSeconds !== undefined) {
+    const modeSeconds = requireFiniteNumber(enemy.modeSeconds, `${field}.modeSeconds`);
+    if (modeSeconds < 0) fail(`${field}.modeSeconds must be >= 0, got ${modeSeconds}`);
     decoded.modeSeconds = modeSeconds;
   }
   return decoded;
+}
+
+function decodeEnemies(enemies) {
+  if (!Array.isArray(enemies)) fail('encounter.enemies must be an array');
+  if (enemies.length > ENEMY_COLLECTION_MAX_LENGTH) {
+    fail(`encounter.enemies may contain at most ${ENEMY_COLLECTION_MAX_LENGTH} entries`);
+  }
+  const ids = new Set();
+  return enemies.map((enemy, index) => {
+    const decoded = decodeEnemy(enemy, index);
+    if (ids.has(decoded.enemyId)) fail(`encounter.enemies contains duplicate enemyId ${JSON.stringify(decoded.enemyId)}`);
+    ids.add(decoded.enemyId);
+    return decoded;
+  });
 }
 
 function decodeHeroes(heroes) {
@@ -680,16 +699,27 @@ function decodeSiege(siege) {
 }
 
 function decodeEncounter(encounter) {
-  if (encounter === null || typeof encounter !== 'object') fail('encounter must be an object');
-  return {
+  if (encounter === null || typeof encounter !== 'object' || Array.isArray(encounter)) {
+    fail('encounter must be an object');
+  }
+  const enemies = decodeEnemies(encounter.enemies);
+  const decoded = {
     revision: requireInteger(encounter.revision, 'encounter.revision'),
-    wolf: decodeWolf(encounter.wolf),
+    enemies,
     heroes: decodeHeroes(encounter.heroes),
     rewards: decodeRewards(encounter.rewards),
     loot: decodeLoot(encounter.loot),
     village: decodeVillage(encounter.village),
     siege: decodeSiege(encounter.siege),
   };
+
+  // C2 compatibility bridge only. main.js is still a singular-Wolf reader until C3, so decoded
+  // client state exposes a derived, NON-ENUMERABLE Wolf reference. It is never present on the wire,
+  // never serialized, and never a second mutable authority. C3 removes this once every presenter
+  // reader is keyed by enemyId.
+  const wolf = enemies.find((enemy) => enemy.kind === 'wolf') ?? null;
+  Object.defineProperty(decoded, 'wolf', { enumerable: false, value: wolf });
+  return decoded;
 }
 
 // Snapshot-only. type is the one field decode enforces (non-empty, capped, matches feedback.js's
@@ -715,7 +745,7 @@ function decodeEvents(events) {
 // builder side, so every message the builders emit is wire-legal either way.
 const EMPTY_ENCOUNTER = Object.freeze({
   revision: 0,
-  wolf: Object.freeze({ x: 0, z: 0, heading: 0, hp: 0, mode: 'idle', targetId: null }),
+  enemies: Object.freeze([]),
   heroes: Object.freeze({}),
   rewards: Object.freeze({}),
   loot: Object.freeze({ spawned: false, collected: Object.freeze({}) }),

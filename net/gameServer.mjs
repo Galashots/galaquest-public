@@ -17,7 +17,7 @@ import {
   createPartyEncounterState,
   removeHero,
   requestPartyAttack,
-  separateFromWolf,
+  separateFromEnemies,
   stepParty,
 } from '../public/src/combat/encounter.js';
 import { RUN_SPEED, groundSpeedForInput } from '../public/src/character/speed.js';
@@ -880,9 +880,13 @@ export function createSimulation(options = {}) {
   let nextPlayerNumber = 0;
   let tick = 0;
 
-  // Hero id = player id (Task B3's binding interface). One party for the whole simulation --
-  // there is one wolf and every joined player is in the same fight.
-  let encounterState = createPartyEncounterState({ wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS, heroIds: [] });
+  // Hero id = player id (Task B3's binding interface). One ordinary-enemy collection for the whole
+  // simulation. Production still authors exactly the existing one Wolf/patrol; `options.enemies` is
+  // a test/config seam for E1 multi-enemy proof and does not add default-world population.
+  const ordinaryEnemyOptions = Array.isArray(options.enemies)
+    ? { enemies: options.enemies }
+    : { wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS };
+  let encounterState = createPartyEncounterState({ ...ordinaryEnemyOptions, heroIds: [] });
   // Events accumulate here from both requestPartyAttack (on attack arrival) and stepParty (each
   // tick) and are drained only when a snapshot broadcasts -- Design ruling 7, "events ride
   // snapshots". Nothing here is time-based, so nothing needs `now`.
@@ -893,8 +897,8 @@ export function createSimulation(options = {}) {
   // replay, only an exact repeat of the most recent commandId).
   const lastAttackSeq = new Map();
 
-  // GP2: the shared physical cart, one for the whole simulation -- same "one party, one wolf" shape
-  // encounterState already is above, just for a different piece of shared world truth. Lives here
+  // GP2: the shared physical cart, one for the whole simulation -- same shared-world-state shape
+  // the ordinary encounter collection already is above, just for a different piece of shared world truth. Lives here
   // (not folded into encounterState) because world/cartLoot.js is deliberately a sibling of
   // combat/encounter.js, not a corner of it -- see that file's own header.
   //
@@ -908,8 +912,8 @@ export function createSimulation(options = {}) {
     ? restoreCartLootState(options.creditedLootIds)
     : createCartLootState();
 
-  // G2/G3: THE BEACON SIEGE, one for the whole simulation -- the same "one party, one wolf" shape
-  // encounterState above already is, for the same reason: there is one Old Beacon and every joined
+  // G2/G3: THE BEACON SIEGE, one for the whole simulation -- the same shared-authority shape
+  // the ordinary encounter collection above already is, for the same reason: there is one Old Beacon and every joined
   // player is standing at the same one. This is what makes "we beat it" true rather than two
   // children each privately beating their own copy of a boss.
   //
@@ -1155,9 +1159,8 @@ export function createSimulation(options = {}) {
     }
 
     // stepParty once per tick with every player's current position/heading (Task B3's binding
-    // interface), THEN separateFromWolf per player (Design ruling 6 -- server owns body
-    // separation, this is the teleport's death), THEN the existing world clamp -- a push away from
-    // the wolf must not be able to shove a hero back out past WORLD_LIMIT.
+    // interface), THEN separate each player from the canonical ordinary-enemy collection (Design
+    // ruling 6 -- server owns body separation), THEN apply the existing world clamp.
     const commandHeroes = {};
     for (const player of players.values()) {
       const stats = heroStatsFor(player.id);
@@ -1210,7 +1213,7 @@ export function createSimulation(options = {}) {
     }
 
     for (const player of players.values()) {
-      const separated = separateFromWolf({ x: player.x, z: player.z }, encounterState.wolf);
+      const separated = separateFromEnemies({ x: player.x, z: player.z }, encounterState.enemies);
       player.x = clampToWorldX(separated.x);
       player.z = clampToWorldZ(separated.z);
     }
@@ -1232,14 +1235,11 @@ export function createSimulation(options = {}) {
     }));
   }
 
-  // The wire's encounter block (protocol.js's decodeEncounter/decodeWolf/decodeHeroes): rounded
-  // like player positions, and only the fields the wire carries -- internal-only fields
-  // (biteCooldown, biteLanded, swingLanded, lastCommandId) never leave the server, same boundary
-  // protocol.js already draws for what canHeroAttack is allowed to read. modeSeconds is the one
-  // exception (Task B4.5): enemies/wolf.js's presenter needs it to restart a one-shot clip on mode
-  // re-entry, so it rides here rounded to 3 decimals like every other numeric wolf field.
+  // The wire's encounter block is collection-shaped in protocol v4. Only presenter/network fields
+  // leave the server; patrol/spawn cursors and bite/swing internals remain simulation authority.
+  // Stable enemyId + kind ride every ordinary entity so events and C3 presenters never infer identity
+  // from array order. modeSeconds still rides for one-shot Wolf animation re-entry.
   function encounterSnapshot() {
-    const wolf = encounterState.wolf;
     const heroes = {};
     for (const [heroId, hero] of Object.entries(encounterState.heroes)) {
       // ONE HERO, ONE SET OF HEARTS -- published from whichever fight this hero is actually IN.
@@ -1266,15 +1266,17 @@ export function createSimulation(options = {}) {
     }
     return {
       revision: encounterState.revision,
-      wolf: {
-        x: roundToWire(wolf.x),
-        z: roundToWire(wolf.z),
-        heading: roundToWire(wolf.heading),
-        hp: wolf.hp,
-        mode: wolf.mode,
-        modeSeconds: roundToWire(wolf.modeSeconds),
-        targetId: wolf.targetId,
-      },
+      enemies: encounterState.enemies.map((enemy) => ({
+        enemyId: enemy.enemyId,
+        kind: enemy.kind,
+        x: roundToWire(enemy.x),
+        z: roundToWire(enemy.z),
+        heading: roundToWire(enemy.heading),
+        hp: enemy.hp,
+        mode: enemy.mode,
+        modeSeconds: roundToWire(enemy.modeSeconds),
+        targetId: enemy.targetId,
+      })),
       heroes,
     };
   }
