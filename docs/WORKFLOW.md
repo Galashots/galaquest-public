@@ -97,6 +97,26 @@ When the owner explicitly chooses a long-running, larger PR, keep the **coherent
 
 This lets a substantial gameplay vertical be reviewed continuously without splitting one coherent experience into artificial PRs or postponing all scrutiny until the end.
 
+### Final-checkpoint stop boundary
+
+Once the final planned checkpoint is feature-complete, the worker's role shifts from implementation to
+**causality classification and handoff**. Do not turn broad validation into an open-ended cleanup phase.
+
+- Run the required final-head gates and, when warranted, one broad diagnostic pass such as the full browser matrix.
+- A newly red check may be investigated far enough to determine whether the active package plausibly caused it.
+- If the failure reproduces on the package base/current `main`, is asset-gated, is timing/flaky without causal evidence,
+  or belongs to another package or engineering surface, record that classification and route any worthwhile follow-up;
+  do not repair it on the completed feature branch.
+- If evidence establishes a new in-scope regression caused by the package, make the smallest causal correction,
+  rerun the affected acceptance seam, then return to handoff.
+- Do not keep cycling through baseline debt, harness hardening, unrelated cleanup, opportunistic polish, or repeated
+  broad revalidation after causality is closed.
+- When required gates are PASS and any remaining reds are evidence-backed non-blocking/UNKNOWN items, stop and hand off.
+  The Production Director or Owner decides whether a separate follow-up package is worth opening.
+
+This stop boundary is part of package discipline: a conscientious worker finding more things to investigate is not,
+by itself, evidence that the current package should continue.
+
 ## Writer topology
 
 Default to one write-worker per bounded package. Read-only investigation, research, playtesting, specialist
