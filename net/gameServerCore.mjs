@@ -59,7 +59,7 @@ import {
 } from '../public/src/world/zones/village.js';
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
 import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
-import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
+import { HELMET_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
 } from '../public/src/world/bounds.js';
@@ -308,6 +308,7 @@ export function createRewardCoordinator(options = {}) {
       if (result.applied) granted += 1;
       facts.push(...announcementFor(result, { type: 'shard-earned', heroId: playerId, eventId }));
     }
+    facts.push(...grantOwnership(playerId, HELMET_SILVERGUARD_ID));
     return { granted, facts };
   }
 
