@@ -25,12 +25,13 @@ import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessa
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
 import {
-  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownItem, isKnownWeapon, swingDamageFor,
+  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownItem, isKnownWeapon,
 } from '../public/src/progression/items.js';
 // One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
 // and the server consumes it rather than keeping a second list that drifts.
-import { isProfileFact, parseXpFactAmount } from '../public/src/progression/facts.js';
+import { isProfileFact, parseXpFactAmount, pendingLanternXpFact } from '../public/src/progression/facts.js';
+import { LEVEL_1_STARTER_STATS, resolveHeroStats } from '../public/src/progression/heroStats.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
@@ -68,14 +69,15 @@ import { attachWebSocketServer } from './wsServer.mjs';
 // authored rewards in favour of hunting caches would ever be the better play.
 export const HOLLOW_CACHE_SHARDS = 3;
 
-// ARC 2: what Ranger Wren's charm is worth, in hearts.
+// ARC 2's CHARM_BONUS_HEARTS USED TO LIVE HERE, and it does not any more.
 //
-// ONE, and the number is the design. Three hearts is three mistakes; four is four, which is roughly
-// a third more room and is exactly the note the child playtesters gave when they called the wolves
-// "a little strong". Two would be a different game -- the Warden's own comment prices itself at
-// "three mistakes, not one" and a six-heart child walks through that fight without learning its
-// rhythm. A reward that removes the lesson is not a reward.
-export const CHARM_BONUS_HEARTS = 1;
+// It was "one heart" against a three-heart body -- roughly a third more room, which is exactly the
+// note the child playtesters gave when they called the wolves "a little strong". P2 makes max HP a
+// derived Hero stat rather than a count of pips, and a charm is a durable fact about a BODY: the
+// offline fallback in public/src/main.js has to resolve the same body from the same law, and it
+// cannot import this server-only module. So the number moved to the one place both sides can read
+// it -- progression/heroStats.js's WREN_CHARM_MAX_HP_BONUS -- with its meaning preserved exactly
+// (10 of a 30hp body is the same third) rather than re-tuned on the way past.
 
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
@@ -252,12 +254,13 @@ export function createRewardCoordinator(options = {}) {
   }
 
   /**
-   * ARC 2: Wren's charm -- the fourth heart, and the first reward in this game that changes what a
-   * hero IS rather than what they are holding.
+   * ARC 2: Wren's charm -- the first reward in this game that changed what a hero IS rather than
+   * what they are holding. Since P2 it is no longer the only one; every Hero level does it too.
    *
-   * The row is the durable fact; combat/encounter.js's reconcileMaxHp is what makes it a heart, fed
-   * from maxHpFor below. Nothing here writes hearts directly, which is the whole point of the seam:
-   * a heart granted by the store rather than by the rules would be a number nobody's fight agreed to.
+   * The row is the durable fact; combat/encounter.js's reconcileMaxHp is what makes it a bigger body,
+   * fed from heroStatsFor below. Nothing here writes health directly, which is the whole point of the
+   * seam: a body granted by the store rather than by the rules would be a number nobody's fight
+   * agreed to.
    */
   function claimCharm(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
@@ -530,12 +533,7 @@ export function createRewardCoordinator(options = {}) {
       // second opinion -- see public/src/progression/facts.js's union law.
       if (result.applied) events.push({ type: 'mark-earned', heroId: award.heroId, eventId: durableEventId });
       if (store.marksFor(guestId) >= MARKS_TO_UNLOCK) {
-        const unlocked = store.apply({
-          guestId, heroId: award.heroId, type: 'lantern-unlocked', eventId: `lantern:${guestId}`,
-        });
-        if (unlocked.applied) {
-          events.push({ type: 'lantern-unlocked', heroId: award.heroId, eventId: `lantern:${guestId}` });
-        }
+        events.push(...applyLanternUnlock(guestId, award.heroId));
       }
       return events;
     }
@@ -551,6 +549,59 @@ export function createRewardCoordinator(options = {}) {
       events.push({ type: 'lantern-unlocked', heroId: award.heroId });
     }
     ephemeral.set(award.heroId, state);
+    return events;
+  }
+
+  /**
+   * P2: THE LANTERN UNLOCK, AND THE ONE XP AWARD THAT RIDES WITH IT.
+   *
+   * The Lantern was already a latch keyed on `lantern:<guestId>`, so "exactly once, ever" was
+   * already true of it across restarts. What P2 adds is that the same moment is worth 100 XP -- the
+   * first level -- and that the two facts must be inseparable.
+   *
+   * WRITTEN AS ONE BATCH, and that is the whole design rather than a tidiness. The brief's stop
+   * condition is precise: "a transient ordering/write failure must not create a normal state where a
+   * newly-earned Lantern is permanently present but its deterministic P2 XP can never be recovered."
+   * Two `apply()` calls in sequence create exactly that state -- the unlock commits, the process
+   * dies, and the child owns a Lantern that is worth nothing forever, because the unlock is a latch
+   * and will never fire again. `applyAll` validates the whole batch and writes it inside one
+   * transaction, so the pair either both land or neither does.
+   *
+   * THE XP FACT'S NAME COMES FROM THE LANTERN'S, through the shared law in progression/facts.js.
+   * Nothing here decides what the award is worth or what it is called; this only asks what this
+   * profile is owed and writes it. That is what lets the offline path (rewards/offlineProgress.js)
+   * mint the same award from the same rule without either side knowing about the other.
+   *
+   * AND IT REPAIRS. `pendingLanternXpFact` is a pure function of the facts on record, so a guest
+   * whose Lantern predates P2 -- or whose XP row was somehow lost -- is owed it the next time this
+   * runs, and a guest who already holds it is owed nothing. "Award" and "repair" are one operation,
+   * which is why there is no separate migration anywhere in this change.
+   *
+   * `hadLantern` is read BEFORE the write rather than taken from an applied-count afterwards:
+   * applyAll reports how many rows landed, not which, and the two events below have to be raised
+   * independently -- a repair on an existing Lantern raises the XP event and must not re-announce an
+   * unlock the child watched happen a week ago.
+   */
+  function applyLanternUnlock(guestId, heroId) {
+    const lanternEventId = `lantern:${guestId}`;
+    const lanternFact = { eventId: lanternEventId, type: 'lantern-unlocked' };
+    const existing = store.profileFactsFor(guestId);
+    const hadLantern = existing.some((fact) => fact.type === 'lantern-unlocked');
+    const xpFact = pendingLanternXpFact([...existing, lanternFact]);
+
+    const batch = [{ guestId, heroId, type: 'lantern-unlocked', eventId: lanternEventId }];
+    if (xpFact) {
+      batch.push({ guestId, heroId, type: 'xp-earned', eventId: xpFact.eventId, value: xpFact.value });
+    }
+    store.applyAll(batch);
+
+    const events = [];
+    // The durable eventId rides each event so the client journals THIS fact under the id the store
+    // used -- what makes the device's copy mergeable with this one rather than a second opinion.
+    if (!hadLantern) events.push({ type: 'lantern-unlocked', heroId, eventId: lanternEventId });
+    if (xpFact) {
+      events.push({ type: 'xp-earned', heroId, eventId: xpFact.eventId, value: xpFact.value });
+    }
     return events;
   }
 
@@ -592,6 +643,8 @@ export function createRewardCoordinator(options = {}) {
           shards: store.shardsFor(guestId),
           satchelCarried: store.satchelTakenFor(guestId),
           charmOwned: store.charmEarnedFor(guestId),
+          // P2: folded from this guest's own rows, never a stored counter -- see the store's xpFor.
+          xp: store.xpFor(guestId),
         };
       } else {
         const state = ephemeral.get(heroId);
@@ -607,6 +660,8 @@ export function createRewardCoordinator(options = {}) {
           // up or been given anything -- false is the truth for it, not a fallback.
           satchelCarried: false,
           charmOwned: false,
+          // ...and can never have earned any, for the same reason. Zero is the truth, not a default.
+          xp: 0,
         };
       }
     }
@@ -748,11 +803,42 @@ export function createRewardCoordinator(options = {}) {
      *  wire, pulled out on its own because the tick needs it every frame and a whole rewards block
      *  per player per tick would be a lot of object for one string. Durable guests read the store;
      *  an equip-only connection reads its ephemeral slot; nobody at all gets null, which
-     *  encounter.js resolves to the starter sword. */
+     *  progression/items.js resolves to the starter sword. */
     equippedWeaponIdFor(heroId) {
       const guestId = guestIdByPlayer.get(heroId);
       if (guestId) return store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID;
       return ephemeralEquipped.get(heroId) ?? DEFAULT_EQUIPPED_WEAPON_ID;
+    },
+
+    /**
+     * P2: HOW STRONG THIS HERO ACTUALLY IS -- `{ maxHp, heroDamage }`, resolved numbers.
+     *
+     * ONE lookup rather than three, because the three answers have to agree. The simulation used to
+     * ask `weaponIdFor` and `maxHpFor` separately, which was fine while the two came from unrelated
+     * rows; a level moves BOTH, and two lookups against a store that could be written between them
+     * is a hero whose body and arm briefly disagree about what level they are. Resolved through one
+     * progression/heroStats.js call, so what the fight is handed is internally consistent by
+     * construction -- that module's own comment gives the same reason for returning one object.
+     *
+     * The fight is handed NUMBERS, never a level or an item id: combat/ may not know that XP or an
+     * item catalogue exist (test/combat-purity.test.mjs), and this is the side of the seam that
+     * knows both.
+     *
+     * An ephemeral connection has no durable identity, so it has no XP and no charm -- Level 1 with
+     * whatever it has equipped in memory, which is the truth for it rather than a fallback.
+     */
+    heroStatsFor(heroId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      if (guestId) {
+        return resolveHeroStats({
+          totalXp: store.xpFor(guestId),
+          equippedWeaponId: store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
+          charmOwned: store.charmEarnedFor(guestId),
+        });
+      }
+      return resolveHeroStats({
+        equippedWeaponId: ephemeralEquipped.get(heroId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
+      });
     },
     applyLootAward,
     creditedLootIds,
@@ -781,11 +867,15 @@ export function createSimulation(options = {}) {
   // Defaults to "nothing to say", which every test that drives createSimulation() directly relies
   // on: encounter.js resolves an unnamed weapon to the starter sword, so an unwired simulation
   // fights exactly as it did before any of this existed.
-  const weaponIdFor = options.weaponIdFor ?? (() => null);
-  // The same shape and the same reasoning for hearts: the simulation does not own who has earned a
-  // charm, so it asks. Defaults to the constant every fight has always used, which is what keeps an
-  // unwired createSimulation() -- every test in this repo that drives it directly -- unchanged.
-  const maxHpFor = options.maxHpFor ?? (() => HERO_MAX_HP);
+  // P2: ONE lookup, not two. It was `weaponIdFor` plus `maxHpFor`, which was fine while the two came
+  // from unrelated durable rows -- but a Hero LEVEL moves both, and asking twice is a hero whose body
+  // and arm can briefly disagree about what level they are. `{ maxHp, heroDamage }`, resolved on the
+  // other side of the seam by progression/heroStats.js and handed here as plain numbers, because
+  // combat/ may not know that XP or an item catalogue exist (test/combat-purity.test.mjs).
+  //
+  // Defaults to the Level-1 starter hero, which every test that drives createSimulation() directly
+  // relies on: an unwired simulation fights exactly the fight it always fought.
+  const heroStatsFor = options.heroStatsFor ?? (() => LEVEL_1_STARTER_STATS);
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -1070,18 +1160,17 @@ export function createSimulation(options = {}) {
     // the wolf must not be able to shove a hero back out past WORLD_LIMIT.
     const commandHeroes = {};
     for (const player of players.values()) {
+      const stats = heroStatsFor(player.id);
       commandHeroes[player.id] = {
         position: { x: player.x, z: player.z },
         heading: player.heading,
-        // Resolved to a NUMBER here rather than passed on as an id: the rules layer is not allowed
-        // to know the item catalogue exists (test/combat-purity.test.mjs), and this side of the seam
-        // already knows both. swingDamageFor never returns null, so a swing always lands for
-        // something even when nobody has said what is equipped.
-        weaponDamage: swingDamageFor(weaponIdFor(player.id)),
-        // ...and how many hearts this body has. Asked every tick for the same reason the weapon is:
-        // a child can be handed Wren's charm mid-session, and a value copied at join would mean the
-        // fourth heart only appeared after a reconnect.
-        maxHp: maxHpFor(player.id),
+        // Resolved to NUMBERS on the other side of the seam: the rules layer is not allowed to know
+        // that an item catalogue or an XP journal exists (test/combat-purity.test.mjs), and this side
+        // knows both. Asked every tick rather than copied at join, because a child can equip a sword
+        // mid-fight, be handed Wren's charm, or cross a level while standing in front of the wolf --
+        // and a value copied at join would mean the stronger hero only appeared after a reconnect.
+        heroDamage: stats.heroDamage,
+        maxHp: stats.maxHp,
         // ...and whether the wolf may pick this hero at all. Derived HERE, on the side of the seam
         // that knows both where everyone is standing and whether the Beacon is burning, from the
         // same RANGER_CLAIM radius the charm handover is already adjudicated against. Nothing new
@@ -1351,14 +1440,13 @@ export function attachGameServer(httpServer, options = {}) {
     ...options,
     creditedLootIds: rewards.creditedLootIds(),
     beaconLit: rewards.beaconLit(),
-    // G4, finally connected: the fight asks the reward store what is in the hand. Handed in as a
-    // function rather than a snapshot because equipment changes mid-session -- a child can open the
-    // Hero screen in the middle of a fight -- and a value copied at construction would mean the
-    // sword you equipped only started working after a reconnect.
-    weaponIdFor: (playerId) => rewards.equippedWeaponIdFor(playerId),
-    // ARC 2, and the whole reason maxHp became a per-hero number: Wren's charm is a durable row, and
-    // this is where a row becomes a heart.
-    maxHpFor: (playerId) => (rewards.charmEarnedFor(playerId) ? HERO_MAX_HP + CHARM_BONUS_HEARTS : HERO_MAX_HP),
+    // G4, finally connected, and P2's whole point: the fight asks the reward store how strong this
+    // hero actually is. Handed in as a function rather than a snapshot because every input changes
+    // mid-session -- a child can equip a sword from the Hero screen, be handed Wren's charm, or earn
+    // the XP that levels them, all without the socket dropping -- and a value copied at construction
+    // would mean the stronger hero only started existing after a reconnect. That is the exact defect
+    // docs/MISTAKES.md GQ-013 is about: a reward the rules never read.
+    heroStatsFor: (playerId) => rewards.heroStatsFor(playerId),
   });
   // Whether the durable row has been written for the victory this process is currently watching.
   // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that

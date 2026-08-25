@@ -71,6 +71,7 @@ jobs:
           - drive-profile-gate
           - drive-recovery
           - drive-guidance-rescue
+          - drive-first-level-up
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

@@ -13,7 +13,9 @@ import test from 'node:test';
 import {
   HERO_MAX_HP,
   RESPAWN_SECONDS,
-  WOLF_DAMAGE_PER_HIT,
+  BASE_HERO_DAMAGE,
+  VICTORY_HEAL_HP,
+  WOLF_BITE_DAMAGE,
   WOLF_MAX_HP,
   WOLF_BITE_SECONDS,
   addHero,
@@ -32,7 +34,7 @@ const MAX_SECONDS = 20;
 
 // --- swings land, and carry heroId -------------------------------------------------------------
 
-test('two heroes each landing one swing take the wolf from 3 to 1 HP, with two wolf-hit events carrying the right heroIds', () => {
+test('two heroes each landing one swing take two blows off the wolf, with two wolf-hit events carrying the right heroIds', () => {
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A', 'B'] });
 
   // heading 0 faces +Z (see encounter.test.mjs's own note on the convention), which is towards
@@ -59,7 +61,7 @@ test('two heroes each landing one swing take the wolf from 3 to 1 HP, with two w
   const wolfHits = seen.filter((event) => event.type === 'wolf-hit');
   assert.equal(wolfHits.length, 2, `expected two wolf-hit events, saw ${JSON.stringify(seen)}`);
   assert.deepEqual(new Set(wolfHits.map((event) => event.heroId)), new Set(['A', 'B']));
-  assert.equal(state.wolf.hp, WOLF_MAX_HP - 2);
+  assert.equal(state.wolf.hp, WOLF_MAX_HP - BASE_HERO_DAMAGE * 2);
 });
 
 // --- targeting: nearest living hero, chosen at bite start ---------------------------------------
@@ -81,7 +83,7 @@ test('the wolf bites the nearest living hero', () => {
   const hurts = seen.filter((event) => event.type === 'hero-hurt');
   assert.equal(hurts.length, 1, `expected exactly one hero-hurt, saw ${JSON.stringify(seen)}`);
   assert.equal(hurts[0].heroId, 'A', 'the nearer hero (1.5) must take the bite, not the farther one (3.0)');
-  assert.equal(state.heroes.A.hp, HERO_MAX_HP - 1);
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP - WOLF_BITE_DAMAGE);
   assert.equal(state.heroes.B.hp, HERO_MAX_HP, 'the farther hero must be untouched');
 });
 
@@ -114,7 +116,8 @@ test('a hero who goes down makes the wolf\'s next bite target the other hero, on
   assert.ok(elapsed < MAX_SECONDS, 'B was never bitten within the time budget');
 
   const hurtsOnA = seen.filter((event) => event.type === 'hero-hurt' && event.heroId === 'A');
-  assert.equal(hurtsOnA.length, HERO_MAX_HP, 'A must take exactly enough bites to go down, no more');
+  assert.equal(hurtsOnA.length, Math.ceil(HERO_MAX_HP / WOLF_BITE_DAMAGE),
+    'A must take exactly enough bites to go down, no more');
   const downIndex = seen.findIndex((event) => event.type === 'hero-down' && event.heroId === 'A');
   assert.notEqual(downIndex, -1, 'A must have gone down');
   const firstBHurtIndex = seen.findIndex((event) => event.type === 'hero-hurt' && event.heroId === 'B');
@@ -261,15 +264,19 @@ test('canHeroAttack reads only the three wire fields, and is false for an unknow
 
 // --- and a better sword is worth more ----------------------------------------------------------
 //
-// For two chapters every blow anywhere took off a flat WOLF_DAMAGE_PER_HIT, so the Wildwood Blade
-// -- earned at the end of the longest promise in the game, with an unlock card and a "2 DAMAGE"
-// line on the Hero screen -- swung exactly like the sword the child started with. The damage now
-// rides in on the per-hero command as a number (see WOLF_DAMAGE_PER_HIT's own comment on why an
-// item id would reach outside combat/), and these pin both halves of that.
+// For two chapters every blow anywhere took off a flat one point, so the Wildwood Blade -- earned at
+// the end of the longest promise in the game, with an unlock card and a damage line on the Hero
+// screen -- swung exactly like the sword the child started with. The damage now rides in on the
+// per-hero command as a number (see BASE_HERO_DAMAGE's own comment on why an item id, or a level,
+// would reach outside combat/), and these pin both halves of that.
+//
+// The numbers below are written as multiples of BASE_HERO_DAMAGE rather than as literals: P2 rescaled
+// the fight by ten, and a hard-typed 2 would have gone from "twice the starter sword" to "a fifth of
+// it" without a word of the test changing (GQ-018 -- and the reason these read as arithmetic).
 
 test('a blow is worth what the command says it is worth, and says so in its own event', () => {
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
-  const heroes = { A: { position: { x: 0, z: -1 }, heading: 0, weaponDamage: 2 } };
+  const heroes = { A: { position: { x: 0, z: -1 }, heading: 0, heroDamage: BASE_HERO_DAMAGE * 2 } };
 
   const asked = requestPartyAttack(state, 'A', 'a-1');
   assert.equal(asked.accepted, true);
@@ -282,9 +289,9 @@ test('a blow is worth what the command says it is worth, and says so in its own 
     state = result.state;
   }
 
-  assert.equal(state.wolf.hp, WOLF_MAX_HP - 2, 'two damage came off, not one');
+  assert.equal(state.wolf.hp, WOLF_MAX_HP - BASE_HERO_DAMAGE * 2, 'a double-strength blow came off, not a base one');
   const hit = seen.find((event) => event.type === 'wolf-hit');
-  assert.equal(hit.damage, 2,
+  assert.equal(hit.damage, BASE_HERO_DAMAGE * 2,
     'the event reports what actually landed -- a floating damage number reads this, and a "1" '
     + 'printed over a two-damage blow is the same lie in a different font');
 });
@@ -295,7 +302,7 @@ test('two heroes in the same fight are each worth their OWN weapon', () => {
   // the same wolf, and each blow has to be worth what THAT child earned.
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A', 'B'] });
   const heroes = {
-    A: { position: { x: -0.3, z: -1 }, heading: 0, weaponDamage: 2 },
+    A: { position: { x: -0.3, z: -1 }, heading: 0, heroDamage: BASE_HERO_DAMAGE * 2 },
     B: { position: { x: 0.3, z: -1 }, heading: 0 },
   };
 
@@ -313,49 +320,57 @@ test('two heroes in the same fight are each worth their OWN weapon', () => {
     seen.filter((event) => event.type === 'wolf-hit' || event.type === 'wolf-defeated')
       .map((event) => [event.heroId, event.damage ?? null]),
   );
-  // Three HP, a two and a one: the wolf is down, and whichever landed last carries the defeat.
+  // A double blow and a base one together exceed WOLF_MAX_HP: the wolf is down, and whichever landed
+  // last carries the defeat.
   assert.equal(state.wolf.mode, 'dying');
   assert.deepEqual(new Set(Object.keys(byHero)), new Set(['A', 'B']));
 });
 
 test('a fight nobody told about equipment is exactly the fight it has always been', () => {
   // Every test above this line, the whole offline fallback before it was wired, and any future
-  // caller that forgets: no weaponDamage on the command must mean WOLF_DAMAGE_PER_HIT, not zero.
+  // caller that forgets: no heroDamage on the command must mean BASE_HERO_DAMAGE, not zero.
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
   const heroes = { A: { position: { x: 0, z: -1 }, heading: 0 } };
   state = requestPartyAttack(state, 'A', 'a-1').state;
   for (let elapsed = 0; elapsed < 0.6; elapsed += STEP) {
     state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
   }
-  assert.equal(state.wolf.hp, WOLF_MAX_HP - WOLF_DAMAGE_PER_HIT);
+  assert.equal(state.wolf.hp, WOLF_MAX_HP - BASE_HERO_DAMAGE);
 });
 
-// --- a body can gain a heart ---------------------------------------------------------------------
+// --- a body can grow ------------------------------------------------------------------------------
 //
-// Ranger Wren's charm is the first thing in this game that changes what a hero IS rather than what
-// they are holding. HERO_MAX_HP was a constant read in five places, so "hearts" quietly meant "three"
-// to the respawn, to the heal-on-kill and to the UI alike. These pin the new rule at the layer that
-// owns it.
+// Ranger Wren's charm was the first thing in this game that changed what a hero IS rather than what
+// they are holding. HERO_MAX_HP was a constant read in five places, so a body quietly meant "three"
+// to the respawn, to the heal-on-kill and to the UI alike. Since P2 every Hero LEVEL moves it too,
+// which is why the rule stayed "the caller states a max" rather than becoming a charm-shaped special
+// case. These pin that rule at the layer that owns it.
+//
+// BIGGER_BY is a bonus the rules layer has no opinion about -- it does not know what a charm or a
+// level is, only that the number it was handed went up. Written as its own constant here rather than
+// as `+ 1` so the tests keep asserting "the body grew" after P2's rescale made one point of it an
+// amount too small for a bite to notice.
+const BIGGER_BY = 5;
 
-test('a heart granted mid-fight is felt in the same tick, not at the next respawn', () => {
-  // The payoff moment: a child standing in front of the person who just handed them the charm
-  // watches a fourth heart fill. Granting the ceiling without the heart would be a number changing
-  // where nobody is looking -- docs/MISTAKES.md GQ-013 exactly.
+test('a body grown mid-fight is felt in the same tick, not at the next respawn', () => {
+  // The payoff moment: a child standing in front of the person who just handed them the charm --
+  // or watching their own LEVEL UP -- sees the new length of bar fill. Granting the ceiling without
+  // the health would be a number changing where nobody is looking -- docs/MISTAKES.md GQ-013 exactly.
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
   const far = { A: { position: { x: 0, z: -12 }, heading: 0 } };
   assert.equal(state.heroes.A.hp, HERO_MAX_HP);
   assert.equal(state.heroes.A.maxHp, HERO_MAX_HP);
 
-  state = stepParty(state, { deltaSeconds: STEP, heroes: { A: { ...far.A, maxHp: HERO_MAX_HP + 1 } } }).state;
-  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1, 'the ceiling moved');
-  assert.equal(state.heroes.A.hp, HERO_MAX_HP + 1, 'and the heart came with it');
+  state = stepParty(state, { deltaSeconds: STEP, heroes: { A: { ...far.A, maxHp: HERO_MAX_HP + BIGGER_BY } } }).state;
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + BIGGER_BY, 'the ceiling moved');
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP + BIGGER_BY, 'and the health came with it');
 });
 
-test('the fourth heart persists without the command repeating itself forever', () => {
+test('the bigger body persists without the command repeating itself forever', () => {
   // Granting must be an EDGE, not a per-tick top-up: a hero who takes a bite and keeps walking
   // around with the charm must stay hurt, or the charm is invulnerability.
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
-  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + 1 } };
+  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + BIGGER_BY } };
   state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
 
   const hurt = { ...state.heroes.A, hp: 1 };
@@ -364,40 +379,40 @@ test('the fourth heart persists without the command repeating itself forever', (
     state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
   }
   assert.equal(state.heroes.A.hp, 1, 'the charm raises the ceiling, it does not refill the hero');
-  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1);
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + BIGGER_BY);
 });
 
 test('a hero on the ground does not stand up because their ceiling went up', () => {
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
   const down = { ...state.heroes.A, hp: 0, downSeconds: 0 };
   state = { ...state, heroes: { ...state.heroes, A: down } };
-  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + 1 } };
+  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + BIGGER_BY } };
 
   state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
-  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1, 'the ceiling still moves while they are down');
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + BIGGER_BY, 'the ceiling still moves while they are down');
   assert.equal(state.heroes.A.hp, 0, 'but a hero stands up when RESPAWN_SECONDS says so, not when a charm does');
 });
 
-test('and when they do stand up, they stand up on ALL of their hearts', () => {
+test('and when they do stand up, they stand up on ALL of their body', () => {
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
   const down = { ...state.heroes.A, hp: 0, downSeconds: 0 };
   state = { ...state, heroes: { ...state.heroes, A: down } };
-  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + 1 } };
+  const charmed = { A: { position: { x: 0, z: -12 }, heading: 0, maxHp: HERO_MAX_HP + BIGGER_BY } };
 
   for (let elapsed = 0; elapsed <= RESPAWN_SECONDS + STEP * 2; elapsed += STEP) {
     state = stepParty(state, { deltaSeconds: STEP, heroes: charmed }).state;
   }
   assert.equal(state.heroes.A.downSeconds, -1, 'they got up');
-  assert.equal(state.heroes.A.hp, HERO_MAX_HP + 1, 'on four, not on three');
+  assert.equal(state.heroes.A.hp, HERO_MAX_HP + BIGGER_BY, 'on the grown body, not on the one they started with');
 });
 
-test('two brothers with different hearts are healed to their OWN ceilings', () => {
+test('two brothers with different bodies are healed to their OWN ceilings', () => {
   // The co-op half, and the reason maxHp is per hero rather than a constant: the older brother has
   // walked the Hollow and carries the charm, the younger has not. A kill must not stop healing the
-  // older one at three because the younger one's body ends there.
+  // older one where the younger one's body ends.
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A', 'B'] });
   const heroes = {
-    A: { position: { x: -0.3, z: -1 }, heading: 0, maxHp: HERO_MAX_HP + 1 },
+    A: { position: { x: -0.3, z: -1 }, heading: 0, maxHp: HERO_MAX_HP + BIGGER_BY },
     B: { position: { x: 0.3, z: -1 }, heading: 0 },
   };
   state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
@@ -415,13 +430,13 @@ test('two brothers with different hearts are healed to their OWN ceilings', () =
     state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
   }
   assert.equal(state.wolf.mode, 'dying', 'the kill has to land for the heal to fire');
-  assert.equal(state.heroes.A.hp, 2, 'one heart back, toward a ceiling of four');
-  assert.equal(state.heroes.B.hp, 2, 'one heart back, toward a ceiling of three');
-  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + 1);
+  assert.equal(state.heroes.A.hp, 1 + VICTORY_HEAL_HP, 'one kill\'s worth back, toward the bigger ceiling');
+  assert.equal(state.heroes.B.hp, 1 + VICTORY_HEAL_HP, 'one kill\'s worth back, toward the smaller one');
+  assert.equal(state.heroes.A.maxHp, HERO_MAX_HP + BIGGER_BY);
   assert.equal(state.heroes.B.maxHp, HERO_MAX_HP);
 });
 
-test('a fight nobody told about hearts is exactly the fight it has always been', () => {
+test('a fight nobody told about a body is exactly the fight it has always been', () => {
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
   const heroes = { A: { position: { x: 0, z: -12 }, heading: 0 } };
   for (let i = 0; i < 20; i += 1) {

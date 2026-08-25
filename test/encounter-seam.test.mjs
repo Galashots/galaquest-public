@@ -16,6 +16,7 @@ import {
   ATTACK_COOLDOWN_SECONDS,
   HERO_MAX_HP,
   SWING_SECONDS,
+  BASE_HERO_DAMAGE,
   WOLF_MAX_HP,
   canAttack,
   createEncounter,
@@ -202,13 +203,67 @@ test('the wrapper exposes the published state it is standing on', () => {
   assert.equal(encounter.state.wolf, encounter.wolf, 'the getter and the state must be one object');
 });
 
+// --- the body the caller states -----------------------------------------------------------------
+//
+// The rules layer has taken a caller-stated max HP since Ranger Wren's charm, and P2 made every Hero
+// LEVEL move that number too: main.js now states the resolved max on the same command it states the
+// resolved damage on. test/encounter-party.test.mjs pins the RULE at the layer that owns it; these
+// pin that the SOLO wrapper actually carries the number, in both directions.
+//
+// It did not. stepEncounter forwarded heroDamage and dropped maxHp, so an offline Level-2 child hit
+// for their new damage out of the body they had at Level 1 -- a level-up that was half real, which
+// is the shape of docs/MISTAKES.md GQ-013.
+
+// A bonus the rules layer has no opinion about, exactly as in the party tests: it does not know what
+// a charm or a level is, only that the number it was handed went up. Not derived from
+// progression/heroStats.js, because a probe built out of the thing under test cannot fail on it
+// (GQ-018) -- and because the seam's contract is "whatever finite number the caller states", not
+// "whatever P2 happens to grant".
+const BIGGER_BY = 5;
+
+test('a body grown by a level crosses the solo seam, and the health comes with it', () => {
+  // Far enough that the wolf never reaches the hero, so nothing but the stated max can move hp.
+  let state = createEncounterState({ wolfSpawn: { x: 0, z: -40 } });
+  assert.equal(state.hero.hp, HERO_MAX_HP);
+
+  // A caller that says nothing still fights the body this game has always given it.
+  state = tick(state).state;
+  assert.equal(state.hero.maxHp, HERO_MAX_HP, 'an unstated max is still the Level-1 body');
+  assert.equal(state.hero.hp, HERO_MAX_HP);
+
+  const grown = HERO_MAX_HP + BIGGER_BY;
+  state = tick(state, { maxHp: grown }).state;
+
+  assert.equal(state.hero.maxHp, grown, 'the caller stated a bigger body and the seam has to carry it');
+  assert.equal(state.hero.hp, grown, 'and the health comes with it -- reconcileMaxHp grants the gain');
+});
+
+test('the grown body survives the round trip home, so it is not granted again every tick', () => {
+  // The solo state is rebuilt from the published one on every call, so anything the party engine
+  // advances has to make the trip back -- the same reason the patrol index is published. If maxHp
+  // does not, reconcileMaxHp compares the stated max against the HERO_MAX_HP fallback on every
+  // single tick, sees a gain every time, and hands the hero the difference again: sixty frames of
+  // that is a child with hundreds of hit points who cannot be bitten.
+  let state = createEncounterState({ wolfSpawn: { x: 0, z: -40 } });
+  const grown = HERO_MAX_HP + BIGGER_BY;
+
+  for (let frame = 0; frame < 60; frame += 1) state = tick(state, { maxHp: grown }).state;
+
+  assert.equal(state.hero.maxHp, grown);
+  assert.equal(state.hero.hp, grown, 'a stated max is an edge, not a per-tick top-up');
+});
+
 // --- the events a caller has to handle ----------------------------------------------------------
 
 test('a full kill raises its events through the seam, in order', () => {
   let state = createEncounterState({ wolfSpawn: { x: 0, z: 1 } });
   const seen = [];
 
-  for (let blow = 0; blow < WOLF_MAX_HP; blow += 1) {
+  // Blows to kill, derived from the two constants rather than counted as hit points: P2 rescaled
+  // both, and a loop that ran WOLF_MAX_HP times would swing thirty times at a wolf that dies on the
+  // third -- which would still pass the defeat assertions below while measuring nothing.
+  const blowsToKill = Math.ceil(WOLF_MAX_HP / BASE_HERO_DAMAGE);
+  for (let blow = 0; blow < blowsToKill; blow += 1) {
     const asked = stepEncounter(state, {
       deltaSeconds: STEP, heroPosition: { x: 0, z: 0 }, heroHeading: 0, attack: true,
     });
@@ -226,5 +281,5 @@ test('a full kill raises its events through the seam, in order', () => {
   assert.equal(state.wolf.hp, 0);
   assert.equal(seen.filter((type) => type === 'wolf-defeated').length, 1,
     'exactly one defeat, however many swings followed');
-  assert.equal(seen.filter((type) => type === 'wolf-hit').length, WOLF_MAX_HP - 1);
+  assert.equal(seen.filter((type) => type === 'wolf-hit').length, blowsToKill - 1);
 });

@@ -8,68 +8,102 @@
 // Timings are matched to the clips wolf.glb actually ships, measured rather than guessed:
 //   bite 1.167s   death 1.750s   hit 0.667s   idle 1.667s   walk 1.708s
 
-// Back to 3, on the owner's call of 2026-08-13, and the round trip is the point rather than an
-// embarrassment. It went 3 -> 4 on his playtest note that the wolf died too easily, against a 0.45s
-// procedural swing. The swing is now the 1.5s sword_slash clip, so a fight at 4hp would take
-// two-thirds longer again -- and he returned it to 3 for exactly that reason. The comment on the old
-// value said "re-ask him when the clip lands", which is what happened, so this is the process
-// working rather than churn.
-export const WOLF_MAX_HP = 3;
-export const HERO_MAX_HP = 3;
-// THE MOST HEARTS ANY BODY IN THIS GAME CAN HAVE.
+// ── THE COMBAT SCALE ────────────────────────────────────────────────────────────────────────────
 //
-// HERO_MAX_HP is what a hero STARTS with; this is where the count stops. They were the same number
-// until Ranger Wren's charm, and index.html hardcodes one <span class="heart"> per pip because it
-// has never had to draw a variable number of them -- so something has to say, in one place, how many
-// pips the markup owes. That is a fact about the fight (what a body can be) rather than about the
-// charm (what one reward happens to give), which is why it lives here beside HERO_MAX_HP and not
-// beside CHARM_BONUS_HEARTS in net/gameServer.mjs.
+// These numbers used to be HIT COUNTERS. A wolf had 3 hp because a swing was worth 1, and the pair
+// meant "three blows", and the FUTURE note that used to live here promised a stat system would
+// replace them one day ("enemy HP and player HP will be based on level ... and same with damage"
+// -- the owner, 2026-08-13).
 //
-// Four rather than open-ended on purpose. A HUD that grows without bound is a HUD nobody designed,
-// and every extra heart is a fight the Warden gets easier at -- its own comment prices it at "three
-// mistakes, not one". test/feedback.test.mjs pins the markup to this, and test/game-server.test.mjs
-// pins the charm to never exceed it, so the two can never drift apart silently.
-export const HERO_MAX_HP_CEILING = 4;
+// P2 is that replacement, so the promise is discharged rather than restated. The whole fight is
+// rescaled by ten: every Level-1 outcome the previous tuning established is preserved exactly (a
+// fresh wolf still takes three starter blows, a base hero still goes down in three bites), but the
+// scale now has room for a level to be worth +5 max HP and +2 damage without a heart being a
+// third of a body. docs/briefs/PROGRESSION_P2_FIRST_HERO_LEVEL_UP.md fixes the values; the
+// PRESERVED RATIOS are pinned in test/level-one-preservation.test.mjs, which is what makes a future
+// re-tune loud instead of silent.
+//
+// The owner's tuning history behind the ratio these numbers preserve is worth keeping: the wolf went
+// 3 -> 4 hits on his playtest note that it died too easily against a 0.45s procedural swing, and
+// back to 3 when the swing became the 1.5s sword_slash clip, because at 4 the fight took two-thirds
+// longer again. Three blows is a decision, not an accident of arithmetic.
+export const WOLF_MAX_HP = 30;
+
+/**
+ * THE BODY A HERO HAS WHEN NOBODY HAS SAID OTHERWISE -- which is to say, a Level-1 hero's.
+ *
+ * It is the rules layer's own fallback (see reconcileMaxHp), and it is ALSO the number
+ * progression/heroStats.js names LEVEL_1_BASE_MAX_HP and builds every level on top of. One number,
+ * imported there rather than typed twice (docs/MISTAKES.md GQ-007). The dependency has to point
+ * that way round: test/combat-purity.test.mjs forbids anything in this directory from importing
+ * outside it, so the rules cannot reach progression -- progression reaches here, exactly as
+ * world/beaconSiege.js already does.
+ *
+ * There is deliberately no ceiling constant beside this any more. HERO_MAX_HP_CEILING existed
+ * because index.html drew one <span class="heart"> per pip and something had to say how many the
+ * markup owed; four was "the most hearts any body in this game can have". Every Hero level now
+ * grants max HP (docs/product/PROGRESSION_CONTRACT_V0.md supersedes the four-heart ceiling in as
+ * many words), so a fixed maximum body is no longer a fact about the fight -- it was a fact about a
+ * HUD that could not draw a variable number. The HUD draws a bar now.
+ */
+export const HERO_MAX_HP = 30;
+
 // ── WHAT A SWING IS WORTH, AND WHOSE SWING IT IS ───────────────────────────────────────────────
 //
 // This was a bare `1`, then a named `1`, and for two chapters the comment under it promised that
 // wiring equipment up was somebody else's job. Meanwhile G4 shipped: Rowan keeps the oldest promise
-// in the game, an unlock card turns over, the Hero screen prints the Wildwood Blade's "2 DAMAGE"
+// in the game, an unlock card turns over, the Hero screen prints the Wildwood Blade's damage
 // straight off progression/items.js -- and the sword swung exactly like the one the child started
-// with, because nothing anywhere read that number. The game told a child they were stronger and
-// then made them hit the wolf three times again.
+// with, because nothing anywhere read that number (docs/MISTAKES.md GQ-013).
 //
-// So a blow is now worth what the WEAPON IN THE HAND THAT THREW IT is worth. This constant keeps
-// its name and its value -- every importer still gets 1 -- but it is now the FLOOR rather than the
-// whole rule: what a hero does with nothing better, and what a caller that names no weapon gets.
+// So a blow is worth what the HERO WHO THREW IT is worth. This constant is the FLOOR rather than
+// the whole rule: what a caller that names no damage gets, which is a Level-1 hero holding the
+// starter sword. progression/heroStats.js and progression/items.js own the real answer between
+// them; test/progression-hero-stats.test.mjs pins this floor to the starter sword's catalogue value
+// so the two cannot drift apart in silence.
 //
 // THE DAMAGE RIDES IN ON THE PER-HERO COMMAND, beside position and heading, as a NUMBER. Not an
-// item id, and this file does not import progression/items.js to turn one into the other -- that
-// would reach outside combat/, which test/combat-purity.test.mjs forbids in as many words: "route
-// the randomness or time through the command/event seam instead of weakening this list". The item
-// catalogue is exactly the kind of thing the seam exists to keep out. progression/items.js owns the
-// id -> damage question (swingDamageFor there), every caller already knows what is equipped, and
-// these rules stay a thing you can reason about with no idea that gear exists.
+// item id, and not a level -- this file does not import progression/, which
+// test/combat-purity.test.mjs forbids in as many words: "route the randomness or time through the
+// command/event seam instead of weakening this list". An item catalogue and an XP journal are
+// exactly the kind of thing the seam exists to keep out. Every caller already knows what its hero
+// has equipped and what level they are, and calls heroStats.resolvedHeroDamage on the way in.
 //
-// Carried per tick rather than stored on the hero for the same reason position is: equipment
-// changes outside the fight, through a screen this file knows nothing about, and a copy kept here
-// would be one more thing that can go stale. What the caller says this tick is the truth this tick.
-export const WOLF_DAMAGE_PER_HIT = 1;
+// It is called BASE_HERO_DAMAGE and the command field is `heroDamage`, not `weaponDamage`. Both
+// were renamed in P2 and the rename is the point: the number now carries the weapon PLUS what the
+// levels added to the arm, so "weapon damage" had become a name that describes half of its own
+// value. GQ-002 -- when the reason changes, the words change with it.
+//
+// Carried per tick rather than stored on the hero for the same reason position is: equipment and
+// level both change outside the fight, through screens this file knows nothing about, and a copy
+// kept here would be one more thing that can go stale. What the caller says this tick is the truth
+// this tick.
+export const BASE_HERO_DAMAGE = 10;
 
-// FUTURE, and deliberately not built now -- the owner's direction, 2026-08-13:
-//
-//   "for future, enemy HP should not be based on how many attacks. Enemy HP and player HP will be
-//    based on level (with the latter also boosted by armour), and same with damage."
-//
-// So these two constants are a placeholder for a stat system, not a design. Today they mean "three
-// blows" because there is one enemy, no levels, no damage numbers and one suit of gear; the moment
-// any of those exist, HP stops being a hit counter and becomes a derived stat. What that means
-// concretely when it is built: a hero's max HP comes from level plus an armour contribution, an
-// enemy's from ITS level, and a swing deals damage rather than exactly one point -- at which point
-// "how many hits to kill" becomes an OUTPUT of the numbers rather than the input it is here.
-//
-// Do not grow this into a stat system incrementally. It is a later phase, and the interesting part
-// is where the numbers live once the fight is server-owned, not the arithmetic.
+/**
+ * What one landed wolf bite takes off a hero.
+ *
+ * Was a bare `1` written inline in the bite resolution -- a hidden constant, which is how it stayed
+ * invisible through two tuning passes. Named here on the way past, because P2's rescale is exactly
+ * the change that would have made an unnamed 1 wrong without anything saying so.
+ *
+ * Ten of a 30hp Level-1 body: THREE BITES TO DOWN A FRESH HERO, which is the promise the previous
+ * scale made with 1-of-3 and the one test/level-one-preservation.test.mjs holds this file to. Three
+ * rather than two on the same reasoning world/beaconSiege.js gives for the Warden: a fight that
+ * two-shots a young player teaches fear of trying.
+ */
+export const WOLF_BITE_DAMAGE = 10;
+
+/**
+ * What beating a wolf gives every standing hero back.
+ *
+ * DERIVED from the bite rather than typed, because the promise is not "ten hit points" -- it is
+ * "the wolf takes something from you and killing it gives that back". Those were the same number
+ * when both were 1, and the day they stop being the same number should be a decision someone makes
+ * here, not a coincidence that quietly ends. See healTheStanding for why the reward is a kill
+ * bonus rather than a regeneration timer.
+ */
+export const VICTORY_HEAL_HP = WOLF_BITE_DAMAGE;
 
 export const ATTACK_REACH = 1.7;
 // Just under a quarter turn each side. Wide enough that a young player who is roughly facing the
@@ -317,7 +351,7 @@ function isReplayId(commandId, lastCommandId) {
 //
 // `heroId == null` is how an event says "this didn't happen to anyone in particular" -- the solo
 // wrapper strips heroId back out for its callers, but party events keep it because the client has
-// to know whose hearts to flash.
+// to know whose health bar to flash.
 //
 // Event objects are built as literal object literals at each push site (`{ type: 'swing' }` and
 // so on), not through a shared "make me an event of this type" helper -- feedback.test.mjs's
@@ -333,8 +367,8 @@ function withHeroId(event, heroId) {
 function freshHero() {
   return {
     hp: HERO_MAX_HP,
-    // A BODY FACT, stored rather than passed per tick -- unlike weaponDamage, which is whatever the
-    // caller says this instant. How many hearts you have is part of what you ARE: it decides what a
+    // A BODY FACT, stored rather than passed per tick -- unlike heroDamage, which is whatever the
+    // caller says this instant. How big your body is is part of what you ARE: it decides what a
     // respawn restores and what a heal is allowed to reach, and the rules have to know it about a
     // hero nobody sent a command for this frame. The caller still owns the NUMBER (see the
     // reconciliation in advancePartyFight); this is where the fight remembers it.
@@ -348,21 +382,25 @@ function freshHero() {
 }
 
 /**
- * A body gains or loses a heart, because something outside the fight said so.
+ * A body grows or shrinks, because something outside the fight said so.
  *
- * Ranger Wren's charm is the first thing in this game that changes what a hero IS rather than what
+ * Ranger Wren's charm was the first thing in this game that changed what a hero IS rather than what
  * they are holding, so it needed a rule the fight could not fudge: the caller states a max on the
- * command, and here is the one place that becomes true.
+ * command, and here is the one place that becomes true. Since P2 the charm is no longer the only
+ * caller -- every Hero LEVEL moves this number too (progression/heroStats.js's resolvedMaxHp) --
+ * which is exactly why the rule stayed a caller-stated max rather than becoming a charm-shaped
+ * special case.
  *
- * GAINING TOPS YOU UP, and that is the whole payoff. A child handed a fourth heart watches a fourth
- * heart fill, in the same second, standing in front of the person who gave it to them. Granting the
- * max without the heart would be a number changing in a place nobody is looking -- exactly the
- * defect docs/MISTAKES.md GQ-013 is about. But NOT while they are down: a hero on the ground does
- * not stand up because their maximum went up, they stand up when RESPAWN_SECONDS says so, and then
- * they get all of it.
+ * GAINING TOPS YOU UP BY WHAT WAS GAINED, and that is the whole payoff. A child who levels watches
+ * the bar grow AND the new length fill, in the same second, in front of the thing that gave it to
+ * them. Granting the max without the health would be a number changing in a place nobody is looking
+ * -- exactly the defect docs/MISTAKES.md GQ-013 is about. But NOT while they are down: a hero on the
+ * ground does not stand up because their maximum went up, they stand up when RESPAWN_SECONDS says
+ * so, and then they get all of it.
  *
- * LOSING CLAMPS, and cannot happen today (nothing revokes a charm). It is two lines and it means a
- * future that takes something away can never leave a hero holding hearts they no longer have.
+ * LOSING CLAMPS, and cannot happen today (nothing revokes a charm or a level). It is two lines and
+ * it means a future that takes something away can never leave a hero holding health they no longer
+ * have.
  */
 function reconcileMaxHp(hero, wanted) {
   const maxHp = Number.isFinite(wanted) ? Math.max(1, Math.round(wanted)) : HERO_MAX_HP;
@@ -552,17 +590,18 @@ export function stepParty(state, command = {}) {
  * heroes keyed by id. Every transition is still time-driven so the visual layer can simply read
  * `wolf.mode`; nothing here knows a clip exists.
  */
-// ── beating a wolf gives a heart back ──────────────────────────────────────────────────────────
+// ── beating a wolf gives health back ───────────────────────────────────────────────────────────
 //
 // Added after the first real child playtest (child playtest). the child playtesters
 // "died a few times" and called the wolves "a little strong". The fight itself was not the problem
-// -- they beat every wolf -- but until this existed the ONLY route back to three hearts was dying,
-// and the quest is three kills, so a child who won the first fight on one heart started the second
-// on one heart. That is a difficulty curve nobody designed; it is just the absence of recovery.
+// -- they beat every wolf -- but until this existed the ONLY route back to a full body was dying,
+// and the quest is three kills, so a child who won the first fight one bite from the floor started
+// the second there too. That is a difficulty curve nobody designed; it is just the absence of
+// recovery.
 //
 // Chosen over passive out-of-combat regeneration on two grounds:
-//   - Legibility. "I killed it and a heart came back" is cause and effect a young player reads the
-//     first time it happens. A timer that refills hearts for standing still is a rule that has to be
+//   - Legibility. "I killed it and health came back" is cause and effect a young player reads the
+//     first time it happens. A timer that refills health for standing still is a rule that has to be
 //     taught, and would also have needed a new per-hero field on the wire (see protocol.js's
 //     decodeHeroes, which lists exactly four) for a value no client renders.
 //   - It rewards winning rather than waiting, so no individual fight is made any easier. Every
@@ -572,17 +611,19 @@ export function stepParty(state, command = {}) {
 // Everyone standing is healed, not just whoever landed the blow, and not only those in range. That
 // is the co-op half: your brother's kill helps you even if you were across the map, which is the
 // cheapest possible way to make being on the same team pay. A hero who is DOWN is skipped -- he is
-// about to stand up on full hearts anyway (see RESPAWN_SECONDS above), so healing him would be
-// banking a heart he never earned, and it would raise a hero-healed event for a child staring at a
+// about to stand up on a full body anyway (see RESPAWN_SECONDS above), so healing him would be
+// banking health he never earned, and it would raise a hero-healed event for a child staring at a
 // death banner.
 function healTheStanding(heroes, heroIds, events) {
   for (const heroId of heroIds) {
     const hero = heroes[heroId];
     if (hero.downSeconds >= 0) continue;
-    // Each hero's OWN ceiling: a brother carrying Wren's charm has four, and a kill must not stop
-    // healing him at three just because his younger brother's body ends there.
+    // Each hero's OWN ceiling: a brother carrying Wren's charm -- or simply a level ahead -- has a
+    // bigger body, and a kill must not stop healing him where his younger brother's body ends.
+    // Clamped rather than incremented since P2: VICTORY_HEAL_HP is a real amount now, not a single
+    // pip, so the last heal before full would otherwise carry a hero past their own maximum.
     if (hero.hp >= (hero.maxHp ?? HERO_MAX_HP)) continue;
-    hero.hp += 1;
+    hero.hp = Math.min(hero.maxHp ?? HERO_MAX_HP, hero.hp + VICTORY_HEAL_HP);
     // A literal, like every other event in this file -- feedback.test.mjs reads this source with a
     // regex rather than running it, so a computed `type` would break the guard. See withHeroId.
     events.push(withHeroId({ type: 'hero-healed', remaining: hero.hp }, heroId));
@@ -614,8 +655,8 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
     const position = cmd?.position ?? { x: 0, z: 0 };
     const heading = cmd?.heading ?? 0;
 
-    // Before anything else this tick: how many hearts is this body supposed to have. See
-    // reconcileMaxHp -- a heart gained is felt on the frame it is given, not on the next respawn.
+    // Before anything else this tick: how big is this body supposed to be. See reconcileMaxHp --
+    // max HP gained is felt on the frame it is given, not on the next respawn.
     reconcileMaxHp(hero, cmd?.maxHp);
 
     hero.cooldown = Math.max(0, hero.cooldown - deltaSeconds);
@@ -649,7 +690,7 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
           // Read at CONTACT rather than at the start of the swing. Nobody will ever equip mid-swing,
           // but "a blow is worth what the hand holds when it lands" is the version of this rule that
           // needs no further explaining, and it is one line either way.
-          const damage = Number.isFinite(cmd?.weaponDamage) ? cmd.weaponDamage : WOLF_DAMAGE_PER_HIT;
+          const damage = Number.isFinite(cmd?.heroDamage) ? cmd.heroDamage : BASE_HERO_DAMAGE;
           wolf.hp -= damage;
           wolf.modeSeconds = 0;
           if (wolf.hp <= 0) {
@@ -728,7 +769,7 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
       const stillTargetable = targetId == null || commandHeroes[targetId]?.targetable !== false;
       if (target && target.downSeconds < 0 && stillTargetable
         && isWithinStrike(wolf, wolf.heading, targetPosition, WOLF_BITE_RANGE)) {
-        target.hp -= 1;
+        target.hp -= WOLF_BITE_DAMAGE;
         events.push(withHeroId({ type: 'hero-hurt', remaining: Math.max(0, target.hp) }, targetId));
         if (target.hp <= 0) {
           target.downSeconds = 0;
@@ -777,7 +818,7 @@ function advancePartyFight(wolf, heroes, heroIds, commandHeroes, events, deltaSe
   // THE GATE, and it has to be here as well as on the approach below. Checkpoint 0 verified the
   // trap by reading the order: this bite check RETURNS, so a gate applied only to the aggro branch
   // never executes for a wolf that is already standing next to the child. That wolf would look
-  // dormant -- no chase, no walk animation -- and still take a heart every 2.6 s. Gating one of the
+  // dormant -- no chase, no walk animation -- and still take a bite every 2.6 s. Gating one of the
   // two is worse than gating neither, because it looks fixed.
   if (wolfHostile && nearestDistance <= WOLF_BITE_RANGE && wolf.biteCooldown === 0) {
     wolf.mode = 'bite';
@@ -845,9 +886,15 @@ function wolfFromParty(wolf) {
   };
 }
 
+/** `maxHp` makes the round trip for the same reason the patrol index does: the solo state is rebuilt
+ *  from the published one on every call, so anything the party engine advances has to come home.
+ *  reconcileMaxHp grants the DIFFERENCE between the stated max and the one the hero already had --
+ *  drop the second and it falls back to HERO_MAX_HP, sees a gain on every tick, and hands a levelled
+ *  child that same gain again, sixty times a second. It is also the field createEncounterState
+ *  has always seeded, so publishing it makes a fresh hero and a stepped one the same shape. */
 function heroFromParty(hero) {
   return {
-    hp: hero.hp, swingSeconds: hero.swingSeconds, cooldown: hero.cooldown,
+    hp: hero.hp, maxHp: hero.maxHp, swingSeconds: hero.swingSeconds, cooldown: hero.cooldown,
     swingLanded: hero.swingLanded, downSeconds: hero.downSeconds,
   };
 }
@@ -896,7 +943,9 @@ export function requestAttack(state, commandId = null) {
 /**
  * Advance the fight by one command.
  *
- * `command` is { commandId, deltaSeconds, heroPosition, heroHeading, attack }. The attack is applied
+ * `command` is { commandId, deltaSeconds, heroPosition, heroHeading, heroDamage, maxHp,
+ * heroTargetable, wolfHostile, attack } -- the ones the fight has always taken, plus what the caller
+ * knows about the hero that the rules do not. The attack is applied
  * before time advances, which is the order main.js has always used -- press, then tick -- and the
  * order that makes a swing land on the frame it was asked for rather than the one after. Composed
  * here from the party engine's two calls (request, then step) rather than from one combined
@@ -910,10 +959,17 @@ export function stepEncounter(state, command = {}) {
     heroPosition = { x: 0, z: 0 },
     heroHeading = 0,
     // The solo wrapper carries what a blow is worth the same way it carries position and heading:
-    // as one more thing the caller knows and the rules do not. Omitted falls to
-    // WOLF_DAMAGE_PER_HIT, so every caller written before equipment existed keeps the fight it has
-    // always had.
-    heroWeaponDamage = null,
+    // as one more thing the caller knows and the rules do not. Omitted falls to BASE_HERO_DAMAGE,
+    // so every caller written before equipment or levels existed keeps the fight it has always had.
+    // Named heroDamage rather than heroWeaponDamage since P2: the number is the weapon PLUS the
+    // level bonus, so the old name described half of its own value (GQ-002).
+    heroDamage = null,
+    // The BODY the caller knows about, carried across the same seam and for the same reason: since
+    // P2 a Hero LEVEL grows max HP as well as damage, and forwarding one without the other ships
+    // half a level-up -- a child hitting for their new blow out of the body they had before it.
+    // Omitted falls to HERO_MAX_HP inside reconcileMaxHp, so a caller that states no body still
+    // fights the one this game has always given it.
+    maxHp = null,
     // One more thing the caller knows and the rules do not, carried exactly as position and weapon
     // damage are. Defaults to targetable so every existing caller fights unchanged.
     heroTargetable = true,
@@ -941,7 +997,8 @@ export function stepEncounter(state, command = {}) {
       [SOLO_HERO_ID]: {
         position: heroPosition,
         heading: heroHeading,
-        weaponDamage: heroWeaponDamage,
+        heroDamage,
+        maxHp,
         targetable: heroTargetable !== false,
       },
     },

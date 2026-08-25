@@ -17,9 +17,15 @@
  * What is NOT seeded is the thing under test: the durable rows go in, the browser boots, and every
  * assertion below is read off the running scene.
  *
- * THE HEART IS MEASURED, NOT ANNOUNCED (docs/MISTAKES.md GQ-013). It is not enough that a row was
- * written or that a banner fired: this asks the running game how many pips the bar is drawing and
- * how many hearts the body it is drawing them for actually has.
+ * THE CHARM IS MEASURED, NOT ANNOUNCED (docs/MISTAKES.md GQ-013). It is not enough that a row was
+ * written or that a banner fired: this asks the running game what the health readout is actually
+ * PRINTING and what the body it is printing for actually is.
+ *
+ * Those two questions used to be "how many pips are drawn" and "how many are filled". P2 replaced
+ * the fixed heart row with a scalable bar and a current/max numeral (every Hero level now grants max
+ * HP, so a fixed row of icons cannot draw a body that grows), and this harness moved with it --
+ * GQ-017: the readers of a changed surface are not all under test/, and finishing one directory is
+ * not finishing.
  *
  * Port 9224 -- the isolated automation Chrome. NOT 9223, which is the owner's signed-in browser.
  *
@@ -49,6 +55,9 @@ import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/gues
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
 import { KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
+// The charm's worth, imported rather than typed as `+ 1`: it is a Hero stat since P2, and a harness
+// that hand-typed the bonus would be the copy GQ-007 hit 8 is about -- silent until the day it moves.
+import { WREN_CHARM_MAX_HP_BONUS } from '../../public/src/progression/heroStats.js';
 import { RANGER_LINE_INTRO, RANGER_LINE_SATCHEL_GIVEN }
   from '../../public/src/world/rangerSpeech.js';
 
@@ -243,13 +252,14 @@ const STATE_EXPR = `JSON.stringify((() => {
     lodgeFound: r.zoneSiegeState ? r.zoneSiegeState().lodgeFound : null,
     objective: document.querySelector('#quest-objective')?.textContent ?? '',
     ranger,
-    // WHAT THE BAR IS ACTUALLY DRAWING, counted off the DOM rather than taken from the state that
+    // WHAT THE READOUT IS ACTUALLY PRINTING, read off the DOM rather than taken from the state that
     // was supposed to have painted it. A ceiling that moved and a bar that did not is exactly the
     // shape of defect GQ-013 is about, and reading the model twice would never catch it.
-    heartsDrawn: Array.from(document.querySelectorAll('#hero-health .heart'))
-      .filter((heart) => heart.hidden !== true).length,
-    heartsFilled: Array.from(document.querySelectorAll('#hero-health .heart'))
-      .filter((heart) => heart.hidden !== true && heart.dataset.filled === 'true').length,
+    healthMaxDrawn: Number(document.querySelector('#health-max')?.textContent ?? NaN),
+    healthCurrentDrawn: Number(document.querySelector('#health-current')?.textContent ?? NaN),
+    // ...and how long the bar itself is, as a percentage string, because the numerals and the bar are
+    // two channels and a child who cannot read numbers only has the second one.
+    healthFillWidth: document.querySelector('#hero-health .health-fill')?.style.width ?? '',
     npcName: document.querySelector('#keeper-speech-name')?.textContent?.trim() ?? null,
     npcLine: document.querySelector('#keeper-speech')?.textContent ?? '',
     npcShown: document.querySelector('#keeper-speech')?.dataset.shown === 'true',
@@ -272,7 +282,7 @@ const state = (tab) => tab.page.eval(STATE_EXPR).then(JSON.parse);
  *     frames a second is most of them;
  *   the wolf caught him.
  *
- * Distance alone separates the first three and hearts separate the fourth, so this records both, on
+ * Distance alone separates the first three and health separates the fourth, so this records both, on
  * requestAnimationFrame rather than over CDP: a poll from Node delays the answer, but a frame the
  * poll was not awake for is gone.
  *
@@ -289,7 +299,8 @@ const state = (tab) => tab.page.eval(STATE_EXPR).then(JSON.parse);
  *   resetWolf(), and touches no position. He stands up after RESPAWN_SECONDS exactly where he fell,
  *   the wolf is put back at its spawn 4.76m away, and it is on him again immediately.
  *
- *   Measured, standing still at Wren's feet at 12x CPU throttle: hearts 3->2->1->0->3 three times in
+ *   Measured, standing still at Wren's feet at 12x CPU throttle: the health bar ran to zero and back
+ *   to full three times in
  *   about 25 seconds, hero position constant at 0.34m from her the whole time, drawn and
  *   authoritative agreeing to the centimetre. Not drift, and not this harness: an unescapable death
  *   loop at the feet of the character a child has to stand still in front of to hear.
@@ -310,8 +321,7 @@ function startApproachRecorder(tab, key) {
       // are the same comparisons they always were. Truncated because this is per frame.
       line: (document.querySelector('#keeper-speech')?.textContent ?? '')
         .replace(/\\s+/g, ' ').trim().slice(0, 90),
-      hp: Array.from(document.querySelectorAll('#hero-health .heart'))
-        .filter((heart) => heart.hidden !== true && heart.dataset.filled === 'true').length,
+      hp: Number(document.querySelector('#health-current')?.textContent ?? NaN),
       snapped: runtime.netState().snapped === true,
     };
   })()`));
@@ -326,21 +336,21 @@ async function approachStory(tab, key) {
   return { frames: samples, summary };
 }
 
-/** The one-line verdict on a recording: how close, how long open, and what it cost in hearts. */
+/** The one-line verdict on a recording: how close, how long open, and what it cost in health. */
 function summarise(samples) {
   const metres = samples.map((sample) => sample.m).filter((m) => Number.isFinite(m));
   // A recorder that caught nothing must SAY so rather than report a tidy zero: "closest 0.00m" off
   // an empty log is the most confident wrong answer this function could give (GQ-022).
   if (metres.length === 0) return 'the recorder caught no frames -- this detail is blind, fix it';
-  const hearts = samples.map((sample) => sample.hp).filter((hp) => Number.isFinite(hp));
-  const lowest = hearts.length > 0 ? Math.min(...hearts) : null;
+  const health = samples.map((sample) => sample.hp).filter((hp) => Number.isFinite(hp));
+  const lowest = health.length > 0 ? Math.min(...health) : null;
   return [
     `${samples.length} frame(s) recorded`,
     `closest ${Math.min(...metres).toFixed(2)}m of ${KEEPER_WAVE_RADIUS_METERS}m`,
     `ended ${metres[metres.length - 1].toFixed(2)}m`,
     `bubble open on ${samples.filter((sample) => sample.shown).length}`,
-    lowest === null ? 'hearts unread'
-      : lowest < HERO_MAX_HP ? `KNOCKED DOWN, hearts fell to ${lowest}` : 'hearts held',
+    lowest === null ? 'health unread'
+      : lowest < HERO_MAX_HP ? `KNOCKED DOWN, health fell to ${lowest}` : 'health held',
     `${samples.filter((sample) => sample.snapped).length} snap(s)`,
   ].join(' · ');
 }
@@ -517,9 +527,9 @@ async function phaseArrival() {
     check(here.ranger?.charmOwned === false && here.ranger?.satchelCarried === false,
       'a child who has been nowhere near the hollow carries nothing of hers',
       `satchel ${here.ranger?.satchelCarried}, charm ${here.ranger?.charmOwned}`);
-    check(here.heartsDrawn === HERO_MAX_HP,
-      'and the bar still draws the three hearts everybody starts with',
-      `${here.heartsDrawn} pips, ${here.heartsFilled} filled`);
+    check(here.healthMaxDrawn === HERO_MAX_HP,
+      'and the readout still prints the Level-1 body everybody starts with',
+      `${here.healthCurrentDrawn} / ${here.healthMaxDrawn}`);
     await shot(tab, 'ranger-01-somebody-came');
 
     // WALK UP TO HER. Five metres, on the stick, the way a child arrives -- recorded from before
@@ -566,17 +576,17 @@ async function phaseArrival() {
 }
 
 /** THE HANDOVER. A child carrying her brother's satchel walks up, and walks away with a fourth
- *  heart that is still there after a reload. */
+ *  bigger body that is still there after a reload. */
 async function phaseCharm() {
-  console.log('\n── phase charm (she takes the satchel, and gives a heart) ──');
+  console.log('\n── phase charm (she takes the satchel, and gives a bigger body) ──');
   const { tab, server, origin } = await boot('charm', { withSatchel: true });
   try {
     const start = await pollUntil(tab, (s) => s.ranger?.satchelCarried === true, 20000);
     check(start.ranger?.satchelCarried === true, 'this child is carrying the fallen ranger\'s satchel',
       `satchel ${start.ranger?.satchelCarried}`);
-    check(start.heartsDrawn === HERO_MAX_HP,
-      'and still has only the three hearts they started the game with',
-      `${start.heartsDrawn} pips`);
+    check(start.healthMaxDrawn === HERO_MAX_HP,
+      'and still has only the body they started the game with',
+      `max ${start.healthMaxDrawn}`);
 
     await walkToward(tab, RANGER.at[0], RANGER.at[1], Math.max(1.2, RANGER_CLAIM.radiusMeters * 0.55),
       WALK_BUDGET_MS);
@@ -590,44 +600,48 @@ async function phaseCharm() {
 
     // THE WHOLE POINT. Measured off the DOM and off the body, not off the row that was written.
     //
-    // Polled on the CEILING AND THE FILL TOGETHER, because they do not land on the same frame: the
-    // bar grows a fourth pip when the ceiling changes and fills it when the heal arrives a beat
-    // later. Waiting on the ceiling alone and then reading the fill off that one sample caught
-    // `4 pips drawn, 3 of 4 filled` on a hosted runner and reported it as the charm opening a wound.
+    // Polled on the MAXIMUM AND THE CURRENT TOGETHER, because they do not land on the same frame:
+    // the bar grows when the ceiling changes and fills when the heal arrives a beat later. Waiting on
+    // the ceiling alone and then reading the fill off that one sample caught `4 pips drawn, 3 of 4
+    // filled` on a hosted runner and reported it as the charm opening a wound. Same trap, new units.
     //
     // This does NOT soften the assertions below, and the difference matters: the budget is bounded,
     // so a charm that genuinely never heals still times out and still fails with the real numbers
     // printed. Waiting for a state to settle is not the same as waiting until a check passes.
+    const charmedMaxHp = HERO_MAX_HP + WREN_CHARM_MAX_HP_BONUS;
     const hearted = await pollUntil(
-      tab, (s) => s.heartsDrawn > HERO_MAX_HP && s.heartsFilled > HERO_MAX_HP, 15000,
+      tab,
+      (s) => s.healthMaxDrawn === charmedMaxHp && s.healthCurrentDrawn === charmedMaxHp,
+      15000,
     );
-    check(hearted.heartsDrawn === HERO_MAX_HP + 1,
-      'and a FOURTH HEART appears on the bar', `${hearted.heartsDrawn} pips drawn`);
-    check(hearted.heartsFilled === HERO_MAX_HP + 1,
-      'filled, not empty -- the charm gives a heart, it does not open a wound',
-      `${hearted.heartsFilled} of ${hearted.heartsDrawn} filled`);
-    check(hearted.ranger?.heartCeiling === HERO_MAX_HP + 1,
-      'and the body the bar is drawing for really does have four',
-      `ceiling ${hearted.ranger?.heartCeiling}, hearts ${hearted.ranger?.hearts}`);
+    check(hearted.healthMaxDrawn === charmedMaxHp,
+      'and the health bar GROWS -- the readout prints the bigger body',
+      `max ${hearted.healthMaxDrawn}, was ${HERO_MAX_HP}`);
+    check(hearted.healthCurrentDrawn === charmedMaxHp,
+      'filled, not empty -- the charm gives health, it does not open a wound',
+      `${hearted.healthCurrentDrawn} / ${hearted.healthMaxDrawn}, bar ${hearted.healthFillWidth}`);
+    check(hearted.ranger?.maxHp === charmedMaxHp,
+      'and the body the bar is drawing for really is bigger',
+      `maxHp ${hearted.ranger?.maxHp}, hp ${hearted.ranger?.hp}`);
     const said = await pollUntil(tab, (s) => s.npcLine.includes(RANGER_LINE_SATCHEL_GIVEN.slice(0, 18)), 12000);
     check(said.npcLine.includes(RANGER_LINE_SATCHEL_GIVEN.slice(0, 18)),
       'and she tells the child where her brother got to', whyTheBubbleSaysThat(said));
-    await shot(tab, 'ranger-03-the-fourth-heart');
+    await shot(tab, 'ranger-03-the-bigger-body');
 
-    // AND IT IS DURABLE. A fourth heart that evaporates on reload is a fourth heart nobody has.
+    // AND IT IS DURABLE. A bigger body that evaporates on reload is a body nobody has.
     await tab.page.send('Page.navigate', { url: gameUrlFor(origin) });
-    // BOTH facts, not just the hearts. A reboot learns `beaconLit` from the first snapshot's siege
-    // block and its hearts from the same snapshot's rewards block, and there is no rule saying the
-    // two land on the same frame -- so a poll that stops at the hearts can read a village Wren has
+    // BOTH facts, not just the body. A reboot learns `beaconLit` from the first snapshot's siege
+    // block and its body from the same snapshot's rewards block, and there is no rule saying the
+    // two land on the same frame -- so a poll that stops at the body can read a village Wren has
     // not been redrawn into yet and report a bug that is really the harness being early.
     const back = await pollUntil(
       tab,
       (s) => s.ready && s.zone?.loaded >= s.zone?.requested
-        && s.heartsDrawn > HERO_MAX_HP && s.ranger?.rangerHere === true,
+        && s.healthMaxDrawn === charmedMaxHp && s.ranger?.rangerHere === true,
       45000,
     );
-    check(back.heartsDrawn === HERO_MAX_HP + 1, 'and it is still there after a reload',
-      `${back.heartsDrawn} pips drawn`);
+    check(back.healthMaxDrawn === charmedMaxHp, 'and it is still there after a reload',
+      `max ${back.healthMaxDrawn}`);
     check(back.ranger?.rangerHere === true, 'and so is she', `here ${back.ranger?.rangerHere}`);
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
@@ -687,7 +701,7 @@ async function phaseLodge() {
 
 /**
  * SEAM 5 OF THE WREN SANCTUARY RULING: stand at her feet long enough to have the conversation, in a
- * real browser, and prove the child keeps every heart.
+ * real browser, and prove the child keeps every hit point.
  *
  * The four unit seams in test/wren-sanctuary.test.mjs argue about the rules. This one argues about
  * the GAME: the whole chain -- authoritative server deriving `targetable` from position and Beacon
@@ -695,7 +709,7 @@ async function phaseLodge() {
  * hosted runner actually produce.
  *
  * DELIBERATELY THROTTLED, because the unthrottled local run does not reproduce the defect: the
- * arrival phase above passes locally with hearts held most of the time purely because it finishes
+ * arrival phase above passes locally with health held most of the time purely because it finishes
  * before the wolf arrives. Twelve times slower puts a local run in the 1-3 fps band where the
  * mauling was first measured, and it stacks with whatever the hosted runner is already doing. The
  * achieved rate is printed rather than assumed.
@@ -737,12 +751,12 @@ async function phaseSanctuary() {
       'the child really did stand in front of Wren for the conversation',
       `${inside.length} frame(s) inside ${KEEPER_WAVE_RADIUS_METERS}m of ${frames.length} recorded`);
 
-    const hearts = frames.map((frame) => frame.hp).filter((hp) => Number.isFinite(hp));
-    const lowest = hearts.length > 0 ? Math.min(...hearts) : null;
+    const health = frames.map((frame) => frame.hp).filter((hp) => Number.isFinite(hp));
+    const lowest = health.length > 0 ? Math.min(...health) : null;
     check(lowest === HERO_MAX_HP,
-      'and kept every heart while she talked -- the sanctuary holds in a real browser',
-      lowest === null ? 'hearts unread, which is a broken instrument not a pass'
-        : `lowest ${lowest} of ${HERO_MAX_HP} over ${hearts.length} frame(s)`);
+      'and kept every hit point while she talked -- the sanctuary holds in a real browser',
+      lowest === null ? 'health unread, which is a broken instrument not a pass'
+        : `lowest ${lowest} of ${HERO_MAX_HP} over ${health.length} frame(s)`);
 
     check(frames.some((frame) => frame.shown === true),
       'and her bubble was actually open, so there was a conversation to protect',

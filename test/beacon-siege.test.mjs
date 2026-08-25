@@ -25,6 +25,7 @@ import test from 'node:test';
 import {
   ATTACK_HALF_ARC_RADIANS,
   ATTACK_REACH,
+  BASE_HERO_DAMAGE,
   HERO_MAX_HP,
   RESPAWN_SECONDS,
   SWING_SECONDS,
@@ -37,9 +38,12 @@ import {
   WARDEN_ATTACK_COOLDOWN_PHASE2_SECONDS,
   WARDEN_ATTACK_COOLDOWN_SECONDS,
   WARDEN_DEATH_SECONDS,
+  WARDEN_DAMAGE_PER_HIT,
   WARDEN_MAX_HP,
   WARDEN_MELEE_RANGE,
   WARDEN_OVERHEAD_CONTACT_SECONDS,
+  WARDEN_PHASE2_FRACTION,
+  WARDEN_PHASE3_FRACTION,
   WARDEN_PULSE_CONTACT_SECONDS,
   WARDEN_PULSE_RANGE,
   WARDEN_SPEED,
@@ -55,6 +59,9 @@ import {
   stepSiege,
   wardenPhaseFor,
 } from '../public/src/world/beaconSiege.js';
+// The catalogue, so the blow-count promises below are measured against the weapons the game actually
+// ships rather than against numbers typed here (GQ-007).
+import { STARTER_SWORD_ID, WILDWOOD_BLADE_ID, damageFor } from '../public/src/progression/items.js';
 
 const STEP = 1 / 60;
 
@@ -257,7 +264,7 @@ test('the overhead lands on a target still in front and in range at contact time
   });
   assert.equal(after.warden.mode, 'overhead');
   assert.deepEqual(events.filter((e) => e.type === 'warden-hurt-hero'), [
-    { type: 'warden-hurt-hero', remaining: HERO_MAX_HP - 1, heroId: 'A' },
+    { type: 'warden-hurt-hero', remaining: HERO_MAX_HP - WARDEN_DAMAGE_PER_HIT, heroId: 'A' },
   ]);
 });
 
@@ -335,7 +342,7 @@ test('the pulse ignores facing but respects its range', () => {
   const { state: after, events } = run(state, WARDEN_PULSE_CONTACT_SECONDS + 0.1, positions);
   assert.equal(after.warden.mode, 'pulse');
   assert.deepEqual(events.filter((e) => e.type === 'warden-hurt-hero'), [
-    { type: 'warden-hurt-hero', remaining: HERO_MAX_HP - 1, heroId: 'A' },
+    { type: 'warden-hurt-hero', remaining: HERO_MAX_HP - WARDEN_DAMAGE_PER_HIT, heroId: 'A' },
   ], 'behind-and-near is hit, ahead-and-far is spared: distance is the ONLY answer to the ring');
   assert.equal(after.heroes.B.hp, HERO_MAX_HP);
   assert.equal(after.warden.pulseQueued, false, 'the phase-entry pulse is spent, not repeated');
@@ -343,27 +350,37 @@ test('the pulse ignores facing but respects its range', () => {
 
 // ── phases ──────────────────────────────────────────────────────────────────────────────────────
 
+// Every probe is a FRACTION of WARDEN_MAX_HP rather than a hit-point literal. It used to read
+// `wardenPhaseFor(8) === 1` against a 12hp boss, which was correct and became meaningless the moment
+// P2 rescaled the Warden to 120: 8 is deep in phase 3 there, and the test would have gone red for a
+// reason that has nothing to do with the ladder it is guarding (GQ-018 -- do not let a probe be
+// written in units the constant under test can move out from under).
 test('the phase ladder sits exactly on its fractions, inclusive at the lines', () => {
   assert.equal(wardenPhaseFor(WARDEN_MAX_HP), 1);
-  assert.equal(wardenPhaseFor(8), 1);
+  assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.7), 1);
   assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.6 + 0.001), 1);
   assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.6), 2, 'AT 60% is already phase 2');
-  assert.equal(wardenPhaseFor(7), 2);
-  assert.equal(wardenPhaseFor(4), 2);
+  assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.55), 2);
+  assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.3), 2);
   assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.25), 3, 'AT 25% is already phase 3');
-  assert.equal(wardenPhaseFor(3), 3);
+  assert.equal(wardenPhaseFor(WARDEN_MAX_HP * 0.2), 3);
   assert.equal(wardenPhaseFor(1), 3);
 });
 
 test('crossing a phase line raises warden-phase and queues the announcing pulse', () => {
-  const into2 = landBlow(fightState({ wardenHp: 8, warden: PASSIVE }));
+  // Started one base blow ABOVE each line so that landing exactly one blow crosses it -- derived from
+  // the fraction and the blow, for the same reason the ladder probes above are fractions.
+  const justAbove = (fraction) => Math.ceil(WARDEN_MAX_HP * fraction) + BASE_HERO_DAMAGE;
+
+  const startedAt2 = justAbove(WARDEN_PHASE2_FRACTION);
+  const into2 = landBlow(fightState({ wardenHp: startedAt2, warden: PASSIVE }));
   assert.deepEqual(into2.events.filter((e) => e.type === 'warden-phase'), [{ type: 'warden-phase', phase: 2 }]);
   assert.deepEqual(into2.events.filter((e) => e.type === 'warden-hit'), [
-    { type: 'warden-hit', remaining: 7, heroId: 'A' },
+    { type: 'warden-hit', remaining: startedAt2 - BASE_HERO_DAMAGE, heroId: 'A' },
   ]);
   assert.equal(into2.state.warden.pulseQueued, true);
 
-  const into3 = landBlow(fightState({ wardenHp: 4, warden: PASSIVE }));
+  const into3 = landBlow(fightState({ wardenHp: justAbove(WARDEN_PHASE3_FRACTION), warden: PASSIVE }));
   assert.deepEqual(into3.events.filter((e) => e.type === 'warden-phase'), [{ type: 'warden-phase', phase: 3 }]);
   assert.equal(into3.state.warden.phase, 3);
 });
@@ -628,18 +645,22 @@ test('the Warden is slower than the wolf, and the scariest move has the longest 
 // ── THE BLADE HAS TO CUT DEEPER ────────────────────────────────────────────────────────────────
 //
 // G4 hands a child the Wildwood Blade at the end of the longest promise in the game, an unlock card
-// turns over, and the Hero screen prints "2 DAMAGE" off progression/items.js. For two chapters
-// nothing read that number: every blow anywhere took off a flat WOLF_DAMAGE_PER_HIT, so the reward
-// swung exactly like the sword they started with. These pin the fix at the rules layer, where it is
-// the only place it can be checked without a browser.
+// turns over, and the Hero screen prints its damage off progression/items.js. For two chapters
+// nothing read that number: every blow anywhere took off a flat one point, so the reward swung
+// exactly like the sword they started with. These pin the fix at the rules layer, where it is the
+// only place it can be checked without a browser.
+//
+// Written in BLOW COUNTS rather than hit points throughout, which is what let P2's rescale (the
+// Warden 12 -> 120, the starter sword 1 -> 10) pass through them unchanged in meaning: twelve blows
+// solo and six with the Blade are the promises, and they are the same promises at either scale.
 
 test('a sharper sword takes the Warden down in fewer blows', () => {
-  const blows = (weaponDamage) => {
-    // The hero is given more hearts than the fight can take off, so this measures ONE thing --
+  const blows = (heroDamage) => {
+    // The hero is given a bigger body than the fight can take off, so this measures ONE thing --
     // blows to kill -- rather than incidentally measuring going down, respawning and the
     // wipe-reset rule, all of which have their own tests above.
-    let state = fightState({ heroes: { A: { hp: 99 } } });
-    const heroes = { A: { position: { x: 0, z: 1.2 }, heading: Math.PI, weaponDamage } };
+    let state = fightState({ heroes: { A: { hp: WARDEN_MAX_HP * 10 } } });
+    const heroes = { A: { position: { x: 0, z: 1.2 }, heading: Math.PI, heroDamage } };
     let landed = 0;
     for (let attempt = 0; attempt < 400 && state.warden.mode !== 'dying'; attempt += 1) {
       if (!canSiegeHeroAttack(state, 'A')) { state = run(state, STEP, heroes).state; continue; }
@@ -648,25 +669,29 @@ test('a sharper sword takes the Warden down in fewer blows', () => {
       state = run(state, SWING_SECONDS, heroes).state;
       if (state.warden.hp < before) landed += 1;
     }
-    assert.equal(state.warden.mode, 'dying', `the Warden survived the fight at ${weaponDamage} damage`);
+    assert.equal(state.warden.mode, 'dying', `the Warden survived the fight at ${heroDamage} damage`);
     return landed;
   };
-  const withStarter = blows(1);
-  const withBlade = blows(2);
-  assert.equal(withStarter, WARDEN_MAX_HP, 'the starter sword is one heart a blow, as it always was');
-  assert.equal(withBlade, Math.ceil(WARDEN_MAX_HP / 2), 'the Blade is worth two');
+  const starterDamage = damageFor(STARTER_SWORD_ID);
+  const bladeDamage = damageFor(WILDWOOD_BLADE_ID);
+  const withStarter = blows(starterDamage);
+  const withBlade = blows(bladeDamage);
+  assert.equal(withStarter, Math.ceil(WARDEN_MAX_HP / starterDamage),
+    'the starter sword takes the blows it always took');
+  assert.equal(withBlade, Math.ceil(WARDEN_MAX_HP / bladeDamage), 'the Blade is worth two of them');
   assert.ok(withBlade < withStarter, 'and a child can FEEL the difference, which is the whole point');
 });
 
 test('a swing that names no weapon still lands, for exactly what it always did', () => {
   // The regression that matters most: every caller written before equipment was wired up -- and
-  // every test in this repo that drives the seam directly -- passes no weaponDamage at all. If that
+  // every test in this repo that drives the seam directly -- passes no heroDamage at all. If that
   // ever resolved to zero, swords would silently stop working for all of them.
   const heroes = { A: { position: { x: 0, z: 1.2 }, heading: Math.PI } };
   let state = fightState();
   state = swing(state);
   state = run(state, SWING_SECONDS, heroes).state;
-  assert.equal(state.warden.hp, WARDEN_MAX_HP - 1, 'an unnamed weapon is the starter sword, not nothing');
+  assert.equal(state.warden.hp, WARDEN_MAX_HP - BASE_HERO_DAMAGE,
+    'an unnamed weapon is a Level-1 hero with the starter sword, not nothing');
 });
 
 test('but a sharper sword does NOT crack a cold seal any faster', () => {
@@ -695,7 +720,7 @@ test('but a sharper sword does NOT crack a cold seal any faster', () => {
     },
     beaconLit: false,
   };
-  const heroes = { A: { position: { x: 0, z: 0.9 }, heading: 0, weaponDamage: 99 } };
+  const heroes = { A: { position: { x: 0, z: 0.9 }, heading: 0, heroDamage: WARDEN_MAX_HP } };
   let state = swing(base);
   state = run(state, SWING_SECONDS, heroes).state;
   assert.equal(state.seals[0].blows, 1, 'one blow is one blow, however sharp');

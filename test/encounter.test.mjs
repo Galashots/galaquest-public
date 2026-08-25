@@ -16,7 +16,8 @@ import {
   SWING_CONTACT_SECONDS,
   WOLF_BITE_CONTACT_SECONDS,
   SWING_SECONDS,
-  WOLF_DAMAGE_PER_HIT,
+  BASE_HERO_DAMAGE,
+  WOLF_BITE_DAMAGE,
   WOLF_MAX_HP,
 } from '../public/src/combat/encounter.js';
 
@@ -61,27 +62,26 @@ test('the blade lands part way through the swing, not on the button press', () =
   assert.equal(encounter.wolf.hp, WOLF_MAX_HP, 'nothing has happened yet');
 
   advance(encounter, SWING_CONTACT_SECONDS);
-  assert.equal(encounter.wolf.hp, WOLF_MAX_HP - 1, 'the blade arrived');
+  assert.equal(encounter.wolf.hp, WOLF_MAX_HP - BASE_HERO_DAMAGE, 'the blade arrived');
 });
 
-// So a floating damage number reads WOLF_DAMAGE_PER_HIT off the event rather than a hardcoded "1"
-// baked into the presenter -- if the number ever stops being one point per swing (the owner's own noted
-// future: HP and damage moving to level/armour-derived stats), the number on screen follows the
-// rules layer for free instead of a second constant silently going stale next to it.
+// So a floating damage number reads the blow's real worth off the event rather than a constant baked
+// into the presenter. That future arrived: P2 makes damage level-derived and rescales the fight, and
+// the number on screen followed for free instead of a second constant silently going stale beside it.
 test('a landed hit reports how much damage it did, not just what remains', () => {
   const encounter = createEncounter({ wolfSpawn: { x: 0, z: 1 } });
   encounter.requestAttack();
   advance(encounter, SWING_CONTACT_SECONDS);
   const hit = encounter.drainEvents().find((event) => event.type === 'wolf-hit');
   assert.ok(hit, 'expected a wolf-hit event');
-  assert.equal(hit.damage, WOLF_DAMAGE_PER_HIT);
+  assert.equal(hit.damage, BASE_HERO_DAMAGE);
 });
 
-test('one swing costs one hit point however long it runs', () => {
+test('one swing costs one blow\'s worth however long it runs', () => {
   const encounter = createEncounter({ wolfSpawn: { x: 0, z: 1 } });
   encounter.requestAttack();
   advance(encounter, SWING_SECONDS * 2);
-  assert.equal(encounter.wolf.hp, WOLF_MAX_HP - 1, 'a swing must not tick damage per frame');
+  assert.equal(encounter.wolf.hp, WOLF_MAX_HP - BASE_HERO_DAMAGE, 'a swing must not tick damage per frame');
 });
 
 // Rewritten 2026-08-13. It used to assert the MECHANISM -- that a separate cooldown blocked the next
@@ -202,7 +202,12 @@ test('a hero who goes down mid-swing drops the blow instead of landing it', () =
     // staggering the wolf so its bite never arrives and the hero never goes down. The swing has to
     // start late enough in the bite that the JAWS land first: after
     // WOLF_BITE_CONTACT_SECONDS - SWING_CONTACT_SECONDS have already elapsed.
-    const oneBiteFromDown = encounter.hero.hp === 1;
+    // DERIVED from the bite, not the literal 1 this used to be. On the pre-P2 scale a bite cost one
+    // point and "one bite from down" and "hp === 1" were the same sentence; after the rescale a hero
+    // goes 30 -> 20 -> 10 -> 0 and never passes through 1, so the probe would have waited for a state
+    // that cannot occur and the loop would have run out having proved nothing (it would still have
+    // failed loudly, on `sawDrop`, which is why that assertion is there).
+    const oneBiteFromDown = encounter.hero.hp > 0 && encounter.hero.hp <= WOLF_BITE_DAMAGE;
     const jawsAboutToLand = encounter.wolf.mode === 'bite'
       && !encounter.wolf.biteLanded
       && encounter.wolf.modeSeconds >= WOLF_BITE_CONTACT_SECONDS - SWING_CONTACT_SECONDS + STEP;
@@ -229,10 +234,13 @@ test('a miss is reported as a miss rather than silently doing nothing', () => {
   assert.equal(encounter.wolf.hp, WOLF_MAX_HP);
 });
 
-test('WOLF_MAX_HP landed hits kill the wolf, and it stays dead', () => {
+test('enough landed hits kill the wolf, and it stays dead', () => {
   const encounter = createEncounter({ wolfSpawn: { x: 0, z: 1 } });
 
-  for (let blow = 0; blow < WOLF_MAX_HP; blow += 1) {
+  // Derived from the two constants rather than counted out: P2 rescaled both, and a loop that ran
+  // WOLF_MAX_HP times would now swing thirty times at a wolf that dies on the third.
+  const blowsToKill = Math.ceil(WOLF_MAX_HP / BASE_HERO_DAMAGE);
+  for (let blow = 0; blow < blowsToKill; blow += 1) {
     encounter.requestAttack();
     advance(encounter, SWING_SECONDS + ATTACK_COOLDOWN_SECONDS + 0.02);
   }
@@ -270,13 +278,13 @@ test('the wolf closes the distance instead of waiting to be walked into', () => 
   assert.equal(encounter.wolf.mode, 'walk');
 });
 
-test('a wolf that reaches the hero bites, and the bite costs a hit point', () => {
+test('a wolf that reaches the hero bites, and the bite costs a bite\'s worth', () => {
   const encounter = createEncounter({ wolfSpawn: { x: 0, z: 1.1 } });
 
   advance(encounter, 1.2);
   const kinds = encounter.drainEvents().map((event) => event.type);
   assert.ok(kinds.includes('hero-hurt'), `expected a bite, saw ${kinds.join(', ')}`);
-  assert.equal(encounter.hero.hp, HERO_MAX_HP - 1);
+  assert.equal(encounter.hero.hp, HERO_MAX_HP - WOLF_BITE_DAMAGE);
 });
 
 test('a downed hero respawns with the encounter reset, so the loop can repeat', () => {

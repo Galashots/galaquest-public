@@ -69,7 +69,15 @@ export const HARNESSES = {
   // never about how any of it looks. Its captures are the human evidence; its exit code is not a
   // claim that anybody has looked at them.
   'drive-beacon-siege': { gate: true, why: 'the whole Beacon arc played end to end: seals, Warden, ignition, and the objective chain' },
-  'drive-ranger': { gate: true, why: 'the Beacon is answered: Wren is standing in the village because of it, takes her brother\'s satchel, and the charm puts a fourth heart on the bar that survives a reload' },
+  // P2's own end-to-end proof: a child one kill short of the Lantern earns it for real, watches the
+  // XP meter complete, LEVELS UP, and walks away with a bigger body and a harder blow that BOTH
+  // fights actually use -- then reloads and finds all of it still there with no ceremony replayed.
+  // A GATE, and firmly so: every check in it is a question about behaviour a script can answer
+  // honestly (did the level land, did the fight take the bigger blow, did hydration stay quiet),
+  // never about how any of it looks. Its captures are the human evidence; its exit code is not a
+  // claim that anybody has looked at them.
+  'drive-first-level-up': { gate: true, why: 'the first Hero level earned on the real path: Lantern -> 100 XP -> Level 2 -> bigger body and harder blow in both fights, surviving a reload without replaying the ceremony' },
+  'drive-ranger': { gate: true, why: 'the Beacon is answered: Wren is standing in the village because of it, takes her brother\'s satchel, and the charm grows the health bar in a way that survives a reload' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -86,6 +94,6 @@ export const SUITES = {
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
-    'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue',
+    'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
   ],
 };

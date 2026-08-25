@@ -23,12 +23,25 @@
 //     none of which reference each other. It has to be noticed without looking at a HUD element in a
 //     corner, which is exactly the gap this project had: hero-hurt previously produced no feedback of
 //     any kind. #hero-hurt-flash in index.html is that convention.
-//   - HEALTH, for a game aimed at young players. Zelda's row of hearts (Zelda Wiki's
-//     "Health" page, Ocarina of Time's heart-container UI, Tears of the Kingdom's heart-container
-//     articles) is discrete, countable icons, filled or not, rather than WoW's numeric/percentage
-//     bar. WoW's own bar convention fits a large, continuously-changing health value; this game's
-//     HERO_MAX_HP is a small fixed integer (3), which is exactly the shape hearts were built for, and
-//     a filled-or-not icon reads without reading anything. Chosen over a bar for that reason.
+//   - HEALTH, for a game aimed at young players. The original research here compared Zelda's row of
+//     hearts (Zelda Wiki's "Health" page, Ocarina of Time's heart-container UI, Tears of the Kingdom's
+//     heart-container articles) -- discrete, countable icons, filled or not -- against WoW's
+//     numeric/percentage bar, and chose hearts, for a reason it stated precisely: "WoW's own bar
+//     convention fits a large, continuously-changing health value; this game's HERO_MAX_HP is a small
+//     fixed integer (3), which is exactly the shape hearts were built for".
+//
+//     THAT REASON EXPIRED, and the same research is what now selects the other answer. P2 makes every
+//     Hero level grant max HP (docs/product/PROGRESSION_CONTRACT_V0.md, OWNER-LOCKED, which supersedes
+//     the old four-heart ceiling in as many words), so HERO_MAX_HP is no longer small and no longer
+//     fixed -- a Level-20 hero has 125 and a Level-1000 hero has 5,025. Drawing that as countable
+//     icons is not a heart row, it is a wall of dots nobody designed. So the convention the reference
+//     work already recorded for exactly this shape applies: a bar that visibly depletes, with the
+//     number as backup rather than as the primary signal (wowinterface.com nameplate/unit-frame
+//     screenshots, e.g. a boss health bar reading "311K (68%)"). The heart is KEPT as the icon beside
+//     it, because what it says -- "this is your life" -- was never the part that stopped working.
+//
+//     This is GQ-002's sharper form and worth naming: the old paragraph was not a stale fact, it was
+//     a superseded ARGUMENT, and a reader trusting it would have rebuilt the heart row.
 //   - A MISS. WoW shows a grey "Miss"/"Dodge" over the target -- text, the exact thing a
 //     young player will not read mid-fight. Fortnite's hit marker suggests the wordless
 //     alternative: confirmation appears instantly at the point of the PLAYER'S OWN action (the
@@ -105,9 +118,27 @@ export function createEncounterFeedback(callbacks) {
  * can pass a mid-frame hp of -1 or a post-respawn value without checking first -- the same
  * defensiveness swingPose() uses in character/swing.js for an out-of-range progress value.
  */
-export function heartsForHp(hp, maxHp) {
-  const filled = Math.max(0, Math.min(maxHp, Math.round(hp)));
-  return Array.from({ length: maxHp }, (_, index) => index < filled);
+/**
+ * WHAT THE HEALTH READOUT SHOWS: a clamped current, a clamped max, and the fraction between them.
+ *
+ * Replaces heartsForHp, which returned one boolean per pip and was scoped to a body that could not
+ * exceed four. The clamping is the part worth keeping and the part worth testing: main.js calls this
+ * from a frame loop, so `hp` can legitimately arrive mid-reconciliation as a negative, as a value
+ * above the max the caller has not caught up to yet, or as a fraction of a point -- and none of
+ * those may become a bar that overflows its track or a number a child reads as "-3".
+ *
+ * `fraction` is the ONLY float here and it is presentation-only, exactly the split
+ * progression/levels.js draws for its own `progress`: the two numbers a child actually reads are
+ * exact integers, so nothing that has to be counted is ever read off a rounded value.
+ *
+ * A max below 1 is clamped to 1 rather than allowed to divide by zero: there is no legal body of
+ * size zero (combat/encounter.js's reconcileMaxHp already refuses one), so this is guarding against
+ * a caller with no state yet rather than against a real hero.
+ */
+export function healthReadout(hp, maxHp) {
+  const max = Number.isFinite(maxHp) ? Math.max(1, Math.round(maxHp)) : 1;
+  const current = Number.isFinite(hp) ? Math.max(0, Math.min(max, Math.round(hp))) : 0;
+  return { current, max, fraction: current / max };
 }
 
 /**

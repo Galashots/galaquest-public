@@ -20,6 +20,7 @@ import {
   DURABLE_FACT_TYPES,
   latestEquippedWeaponId,
   parseXpFactAmount,
+  totalXpFromFacts,
 } from '../public/src/progression/facts.js';
 
 // v2, GP1: one nullable `value` column added for 'weapon-equipped' events, which need to carry
@@ -228,6 +229,20 @@ export function openRewardStore(path) {
   const ownedItemIdsStmt = db.prepare(
     "SELECT DISTINCT value FROM reward_events WHERE guest_id = ? AND type = 'gear-owned'",
   );
+  // P2: this guest's XP rows, fetched so the shared fold can be applied to them.
+  //
+  // Deliberately the same shape equipFactsStmt uses just above, and for the same reason: the ARITHMETIC
+  // is not this file's to own. A SUM() in SQL cannot be the answer -- the amount rides in the TEXT
+  // `value` column every other payload fact uses, and public/src/progression/facts.js's
+  // parseXpFactAmount is narrow on purpose (no sign, no leading zero, no exponent, strictly positive),
+  // so SQLite's own string-to-number coercion would happily count "-40" and "1e6" as amounts this
+  // codebase refuses everywhere else. Fetching the rows and folding them through the shared reader is
+  // what keeps the disk and the device answering one question one way (GQ-007 hit 7).
+  //
+  // A handful of rows per guest -- one, today -- so this costs nothing worth a second definition.
+  const xpFactsStmt = db.prepare(
+    "SELECT value FROM reward_events WHERE guest_id = ? AND type = 'xp-earned'",
+  );
   // GP3-0: unlike every query above, NOT guest-scoped -- this is the restart-coherence fix's whole
   // read side. net/gameServer.mjs's in-memory cart lootState resets on every process restart, but
   // these rows do not; a pickup id that already has a coin-earned/shard-earned row here (awarded to
@@ -425,6 +440,16 @@ export function openRewardStore(path) {
     return coinsStmt.get(guestId).c;
   }
 
+  /** This guest's total XP, folded from their rows through the one shared law -- never stored as a
+   *  mutable counter, which is the property the whole append-only design rests on
+   *  (docs/product/PROGRESSION_CONTRACT_V0.md, reward-basis invariant 5). */
+  function xpFor(guestId) {
+    return totalXpFromFacts(xpFactsStmt.all(guestId).map((row) => ({
+      type: 'xp-earned',
+      value: row.value ?? undefined,
+    })));
+  }
+
   function shardsFor(guestId) {
     return shardsStmt.get(guestId).c;
   }
@@ -503,6 +528,7 @@ export function openRewardStore(path) {
     ownedItemIdsFor,
     coinsFor,
     shardsFor,
+    xpFor,
     creditedLootIds,
     totalCoinsEarned,
     totalShardsEarned,

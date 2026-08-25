@@ -47,7 +47,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STARTER_SWORD_ID, WILDWOOD_BLADE_ID } from '../../public/src/progression/items.js';
+import { STARTER_SWORD_ID, WILDWOOD_BLADE_ID, damageFor } from '../../public/src/progression/items.js';
 import { swatchFor } from '../../public/src/progression/heroScreen.js';
 import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 import { DEFAULT_DISTANCE, MIN_DISTANCE } from '../../public/src/camera/follow.js';
@@ -433,8 +433,16 @@ for (let i = 0; i < 20 && compareText.trim() === ''; i += 1) {
   // eslint-disable-next-line no-await-in-loop
   compareText = await page.eval("document.querySelector('#hero-item-compare').textContent");
 }
-check('selecting the Wildwood Blade shows the plan\'s own worked comparison, 1 -> 2 DAMAGE',
-  compareText.replace(/\s+/g, ' ').trim() === '1 → 2 DAMAGE', JSON.stringify(compareText));
+// DERIVED, NOT TYPED. This pinned the literal string `1 → 2 DAMAGE` -- the plan's own worked example
+// -- and P2 falsified it twice over in one commit: the catalogue was rescaled to 10/20, and the card
+// gained the POWER clause the Hero surface owes the contract. A harness that hard-codes a rendered
+// string is the reader GQ-017 is about: one directory gets swept, the other keeps asserting the old
+// world. Both halves are now read off the same authorities the screen itself renders from.
+const expectedCompare = `${damageFor(STARTER_SWORD_ID)} → ${damageFor(WILDWOOD_BLADE_ID)} DAMAGE`;
+check('selecting the Wildwood Blade shows the catalogue\'s own comparison and what it does to POWER',
+  compareText.replace(/\s+/g, ' ').trim().startsWith(expectedCompare)
+    && /POWER \+/.test(compareText),
+  JSON.stringify(compareText));
 await shot('portrait-compare');
 
 await clickSelector('#hero-equip-button');
@@ -515,8 +523,13 @@ await clickSelector(`[data-item-id="${STARTER_SWORD_ID}"]`);
 await sleep(100);
 await shot('landscape-compare');
 const landscapeCompare = await page.eval("document.querySelector('#hero-item-compare').textContent");
+// The other direction, and the POWER clause has to follow it: the contract's sidegrade rule says a
+// change that lowers overall POWER must not be labelled as strictly better, so a downgrade reads with
+// a MINUS. Same derivation as the upgrade above.
+const expectedDowngrade = `${damageFor(WILDWOOD_BLADE_ID)} → ${damageFor(STARTER_SWORD_ID)} DAMAGE`;
 check('landscape: selecting the Starter Sword while the Blade is equipped shows a DOWNGRADE comparison',
-  landscapeCompare.replace(/\s+/g, ' ').trim() === '2 → 1 DAMAGE', JSON.stringify(landscapeCompare));
+  landscapeCompare.replace(/\s+/g, ' ').trim().startsWith(expectedDowngrade)
+    && /POWER -/.test(landscapeCompare), JSON.stringify(landscapeCompare));
 
 await clickSelector('#hero-equip-button');
 // Same reasoning as the equip-to-Blade poll above: wait for the accent, not just `equipped`.

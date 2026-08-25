@@ -28,6 +28,8 @@ import {
   lanternUnlockEventId,
 } from '../public/src/rewards/offlineProgress.js';
 import { createProfileStore } from '../public/src/progression/profiles.js';
+import { LANTERN_UNLOCK_XP, lanternXpEventId } from '../public/src/progression/facts.js';
+import { levelForXp } from '../public/src/progression/levels.js';
 
 const PROFILE = 'p-offline-1111-2222-3333';
 
@@ -149,8 +151,8 @@ test('three marks across two sessions unlock the lantern, and the unlock is dura
   assert.equal(second.lanternUnlocked(), true, 'the third mark unlocks the lantern across sessions');
   assert.deepEqual(
     raised.map((event) => event.type),
-    ['mark-earned', 'lantern-unlocked'],
-    'and the ceremony is raised on the frame it becomes true',
+    ['mark-earned', 'lantern-unlocked', 'xp-earned'],
+    'and the ceremony is raised on the frame it becomes true -- P2 adds the XP the unlock is worth',
   );
 
   const third = pageLoad(storage);
@@ -168,6 +170,111 @@ test('three marks across two sessions unlock the lantern, and the unlock is dura
   );
   assert.equal(lanternUnlockEventId(PROFILE), `lantern-unlocked:${PROFILE}`,
     'the unlock id is derived from the profile alone, so it is the same one every reload');
+});
+
+// ── P2: the Lantern is worth a level, offline too ───────────────────────────────────────────────
+//
+// The brief requires the offline/local path to "produce the same logical one-time progression
+// result" as the server. It is the same LAW rather than a matching implementation --
+// progression/facts.js decides both the amount and the eventId, and neither side knows the other
+// exists -- so what is actually worth testing here is the DURABILITY and the IDEMPOTENCY, which are
+// this file's business, on the same reload machinery the marks above use.
+
+test('the offline Lantern unlock earns exactly one 100-XP fact, and it lands a child on Level 2', () => {
+  const storage = deviceStorage();
+  const loaded = pageLoad(storage);
+
+  loaded.killWolf();
+  loaded.killWolf();
+  assert.equal(loaded.profiles.stateFor(PROFILE).xp, 0, 'marks alone are not XP -- R1 owns combat XP');
+
+  const raised = loaded.killWolf();
+  const xpEvents = raised.filter((event) => event.type === 'xp-earned');
+  assert.equal(xpEvents.length, 1, 'exactly one XP fact, on the frame the Lantern unlocks');
+  assert.equal(xpEvents[0].value, String(LANTERN_UNLOCK_XP));
+  assert.equal(xpEvents[0].eventId, lanternXpEventId(lanternUnlockEventId(PROFILE)),
+    'named from the Lantern that earned it, so it cannot be minted twice');
+
+  const state = loaded.profiles.stateFor(PROFILE);
+  assert.equal(state.xp, LANTERN_UNLOCK_XP);
+  assert.equal(levelForXp(state.xp), 2, 'the award IS the first level, which is why it is derived');
+});
+
+test('the XP is written in the SAME journal call as the unlock, so neither can land alone', () => {
+  // The failure the batching exists for: a Lantern that is permanently present with XP that can
+  // never arrive, because the unlock is a latch and will never fire again. Proved by observing that
+  // the journal never passes through a state where one is present and the other is not.
+  const storage = deviceStorage();
+  const loaded = pageLoad(storage);
+  loaded.killWolf();
+  loaded.killWolf();
+
+  const seen = [];
+  const realRecord = loaded.profiles.recordFacts;
+  loaded.profiles.recordFacts = (profileId, facts) => {
+    const result = realRecord(profileId, facts);
+    seen.push(loaded.profiles.journalFor(profileId).map((fact) => fact.type));
+    return result;
+  };
+  loaded.killWolf();
+
+  for (const snapshot of seen) {
+    const hasLantern = snapshot.includes('lantern-unlocked');
+    const hasXp = snapshot.includes('xp-earned');
+    assert.equal(hasLantern, hasXp,
+      `the journal was observed holding one without the other: ${JSON.stringify(snapshot)}`);
+  }
+  assert.ok(seen.some((snapshot) => snapshot.includes('xp-earned')), 'setup: the XP was written at all');
+});
+
+test('replaying the unlock across reloads never adds a second hundred XP', () => {
+  const storage = deviceStorage();
+  const first = pageLoad(storage);
+  first.killWolf();
+  first.killWolf();
+  first.killWolf();
+  assert.equal(first.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP);
+
+  // Four more reloads, each with another kill: the unlock latch, the derived id and the journal's own
+  // idempotency all have to hold, and the total must not move by a single point.
+  for (let reload = 0; reload < 4; reload += 1) {
+    const later = pageLoad(storage);
+    const raised = later.killWolf();
+    assert.deepEqual(raised.map((event) => event.type), ['mark-earned'],
+      `reload ${reload + 1} re-raised a beat the child already had`);
+    assert.equal(later.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP,
+      `reload ${reload + 1} moved a total that must not move`);
+  }
+
+  const journal = pageLoad(storage).profiles.journalFor(PROFILE);
+  assert.equal(journal.filter((fact) => fact.type === 'xp-earned').length, 1,
+    'one lantern, one XP row, however many sessions asked');
+  assert.equal(levelForXp(pageLoad(storage).profiles.stateFor(PROFILE).xp), 2,
+    'and the child is still Level 2, not Level 3');
+});
+
+test('a child who already met a server is not paid twice for one lantern', () => {
+  // The two-identity case, and the one a naive "derive an id from the unlock" would get wrong: a
+  // profile can legitimately carry the DEVICE's `lantern-unlocked:<profileId>` and the SERVER's
+  // `lantern:<guestId>` at once, because the two stores mint their own names for the same latch. One
+  // child, one unlock, one award.
+  const storage = deviceStorage();
+  const seeded = pageLoad(storage);
+  const serverLanternId = 'lantern:some-guest-id';
+  seeded.profiles.recordFacts(PROFILE, [
+    { eventId: serverLanternId, type: 'lantern-unlocked' },
+    { eventId: lanternXpEventId(serverLanternId), type: 'xp-earned', value: String(LANTERN_UNLOCK_XP) },
+  ]);
+  assert.equal(seeded.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP, 'setup: paid once already');
+
+  seeded.killWolf();
+  seeded.killWolf();
+  const raised = seeded.killWolf();
+
+  assert.equal(raised.filter((event) => event.type === 'xp-earned').length, 0,
+    'the offline path must not pay a second time for a lantern the server already paid for');
+  assert.equal(seeded.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP);
+  assert.equal(levelForXp(seeded.profiles.stateFor(PROFILE).xp), 2, 'Level 2, not Level 3');
 });
 
 test('two children on one tablet do not share an offline mark', () => {
