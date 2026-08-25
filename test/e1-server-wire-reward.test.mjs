@@ -71,6 +71,21 @@ test('protocol v4 rejects malformed, duplicate, unsupported-kind, and invalid-mo
   ]), ProtocolError);
   assert.throws(() => decodeEncounter([enemy({ enemyId: 'spriggan-1', kind: 'spriggan' })]), ProtocolError);
   assert.throws(() => decodeEncounter([enemy({ mode: 'teleporting' })]), ProtocolError);
+
+  // The builder has a temporary C2 input bridge for older in-process callers, but literal v4 bytes
+  // are collection-only. Prove the decoder itself will not guess an old singular Wolf into v4.
+  assert.throws(() => decode(encode({
+    v: PROTOCOL_VERSION,
+    type: 'snapshot',
+    tick: 1,
+    players: [],
+    encounter: {
+      revision: 1,
+      wolf: { x: 0, z: 0, heading: 0, hp: 3, mode: 'idle', targetId: null },
+      heroes: {},
+    },
+    events: [],
+  })), ProtocolError);
 });
 
 test('server default snapshot still contains exactly the shipped wolf-1 and no singular wire slot', () => {
@@ -80,7 +95,8 @@ test('server default snapshot still contains exactly the shipped wolf-1 and no s
   assert.equal(snapshot.enemies.length, 1);
   assert.equal(snapshot.enemies[0].enemyId, 'wolf-1');
   assert.equal(snapshot.enemies[0].kind, 'wolf');
-  assert.equal(Object.hasOwn(snapshot, 'wolf'), false);
+  assert.equal(Object.keys(snapshot).includes('wolf'), false, 'derived C2 bridge is not enumerable/wire state');
+  assert.equal(JSON.stringify(snapshot).includes('\"wolf\":'), false, 'singular Wolf is absent from serialized server state');
 });
 
 test('server fixture can own two stable ordinary enemies without changing default population', () => {
