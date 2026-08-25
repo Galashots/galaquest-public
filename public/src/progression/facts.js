@@ -38,6 +38,8 @@
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
+import { LEVEL_ONE, xpToAdvanceFrom } from './levels.js';
+
 /** One profile's own earnings. `village-upgrade` and `beacon-lit` are deliberately absent: those are
  *  world facts, not one profile's earnings, and folding them into a personal state would be a
  *  category error. */
@@ -87,6 +89,110 @@ export function isDurableFactType(type) {
 
 /** The largest total XP that can be counted exactly. Past this, integers stop being integers. */
 export const MAX_TOTAL_XP = Number.MAX_SAFE_INTEGER;
+
+// ── P2: THE FIRST REAL XP SOURCE, AND ITS IDENTITY ─────────────────────────────────────────────
+//
+// P1 built the XP fact and proved it durable; nothing minted one. P2 adds exactly ONE production
+// source -- the first-time Lantern unlock -- because the vertical it has to prove is "a child earns
+// something, the meter completes, they level up and the game gets easier", and one authored award is
+// enough to prove all four. Repeatable combat XP is R1's package, learning XP is L1's, and the
+// brief is explicit that neither may arrive early through this door.
+
+/**
+ * What the Lantern unlock is worth.
+ *
+ * DERIVED from the level curve, not typed. The brief's phrase is "100 is intentionally the P1
+ * Level-2 threshold" -- so the award is not "one hundred XP that happens to be a level", it is "the
+ * first level", and writing it as a literal would be a snapshot of that relationship rather than the
+ * relationship (docs/MISTAKES.md GQ-007 hit 6). Re-tune BASE_XP_TO_ADVANCE in levels.js and the
+ * Lantern still lands a child exactly on Level 2, which is the authored beat.
+ */
+export const LANTERN_UNLOCK_XP = xpToAdvanceFrom(LEVEL_ONE);
+
+/**
+ * THE XP FACT'S NAME, derived from the Lantern fact that earned it.
+ *
+ * The whole idempotency of the award rests on this being a pure function of a durable identity that
+ * already exists. Not a timestamp, not a counter, not a row index, not the total it is about to
+ * change -- every one of those has been the wrong answer to this question at least once in this
+ * repository (GQ-014: "an identity derived from mutable state is not an identity"). The Lantern's own
+ * eventId is minted once per child and never moves, so the XP fact minted from it cannot be minted
+ * twice however many times the question is asked.
+ */
+export function lanternXpEventId(lanternEventId) {
+  return `xp:${lanternEventId}`;
+}
+
+/**
+ * The XP fact this profile has earned from its Lantern and does not yet hold -- or null.
+ *
+ * ONE FUNCTION, THREE CALLERS, and that is the design rather than a convenience. The server calls it
+ * as it writes the unlock, the offline path calls it as it journals the unlock, and both call it
+ * again on a profile they have just recovered. Because the answer is a pure function of the fact set,
+ * "award it" and "repair it" are the same operation, and asking twice is free.
+ *
+ * Two properties make it safe to call anywhere:
+ *
+ *   - ORDER-INDEPENDENT. The fact set is a grow-only union with no ordering (see unionFacts), so the
+ *     canonical Lantern is picked by sorted eventId rather than by position. Two stores holding the
+ *     same facts in different orders get the same answer.
+ *   - IDEMPOTENT ACROSS IDENTITIES. A child who unlocked the Lantern offline and then met a server
+ *     can legitimately end up carrying TWO lantern-unlocked facts under two ids -- the device's
+ *     `lantern-unlocked:<profileId>` and the server's `lantern:<guestId>`. The Lantern is a latch:
+ *     one child, one unlock, one award. So this returns null if the XP for ANY of them is already
+ *     held, rather than paying once per identity. Without that clause a reconnecting child would be
+ *     handed 200 XP for one lantern, which is the exact double-count the union law exists to prevent.
+ *
+ * @param facts any iterable of profile facts -- a journal, a store's rows, or the union of both,
+ *              INCLUDING the lantern fact that is about to be written but is not on disk yet.
+ */
+export function pendingLanternXpFact(facts) {
+  const lanternEventIds = [];
+  const xpEventIds = new Set();
+  for (const fact of facts ?? []) {
+    if (!isProfileFact(fact)) continue;
+    if (fact.type === 'lantern-unlocked') lanternEventIds.push(fact.eventId);
+    else if (fact.type === 'xp-earned') xpEventIds.add(fact.eventId);
+  }
+  if (lanternEventIds.length === 0) return null;
+  for (const lanternEventId of lanternEventIds) {
+    if (xpEventIds.has(lanternXpEventId(lanternEventId))) return null;
+  }
+  // Sorted rather than first-seen: arbitrary but TOTAL and STABLE, which is all a canonical choice
+  // has to be -- the same reasoning latestEquippedFact's own tiebreak gives.
+  lanternEventIds.sort();
+  return Object.freeze({
+    eventId: lanternXpEventId(lanternEventIds[0]),
+    type: 'xp-earned',
+    value: String(LANTERN_UNLOCK_XP),
+  });
+}
+
+/**
+ * Total XP from a set of facts. THE fold, exported so there is exactly one of it.
+ *
+ * foldFacts below computes a whole profile state and the reward store needs only this number, so
+ * without this the store would grow its own loop over the same rows with its own parser and its own
+ * clamp -- a second law for one question, which is GQ-007's hit 7 exactly ("a rule with two
+ * implementations is a constant with two copies"). The caller passes rows, this owns the arithmetic.
+ *
+ * Saturating rather than wrapping into float territory: two enormous valid amounts can sum past
+ * exact integer range, and a total that stops being an integer stops being countable. Clamping keeps
+ * it monotone and keeps it a legal input to progression/levels.js, which refuses anything else.
+ *
+ * A malformed amount is DROPPED rather than counted or thrown on: this runs against a journal
+ * recovered from device storage, so one corrupt row must degrade to "slightly less XP" and not to a
+ * hero who cannot be loaded.
+ */
+export function totalXpFromFacts(facts) {
+  let xp = 0;
+  for (const fact of facts ?? []) {
+    if (fact?.type !== 'xp-earned') continue;
+    const amount = parseXpFactAmount(fact.value);
+    if (amount !== null) xp = Math.min(MAX_TOTAL_XP, xp + amount);
+  }
+  return xp;
+}
 
 /**
  * THE one reading of what an `xp-earned` fact's value means. Returns the amount, or null.
@@ -256,7 +362,6 @@ export function foldFacts(facts, defaults = {}) {
   let marks = 0;
   let coins = 0;
   let shards = 0;
-  let xp = 0;
   let lanternUnlocked = false;
   let satchelCarried = false;
   let charmOwned = false;
@@ -273,19 +378,6 @@ export function foldFacts(facts, defaults = {}) {
       case 'gear-owned':
         if (typeof fact.value === 'string' && fact.value.length > 0) ownedItemIds.add(fact.value);
         break;
-      case 'xp-earned': {
-        // Read through the one shared parser, never with parseInt -- see parseXpFactAmount for the
-        // four ways that quietly went wrong. A malformed amount is DROPPED rather than counted or
-        // thrown on: this fold runs against a journal recovered from device storage, so a single
-        // corrupt row must degrade to "slightly less XP" and not to a hero who cannot be loaded.
-        const amount = parseXpFactAmount(fact.value);
-        // Saturating rather than wrapping into float territory: two enormous valid amounts can sum
-        // past exact integer range, and a total that stops being an integer stops being countable.
-        // Clamping keeps the total monotone and keeps it a legal input to progression/levels.js,
-        // which refuses anything that is not a safe integer.
-        if (amount !== null) xp = Math.min(MAX_TOTAL_XP, xp + amount);
-        break;
-      }
       // weapon-equipped is resolved by latestEquippedWeaponId below, not here: it is the one field
       // that is a choice rather than an accumulation, and its law is shared with the server.
       default: break;
@@ -301,6 +393,8 @@ export function foldFacts(facts, defaults = {}) {
     shards,
     satchelCarried,
     charmOwned,
-    xp,
+    // Through the shared fold, not a running total accumulated in the loop above. Same rows, same
+    // parser, same clamp as every other reader of this fact type -- see totalXpFromFacts.
+    xp: totalXpFromFacts(merged),
   };
 }

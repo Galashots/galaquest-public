@@ -27,10 +27,24 @@
 //    identity derived from mutable state is not an identity -- and a process's own counter is
 //    mutable state).
 //
+// 3. P2: AND THE LANTERN IS NOW WORTH A LEVEL. The unlock earns one `xp-earned` fact, whose amount
+//    and whose NAME both come from progression/facts.js -- the same function net/gameServer.mjs
+//    calls on the online path. The two are written in ONE recordFacts call, which is this side's
+//    equivalent of the store's applyAll transaction and exists for the same failure: a Lantern that
+//    is permanently present with XP that can never arrive, because the unlock is a latch and will
+//    never fire again. Journalling them together makes that state unreachable, and because the award
+//    is a pure function of the facts on record, calling it again on a profile that already holds it
+//    is a no-op rather than a second hundred XP.
+//
 // The server is still the only adjudicator when there IS one. Nothing here decides whether a wolf
 // died; combat/encounter.js does, exactly as before. This only writes down what was already true.
 
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from './marks.js';
+// The Lantern's XP award, from the same law the server uses. Neither side knows about the other;
+// both ask progression/facts.js what this profile is owed, which is what makes "the offline path
+// produces the same logical one-time result" true by construction rather than by two matching
+// implementations somebody has to keep in step (GQ-007 hit 7).
+import { pendingLanternXpFact } from '../progression/facts.js';
 
 /** The hero id an offline session credits its kills to. foldEvents attributes a mark to a
  *  contributor, and a solo offline hero has no server-assigned player id to be one -- so it gets a
@@ -125,8 +139,16 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
     const state = profiles.stateFor(profileId);
     if (!state.lanternUnlocked && state.marks >= MARKS_TO_UNLOCK) {
       const eventId = lanternUnlockEventId(profileId);
-      profiles.recordFacts(profileId, [{ eventId, type: 'lantern-unlocked' }]);
+      const lanternFact = { eventId, type: 'lantern-unlocked' };
+      // Computed against the profile's WHOLE journal plus the unlock about to be written, not against
+      // the unlock alone: a child who already met a server carries the server's `lantern:<guestId>`
+      // too, and the Lantern is a latch -- one child, one unlock, one award. pendingLanternXpFact
+      // answers null in that case rather than paying a second time for the same lantern.
+      const xpFact = pendingLanternXpFact([...profiles.journalFor(profileId), lanternFact]);
+      // ONE CALL, so the pair cannot half-land. See this file's header, point 3.
+      profiles.recordFacts(profileId, xpFact ? [lanternFact, xpFact] : [lanternFact]);
       raised.push({ type: 'lantern-unlocked', eventId });
+      if (xpFact) raised.push({ type: 'xp-earned', eventId: xpFact.eventId, value: xpFact.value });
     }
 
     return raised;

@@ -29,6 +29,7 @@ import {
   LEVEL_1_STARTER_STATS,
   MAX_HP_PER_LEVEL,
   WREN_CHARM_MAX_HP_BONUS,
+  levelUpTransition,
   maxHpForLevel,
   resolveHeroStats,
   resolvedHeroDamage,
@@ -236,6 +237,92 @@ test('resolveHeroStats refuses a corrupt XP total rather than folding it into Le
     assert.throws(() => resolveHeroStats({ totalXp: bad }), TypeError,
       `resolveHeroStats accepted a total XP of ${JSON.stringify(bad)}`);
   }
+});
+
+// ── WHEN A LEVEL DESERVES A CEREMONY ────────────────────────────────────────────────────────────
+//
+// docs/MISTAKES.md: "Hydration restores state; it must not replay the ceremony that created it." A
+// level is folded from durable facts, so the FIRST frame of every session already knows it -- and a
+// presenter that treated "I did not know, now I do" as a rise would fire LEVEL UP at a returning
+// child every single time they opened the game.
+
+test('a presenter that has never shown a level ADOPTS it silently', () => {
+  for (const unseen of [null, undefined]) {
+    assert.deepEqual(levelUpTransition(unseen, 1), { celebrate: false, from: null, to: 1 });
+    assert.deepEqual(levelUpTransition(unseen, 2), { celebrate: false, from: null, to: 2 },
+      'a returning Level-2 child must not watch themselves reach Level 2 again on every page load');
+    assert.deepEqual(levelUpTransition(unseen, 47), { celebrate: false, from: null, to: 47 });
+  }
+});
+
+test('a rise observed inside one session IS the ceremony', () => {
+  assert.deepEqual(levelUpTransition(1, 2), { celebrate: true, from: 1, to: 2 });
+  assert.deepEqual(levelUpTransition(4, 5), { celebrate: true, from: 4, to: 5 });
+  // A jump of more than one is still one transition, ending at the level the hero actually reached.
+  // P2 does not need a multi-level cinematic queue and the brief says so; what it needs is for the
+  // state to end in the right place, which this is.
+  assert.deepEqual(levelUpTransition(1, 4), { celebrate: true, from: 1, to: 4 });
+});
+
+test('standing still is not a transition, however many frames it lasts', () => {
+  // Called every frame by the frame loop, so "no change" being silent is not an optimisation.
+  let seen = null;
+  let celebrations = 0;
+  for (let frame = 0; frame < 600; frame += 1) {
+    const beat = levelUpTransition(seen, 2);
+    if (beat.celebrate) celebrations += 1;
+    seen = beat.to;
+  }
+  assert.equal(celebrations, 0, 'a hydrated Level-2 child watched a ceremony for standing still');
+});
+
+test('a live rise fires exactly once, not once per frame after it', () => {
+  let seen = null;
+  let celebrations = 0;
+  // Ten seconds at 60fps as Level 1, then the XP lands, then ten more seconds as Level 2.
+  for (let frame = 0; frame < 1200; frame += 1) {
+    const beat = levelUpTransition(seen, frame < 600 ? 1 : 2);
+    if (beat.celebrate) celebrations += 1;
+    seen = beat.to;
+  }
+  assert.equal(celebrations, 1, 'the beat is the EDGE, not the state');
+});
+
+test('a fall is adopted silently rather than leaving the presenter stuck above the hero', () => {
+  // Cannot happen -- death costs no XP by explicit Owner decision -- which is exactly why it is two
+  // words rather than a thrown error: a corrupt or rolled-back total must not leave the HUD showing
+  // a level the meter beside it disagrees with.
+  assert.deepEqual(levelUpTransition(5, 2), { celebrate: false, from: 5, to: 2 });
+});
+
+test('a level that is not a level is refused rather than shown to a child', () => {
+  for (const bad of [0, -1, 1.5, NaN, '2', null, undefined]) {
+    assert.throws(() => levelUpTransition(1, bad), TypeError,
+      `levelUpTransition accepted a next level of ${JSON.stringify(bad)}`);
+  }
+});
+
+test('a corrupt REMEMBERED level is treated as never-seen, not as a rise from garbage', () => {
+  // The conservative direction: suppressing a ceremony we are unsure about is a silent loss, and
+  // firing one is a visible duplicate at the worst possible moment.
+  for (const bad of [NaN, 1.5, '1', {}]) {
+    assert.equal(levelUpTransition(bad, 2).celebrate, false,
+      `a remembered level of ${JSON.stringify(bad)} produced a ceremony`);
+  }
+});
+
+test('the transition is driven by the SAME resolver the fight is', () => {
+  // GQ-007 at the presentation layer: if the ceremony read a level from anywhere other than the
+  // resolver the combat stats come from, a child could be shown a LEVEL UP whose numbers the fight
+  // had not agreed to. Threaded here exactly as main.js's frame loop threads it.
+  const before = resolveHeroStats({ totalXp: cumulativeXpForLevel(2) - 1 });
+  const after = resolveHeroStats({ totalXp: cumulativeXpForLevel(2) });
+  const beat = levelUpTransition(before.level, after.level);
+  assert.equal(beat.celebrate, true);
+  assert.equal(beat.from, before.level);
+  assert.equal(beat.to, after.level);
+  assert.equal(resolvedMaxHp(beat.to) - resolvedMaxHp(beat.from), MAX_HP_PER_LEVEL,
+    'and the numbers the ceremony would show are the ones the fight is already using');
 });
 
 test('the exported Level-1 benchmark is the same hero resolveHeroStats builds', () => {

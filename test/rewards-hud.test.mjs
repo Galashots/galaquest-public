@@ -14,6 +14,7 @@ import test from 'node:test';
 import { MARKS_TO_UNLOCK } from '../public/src/rewards/marks.js';
 import { RECIPES } from '../public/src/audio/recipes.js';
 import { pipsForMarks } from '../public/src/rewards/hud.js';
+import { PROFILE_FACT_TYPES } from '../public/src/progression/facts.js';
 import {
   REWARD_EVENT_TYPES,
   REWARD_RECIPE_MAP,
@@ -53,8 +54,27 @@ test('REWARD_EVENT_TYPES is exactly the durable facts the reward coordinator ann
     [
       'charm-earned', 'coin-earned', 'gear-owned', 'lantern-unlocked',
       'mark-earned', 'satchel-taken', 'shard-earned',
+      // P2: the Lantern unlock is worth a level now, and the XP that pays for it is announced with
+      // its durable id for the same reason currency is -- so the device journals the fact rather
+      // than receiving a total it cannot deduplicate.
+      'xp-earned',
     ],
   );
+});
+
+// The other half of the same guard, from the other end: this list must not fall BEHIND the fact
+// vocabulary either. Every profile fact the coordinator can write is a fact it can announce, and one
+// that arrives with no handler falls through to the combat dispatcher and logs "no handler" -- which
+// is itself a harness failure. `weapon-equipped` is the deliberate exception and the only one: a
+// device MINTS its own equip fact (progression/profiles.js's mintEquipFact) rather than being told
+// about it, so there is nothing to announce back to it.
+test('no profile fact type can be added without a reward handler for it', () => {
+  const announced = new Set(REWARD_EVENT_TYPES);
+  const unhandled = PROFILE_FACT_TYPES
+    .filter((type) => type !== 'weapon-equipped' && !announced.has(type));
+  assert.deepEqual(unhandled, [],
+    'these durable facts can be written but not announced -- add a handler in main.js and list them '
+    + 'in REWARD_EVENT_TYPES, or the device cannot journal them under the store\'s own id');
 });
 
 test('createRewardFeedback refuses to build with a missing handler', () => {

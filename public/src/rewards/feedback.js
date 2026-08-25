@@ -15,9 +15,15 @@
 // HUD already shows a collected pickup, diffed off the rewards block, and nothing here changes that
 // -- these exist so the device can journal the fact under the same id the store keyed it on, which
 // a count can never be. Their handlers in main.js are deliberately empty of ceremony; see there.
+// P2's xp-earned joins on the same footing as currency: DURABILITY, not presentation. The level-up
+// ceremony is fired by DIFFING the folded level off the rewards block, not by this event -- the same
+// discipline the Blade's unlock card, the satchel lift and Wren's charm already follow, and for the
+// same reason. A one-shot beat hung off an announcement replays on a reconnect to a wiped server,
+// where the device teaches its own facts back and the server announces every one of them straight
+// to it; a beat hung off a diff cannot.
 export const REWARD_EVENT_TYPES = Object.freeze([
   'mark-earned', 'lantern-unlocked', 'coin-earned', 'shard-earned',
-  'gear-owned', 'satchel-taken', 'charm-earned',
+  'gear-owned', 'satchel-taken', 'charm-earned', 'xp-earned',
 ]);
 
 /**
@@ -66,12 +72,16 @@ export const REWARD_RECIPE_MAP = Object.freeze({
   'coin-earned': null,
   'shard-earned': null,
   // Same reasoning, one step further along the arc: each of these already has a ceremony of its own
-  // -- the Blade's unlock card, the satchel being lifted, Wren's fourth heart -- fired by DIFFING
+  // -- the Blade's unlock card, the satchel being lifted, Wren's charm -- fired by DIFFING
   // the rewards block, which is how those beats survive a reconnect without replaying. The durable
   // announcement is for the JOURNAL, and a sound here would be that beat played a second time.
   'gear-owned': null,
   'satchel-taken': null,
   'charm-earned': null,
+  // Silent HERE for the same reason, and loudly not silent elsewhere: the level-up ceremony this XP
+  // pays for has its own sound, fired from the level diff. A recipe here would play it a beat early,
+  // and play it again on every reconnect that re-announces the fact.
+  'xp-earned': null,
 });
 
 export function soundForRewardEvent(eventType) {

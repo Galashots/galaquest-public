@@ -47,6 +47,10 @@ import {
 } from './rewards/offlineProgress.js';
 import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS, swingDamageFor } from './progression/items.js';
 import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
+// P2: how strong this hero actually is, and whether a level a presenter is about to show deserves a
+// ceremony. Both live in progression/ so the offline fallback here and net/gameServer.mjs's online
+// fight resolve ONE law -- see that module's own header on why there must not be two.
+import { levelUpTransition, resolveHeroStats } from './progression/heroStats.js';
 import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
@@ -973,6 +977,18 @@ async function bootstrap() {
     }, MARK_IGNITE_MS);
   }
 
+  // ── THE LEVEL-UP BEAT ─────────────────────────────────────────────────────────────────────────
+  //
+  // P2-C2 ships the RULE and a first, honest announcement; the ceremony proper -- the meter
+  // completing, the treatment, the before/delta/after POWER -- is C3's. What is already true here and
+  // must stay true is WHEN it fires: on a live rise observed inside one session, never on hydration.
+  // progression/heroStats.js's levelUpTransition owns that decision; this only paints.
+  let levelUpCount = 0;
+  function celebrateLevelUp(fromLevel, toLevel) {
+    levelUpCount += 1;
+    banner(`LEVEL UP!  ${toLevel}`, 3000, `Level up! You are level ${toLevel}.`);
+  }
+
   // GP2: the coin/shard HUD, re-rendered from whatever coinsDisplayed/shardsDisplayed currently hold
   // -- the same "read-only, paint from the current value" pattern renderHealth/renderLanternPips
   // already use. Deliberately NOT reading ownRewards.coins/.shards directly (see the frame loop's own
@@ -1290,6 +1306,20 @@ async function bootstrap() {
   // which anchor is visible. A harness reading a DIFFERENT id than the game used is worse than no
   // accessor at all: it would report agreement between a card and a sword that never agreed.
   let equippedWeaponIdThisFrame = DEFAULT_EQUIPPED_WEAPON_ID;
+  // P2: this frame's resolved Hero stats -- `{ level, levelState, maxHp, heroDamage }` -- recorded
+  // for exactly the reason the equipped id above is. Both offline fights, the level-up watch and the
+  // runtime accessor all need them, and a second "online ? server rewards : journal" branch would be
+  // a second answer to one question, free to drift from the one the fight actually used.
+  //
+  // Seeded with a Level-1 starter hero rather than left null, so a frame that runs before the first
+  // rewards block has arrived fights the fight every child starts with instead of throwing.
+  let heroStatsThisFrame = resolveHeroStats();
+  // THE LEVEL THIS SESSION HAS ALREADY SHOWN THE CHILD. `null` until the first frame that knows
+  // anything, which is the hydration case: a returning Level-2 child must not watch themselves reach
+  // Level 2 again on every page load. Same `xxxSeen === null` shape charmOwnedSeen and bladeOwnedSeen
+  // already use, and progression/heroStats.js's levelUpTransition owns the actual rule so it can be
+  // proved without a browser.
+  let heroLevelSeen = null;
   function ensureEquippedWeaponMesh(equippedItemId) {
     equippedWeaponIdThisFrame = equippedItemId;
     if (!runtime.hero) return;
@@ -1778,6 +1808,12 @@ async function bootstrap() {
     'gear-owned'(event) { rewardEventLog.push(event); },
     'satchel-taken'(event) { rewardEventLog.push(event); },
     'charm-earned'(event) { rewardEventLog.push(event); },
+    // P2: durability only, on exactly the same footing as the five above. The XP this fact records is
+    // what pays for the level-up, and the level-up is fired by DIFFING the folded level in the frame
+    // loop -- see the level-up beat there for why a one-shot beat must never hang off an
+    // announcement. What this handler adds is the NAMED fact, journalled by the dispatch loop under
+    // the id the store wrote it with, so this device keeps its own copy of the hundred XP.
+    'xp-earned'(event) { rewardEventLog.push(event); },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See
@@ -2214,6 +2250,20 @@ async function bootstrap() {
     // credited MINUS what is still flying to them", and when they read zero beside a credited count
     // of two there is no way to tell from outside which half is responsible. Same posture as every
     // other accessor here: readable, not drivable.
+    // P2: what this hero actually IS right now, so a harness can ask "did the level reach the fight"
+    // rather than inferring it from a screenshot at a guessed moment. Reported as the RESOLVED
+    // numbers the fight was handed, not as the facts behind them -- the distinction
+    // docs/MISTAKES.md GQ-013 is about -- plus how many level-up beats this SESSION has fired, which
+    // is the only way to prove from outside that hydration did not replay one.
+    heroProgressState: () => ({
+      level: heroStatsThisFrame.level,
+      totalXp: heroStatsThisFrame.levelState.totalXp,
+      xpIntoLevel: heroStatsThisFrame.levelState.xpIntoLevel,
+      xpForLevel: heroStatsThisFrame.levelState.xpForLevel,
+      maxHp: heroStatsThisFrame.maxHp,
+      heroDamage: heroStatsThisFrame.heroDamage,
+      levelUpsThisSession: levelUpCount,
+    }),
     markHudState: () => ({
       marksInTheAir,
       authoritativeMarksThisFrame,
@@ -2340,6 +2390,31 @@ async function bootstrap() {
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
       : profileState;
     const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
+    // HOW STRONG THIS HERO IS, resolved once per frame from whichever authority is live, and read by
+    // everything downstream: both offline fights, the Hero screen, the HUD and the level-up watch.
+    //
+    // Online that authority is the server's rewards block (which folded it from the durable rows);
+    // offline it is this device's own journal, folded to the same shape. One resolve() call rather
+    // than several, for the reason progression/heroStats.js gives for returning one object: a fight
+    // that reads its damage from one place and its body from another is how the online and offline
+    // hero end up being different heroes.
+    heroStatsThisFrame = resolveHeroStats({
+      totalXp: Number.isSafeInteger(ownRewards?.xp) ? ownRewards.xp : 0,
+      equippedWeaponId: currentEquippedWeaponId,
+      charmOwned: ownRewards?.charmOwned === true,
+    });
+
+    // ── THE LEVEL-UP BEAT ──────────────────────────────────────────────────────────────────────
+    //
+    // Fired off the DIFF, never off the xp-earned announcement, which is the discipline every other
+    // one-shot reward beat in this file already keeps and the reason they survive a reconnect. On a
+    // reconnect to a server that has never heard of this child, the device teaches its own facts
+    // back and the server announces every one of them straight to it -- so a ceremony hung off the
+    // announcement would replay a level the child crossed last week. The folded level does not move
+    // when a fact the child already had is re-announced, so a beat hung off it cannot.
+    const levelBeat = levelUpTransition(heroLevelSeen, heroStatsThisFrame.level);
+    heroLevelSeen = levelBeat.to;
+    if (levelBeat.celebrate) celebrateLevelUp(levelBeat.from, levelBeat.to);
     if (heroScreenOpen) {
       heroScreen.render(heroScreenViewModel({
         equippedWeaponId: currentEquippedWeaponId,
@@ -2629,7 +2704,13 @@ async function bootstrap() {
           // I holding" (see equippedWeaponIdThisFrame's own comment on why it is recorded, not
           // re-derived). Resolved to a number on this side of the seam, exactly as
           // net/gameServer.mjs does for the online fight.
-          heroDamage: swingDamageFor(equippedWeaponIdThisFrame),
+          // Weapon PLUS what the levels added to the arm, from the one authority both fights use --
+          // see heroStatsThisFrame. It was swingDamageFor(equippedWeaponIdThisFrame), which was the
+          // weapon alone, and P2 is exactly the change that made that half an answer.
+          heroDamage: heroStatsThisFrame.heroDamage,
+          // ...and how big this body is. It rides the same command the server's own tick puts it on,
+          // so an offline child's level is worth the same max HP an online child's is.
+          maxHp: heroStatsThisFrame.maxHp,
           // THE SAME QUESTION net/gameServer.mjs asks per player, asked here for the offline hero
           // and answered by the same function against the same RANGER_CLAIM radius. A child playing
           // with no socket gets the identical sanctuary; two answers to "may the wolf have this
@@ -3415,7 +3496,10 @@ async function bootstrap() {
           [ownSiegeHeroId]: {
             position: { x: player.position.x, z: player.position.z },
             heading: player.heading,
-            heroDamage: swingDamageFor(equippedWeaponIdThisFrame),
+            // The same resolved numbers the wolf fight above is handed, and for the same reason: a
+            // child who levels up and walks into the Beacon arena must be the hero they just became.
+            heroDamage: heroStatsThisFrame.heroDamage,
+            maxHp: heroStatsThisFrame.maxHp,
           },
         },
       });

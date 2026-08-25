@@ -177,6 +177,39 @@ export function resolveHeroStats({ totalXp = 0, equippedWeaponId = DEFAULT_EQUIP
   };
 }
 
+/**
+ * WHETHER A LEVEL A PRESENTER IS ABOUT TO SHOW DESERVES A CEREMONY.
+ *
+ * Pure state machine, exactly the shape world/zoneLoader.js's treeLitTransition already uses and for
+ * the same reason: WHETHER the one-shot beat runs is a rule, and a rule belongs somewhere it can be
+ * proved with no browser in the room. What the beat looks like is taste, judged in captures.
+ *
+ * THE `null` CASE IS THE WHOLE POINT. `docs/MISTAKES.md`: "Hydration restores state; it must not
+ * replay the ceremony that created it." A hero's level is folded from durable facts, so the FIRST
+ * frame of every session already knows it -- from the local journal, from a server welcome, from a
+ * reconnect to a store that has just been taught the child's own facts back. A presenter that
+ * treated "I did not know, now I do" as a rise would fire a LEVEL UP at a child every time they
+ * opened the game, for something they did last week. So a caller that has not yet seen a level
+ * ADOPTS it silently, and only a rise observed inside one live session is a transition.
+ *
+ * A FALL is adopted silently too. Nothing in the game can lower a level -- death costs no XP by
+ * explicit Owner decision -- so this is not a case that occurs; it is two words that guarantee a
+ * corrupted or rolled-back total can never leave the presenter stuck above the hero it is drawing,
+ * silently disagreeing with the meter beside it.
+ *
+ * @param seenLevel the level this presenter last showed, or null/undefined if it has shown none.
+ * @param nextLevel the level the hero is at now.
+ */
+export function levelUpTransition(seenLevel, nextLevel) {
+  assertLevel(nextLevel);
+  const hydrating = !Number.isSafeInteger(seenLevel);
+  return {
+    celebrate: !hydrating && nextLevel > seenLevel,
+    from: hydrating ? null : seenLevel,
+    to: nextLevel,
+  };
+}
+
 /** The Level-1 starter benchmark every POWER comparison is taken against, as a stats object of the
  *  same shape resolveHeroStats returns -- so power.js's benchmark and a real hero's stats are the
  *  same kind of thing rather than two shapes that have to be kept in step by hand. */

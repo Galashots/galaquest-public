@@ -534,6 +534,21 @@ function decodeRewards(rewards) {
       if (shards < 0) fail(`encounter.rewards[${id}].shards must be >= 0, got ${shards}`);
       decoded.shards = shards;
     }
+    // P2: the hero's total XP, same additive/optional treatment as coins and shards above, and NOT a
+    // protocol version bump for the same reason those were not -- an old client decodes past a field
+    // it does not know, and a client with no field falls back to 0, which is the honest answer for a
+    // hero who has earned nothing.
+    //
+    // A TOTAL, not a level. The level is derived from it by progression/levels.js on whichever side
+    // is asking, so the wire cannot carry a level that disagrees with the XP beside it -- the exact
+    // contradiction the one-authority rule exists to prevent (GQ-007). Range-checked as a
+    // non-negative integer because that is the only shape progression/levels.js accepts; a malformed
+    // total must be refused at the boundary rather than folded into a plausible Level 1.
+    if (reward.xp !== undefined) {
+      const xp = requireInteger(reward.xp, `encounter.rewards[${id}].xp`);
+      if (xp < 0) fail(`encounter.rewards[${id}].xp must be >= 0, got ${xp}`);
+      decoded.xp = xp;
+    }
     // ARC 2: two more latches, same additive/optional treatment and the same "absent falls back to
     // false" discipline as every field above. Both ride here rather than as world state because both
     // are PER GUEST -- two brothers can be carrying different things and owe each other nothing.

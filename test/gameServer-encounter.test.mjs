@@ -11,7 +11,9 @@ import {
 } from '../public/src/combat/encounter.js';
 import { BEACON_ARENA } from '../public/src/world/zones/village.js';
 import { attackMessage, decode, encode } from '../public/src/net/protocol.js';
-import { WILDWOOD_BLADE_ID, damageFor } from '../public/src/progression/items.js';
+import { STARTER_SWORD_ID, WILDWOOD_BLADE_ID, damageFor } from '../public/src/progression/items.js';
+import { cumulativeXpForLevel } from '../public/src/progression/levels.js';
+import { resolveHeroStats, resolvedHeroDamage, resolvedMaxHp } from '../public/src/progression/heroStats.js';
 
 // A spot within ATTACK_REACH (1.7) of the wolf, straight along +Z from it, so a hero standing here
 // with the default heading (0, meaning "facing +Z") is both in range and in the strike arc.
@@ -235,14 +237,18 @@ test('an in-flight swing is cancelled at the arena boundary rather than carried 
   );
 });
 
-// ── THE EQUIPPED WEAPON REACHES THE FIGHT ──────────────────────────────────────────────────────
+// ── HOW STRONG THIS HERO IS REACHES THE FIGHT ──────────────────────────────────────────────────
 //
-// createSimulation() does not own equipment and must not: what a guest owns and has equipped is
-// durable, per-guest reward-store truth, and guestId is a CONNECTION fact this factory has no
-// business knowing. So the owner of that truth hands in a lookup. These pin the two ends of that
-// wire -- the default (nobody said anything) and the wired case (the Blade actually cuts) --
-// because between them sits the exact seam where a shipped reward quietly did nothing for two
-// chapters.
+// createSimulation() does not own equipment or progression and must not: what a guest owns, has
+// equipped and has earned is durable, per-guest reward-store truth, and guestId is a CONNECTION fact
+// this factory has no business knowing. So the owner of that truth hands in a lookup. These pin the
+// two ends of that wire -- the default (nobody said anything) and the wired case (a stronger hero
+// actually hits harder) -- because between them sits the exact seam where a shipped reward quietly
+// did nothing for two chapters (docs/MISTAKES.md GQ-013).
+//
+// The lookup used to be `weaponIdFor` returning an item id. Since P2 it is `heroStatsFor` returning
+// `{ maxHp, heroDamage }`, because a Hero LEVEL moves both numbers and two separate lookups is a
+// hero whose body and arm can disagree about what level they are.
 
 test('a simulation nobody told about equipment fights exactly as it always has', () => {
   const sim = createSimulation();
@@ -255,7 +261,9 @@ test('a simulation nobody told about equipment fights exactly as it always has',
 });
 
 test('a hero holding the Wildwood Blade takes two blows\' worth off the wolf, not one', () => {
-  const sim = createSimulation({ weaponIdFor: () => WILDWOOD_BLADE_ID });
+  const sim = createSimulation({
+    heroStatsFor: () => resolveHeroStats({ equippedWeaponId: WILDWOOD_BLADE_ID }),
+  });
   const player = sim.addPlayer('kid', meleeSpot());
   const before = sim.encounterSnapshot().wolf.hp;
   attack(sim, player.id, 1);
@@ -264,12 +272,49 @@ test('a hero holding the Wildwood Blade takes two blows\' worth off the wolf, no
     'the reward at the end of the longest promise in the game has to be felt in the fight');
 });
 
+test('a LEVELLED hero hits harder in the server-hosted fight, with no gear change at all', () => {
+  // P2's whole claim, at the seam where it can be checked without a browser: the same starter sword,
+  // the same wolf, and the only difference is that the child earned a level. If this ever stops
+  // being true, the level-up ceremony is a lie with numbers attached (GQ-013).
+  const levelled = createSimulation({
+    heroStatsFor: () => resolveHeroStats({
+      totalXp: cumulativeXpForLevel(2), equippedWeaponId: STARTER_SWORD_ID,
+    }),
+  });
+  const player = levelled.addPlayer('kid', meleeSpot());
+  const before = levelled.encounterSnapshot().wolf.hp;
+  attack(levelled, player.id, 1);
+  stepTicks(levelled, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
+  const dealt = before - levelled.encounterSnapshot().wolf.hp;
+
+  assert.equal(dealt, resolvedHeroDamage(2, STARTER_SWORD_ID), 'the level reached the blade');
+  assert.ok(dealt > damageFor(STARTER_SWORD_ID), 'and it is strictly more than the sword alone');
+});
+
+test('a LEVELLED hero has a bigger body in the server-hosted fight', () => {
+  const levelled = createSimulation({
+    heroStatsFor: () => resolveHeroStats({
+      totalXp: cumulativeXpForLevel(2), equippedWeaponId: STARTER_SWORD_ID,
+    }),
+  });
+  const player = levelled.addPlayer('kid', { x: WOLF_SPAWN.x + 40, z: WOLF_SPAWN.z + 40 });
+  // One tick is all it takes: reconcileMaxHp runs before anything else in the step, and a gain tops
+  // the hero up in the same frame it is granted.
+  stepTicks(levelled, 1);
+  const hero = levelled.encounterSnapshot().heroes[player.id];
+  assert.equal(hero.maxHp, resolvedMaxHp(2), 'the level reached the body');
+  assert.equal(hero.hp, hero.maxHp, 'and the new health is filled, not left as an empty promise');
+  assert.ok(hero.maxHp > HERO_MAX_HP, 'strictly bigger than the body they started the game with');
+});
+
 test('the lookup is asked every tick, so equipping mid-fight works without a reconnect', () => {
   // A value copied at construction would mean the sword you just equipped on the Hero screen only
   // started working after the socket dropped and came back -- which is the shape of bug nobody
   // reports and every child notices.
   let held = null;
-  const sim = createSimulation({ weaponIdFor: () => held });
+  const sim = createSimulation({
+    heroStatsFor: () => resolveHeroStats({ equippedWeaponId: held }),
+  });
   const player = sim.addPlayer('kid', meleeSpot());
 
   const start = sim.encounterSnapshot().wolf.hp;
