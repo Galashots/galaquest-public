@@ -1,5 +1,5 @@
 // The Lantern Marks pure fold. Turns combat/encounter.js's own events into mark-earned award
-// decisions -- one per wolf-life, one per contributing hero -- with no I/O, no clock, no randomness,
+// decisions -- one per Wolf life, one per contributing hero -- with no I/O, no clock, no randomness,
 // and no reach into public/src/combat/ or the DOM. `rewards/` is a deliberate sibling of `combat/`
 // rather than living inside it: encounter.js stays the one file that owns the rules of the fight, and
 // this file only READS the events it already publishes. Copy the discipline, not the directory --
@@ -44,7 +44,10 @@ export const MARKS_TO_UNLOCK = 3;
 export function createRewardLedger() {
   return {
     livesCompleted: 0,
-    contributors: new Set(),
+    // E1: contributors belong to ONE stable enemy life, not to "the Wolf" globally. A Map keeps two
+    // interleaved Wolves from sharing participation credit. The default shipped world still authors
+    // exactly one Wolf; this is collection correctness, not density.
+    contributorsByEnemy: new Map(),
     processedEvents: new WeakSet(),
   };
 }
@@ -93,12 +96,28 @@ export function createRewardLedger() {
  *
  * @param options.mintLifeId  (lifeIndex) => string, called once per completed wolf-life.
  */
+const LEGACY_WOLF_ID = '__legacy-wolf__';
+
+function rewardableWolfId(event) {
+  // Identity-bearing non-Wolf events must never mint Lantern Marks. An event without `kind` is a
+  // pre-E1 compatibility fixture and therefore historically meant Wolf.
+  if (event?.kind !== undefined && event.kind !== 'wolf') return null;
+  if (event?.enemyId === undefined || event.enemyId === null) return LEGACY_WOLF_ID;
+  if (typeof event.enemyId !== 'string' || event.enemyId.length === 0) return null;
+  return event.enemyId;
+}
+
 export function foldEvents(ledger, events, options = {}) {
   const mintLifeId = options.mintLifeId ?? ((lifeIndex) => String(lifeIndex));
   const start = ledger ?? createRewardLedger();
   let livesCompleted = start.livesCompleted;
-  let contributors = new Set(start.contributors);
-  const processedEvents = start.processedEvents;
+
+  // Compatibility is intentionally one-way: an old opaque ledger can be threaded into E1 without
+  // losing the current Wolf's contributors, but every ledger returned from here is collection-shaped.
+  const contributorsByEnemy = start.contributorsByEnemy instanceof Map
+    ? new Map([...start.contributorsByEnemy].map(([enemyId, contributors]) => [enemyId, new Set(contributors)]))
+    : new Map(start.contributors instanceof Set ? [[LEGACY_WOLF_ID, new Set(start.contributors)]] : []);
+  const processedEvents = start.processedEvents instanceof WeakSet ? start.processedEvents : new WeakSet();
   const awards = [];
 
   for (const event of events) {
@@ -106,28 +125,35 @@ export function foldEvents(ledger, events, options = {}) {
     processedEvents.add(event);
 
     if (event.type === 'wolf-hit') {
+      const enemyId = rewardableWolfId(event);
+      if (enemyId === null) continue;
+      const contributors = contributorsByEnemy.get(enemyId) ?? new Set();
       if (event.heroId != null) contributors.add(event.heroId);
+      contributorsByEnemy.set(enemyId, contributors);
       continue;
     }
 
     if (event.type === 'wolf-defeated') {
+      const enemyId = rewardableWolfId(event);
+      if (enemyId === null) continue;
+      const contributors = contributorsByEnemy.get(enemyId) ?? new Set();
       if (event.heroId != null) contributors.add(event.heroId);
-      // Once per LIFE, not once per contributor: every hero credited with this kill has to carry
-      // the same lifeId, or the durable key stops naming the kill and starts naming the payee.
+      // Once per ENEMY LIFE, not once per contributor. Interleaved enemies keep separate sets and
+      // therefore cannot pay each other's contributors when either one dies.
       const lifeId = mintLifeId(livesCompleted);
       for (const heroId of contributors) {
         awards.push({ heroId, type: 'mark-earned', lifeId, eventId: `mark:${heroId}:${lifeId}` });
       }
       livesCompleted += 1;
-      contributors = new Set();
+      contributorsByEnemy.delete(enemyId);
       continue;
     }
 
-    // wolf-respawned and every other event type carry no contributor information this fold needs.
+    // respawn and every other event type carry no contributor information this fold needs.
   }
 
   return {
-    ledger: { livesCompleted, contributors, processedEvents },
+    ledger: { livesCompleted, contributorsByEnemy, processedEvents },
     awards,
   };
 }

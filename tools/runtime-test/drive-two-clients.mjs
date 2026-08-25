@@ -15,7 +15,9 @@ import {
   deadlineAfter,
   movementPulseMillis,
 } from './automation-timing.mjs';
-import { readWatchSource, startWatch, stopWatchSource } from './in-page-driver.mjs';
+import {
+  authoredWolfSource, readWatchSource, startWatch, stopWatchSource,
+} from './in-page-driver.mjs';
 import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { WILDWOOD_BLADE_ID } from '../../public/src/progression/items.js';
@@ -576,9 +578,10 @@ if (bootA && bootB) {
   const fightState = (page) => page.eval(`(() => {
     const r = window.__galaQuestRuntime;
     const published = r.encounterState();
+    const authoredWolf = ${authoredWolfSource()};
     const net = r.netState();
     return JSON.stringify({
-      wolf: { ...published.wolf },
+      enemy: { ...authoredWolf },
       heading: r.follow.heading,
       heroPos: [+r.player.position.x.toFixed(3), +r.player.position.z.toFixed(3)],
       serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(3), +net.serverSelf.z.toFixed(3)] : null,
@@ -644,7 +647,7 @@ if (bootA && bootB) {
   // applying it -- the two bodies were once measured 0.145m apart with the wolf drawn through the
   // hero's legs, and the client-side push fighting net.reconcile() produced a visible snap rather
   // than a smooth hold-off. This is that regression, automated instead of eyeballed off a capture.
-  const walkedThrough = await walkToward(pageA, (live) => ({ x: live.wolf.x, z: live.wolf.z }), 0.3, 15_000);
+  const walkedThrough = await walkToward(pageA, (live) => ({ x: live.enemy.x, z: live.enemy.z }), 0.3, 15_000);
   let maxJump = 0;
   for (let i = 1; i < walkedThrough.positions.length; i += 1) {
     const [px, pz] = walkedThrough.positions[i - 1];
@@ -730,7 +733,7 @@ if (bootA && bootB) {
       await pageA.send('Page.bringToFront');
       await afterAFrame(pageA);
       a = await fightState(pageA);
-      if (before.wolf.hp === a.wolf.hp) return { a, b, bracketed: true };
+      if (before.enemy.hp === a.enemy.hp) return { a, b, bracketed: true };
     } while (Date.now() < deadline);
     return { a, b, bracketed: false };
   }
@@ -741,21 +744,21 @@ if (bootA && bootB) {
     for (const page of [pageA, pageB]) {
       await page.send('Page.bringToFront');
       const before = await fightState(page);
-      if (before.wolf.mode === 'dead') continue;
-      const gap = Math.hypot(before.heroPos[0] - before.wolf.x, before.heroPos[1] - before.wolf.z);
+      if (before.enemy.mode === 'dead') continue;
+      const gap = Math.hypot(before.heroPos[0] - before.enemy.x, before.heroPos[1] - before.enemy.z);
       if (gap > 1.5) {
-        await walkToward(page, (live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 2_500, { faceTarget: true });
+        await walkToward(page, (live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.2, 2_500, { faceTarget: true });
       } else {
-        await walkToward(page, (live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 800, { faceTarget: true });
+        await walkToward(page, (live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.2, 800, { faceTarget: true });
         await tapAttack(page);
         await sleep(200);
       }
     }
     const { a, b, bracketed } = await bracketedPair(12_000);
     hpSamples.push({
-      round, bracketed, aHp: a.wolf.hp, bHp: b.wolf.hp, aMode: a.wolf.mode, bMode: b.wolf.mode,
+      round, bracketed, aHp: a.enemy.hp, bHp: b.enemy.hp, aMode: a.enemy.mode, bMode: b.enemy.mode,
     });
-    killed = a.wolf.mode === 'dead' && b.wolf.mode === 'dead';
+    killed = a.enemy.mode === 'dead' && b.enemy.mode === 'dead';
   }
 
   const comparable = hpSamples.filter((sample) => sample.bracketed);

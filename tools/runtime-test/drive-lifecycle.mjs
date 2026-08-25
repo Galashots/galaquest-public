@@ -48,7 +48,8 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource, waitForSample,
+  authoredWolfSource, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK,
+  stopWatchSource, waitForSample,
 } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
@@ -263,9 +264,10 @@ try {
   const state = () => page.eval(`(() => {
     const r = window.__galaQuestRuntime;
     const published = r.encounterState();
+    const authoredWolf = ${authoredWolfSource()};
     const net = r.netState();
     return JSON.stringify({
-      wolf: { ...published.wolf }, hero: { ...published.hero },
+      enemy: { ...authoredWolf }, hero: { ...published.hero },
       heading: r.follow.heading,
       heroPos: [+r.player.position.x.toFixed(3), +r.player.position.z.toFixed(3)],
       serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(3), +net.serverSelf.z.toFixed(3)] : null,
@@ -383,18 +385,18 @@ try {
   // roused during the approach is both the real question and one a log can answer.
   await page.eval(startWatch('lifecycle-fight', `(() => {
     const runtime = window.__galaQuestRuntime;
-    const wolf = runtime.encounterState().wolf;
+    const authoredWolf = ${authoredWolfSource()};
     return {
       // Wall clock from inside the page, so the respawn interval below is measured between two
       // RECORDED FRAMES rather than between two harness reads that arrive whenever they arrive.
       t: Date.now(),
-      mode: wolf.mode,
-      hp: wolf.hp,
-      gap: Math.hypot(runtime.player.position.x - wolf.x, runtime.player.position.z - wolf.z),
+      mode: authoredWolf.mode,
+      hp: authoredWolf.hp,
+      gap: Math.hypot(runtime.player.position.x - authoredWolf.x, runtime.player.position.z - authoredWolf.z),
     };
   })()`));
   const beforeWalk = await state();
-  const closed = await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 14000);
+  const closed = await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.2, 14000);
   const moved = Math.hypot(closed.heroPos[0] - beforeWalk.heroPos[0], closed.heroPos[1] - beforeWalk.heroPos[1]);
   check('8. hero movement changes world position (measured, not a status string)',
     moved > 1.0, `moved ${moved.toFixed(3)}m: ${JSON.stringify(beforeWalk.heroPos)} -> ${JSON.stringify(closed.heroPos)}`);
@@ -405,7 +407,7 @@ try {
     rousedFrames.length > 0,
     `${rousedFrames.length} of ${roused.samples.length} recorded frames had the wolf roused; `
       + `modes ${JSON.stringify([...new Set(roused.samples.map((sample) => sample.mode))])}, `
-      + `gap ${Math.hypot(closed.heroPos[0] - closed.wolf.x, closed.heroPos[1] - closed.wolf.z).toFixed(2)}m`);
+      + `gap ${Math.hypot(closed.heroPos[0] - closed.enemy.x, closed.heroPos[1] - closed.enemy.z).toFixed(2)}m`);
 
   // ── 10. the wolf can be killed ───────────────────────────────────────────────────────────────────
   //
@@ -419,7 +421,7 @@ try {
   // because the wolf backs off after a bite and the hero only turns while walking, but it is a held
   // walk on the wolf's live position and its cost comes out of the wait before the next tap rather
   // than being added to it.
-  const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+  const WOLF_TARGET = authoredWolfSource();
   const readFight = () => page.eval(readWatchSource('lifecycle-fight')).then(JSON.parse);
   // A second of recording, so the frame count is the frame rate.
   await sleep(1000);
@@ -468,7 +470,7 @@ try {
     if (gapMetres > stopWithin + HELD_APPROACH_SLACK_METRES) {
       await heldLegToWolf(stopWithin + HELD_APPROACH_SLACK_METRES, 8000);
     }
-    await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), stopWithin, 900,
+    await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), stopWithin, 900,
       { faceTarget: true });
   }
 

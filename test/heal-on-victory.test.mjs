@@ -44,11 +44,21 @@ const STEP = 1 / 60;
  * full hearts part-way through. (The first draft of this file did exactly that, and every expected
  * hp was wrong for reasons that had nothing to do with the heal.) The realistic end-to-end path,
  * bites and all, is covered by the solo test at the bottom.
+ *
+ * E1 moved ordinary-enemy authority to `enemies[]`. This fixture therefore edits the canonical
+ * Wolf entity instead of the derived `.wolf` compatibility view; writing the view would create two
+ * contradictory truths in a hand-built state and would no longer be a valid fixture.
  */
 function killTheWolf(state, heroesCommand, killerId) {
+  const wolf = state.enemies.find((enemy) => enemy.kind === 'wolf');
+  assert.ok(wolf, 'fixture needs the ordinary Wolf');
   state = {
     ...state,
-    wolf: { ...state.wolf, hp: 1, mode: 'idle', modeSeconds: 0, biteCooldown: 99 },
+    enemies: state.enemies.map((enemy) => (
+      enemy.enemyId === wolf.enemyId
+        ? { ...enemy, hp: 1, mode: 'idle', modeSeconds: 0, biteCooldown: 99 }
+        : enemy
+    )),
   };
   const seen = [];
   for (let elapsed = 0; elapsed < 5; elapsed += STEP) {

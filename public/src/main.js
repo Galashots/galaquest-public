@@ -63,7 +63,8 @@ import { REWARD_EVENT_TYPES, createRewardFeedback, soundForRewardEvent } from '.
 import { createMarkSparks } from './rewards/markSpark.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
-import { createWolfPresenter, loadWolf, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
+import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
+import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -77,7 +78,7 @@ import {
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
   isWithinStrike,
-  separateFromWolf,
+  separateFromEnemies,
 } from './combat/encounter.js';
 import { createAttackInput } from './input/attackButton.js';
 import { createKeyboardInput } from './input/keyboard.js';
@@ -176,7 +177,7 @@ import * as VILLAGE from './world/zones/village.js';
 // window never survives to a rendered frame. Kept anyway so a mirror read never throws.
 const EMPTY_SERVER_ENCOUNTER = Object.freeze({
   revision: 0,
-  wolf: Object.freeze({ x: 0, z: 0, heading: 0, hp: 0, mode: 'idle', targetId: null }),
+  enemies: Object.freeze([]),
   heroes: Object.freeze({}),
 });
 // The wire's hero shape (protocol.js decodeHeroes): only the four fields a client needs to
@@ -750,7 +751,40 @@ async function bootstrap() {
   };
   let locomotion = null;
   let remotes = null;
-  let wolfPresenter = null;
+  let wolfVisualFactory = null;
+  const enemyPresenters = createEnemyPresenterRegistry({
+    createPresenter(enemy) {
+      if (enemy.kind !== 'wolf') return null;
+      // bootstrap loads the shared Wolf source after the render loop is already live. `undefined`
+      // means "supported, not ready yet" to the registry, so the same stable id is retried next
+      // frame rather than being replaced with a placeholder authority.
+      if (wolfVisualFactory === null) return undefined;
+      if (wolfVisualFactory.failed) return null;
+
+      const visual = wolfVisualFactory.create();
+      visual.root.name = `wolf:${enemy.enemyId}`;
+      scene.add(visual.root);
+      const wolfPresenter = createWolfPresenter(visual.root, visual.animations);
+      const materials = new Set();
+      visual.root.traverse((object) => {
+        if (!object.isMesh) return;
+        for (const material of [].concat(object.material)) if (material) materials.add(material);
+      });
+      return {
+        update: (deltaSeconds, state) => wolfPresenter.update(deltaSeconds, state),
+        flashHit: () => wolfPresenter.flashHit(),
+        flashDefeated: () => wolfPresenter.flashDefeated(),
+        flashSeen: () => wolfPresenter.flashSeen(),
+        getState: () => wolfPresenter.getState(),
+        mixer: wolfPresenter.mixer,
+        dispose() {
+          wolfPresenter.dispose();
+          scene.remove(visual.root);
+          for (const material of materials) material.dispose?.();
+        },
+      };
+    },
+  });
   let companionPresenter = null;
   let companionReactionElement = null;
   let swing = null;
@@ -765,17 +799,46 @@ async function bootstrap() {
   // the wolf charges the instant the page loads and a young player is in a fight before they
   // have found the stick.
   // Held as published state and advanced through the seam, not as an object with methods that own
-  // hidden mutable fields. Everything downstream -- the swing, the wolf presenter, the health bar, the
+  // hidden mutable fields. Everything downstream -- the swing, enemy presenters, the health bar, the
   // status line -- reads THIS, and none of them reach into the rules, whether it holds the local
   // step's result or the server's mirror. That is what made the move to a server-owned fight a
   // change of who calls stepParty rather than a rewrite of every reader.
   let encounterState = createEncounterState({ wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS, heroSpawn: HERO_SPAWN });
+
+  function enemyById(enemyId) {
+    if (typeof enemyId !== 'string') return null;
+    return encounterState.enemies.find((enemy) => enemy.enemyId === enemyId) ?? null;
+  }
+
+  function soleEnemyOfKind(kind) {
+    const matches = encounterState.enemies.filter((enemy) => enemy.kind === kind);
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function mirrorPublishedEnemy(enemy) {
+    // Patrol cursors are simulation-private and intentionally do not ride the wire. The current
+    // shipped kind is Wolf, so reconnect-to-offline preserves the exact authored Wolf patrol the
+    // legacy singular mirror used. A future kind with no authored client patrol remains where the
+    // server last published it rather than borrowing Wolf geography.
+    const patrol = enemy.kind === 'wolf'
+      ? WOLF_SPAWNS.map((point) => ({ x: point.x, z: point.z }))
+      : [{ x: enemy.x, z: enemy.z }];
+    const { targetId, ...published } = enemy;
+    return {
+      ...published,
+      patrol,
+      spawnIndex: 0,
+      biteCooldown: 0,
+      biteLanded: false,
+    };
+  }
+
   let nextCommandId = 1;
   // Online-only mirror of the server's last published encounter block (party-shaped: { revision,
-  // wolf, heroes }), set from net client's onEncounter. canHeroAttack needs this exact shape --
+  // enemies, heroes }), set from net client's onEncounter. canHeroAttack needs this exact shape --
   // heroes keyed by id -- which is why it is kept separate from `encounterState` above rather than
-  // merged into it; `encounterState` itself is overwritten every online frame with the { wolf,
-  // hero } view every existing consumer already reads (see the frame loop).
+  // merged into it; `encounterState` itself is overwritten every online frame with a collection-
+  // shaped solo view for the existing local hero consumers (see the frame loop).
   let serverEncounter = null;
   // Events queued between frames by onEncounter (snapshots arrive at 10 Hz, independent of the
   // 60fps frame loop) and drained once per frame, the same shape the offline path builds locally.
@@ -1885,7 +1948,11 @@ async function bootstrap() {
       // The reward now speaks when its light arrives, about a second later, with the frame to itself.
       // See celebrateMarkArrival.
       marksInTheAir += 1;
-      markSparks?.launch({ x: encounterState.wolf.x, z: encounterState.wolf.z });
+      // mark-earned does not carry combat identity yet; in the shipped E1 world there is exactly
+      // one rewardable Wolf. Derive that Wolf by kind, never by collection position. Hit/defeat
+      // feedback below is fully enemyId-addressed.
+      const source = soleEnemyOfKind('wolf');
+      if (source) markSparks?.launch({ x: source.x, z: source.z });
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
     // fires out at the wolf, 18 m from the tree, and the child's next question is "now what".
@@ -1967,15 +2034,16 @@ async function bootstrap() {
     // requirement is the point -- it is how this event announced itself instead of vanishing.
     'swing-dropped'() {},
     'wolf-hit'(event) {
-      wolfPresenter?.flashHit();
-      // GP1-C5: the ring, at the same point on the wolf the damage number is already anchored to, so
-      // the three signals for one blow (flash, ring, number) all land in the same place instead of
-      // scattering the child's eye across the frame.
+      const enemy = enemyById(event.enemyId);
+      enemyPresenters.get(event.enemyId)?.flashHit?.();
+      if (!enemy) return;
+      // GP1-C5: the ring, at the same point on the identified wolf the damage number is already
+      // anchored to, so two enemies can never steal each other's hit flash after a collection reorder.
       impactBursts.burst({
-        x: encounterState.wolf.x, y: WOLF_SPARK_HEIGHT_METERS, z: encounterState.wolf.z, kind: 'hit',
+        x: enemy.x, y: WOLF_SPARK_HEIGHT_METERS, z: enemy.z, kind: 'hit',
       });
       // event.damage, not a hardcoded 1 -- see WOLF_DAMAGE_PER_HIT's own comment in encounter.js.
-      popDamageNumber(encounterState.wolf.x, WOLF_SPARK_HEIGHT_METERS, encounterState.wolf.z, event.damage);
+      popDamageNumber(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, event.damage);
     },
     // GP1-C5: the kill is a COMPOSITION, and the pieces were always here -- they just never added up
     // to one moment. Same frame: the defeat flash turns the wolf the colour of the light it stole
@@ -1983,11 +2051,14 @@ async function bootstrap() {
     // than a hit's, the wolf's own spark goes out, and the death clip starts. A beat later
     // mark-earned launches that light to the boy's belt and says so. Nothing here is new machinery;
     // what changed is that a kill no longer looks like the hit before it.
-    'wolf-defeated'() {
-      wolfPresenter?.flashDefeated();
-      impactBursts.burst({
-        x: encounterState.wolf.x, y: WOLF_SPARK_HEIGHT_METERS, z: encounterState.wolf.z, kind: 'kill',
-      });
+    'wolf-defeated'(event) {
+      const enemy = enemyById(event.enemyId);
+      enemyPresenters.get(event.enemyId)?.flashDefeated?.();
+      if (enemy) {
+        impactBursts.burst({
+          x: enemy.x, y: WOLF_SPARK_HEIGHT_METERS, z: enemy.z, kind: 'kill',
+        });
+      }
       banner('The wolf is beaten!', 1800);
     },
     // The flinch is gated on the swing state at dispatch time: the owner's precedence rule (2026-08-13)
@@ -2023,8 +2094,8 @@ async function bootstrap() {
     // popping IS the message, and it points at exactly the thing that changed.
     'hero-healed'(event) { renderHealth(event.remaining); popHealth(); },
     // the owner's ruling, 2026-08-13: WOLF_RESPAWN_SECONDS after a kill, the wolf is back. No presenter
-    // consumer yet -- wolfPresenter?.update() already reads wolf.mode/hp off encounterState every
-    // frame and draws whatever it finds, so the wolf reappearing needs no push here. Declared
+    // consumer yet -- the stable-ID presenter registry reads each enemy's mode/hp off encounterState
+    // every frame and draws whatever it finds, so a respawn needs no push here. Declared
     // (rather than left off the table) for the same reason every other event is: the dispatcher
     // throws at startup on a gap instead of silently dropping an event during a fight.
     'wolf-respawned'() {},
@@ -2145,7 +2216,14 @@ async function bootstrap() {
     // The published state, not a handle on the rules. A harness that could call requestAttack() on
     // this object could drive the fight down a path no child can reach; reading state cannot.
     encounterState: () => encounterState,
-    wolf: () => wolfPresenter,
+    // Runtime-test compatibility only: derive the shipped Wolf presenter from stable collection
+    // identity. Gameplay/presentation code never reads this alias; C3's real surface is keyed.
+    wolf: () => {
+      const wolf = soleEnemyOfKind('wolf');
+      return wolf ? enemyPresenters.get(wolf.enemyId) : null;
+    },
+    enemyPresenter: (enemyId) => enemyPresenters.get(enemyId),
+    enemyPresenters: () => enemyPresenters.describe(),
     // Checkpoint 0's companion is a cosmetic presenter only. The state is read-only evidence for
     // the follow harness; it is never sent through net, combat, rewards, quests, or persistence.
     companion: () => companionPresenter?.getState() ?? null,
@@ -2625,12 +2703,12 @@ async function bootstrap() {
     lastReconcile = net.reconcile(player.position);
 
     // Online: the fight is the server's (Task B4). Mirror the last published block onto
-    // encounterState -- health, the swing, the wolf presenter, the status line all read `wolf` and
-    // `hero` off it, none of them needing to know whether they are reading a local step's result or
+    // encounterState -- health, the swing, enemy presenters, and the status line all read the
+    // collection plus `hero` off it, none of them needing to know whether they are reading a local step's result or
     // the server's. Offline: encounterState is still advanced by the local rules further down,
     // unchanged (ruling 8).
     //
-    // The mirror carries a COMPLETE encounter state, not just { wolf, hero } -- root-caused
+    // The mirror carries a COMPLETE collection-shaped encounter state, not just presenter fields -- root-caused
     // 2026-08-13 (the private engineering archive, test/offline-handover.test.mjs): the
     // moment netStatus first leaves 'online', the offline branch below calls
     // stepEncounter/requestAttack directly on this same `encounterState`, and encounter.js's
@@ -2649,14 +2727,8 @@ async function bootstrap() {
       encounterState = {
         revision: published.revision,
         lastCommandId: null,
-        wolfSpawn: WOLF_SPAWN,
-        // The patrol never rides the wire (the client does not need to know where the NEXT wolf will
-        // be -- it is told where this one IS). Seeded from the zone so that if the socket drops
-        // mid-quest, the offline rules that take over keep moving the wolf around the same three
-        // spots instead of pinning it to the first one for the rest of the session.
-        wolfSpawns: WOLF_SPAWNS,
+        enemies: published.enemies.map(mirrorPublishedEnemy),
         heroSpawn: HERO_SPAWN,
-        wolf: { biteCooldown: 0, biteLanded: false, modeSeconds: 0, ...published.wolf },
         hero: { swingLanded: false, ...ownHero },
       };
     }
@@ -2685,7 +2757,7 @@ async function bootstrap() {
     // back to agree with it -- applying the local push again here would double-correct against a
     // wolf position this same tick's snapshot may already have moved.
     if (netStatus !== 'online') {
-      const separated = separateFromWolf(player.position, encounterState.wolf);
+      const separated = separateFromEnemies(player.position, encounterState.enemies);
       player.position.x = separated.x;
       player.position.z = separated.z;
     }
@@ -2787,7 +2859,7 @@ async function bootstrap() {
       const events = [];
       if (netStatus === 'online') {
         // Combat commands are server-applied, presentation is client-predicted (Design ruling 3).
-        // No local stepEncounter/requestAttack/separateFromWolf here at all -- HP, wolf mode,
+        // No local stepEncounter/requestAttack/separateFromEnemies here at all -- HP, enemy mode,
         // health, banners and events all come exclusively from the mirror set up above.
         const ownHeroId = net.selfId;
         const canSwing = ownHeroId !== null && serverEncounter !== null
@@ -2961,8 +3033,10 @@ async function bootstrap() {
       }
 
       // The published state, read once and shared by every consumer below. Nothing here calls back
-      // into the rules -- online or offline, `encounterState` is just data by this point.
-      const { wolf, hero } = encounterState;
+      // into the rules -- online or offline, `encounterState` is just data by this point. Enemy
+      // identity comes from the collection; the shipped status line still describes the one Wolf.
+      const { hero } = encounterState;
+      const wolf = soleEnemyOfKind('wolf');
       // The server's own swingSeconds (mirrored into `hero` above) takes over the instant it
       // confirms, or the prediction times out on its own clock -- either way nothing downstream of
       // this line ever decides whether a swing lands; that stays server truth online.
@@ -3011,7 +3085,7 @@ async function bootstrap() {
         // top of that pose, so running it first would be overwritten the same frame.
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
       }
-      wolfPresenter?.update(deltaSeconds, wolf);
+      enemyPresenters.update(deltaSeconds, encounterState.enemies);
       const companionState = companionPresenter?.update(deltaSeconds, {
         x: player.position.x,
         z: player.position.z,
@@ -3067,9 +3141,11 @@ async function bootstrap() {
         onEncounterEvent(event);
       }
 
-      const fight = wolf.mode === 'dead'
-        ? 'wolf down'
-        : `wolf ${wolf.hp}hp · you ${Math.max(0, hero.hp)}hp`;
+      const fight = !wolf
+        ? `you ${Math.max(0, hero.hp)}hp`
+        : wolf.mode === 'dead'
+          ? 'wolf down'
+          : `wolf ${wolf.hp}hp · you ${Math.max(0, hero.hp)}hp`;
       status.textContent = `${own} · ${fight} · ${others}`;
     }
     // The keeper's proximity flourish reads local AND remote hero positions (brief V2: "any hero
@@ -4003,16 +4079,16 @@ async function bootstrap() {
   });
   gameSurface.appendChild(companionReactionElement);
 
-  // The wolf is loaded after the hero and companion. A missing or broken wolf must leave a walkable
-  // world rather than an empty screen -- the same rule the socket follows. The companion used a
-  // SkeletonUtils clone, so this load still owns the cached GLTF scene and enemy presenter.
+  // The Wolf source is loaded once after the hero and companion, then the keyed registry clones a
+  // fresh visual per stable enemyId. The default world still contains exactly one wolf-1, so this
+  // is visually the same one Wolf; the collection seam simply no longer assumes there can only be
+  // one presenter. A missing/broken asset still leaves a walkable world.
   try {
-    const wolf = await loadWolf();
-    if (!wolf.failed) {
-      scene.add(wolf.root);
-      wolfPresenter = createWolfPresenter(wolf.root, wolf.animations);
-    } else {
+    wolfVisualFactory = await loadWolfFactory();
+    if (wolfVisualFactory.failed) {
       console.warn('[runtime] wolf load failed — world is playable without it');
+    } else {
+      enemyPresenters.update(0, encounterState.enemies);
     }
   } catch (error) {
     console.warn('[runtime] wolf load threw — world is playable without it', error);

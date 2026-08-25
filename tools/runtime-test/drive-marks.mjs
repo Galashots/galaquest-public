@@ -31,7 +31,8 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource, waitForSample,
+  authoredWolfSource, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK,
+  stopWatchSource, waitForSample,
 } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
@@ -202,10 +203,11 @@ async function shot(name) {
 const state = () => page.eval(`(() => {
   const r = window.__galaQuestRuntime;
   const published = r.encounterState();
+  const authoredWolf = ${authoredWolfSource()};
   const net = r.netState();
   const pipEls = [...document.querySelectorAll('#lantern-marks .mark')];
   return JSON.stringify({
-    wolf: { ...published.wolf }, hero: { ...published.hero },
+    enemy: { ...authoredWolf }, hero: { ...published.hero },
     heading: r.follow.heading,
     heroPos: [+r.player.position.x.toFixed(2), +r.player.position.z.toFixed(2)],
     serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(2), +net.serverSelf.z.toFixed(2)] : null,
@@ -279,7 +281,7 @@ check('no marks on record before any kill', (start.rewards[Object.keys(start.rew
 check('zero pips filled before any kill', start.pipsFilled === 0, `pipsFilled ${start.pipsFilled}`);
 await shot('00-before');
 
-await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 14000);
+await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.2, 14000);
 
 // RECORD THE ARRIVAL CEREMONY FROM INSIDE THE PAGE, BEFORE THE FIGHT STARTS.
 //
@@ -360,17 +362,18 @@ await page.eval(`(() => {
 //   The fight is RECORDED per frame instead of point-read between taps. The wolf's `hit` reaction
 //   lives WOLF_HIT_FLASH_SECONDS (0.18s) and `dying` is brief; a read every ~370ms was sampling
 //   less often than the states it was looking for last.
-const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+const WOLF_TARGET = authoredWolfSource();
 const FIGHT_SAMPLE = `(() => {
   const runtime = window.__galaQuestRuntime;
   const encounter = runtime.encounterState();
+  const authoredWolf = ${authoredWolfSource()};
   const self = runtime.netState().serverSelf;
   const at = self ? [self.x, self.z] : [runtime.player.position.x, runtime.player.position.z];
   return {
-    hp: encounter.wolf.hp,
-    mode: encounter.wolf.mode,
+    hp: authoredWolf.hp,
+    mode: authoredWolf.mode,
     heroDown: encounter.hero.downSeconds >= 0,
-    gap: Math.hypot(at[0] - encounter.wolf.x, at[1] - encounter.wolf.z),
+    gap: Math.hypot(at[0] - authoredWolf.x, at[1] - authoredWolf.z),
     // Rides along because the flight is ~0.4s and the kill is noticed a burst late. See the spark
     // check below for why a poll cannot be the evidence for this one.
     sparks: runtime.markSparksInFlight(),

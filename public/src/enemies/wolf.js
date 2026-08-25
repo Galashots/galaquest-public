@@ -1,4 +1,5 @@
 import * as THREE from '../../vendor/three.module.min.js';
+import { clone as cloneSkinned } from '../../vendor/utils/SkeletonUtils.js';
 import { normaliseCharacterMaterial } from '../character/hero.js';
 import {
   flashIntensity,
@@ -142,15 +143,24 @@ export function wolfSparkTarget(mode, hp = WOLF_MAX_HP, maxHp = WOLF_MAX_HP) {
   return WOLF_SPARK_LAST_HIT_STRENGTH + (1 - WOLF_SPARK_LAST_HIT_STRENGTH) * remaining;
 }
 
-export async function loadWolf() {
-  const gltf = await loadGLB(WOLF_URL);
-  const root = setLayer(gltf.scene, CHARACTER);
+function prepareWolfRoot(source) {
+  // loadGLB caches the GLTF scene. E1 can present more than one stable ordinary enemy, so every
+  // presenter needs its own skinned hierarchy AND its own materials. SkeletonUtils gives the rig
+  // independent bones; cloning materials prevents one Wolf's hit flash/dissolve from tinting every
+  // other Wolf that happens to share the same cached atlas/material objects. Geometry and textures
+  // stay shared, which is both safe and the cheap path.
+  const root = setLayer(cloneSkinned(source), CHARACTER);
   root.name = 'wolf';
   root.scale.setScalar(WOLF_SCALE);
   root.traverse((object) => {
     if (!object.isMesh) return;
     object.castShadow = false;
     object.receiveShadow = false;
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => material?.clone?.() ?? material);
+    } else if (object.material?.clone) {
+      object.material = object.material.clone();
+    }
     // The same two export defects the hero had, and the wolf has both: emissiveFactor [1,1,1] with
     // an emissiveTexture that is the base colour atlas again (both glTF textures resolve to image
     // source 0), and metallicFactor/roughnessFactor omitted so glTF defaults each to 1.0. Left
@@ -167,7 +177,27 @@ export async function loadWolf() {
       }
     }
   });
-  return { animations: gltf.animations ?? [], failed: Boolean(gltf.userData?.loadError), root };
+  return root;
+}
+
+export async function loadWolfFactory() {
+  const gltf = await loadGLB(WOLF_URL);
+  const animations = gltf.animations ?? [];
+  const failed = Boolean(gltf.userData?.loadError);
+  return Object.freeze({
+    failed,
+    create() {
+      return { animations, root: prepareWolfRoot(gltf.scene) };
+    },
+  });
+}
+
+// Kept as the simple one-Wolf loader for existing callers/tests. The implementation now comes from
+// the same factory C3 uses for keyed presenters, so one Wolf and several Wolves cannot drift into
+// different scale/material/animation preparation paths.
+export async function loadWolf() {
+  const factory = await loadWolfFactory();
+  return { ...factory.create(), failed: factory.failed };
 }
 
 /**

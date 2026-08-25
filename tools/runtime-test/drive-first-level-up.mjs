@@ -57,7 +57,9 @@ import { sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
 import { startOwnedServer, gameUrlFor } from './owned-server.mjs';
-import { READ_WALK, startWalk, startWatch, STOP_WALK, readWatchSource, stopWatchSource } from './in-page-driver.mjs';
+import {
+  authoredWolfSource, READ_WALK, startWalk, startWatch, STOP_WALK, readWatchSource, stopWatchSource,
+} from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -243,6 +245,7 @@ async function shot(name) {
 const STATE_EXPR = `(() => {
   const runtime = window.__galaQuestRuntime;
   const encounter = runtime.encounterState();
+  const authoredWolf = ${authoredWolfSource('runtime')};
   const net = runtime.netState();
   const text = (selector) => document.querySelector(selector)?.textContent?.trim() ?? null;
   return JSON.stringify({
@@ -252,7 +255,7 @@ const STATE_EXPR = `(() => {
     rewards: runtime.rewards(),
     progress: runtime.heroProgressState(),
     hero: { ...encounter.hero },
-    wolf: { ...encounter.wolf },
+    enemy: { ...authoredWolf },
     heading: runtime.follow.heading,
     heroPos: [+runtime.player.position.x.toFixed(2), +runtime.player.position.z.toFixed(2)],
     serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(2), +net.serverSelf.z.toFixed(2)] : null,
@@ -391,14 +394,14 @@ try {
       levelUps: progress.levelUpsThisSession,
       heroHp: runtime.encounterState().hero.hp,
       heroMaxHp: runtime.encounterState().hero.maxHp,
-      wolfHp: runtime.encounterState().wolf.hp,
-      wolfMode: runtime.encounterState().wolf.mode,
+      wolfHp: ${authoredWolfSource()}.hp,
+      wolfMode: ${authoredWolfSource()}.mode,
       swinging: runtime.encounterState().hero.swingSeconds >= 0,
       gap: (() => {
         const net = runtime.netState();
         const at = net.serverSelf ? [net.serverSelf.x, net.serverSelf.z]
           : [runtime.player.position.x, runtime.player.position.z];
-        const w = runtime.encounterState().wolf;
+        const w = ${authoredWolfSource()};
         return +Math.hypot(at[0] - w.x, at[1] - w.z).toFixed(2);
       })(),
       marks: (() => {
@@ -421,7 +424,7 @@ try {
   const stickX = VIEWPORT.width * 0.18;
   const stickY = VIEWPORT.height * 0.86;
   const STICK_PX = 56;
-  const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+  const WOLF_TARGET = authoredWolfSource();
 
   /** Pulsed, camera-relative steering -- exact rather than fast, which is what matters for getting
    *  into ATTACK_REACH and, more importantly, for turning: the hero only turns while moving. */
@@ -475,7 +478,7 @@ try {
     }
   }
 
-  await walkToward((live2) => ({ x: live2.wolf.x, z: live2.wolf.z }), 1.2, 20000);
+  await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.2, 20000);
 
   // Measure this machine's own frame period rather than assuming one, then tap once per rendered
   // frame: main.js samples input once a frame, so tapping faster cannot help and slower wastes
@@ -520,7 +523,7 @@ try {
     // eslint-disable-next-line no-await-in-loop
     const now = await state();
     const at = now.serverPos ?? now.heroPos;
-    const gap = Math.hypot(at[0] - now.wolf.x, at[1] - now.wolf.z);
+    const gap = Math.hypot(at[0] - now.enemy.x, at[1] - now.enemy.z);
     // A knockdown respawns the hero at spawn, metres away: that is the one case with real ground in
     // it, and the held walk crosses it at distance-over-speed instead of one pulse per round trip.
     // Everything else is a nudge, which is mostly about TURNING -- the hero only turns while moving,
@@ -530,7 +533,7 @@ try {
       await heldWalkToward(1.0, 20000);
     } else if (gap > RECLOSE_WITHIN_METRES) {
       // eslint-disable-next-line no-await-in-loop
-      await walkToward((live2) => ({ x: live2.wolf.x, z: live2.wolf.z }), 1.0, 4000);
+      await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.0, 4000);
     }
   }
 
@@ -623,10 +626,10 @@ try {
   //
   // GQ-013: a reward the rules never read is a lie with a ceremony attached. The numbers above are
   // what the game says the hero IS; this is the wolf actually taking the bigger blow.
-  const wolfBefore = await pollUntil((s) => s.wolf.hp === WOLF_MAX_HP, 25000).catch(() => null);
+  const wolfBefore = await pollUntil((s) => s.enemy.hp === WOLF_MAX_HP, 25000).catch(() => null);
   if (wolfBefore) {
-    await walkToward((live2) => ({ x: live2.wolf.x, z: live2.wolf.z }), 1.2, 20000);
-    await page.eval(startWatch('blow', '({ hp: window.__galaQuestRuntime.encounterState().wolf.hp })'));
+    await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.2, 20000);
+    await page.eval(startWatch('blow', `({ hp: ${authoredWolfSource()}.hp })`));
     for (let tap = 0; tap < 40; tap += 1) {
       // eslint-disable-next-line no-await-in-loop
       await touch('touchStart', [{ x: attackX, y: attackY }]);

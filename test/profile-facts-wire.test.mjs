@@ -232,7 +232,7 @@ test('a client that never sends a guestId gets no profile facts rather than some
 
 // ── protocol shape: additive, and validated rather than trusted ────────────────────────────────
 
-test('profileFacts is additive -- a welcome without it still decodes, at protocol 3', () => {
+test('profileFacts is additive -- a welcome without it still decodes, at protocol 4', () => {
   // A pre-1b server's exact bytes: a real welcome with the new key removed, rather than a
   // hand-built object that could differ from one in some other way and pass for the wrong reason.
   const legacy = { ...welcomeMessage('p1', 0, []) };
@@ -241,7 +241,7 @@ test('profileFacts is additive -- a welcome without it still decodes, at protoco
 
   const decoded = decode(encode(legacy));
   assert.equal(decoded.v, PROTOCOL_VERSION, 'carrying facts must not bump the protocol version');
-  assert.equal(PROTOCOL_VERSION, 3, 'and the version this is additive against is 3');
+  assert.equal(PROTOCOL_VERSION, 4, 'and the version this remains additive against after E1 is 4');
   assert.deepEqual(decoded.profileFacts, [], 'an absent field reads as no facts, not as a failure');
 });
 

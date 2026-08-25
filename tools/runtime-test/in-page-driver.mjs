@@ -54,6 +54,26 @@ const WATCH_STORE = 'window.__gqWatch';
 const WALK_STATE = 'window.__gqWalk';
 
 /**
+ * JavaScript source for the one authored Wolf in today's shipped-world harnesses.
+ *
+ * The runtime is collection-shaped. These harnesses exercise today's one-Wolf world, so they may
+ * select by the authored kind only after proving that the collection contains exactly one such
+ * enemy. That keeps a future second Wolf from silently changing which entity the evidence follows.
+ */
+export function authoredWolfSource(runtimeExpression = 'window.__galaQuestRuntime') {
+  return `(() => {
+  const encounter = ${runtimeExpression}.encounterState();
+  const wolves = Array.isArray(encounter?.enemies)
+    ? encounter.enemies.filter((enemy) => enemy?.kind === 'wolf')
+    : [];
+  if (wolves.length !== 1) {
+    throw new Error('expected exactly one authored Wolf, found ' + wolves.length);
+  }
+  return wolves[0];
+})()`;
+}
+
+/**
  * Record `sampleExpression` once per rendered frame, under `key`.
  *
  * @param key               names this recording; starting a second under the same key stops the first.
