@@ -445,7 +445,6 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
     if (enemy.modeSeconds >= DEATH_SECONDS) {
       enemy.mode = 'dead';
       enemy.modeSeconds = 0;
-      enemy.targetId = null;
     }
     return;
   }
@@ -489,7 +488,6 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
     if (enemy.modeSeconds >= WOLF_BITE_SECONDS) {
       enemy.mode = 'idle';
       enemy.modeSeconds = 0;
-      enemy.targetId = null;
     }
     return;
   }
@@ -497,7 +495,6 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
   const nearest = nearestTargetableHero(enemy, heroes, heroIds, commandHeroes);
   if (nearest.heroId === null) {
     enemy.mode = 'idle';
-    enemy.targetId = null;
     return;
   }
 
@@ -523,12 +520,10 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
     enemy.z = moved.z;
     enemy.heading = moved.heading;
     enemy.mode = 'walk';
-    enemy.targetId = null;
     return;
   }
 
   enemy.mode = 'idle';
-  enemy.targetId = null;
 }
 
 export function stepParty(state, command = {}) {
@@ -579,12 +574,10 @@ export function stepParty(state, command = {}) {
           target.modeSeconds = 0;
           if (target.hp <= 0) {
             target.mode = 'dying';
-            target.targetId = null;
             events.push(enemyEvent({ type: 'wolf-defeated' }, target, heroId));
             healTheStanding(heroes, heroIds, events);
           } else {
             target.mode = 'hit';
-            target.targetId = null;
             events.push(enemyEvent({ type: 'wolf-hit', remaining: target.hp, damage }, target, heroId));
           }
         } else {
