@@ -248,6 +248,26 @@ export function isProfileFact(fact) {
   return structural && (!isEquipmentFactType(fact.type) || isSemanticallyValidEquipmentFact(fact));
 }
 
+// H1: local-first recovery is allowed to trust PERSONAL history, but that trust stops before facts
+// that author the shared world. Currency rows fund the communal Village and determine whether
+// physical loot is already spent, so a device may never restore them. The namespace check is the
+// other half of the boundary: a personal fact of an otherwise-allowed type (for example XP) may not
+// occupy an id the server uses for shared-world state. Keep legitimate personal ids unchanged -- the
+// local/server union above depends on the SAME eventId naming the SAME fact exactly once.
+const CLIENT_RESTORE_REFUSED_TYPES = new Set(['coin-earned', 'shard-earned']);
+const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
+  'cart-loot:',
+  'hollow-cache:',
+  'village-upgrade:',
+  'beacon-lit:',
+]);
+
+export function isClientRestorableProfileFact(fact) {
+  return isProfileFact(fact)
+    && !CLIENT_RESTORE_REFUSED_TYPES.has(fact.type)
+    && !SERVER_SHARED_WORLD_EVENT_ID_PREFIXES.some((prefix) => fact.eventId.startsWith(prefix));
+}
+
 export function isEquipmentFact(fact) {
   return isProfileFact(fact) && isEquipmentFactType(fact.type);
 }
