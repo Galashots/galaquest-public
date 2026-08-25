@@ -540,6 +540,18 @@ function decodeRewards(rewards) {
         (itemId, index) => requireString(itemId, `encounter.rewards[${id}].ownedItemIds[${index}]`, ITEM_ID_MAX_LENGTH),
       );
     }
+    if (reward.equippedItemIds !== undefined) {
+      if (reward.equippedItemIds === null || typeof reward.equippedItemIds !== 'object'
+        || Array.isArray(reward.equippedItemIds)) {
+        fail(`encounter.rewards[${id}].equippedItemIds must be an object`);
+      }
+      decoded.equippedItemIds = Object.fromEntries(Object.entries(reward.equippedItemIds).map(
+        ([slot, itemId]) => [
+          requireString(slot, `encounter.rewards[${id}].equippedItemIds slot`, ITEM_ID_MAX_LENGTH),
+          requireString(itemId, `encounter.rewards[${id}].equippedItemIds[${slot}]`, ITEM_ID_MAX_LENGTH),
+        ],
+      ));
+    }
     // GP2: same additive/optional treatment as equippedWeaponId above -- absent for every pre-GP2
     // fixture and caller, so a client with no field falls back to 0 (nothing collected yet), the same
     // "always a safe fallback" discipline the rest of this block already follows.

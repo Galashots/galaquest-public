@@ -25,7 +25,13 @@
 // gives for doing the same: it is what lets this run under bare `node --test` with no DOM, no real
 // clock and no real crypto, so the tests can be deterministic rather than merely probable.
 
-import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS } from './items.js';
+import {
+  DEFAULT_EQUIPPED_ITEM_IDS,
+  DEFAULT_EQUIPPED_WEAPON_ID,
+  DEFAULT_OWNED_ITEM_IDS,
+  isKnownItem,
+  itemDef,
+} from './items.js';
 import { foldFacts, isProfileFact, unionFacts } from './facts.js';
 // One authority for the client's id rule and one for the legacy key (GQ-007). net/guestId.js already
 // owns both -- a profile id travels the wire in the guestId field and so is the same kind of string,
@@ -199,7 +205,7 @@ function readJournal(storage, profileId) {
 function highestEquipRevision(facts) {
   let highest = -1;
   for (const fact of facts) {
-    if (fact.type !== 'weapon-equipped') continue;
+    if (fact.type !== 'weapon-equipped' && fact.type !== 'gear-equipped') continue;
     if (typeof fact.rev === 'number' && Number.isFinite(fact.rev) && fact.rev > highest) {
       highest = fact.rev;
     }
@@ -230,7 +236,7 @@ function stampEquipRevisions(incoming, knownEventIds) {
   // Their order relative to EACH OTHER is real and is preserved: net/rewardStore.mjs returns a
   // profile's facts in rowid order, so the last legacy equip to arrive is the last one that was made.
   const unstamped = incoming.filter((fact) => (
-    fact.type === 'weapon-equipped'
+    (fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')
     && !knownEventIds.has(fact.eventId)
     && !(typeof fact.rev === 'number' && Number.isFinite(fact.rev))
   ));
@@ -563,6 +569,7 @@ export function createProfileStore(options = {}) {
   function stateFor(profileId) {
     return foldFacts(readJournal(storage, profileId), {
       equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
+      equippedItemIds: DEFAULT_EQUIPPED_ITEM_IDS,
       ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
     });
   }
@@ -585,6 +592,7 @@ export function createProfileStore(options = {}) {
    * maximum the real one.
    */
   function mintEquipFact(profileId, itemId) {
+    if (!isKnownItem(itemId)) throw new Error(`cannot equip unknown item ${JSON.stringify(itemId)}`);
     const journal = readJournal(storage, profileId);
     const highest = highestEquipRevision(journal);
     // WHEN it happened, in epoch milliseconds -- not how many have happened. A per-profile counter
@@ -602,7 +610,7 @@ export function createProfileStore(options = {}) {
     const unique = randomUUID ? randomUUID() : `local-${mintCounter += 1}`;
     const fact = {
       eventId: `equip:${profileId}:${rev}:${unique}`,
-      type: 'weapon-equipped',
+      type: itemDef(itemId).slot === 'weapon' ? 'weapon-equipped' : 'gear-equipped',
       value: itemId,
       rev,
     };

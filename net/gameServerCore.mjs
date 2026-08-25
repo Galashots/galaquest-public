@@ -25,7 +25,8 @@ import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessa
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
 import {
-  DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID, isKnownItem, isKnownWeapon,
+  DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
+  isKnownItem, itemDef,
 } from '../public/src/progression/items.js';
 // One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
@@ -136,7 +137,7 @@ export function createRewardCoordinator(options = {}) {
   // kept as its own map rather than folded into that one's shape because equip has nothing to do with
   // marks/lantern and every one of that map's three fields (marks, unlocked, seenEventIds) would sit
   // unused on an equip-only connection.
-  const ephemeralEquipped = new Map();
+  const ephemeralEquipment = new Map();
   // playerId -> { coins, shards }, the GP2 ephemeral (guestId-less) fallback -- mirrors `ephemeral`
   // above, kept as its own map for the same reason ephemeralEquipped is: an equip-or-loot-only
   // connection has nothing to do with marks/lantern, and every field of `ephemeral`'s own shape would
@@ -160,7 +161,7 @@ export function createRewardCoordinator(options = {}) {
   function leave(playerId) {
     guestIdByPlayer.delete(playerId);
     ephemeral.delete(playerId);
-    ephemeralEquipped.delete(playerId);
+    ephemeralEquipment.delete(playerId);
     ephemeralLoot.delete(playerId);
   }
 
@@ -326,15 +327,13 @@ export function createRewardCoordinator(options = {}) {
     return store.beaconLit();
   }
 
-  /** Every item this player's guest owns, starter sword included -- the one place that constant is
-   *  prepended (rewardStore.mjs's own ownedItemIdsFor deliberately does not carry it; see its
-   *  comment). An ephemeral (guestId-less) connection has no durable grant path at all today -- GP1-C1
-   *  only asks for a harness/dev fixture to be able to seed OWNERSHIP for a guested test fixture, not
-   *  a production "gain gear" flow, so ephemeral players simply always own the starter sword. */
+  /** Every item this player's guest owns, including the default starter weapon and baseline Shield.
+   *  The store deliberately reports only earned rows; this coordinator supplies construction defaults
+   *  for both durable and ephemeral profiles. */
   function ownedItemIdsFor(playerId) {
     const guestId = guestIdByPlayer.get(playerId);
-    if (!guestId) return [STARTER_SWORD_ID];
-    return [STARTER_SWORD_ID, ...store.ownedItemIdsFor(guestId)];
+    if (!guestId) return [...DEFAULT_OWNED_ITEM_IDS];
+    return [...new Set([...DEFAULT_OWNED_ITEM_IDS, ...store.ownedItemIdsFor(guestId)])];
   }
 
   /** GP3-0: passthrough to the durable store's own creditedLootIds() -- attachGameServer's boot
@@ -396,7 +395,7 @@ export function createRewardCoordinator(options = {}) {
   }
 
   /**
-   * A weapon-equipped choice, applied durably (guestId known) or in-memory (ephemeral). Unlike
+   * An equipment choice, applied durably (guestId known) or in-memory (ephemeral). Unlike
    * applyMarkAward, this never folds combat events -- it is called directly off an incoming `equip`
    * message (see attachGameServer's onMessage below), the same "applied the instant it arrives"
    * treatment applyAttack gives attack.
@@ -411,13 +410,17 @@ export function createRewardCoordinator(options = {}) {
    * attack/input already take on a message that is shaped correctly but makes no sense.
    */
   function applyEquip(playerId, itemId, identity) {
-    if (!isKnownWeapon(itemId)) {
+    if (!isKnownItem(itemId)) {
+      // Keep the long-standing client/test contract while this seam widens from weapon-only to
+      // slot-generic equipment. The value is still rejected before either durable or ephemeral
+      // state is touched.
       throw new Error(`applyEquip got an unknown weapon id ${JSON.stringify(itemId)}`);
     }
     if (!ownedItemIdsFor(playerId).includes(itemId)) {
       throw new Error(`applyEquip: player ${playerId} does not own ${JSON.stringify(itemId)}`);
     }
     const guestId = guestIdByPlayer.get(playerId);
+    const slot = itemDef(itemId).slot;
     if (guestId) {
       // WHEN the child chose this weapon is a fact about the choice, so it is created with the
       // choice -- on the device, before the message is sent -- and merely persisted here. Deriving
@@ -437,7 +440,12 @@ export function createRewardCoordinator(options = {}) {
       const eventId = identity?.eventId ?? `equip:${guestId}:${randomUUID()}`;
       const rev = Number.isInteger(identity?.rev) ? identity.rev : store.maxEquipRevFor(guestId) + 1;
       const result = store.apply({
-        guestId, heroId: playerId, type: 'weapon-equipped', eventId, value: itemId, rev,
+        guestId,
+        heroId: playerId,
+        type: slot === 'weapon' ? 'weapon-equipped' : 'gear-equipped',
+        eventId,
+        value: itemId,
+        rev,
       });
       // A repeated equip identity is a replay, not a failure: the child's choice is already on
       // record with the order it was made, and re-sending it must be the no-op INSERT OR IGNORE
@@ -446,7 +454,11 @@ export function createRewardCoordinator(options = {}) {
         throw new Error(`applyEquip failed to record a new durable event for ${guestId}`);
       }
     } else {
-      ephemeralEquipped.set(playerId, itemId);
+      ephemeralEquipment.set(playerId, {
+        ...DEFAULT_EQUIPPED_ITEM_IDS,
+        ...(ephemeralEquipment.get(playerId) ?? {}),
+        [slot]: itemId,
+      });
     }
   }
 
@@ -622,12 +634,12 @@ export function createRewardCoordinator(options = {}) {
   }
 
   /** The wire's rewards block (net/protocol.js's decodeRewards):
-   *  { [heroId]: { marks, lanternUnlocked, equippedWeaponId, ownedItemIds, coins, shards } }.
+   *  { [heroId]: { marks, lanternUnlocked, equippedWeaponId, equippedItemIds, ownedItemIds, coins, shards } }.
    *  equippedWeaponId always carries a value (DEFAULT_EQUIPPED_WEAPON_ID when nobody has equipped
    *  anything yet) rather than riding as absent -- unlike the wire's OWN optional-field treatment of
    *  it, a hero always has SOME weapon equipped, so there is no "not yet known" state to represent
    *  the way an as-yet-unearned mark count legitimately starts at zero. ownedItemIds is the same
-   *  always-present treatment, for the same reason: a hero always owns AT LEAST the starter sword.
+   *  always-present treatment, for the same reason: a hero always owns the baseline equipment.
    *  coins/shards start at 0 like marks -- nothing to fall back to, nothing owned by construction. */
   function rewardsFor(heroIds) {
     const rewards = {};
@@ -638,6 +650,7 @@ export function createRewardCoordinator(options = {}) {
           marks: store.marksFor(guestId),
           lanternUnlocked: store.unlockedFor(guestId),
           equippedWeaponId: store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
+          equippedItemIds: store.equippedItemsFor(guestId),
           ownedItemIds: ownedItemIdsFor(heroId),
           coins: store.coinsFor(guestId),
           shards: store.shardsFor(guestId),
@@ -649,10 +662,12 @@ export function createRewardCoordinator(options = {}) {
       } else {
         const state = ephemeral.get(heroId);
         const lootState = ephemeralLoot.get(heroId);
+        const equipment = ephemeralEquipment.get(heroId) ?? DEFAULT_EQUIPPED_ITEM_IDS;
         rewards[heroId] = {
           marks: state?.marks ?? 0,
           lanternUnlocked: state?.unlocked ?? false,
-          equippedWeaponId: ephemeralEquipped.get(heroId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
+          equippedWeaponId: equipment.weapon ?? DEFAULT_EQUIPPED_WEAPON_ID,
+          equippedItemIds: equipment,
           ownedItemIds: ownedItemIdsFor(heroId),
           coins: lootState?.coins ?? 0,
           shards: lootState?.shards ?? 0,
@@ -705,7 +720,7 @@ export function createRewardCoordinator(options = {}) {
      *
      * This is the empty-store half of local-first recovery, and it exists because re-sending the
      * equip alone provably cannot work: applyEquip refuses a weapon the guest does not own, and
-     * against a wiped store the child owns nothing but the starter sword. The recovered choice is
+     * against a wiped store the child owns the baseline equipment. The recovered choice is
      * rejected and the hero snaps back to a weapon the child stopped holding. The ownership has to
      * arrive with the choice that depends on it, which is why this takes the whole set at once
      * rather than one fact at a time -- the two are validated against each other below.
@@ -742,7 +757,7 @@ export function createRewardCoordinator(options = {}) {
       const candidates = (Array.isArray(facts) ? facts : []).filter((fact) => (
         isProfileFact(fact)
         && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
-        && !(fact.type === 'weapon-equipped' && !isKnownWeapon(fact.value))
+        && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !isKnownItem(fact.value))
         // Checked through the same reader the fold and the store use, so a device cannot restore an
         // amount that would later be counted differently -- or, before this check existed, counted
         // NEGATIVELY. Filtered rather than thrown on, exactly like the two lines above it: a device
@@ -773,7 +788,7 @@ export function createRewardCoordinator(options = {}) {
       let refused = 0;
       const accepted = [];
       for (const fact of candidates) {
-        if (fact.type === 'weapon-equipped' && !ownedAfter.has(fact.value)) {
+        if ((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !ownedAfter.has(fact.value)) {
           refused += 1;
           continue;
         }
@@ -807,7 +822,7 @@ export function createRewardCoordinator(options = {}) {
     equippedWeaponIdFor(heroId) {
       const guestId = guestIdByPlayer.get(heroId);
       if (guestId) return store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID;
-      return ephemeralEquipped.get(heroId) ?? DEFAULT_EQUIPPED_WEAPON_ID;
+      return ephemeralEquipment.get(heroId)?.weapon ?? DEFAULT_EQUIPPED_WEAPON_ID;
     },
 
     /**
@@ -832,12 +847,12 @@ export function createRewardCoordinator(options = {}) {
       if (guestId) {
         return resolveHeroStats({
           totalXp: store.xpFor(guestId),
-          equippedWeaponId: store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
+          equippedItemIds: store.equippedItemsFor(guestId),
           charmOwned: store.charmEarnedFor(guestId),
         });
       }
       return resolveHeroStats({
-        equippedWeaponId: ephemeralEquipped.get(heroId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
+        equippedItemIds: ephemeralEquipment.get(heroId) ?? DEFAULT_EQUIPPED_ITEM_IDS,
       });
     },
     applyLootAward,
@@ -1174,6 +1189,7 @@ export function createSimulation(options = {}) {
         // and a value copied at join would mean the stronger hero only appeared after a reconnect.
         heroDamage: stats.heroDamage,
         maxHp: stats.maxHp,
+        damageReductionPercent: stats.damageReductionPercent,
         // ...and whether the wolf may pick this hero at all. Derived HERE, on the side of the seam
         // that knows both where everyone is standing and whether the Beacon is burning, from the
         // same RANGER_CLAIM radius the charm handover is already adjudicated against. Nothing new

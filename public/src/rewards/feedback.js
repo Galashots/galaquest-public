@@ -23,7 +23,7 @@
 // to it; a beat hung off a diff cannot.
 export const REWARD_EVENT_TYPES = Object.freeze([
   'mark-earned', 'lantern-unlocked', 'coin-earned', 'shard-earned',
-  'gear-owned', 'satchel-taken', 'charm-earned', 'xp-earned',
+  'gear-owned', 'gear-equipped', 'satchel-taken', 'charm-earned', 'xp-earned',
 ]);
 
 /**
@@ -76,6 +76,9 @@ export const REWARD_RECIPE_MAP = Object.freeze({
   // the rewards block, which is how those beats survive a reconnect without replaying. The durable
   // announcement is for the JOURNAL, and a sound here would be that beat played a second time.
   'gear-owned': null,
+  // An equipment choice is durable state, not a ceremony. The visible result is derived from the
+  // equipped-item snapshot; this event only lets the device journal the named choice.
+  'gear-equipped': null,
   'satchel-taken': null,
   'charm-earned': null,
   // Silent HERE for the same reason, and loudly not silent elsewhere: the level-up ceremony this XP

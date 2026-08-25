@@ -46,8 +46,18 @@ import {
   createLifeIdMinter,
   createOfflineProgress,
 } from './rewards/offlineProgress.js';
-import { DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS, swingDamageFor } from './progression/items.js';
-import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from './progression/state.js';
+import {
+  DEFAULT_EQUIPPED_ITEM_IDS,
+  DEFAULT_EQUIPPED_WEAPON_ID,
+  DEFAULT_OWNED_ITEM_IDS,
+  swingDamageFor,
+} from './progression/items.js';
+import {
+  canEquip,
+  equippedItemIdsFromRewards,
+  equippedWeaponIdFromRewards,
+  ownedItemIdsFromRewards,
+} from './progression/state.js';
 // P2: how strong this hero actually is, and whether a level a presenter is about to show deserves a
 // ceremony. Both live in progression/ so the offline fallback here and net/gameServer.mjs's online
 // fight resolve ONE law -- see that module's own header on why there must not be two.
@@ -1678,6 +1688,7 @@ async function bootstrap() {
    */
   let profileState = foldFacts([], {
     equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID,
+    equippedItemIds: DEFAULT_EQUIPPED_ITEM_IDS,
     ownedItemIds: DEFAULT_OWNED_ITEM_IDS,
   });
 
@@ -1977,6 +1988,7 @@ async function bootstrap() {
     // replaying, so nothing here may fire one. What these add is the NAMED fact, journalled by the
     // dispatch loop under the id the store wrote it with.
     'gear-owned'(event) { rewardEventLog.push(event); },
+    'gear-equipped'(event) { rewardEventLog.push(event); },
     'satchel-taken'(event) { rewardEventLog.push(event); },
     'charm-earned'(event) { rewardEventLog.push(event); },
     // P2: durability only, on exactly the same footing as the five above. The XP this fact records is
@@ -2590,6 +2602,7 @@ async function bootstrap() {
     heroStatsThisFrame = resolveHeroStats({
       totalXp: Number.isSafeInteger(ownRewards?.xp) ? ownRewards.xp : 0,
       equippedWeaponId: currentEquippedWeaponId,
+      equippedItemIds: equippedItemIdsFromRewards(ownRewards),
       charmOwned: ownRewards?.charmOwned === true,
     });
 
@@ -2918,6 +2931,7 @@ async function bootstrap() {
           // ...and how big this body is. It rides the same command the server's own tick puts it on,
           // so an offline child's level is worth the same max HP an online child's is.
           maxHp: heroStatsThisFrame.maxHp,
+          damageReductionPercent: heroStatsThisFrame.damageReductionPercent,
           // THE SAME QUESTION net/gameServer.mjs asks per player, asked here for the offline hero
           // and answered by the same function against the same RANGER_CLAIM radius. A child playing
           // with no socket gets the identical sanctuary; two answers to "may the wolf have this
@@ -3711,6 +3725,7 @@ async function bootstrap() {
             // child who levels up and walks into the Beacon arena must be the hero they just became.
             heroDamage: heroStatsThisFrame.heroDamage,
             maxHp: heroStatsThisFrame.maxHp,
+            damageReductionPercent: heroStatsThisFrame.damageReductionPercent,
           },
         },
       });

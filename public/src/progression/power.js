@@ -62,11 +62,18 @@ function assertStat(value, what) {
  *
  * @param stats.maxHp      resolved max HP, from heroStats.resolveHeroStats.
  * @param stats.heroDamage resolved per-blow damage, from the same call.
+ * @param stats.damageReductionPercent resolved incoming-damage reduction from equipped items.
  */
-export function realStrengthFor({ maxHp, heroDamage }) {
+export function realStrengthFor({ maxHp, heroDamage, damageReductionPercent = 0 }) {
   assertStat(maxHp, 'maxHp');
   assertStat(heroDamage, 'heroDamage');
-  return (maxHp / LEVEL_1_BASE_MAX_HP) * (heroDamage / LEVEL_1_STARTER_DAMAGE);
+  if (!Number.isFinite(damageReductionPercent) || damageReductionPercent < 0 || damageReductionPercent >= 100) {
+    throw new TypeError(
+      `damageReductionPercent must be finite and in [0, 100), got ${JSON.stringify(damageReductionPercent)}`,
+    );
+  }
+  const effectiveSurvivability = maxHp / (1 - damageReductionPercent / 100);
+  return (effectiveSurvivability / LEVEL_1_BASE_MAX_HP) * (heroDamage / LEVEL_1_STARTER_DAMAGE);
 }
 
 /**
