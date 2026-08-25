@@ -33,6 +33,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { startOwnedServer } from './owned-server.mjs';
+// The bite, imported rather than assumed. This file used to soften the hero to `hp <= 1`, which was
+// "one bite from the floor" on the pre-P2 scale and became unreachable when the fight was rescaled:
+// a hero now goes 30 -> 20 -> 10 -> 0 and never passes through 1, so the loop would have run to its
+// deadline and the scenario would have swung at full health -- exactly the vacuous pass GQ-017 warns
+// about, where a probe stops meaning anything without going red.
+import { HERO_MAX_HP, WOLF_BITE_DAMAGE } from '../../public/src/combat/encounter.js';
 
 const CHROME_PORT = 9224;
 const args = process.argv.slice(2);
@@ -314,12 +320,12 @@ if (live.wolf) {
   // Keep swinging until he goes down. A swing is 1.5 s and the wolf bites every 2.6 s, so a hero
   // who never disengages loses eventually -- which is the state this scenario needs.
   // DO NOT ATTACK YET. The first version swung continuously and simply won every fight -- 2425
-  // frames of swing and zero frames down. Standing and taking bites until one heart is left, and
+  // frames of swing and zero frames down. Standing and taking bites until one bite is left, and
   // only THEN swinging, is what makes the killing bite land while a swing is actually running.
   const softenDeadline = Date.now() + 40000;
   while (Date.now() < softenDeadline) {
     live = await liveState();
-    if (live.hero.down >= 0 || (live.hero.hp ?? 3) <= 1) break;
+    if (live.hero.down >= 0 || (live.hero.hp ?? HERO_MAX_HP) <= WOLF_BITE_DAMAGE) break;
     await sleep(200);
   }
   await mark(`softened-to-hp-${live.hero.hp}`);

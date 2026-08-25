@@ -31,6 +31,8 @@ import {
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
 // and the server consumes it rather than keeping a second list that drifts.
 import { isProfileFact, parseXpFactAmount } from '../public/src/progression/facts.js';
+import { resolvedMaxHp } from '../public/src/progression/heroStats.js';
+import { LEVEL_ONE } from '../public/src/progression/levels.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
@@ -68,14 +70,15 @@ import { attachWebSocketServer } from './wsServer.mjs';
 // authored rewards in favour of hunting caches would ever be the better play.
 export const HOLLOW_CACHE_SHARDS = 3;
 
-// ARC 2: what Ranger Wren's charm is worth, in hearts.
+// ARC 2's CHARM_BONUS_HEARTS USED TO LIVE HERE, and it does not any more.
 //
-// ONE, and the number is the design. Three hearts is three mistakes; four is four, which is roughly
-// a third more room and is exactly the note the child playtesters gave when they called the wolves
-// "a little strong". Two would be a different game -- the Warden's own comment prices itself at
-// "three mistakes, not one" and a six-heart child walks through that fight without learning its
-// rhythm. A reward that removes the lesson is not a reward.
-export const CHARM_BONUS_HEARTS = 1;
+// It was "one heart" against a three-heart body -- roughly a third more room, which is exactly the
+// note the child playtesters gave when they called the wolves "a little strong". P2 makes max HP a
+// derived Hero stat rather than a count of pips, and a charm is a durable fact about a BODY: the
+// offline fallback in public/src/main.js has to resolve the same body from the same law, and it
+// cannot import this server-only module. So the number moved to the one place both sides can read
+// it -- progression/heroStats.js's WREN_CHARM_MAX_HP_BONUS -- with its meaning preserved exactly
+// (10 of a 30hp body is the same third) rather than re-tuned on the way past.
 
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
@@ -1077,10 +1080,10 @@ export function createSimulation(options = {}) {
         // to know the item catalogue exists (test/combat-purity.test.mjs), and this side of the seam
         // already knows both. swingDamageFor never returns null, so a swing always lands for
         // something even when nobody has said what is equipped.
-        weaponDamage: swingDamageFor(weaponIdFor(player.id)),
-        // ...and how many hearts this body has. Asked every tick for the same reason the weapon is:
-        // a child can be handed Wren's charm mid-session, and a value copied at join would mean the
-        // fourth heart only appeared after a reconnect.
+        heroDamage: swingDamageFor(weaponIdFor(player.id)),
+        // ...and how big this body is. Asked every tick for the same reason the weapon is: a child
+        // can be handed Wren's charm -- or cross a level -- mid-session, and a value copied at join
+        // would mean the bigger body only appeared after a reconnect.
         maxHp: maxHpFor(player.id),
         // ...and whether the wolf may pick this hero at all. Derived HERE, on the side of the seam
         // that knows both where everyone is standing and whether the Beacon is burning, from the
@@ -1357,8 +1360,10 @@ export function attachGameServer(httpServer, options = {}) {
     // sword you equipped only started working after a reconnect.
     weaponIdFor: (playerId) => rewards.equippedWeaponIdFor(playerId),
     // ARC 2, and the whole reason maxHp became a per-hero number: Wren's charm is a durable row, and
-    // this is where a row becomes a heart.
-    maxHpFor: (playerId) => (rewards.charmEarnedFor(playerId) ? HERO_MAX_HP + CHARM_BONUS_HEARTS : HERO_MAX_HP),
+    // this is where a durable row becomes a bigger body. Through progression/heroStats.js since P2
+    // rather than by adding a constant here, so the server and the offline fallback resolve one
+    // law -- see that module's resolvedMaxHp.
+    maxHpFor: (playerId) => resolvedMaxHp(LEVEL_ONE, { charmOwned: rewards.charmEarnedFor(playerId) }),
   });
   // Whether the durable row has been written for the victory this process is currently watching.
   // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that

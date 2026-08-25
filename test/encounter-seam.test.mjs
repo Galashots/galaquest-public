@@ -16,6 +16,7 @@ import {
   ATTACK_COOLDOWN_SECONDS,
   HERO_MAX_HP,
   SWING_SECONDS,
+  BASE_HERO_DAMAGE,
   WOLF_MAX_HP,
   canAttack,
   createEncounter,
@@ -208,7 +209,11 @@ test('a full kill raises its events through the seam, in order', () => {
   let state = createEncounterState({ wolfSpawn: { x: 0, z: 1 } });
   const seen = [];
 
-  for (let blow = 0; blow < WOLF_MAX_HP; blow += 1) {
+  // Blows to kill, derived from the two constants rather than counted as hit points: P2 rescaled
+  // both, and a loop that ran WOLF_MAX_HP times would swing thirty times at a wolf that dies on the
+  // third -- which would still pass the defeat assertions below while measuring nothing.
+  const blowsToKill = Math.ceil(WOLF_MAX_HP / BASE_HERO_DAMAGE);
+  for (let blow = 0; blow < blowsToKill; blow += 1) {
     const asked = stepEncounter(state, {
       deltaSeconds: STEP, heroPosition: { x: 0, z: 0 }, heroHeading: 0, attack: true,
     });
@@ -226,5 +231,5 @@ test('a full kill raises its events through the seam, in order', () => {
   assert.equal(state.wolf.hp, 0);
   assert.equal(seen.filter((type) => type === 'wolf-defeated').length, 1,
     'exactly one defeat, however many swings followed');
-  assert.equal(seen.filter((type) => type === 'wolf-hit').length, WOLF_MAX_HP - 1);
+  assert.equal(seen.filter((type) => type === 'wolf-hit').length, blowsToKill - 1);
 });

@@ -29,7 +29,7 @@
       /* DEVELOPER TELEMETRY, hidden in play -- the same data-debug convention #perf-hud already uses,
          because a second mechanism for "show this only to a developer" is a second thing to keep
          true. This line read `you (14.2,-3.1) · wolf 3hp · you 4hp · players 1` permanently, over
-         the game, for the whole session. None of it is for a child: their health is the hearts, the
+         the game, for the whole session. None of it is for a child: their health is the bar, the
          wolf's is the bar over the wolf, and the coordinates and player count are for me.
 
          BUT NOT WHEN IT IS A FAULT. The same element carries the four things that get said when the
@@ -161,34 +161,59 @@
         45%  { opacity: 1; transform: scale(1.28); }
         100% { opacity: 0; transform: scale(1.45); }
       }
-      /* Hearts, not a bar: see combat/feedback.js for why. Same dark pill treatment as the other HUD
-         readouts so a red heart still reads against open sky. */
+      /* A BAR AND A NUMBER since P2 -- see combat/feedback.js for why the same reference research
+         that once chose a row of hearts now chooses this, and #hero-health's own markup comment for
+         what it replaced. Same dark pill treatment as the other HUD readouts so red still reads
+         against open sky, and the same fixed top-left anchor so nothing about the status column
+         moved. The pill is a FIXED WIDTH regardless of the numbers in it: the bar's length is the
+         signal, and a pill that grew as a hero levelled would move the lantern row underneath it. */
       #hero-health {
         position: absolute; top: 0.75rem; left: 0.75rem;
-        display: flex; gap: 0.15rem; align-items: center;
-        padding: 0.3rem 0.5rem; border-radius: 0.35rem;
+        display: flex; gap: 0.4rem; align-items: center;
+        padding: 0.3rem 0.55rem; border-radius: 0.35rem;
         background: rgb(12 20 31 / 75%);
-        font-size: 1.5rem; line-height: 1;
+        line-height: 1;
         pointer-events: none; touch-action: none;
       }
-      #hero-health .heart { color: rgb(255 255 255 / 25%); transition: color 120ms ease-out; }
-      #hero-health .heart[data-filled="true"] { color: #e0334f; }
-      #hero-health .heart::after { content: '\2665'; }
-      /* Beating a wolf gives a heart back (healTheStanding in combat/encounter.js). The refilled
-         heart lights on its own from renderHearts -- this makes the row ANNOUNCE it, because a child
-         watching a wolf dissolve eighteen metres away is not looking at the top-left corner. Green,
-         and scaling UP, so it cannot be confused with the red damage vignette, which is the other
-         thing that happens to the hearts and means the opposite. Fast in, slow out, the same shape
-         #hero-hurt-flash uses and for the same reason. */
+      #hero-health .health-icon { color: #e0334f; font-size: 1.15rem; line-height: 1; }
+      #hero-health .health-icon::after { content: '\2665'; }
+      /* THICK, on purpose: the brief's own word, and the reason is a thumb-held tablet at arm's
+         length rather than a monitor. 0.62rem is about the height of the numerals beside it, which is
+         what makes the two read as one readout instead of a bar with a caption. */
+      #hero-health .health-track {
+        display: block; width: 6.5rem; height: 0.62rem; border-radius: 0.31rem;
+        background: rgb(255 255 255 / 18%); overflow: hidden;
+      }
+      #hero-health .health-fill {
+        display: block; height: 100%; width: 100%; border-radius: 0.31rem;
+        background: linear-gradient(90deg, #e0334f, #ff6b7f);
+        transform-origin: left center;
+        transition: width 180ms ease-out, background 180ms ease-out;
+      }
+      /* THE LAST OF IT LOOKS DIFFERENT. A bar that only shortens says "you are losing"; a bar that
+         changes colour says "you are nearly out", which is the thing a child needs a beat earlier
+         than the geometry alone gives them. Set by main.js off the same fraction that sizes the
+         fill, so the two can never disagree about what "low" means. */
+      #hero-health[data-low="true"] .health-fill { background: linear-gradient(90deg, #d11f2f, #ff9a3d); }
+      #hero-health .health-count { font: 700 0.95rem/1 system-ui, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+      /* Tabular numerals above and a fixed-width slash here for the same reason: the readout must not
+         jitter horizontally as 30 becomes 9 and back. */
+      #hero-health .health-slash { opacity: 0.55; margin: 0 0.15rem; }
+      /* Beating a wolf gives health back (healTheStanding in combat/encounter.js). The bar refills on
+         its own from renderHealth -- this makes the row ANNOUNCE it, because a child watching a wolf
+         dissolve eighteen metres away is not looking at the top-left corner. Green, and scaling UP,
+         so it cannot be confused with the red damage vignette, which is the other thing that happens
+         to this readout and means the opposite. Fast in, slow out, the same shape #hero-hurt-flash
+         uses and for the same reason. */
       #hero-health { transform-origin: left center; transition: transform 320ms ease-out, box-shadow 320ms ease-out; }
       #hero-health[data-healing="true"] {
         transform: scale(1.16);
         box-shadow: 0 0 0.85rem 0.15rem rgb(126 226 138 / 75%);
         transition: transform 90ms ease-out, box-shadow 90ms ease-out;
       }
-      /* Lantern Marks, D4: three pips directly under the hearts, same dark-pill / same fill
-         convention (see combat/feedback.js's heartsForHp comment for why filled-icon-not-a-bar
-         suits a small fixed integer -- MARKS_TO_UNLOCK is 3, exactly like HERO_MAX_HP). Read-only
+      /* Lantern Marks, D4: three pips directly under the health readout, same dark-pill / same fill
+         convention (see combat/feedback.js's health research for why filled-icon-not-a-bar suits a
+         small FIXED integer, which MARKS_TO_UNLOCK still is and HERO_MAX_HP no longer is). Read-only
          and out of touch-flow, so the touch-target-size rules elsewhere on this page do not apply.
          Glyph is a plain filled dot, not a lantern pictogram: a placeholder shape like the six
          audio recipes are placeholder sounds -- what it looks like is a later the owner-on-iPad call,
@@ -265,15 +290,15 @@
       #loot-hud .loot-count[data-kind="shard"] .loot-icon { color: #b98be0; }
       #loot-hud .loot-count[data-kind="shard"] .loot-icon::after { content: '\25C6'; }
       #loot-hud .loot-count[data-kind="coin"] .loot-icon { color: #f2c14e; }
-      /* Same brief pop-and-settle the hearts row uses on a heal (#hero-health[data-healing]) -- a
+      /* Same brief pop-and-settle the health row uses on a heal (#hero-health[data-healing]) -- a
          number that merely changes value is easy to miss in a HUD corner; a number that visibly
          pops is not. Reset by main.js the same way flashHeroHurt's timer is: a fresh setTimeout on
          every arrival, so two pickups landing close together each get their own pop. */
       #loot-hud .loot-count[data-popped="true"] { animation: loot-pop 260ms ease-out; }
       @keyframes loot-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
-      /* The standing objective. Sits directly under #lantern-marks (0.75 + 2.5 for the hearts row,
+      /* The standing objective. Sits directly under #lantern-marks (0.75 + 2.5 for the health row,
          + 2.2 for the pips row), same pill treatment, same read-only/out-of-touch-flow rules. Left
-         aligned with the hearts and pips so the whole top-left corner reads as one status column. */
+         aligned with the bar and pips so the whole top-left corner reads as one status column. */
       #quest-objective {
         position: absolute; top: calc(0.75rem + 2.5rem + 2.2rem); left: 0.75rem;
         max-width: min(20rem, calc(100% - 10rem));
@@ -286,7 +311,7 @@
       #quest-objective[data-shown="true"] { opacity: 1; }
       /* The gap that mattered most: before this, a bitten hero got no feedback beyond a number in
          the status line. A red glow at the screen EDGES -- the "damage vignette" convention, see
-         combat/feedback.js -- because it has to register without the child looking at the hearts in
+         combat/feedback.js -- because it has to register without the child looking at the bar in
          the corner. Fast in, slower fade out: the [data-shown="true"] rule below overrides the base
          transition so the rise reads as sudden and the decay reads as a fade. */
       #hero-hurt-flash {
@@ -427,7 +452,7 @@
       }
       .damage-number[data-rise="true"] { transform: translate(-50%, -260%); opacity: 0; }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .heart, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
       }
       /* Y/Task F2: debug-only, hidden by default -- the GPU/frame-cost panel was competing with the
          game and Keeper dialogue in every capture (found by looking at village-keeper-wave.png-style
@@ -865,7 +890,7 @@
         display: grid; place-items: center;
         background: rgb(9 15 24 / 96%);
         /* Above the HUD, not merely above the world. Found by looking at a capture: the backdrop
-           dimmed the village correctly and the hearts, the objective chip, the Hero/Board buttons
+           dimmed the village correctly and the health readout, the objective chip, the Hero/Board buttons
            and the loading line all still sat ON TOP of the question. A stacking context is the half
            of "opaque" that a background colour does not give you. */
         z-index: 20;
@@ -1039,7 +1064,7 @@
       <canvas id="game-canvas" aria-label="GalaQuest game view"></canvas>
       <div id="hero-hurt-flash" aria-hidden="true" data-shown="false"></div>
       <!-- GP1-C5. role=status rather than aria-hidden: "you are out for a moment" is state a screen
-           reader user needs, where the hurt flash above is decoration for a fact the hearts already
+           reader user needs, where the hurt flash above is decoration for a fact the bar already
            announce. The bar itself is aria-hidden -- it is the same information as the message, drawn. -->
       <div id="hero-down-veil" role="status" aria-live="polite" data-shown="false">
         <div id="hero-down-bar" aria-hidden="true"></div>
@@ -1048,20 +1073,24 @@
            real state, this is juice on top of it -- so aria-hidden, same as the hurt flash above.
            Populated/emptied by main.js's popDamageNumber(); see screenProjection.js for the maths. -->
       <div id="damage-numbers" aria-hidden="true"></div>
-      <!-- Three spans: matches HERO_MAX_HP in combat/encounter.js. feedback.test.mjs asserts that,
-           so this drifting out of sync with a future HERO_MAX_HP change fails loudly rather than
-           quietly under- or over-drawing hearts. -->
-      <!-- HERO_MAX_HP_CEILING spans, not HERO_MAX_HP. A hero STARTS with three hearts and can be
-           given a fourth (Ranger Wren's charm), so the markup carries the ceiling and main.js hides
-           the pips this particular body has not earned. test/feedback.test.mjs pins the count. -->
+      <!-- P2: A BAR AND A NUMBER, not a fixed row of pips.
+           This was four <span class="heart"> elements, one per pip, with a hand-maintained count
+           pinned to HERO_MAX_HP_CEILING -- because the markup could not draw a variable number and
+           something had to say how many it owed. Every Hero level now grants max HP
+           (docs/product/PROGRESSION_CONTRACT_V0.md supersedes the four-heart ceiling), so there is
+           no count to hardcode: a Level-20 hero has 125 max HP and would need 125 pips.
+           The heart glyph is KEPT as the icon -- see combat/feedback.js's reference research for why
+           the same work that once chose pips now chooses a bar, and why the heart itself was never
+           the part that stopped working. The numerals are the backup readout the same research
+           records for large, continuously-changing health; they are also the only channel that
+           survives reduced motion, which is why they are real text and not a title attribute. -->
       <div id="hero-health" role="status" aria-live="polite" aria-label="Hero health">
-        <span class="heart" data-filled="true"></span>
-        <span class="heart" data-filled="true"></span>
-        <span class="heart" data-filled="true"></span>
-        <span class="heart" data-filled="true" hidden></span>
+        <span class="health-icon" aria-hidden="true"></span>
+        <span class="health-track" aria-hidden="true"><span class="health-fill"></span></span>
+        <span class="health-count"><span id="health-current">30</span><span class="health-slash">/</span><span id="health-max">30</span></span>
       </div>
       <!-- Three spans: matches MARKS_TO_UNLOCK in rewards/marks.js. test/rewards-hud.test.mjs
-           asserts that, the same guard feedback.test.mjs already runs for the hearts above. -->
+           asserts that, the same guard feedback.test.mjs already runs for the health readout above. -->
       <div id="lantern-marks" role="status" aria-live="polite" aria-label="Lantern marks">
         <span class="mark" data-filled="false"></span>
         <span class="mark" data-filled="false"></span>

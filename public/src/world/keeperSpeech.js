@@ -3,7 +3,7 @@
 // W1: the game's first tap-to-hear speech line. PURE state->text mapping plus one small
 // injectable-speak wrapper -- no three.js, no DOM read here (main.js owns the one place this ever
 // meets a <span> and a real SpeechSynthesisUtterance, the same discipline rewards/hud.js's
-// pipsForMarks and combat/feedback.js's heartsForHp already follow for their own HUD pieces).
+// pipsForMarks and combat/feedback.js's healthReadout already follow for their own HUD pieces).
 //
 // WRITTEN FOR a younger player, who is in the younger bracket. What shipped first was one 27-word sentence
 // with an em dash, the word "wilderness", and the speaker's name eating the first line -- and it

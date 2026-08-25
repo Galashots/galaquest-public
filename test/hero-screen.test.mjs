@@ -9,6 +9,7 @@ import {
   DEFAULT_OWNED_ITEM_IDS,
   STARTER_SWORD_ID,
   WILDWOOD_BLADE_ID,
+  damageFor,
 } from '../public/src/progression/items.js';
 import { heroScreenViewModel, swatchFor, swatchHexFor } from '../public/src/progression/heroScreen.js';
 
@@ -91,9 +92,16 @@ test('comparing the equipped item against itself yields no comparison card', () 
   assert.equal(view.selected.isEquipped, true);
 });
 
-test('once granted, comparing the Wildwood Blade against the equipped Starter Sword reads 1 -> 2 DAMAGE, an upgrade', () => {
+test('once granted, comparing the Wildwood Blade against the equipped Starter Sword reads an upgrade', () => {
   const view = heroScreenViewModel({ ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID });
-  assert.deepEqual(view.comparison, { fromDamage: 1, toDamage: 2, isUpgrade: true });
+  // Read off the catalogue rather than typed. The test title used to name the numbers -- "reads
+  // 1 -> 2 DAMAGE" -- and P2's rescale made both of them wrong; a card that prints the catalogue's
+  // real values is the property, and which values those are is items.js's business (GQ-007).
+  assert.deepEqual(view.comparison, {
+    fromDamage: damageFor(STARTER_SWORD_ID),
+    toDamage: damageFor(WILDWOOD_BLADE_ID),
+    isUpgrade: true,
+  });
   assert.equal(view.selected.isEquipped, false);
 });
 

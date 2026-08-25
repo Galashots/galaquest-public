@@ -16,9 +16,13 @@ import {
   swingDamageFor,
 } from '../public/src/progression/items.js';
 
-test('starter sword and Wildwood Blade are both defined weapons with the plan-specified damage', () => {
-  assert.equal(itemDef(STARTER_SWORD_ID).damage, 1);
-  assert.equal(itemDef(WILDWOOD_BLADE_ID).damage, 2);
+test('starter sword and Wildwood Blade are both defined weapons with the brief-specified damage', () => {
+  // P2's values (docs/briefs/PROGRESSION_P2_FIRST_HERO_LEVEL_UP.md). They were 1 and 2 -- hit
+  // counters against a 3hp wolf -- and the rescale is what gives a Hero level room to be worth +2
+  // damage on top of a weapon. The RATIO is the promise and it is unchanged; see the blow-count
+  // tests below, which is where that promise is actually pinned.
+  assert.equal(itemDef(STARTER_SWORD_ID).damage, 10);
+  assert.equal(itemDef(WILDWOOD_BLADE_ID).damage, 20);
   assert.equal(itemDef(STARTER_SWORD_ID).slot, WEAPON_SLOT);
   assert.equal(itemDef(WILDWOOD_BLADE_ID).slot, WEAPON_SLOT);
 });
@@ -51,8 +55,9 @@ test('sabotage: isKnownWeapon is not just isKnownItem in disguise -- a non-weapo
 });
 
 test('the Wildwood Blade damage is a meaningful, non-breaking upgrade against the current wolf', () => {
-  // Plan section 9/29's own worked example: WOLF_MAX_HP stays 3, so 1 damage takes three hits and
-  // 2 damage takes two -- an upgrade a child can feel without becoming a one-shot.
+  // THE PROMISE, and it survived the P2 rescale unchanged because it was always about blow COUNTS:
+  // the starter sword takes three and the Blade takes two -- an upgrade a child can feel without
+  // becoming a one-shot. Both the wolf and both weapons moved by ten; this test did not have to.
   const starterHits = Math.ceil(WOLF_MAX_HP / damageFor(STARTER_SWORD_ID));
   const bladeHits = Math.ceil(WOLF_MAX_HP / damageFor(WILDWOOD_BLADE_ID));
   assert.equal(starterHits, 3);

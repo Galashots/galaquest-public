@@ -944,9 +944,9 @@ await shot('02-engaged');
 //
 // Comparing a reading from before the walk against one taken after it straddles whatever happened
 // in between -- including a knockdown and the respawn that follows it, which puts the hero back on
-// full hearts. Seen locally: `hero 0hp -> 0hp`, because the walk into range took long enough for
+// whole again. Seen locally: `hero 0hp -> 0hp`, because the walk into range took long enough for
 // him to be knocked out before the comparison even started, and `hp < 0` is not reachable. The
-// recorder makes the claim directly: at some frame, the hero had fewer hearts than he had on the
+// recorder makes the claim directly: at some frame, the hero had less health than he had on the
 // frame before. That is what a bite landing IS, and no respawn can forge it.
 await page.eval(startWatch('bite', '({ hp: window.__galaQuestRuntime.encounterState().hero.hp })'));
 await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.0, 4000, { faceTarget: true });
@@ -957,7 +957,7 @@ await shot('hero-hurt-flash');
 const bites = bitten.samples.filter((sample, index) => index > 0 && sample.hp < bitten.samples[index - 1].hp);
 check('a wolf bite lands and the capture catches it while the hurt flash is still up',
   bites.length > 0,
-  `${bitten.frames} frames recorded, ${bites.length} bite(s) seen, hearts `
+  `${bitten.frames} frames recorded, ${bites.length} bite(s) seen, hp `
     + `${bitten.samples[0]?.hp} -> ${bitten.samples[bitten.samples.length - 1]?.hp}`);
 
 // ── GP1-C5: being knocked out, photographed ─────────────────────────────────────────────────────
@@ -969,7 +969,7 @@ check('a wolf bite lands and the capture catches it while the hurt flash is stil
 // broken, which is the specific failure this phase was commissioned to fix.
 //
 // Reached by simply CONTINUING to stand there. The beat above already walked into bite range and
-// took one bite without attacking; three bites is a knockout at HERO_MAX_HP 3, so this needs no new
+// took one bite without attacking; three bites is a knockout at a Level-1 body, so this needs no new
 // technique and no forced state -- just patience, which is also exactly how a real child gets
 // knocked out. Nothing here touches the rules: the wolf does it.
 // THE WHOLE KNOCKDOWN IS RECORDED, then judged -- because the thing being asserted is a state that
@@ -1713,7 +1713,7 @@ check('landscape: the knocked-out state is on screen in this orientation too',
     + `${veiledFrames.length} of them veiled`);
 
 // KILL, in landscape -- the fourth state, and the last one needed to say the cues survive outside
-// portrait. He stands back up on full hearts RESPAWN_SECONDS after going down, so this waits for
+// portrait. He stands back up whole RESPAWN_SECONDS after going down, so this waits for
 // that rather than swinging at a wolf while downed and having every tap refused.
 await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000 });
 // The same clock and the same recorder the portrait kill uses -- see its header. This loop was the

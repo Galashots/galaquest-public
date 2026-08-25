@@ -18,7 +18,7 @@ import {
   RESPAWN_SECONDS,
   stepEncounter,
 } from './combat/encounter.js';
-import { createEncounterFeedback, heartsForHp } from './combat/feedback.js';
+import { createEncounterFeedback, healthReadout } from './combat/feedback.js';
 import { createAudioEngine } from './audio/engine.js';
 import {
   CART_JOLT_RECIPE_NAME,
@@ -66,7 +66,6 @@ import { avatarForProfile } from './progression/heroAvatars.js';
 import {
   ATTACK_REACH,
   HERO_MAX_HP,
-  HERO_MAX_HP_CEILING,
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
   isWithinStrike,
@@ -173,7 +172,7 @@ const EMPTY_SERVER_ENCOUNTER = Object.freeze({
   heroes: Object.freeze({}),
 });
 // The wire's hero shape (protocol.js decodeHeroes): only the four fields a client needs to
-// predict its own attack button and render hearts. Matches createPartyEncounterState's freshHero
+// predict its own attack button and render health. Matches createPartyEncounterState's freshHero
 // on those same four fields.
 const DEFAULT_HERO_VIEW = Object.freeze({ hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1 });
 // Shared with net/gameServer.mjs through the zone data both sides import (Phase R2, GQ-007). These
@@ -758,7 +757,7 @@ async function bootstrap() {
   // the wolf charges the instant the page loads and a young player is in a fight before they
   // have found the stick.
   // Held as published state and advanced through the seam, not as an object with methods that own
-  // hidden mutable fields. Everything downstream -- the swing, the wolf presenter, the hearts, the
+  // hidden mutable fields. Everything downstream -- the swing, the wolf presenter, the health bar, the
   // status line -- reads THIS, and none of them reach into the rules, whether it holds the local
   // step's result or the server's mirror. That is what made the move to a server-owned fight a
   // change of who calls stepParty rather than a rewrite of every reader.
@@ -825,19 +824,27 @@ async function bootstrap() {
     speakKeeperLineIfUnlocked(spoken);
   }
 
-  // Hearts, not the status line's "you Nhp": see combat/feedback.js for the reference research
-  // behind that choice. heartsForHp() is the only part of this worth unit testing; wiring its result
-  // onto three fixed spans is not.
-  const heartElements = Array.from(document.querySelectorAll('#hero-health .heart'));
-  const heartsElement = document.querySelector('#hero-health');
-  // How many hearts THIS body has, remembered between renders. Every renderHearts caller in the
-  // frame loop knows an hp and most of them do not know a ceiling (a 'hero-healed' event carries
-  // `remaining` and nothing else), so the ceiling is latched here from the one place that does know
-  // it -- the published hero -- rather than threaded through every call site.
-  let heartCeiling = HERO_MAX_HP;
-  // What the bar is currently SHOWING, so the per-frame read in the loop repaints on a change rather
-  // than rewriting four dataset attributes sixty times a second.
-  let heartsShown = { hp: HERO_MAX_HP, maxHp: HERO_MAX_HP };
+  // A bar and a number, not the status line's "you Nhp": see combat/feedback.js for the reference
+  // research behind that choice and for why P2's per-level max HP is what retired the pip row.
+  // healthReadout() is the only part of this worth unit testing; wiring its result onto three spans
+  // is not.
+  const healthElement = document.querySelector('#hero-health');
+  const healthFillElement = document.querySelector('#hero-health .health-fill');
+  const healthCurrentElement = document.querySelector('#health-current');
+  const healthMaxElement = document.querySelector('#health-max');
+  // How big THIS body is, remembered between renders. Every renderHealth caller in the frame loop
+  // knows an hp and most of them do not know a max (a 'hero-healed' event carries `remaining` and
+  // nothing else), so the max is latched here from the one place that does know it -- the published
+  // hero -- rather than threaded through every call site.
+  let healthMax = HERO_MAX_HP;
+  // What the readout is currently SHOWING, so the per-frame read in the loop repaints on a change
+  // rather than rewriting the same three nodes sixty times a second.
+  let healthShown = { hp: HERO_MAX_HP, maxHp: HERO_MAX_HP };
+  // Below this share of the body the bar changes colour -- see #hero-health[data-low] in index.html
+  // for why that is a second channel rather than decoration. A third, matching the promise both
+  // fights already make: three wolf bites, or three Warden blows, is a fresh hero's whole body, so
+  // "one mistake left" and "the bar has gone orange" are the same moment by construction.
+  const HEALTH_LOW_FRACTION = 1 / 3;
   // ── The teaching latches ────────────────────────────────────────────────────────────────────
   // Three things a child learns ONCE and must never be taught again: that the Keeper gave them a
   // quest, that they can move, that they can swing. All three are declared here and HYDRATED from
@@ -846,26 +853,25 @@ async function bootstrap() {
   // variable that does not exist yet. This branch has already shipped one temporal dead zone.
   let combatCoached = false;
   let movementTaught = false;
-  function renderHearts(hp, maxHp = heartCeiling) {
-    heartCeiling = Math.max(1, Math.min(HERO_MAX_HP_CEILING, Math.round(maxHp)));
-    const filled = heartsForHp(hp, heartCeiling);
-    heartElements.forEach((heart, index) => {
-      // Pips this body has not earned are HIDDEN rather than drawn empty. An empty pip is this HUD's
-      // word for "you have lost a heart", so painting a fourth empty one on a three-heart child
-      // would tell them they are hurt at full health -- and the fourth simply appearing is exactly
-      // how Wren's charm announces itself.
-      heart.hidden = index >= heartCeiling;
-      heart.dataset.filled = String(filled[index] ?? false);
-    });
+  function renderHealth(hp, maxHp = healthMax) {
+    const readout = healthReadout(hp, maxHp);
+    healthMax = readout.max;
+    // Percentage width rather than a transform: the track has `overflow: hidden` and a rounded end,
+    // and a scaled child would squash its own corner radius as it shrank.
+    healthFillElement.style.width = `${readout.fraction * 100}%`;
+    healthCurrentElement.textContent = String(readout.current);
+    healthMaxElement.textContent = String(readout.max);
+    // Strictly below, so a hero sitting exactly on the threshold is not already being warned.
+    healthElement.dataset.low = String(readout.fraction < HEALTH_LOW_FRACTION);
   }
 
   // The heal's own signal -- see the #hero-health[data-healing] rule in index.html. Same
   // hold-then-release shape as flashHeroHurt below; the CSS owns the fade.
-  let heartPopTimer = null;
-  function popHearts() {
-    heartsElement.dataset.healing = 'true';
-    window.clearTimeout(heartPopTimer);
-    heartPopTimer = window.setTimeout(() => { delete heartsElement.dataset.healing; }, 200);
+  let healthPopTimer = null;
+  function popHealth() {
+    healthElement.dataset.healing = 'true';
+    window.clearTimeout(healthPopTimer);
+    healthPopTimer = window.setTimeout(() => { delete healthElement.dataset.healing; }, 200);
   }
 
   // Floating damage numbers. Until now a landed hit was only visible as the wolf's own spark
@@ -874,7 +880,7 @@ async function bootstrap() {
   // once, at the moment it pops, rather than tracked every frame for its own short life: 900ms is
   // short enough that a fixed spawn point still reads as "the hit landed there", and tracking it
   // would mean carrying a live reference into a frame loop for an effect that owes the DOM nothing
-  // else, the same reasoning popHearts() above already follows.
+  // else, the same reasoning popHealth() above already follows.
   const damageNumbersElement = document.querySelector('#damage-numbers');
   const DAMAGE_NUMBER_LIFETIME_MS = 900;
   function popDamageNumber(worldX, worldY, worldZ, amount) {
@@ -897,10 +903,10 @@ async function bootstrap() {
     window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
   }
 
-  // Phase D (D4): three lantern-mark pips by the hearts, filling as marks arrive. Same read-only,
-  // re-render-from-current-value pattern as renderHearts above -- pipsForMarks() is the only part of
+  // Phase D (D4): three lantern-mark pips under the health readout, filling as marks arrive. Same read-only,
+  // re-render-from-current-value pattern as renderHealth above -- pipsForMarks() is the only part of
   // this worth unit testing (test/rewards-hud.test.mjs); wiring its result onto three fixed spans is
-  // not, the same reasoning renderHearts' own comment gives.
+  // not, the same reasoning renderHealth's own comment gives.
   const lanternPipElements = Array.from(document.querySelectorAll('#lantern-marks .mark'));
   const lanternMarksElement = document.querySelector('#lantern-marks');
   // Matches the mark-ignite / mark-pill-lift keyframes in index.html. One number, because the
@@ -968,7 +974,7 @@ async function bootstrap() {
   }
 
   // GP2: the coin/shard HUD, re-rendered from whatever coinsDisplayed/shardsDisplayed currently hold
-  // -- the same "read-only, paint from the current value" pattern renderHearts/renderLanternPips
+  // -- the same "read-only, paint from the current value" pattern renderHealth/renderLanternPips
   // already use. Deliberately NOT reading ownRewards.coins/.shards directly (see the frame loop's own
   // comment): those two module-level numbers are what stays gated behind a pickup's own arrival.
   const coinCountElement = document.querySelector('#coin-count');
@@ -999,7 +1005,7 @@ async function bootstrap() {
   // metres apart and can never both be in range at once -- see the frame loop's own npcSpeech pick).
   // Text, name and shown/hidden are all driven every frame by keeperSpeechState/rowanSpeechState --
   // this function only paints whatever it was handed, the same read-only "render from current
-  // value" pattern renderHearts/renderLanternPips use. The name row used to be set once at boot to
+  // value" pattern renderHealth/renderLanternPips use. The name row used to be set once at boot to
   // KEEPER_NAME; now it has to change with whoever is actually speaking.
   const keeperSpeechElement = document.querySelector('#keeper-speech');
   const keeperSpeechTextElement = document.querySelector('#keeper-speech-text');
@@ -1008,7 +1014,7 @@ async function bootstrap() {
   let npcSpeechLine = null;
   let npcSpeechName = null;
 
-  // The standing objective, same render-from-current-value discipline as the hearts and the pips.
+  // The standing objective, same render-from-current-value discipline as the health readout and the pips.
   const questObjectiveElement = document.querySelector('#quest-objective');
   let questObjectiveLine = null;
   function renderQuestObjective(line) {
@@ -1650,7 +1656,7 @@ async function bootstrap() {
       touchStickElement.dataset.suspended = String(open);
       attackButtonElement.dataset.suspended = String(open);
       // And the same HUD-hiding attribute, for a reason a capture made obvious: a dimmed backdrop
-      // still leaves the hearts and the objective looking tappable, and behind a modal they are not.
+      // still leaves the health readout and the objective looking tappable, and behind a modal they are not.
       gameSurface.dataset.profileGateOpen = String(open);
       if (open) {
         heroScreen.close();
@@ -1717,7 +1723,7 @@ async function bootstrap() {
   // hard boundary, not an oversight) -- this is their own dispatcher, same discipline.
   const onRewardEvent = createRewardFeedback({
     // Pips are re-rendered directly from the current mark count every frame below, the same way
-    // hearts are re-rendered from event.remaining above; nothing extra needed per-event.
+    // health is re-rendered from event.remaining above; nothing extra needed per-event.
     // The banner AND the spark are what tell the child a wolf was worth something -- the pip alone
     // is 1.1rem of dot in a corner they are not looking at while a wolf is biting them. The spark
     // lifts off wherever the wolf went down (its last published position, read here rather than at
@@ -1766,7 +1772,7 @@ async function bootstrap() {
     'shard-earned'(event) { rewardEventLog.push(event); },
     // Gear, satchel and charm: durability only, for the same reason as currency. Each already has
     // its own ceremony fired by DIFFING the rewards block -- the Blade's unlock card, the satchel
-    // lift, Wren's fourth heart -- and those diffs are what make a beat survive a reconnect without
+    // lift, Wren's charm -- and those diffs are what make a beat survive a reconnect without
     // replaying, so nothing here may fire one. What these add is the NAMED fact, journalled by the
     // dispatch loop under the id the store wrote it with.
     'gear-owned'(event) { rewardEventLog.push(event); },
@@ -1847,10 +1853,10 @@ async function bootstrap() {
     // The flinch is gated on the swing state at dispatch time: the owner's precedence rule (2026-08-13)
     // is that attack wins and a hit only shows when the testers are not attacking. reactClips.js
     // refuses the trigger itself (and is null until the rig actually ships hit/death clips), so
-    // the flash and hearts here remain the guaranteed feedback either way.
+    // the flash and the health bar here remain the guaranteed feedback either way.
     'hero-hurt'(event) {
       flashHeroHurt();
-      renderHearts(event.remaining);
+      renderHealth(event.remaining);
       reactions?.triggerHit({ swinging: swing?.isSwinging() === true });
       // THE ONE SENTENCE THE GAME NEVER SAID. Measured against the real rules: a child who freezes
       // and never swings takes 7 knockouts in a minute and never scratches the wolf, while a child
@@ -1871,11 +1877,11 @@ async function bootstrap() {
     'bite-missed'() {},
     // The banner says it; the veil and the filling bar are what a child who is not reading gets.
     'hero-down'() { showHeroDown(true); banner('You went down…', 1600); },
-    'hero-respawned'() { showHeroDown(false); renderHearts(heartCeiling); banner('Back on your feet', 1200); },
-    // Beating a wolf gives a heart back. No banner: wolf-defeated's "The wolf is beaten!" is already
-    // on screen from the same frame, and a second banner would replace it mid-read. The hearts row
+    'hero-respawned'() { showHeroDown(false); renderHealth(healthMax); banner('Back on your feet', 1200); },
+    // Beating a wolf gives health back. No banner: wolf-defeated's "The wolf is beaten!" is already
+    // on screen from the same frame, and a second banner would replace it mid-read. The health row
     // popping IS the message, and it points at exactly the thing that changed.
-    'hero-healed'(event) { renderHearts(event.remaining); popHearts(); },
+    'hero-healed'(event) { renderHealth(event.remaining); popHealth(); },
     // the owner's ruling, 2026-08-13: WOLF_RESPAWN_SECONDS after a kill, the wolf is back. No presenter
     // consumer yet -- wolfPresenter?.update() already reads wolf.mode/hp off encounterState every
     // frame and draws whatever it finds, so the wolf reappearing needs no push here. Declared
@@ -1885,7 +1891,7 @@ async function bootstrap() {
   });
   // Paint from the encounter's own starting hp rather than trusting the markup's default -- the
   // markup only needs to be right until this line runs.
-  renderHearts(encounterState.hero.hp);
+  renderHealth(encounterState.hero.hp);
   renderLanternPips(0);
 
   // Party events (Task B1) carry heroId; a solo consumer table like onEncounterEvent's above
@@ -1907,9 +1913,9 @@ async function bootstrap() {
   // child hit a seal.
   //
   // hero-down / hero-respawned / hero-healed are DELIBERATELY ABSENT from this set even though the
-  // siege raises them too: they mean exactly the same thing in both fights (this hero's hearts), the
+  // siege raises them too: they mean exactly the same thing in both fights (this hero's health), the
   // wolf's dispatcher already does exactly the right thing with them, and a hero has one set of
-  // hearts whichever fight knocked them over.
+  // health whichever fight knocked them over.
   const SIEGE_EVENT_TYPES = new Set([
     'seal-cracked', 'seal-burst', 'warden-woke', 'warden-hit', 'warden-defeated', 'warden-hurt-hero',
     'warden-phase', 'beacon-ignited', 'siege-reset',
@@ -2198,8 +2204,8 @@ async function bootstrap() {
     // are reported separately for the same reason zoneTrailState reports `lit` and `loaded` apart:
     // if the two ever disagree, a harness sees a Beacon the rules think is burning standing over a
     // cold cresset.
-    // ARC 2: is Wren in the world, is she carrying anything of ours yet, and how many hearts does
-    // this body actually have. Reported as OBSERVABLE facts rather than as the flags behind them --
+    // ARC 2: is Wren in the world, is she carrying anything of ours yet, and how big is this body
+    // actually. Reported as OBSERVABLE facts rather than as the flags behind them --
     // `rangerHere` is whether the mesh is drawn, not whether the Beacon is lit, which is the
     // distinction docs/MISTAKES.md GQ-013 is about.
     // The guidance rescue's own reading, for the same reason every zone exposes one: a harness has
@@ -2228,8 +2234,13 @@ async function bootstrap() {
       rangerBuilt: zoneRanger !== null,
       satchelCarried: satchelCarriedSeen === true,
       charmOwned: charmOwnedSeen === true,
-      hearts: heartsShown.hp,
-      heartCeiling: heartsShown.maxHp,
+      // THE BODY, as the readout actually shows it. Renamed from hearts/heartCeiling in P2: the
+      // fixed pip row is gone and max HP is a Hero STAT now (progression/heroStats.js), so a name
+      // that counts hearts would be a harness asking a question the game no longer answers -- and
+      // GQ-017 is explicit that the readers under tools/ are part of a type change, not an
+      // afterthought.
+      hp: healthShown.hp,
+      maxHp: healthShown.maxHp,
     }),
     zoneSiegeState: () => ({
       seals: siegeState.seals.map((seal) => ({ blows: seal.blows, burst: seal.burst })),
@@ -2404,7 +2415,7 @@ async function bootstrap() {
     lastReconcile = net.reconcile(player.position);
 
     // Online: the fight is the server's (Task B4). Mirror the last published block onto
-    // encounterState -- hearts, the swing, the wolf presenter, the status line all read `wolf` and
+    // encounterState -- health, the swing, the wolf presenter, the status line all read `wolf` and
     // `hero` off it, none of them needing to know whether they are reading a local step's result or
     // the server's. Offline: encounterState is still advanced by the local rules further down,
     // unchanged (ruling 8).
@@ -2440,20 +2451,21 @@ async function bootstrap() {
       };
     }
 
-    // HEARTS FROM THE BODY, diffed, once per frame, online and off.
+    // HEALTH FROM THE BODY, diffed, once per frame, online and off.
     //
-    // Every other renderHearts call in this file is EVENT-driven, which was correct while a hero's
+    // Every other renderHealth call in this file is EVENT-driven, which was correct while a hero's
     // ceiling was a constant: 'hero-healed' carries `remaining` and nothing else, and nothing else
     // was needed. Wren's charm moves the ceiling with no combat event at all -- it is a durable row
-    // arriving on the next snapshot's rewards block -- so a fourth heart would otherwise appear only
-    // on the child's next heal, kill or death. Reading the published body and repainting when either
-    // number moves costs one comparison a frame and makes the bar unconditionally honest; the event
-    // handlers keep their real jobs, which are the POP and the flash, not the truth.
-    const heartsNow = encounterState.hero;
-    const heartsMax = heartsNow.maxHp ?? HERO_MAX_HP;
-    if (heartsNow.hp !== heartsShown.hp || heartsMax !== heartsShown.maxHp) {
-      heartsShown = { hp: heartsNow.hp, maxHp: heartsMax };
-      renderHearts(heartsShown.hp, heartsShown.maxHp);
+    // arriving on the next snapshot's rewards block -- and since P2 a LEVEL moves it the same
+    // silent way -- so a bigger body would otherwise appear only on the child's next heal, kill or
+    // death. Reading the published body and repainting when either number moves costs one comparison
+    // a frame and makes the bar unconditionally honest; the event handlers keep their real jobs,
+    // which are the POP and the flash, not the truth.
+    const bodyNow = encounterState.hero;
+    const bodyMax = bodyNow.maxHp ?? HERO_MAX_HP;
+    if (bodyNow.hp !== healthShown.hp || bodyMax !== healthShown.maxHp) {
+      healthShown = { hp: bodyNow.hp, maxHp: bodyMax };
+      renderHealth(healthShown.hp, healthShown.maxHp);
     }
 
     // Stop the hero walking through the wolf. Applied after movement and reconciliation so it is the
@@ -2566,7 +2578,7 @@ async function bootstrap() {
       if (netStatus === 'online') {
         // Combat commands are server-applied, presentation is client-predicted (Design ruling 3).
         // No local stepEncounter/requestAttack/separateFromWolf here at all -- HP, wolf mode,
-        // hearts, banners and events all come exclusively from the mirror set up above.
+        // health, banners and events all come exclusively from the mirror set up above.
         const ownHeroId = net.selfId;
         const canSwing = ownHeroId !== null && serverEncounter !== null
           && canHeroAttack(serverEncounter, ownHeroId);
@@ -2617,7 +2629,7 @@ async function bootstrap() {
           // I holding" (see equippedWeaponIdThisFrame's own comment on why it is recorded, not
           // re-derived). Resolved to a number on this side of the seam, exactly as
           // net/gameServer.mjs does for the online fight.
-          heroWeaponDamage: swingDamageFor(equippedWeaponIdThisFrame),
+          heroDamage: swingDamageFor(equippedWeaponIdThisFrame),
           // THE SAME QUESTION net/gameServer.mjs asks per player, asked here for the offline hero
           // and answered by the same function against the same RANGER_CLAIM radius. A child playing
           // with no socket gets the identical sanctuary; two answers to "may the wolf have this
@@ -2710,10 +2722,10 @@ async function bootstrap() {
         charmOwnedSeen = holdsCharmNow;
       } else if (holdsCharmNow && !charmOwnedSeen) {
         charmOwnedSeen = true;
-        // The fourth heart paints ITSELF: the new ceiling rides the same snapshot and the per-frame
-        // hearts read above repaints the bar. This is only the sentence and the flourish.
+        // The bigger body paints ITSELF: the new maximum rides the same snapshot and the per-frame
+        // health read above repaints the bar. This is only the sentence and the flourish.
         banner('Wren gives you her charm.', 3000);
-        popHearts();
+        popHealth();
       }
 
       // GP2/GP3: seed the displayed HUD totals from the authoritative value ONCE, the first frame it
@@ -3377,7 +3389,7 @@ async function bootstrap() {
       const published = serverEncounter?.siege ?? null;
       if (published) {
         // Only the shared truth is taken from the wire. The hero clocks stay whatever the local
-        // copy holds -- there is one hero with one set of hearts and the encounter block already
+        // copy holds -- there is one hero with one body and the encounter block already
         // carries them (see net/gameServer.mjs's siegeSnapshot for the same rule stated there).
         siegeState = {
           ...siegeState,
@@ -3403,7 +3415,7 @@ async function bootstrap() {
           [ownSiegeHeroId]: {
             position: { x: player.position.x, z: player.position.z },
             heading: player.heading,
-            weaponDamage: swingDamageFor(equippedWeaponIdThisFrame),
+            heroDamage: swingDamageFor(equippedWeaponIdThisFrame),
           },
         },
       });
@@ -3420,10 +3432,10 @@ async function bootstrap() {
       if (recipeName) audio.play(recipeName);
       if (event.type === 'warden-woke') banner('Something is standing up.', 3000);
       else if (event.type === 'warden-defeated') banner('The Beacon Warden falls!', 3000);
-      else if (event.type === 'warden-hurt-hero') { flashHeroHurt(); renderHearts(event.remaining); }
+      else if (event.type === 'warden-hurt-hero') { flashHeroHurt(); renderHealth(event.remaining); }
       else if (event.type === 'hero-down') { showHeroDown(true); banner('You went down…', 1600); }
-      else if (event.type === 'hero-respawned') { showHeroDown(false); renderHearts(heartCeiling); }
-      else if (event.type === 'hero-healed') { renderHearts(event.remaining); popHearts(); }
+      else if (event.type === 'hero-respawned') { showHeroDown(false); renderHealth(healthMax); }
+      else if (event.type === 'hero-healed') { renderHealth(event.remaining); popHealth(); }
       else if (event.type === 'siege-swing-missed') pulseMiss();
     }
 
@@ -3755,7 +3767,7 @@ async function bootstrap() {
   }
 
   // The cue is deliberately one local primitive rather than a new asset or UI system. The presenter
-  // supplies the bounce; this DOM heart simply keeps the tap readable at normal gameplay framing.
+  // supplies the bounce; this DOM heart glyph simply keeps the tap readable at normal gameplay framing.
   companionReactionElement = document.createElement('div');
   companionReactionElement.textContent = '♥';
   companionReactionElement.setAttribute('aria-hidden', 'true');

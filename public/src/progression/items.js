@@ -9,13 +9,21 @@
 // with no items defined here yet. Add a definition here the moment a real one is needed; do not
 // pre-populate slots nobody can fill.
 //
-// Damage values are read off this file, never restated (GQ-007) -- both by the Hero screen's
-// comparison card and, from GP9 on, by the combat rules that decide what a landed hit is worth.
-// GP1 itself does NOT wire equippedWeaponId into combat/encounter.js: the work order names that GP9's
-// job ("Wildwood Blade reward + actual damage change"), and wolf.hp still reads WOLF_DAMAGE_PER_HIT
-// as a flat constant until then. Verified against the current rules before writing these numbers:
-// WOLF_MAX_HP is 3 and the existing per-hit damage constant is 1, so 1 -> 2 DAMAGE takes a
-// three-hit kill to two, exactly the plan's own worked example in section 29.
+// Damage values are read off this file, never restated (GQ-007) -- by the Hero screen's comparison
+// card, by progression/heroStats.js when it adds what a hero's LEVEL is worth on top, and through
+// that by the combat rules that decide what a landed hit costs.
+//
+// ── THE P2 RESCALE ──────────────────────────────────────────────────────────────────────────────
+//
+// These were 1 and 2, and they were hit counters rather than damage: a wolf had 3 hp, so "2" meant
+// "half a wolf". That resolution cannot express a Hero level being worth +2 damage on top of a
+// weapon, which is why docs/product/PROGRESSION_CONTRACT_V0.md names scalable stat resolution as a
+// hard predecessor to honest level tuning.
+//
+// So both are multiplied by ten alongside combat/encounter.js's own rescale, and the RELATIONSHIPS
+// the old pair established are preserved exactly rather than re-derived: against a 30hp wolf, 10
+// still takes three blows and 20 still takes two. test/level-one-preservation.test.mjs pins that,
+// because a preserved promise nobody checks is a promise until the next re-tune.
 
 export const WEAPON_SLOT = 'weapon';
 
@@ -27,17 +35,20 @@ export const ITEM_DEFS = Object.freeze({
     id: STARTER_SWORD_ID,
     slot: WEAPON_SLOT,
     name: 'Starter Sword',
-    damage: 1,
+    damage: 10,
   }),
-  // Provisional/test damage value (plan section 8's own phrase): the real reward ceremony and its
-  // final geometry are GP9's job. The clearing already carries a physical placeholder for this item
-  // -- world/wildwoodBlade.js's planted prop, in the same WILDWOOD_COLOR -- so the Hero screen's item
-  // card reuses that colour rather than inventing a second opinion about what this weapon looks like.
+  // TWICE THE STARTER SWORD, which is the promise G4's reward ceremony actually made to a child and
+  // the one P2's rescale had to carry over intact. Written as its own catalogue value rather than as
+  // `starter * 2`: what an item is worth is this file's to state, and the day a third weapon exists
+  // it will not be a multiple of anything. The clearing already carries a physical placeholder for
+  // this item -- world/wildwoodBlade.js's planted prop, in the same WILDWOOD_COLOR -- so the Hero
+  // screen's item card reuses that colour rather than inventing a second opinion about what this
+  // weapon looks like.
   [WILDWOOD_BLADE_ID]: Object.freeze({
     id: WILDWOOD_BLADE_ID,
     slot: WEAPON_SLOT,
     name: 'Wildwood Blade',
-    damage: 2,
+    damage: 20,
   }),
 });
 

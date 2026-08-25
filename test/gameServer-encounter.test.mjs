@@ -6,10 +6,12 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
 import { WOLF_SPAWN, createSimulation } from '../net/gameServer.mjs';
-import { HERO_MAX_HP, MIN_BODY_SEPARATION, SWING_CONTACT_SECONDS } from '../public/src/combat/encounter.js';
+import {
+  BASE_HERO_DAMAGE, HERO_MAX_HP, MIN_BODY_SEPARATION, SWING_CONTACT_SECONDS, WOLF_MAX_HP,
+} from '../public/src/combat/encounter.js';
 import { BEACON_ARENA } from '../public/src/world/zones/village.js';
 import { attackMessage, decode, encode } from '../public/src/net/protocol.js';
-import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
+import { WILDWOOD_BLADE_ID, damageFor } from '../public/src/progression/items.js';
 
 // A spot within ATTACK_REACH (1.7) of the wolf, straight along +Z from it, so a hero standing here
 // with the default heading (0, meaning "facing +Z") is both in range and in the strike arc.
@@ -52,7 +54,7 @@ test('a joined player within reach who attacks produces a swing event, then wolf
   // Step past contact.
   stepTicks(sim, 3);
   const afterContact = sim.encounterSnapshot();
-  assert.equal(afterContact.wolf.hp, hpBeforeContact - 1, 'the wolf should have taken one hit');
+  assert.equal(afterContact.wolf.hp, hpBeforeContact - BASE_HERO_DAMAGE, 'the wolf should have taken one hit');
   const events = sim.drainEvents();
   assert.ok(events.some((e) => e.type === 'wolf-hit' && e.heroId === player.id),
     `expected a wolf-hit event carrying the attacker's heroId, got ${JSON.stringify(events)}`);
@@ -73,7 +75,8 @@ test('two players both landing swings both damage the wolf', () => {
   stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 1);
 
   const afterHp = sim.encounterSnapshot().wolf.hp;
-  assert.equal(afterHp, startHp - 2, `both swings should land; wolf hp ${startHp} -> ${afterHp}`);
+  assert.equal(afterHp, startHp - BASE_HERO_DAMAGE * 2,
+    `both swings should land; wolf hp ${startHp} -> ${afterHp}`);
   const events = sim.drainEvents();
   const hitHeroIds = events.filter((e) => e.type === 'wolf-hit' || e.type === 'wolf-defeated')
     .map((e) => e.heroId).sort();
@@ -99,7 +102,7 @@ test('a replayed attack seq does not start a second swing', () => {
   // Confirm only one swing ever lands, not two, by stepping through contact and checking damage.
   const startHp = sim.encounterSnapshot().wolf.hp;
   stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 1);
-  assert.equal(sim.encounterSnapshot().wolf.hp, startHp - 1,
+  assert.equal(sim.encounterSnapshot().wolf.hp, startHp - BASE_HERO_DAMAGE,
     'exactly one hit should land, not two');
 });
 
@@ -137,7 +140,7 @@ test('welcome-time encounter and snapshot-time encounter are both available, rou
   const sim = createSimulation();
   sim.addPlayer('kid', meleeSpot());
   const before = sim.encounterSnapshot();
-  assert.equal(before.wolf.hp, 3, 'a fresh encounter starts the wolf at full HP');
+  assert.equal(before.wolf.hp, WOLF_MAX_HP, 'a fresh encounter starts the wolf at full HP');
   // revision counts commands applied (encounter.js's own doc comment) -- addHero is one, so a
   // single joined player already reads 1, not 0.
   assert.equal(before.revision, 1);
@@ -247,17 +250,17 @@ test('a simulation nobody told about equipment fights exactly as it always has',
   const before = sim.encounterSnapshot().wolf.hp;
   attack(sim, player.id, 1);
   stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
-  assert.equal(sim.encounterSnapshot().wolf.hp, before - 1,
-    'the starter sword is one heart a blow, and an unwired simulation swings it');
+  assert.equal(sim.encounterSnapshot().wolf.hp, before - BASE_HERO_DAMAGE,
+    'an unnamed weapon is a Level-1 hero with the starter sword, and an unwired simulation swings it');
 });
 
-test('a hero holding the Wildwood Blade takes two hearts off the wolf, not one', () => {
+test('a hero holding the Wildwood Blade takes two blows\' worth off the wolf, not one', () => {
   const sim = createSimulation({ weaponIdFor: () => WILDWOOD_BLADE_ID });
   const player = sim.addPlayer('kid', meleeSpot());
   const before = sim.encounterSnapshot().wolf.hp;
   attack(sim, player.id, 1);
   stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
-  assert.equal(sim.encounterSnapshot().wolf.hp, before - 2,
+  assert.equal(sim.encounterSnapshot().wolf.hp, before - damageFor(WILDWOOD_BLADE_ID),
     'the reward at the end of the longest promise in the game has to be felt in the fight');
 });
 
@@ -273,7 +276,8 @@ test('the lookup is asked every tick, so equipping mid-fight works without a rec
   attack(sim, player.id, 1);
   stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
   const afterFirst = sim.encounterSnapshot().wolf.hp;
-  assert.equal(afterFirst, start - 1, 'the first blow was thrown bare-handed of any named weapon');
+  assert.equal(afterFirst, start - BASE_HERO_DAMAGE,
+    'the first blow was thrown bare-handed of any named weapon');
 
   held = WILDWOOD_BLADE_ID;
   let seq = 2;
@@ -284,7 +288,8 @@ test('the lookup is asked every tick, so equipping mid-fight works without a rec
   }
   stepTicks(sim, Math.ceil(SWING_CONTACT_SECONDS / 0.05) + 2);
   const wolf = sim.encounterSnapshot().wolf;
-  // 3 HP, one blow at 1 and then one at 2: the wolf is down, and it took two blows rather than three.
+  // A base blow and then a Blade blow together exceed WOLF_MAX_HP: the wolf is down, and it took two
+  // blows rather than three.
   assert.ok(wolf.hp <= 0 || wolf.mode === 'dying' || wolf.mode === 'dead',
     `the second blow should have finished it, wolf reads ${JSON.stringify(wolf)}`);
 });
