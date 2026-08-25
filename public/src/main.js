@@ -991,7 +991,18 @@ async function bootstrap() {
   const xpFillElement = document.querySelector('#hero-xp .xp-fill');
   const xpTextElement = document.querySelector('#hero-xp-text');
   const heroPowerElement = document.querySelector('#hero-power-value');
+  // WHAT THE PILL IS CURRENTLY SHOWING, so the per-frame call below repaints on a CHANGE rather than
+  // rewriting four text nodes and a width sixty times a second. The same diff renderHealth keeps, and
+  // for a reason that turned out not to be theoretical: the first version wrote unconditionally, and
+  // on a 12x-throttled hosted runner -- where drive-ranger's sanctuary phase measures ~3.3 fps -- four
+  // gratuitous style recalculations per frame is real time taken out of a frame budget that is
+  // already the thing every positional check in this repo is fighting. A HUD that costs nothing when
+  // nothing has changed is the convention this file already had; this was the line that broke it.
+  let progressShown = null;
   function renderHeroProgress({ level, xpIntoLevel, xpForLevel, power }) {
+    const key = `${level}|${xpIntoLevel}|${xpForLevel}|${power}`;
+    if (key === progressShown) return;
+    progressShown = key;
     heroLevelElement.textContent = String(level);
     xpFillElement.style.width = `${(xpForLevel > 0 ? xpIntoLevel / xpForLevel : 0) * 100}%`;
     xpTextElement.textContent = `${xpIntoLevel} / ${xpForLevel}`;
