@@ -38,6 +38,7 @@
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
+import { sanitizeGuestId } from '../net/guestId.js';
 import { LEVEL_ONE, xpToAdvanceFrom } from './levels.js';
 import { EQUIPMENT_SLOTS, itemDef, WEAPON_SLOT } from './items.js';
 
@@ -262,17 +263,18 @@ const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
 ]);
 
 // These are current personal durable identity families whose id embeds the owning profile. They are
-// server-authored except equip (also minted locally with the same profile id). Offline marks are the
-// one deliberate exception: rewards/offlineProgress.js uses `mark:offline-hero:<lifeId>` before a
-// server identity exists, so that client-only domain remains restorable by whichever profile owns it.
+// server-authored except equip and the offline Lantern identities, which are minted locally with the
+// same profile id. Keep their ids unchanged for the rightful profile and refuse them for every other
+// profile so one child cannot reserve a sibling's future durable row.
 const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   'own:',
   'satchel:',
   'charm:',
   'lantern:',
+  'lantern-unlocked:',
   'equip:',
   'xp:lantern:',
-  'mark:',
+  'xp:lantern-unlocked:',
 ]);
 
 function reservedProfileEventOwner(eventId) {
@@ -281,10 +283,20 @@ function reservedProfileEventOwner(eventId) {
     const remainder = eventId.slice(prefix.length);
     const separator = remainder.indexOf(':');
     const owner = separator === -1 ? remainder : remainder.slice(0, separator);
-    if (prefix === 'mark:' && owner === 'offline-hero') return null;
     return owner;
   }
-  return null;
+
+  // Marks need one compatibility carve-out. Current server marks are `mark:<guestId>:<lifeId>`, but
+  // older/offline device journals also contain `mark:<label>:<lifeId>` identities such as
+  // `mark:old:one`, and offlineProgress deliberately uses `mark:offline-hero:<lifeId>`. Only a first
+  // segment that is itself a legal guest/profile id is therefore a reserved profile identity.
+  if (!eventId.startsWith('mark:')) return null;
+  const remainder = eventId.slice('mark:'.length);
+  const separator = remainder.indexOf(':');
+  if (separator === -1) return null;
+  const owner = remainder.slice(0, separator);
+  if (owner === 'offline-hero') return null;
+  return sanitizeGuestId(owner) === owner ? owner : null;
 }
 
 export function isClientRestorableProfileFact(fact, profileId) {

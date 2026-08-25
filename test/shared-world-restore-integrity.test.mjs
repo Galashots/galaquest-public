@@ -54,10 +54,26 @@ test('H1 recovery authority refuses shared-world and cross-profile event namespa
   );
   assert.equal(isClientRestorableProfileFact(xpFact(`xp:lantern:${SIBLING}`), ATTACKER), false);
   assert.equal(
+    isClientRestorableProfileFact({ eventId: `mark:${SIBLING}:server-life`, type: 'mark-earned' }, ATTACKER),
+    false,
+    'a current server mark embeds the profile that owns its durable identity',
+  );
+  assert.equal(
+    isClientRestorableProfileFact({ eventId: 'mark:old:one', type: 'mark-earned' }, ATTACKER),
+    true,
+    'legacy mark labels are not mistaken for another profile id',
+  );
+  assert.equal(
     isClientRestorableProfileFact({ eventId: 'mark:offline-hero:device-life', type: 'mark-earned' }, ATTACKER),
     true,
     'offline marks have no server profile identity yet and remain recoverable',
   );
+  assert.equal(
+    isClientRestorableProfileFact({ eventId: `lantern-unlocked:${SIBLING}`, type: 'lantern-unlocked' }, ATTACKER),
+    false,
+    'the offline Lantern identity is still profile-scoped',
+  );
+  assert.equal(isClientRestorableProfileFact(xpFact(`xp:lantern-unlocked:${SIBLING}`, '100'), ATTACKER), false);
 
   for (const eventId of [
     'cart-loot:coin:0',
@@ -237,16 +253,26 @@ test('H1 reward store independently rejects cross-profile client identity reserv
   const store = openRewardStore(fixture.path);
   try {
     const siblingOwnId = `own:${SIBLING}:${WILDWOOD_BLADE_ID}`;
+    const siblingMarkId = `mark:${SIBLING}:known-life`;
     assert.throws(
       () => store.apply({
         guestId: ATTACKER, type: 'xp-earned', eventId: siblingOwnId, value: '1', origin: 'client',
       }),
       /client-restored fact/i,
     );
+    assert.throws(
+      () => store.apply({
+        guestId: ATTACKER, type: 'xp-earned', eventId: siblingMarkId, value: '1', origin: 'client',
+      }),
+      /client-restored fact/i,
+      'a cross-type restore cannot reserve a sibling server-mark identity',
+    );
     const serverAward = store.apply({
       guestId: SIBLING, type: 'gear-owned', eventId: siblingOwnId, value: WILDWOOD_BLADE_ID,
     });
     assert.equal(serverAward.applied, true, 'the rightful profile server award must still own its id');
+    const serverMark = store.apply({ guestId: SIBLING, type: 'mark-earned', eventId: siblingMarkId });
+    assert.equal(serverMark.applied, true, 'the rightful profile server mark must still own its id');
   } finally {
     store.close();
     fixture.cleanup();
@@ -263,11 +289,22 @@ test('H1 one profile cannot reserve another profile server-authored personal ide
     const siblingOwnId = `own:${SIBLING}:${WILDWOOD_BLADE_ID}`;
     const siblingCharmId = `charm:${SIBLING}`;
     const siblingLanternXpId = `xp:lantern:${SIBLING}`;
+    const siblingMarkId = `mark:${SIBLING}:future-life`;
+    const siblingOfflineLanternId = `lantern-unlocked:${SIBLING}`;
+    const siblingOfflineLanternXpId = `xp:lantern-unlocked:${SIBLING}`;
     assert.deepEqual(rewards.restoreProfileFacts('hero-a', [
       xpFact(siblingOwnId),
       { eventId: siblingCharmId, type: 'charm-earned' },
       xpFact(siblingLanternXpId, '100'),
-    ]), { restored: 0, refused: 3 });
+      { eventId: siblingMarkId, type: 'mark-earned' },
+      { eventId: siblingOfflineLanternId, type: 'lantern-unlocked' },
+      xpFact(siblingOfflineLanternXpId, '100'),
+    ]), { restored: 0, refused: 6 });
+
+    const siblingState = rewards.rewardsFor(['hero-b'])['hero-b'];
+    assert.equal(siblingState.marks, 0, 'the attack cannot write a sibling mark');
+    assert.equal(siblingState.lanternUnlocked, false, 'the attack cannot write a sibling Lantern');
+    assert.equal(siblingState.xp, 0, 'the attack cannot write sibling Lantern XP');
 
     const blade = rewards.claimWildwoodBlade('hero-b');
     assert.equal(blade.granted, true, 'the sibling legitimate Blade award must not be poisoned');
