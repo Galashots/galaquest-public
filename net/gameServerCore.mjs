@@ -31,7 +31,9 @@ import {
 // One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
 // and the server consumes it rather than keeping a second list that drifts.
-import { isProfileFact, parseXpFactAmount, pendingLanternXpFact } from '../public/src/progression/facts.js';
+import {
+  isProfileFact, isSemanticallyValidEquipmentFact, parseXpFactAmount, pendingLanternXpFact,
+} from '../public/src/progression/facts.js';
 import { LEVEL_1_STARTER_STATS, resolveHeroStats } from '../public/src/progression/heroStats.js';
 import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
@@ -758,6 +760,8 @@ export function createRewardCoordinator(options = {}) {
         isProfileFact(fact)
         && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !isKnownItem(fact.value))
+        && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')
+          && !isSemanticallyValidEquipmentFact(fact))
         // Checked through the same reader the fold and the store use, so a device cannot restore an
         // amount that would later be counted differently -- or, before this check existed, counted
         // NEGATIVELY. Filtered rather than thrown on, exactly like the two lines above it: a device

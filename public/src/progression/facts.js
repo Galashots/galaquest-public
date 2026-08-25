@@ -39,7 +39,7 @@
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
 import { LEVEL_ONE, xpToAdvanceFrom } from './levels.js';
-import { itemDef, WEAPON_SLOT } from './items.js';
+import { EQUIPMENT_SLOTS, itemDef, WEAPON_SLOT } from './items.js';
 
 /** One profile's own earnings. `village-upgrade` and `beacon-lit` are deliberately absent: those are
  *  world facts, not one profile's earnings, and folding them into a personal state would be a
@@ -222,27 +222,34 @@ export function parseXpFactAmount(value) {
   return Number.isSafeInteger(amount) ? amount : null;
 }
 
+function isEquipmentFactType(type) {
+  return type === 'weapon-equipped' || type === 'gear-equipped';
+}
+
+/** The one semantic boundary between an equipment fact's encoding and the item catalogue. */
+export function isSemanticallyValidEquipmentFact(fact) {
+  if (!isEquipmentFactType(fact?.type) || typeof fact.value !== 'string' || fact.value.length === 0) {
+    return false;
+  }
+  const slot = itemDef(fact.value)?.slot;
+  if (fact.type === 'weapon-equipped') return slot === WEAPON_SLOT;
+  return EQUIPMENT_SLOTS.includes(slot) && slot !== WEAPON_SLOT;
+}
+
 /** Whether this is a fact a profile can durably own. Anything else -- a world fact, a transient
  *  combat event, a malformed row recovered from storage -- is refused rather than folded, so a
  *  corrupted journal degrades to "fewer facts" instead of to a wrong number. */
 export function isProfileFact(fact) {
-  return Boolean(
+  const structural = Boolean(
     fact
     && typeof fact.eventId === 'string' && fact.eventId.length > 0
     && typeof fact.type === 'string' && PROFILE_FACT_TYPE_SET.has(fact.type),
   );
+  return structural && (!isEquipmentFactType(fact.type) || isSemanticallyValidEquipmentFact(fact));
 }
 
 export function isEquipmentFact(fact) {
-  const slot = fact?.type === 'weapon-equipped'
-    ? WEAPON_SLOT
-    : itemDef(fact?.value)?.slot;
-  return Boolean(
-    isProfileFact(fact)
-    && (fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')
-    && typeof fact.value === 'string' && fact.value.length > 0
-    && slot,
-  );
+  return isProfileFact(fact) && isEquipmentFactType(fact.type);
 }
 
 /**

@@ -21,6 +21,7 @@ import {
 } from '../public/src/progression/items.js';
 import {
   DURABLE_FACT_TYPES,
+  isEquipmentFact,
   latestEquippedItemIds,
   latestEquippedWeaponId,
   parseXpFactAmount,
@@ -336,6 +337,9 @@ export function openRewardStore(path) {
       // a weapon id nobody defined, whether that came from a stale client or a bug upstream of here.
       throw new Error(`reward store apply() got an unknown ${award.type === 'weapon-equipped' ? 'weapon' : 'equipment'} id ${JSON.stringify(award.value)}`);
     }
+    if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isEquipmentFact(award)) {
+      throw new Error(`reward store apply() got an invalid slot for ${award.type} item ${JSON.stringify(award.value)}`);
+    }
     if (award.type === 'gear-owned' && !isKnownItem(award.value)) {
       throw new Error(`reward store apply() got an unknown item id ${JSON.stringify(award.value)}`);
     }
@@ -432,7 +436,10 @@ export function openRewardStore(path) {
       ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
       // Absent for everything the server adjudicated, which is almost everything -- see the v4 note.
       ...(row.origin ? { origin: row.origin } : {}),
-    }));
+    })).filter((fact) => (
+      fact.type !== 'weapon-equipped'
+      && fact.type !== 'gear-equipped'
+    ) || isEquipmentFact(fact));
   }
 
   function maxEquipRevFor(guestId) {

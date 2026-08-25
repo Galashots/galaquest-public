@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,10 +11,12 @@ import {
   HELMET_SILVERGUARD_ID,
   SHIELD_IRONWOOD_ID,
   STARTER_SWORD_ID,
+  WILDWOOD_BLADE_ID,
   itemDef,
 } from '../public/src/progression/items.js';
 import {
   foldFacts,
+  isProfileFact,
   latestEquippedFacts,
 } from '../public/src/progression/facts.js';
 import { createProfileStore } from '../public/src/progression/profiles.js';
@@ -23,6 +26,7 @@ import {
 } from '../public/src/progression/heroStats.js';
 import { powerFor } from '../public/src/progression/power.js';
 import { createPartyEncounterState, HERO_MAX_HP, stepParty, WOLF_BITE_DAMAGE } from '../public/src/combat/encounter.js';
+import { createRewardCoordinator } from '../net/gameServer.mjs';
 import {
   WARDEN_DAMAGE_PER_HIT,
   WARDEN_OVERHEAD_CONTACT_SECONDS,
@@ -126,6 +130,23 @@ test('per-slot equip facts share the durable revision and event-id ordering law'
   assert.equal(latestEquippedFacts([older, newer]).get('helmet').eventId, 'helmet-new');
 });
 
+test('equipment fact type and canonical item slot are one semantic boundary', () => {
+  const malformedWeapon = {
+    eventId: 'malformed-weapon-helmet', type: 'weapon-equipped', value: HELMET_SILVERGUARD_ID, rev: 99,
+  };
+  const malformedGear = {
+    eventId: 'malformed-gear-weapon', type: 'gear-equipped', value: WILDWOOD_BLADE_ID, rev: 100,
+  };
+  assert.equal(isProfileFact(malformedWeapon), false);
+  assert.equal(isProfileFact(malformedGear), false);
+  const folded = foldFacts([malformedWeapon, malformedGear], {
+    equippedItemIds: DEFAULT_EQUIPPED_ITEM_IDS,
+    equippedWeaponId: STARTER_SWORD_ID,
+  });
+  assert.deepEqual(folded.equippedItemIds, DEFAULT_EQUIPPED_ITEM_IDS);
+  assert.equal(folded.equippedWeaponId, STARTER_SWORD_ID);
+});
+
 test('POWER uses effective survivability and preserves the C1 benchmarks', () => {
   const starterL1 = resolveHeroStats({ equippedItemIds: DEFAULT_EQUIPPED_ITEM_IDS });
   const starterL2 = resolveHeroStats({ totalXp: 100, equippedItemIds: DEFAULT_EQUIPPED_ITEM_IDS });
@@ -138,6 +159,18 @@ test('POWER uses effective survivability and preserves the C1 benchmarks', () =>
   assert.equal(powerFor(helmetL2), 1556);
   assert.equal(helmetL2.damageReductionPercent, 10);
   assert.equal(powerFor({ ...starterL2, damageReductionPercent: 0 }), 1400);
+  const bladeL2 = resolveHeroStats({
+    totalXp: 100,
+    equippedItemIds: { ...DEFAULT_EQUIPPED_ITEM_IDS, weapon: WILDWOOD_BLADE_ID },
+  });
+  const bladeHelmetL2 = resolveHeroStats({
+    totalXp: 100,
+    equippedItemIds: {
+      ...DEFAULT_EQUIPPED_ITEM_IDS, weapon: WILDWOOD_BLADE_ID, helmet: HELMET_SILVERGUARD_ID,
+    },
+  });
+  assert.equal(powerFor(bladeL2), 2567);
+  assert.equal(powerFor(bladeHelmetL2), 2852);
 });
 
 test('the real Wolf seam resolves 10 damage to 10 unarmored and 9 with the equipped Helmet', () => {
@@ -178,5 +211,67 @@ test('non-weapon equip facts persist through the existing profile and store arch
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('reward-store acceptance refuses both malformed equipment encodings', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gq-g1-c1-slot-store-'));
+  const path = join(directory, 'rewards.db');
+  const store = openRewardStore(path);
+  try {
+    assert.throws(() => store.apply({
+      guestId: 'guest-c1-slot', type: 'weapon-equipped', eventId: 'bad-weapon-helmet',
+      value: HELMET_SILVERGUARD_ID,
+    }), /slot|weapon/i);
+    assert.throws(() => store.apply({
+      guestId: 'guest-c1-slot', type: 'gear-equipped', eventId: 'bad-gear-weapon',
+      value: WILDWOOD_BLADE_ID,
+    }), /slot|equipment/i);
+    assert.deepEqual(store.profileFactsFor('guest-c1-slot'), []);
+    store.close();
+    const raw = new DatabaseSync(path);
+    raw.prepare(
+      'INSERT INTO reward_events (id, guest_id, type, created_at, value, rev) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('legacy-bad-weapon-helmet', 'guest-c1-published', 'weapon-equipped', 'now', HELMET_SILVERGUARD_ID, 1);
+    raw.prepare(
+      'INSERT INTO reward_events (id, guest_id, type, created_at, value, rev) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('legacy-bad-gear-weapon', 'guest-c1-published', 'gear-equipped', 'now', WILDWOOD_BLADE_ID, 2);
+    raw.close();
+    const reopened = openRewardStore(path);
+    assert.deepEqual(reopened.profileFactsFor('guest-c1-published'), []);
+    reopened.close();
+  } finally {
+    try { store.close(); } catch {}
+    try { rmSync(directory, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test('restore rejects malformed equipment while recovering historical Weapon and new Helmet facts', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gq-g1-c1-slot-restore-'));
+  const path = join(directory, 'rewards.db');
+  const rewards = createRewardCoordinator({ rewardStorePath: path });
+  rewards.join('hero-c1-slot', 'guest-c1-slot-restore');
+  rewards.grantOwnership('hero-c1-slot', WILDWOOD_BLADE_ID);
+  try {
+    const result = rewards.restoreProfileFacts('hero-c1-slot', [
+      { eventId: 'bad-weapon-helmet-restore', type: 'weapon-equipped', value: HELMET_SILVERGUARD_ID, rev: 99 },
+      { eventId: 'bad-gear-weapon-restore', type: 'gear-equipped', value: WILDWOOD_BLADE_ID, rev: 100 },
+      { eventId: 'historical-weapon', type: 'weapon-equipped', value: WILDWOOD_BLADE_ID, rev: 10 },
+      { eventId: 'new-helmet-owned', type: 'gear-owned', value: HELMET_SILVERGUARD_ID },
+      { eventId: 'new-helmet', type: 'gear-equipped', value: HELMET_SILVERGUARD_ID, rev: 11 },
+      { eventId: 'new-shield-owned', type: 'gear-owned', value: SHIELD_IRONWOOD_ID },
+      { eventId: 'new-shield', type: 'gear-equipped', value: SHIELD_IRONWOOD_ID, rev: 12 },
+    ]);
+    assert.equal(result.refused, 2);
+    const rewardsForHero = rewards.rewardsFor(['hero-c1-slot'])['hero-c1-slot'];
+    assert.equal(rewardsForHero.equippedWeaponId, WILDWOOD_BLADE_ID);
+    assert.equal(rewardsForHero.equippedItemIds.helmet, HELMET_SILVERGUARD_ID);
+    assert.equal(rewardsForHero.equippedItemIds.shield, SHIELD_IRONWOOD_ID);
+    assert.ok(rewards.profileFactsFor('hero-c1-slot').every((fact) => (
+      fact.type !== 'weapon-equipped' || itemDef(fact.value)?.slot === 'weapon'
+    )));
+  } finally {
+    rewards.close();
+    try { rmSync(directory, { recursive: true, force: true }); } catch {}
   }
 });
