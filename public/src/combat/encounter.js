@@ -67,36 +67,23 @@ function firstWolf(state) {
 }
 
 function addLegacyEnemyViews(state, { includeTargetId = true } = {}) {
+  // Compatibility is a SNAPSHOT of the canonical collection, not another live state owner. These
+  // are immutable values rather than getters so repeated reads of `state.wolf` return the same
+  // object, preserving the old seam's object-identity guarantee while still deriving once from
+  // `enemies`. A caller cannot mutate either side after publication because the whole state is
+  // frozen immediately below.
+  const enemy = firstWolf(state);
+  const fullView = legacyWolfView(enemy);
+  let wolf = fullView;
+  if (fullView && !includeTargetId) {
+    const { targetId, ...soloView } = fullView;
+    wolf = Object.freeze(soloView);
+  }
   Object.defineProperties(state, {
-    wolf: {
-      enumerable: true,
-      get() {
-        const enemy = firstWolf(this);
-        const view = legacyWolfView(enemy);
-        if (!view || includeTargetId) return view;
-        const { targetId, ...soloView } = view;
-        return Object.freeze(soloView);
-      },
-    },
-    wolfSpawn: {
-      enumerable: true,
-      get() {
-        const enemy = firstWolf(this);
-        return enemy ? enemy.patrol[enemy.spawnIndex] : null;
-      },
-    },
-    wolfSpawns: {
-      enumerable: true,
-      get() {
-        return firstWolf(this)?.patrol ?? [];
-      },
-    },
-    wolfSpawnIndex: {
-      enumerable: true,
-      get() {
-        return firstWolf(this)?.spawnIndex ?? 0;
-      },
-    },
+    wolf: { enumerable: true, value: wolf },
+    wolfSpawn: { enumerable: true, value: enemy ? enemy.patrol[enemy.spawnIndex] : null },
+    wolfSpawns: { enumerable: true, value: enemy?.patrol ?? [] },
+    wolfSpawnIndex: { enumerable: true, value: enemy?.spawnIndex ?? 0 },
   });
   return state;
 }
@@ -180,7 +167,12 @@ function enemiesFromLegacyState(state) {
   }));
 
   if (!state.wolf) return [];
-  const patrol = (state.wolfSpawns?.length ? state.wolfSpawns : [state.wolfSpawn ?? state.wolf]).map(clonePoint);
+  // Legacy-only hand-built states still have to carry the legacy spawn seam they always required.
+  // Do not silently infer it from the wolf's CURRENT position: that would turn a malformed online
+  // mirror into a plausible state and would also confuse "where it is now" with "where it respawns".
+  // Deliberately reading x/z here preserves the old fail-loud behavior when wolfSpawn is absent.
+  const legacySpawn = { x: state.wolfSpawn.x, z: state.wolfSpawn.z };
+  const patrol = (state.wolfSpawns?.length ? state.wolfSpawns : [legacySpawn]).map(clonePoint);
   return [{
     enemyId: DEFAULT_ENEMY_ID,
     kind: 'wolf',

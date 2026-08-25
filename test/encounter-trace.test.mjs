@@ -4,12 +4,18 @@
 // until it goes down and respawns, then both heroes finish the wolf off. Every step's
 // { state, events } is recorded.
 //
-// TRACE_REGENERATE=1 writes test/fixtures/encounter-golden-trace.json from a fresh run. Without
-// it, this test replays the same script and asserts every step is byte-identical to the committed
-// fixture. That is the property Task B5 exists to freeze: the server re-host stands on `stepParty`
-// producing the same output for the same input, every time, with nothing hidden in a closure or a
-// clock. A future rules change is expected to change this fixture -- deliberately, in its own
-// commit, per the brief -- not to make this test flaky.
+// E1 deliberately changes the ordinary-enemy STATE SHAPE from one mutable `wolf` to canonical
+// `enemies[]`. This test therefore checks the E1 collection facts first (one default enemy, stable
+// `wolf-1` identity, `kind: 'wolf'`, derived `.wolf` agreement, identity on enemy events), then
+// projects that one-Wolf state back to the historical behavioral shape before comparing it with the
+// committed trace. That keeps this fixture answering the question it was created for -- did the
+// shipped Wolf fight change? -- without duplicating the same enemy twice in every frame. The actual
+// multi-enemy collection shape and order-independence are pinned by test/enemy-collection.test.mjs.
+//
+// TRACE_REGENERATE=1 writes test/fixtures/encounter-golden-trace.json from a fresh projected run.
+// Without it, this test replays the same script and asserts every behavioral step is byte-identical
+// to the committed fixture. A future behavior change is expected to change that fixture --
+// deliberately, in its own commit -- not to make this test flaky.
 //
 // Nothing in the script below reads the wall clock or Math.random. The only state fed back into
 // the script's own decisions (heroes.A.downSeconds, to know when A has gone down) is itself the
@@ -74,9 +80,51 @@ function positionB(tick, aDownTick) {
 }
 
 /**
- * Run the fixed script through the party API and return every step's { state, events }, already
- * JSON-safe (stepParty publishes frozen objects; round-tripping through JSON both strips that and
- * matches exactly what assert.deepEqual will compare against the fixture file on disk).
+ * Assert the E1 collection contract for the default-world trace, then remove only the NEW identity
+ * wrapper before comparing behavior with the pre-E1 fixture. This projection is intentionally
+ * one-way: the simulation never consumes the derived `.wolf` view as authority.
+ */
+function oneWolfBehaviorStep(state, events) {
+  assert.equal(state.enemies.length, 1, 'default trace must still contain exactly one ordinary enemy');
+  const enemy = state.enemies.find((candidate) => candidate.enemyId === 'wolf-1');
+  assert.ok(enemy, 'default trace must preserve stable Wolf identity');
+  assert.equal(enemy.kind, 'wolf');
+  assert.deepEqual(state.wolf, {
+    x: enemy.x,
+    z: enemy.z,
+    heading: enemy.heading,
+    hp: enemy.hp,
+    mode: enemy.mode,
+    modeSeconds: enemy.modeSeconds,
+    biteCooldown: enemy.biteCooldown,
+    biteLanded: enemy.biteLanded,
+    targetId: enemy.targetId,
+  });
+
+  const projectedEvents = events.map((event) => {
+    if (!('enemyId' in event) && !('kind' in event)) return event;
+    assert.equal(event.enemyId, enemy.enemyId, 'enemy event must carry the stable default Wolf id');
+    assert.equal(event.kind, enemy.kind, 'enemy event must carry the default Wolf kind');
+    const { enemyId, kind, ...legacyEvent } = event;
+    return legacyEvent;
+  });
+
+  return {
+    state: {
+      revision: state.revision,
+      wolfSpawn: state.wolfSpawn,
+      wolfSpawns: state.wolfSpawns,
+      wolfSpawnIndex: state.wolfSpawnIndex,
+      wolf: state.wolf,
+      heroes: state.heroes,
+    },
+    events: projectedEvents,
+  };
+}
+
+/**
+ * Run the fixed script through the party API and return every behavioral step's { state, events },
+ * already JSON-safe. E1 identity is asserted by oneWolfBehaviorStep before the projection happens.
  */
 function runTrace() {
   let state = createPartyEncounterState({ wolfSpawn: WOLF_SPAWN, heroIds: [] });
@@ -124,7 +172,7 @@ function runTrace() {
     state = stepped.state;
     events.push(...stepped.events);
 
-    steps.push({ state, events });
+    steps.push(oneWolfBehaviorStep(state, events));
 
     if (state.wolf.mode === 'dead') {
       if (deathSeenAtTick === null) deathSeenAtTick = tick;
@@ -136,7 +184,7 @@ function runTrace() {
   return JSON.parse(JSON.stringify(steps));
 }
 
-test('the golden trace replays byte-identical to the committed fixture', () => {
+test('the golden trace replays byte-identical to the committed one-Wolf behavioral fixture', () => {
   const steps = runTrace();
 
   if (process.env.TRACE_REGENERATE === '1') {
