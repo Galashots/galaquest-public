@@ -135,6 +135,33 @@ export function formatPower(power) {
 }
 
 /**
+ * EVERYTHING A LEVEL-UP CEREMONY HAS TO SAY, from the two stat states it is about.
+ *
+ * Pure, and in this module rather than in main.js, for the reason every other view model in this
+ * repo is: the numbers a child is shown at the loudest moment in the game are exactly the ones worth
+ * being able to check without a browser. main.js paints these fields and computes none of them.
+ *
+ * The inputs are two resolved stat objects -- what the hero WAS and what they ARE -- so the ceremony
+ * cannot disagree with the fight: both come from the same progression/heroStats.js call the combat
+ * seam is fed from. Nothing here re-derives a level, a body or a blow.
+ *
+ * `maxHpGain` and `damageGain` are shown with an explicit sign because a gain is the whole point and
+ * "+5" reads as a reward where "5" reads as a fact.
+ */
+export function levelUpSummary({ level, before, after }) {
+  const change = powerChange(powerFor(before), powerFor(after));
+  const signed = (value) => `${value < 0 ? '-' : '+'}${Math.abs(value)}`;
+  return {
+    level,
+    maxHpGain: after.maxHp - before.maxHp,
+    damageGain: after.heroDamage - before.heroDamage,
+    maxHpGainText: signed(after.maxHp - before.maxHp),
+    damageGainText: signed(after.heroDamage - before.heroDamage),
+    power: change,
+  };
+}
+
+/**
  * The before -> delta -> after shape both #41 and the P2 brief name for a POWER change.
  *
  * A tiny helper rather than three call sites building the same three strings, because the delta's

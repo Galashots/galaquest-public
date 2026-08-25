@@ -161,6 +161,40 @@ export const RECIPES = Object.freeze({
     }),
   ]),
 
+  // ── P2: THE FIRST HERO LEVEL ───────────────────────────────────────────────────────────────────
+  //
+  // The strongest ROUTINE progression celebration (docs/product/PROGRESSION_CONTRACT_V0.md §11), and
+  // the word doing the work there is "routine": relight-bloom is the sound of the whole first quest
+  // landing and happens once, ever, so this must be clearly big without trying to outdo it -- a child
+  // will hear this one many times.
+  //
+  // A RISING MAJOR TRIAD, which is the one musical gesture that means "up" without needing to be
+  // taught: C-E-G climbing, each note entering before the last has gone, over a short bright noise
+  // transient that gives it an attack. Deliberately shorter than the relight (0.9s against 2.7s) and
+  // built from three clean tones rather than a sweep -- the Lantern's own unlock-flourish sweeps, and
+  // the two now fire seconds apart, so they have to be distinguishable from each other by shape and
+  // not only by pitch.
+  //
+  // First-draft placeholder on exactly the same footing as every other recipe in this table: what it
+  // is MADE of is here, how it SOUNDS is the owner's call on a real iPad.
+  'level-up': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.1, gainPeak: 0.16 }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0, durationSeconds: 0.55, frequencyStart: 261.63, frequencyEnd: 261.63, gainPeak: 0.3,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.12, durationSeconds: 0.5, frequencyStart: 329.63, frequencyEnd: 329.63, gainPeak: 0.3,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.24, durationSeconds: 0.66, frequencyStart: 392, frequencyEnd: 392, gainPeak: 0.34,
+    }),
+    // The octave on top, entering last and held longest: the part that reads as arrival rather than
+    // as another note in the run.
+    Object.freeze({
+      type: 'tone', startSeconds: 0.36, durationSeconds: 0.72, frequencyStart: 523.25, frequencyEnd: 523.25, gainPeak: 0.32,
+    }),
+  ]),
+
   // ── GP2: Rowan's cart ──────────────────────────────────────────────────────────────────────────
   //
   // Same status as everything else in this table: first-draft placeholders, how they SOUND is the owner's
@@ -286,6 +320,11 @@ export const SHARD_PICKUP_RECIPE_NAME = 'shard-resonance';
 export const WORKSHOP_BUILD_RECIPE_NAME = 'workshop-build';
 // G1: reaching the Old Beacon -- proximity, not an event, same group as everything above it here.
 export const BEACON_ARRIVAL_RECIPE_NAME = 'beacon-cold';
+// P2: the level-up. Directly played rather than mapped to an event for the reason the level-up
+// ceremony itself is fired off a DIFF rather than off the xp-earned announcement -- see main.js's
+// celebrateLevelUp. A sound hung off the announcement would replay on every reconnect where the
+// device teaches its own facts back and the server announces them straight to it.
+export const LEVEL_UP_RECIPE_NAME = 'level-up';
 export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   RELIGHT_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
@@ -294,6 +333,7 @@ export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   SHARD_PICKUP_RECIPE_NAME,
   WORKSHOP_BUILD_RECIPE_NAME,
   BEACON_ARRIVAL_RECIPE_NAME,
+  LEVEL_UP_RECIPE_NAME,
 ]);
 
 /**

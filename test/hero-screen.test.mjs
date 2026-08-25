@@ -12,6 +12,9 @@ import {
   damageFor,
 } from '../public/src/progression/items.js';
 import { heroScreenViewModel, swatchFor, swatchHexFor } from '../public/src/progression/heroScreen.js';
+import { resolveHeroStats } from '../public/src/progression/heroStats.js';
+import { formatPower, powerFor } from '../public/src/progression/power.js';
+import { cumulativeXpForLevel } from '../public/src/progression/levels.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // A fresh, real player: starter sword only. This is BASE deliberately, not a "granted" variant --
@@ -121,4 +124,106 @@ test('swatchHexFor is the single source of truth swatchFor\'s CSS string is deri
   assert.equal(typeof swatchHexFor(STARTER_SWORD_ID), 'number');
   assert.equal(swatchFor(STARTER_SWORD_ID), `#${swatchHexFor(STARTER_SWORD_ID).toString(16).padStart(6, '0')}`);
   assert.equal(swatchFor(WILDWOOD_BLADE_ID), `#${swatchHexFor(WILDWOOD_BLADE_ID).toString(16).padStart(6, '0')}`);
+});
+
+
+// ── P2: WHO THIS HERO IS ────────────────────────────────────────────────────────────────────────
+//
+// The contract puts POWER "prominently on the Hero/equipment surface", and the brief adds that the
+// screen "must not lie about normalized weapon damage". The second half is the one with teeth: every
+// number on this screen is individually true of SOMETHING, and the failure mode is printing a number
+// that is true of the item while a child reads it as being about themselves.
+
+const LEVELLED = resolveHeroStats({
+  totalXp: cumulativeXpForLevel(2), equippedWeaponId: STARTER_SWORD_ID,
+});
+
+test('the identity panel reports the RESOLVED hero, not the catalogue', () => {
+  const view = heroScreenViewModel({
+    equippedWeaponId: STARTER_SWORD_ID,
+    ownedItemIds: [STARTER_SWORD_ID],
+    selectedItemId: STARTER_SWORD_ID,
+    stats: LEVELLED,
+  });
+  assert.equal(view.identity.level, 2);
+  assert.equal(view.identity.maxHp, LEVELLED.maxHp);
+  assert.equal(view.identity.damage, LEVELLED.heroDamage);
+  assert.equal(view.identity.power, powerFor(LEVELLED));
+  assert.equal(view.identity.powerText, formatPower(powerFor(LEVELLED)));
+
+  // THE ONE THAT MATTERS. A Level-2 hero holding the starter sword hits for 12; the sword itself is
+  // worth 10. A screen that printed the sword's number as the hero's would be true about the item
+  // and false about the child -- the version of GQ-013 that is hardest to notice, because every
+  // individual number in it is correct.
+  assert.notEqual(view.identity.damage, damageFor(STARTER_SWORD_ID));
+  assert.equal(view.selected.damage, damageFor(STARTER_SWORD_ID),
+    'the item card still reports the ITEM, which is its job');
+});
+
+test('a screen with no hero yet shows no identity rather than a made-up one', () => {
+  const view = heroScreenViewModel({
+    equippedWeaponId: STARTER_SWORD_ID, ownedItemIds: [STARTER_SWORD_ID], selectedItemId: null,
+  });
+  assert.equal(view.identity, null, 'an empty POWER panel reads as "you have no power", which is a '
+    + 'different and untrue statement from "this is not known yet"');
+  assert.equal(view.powerComparison, null, 'a POWER change needs a hero to happen to');
+});
+
+test('the equip comparison says what it would do to POWER, from the same law the ceremony uses', () => {
+  const view = heroScreenViewModel({
+    ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID, stats: LEVELLED,
+  });
+  assert.equal(view.powerComparison.from, powerFor(LEVELLED));
+  assert.ok(view.powerComparison.delta > 0, 'the Blade is a real upgrade at any level');
+  assert.equal(view.powerComparison.deltaText, `+${formatPower(view.powerComparison.delta)}`);
+  assert.equal(view.powerComparison.fromText, formatPower(view.powerComparison.from));
+});
+
+test('comparing the equipped item against itself yields no POWER comparison either', () => {
+  const view = heroScreenViewModel({
+    ...GRANTED, selectedItemId: STARTER_SWORD_ID, stats: LEVELLED,
+  });
+  assert.equal(view.powerComparison, null, 'nothing to compare against itself');
+});
+
+test('the POWER comparison holds the BODY still and moves only the weapon', () => {
+  // The equip question is "what would this sword do", not "what would this sword and a level do".
+  // Holding max HP fixed is what makes the delta answerable at all.
+  const view = heroScreenViewModel({
+    ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID, stats: LEVELLED,
+  });
+  const sameBodyBladeArm = powerFor({
+    maxHp: LEVELLED.maxHp,
+    heroDamage: LEVELLED.heroDamage + (damageFor(WILDWOOD_BLADE_ID) - damageFor(STARTER_SWORD_ID)),
+  });
+  assert.equal(view.powerComparison.to, sameBodyBladeArm);
+});
+
+test('a sidegrade that lowers POWER is reported as a loss, not silently as an upgrade', () => {
+  // The contract protects this explicitly. No item in the current catalogue can produce it, so the
+  // property is proved against the direction rather than against a fixture that does not exist:
+  // equipping DOWN from the Blade to the starter sword must read as negative.
+  const bladeHero = resolveHeroStats({
+    totalXp: cumulativeXpForLevel(2), equippedWeaponId: WILDWOOD_BLADE_ID,
+  });
+  const view = heroScreenViewModel({
+    equippedWeaponId: WILDWOOD_BLADE_ID,
+    ownedItemIds: GRANTED.ownedItemIds,
+    selectedItemId: STARTER_SWORD_ID,
+    stats: bladeHero,
+  });
+  assert.ok(view.powerComparison.delta < 0);
+  assert.ok(view.powerComparison.deltaText.startsWith('-'),
+    `a downgrade must not be labelled "+": got ${view.powerComparison.deltaText}`);
+});
+
+test('every existing field survives the identity being added', () => {
+  // GQ-017: adding a field to a view model is a type change, and the callers that already read the
+  // old shape are the ones nobody looks at. This pins that the old contract is untouched.
+  const withStats = heroScreenViewModel({ ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID, stats: LEVELLED });
+  const without = heroScreenViewModel({ ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID });
+  assert.deepEqual(withStats.slots, without.slots);
+  assert.deepEqual(withStats.weapons, without.weapons);
+  assert.deepEqual(withStats.selected, without.selected);
+  assert.deepEqual(withStats.comparison, without.comparison);
 });

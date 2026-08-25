@@ -13,6 +13,10 @@
 // you can only prove by looking at it.
 
 import { WEAPON_SLOT, damageFor, itemDef } from './items.js';
+// P2: the RESOLVED hero, and the number a child brags about. Imported rather than passed as loose
+// numbers so this surface cannot be handed a level and a POWER that disagree with each other.
+import { resolvedHeroDamage } from './heroStats.js';
+import { formatPower, powerFor } from './power.js';
 // A plain numeric hex constant, not a three.js Color or a DOM value -- safe to import into a
 // browser-only UI module with zero new coupling. Reusing it (rather than a second guess at "what
 // colour is the Wildwood Blade") is what keeps the item card's swatch agreeing with the planted prop
@@ -56,8 +60,14 @@ export function swatchFor(itemId) {
  * selectedItemId may be stale (an id no longer owned, or none chosen yet) -- resolved down to the
  * equipped weapon in that case, the same "always a safe fallback, never a blank card" discipline
  * progression/state.js's equippedWeaponIdFromRewards already uses for the wire field it reads.
+ *
+ * @param stats the RESOLVED Hero stats from progression/heroStats.js -- `{ level, maxHp, heroDamage }`.
+ *   Optional: a caller with none yet (pre-welcome) gets no identity panel rather than a made-up one,
+ *   which is the same "absent is not zero" posture the wire's own optional fields take. When present
+ *   it is the SAME object the fight is being fed, so this screen cannot print a hero the combat rules
+ *   have not agreed to (docs/MISTAKES.md GQ-013, one layer out from where it was first found).
  */
-export function heroScreenViewModel({ equippedWeaponId, ownedItemIds, selectedItemId }) {
+export function heroScreenViewModel({ equippedWeaponId, ownedItemIds, selectedItemId, stats = null }) {
   const owned = new Set(ownedItemIds);
   const resolvedSelectedId = owned.has(selectedItemId) ? selectedItemId : equippedWeaponId;
   const selectedDef = itemDef(resolvedSelectedId);
@@ -88,9 +98,47 @@ export function heroScreenViewModel({ equippedWeaponId, ownedItemIds, selectedIt
     return { id: slot.id, label: slot.label, locked: true, filled: false, name: null, swatch: null };
   });
 
+  // P2: WHO THIS HERO IS, from the resolved stats rather than from the catalogue.
+  //
+  // `damage` here is the hero's RESOLVED blow -- weapon plus what their level added to the arm --
+  // not the sword's catalogue number. A screen that printed the sword's 10 beside a hero who hits
+  // for 12 would be true about the item and false about the child, which is the version of GQ-013
+  // that is hardest to notice because every individual number is correct.
+  const identity = stats ? {
+    level: stats.level,
+    maxHp: stats.maxHp,
+    damage: stats.heroDamage,
+    power: powerFor(stats),
+    powerText: formatPower(powerFor(stats)),
+  } : null;
+
+  // What equipping the selected weapon would do to this hero's POWER.
+  //
+  // The DRAMATIC before/delta/after equip ceremony is G1's, explicitly; what P2 owes is a surface
+  // that is truthful and ready for it. So the delta is computed here, from the same law the level-up
+  // ceremony uses, and simply printed on the comparison card. Null without stats: a POWER change
+  // needs a hero to happen to, and inventing one would be worse than saying nothing.
+  const powerComparison = (identity && selectedDef && selectedDef.id !== equippedWeaponId)
+    ? (() => {
+      const after = powerFor({
+        maxHp: stats.maxHp,
+        heroDamage: resolvedHeroDamage(stats.level, selectedDef.id),
+      });
+      return {
+        from: identity.power,
+        to: after,
+        delta: after - identity.power,
+        fromText: formatPower(identity.power),
+        toText: formatPower(after),
+        deltaText: `${after - identity.power < 0 ? '-' : '+'}${formatPower(Math.abs(after - identity.power))}`,
+      };
+    })()
+    : null;
+
   return {
     slots,
     weapons,
+    identity,
     selected: selectedDef && {
       id: selectedDef.id,
       name: selectedDef.name,
@@ -99,10 +147,11 @@ export function heroScreenViewModel({ equippedWeaponId, ownedItemIds, selectedIt
       isEquipped: selectedDef.id === equippedWeaponId,
     },
     // null when the selected item IS the equipped one -- nothing to compare against itself. Section
-    // 8's own worked example is `1 -> 2 DAMAGE`; a same-item card has no arrow to draw.
+    // 8's own worked example was `1 -> 2 DAMAGE`; a same-item card has no arrow to draw.
     comparison: (selectedDef && selectedDef.id !== equippedWeaponId)
       ? { fromDamage: equippedDamage, toDamage: selectedDef.damage, isUpgrade: selectedDef.damage > equippedDamage }
       : null,
+    powerComparison,
   };
 }
 
@@ -135,6 +184,11 @@ export function createHeroScreen(options = {}) {
   const damageEl = root.querySelector('#hero-item-damage');
   const compareEl = root.querySelector('#hero-item-compare');
   const equipButton = root.querySelector('#hero-equip-button');
+  const identityEl = root.querySelector('#hero-identity');
+  const identityLevelEl = root.querySelector('#hero-identity-level-value');
+  const identityPowerEl = root.querySelector('#hero-identity-power-value');
+  const identityHpEl = root.querySelector('#hero-identity-hp');
+  const identityDamageEl = root.querySelector('#hero-identity-damage');
 
   let shown = false;
   // The last view() this presenter was handed, so a click handler (which fires between frames, not
@@ -180,7 +234,7 @@ export function createHeroScreen(options = {}) {
     }
   }
 
-  function renderCard(selected, comparison) {
+  function renderCard(selected, comparison, powerComparison) {
     if (!selected) {
       nameEl.textContent = '';
       damageEl.textContent = '';
@@ -190,10 +244,24 @@ export function createHeroScreen(options = {}) {
       return;
     }
     nameEl.textContent = selected.name;
-    damageEl.textContent = `DAMAGE ${selected.damage}`;
+    // "WEAPON DAMAGE", not "DAMAGE", since P2 put the HERO's resolved damage on the same screen.
+    // Caught in a capture: the identity panel read "12 DAMAGE" while the card underneath it read
+    // "DAMAGE 10", and both were true -- of different subjects. Two numbers a child cannot tell
+    // apart is a worse readout than either alone, and the fix is a word rather than a number.
+    damageEl.textContent = `WEAPON DAMAGE ${selected.damage}`;
     if (comparison) {
-      compareEl.textContent = `${comparison.fromDamage} → ${comparison.toDamage} DAMAGE`;
-      compareEl.dataset.upgrade = String(comparison.isUpgrade);
+      // The stat delta, and -- when a hero is known -- what it would do to the one number the child
+      // actually reads. Two lines rather than one because they answer different questions and the
+      // contract's sidegrade rule depends on both being visible.
+      compareEl.textContent = powerComparison
+        ? `${comparison.fromDamage} → ${comparison.toDamage} DAMAGE · POWER ${powerComparison.deltaText}`
+        : `${comparison.fromDamage} → ${comparison.toDamage} DAMAGE`;
+      // Read off the POWER change when there is one, because POWER is the game's official
+      // single-number estimate of readiness and a two-stat item can be a legitimate sidegrade the
+      // damage line alone would mislabel as strictly better.
+      compareEl.dataset.upgrade = String(
+        powerComparison ? powerComparison.delta > 0 : comparison.isUpgrade,
+      );
     } else {
       compareEl.textContent = '';
     }
@@ -201,11 +269,24 @@ export function createHeroScreen(options = {}) {
     equipButton.disabled = selected.isEquipped;
   }
 
+  function renderIdentity(identity) {
+    if (!identityEl) return;
+    // Hidden rather than blank when there is no hero yet: an empty POWER panel reads as "you have no
+    // power", which is a different and untrue statement from "this is not known yet".
+    identityEl.hidden = identity === null;
+    if (identity === null) return;
+    identityLevelEl.textContent = String(identity.level);
+    identityPowerEl.textContent = identity.powerText;
+    identityHpEl.textContent = String(identity.maxHp);
+    identityDamageEl.textContent = String(identity.damage);
+  }
+
   function render(view) {
     lastView = view;
     renderSlots(view.slots);
     renderItemList(view.weapons);
-    renderCard(view.selected, view.comparison);
+    renderIdentity(view.identity ?? null);
+    renderCard(view.selected, view.comparison, view.powerComparison ?? null);
   }
 
   // A TOGGLE, because that is what a button in the top-right corner of a phone means.

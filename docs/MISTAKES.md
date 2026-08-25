@@ -1196,6 +1196,37 @@ that is not unique is a silent way to write working code in the wrong place; the
 on the enclosing function instead and asserted the anchor occurred exactly once.
 **Foreknowledge helped:** not yet recorded.
 
+### OBSERVED — A factory that ignores unknown options turns a typo into a silent redirection to production state.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-25
+**Rule:** `createRewardCoordinator(options)` takes `options.rewardStorePath` and falls back to
+`DEFAULT_REWARD_STORE_PATH` — the repository's real `data/rewards.db`. The fallback is right for
+production and the option is right for tests; what is wrong is that a caller who names the option
+something else gets the fallback **silently**, with no error, no warning, and a working object.
+
+The generalisation past this repo: whenever a default points at REAL state and the override is an
+optional property on a bag, a misspelled key is not a missing feature, it is a redirect. The failure
+does not surface where the typo is — it surfaces as the thing you were measuring being absent,
+because you are reading a different store from the one being written. **The distance between the
+mistake and its symptom is the whole cost.** A factory whose default is destructive should either
+reject keys it does not recognise, or require the safe caller to be explicit rather than the
+dangerous one.
+**Incident (2026-08-25, PROG-P2-C2):** a new test built its coordinator as
+`createRewardCoordinator({ store })` — passing an already-open handle, which that factory does not
+accept. Every assertion in the file failed reporting `0 marks` while the harness's own log showed
+three `mark-earned` events being raised, because the events were real and were landing in
+`data/rewards.db` rather than in the temp store the test was reading. Eleven of twenty checks red,
+none of them naming the cause. Found by noticing that `data/` had grown a `rewards.db` and thirty
+timestamped backups, not by reading any failure. The `.db` files are gitignored, so nothing reached
+the commit — but a local run had mutated real save data, which is exactly the custody boundary
+`net/rewardStore.mjs`'s own header draws ("every real run's store lives at `data/rewards.db`; every
+test's store lives under the OS temp dir — never here").
+
+Worth recording alongside it: the same run revealed that `node --test test/*.test.mjs` **already**
+writes to `data/rewards.db` at `main@ee2c5e60`, verified in a clean worktree. So the boundary this
+entry is about was already leaking before the typo, and the typo only made it visible. A default
+that is never exercised by tests is a default nobody notices has been exercised.
+**Foreknowledge helped:** not yet recorded.
+
 ### GQ-016 — Booting the app mints an identity, so a harness that seeds one must do it before the first boot.
 **Status:** ENFORCED · **Hits:** 2 · **First/Last:** 2026-08-22
 **Enforced by:** `test/harness-seeded-identity.test.mjs`

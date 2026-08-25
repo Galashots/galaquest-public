@@ -24,10 +24,12 @@ import {
   POWER_COMPACT_FROM,
   POWER_DISPLAY_SCALE,
   formatPower,
+  levelUpSummary,
   powerChange,
   powerFor,
   realStrengthFor,
 } from '../public/src/progression/power.js';
+import { cumulativeXpForLevel } from '../public/src/progression/levels.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -211,6 +213,53 @@ test('powerChange can say a change was a LOSS, because a sidegrade is a legitima
   const change = powerChange(2000, 1840);
   assert.equal(change.delta, -160);
   assert.equal(change.deltaText, '-160');
+});
+
+// ── what the ceremony says ──────────────────────────────────────────────────────────────────────
+//
+// The numbers a child is shown at the loudest moment in the game. Worth being able to check without a
+// browser for exactly that reason -- what the ceremony LOOKS like is taste and is judged in captures,
+// but what it CLAIMS is arithmetic and must be right.
+
+test('the first level-up says precisely what the brief says it must', () => {
+  const before = resolveHeroStats({ totalXp: 0, equippedWeaponId: STARTER_SWORD_ID });
+  const after = resolveHeroStats({ totalXp: cumulativeXpForLevel(2), equippedWeaponId: STARTER_SWORD_ID });
+  const summary = levelUpSummary({ level: after.level, before, after });
+
+  assert.equal(summary.level, 2);
+  assert.equal(summary.maxHpGainText, '+5');
+  assert.equal(summary.damageGainText, '+2');
+  // #41's own worked shape, and the brief's: `1,000 -> +400 -> 1,400`.
+  assert.deepEqual(
+    [summary.power.beforeText, summary.power.deltaText, summary.power.afterText],
+    ['1,000', '+400', '1,400'],
+  );
+});
+
+test('the ceremony is built from the two stat states, so it cannot disagree with the fight', () => {
+  // The gains are the real difference between two resolved heroes, not a remembered snapshot. If a
+  // future level ever grants something different, the ceremony says the new thing without being told.
+  const before = resolveHeroStats({ totalXp: cumulativeXpForLevel(4) });
+  const after = resolveHeroStats({ totalXp: cumulativeXpForLevel(5) });
+  const summary = levelUpSummary({ level: after.level, before, after });
+  assert.equal(summary.maxHpGain, after.maxHp - before.maxHp);
+  assert.equal(summary.damageGain, after.heroDamage - before.heroDamage);
+  assert.equal(summary.power.before, powerFor(before));
+  assert.equal(summary.power.after, powerFor(after));
+  assert.equal(summary.power.delta, powerFor(after) - powerFor(before));
+});
+
+test('a level-up whose gains are held in a charmed body still reports the LEVEL\'s gains', () => {
+  // Both states carry the charm, so the +10 it is worth appears in neither delta -- which is right:
+  // the ceremony is about what the LEVEL just gave, and the charm was given by Wren weeks ago.
+  const before = resolveHeroStats({ totalXp: 0, charmOwned: true });
+  const after = resolveHeroStats({ totalXp: cumulativeXpForLevel(2), charmOwned: true });
+  const summary = levelUpSummary({ level: 2, before, after });
+  assert.equal(summary.maxHpGainText, '+5');
+  assert.equal(summary.damageGainText, '+2');
+  // But POWER is about the whole hero, so a charmed hero's numbers are their own.
+  assert.equal(summary.power.before, powerFor(before));
+  assert.ok(summary.power.delta > 0);
 });
 
 // ── contract invariants 1 and 6: POWER is never an input ────────────────────────────────────────

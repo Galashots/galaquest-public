@@ -74,6 +74,7 @@
       #game[data-hero-screen-open="true"] #quest-objective,
       #game[data-hero-screen-open="true"] #banner,
       #game[data-hero-screen-open="true"] #hero-health,
+      #game[data-hero-screen-open="true"] #hero-progress,
       #game[data-hero-screen-open="true"] #lantern-marks,
       #game[data-hero-screen-open="true"] #loot-hud {
         opacity: 0 !important; pointer-events: none !important;
@@ -211,6 +212,60 @@
         box-shadow: 0 0 0.85rem 0.15rem rgb(126 226 138 / 75%);
         transition: transform 90ms ease-out, box-shadow 90ms ease-out;
       }
+      /* P2: LEVEL, THE METER, AND POWER -- one pill, directly under the health readout, and the
+         second member of the top-left status column rather than a new corner. See its own markup
+         comment for why the three sit together.
+         FIXED WIDTH, deliberately: a Level that reaches two digits or a POWER that reaches five must
+         not widen the pill, because the rows beneath it are positioned by hand and a pill that grows
+         would shove the whole column sideways as a child gets stronger. Tabular numerals for the same
+         reason at a smaller scale -- the meter must not jitter as the XP count ticks. */
+      #hero-progress {
+        position: absolute; top: calc(0.75rem + 2.5rem); left: 0.75rem;
+        display: flex; gap: 0.4rem; align-items: center;
+        padding: 0.3rem 0.55rem; border-radius: 0.35rem;
+        background: rgb(12 20 31 / 75%);
+        font: 800 0.8rem/1 system-ui, sans-serif; color: #fff;
+        font-variant-numeric: tabular-nums;
+        pointer-events: none; touch-action: none;
+      }
+      #hero-progress .hero-progress-level { color: #f2b33d; letter-spacing: 0.04em; }
+      /* The meter. Same track/fill construction as the health bar above it and deliberately SHORTER
+         and THINNER -- they are different promises and must not read as two of the same thing: one is
+         "how much of you is left", which a child needs at a glance mid-fight, and this is "how close
+         you are", which they look at between fights. Gold rather than red for the same reason. */
+      #hero-progress .hero-progress-meter {
+        display: block; width: 4.2rem; height: 0.4rem; border-radius: 0.2rem;
+        background: rgb(255 255 255 / 18%); overflow: hidden;
+      }
+      #hero-progress .xp-fill {
+        display: block; height: 100%; width: 0%; border-radius: 0.2rem;
+        background: linear-gradient(90deg, #f2b33d, #ffe08a);
+        transition: width 240ms ease-out;
+      }
+      #hero-progress .hero-progress-xp { font-weight: 700; font-size: 0.7rem; opacity: 0.75; }
+      #hero-progress .hero-progress-power { display: inline-flex; align-items: center; gap: 0.18rem; color: #ffd76e; }
+      #hero-progress .hero-progress-power-icon::after { content: '\26A1'; font-size: 0.8rem; }
+      /* The moment the meter completes. One beat, on the pill AND the fill, so the eye is PULLED to
+         the corner rather than expected to already be looking there -- the same argument
+         #lantern-marks[data-just-lit] makes for itself, and the same 700ms shape. */
+      #hero-progress[data-levelled="true"] { animation: hero-progress-lift 900ms ease-out 1; }
+      #hero-progress[data-levelled="true"] .xp-fill { animation: xp-complete 900ms ease-out 1; }
+      /* AND THE ROLLOVER SNAPS. The 240ms ease above is right for XP trickling in and wrong for the
+         one moment the meter empties: caught in a capture, it left a full gold bar sitting beside a
+         label already reading "0 / 150", which for a quarter of a second says two different things.
+         Turning the transition off for the duration of the beat makes the reset instant, so the bar
+         is full, then the level flips, then the bar is empty -- three states, each of them true. */
+      #hero-progress[data-levelled="true"] .xp-fill { transition: none; }
+      @keyframes hero-progress-lift {
+        0%   { background: rgb(12 20 31 / 75%); transform: scale(1); }
+        16%  { background: rgb(78 56 18 / 94%); transform: scale(1.1); }
+        100% { background: rgb(12 20 31 / 75%); transform: scale(1); }
+      }
+      @keyframes xp-complete {
+        0%   { filter: brightness(1); }
+        16%  { filter: brightness(2.4); }
+        100% { filter: brightness(1); }
+      }
       /* Lantern Marks, D4: three pips directly under the health readout, same dark-pill / same fill
          convention (see combat/feedback.js's health research for why filled-icon-not-a-bar suits a
          small FIXED integer, which MARKS_TO_UNLOCK still is and HERO_MAX_HP no longer is). Read-only
@@ -219,7 +274,8 @@
          audio recipes are placeholder sounds -- what it looks like is a later the owner-on-iPad call,
          same as the growl and the other five. */
       #lantern-marks {
-        position: absolute; top: calc(0.75rem + 2.5rem); left: 0.75rem;
+        /* One row further down since P2 put #hero-progress between this and the health readout. */
+        position: absolute; top: calc(0.75rem + 2.5rem + 2rem); left: 0.75rem;
         display: flex; gap: 0.15rem; align-items: center;
         padding: 0.3rem 0.5rem; border-radius: 0.35rem;
         background: rgb(12 20 31 / 75%);
@@ -297,10 +353,11 @@
       #loot-hud .loot-count[data-popped="true"] { animation: loot-pop 260ms ease-out; }
       @keyframes loot-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
       /* The standing objective. Sits directly under #lantern-marks (0.75 + 2.5 for the health row,
-         + 2.2 for the pips row), same pill treatment, same read-only/out-of-touch-flow rules. Left
-         aligned with the bar and pips so the whole top-left corner reads as one status column. */
+         + 2 for the level/POWER row, + 2.2 for the pips row), same pill treatment, same
+         read-only/out-of-touch-flow rules. Left aligned with the bar, the meter and the pips so the
+         whole top-left corner reads as one status column. */
       #quest-objective {
-        position: absolute; top: calc(0.75rem + 2.5rem + 2.2rem); left: 0.75rem;
+        position: absolute; top: calc(0.75rem + 2.5rem + 2rem + 2.2rem); left: 0.75rem;
         max-width: min(20rem, calc(100% - 10rem));
         padding: 0.3rem 0.55rem; border-radius: 0.35rem;
         color: #fff; background: rgb(12 20 31 / 75%);
@@ -309,6 +366,73 @@
         pointer-events: none; touch-action: none;
       }
       #quest-objective[data-shown="true"] { opacity: 1; }
+      /* ── P2: THE LEVEL-UP CEREMONY ────────────────────────────────────────────────────────────
+         The strongest routine progression celebration in the game, and it had to stop being a banner
+         -- see its own markup comment for the capture that settled that.
+         WHERE IT SITS is the first decision. Centred horizontally and in the UPPER-MIDDLE band, not
+         dead centre: the hero stands slightly below the middle of the frame at gameplay framing (see
+         any capture under .local/runtime-test/), and a card over the middle would cover the child's
+         own body at the exact moment they are meant to be looking at it. The bottom third belongs to
+         the stick and ATTACK and is never covered by anything.
+         POINTER-EVENTS NONE throughout: the fight keeps running underneath and a child can keep
+         swinging through the whole ceremony. It celebrates, it does not interrupt. */
+      #level-up {
+        position: absolute; inset: 0; display: grid; place-items: start center;
+        /* Measured against a real capture rather than chosen: at 18% the card's top-left corner
+           clipped the objective chip in portrait. 22% clears the whole top-left status column and
+           still sits well above the hero, who stands just below the middle of the frame. */
+        padding-top: 22%;
+        pointer-events: none; touch-action: none;
+        opacity: 0; transition: opacity 260ms ease-out;
+      }
+      #level-up[data-shown="true"] { opacity: 1; transition: opacity 90ms ease-in; }
+      #level-up-card {
+        display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+        padding: 0.9rem 1.6rem; border-radius: 0.9rem;
+        border: 2px solid rgb(242 179 61 / 70%);
+        background: rgb(12 20 31 / 92%); color: #fff;
+        text-align: center;
+        /* The glow IS the "strongest celebration" half. Two shadows: a tight warm ring on the card
+           and a wide soft bloom past it, which is what makes it read as light rather than as a box
+           with a yellow border. */
+        box-shadow: 0 0 1.2rem 0.15rem rgb(242 179 61 / 55%), 0 0 3.5rem 0.6rem rgb(242 179 61 / 22%);
+        transform: scale(0.86);
+        transition: transform 260ms cubic-bezier(0.2, 1.4, 0.5, 1);
+      }
+      #level-up[data-shown="true"] #level-up-card { transform: scale(1); }
+      /* The two words themselves, and the only thing on screen this size. */
+      #level-up-title {
+        font: 900 2.1rem/1 system-ui, sans-serif; letter-spacing: 0.06em;
+        color: #ffd76e;
+        text-shadow: 0 0 0.6rem rgb(255 215 110 / 90%), 0 0 1.6rem rgb(242 179 61 / 55%);
+      }
+      #level-up[data-shown="true"] #level-up-title { animation: level-up-pulse 900ms ease-out 1; }
+      @keyframes level-up-pulse {
+        0%   { transform: scale(1);    filter: brightness(1); }
+        18%  { transform: scale(1.14); filter: brightness(1.8); }
+        100% { transform: scale(1);    filter: brightness(1); }
+      }
+      #level-up-level {
+        font: 800 1.15rem/1 system-ui, sans-serif; letter-spacing: 0.1em; color: #fff; opacity: 0.9;
+      }
+      /* The two real stat gains, side by side. These are the "it changed the game" half, and they are
+         deliberately as legible as the title: a ceremony whose numbers a child cannot read is a
+         flash. */
+      #level-up-gains {
+        display: flex; gap: 1.1rem; margin-top: 0.25rem;
+        font: 700 0.8rem/1.2 system-ui, sans-serif; letter-spacing: 0.05em; opacity: 0.85;
+      }
+      #level-up-gains .level-up-gain-value { font-weight: 900; font-size: 1.05rem; color: #7ee28a; }
+      /* before -> delta -> after, the shape #41 names. Tabular numerals so the three numbers line up
+         as a sentence rather than jostling. */
+      #level-up-power {
+        display: flex; align-items: baseline; gap: 0.35rem; margin-top: 0.35rem;
+        font: 800 1rem/1 system-ui, sans-serif; color: #ffd76e;
+        font-variant-numeric: tabular-nums;
+      }
+      #level-up-power .level-up-power-label { font-size: 0.7rem; letter-spacing: 0.12em; opacity: 0.75; color: #fff; }
+      #level-up-power .level-up-power-arrow { opacity: 0.55; font-size: 0.8rem; }
+      #level-up-power #level-up-power-delta { color: #7ee28a; }
       /* The gap that mattered most: before this, a bitten hero got no feedback beyond a number in
          the status line. A red glow at the screen EDGES -- the "damage vignette" convention, see
          combat/feedback.js -- because it has to register without the child looking at the bar in
@@ -452,7 +576,16 @@
       }
       .damage-number[data-rise="true"] { transform: translate(-50%, -260%); opacity: 0; }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        /* THE CEREMONY STILL HAPPENS UNDER REDUCED MOTION -- it just stops moving.
+           The contract's requirement is that "essential Level/HP/POWER information must remain
+           legible when motion is reduced; animation is enhancement, not the only communication
+           channel". So the card is not hidden here: it appears, holds for its full duration and
+           goes, carrying every number it always carried. What is removed is the scale-in, the glow
+           pulse and the fade -- the parts that are decoration. A reduced-motion setting is a request
+           for less movement, not for less game. */
+        #level-up, #level-up-card, #level-up-title { transition: none; animation: none; }
+        #level-up[data-shown="true"] #level-up-card { transform: none; }
       }
       /* Y/Task F2: debug-only, hidden by default -- the GPU/frame-cost panel was competing with the
          game and Keeper dialogue in every capture (found by looking at village-keeper-wave.png-style
@@ -594,6 +727,29 @@
         background: var(--slot-swatch, #8a97a6);
       }
       .hero-item-equipped-tag { color: #f2b33d; font-size: 0.55rem; letter-spacing: 0.05em; }
+      /* P2: the Hero screen's own identity panel -- Level and POWER prominently, per the contract's
+         "prominently on the Hero/equipment surface", with the two REAL combat stats under them.
+         Positioned per orientation below, beside the slots, so it reads as part of the same header
+         band rather than as a fourth floating dock. */
+      #hero-identity {
+        display: flex; flex-direction: column; gap: 0.15rem; pointer-events: none;
+        padding: 0.5rem 0.75rem; border-radius: 0.6rem;
+        background: rgb(12 20 31 / 85%); color: #fff; text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      #hero-identity-level { font: 800 0.75rem/1 system-ui, sans-serif; letter-spacing: 0.12em; opacity: 0.8; }
+      #hero-identity-power {
+        display: inline-flex; align-items: baseline; justify-content: center; gap: 0.25rem;
+        color: #ffd76e; font: 900 1.5rem/1.1 system-ui, sans-serif;
+        text-shadow: 0 0 0.5rem rgb(242 179 61 / 45%);
+      }
+      #hero-identity-power .hero-identity-power-icon::after { content: '\26A1'; font-size: 1.1rem; }
+      #hero-identity-power .hero-identity-power-label { font-size: 0.6rem; letter-spacing: 0.12em; opacity: 0.7; color: #fff; }
+      #hero-identity-stats {
+        display: flex; gap: 0.7rem; justify-content: center;
+        font: 700 0.65rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; opacity: 0.8;
+      }
+      #hero-identity-stats span span { font-weight: 900; font-size: 0.8rem; color: #fff; opacity: 1; }
       #hero-item-card {
         display: flex; flex-direction: column; gap: 0.3rem; pointer-events: auto;
         padding: 0.6rem 0.8rem; border-radius: 0.6rem;
@@ -619,11 +775,19 @@
          available once both docks are pinned to an edge instead of the middle. */
       @media (orientation: landscape) {
         #hero-slots { top: 4.5rem; left: 0.75rem; flex-direction: column; }
+        /* Bottom-left, under the slot column: the one corner both docks leave clear in landscape,
+           and directly opposite the item card so a child comparing a weapon can see what they
+           currently ARE without their thumb crossing the preview. */
+        #hero-identity { position: absolute; left: 0.75rem; bottom: 0.75rem; }
         #hero-item-list { position: absolute; right: 0.75rem; bottom: 8.5rem; top: 4.5rem; flex-direction: column; width: 5.4rem; }
         #hero-item-card { position: absolute; right: 0.75rem; bottom: 0.75rem; }
       }
       @media (orientation: portrait) {
         #hero-slots { top: 4.5rem; left: 0.75rem; right: 0.75rem; flex-direction: row; justify-content: center; flex-wrap: wrap; }
+        /* Directly under the slot row and above the preview band, centred: in portrait the eye
+           travels top-to-bottom, so "who you are" belongs between the gear you are wearing and the
+           gear you are choosing. */
+        #hero-identity { position: absolute; top: 9.6rem; left: 0.75rem; right: 0.75rem; }
         #hero-item-list { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 6.5rem; }
         #hero-item-card { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; }
       }
@@ -822,7 +986,11 @@
          Under the objective chip, in the same left-hand information column, and clear of both thumb
          zones. 110 CSS px backed by a 220 px canvas so it is not soft on a 2x tablet. */
       #minimap {
-        position: absolute; left: 0.75rem; top: 7.5rem;
+        /* One row further down since P2, for the same reason #lantern-marks and #quest-objective
+           moved: the status column above it grew a Level/XP/POWER row and the objective chip landed
+           underneath this circle. Caught in a running-game capture rather than by reading the CSS --
+           7.5rem was fine for a three-row column and the fourth row is what broke it. */
+        position: absolute; left: 0.75rem; top: 9.5rem;
         width: 110px; height: 110px; border-radius: 50%;
         border: 2px solid rgb(242 179 61 / 45%);
         background: rgb(12 20 31 / 62%);
@@ -1089,6 +1257,20 @@
         <span class="health-track" aria-hidden="true"><span class="health-fill"></span></span>
         <span class="health-count"><span id="health-current">30</span><span class="health-slash">/</span><span id="health-max">30</span></span>
       </div>
+      <!-- P2: WHAT THE CHILD IS BECOMING, under what they currently are.
+           Level, the meter toward the next one, and POWER, in one compact pill in the same dark-pill
+           family as everything else in this column. All three together rather than three pills
+           because they are one sentence -- "you are LV 1, this much of the way to LV 2, and that
+           makes you this strong" -- and because the contract asks for POWER "persistently in a
+           compact HUD treatment BESIDE Hero level/progress", not somewhere else on the screen.
+           The pill is a fixed width so a rising Level or a five-digit POWER cannot move the rows
+           beneath it. main.js paints every field; nothing here is authored text. -->
+      <div id="hero-progress" role="status" aria-live="polite" aria-label="Hero level and power">
+        <span class="hero-progress-level">LV&nbsp;<span id="hero-level">1</span></span>
+        <span id="hero-xp" class="hero-progress-meter" aria-hidden="true"><span class="xp-fill"></span></span>
+        <span id="hero-xp-text" class="hero-progress-xp">0 / 100</span>
+        <span class="hero-progress-power"><span class="hero-progress-power-icon" aria-hidden="true"></span><span id="hero-power-value">1,000</span></span>
+      </div>
       <!-- Three spans: matches MARKS_TO_UNLOCK in rewards/marks.js. test/rewards-hud.test.mjs
            asserts that, the same guard feedback.test.mjs already runs for the health readout above. -->
       <div id="lantern-marks" role="status" aria-live="polite" aria-label="Lantern marks">
@@ -1131,6 +1313,39 @@
         </div>
         <button id="keeper-speech-speak" type="button" aria-label="Hear this line aloud">🔊</button>
       </div>
+      <!-- P2: THE LEVEL-UP CEREMONY.
+           The strongest routine progression celebration the game has (PROGRESSION_CONTRACT_V0 §11),
+           and deliberately NOT a banner. It was a banner for exactly one run of
+           tools/runtime-test/drive-first-level-up.mjs, and the capture from that run is the whole
+           argument: wolf-defeated, the third Lantern Mark and the unlock all fire on the same frame,
+           each replacing the last, and the child's first level arrived as a toast saying
+           "LANTERN MARK 3 / 3". docs/MISTAKES.md records that class in as many words -- "two one-shot
+           payoffs whose triggers overlap in space fire on the same frame, and cancel each other".
+           So it owns its own element, its own space and its own clock.
+           NONBLOCKING: pointer-events none throughout, so a child can keep walking and swinging
+           through it. It does not gate input and it does not pause the fight.
+           Every number in it is written by main.js from the same resolved stats the fight is using;
+           nothing here is authored text except the words. -->
+      <div id="level-up" role="status" aria-live="assertive" data-shown="false">
+        <div id="level-up-card">
+          <div id="level-up-title">LEVEL UP!</div>
+          <div id="level-up-level">LEVEL <span id="level-up-level-value">2</span></div>
+          <div id="level-up-gains">
+            <span class="level-up-gain"><span class="level-up-gain-value" id="level-up-hp">+5</span> MAX HP</span>
+            <span class="level-up-gain"><span class="level-up-gain-value" id="level-up-damage">+2</span> DAMAGE</span>
+          </div>
+          <!-- The before -> delta -> after moment #41 asks for by name, in the shape it names:
+               `1,000 -> +400 -> 1,400`. -->
+          <div id="level-up-power">
+            <span class="level-up-power-label">POWER</span>
+            <span id="level-up-power-before">1,000</span>
+            <span class="level-up-power-arrow" aria-hidden="true">→</span>
+            <span id="level-up-power-delta">+400</span>
+            <span class="level-up-power-arrow" aria-hidden="true">→</span>
+            <span id="level-up-power-after">1,400</span>
+          </div>
+        </div>
+      </div>
       <div id="runtime-status" role="status" data-debug="false" data-fault="false">loading hero…</div>
       <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
@@ -1161,6 +1376,23 @@
         <!-- Owned-item strip. Rebuilt per render() by progression/heroScreen.js -- both v0 items
              ship owned (progression/items.js), so this always shows the Starter Sword and the
              Wildwood Blade side by side, ahead of GP9's real reward ceremony. -->
+        <!-- P2: WHO THIS HERO IS, prominently, on the surface the contract says POWER belongs on.
+             Level and POWER large, the two real combat stats under them. Every value is the RESOLVED
+             one the fight is actually using (progression/heroStats.js), not the catalogue's item
+             damage -- a Hero screen that printed the sword's 10 beside a hero who hits for 12 would
+             be the same lie GQ-013 is about, one layer out. -->
+        <div id="hero-identity">
+          <div id="hero-identity-level">LEVEL <span id="hero-identity-level-value">1</span></div>
+          <div id="hero-identity-power">
+            <span class="hero-identity-power-icon" aria-hidden="true"></span>
+            <span id="hero-identity-power-value">1,000</span>
+            <span class="hero-identity-power-label">POWER</span>
+          </div>
+          <div id="hero-identity-stats">
+            <span class="hero-identity-stat"><span id="hero-identity-hp">30</span> MAX HP</span>
+            <span class="hero-identity-stat"><span id="hero-identity-damage">10</span> DAMAGE</span>
+          </div>
+        </div>
         <div id="hero-item-list" role="listbox" aria-label="Owned weapons"></div>
         <div id="hero-item-card">
           <div id="hero-item-name"></div>

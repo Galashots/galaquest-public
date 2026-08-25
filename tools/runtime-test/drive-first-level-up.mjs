@@ -356,9 +356,14 @@ try {
     `stat ${before.progress.maxHp}, fight ${before.hero.maxHp}, drawn ${before.drawn.healthCurrent}/${before.drawn.healthMax}`);
   check(`BEFORE: Starter Sword resolves to ${BEFORE.damage} damage`,
     before.progress.heroDamage === BEFORE.damage, `damage ${before.progress.heroDamage}`);
-  check(`BEFORE: POWER ${formatPower(BEFORE.power)}`,
-    powerFor(before.progress) === BEFORE.power,
-    `derived ${formatPower(powerFor(before.progress))}, drawn ${before.drawn.power ?? '(not on the HUD yet)'}`);
+  check(`BEFORE: POWER ${formatPower(BEFORE.power)}, ON THE ORDINARY HUD`,
+    powerFor(before.progress) === BEFORE.power && before.drawn.power === formatPower(BEFORE.power),
+    `derived ${formatPower(powerFor(before.progress))}, drawn ${before.drawn.power}`);
+  check(`BEFORE: the HUD says LV ${BEFORE.level} and draws an empty meter`,
+    before.drawn.level === String(BEFORE.level)
+      && before.drawn.xp === `0 / ${BEFORE.xpForLevel}`
+      && before.drawn.xpFill === '0%',
+    `LV ${before.drawn.level}, ${before.drawn.xp}, fill ${before.drawn.xpFill}`);
   check('BEFORE: the Lantern is not unlocked and the pips are one short',
     arrivedRewards.lanternUnlocked !== true && before.pipsFilled === MARKS_TO_UNLOCK - 1,
     `unlocked ${arrivedRewards.lanternUnlocked}, pips ${before.pipsFilled}`);
@@ -563,20 +568,31 @@ try {
   check('the level-up beat fired EXACTLY ONCE',
     Math.max(0, ...samples.map((sample) => sample.levelUps)) === 1,
     `levelUps reached ${Math.max(0, ...samples.map((sample) => sample.levelUps))}`);
+  // THE METER HAS TO BE SEEN FULL. The Lantern awards exactly one level's worth, so the honest
+  // reading goes 0/100 -> 0/150 and the meter is never full at any moment -- which is the
+  // "teleporting to an unrelated number" the brief forbids by name. The rollover holds the row at the
+  // level just finished, meter at 100%, for a beat. This asks the DRAWN readout, not the model,
+  // because the model never passes through that state at all: it only exists on screen.
+  const drawnFull = samples.filter((sample) => sample.drawnXp === `${LANTERN_UNLOCK_XP} / ${LANTERN_UNLOCK_XP}`);
   check('the XP meter visibly COMPLETED rather than teleporting',
-    // The meter has to be seen at a full level's worth before it rolls over -- a hero who jumps
-    // straight from 0/100 to 0/150 with nothing in between is a number changing, not a meter filling.
-    samples.some((sample) => sample.level === BEFORE.level
-      && sample.xpIntoLevel + sample.xpForLevel >= LANTERN_UNLOCK_XP)
-      || samples.some((sample) => sample.level === AFTER.level),
-    `xp seen: ${[...new Set(samples.map((s) => `${s.xpIntoLevel}/${s.xpForLevel}`))].slice(-4).join(', ')}`);
+    drawnFull.length > 0,
+    `the drawn meter read ${JSON.stringify([...new Set(samples.map((s) => s.drawnXp))].slice(-5))}`);
+  check('...and then rolled over into the new level rather than staying full',
+    drawnFull.length > 0 && samples.some((sample, index) =>
+      index > samples.indexOf(drawnFull[0]) && /^0 \//.test(sample.drawnXp ?? '')),
+    `held full for ${drawnFull.length} frame(s), then ${samples[samples.length - 1]?.drawnXp}`);
 
-  const levelUpBanners = samples
-    .map((sample) => sample.banner)
-    .filter((text) => typeof text === 'string' && /level\s*up/i.test(text));
-  check('a LEVEL UP treatment appeared on screen',
-    levelUpBanners.length > 0 || samples.some((sample) => sample.celebrating),
-    levelUpBanners[0] ?? '(no LEVEL UP text or #level-up treatment seen)');
+  // THE CEREMONY, and deliberately NOT read off a banner. It was a banner for one run of this file
+  // and the capture from that run is why it is not one now: three other beats fire on the same frame
+  // and each replaced the last, so the child's first level arrived as "LANTERN MARK 3 / 3". The
+  // treatment has its own element, its own space and its own clock, and this asks about that.
+  const celebratingFrames = samples.filter((sample) => sample.celebrating).length;
+  check('a LEVEL UP treatment appeared on screen, in its own right',
+    celebratingFrames > 0,
+    `#level-up was shown on ${celebratingFrames} of ${samples.length} recorded frames`);
+  check('...and it was not silently replaced by another beat competing for the same slot',
+    celebratingFrames >= 3,
+    `only ${celebratingFrames} frame(s) -- a beat that flashes for one frame is a beat nobody saw`);
 
   // ── AFTER ─────────────────────────────────────────────────────────────────────────────────────
   const after = await pollUntil((s) => s.progress.level === AFTER.level
@@ -593,9 +609,12 @@ try {
     `drawn ${after.drawn.healthCurrent}/${after.drawn.healthMax}`);
   check(`AFTER: resolved Starter damage ${AFTER.damage} -- +${AFTER.damage - BEFORE.damage}`,
     after.progress.heroDamage === AFTER.damage, `damage ${after.progress.heroDamage}`);
-  check(`AFTER: POWER ${formatPower(AFTER.power)} -- +${AFTER.power - BEFORE.power} from ${formatPower(BEFORE.power)}`,
-    powerFor(after.progress) === AFTER.power,
-    `derived ${formatPower(powerFor(after.progress))}, drawn ${after.drawn.power ?? '(not on the HUD yet)'}`);
+  check(`AFTER: POWER ${formatPower(AFTER.power)} -- +${AFTER.power - BEFORE.power} from ${formatPower(BEFORE.power)}, ON THE HUD`,
+    powerFor(after.progress) === AFTER.power && after.drawn.power === formatPower(AFTER.power),
+    `derived ${formatPower(powerFor(after.progress))}, drawn ${after.drawn.power}`);
+  check(`AFTER: the HUD says LV ${AFTER.level} with a fresh meter`,
+    after.drawn.level === String(AFTER.level) && /^0 \/ \d+$/.test(after.drawn.xp ?? ''),
+    `LV ${after.drawn.level}, ${after.drawn.xp}`);
   check(`AFTER: exactly ${LANTERN_UNLOCK_XP} XP, from one Lantern and nothing else`,
     after.progress.totalXp === LANTERN_UNLOCK_XP, `${after.progress.totalXp} XP`);
   await shot('03-after-level-2');
@@ -650,6 +669,9 @@ try {
   check('RELOAD: and so did the body the fight uses',
     reloaded.hero.maxHp === AFTER.maxHp && reloaded.drawn.healthMax === String(AFTER.maxHp),
     `fight ${reloaded.hero.maxHp}, drawn ${reloaded.drawn.healthMax}`);
+  check('RELOAD: the HUD comes back at the level and POWER the child earned',
+    reloaded.drawn.level === String(AFTER.level) && reloaded.drawn.power === formatPower(AFTER.power),
+    `LV ${reloaded.drawn.level}, POWER ${reloaded.drawn.power}`);
   check('RELOAD: the SAME guest came back -- localStorage, not a fresh mint',
     reloaded.guestId === guestId, `${reloaded.guestId}`);
 
@@ -669,6 +691,49 @@ try {
     replayed === 0 && replayBanners.length === 0,
     `levelUps ${replayed} over ${replay.frames} frames, banners ${JSON.stringify([...new Set(replayBanners)])}`);
   await shot('04-after-reload-level-2');
+
+  // ── THE HERO SCREEN ───────────────────────────────────────────────────────────────────────────
+  //
+  // The other surface the contract puts POWER on, "prominently". Opened through the real button a
+  // child taps, not by setting an attribute.
+  const heroButton = await page.eval(`(() => {
+    const rect = document.querySelector('#hero-button')?.getBoundingClientRect();
+    return rect ? JSON.stringify({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }) : null;
+  })()`);
+  if (heroButton) {
+    const at = JSON.parse(heroButton);
+    await touch('touchStart', [at]);
+    await sleep(60);
+    await touch('touchEnd', []);
+    await sleep(900);
+    const screen = await page.eval(`(() => {
+      const text = (selector) => document.querySelector(selector)?.textContent?.trim() ?? null;
+      return JSON.stringify({
+        shown: document.querySelector('#hero-screen')?.dataset.shown === 'true',
+        hidden: document.querySelector('#hero-identity')?.hidden ?? null,
+        level: text('#hero-identity-level-value'),
+        power: text('#hero-identity-power-value'),
+        hp: text('#hero-identity-hp'),
+        damage: text('#hero-identity-damage'),
+        itemDamage: text('#hero-item-damage'),
+      });
+    })()`).then(JSON.parse);
+    check('HERO SCREEN: Level and POWER are shown prominently',
+      screen.shown && screen.hidden === false
+        && screen.level === String(AFTER.level) && screen.power === formatPower(AFTER.power),
+      `shown ${screen.shown}, LEVEL ${screen.level}, POWER ${screen.power}`);
+    check('HERO SCREEN: and the stats are the RESOLVED ones the fight is using, not the catalogue\'s',
+      screen.hp === String(AFTER.maxHp) && screen.damage === String(AFTER.damage),
+      `${screen.hp} MAX HP, ${screen.damage} DAMAGE (the Starter Sword's own catalogue value is `
+      + `${BEFORE.damage}, which is what a screen reading the item instead of the hero would print)`);
+    await shot('05-hero-screen');
+    await touch('touchStart', [at]);
+    await sleep(60);
+    await touch('touchEnd', []);
+    await sleep(500);
+  } else {
+    check('HERO SCREEN: Level and POWER are shown prominently', false, 'no #hero-button to tap');
+  }
 
   check('no console errors attributable to P2', consoleErrors.length === 0,
     consoleErrors.slice(0, 3).join(' | '));

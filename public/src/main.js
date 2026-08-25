@@ -24,6 +24,7 @@ import {
   CART_JOLT_RECIPE_NAME,
   COIN_PICKUP_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
+  LEVEL_UP_RECIPE_NAME,
   RELIGHT_RECIPE_NAME,
   SHARD_PICKUP_RECIPE_NAME,
   WORKSHOP_BUILD_RECIPE_NAME,
@@ -51,6 +52,9 @@ import { canEquip, equippedWeaponIdFromRewards, ownedItemIdsFromRewards } from '
 // ceremony. Both live in progression/ so the offline fallback here and net/gameServer.mjs's online
 // fight resolve ONE law -- see that module's own header on why there must not be two.
 import { levelUpTransition, resolveHeroStats } from './progression/heroStats.js';
+import { cumulativeXpForLevel } from './progression/levels.js';
+import { formatPower, levelUpSummary, powerFor } from './progression/power.js';
+import { prefersReducedMotion } from './render/motionPreference.js';
 import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
@@ -977,16 +981,105 @@ async function bootstrap() {
     }, MARK_IGNITE_MS);
   }
 
-  // ── THE LEVEL-UP BEAT ─────────────────────────────────────────────────────────────────────────
+  // ── LEVEL, THE METER, AND POWER ───────────────────────────────────────────────────────────────
   //
-  // P2-C2 ships the RULE and a first, honest announcement; the ceremony proper -- the meter
-  // completing, the treatment, the before/delta/after POWER -- is C3's. What is already true here and
-  // must stay true is WHEN it fires: on a live rise observed inside one session, never on hydration.
-  // progression/heroStats.js's levelUpTransition owns that decision; this only paints.
+  // Same read-only, paint-from-the-current-value pattern as renderHealth and renderLanternPips. Every
+  // number comes from the one resolved stats object the fight is being fed, so the pill cannot print
+  // a hero the combat rules have not agreed to.
+  const heroProgressElement = document.querySelector('#hero-progress');
+  const heroLevelElement = document.querySelector('#hero-level');
+  const xpFillElement = document.querySelector('#hero-xp .xp-fill');
+  const xpTextElement = document.querySelector('#hero-xp-text');
+  const heroPowerElement = document.querySelector('#hero-power-value');
+  function renderHeroProgress({ level, xpIntoLevel, xpForLevel, power }) {
+    heroLevelElement.textContent = String(level);
+    xpFillElement.style.width = `${(xpForLevel > 0 ? xpIntoLevel / xpForLevel : 0) * 100}%`;
+    xpTextElement.textContent = `${xpIntoLevel} / ${xpForLevel}`;
+    heroPowerElement.textContent = formatPower(power);
+  }
+
+  // ── THE LEVEL-UP CEREMONY ─────────────────────────────────────────────────────────────────────
+  //
+  // WHEN it fires is progression/heroStats.js's levelUpTransition, proved without a browser. WHAT it
+  // says is progression/power.js's levelUpSummary, proved the same way. This is only the painting and
+  // the clock -- which is the split every other presenter in this file keeps.
+  //
+  // It was a `banner()` for exactly one run of tools/runtime-test/drive-first-level-up.mjs, and that
+  // run is the reason it is not one now: wolf-defeated, the third Lantern Mark and the unlock all
+  // fire on the same frame, each banner replacing the last, and the capture of the child's first
+  // level shows a toast reading "LANTERN MARK 3 / 3". The strongest routine progression celebration
+  // in the game cannot be a queue slot that three other beats are also using.
+  const levelUpElement = document.querySelector('#level-up');
+  const levelUpLevelElement = document.querySelector('#level-up-level-value');
+  const levelUpHpElement = document.querySelector('#level-up-hp');
+  const levelUpDamageElement = document.querySelector('#level-up-damage');
+  const levelUpPowerBeforeElement = document.querySelector('#level-up-power-before');
+  const levelUpPowerDeltaElement = document.querySelector('#level-up-power-delta');
+  const levelUpPowerAfterElement = document.querySelector('#level-up-power-after');
+  // Long enough to read four numbers at a child's pace, short enough that it is gone before the next
+  // thing happens. The Lantern's own banner holds 3200ms; this outlasts it deliberately, because it
+  // is the bigger beat and the two now coexist rather than competing for one slot.
+  const LEVEL_UP_SHOWN_MS = 4200;
+  // HOW LONG THE METER IS HELD FULL BEFORE IT ROLLS OVER.
+  //
+  // The brief: "the XP meter must visibly complete and roll into the new level rather than teleporting
+  // to an unrelated number". Without this it cannot -- the Lantern awards exactly one level's worth,
+  // so the honest reading goes from 0/100 straight to 0/150 and the meter is never seen full at all.
+  // So the whole progress row is HELD at the level the child just finished, with its meter at 100%,
+  // for a beat; then it rolls. Nothing about the fight is held: the bigger body is already real and
+  // the health bar is already drawing it, which is the other half of the same moment.
+  //
+  // Kept under reduced motion. It is sequencing, not movement -- the reduced-motion rule in
+  // index.html removes the animations and leaves the order of events intact, because "less motion" is
+  // a request about how things move, not about what a child is told.
+  const XP_ROLL_MS = 700;
   let levelUpCount = 0;
-  function celebrateLevelUp(fromLevel, toLevel) {
+  let levelUpTimer = null;
+  let levelUpLiftTimer = null;
+  // The progress readout frozen mid-rollover, or null. See XP_ROLL_MS.
+  let progressHold = null;
+
+  function celebrateLevelUp(fromLevel, toLevel, before, after) {
     levelUpCount += 1;
-    banner(`LEVEL UP!  ${toLevel}`, 3000, `Level up! You are level ${toLevel}.`);
+    const summary = levelUpSummary({ level: toLevel, before, after });
+
+    // Hold the meter full at the level they just finished, then let the ordinary per-frame render
+    // take over at the new one.
+    progressHold = {
+      level: fromLevel,
+      xpIntoLevel: before.levelState.xpForLevel,
+      xpForLevel: before.levelState.xpForLevel,
+      power: summary.power.before,
+      until: performance.now() + XP_ROLL_MS,
+    };
+    // Re-triggering a CSS animation needs the attribute to actually leave and come back, which needs
+    // a frame in between -- the same reason celebrateMarkArrival waits one.
+    delete heroProgressElement.dataset.levelled;
+    window.requestAnimationFrame(() => { heroProgressElement.dataset.levelled = 'true'; });
+    window.clearTimeout(levelUpLiftTimer);
+    levelUpLiftTimer = window.setTimeout(() => {
+      delete heroProgressElement.dataset.levelled;
+    }, XP_ROLL_MS + 900);
+
+    levelUpLevelElement.textContent = String(summary.level);
+    levelUpHpElement.textContent = summary.maxHpGainText;
+    levelUpDamageElement.textContent = summary.damageGainText;
+    levelUpPowerBeforeElement.textContent = summary.power.beforeText;
+    levelUpPowerDeltaElement.textContent = summary.power.deltaText;
+    levelUpPowerAfterElement.textContent = summary.power.afterText;
+    levelUpElement.dataset.shown = 'true';
+    window.clearTimeout(levelUpTimer);
+    levelUpTimer = window.setTimeout(() => { levelUpElement.dataset.shown = 'false'; }, LEVEL_UP_SHOWN_MS);
+
+    // Read aloud on the same terms every other line in the game is: only once the child has asked to
+    // be read to. The numbers are spoken as words rather than as the on-screen arrows, which read
+    // aloud as punctuation.
+    speakKeeperLineIfUnlocked(`Level up! You are level ${summary.level}. `
+      + `${summary.maxHpGainText} max health, ${summary.damageGainText} damage. `
+      + `Power ${summary.power.afterText}.`);
+    // Its own sound, not the Lantern's. The two fire seconds apart on this very path, so borrowing
+    // unlock-flourish would have made the biggest beat in the game sound like the one before it.
+    audio.play(LEVEL_UP_RECIPE_NAME);
   }
 
   // GP2: the coin/shard HUD, re-rendered from whatever coinsDisplayed/shardsDisplayed currently hold
@@ -2262,7 +2355,14 @@ async function bootstrap() {
       xpForLevel: heroStatsThisFrame.levelState.xpForLevel,
       maxHp: heroStatsThisFrame.maxHp,
       heroDamage: heroStatsThisFrame.heroDamage,
+      power: powerFor(heroStatsThisFrame),
       levelUpsThisSession: levelUpCount,
+      // Whether the ceremony is on screen RIGHT NOW, from the element rather than from a flag beside
+      // it -- the same "report the observable, not the intention" discipline every other accessor in
+      // this object keeps. A harness asking "did a child see it" must not be answered by a boolean
+      // that only says somebody meant them to.
+      celebrating: levelUpElement?.dataset.shown === 'true',
+      reducedMotion: prefersReducedMotion(),
     }),
     markHudState: () => ({
       marksInTheAir,
@@ -2414,12 +2514,36 @@ async function bootstrap() {
     // when a fact the child already had is re-announced, so a beat hung off it cannot.
     const levelBeat = levelUpTransition(heroLevelSeen, heroStatsThisFrame.level);
     heroLevelSeen = levelBeat.to;
-    if (levelBeat.celebrate) celebrateLevelUp(levelBeat.from, levelBeat.to);
+    if (levelBeat.celebrate) {
+      // The hero they WERE, resolved through the same law as the hero they are -- same weapon, same
+      // charm, one level down -- so the ceremony's "+5 MAX HP" and "1,000 -> +400 -> 1,400" are the
+      // real difference between two states of this child rather than a remembered snapshot that
+      // could have gone stale while the XP was in flight.
+      const before = resolveHeroStats({
+        totalXp: cumulativeXpForLevel(levelBeat.from),
+        equippedWeaponId: currentEquippedWeaponId,
+        charmOwned: ownRewards?.charmOwned === true,
+      });
+      celebrateLevelUp(levelBeat.from, levelBeat.to, before, heroStatsThisFrame);
+    }
+
+    // The pill, painted every frame from the same resolved stats -- except while the rollover is
+    // holding it at the level the child just finished. See XP_ROLL_MS.
+    if (progressHold !== null && performance.now() >= progressHold.until) progressHold = null;
+    renderHeroProgress(progressHold ?? {
+      level: heroStatsThisFrame.level,
+      xpIntoLevel: heroStatsThisFrame.levelState.xpIntoLevel,
+      xpForLevel: heroStatsThisFrame.levelState.xpForLevel,
+      power: powerFor(heroStatsThisFrame),
+    });
     if (heroScreenOpen) {
       heroScreen.render(heroScreenViewModel({
         equippedWeaponId: currentEquippedWeaponId,
         ownedItemIds: ownedItemIdsFromRewards(ownRewards),
         selectedItemId: selectedHeroItemId,
+        // The SAME object the fight is being fed this frame, so the screen cannot print a hero the
+        // combat rules have not agreed to.
+        stats: heroStatsThisFrame,
       }));
     }
     // GP1-C3: the showcase pass's per-frame input. No-ops entirely while the screen is closed, and
