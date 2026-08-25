@@ -417,18 +417,22 @@ function peakSpeedOf(samples) {
   }
   return pairs ? peak : null;
 }
-// By name off the live scene, because the wolf presenter publishes its clip but not its root, and
-// the question here is about the body rather than about what the presenter believes. Re-found every
-// frame on purpose: the wolf is removed and rebuilt across a respawn.
-// Cached across frames, and re-found when the cached one leaves the graph. An instrument has to be
-// cheaper than the thing it measures: this sample is taken once per RENDERED FRAME for the whole
-// fight, and getObjectByName walks the entire scene -- a village, a forest and a lamp-lit road --
-// before it ever reaches the wolf. Paying that 60 times a second to answer a question about a
-// corpse would slow the frame rate the rest of this file measures against.
+// By stable identity off the live scene, because the wolf presenter publishes its clip but not its
+// root, and the question here is about the body rather than about what the presenter believes. The
+// same authored enemy and presenter survive respawn; re-resolution is only needed if that
+// authoritative identity's presenter actually leaves and re-enters the graph.
+// Cached across frames, and re-found when the cached one has the wrong stable identity or leaves the
+// graph. An instrument has to be cheaper than the thing it measures: this sample is taken once per
+// RENDERED FRAME for the whole fight, and getObjectByName walks the entire scene -- a village, a
+// forest and a lamp-lit road -- before it ever reaches the wolf. Paying that 60 times a second to
+// answer a question about a corpse would slow the frame rate the rest of this file measures against.
 const WOLF_HEIGHT = bodyHeightOf(`(() => {
+  const runtime = window.__galaQuestRuntime;
+  const enemy = ${authoredWolfSource('runtime')};
+  const expectedName = 'wolf:' + enemy.enemyId;
   const cached = window.__gqWolfBody;
-  if (cached && cached.parent) return cached;
-  return (window.__gqWolfBody = window.__galaQuestRuntime.scene.getObjectByName('wolf') ?? null);
+  if (cached?.name === expectedName && cached.parent) return cached;
+  return (window.__gqWolfBody = runtime.scene.getObjectByName(expectedName) ?? null);
 })()`);
 
 /** When the fall is over and the hero is lying on the clamped last frame -- the part of the window
