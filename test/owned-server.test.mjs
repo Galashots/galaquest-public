@@ -7,7 +7,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer as createProbeServer } from 'node:net';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { startOwnedServer } from '../tools/runtime-test/owned-server.mjs';
+
+// Every child spawned here is a REAL server.mjs, and server.mjs opens (and backs up) the reward
+// store on boot. Without an explicit scratch path each boot in this file opened the repository's
+// real data/rewards.db and left a backup-*.db behind -- data/README.md's "tests must never open a
+// store at a path under data/" rule, violated from the one test file that boots real children.
+function scratchStore() {
+  return join(mkdtempSync(join(tmpdir(), 'gq-owned-server-')), 'rewards.db');
+}
 
 // MUST probe '0.0.0.0', the exact host server.mjs itself binds -- see owned-server.mjs's own portFree()
 // for why probing '127.0.0.1' instead silently lies on Windows (the exact bug this test file pins).
@@ -21,7 +32,7 @@ function portFree(port) {
 }
 
 test('kill() terminates the real owned child and the port is independently confirmed free afterward', async () => {
-  const server = await startOwnedServer({ quiet: true });
+  const server = await startOwnedServer({ quiet: true, rewardStorePath: scratchStore() });
   assert.equal(await portFree(server.port), false, 'the server should genuinely be listening before kill()');
 
   const result = await server.kill();
@@ -31,7 +42,7 @@ test('kill() terminates the real owned child and the port is independently confi
 });
 
 test('kill() is idempotent -- calling it a second time after the child already exited still confirms free and does not throw', async () => {
-  const server = await startOwnedServer({ quiet: true });
+  const server = await startOwnedServer({ quiet: true, rewardStorePath: scratchStore() });
   await server.kill();
   const second = await server.kill();
   assert.equal(second, true);
@@ -39,8 +50,8 @@ test('kill() is idempotent -- calling it a second time after the child already e
 });
 
 test('two owned servers started back to back each get their own port, and killing one does not affect the other', async () => {
-  const first = await startOwnedServer({ quiet: true });
-  const second = await startOwnedServer({ quiet: true });
+  const first = await startOwnedServer({ quiet: true, rewardStorePath: scratchStore() });
+  const second = await startOwnedServer({ quiet: true, rewardStorePath: scratchStore() });
   assert.notEqual(first.port, second.port, 'first-free-wins must not hand out the same port twice while the first is still up');
 
   await first.kill();

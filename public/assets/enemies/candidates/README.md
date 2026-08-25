@@ -4,8 +4,8 @@ These files are **candidate-only**. Do not wire them into shipping enemy registr
 
 Enemy Wave 1 base rigged GLBs are **not stored in this directory**. They were committed on the
 source branch `feat/enemy-asset-wave-1` (PR #28) and moved to the external source archive during the
-2026-08-21 asset-platform consolidation: 13 raw provider exports totalling ~131 MiB, against a
-`public/assets` tree that is otherwise ~6 MB, with no runtime load path reaching them.
+2026-08-21 asset-platform consolidation: 13 raw provider exports totalling ~131 MiB — several times
+the entire shipped `public/assets` tree — with no runtime load path reaching them.
 
 Nothing was lost. Each file's byte size, SHA-256 and git blob OID are recorded in
 `docs/asset-production/asset-platform-inventory.json`, and the source branch is not closed, so any

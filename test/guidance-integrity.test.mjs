@@ -34,6 +34,15 @@ const GUIDANCE_DIRS = [
   'docs/product',
   'docs/pipeline',
   'docs/review-guides',
+  // Briefs, asset-production records, and foundry/teardown authorities are guidance too: every dead
+  // path the 2026-08-25 repo audit found lived in exactly these then-unlinted trees, while the
+  // linted corpus was clean. Historical documents in them stay linted -- a record whose paths have
+  // left the public tree must say so (banner/`MISSING IN PUBLIC` prose) rather than keep presenting
+  // them as current, which is the same bar docs/GALAQUEST_VISUAL_AUTHORITY.md already meets.
+  'docs/briefs',
+  'docs/asset-production',
+  'docs/foundry',
+  'docs/teardown',
   '.agents/skills',
 ];
 

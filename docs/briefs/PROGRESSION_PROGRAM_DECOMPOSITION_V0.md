@@ -1,9 +1,9 @@
 # Progression Program Decomposition v0
 
-**Program fixed point:** `main@ee2c5e60a29c6c2e6572ad3d0d0b8d36aff33885`  
+**Program fixed point:** `main@38f753e3b470796a38c2274645e9f286da25a07a` (refreshed 2026-08-25 after the P2 merge)  
 **Governing design:** `docs/product/PROGRESSION_CONTRACT_V0.md`  
 **Owning product records:** #43 Hero XP/levels, #44 meaningful gear, #47 enemy variety, #41 kid-readable POWER, #35 Pet Companions v1  
-**Status:** Owner-approved decomposition plan. P1, A1, and A2 are complete; P2 is the next core implementation package. Package scope/order may be reforecast only through the repository workflow.
+**Status:** Owner-approved decomposition plan. P1, P2, A1, and A2 are complete; E1 is the in-flight core implementation package (draft PR #59 on `feat/progression-e1-enemy-collection-foundation`). Package scope/order may be reforecast only through the repository workflow.
 
 ## Purpose
 
@@ -18,8 +18,9 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 - **P1 — XP / Level Authority:** COMPLETE. PR #53 merged; current `main` includes the canonical XP->Level law and durable `xp-earned` fact path.
 - **A1 — Armor Bank Inventory:** COMPLETE. Working first-vertical leads are Silverguard Helmet + Ironwood Shield; broader local armor content remains thin. Durable result is recorded on #44.
 - **A2 — Mob Bank Inventory:** COMPLETE. Recoverable Wave-1 candidate bank exists; working leads are Spriggan Scrapper, Magmahorn Juggernaut, and conditional Graveflame Reaper. Durable corrected result is recorded on #47.
-- **P2 — First Hero Level-Up Vertical:** NEXT core write package.
-- **A3 — Selected Enemy Qualification:** PLANNED asset predecessor to E3. It prevents candidate recovery/material/animation/visual work from silently bloating the later enemy-archetype implementation package.
+- **P2 — First Hero Level-Up Vertical:** COMPLETE. PR #56 merged; current `main` includes the canonical Hero stat + POWER authority, the durable Lantern -> 100 XP -> Level 2 path in both fights, and the Level/XP/POWER HUD with the level-up ceremony.
+- **E1 — Enemy Collection Foundation:** IN PROGRESS. Draft PR #59 open on `feat/progression-e1-enemy-collection-foundation`; its committed execution brief lives on that branch until merge.
+- **A3 — Selected Enemy Qualification:** IN PROGRESS as an asset lane (draft PR #57, Spriggan qualification); asset predecessor to E3. It prevents candidate recovery/material/animation/visual work from silently bloating the later enemy-archetype implementation package.
 
 ## Operating model
 
@@ -36,7 +37,7 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 | **A1 — Armor Bank Inventory** | M | Inventory existing armor/gear custody and qualify/shortlist the strongest candidates | none | **COMPLETE — Terra High read-only audit + Director adjudication** | no generation, asset editing, fit correction, promotion, or gameplay integration |
 | **A2 — Mob Bank Inventory** | M | Inventory existing mob candidates and shortlist first contrasting archetypes | none | **COMPLETE — Terra High read-only audit + Director/Drive adjudication** | no generation, runtime integration, bestiary expansion, or branch writes |
 | **P1 — XP / Level Authority** | M | Create the canonical XP->Level authority and make `xp-earned` safe/durable through current profile recovery | prior main | **COMPLETE — PR #53 merged** | no HUD, combat stat scaling, XP reward sources, POWER UI, gear, enemies, learning, assets |
-| **P2 — First Hero Level-Up Vertical** | L | Make gaining a Hero level visible, satisfying, and mechanically stronger | P1 | **Claude Execute single writer; Director checkpoint/final review; running-game acceptance** | no armor economy, random loot, learning system, enemy expansion, pet work, or Level-5 special |
+| **P2 — First Hero Level-Up Vertical** | L | Make gaining a Hero level visible, satisfying, and mechanically stronger | P1 | **COMPLETE — PR #56 merged** | no armor economy, random loot, learning system, enemy expansion, pet work, or Level-5 special |
 | **E1 — Enemy Collection Foundation** | L | Convert singular ordinary-enemy state into scalable identified enemy collection architecture end-to-end | P2 recommended; P1 minimum | Claude Execute by default | preserve existing fight semantics; no new archetype, density tuning, drops, or geography |
 | **G1 — First Visible Armor Vertical** | L | Earn/equip first real non-weapon armor and visibly/statistically improve | P2 + A1 + E1 | Claude Execute or proven bounded worker | first content centered on qualified Silverguard Helmet / Ironwood Shield; no broad armor library or loot economy |
 | **E2 — Enemy Population, Levels & Safety** | L | Build a real fixed-world mob field with levels/nameplates and safe recovery | E1 + P2 | Claude Execute by default | use known active enemy assets first; no new archetype integration yet |
@@ -50,13 +51,13 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 
 ## Preferred order
 
-Core write sequence:
+Core write sequence (E1 in flight):
 
-`P2 -> E1 -> G1 -> E2 -> R1 -> G2 -> L1 -> E3 -> M1 -> V1`
+`E1 -> G1 -> E2 -> R1 -> G2 -> L1 -> E3 -> M1 -> V1`
 
 Completed predecessors:
 
-`P1 + A1 + A2`
+`P1 + P2 + A1 + A2`
 
 Asset qualification lane:
 

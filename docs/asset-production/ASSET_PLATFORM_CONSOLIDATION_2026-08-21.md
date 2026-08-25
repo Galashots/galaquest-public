@@ -271,7 +271,7 @@ standing permission, and `test/guidance-integrity.test.mjs` hard-bans the litera
 `main`'s version carries the "Credit budgets are not authority" rule this consolidation enforces
 everywhere else.
 
-The one genuinely new file, `docs/pipeline/briefs/beacon-warden.md`, is **HISTORICAL_ONLY**. No asset
+The one genuinely new file, `beacon-warden.md` (a pipeline brief that exists only on that unmerged branch, never on `main`), is **HISTORICAL_ONLY**. No asset
 named beacon-warden exists in the current bank — that is the 13-enemy Wave 1 roster plus Bramble
 Stalker — and the brief hardcodes paths that do not exist, which would fail the guidance path scan if
 landed under `docs/pipeline/`. It stays readable on its own unclosed branch as dated Warden art

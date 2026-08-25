@@ -8,7 +8,8 @@ on:
     branches: [main, 'integration/**']
     # A prose-only diff cannot change what a browser-driven harness observes: no harness reads a
     # markdown file as input -- every docs/ and *.md mention under tools/runtime-test/ is a comment
-    # citing a rule, not a load. Running 27 hosted jobs (66-79 runner-minutes) to re-observe an
+    # citing a rule, not a load. Running the full hosted matrix (31 jobs today; count it in this
+    # file rather than trusting this comment) to re-observe an
     # unchanged game is spend with no signal attached, so a diff that is entirely markdown skips.
     #
     # DELIBERATELY NOT IGNORED: .github/workflows/** -- a change to the matrix must be validated BY
@@ -89,7 +90,7 @@ jobs:
         # workflow it failed in a DIFFERENT job each time -- review-studio, then fit-carry, then
         # fit-wildwood-blade -- each time at exactly 25.0 s, with the harness step skipped and no
         # artifacts uploaded, so the check reported a red harness that had never executed a line.
-        # Twenty-six jobs start at once on hosted runners and cold-start a browser; the one that
+        # The whole matrix starts at once on hosted runners and cold-starts a browser; the one that
         # loses that race is not the one with a bug in it.
         #
         # A red that means "the browser did not start" and a red that means "the game is broken" are
