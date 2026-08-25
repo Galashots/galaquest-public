@@ -9,7 +9,8 @@ import { rigidAnchorName } from '../public/src/character/gear.js';
 import {
   SHIPPING_SWORD_MESH_ID, WEAPON_BONE_NAME, WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../public/src/character/weaponLoadout.js';
-import { BELT_LANTERN_BONE_NAME, RIGID_BELT_LANTERN } from '../public/src/character/gear.js';
+import { BELT_LANTERN_BONE_NAME, RIGID_BELT_LANTERN, RIGID_SILVERGUARD_HELMET, SILVERGUARD_HELMET_BONE_NAME } from '../public/src/character/gear.js';
+import { HELMET_SILVERGUARD_ID } from '../public/src/progression/items.js';
 
 // WHAT A CHILD SEES OF THEIR SIBLING.
 //
@@ -43,7 +44,7 @@ function poseClip(name, seconds, from, to, node = 'hips') {
 // for by their real lowercase-substring names (locomotion: idle/walking/running, reactions:
 // hit/death, swing: sword_slash). Standing is 0, the fall runs to +1, the swing to -1, so no two
 // animators can be mistaken for each other.
-function heroTemplate({ deathSeconds = 2.97, withBlade = false, withLantern = false } = {}) {
+function heroTemplate({ deathSeconds = 2.97, withBlade = false, withLantern = false, withHelmet = false } = {}) {
   const root = new THREE.Object3D();
   root.name = 'hero-template';
   const hips = new THREE.Object3D();
@@ -69,6 +70,13 @@ function heroTemplate({ deathSeconds = 2.97, withBlade = false, withLantern = fa
     const lantern = new THREE.Object3D();
     lantern.name = rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME);
     root.add(lantern);
+  }
+  // G1-C3: the same inherited-anchor fork for the Helmet -- `withHelmet` models a template taken from
+  // a child who was wearing one, which is how a clone comes to carry the anchor at all.
+  if (withHelmet) {
+    const helmet = new THREE.Object3D();
+    helmet.name = rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, SILVERGUARD_HELMET_BONE_NAME);
+    root.add(helmet);
   }
   return {
     root,
@@ -555,4 +563,60 @@ test('two siblings, one with a lantern and one without, are drawn differently', 
   });
   assert.equal(lanternVisible(scene, 'sib'), true);
   assert.equal(lanternVisible(scene, 'other'), false);
+});
+
+// ── G1-C3: the Helmet a sibling is wearing, and the one they took off ────────────────────────────
+//
+// `rewards[heroId].equippedItemIds` has ridden the wire since C1 (it carries the Shield). The Helmet
+// reads its own slot off it -- the same statement-about-someone-else's-progression the lantern is,
+// with one real difference: a helmet EQUIPS AND UNEQUIPS, so unlike the one-way lantern it has to come
+// back OFF a sibling's head when they take it off, without a rejoin.
+
+const helmetVisible = (scene, id = 'sib') => {
+  const anchor = scene.getObjectByName(`remote-${id}`)
+    .getObjectByName(rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, SILVERGUARD_HELMET_BONE_NAME));
+  return anchor ? anchor.visible === true : null;
+};
+const helmetEquipped = { helmet: HELMET_SILVERGUARD_ID };
+
+test('a sibling not wearing the Helmet is not drawn in one, even off a template that carries the anchor', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withHelmet: true }));
+  remotes.update(sampleOf(), walking({ equippedItemIds: {} }));
+  assert.equal(helmetVisible(scene), false);
+});
+
+test('a sibling the server has said nothing about is not drawn wearing a Helmet either', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withHelmet: true }));
+  remotes.update(sampleOf(), walking(undefined));
+  assert.equal(helmetVisible(scene), false);
+});
+
+test('a sibling wearing the Helmet is drawn in it', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withHelmet: true }));
+  remotes.update(sampleOf(), walking({ equippedItemIds: helmetEquipped }));
+  assert.equal(helmetVisible(scene), true);
+  assert.equal(remotes.describe()[0].helmetEquipped, true);
+});
+
+test('a sibling who equips the Helmet mid-session puts it on without a rejoin, and takes it back off when they unequip', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withHelmet: true }));
+  remotes.update(sampleOf(), walking({ equippedItemIds: {} }));
+  assert.equal(helmetVisible(scene), false);
+  remotes.update(sampleOf(), walking({ equippedItemIds: helmetEquipped }));
+  assert.equal(helmetVisible(scene), true);
+  // The half the lantern never had to do: OFF again on unequip.
+  remotes.update(sampleOf(), walking({ equippedItemIds: {} }));
+  assert.equal(helmetVisible(scene), false);
+});
+
+test('a clone with no Helmet anchor is left alone rather than throwing', () => {
+  const scene = new THREE.Scene();
+  const remotes = createRemotePlayers(scene, heroTemplate({ withHelmet: false }));
+  remotes.update(sampleOf(), walking({ equippedItemIds: helmetEquipped }));
+  assert.equal(helmetVisible(scene), null);
+  assert.equal(remotes.count, 1);
 });

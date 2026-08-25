@@ -166,6 +166,15 @@ export function heroAnatomyApi({ anatomy, anatomyError }) {
     get anatomyCoverage() { return anatomy?.coverage ?? []; },
     get anatomyAvailable() { return Boolean(anatomy); },
     get anatomyError() { return anatomyError ?? null; },
+    // The UN-occluded body geometry, with the anatomy regions attached. Exposed for net/remotes.js:
+    // a sibling wearing the Helmet needs the SAME hair/ear occlusion the local hero gets, and a clone
+    // shares whatever geometry the template's body held at clone time -- which is the occluded variant
+    // if the local child happened to be wearing a helmet then. Reading the true source here lets a
+    // clone toggle its own coverage from a fixed origin (geometryForAnatomyCoverage caches per source
+    // geometry, so every clone shares one variant), independent of what the local hero is wearing.
+    // null on the degraded/failed path, where a clone simply shows hair under the helmet like the
+    // local hero does.
+    get anatomySourceGeometry() { return anatomy?.sourceGeometry ?? null; },
   };
 }
 

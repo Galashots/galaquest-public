@@ -37,7 +37,16 @@ import { CHARACTER, setLayer } from '../render/layers.js';
 import {
   cloneWeaponAnchors, showWeaponOnClone, weaponMeshIdFor, WILDWOOD_BLADE_CANDIDATE_ID,
 } from '../character/weaponLoadout.js';
-import { BELT_LANTERN_BONE_NAME, RIGID_BELT_LANTERN, rigidAnchorName } from '../character/gear.js';
+import {
+  BELT_LANTERN_BONE_NAME,
+  RIGID_BELT_LANTERN,
+  RIGID_SILVERGUARD_HELMET,
+  SILVERGUARD_HELMET_BONE_NAME,
+  SILVERGUARD_HELMET_HIDES_ANATOMY,
+  rigidAnchorName,
+} from '../character/gear.js';
+import { geometryForAnatomyCoverage } from '../character/anatomyOcclusion.js';
+import { HELMET_SILVERGUARD_ID, HELMET_SLOT } from '../progression/items.js';
 import { createLocomotionController } from '../character/locomotion.js';
 import { locomotionModeForSpeed } from '../character/speed.js';
 import { createReactionAnimator } from '../character/reactClips.js';
@@ -95,6 +104,12 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
       // reasons that have nothing to do with the child it represents. Found once; whether it is
       // SHOWN is decided every frame from that child's own rewards.
       lanternAnchor: root.getObjectByName(rigidAnchorName(RIGID_BELT_LANTERN.id, BELT_LANTERN_BONE_NAME)) ?? null,
+      // G1-C3: the same inherited-or-null story as the lantern. A clone carries a helmet anchor only
+      // because the LOCAL child was wearing one when it was taken; whether THIS sibling shows it is
+      // decided every frame from their own equipped map. The body mesh is caught for the hair/ear
+      // occlusion -- the first SkinnedMesh, the same one hero.js treats as the body.
+      helmetAnchor: root.getObjectByName(rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, SILVERGUARD_HELMET_BONE_NAME)) ?? null,
+      bodyMesh: (() => { let m = null; root.traverse((o) => { if (!m && o.isSkinnedMesh) m = o; }); return m; })(),
       gearMountsInFlight: new Set(),
       // Both degrade per-clip and return null when the rig ships nothing to play, the same contract
       // main.js gets: a remote on a rig with no death clip is still positioned, still walks, and
@@ -198,6 +213,39 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
     if (remote.lanternAnchor) remote.lanternAnchor.visible = unlocked;
   }
 
+  // The sibling's hair and ears vanish under their helmet, tracking THIS clone's own helmet and
+  // nothing else. Toggled from the template's true source geometry (hero.js exposes it) rather than
+  // from whatever the clone was born holding -- a clone taken while the LOCAL child wore a helmet
+  // inherits the occluded variant, so reading that as the origin would strand a bare-headed sibling
+  // with no hair. geometryForAnatomyCoverage caches one variant per source, so every helmeted sibling
+  // shares it; passing [] returns the source unchanged, which is the clean way back. Degrades to
+  // nothing (hair shows under the helmet, as it does for the local hero) when the template has no
+  // anatomy source -- the failed/ drifted path.
+  function setRemoteHelmetCoverage(remote, hidden) {
+    const source = template.anatomySourceGeometry ?? null;
+    if (!remote.bodyMesh || !source) return;
+    const want = geometryForAnatomyCoverage(source, hidden ? SILVERGUARD_HELMET_HIDES_ANATOMY : []);
+    if (remote.bodyMesh.geometry !== want) remote.bodyMesh.geometry = want;
+  }
+
+  // WHETHER THIS PARTICULAR CHILD IS WEARING THE HELMET, every frame, from their own equipped map --
+  // the same statement-about-someone-else's-progression the lantern and the sword are, and the same
+  // absence-is-not-permission rule: no equipped entry means not worn as far as this body is concerned.
+  // Unlike the lantern's one-way unlock, a helmet equips AND unequips, so visibility and the hair/ear
+  // occlusion both follow the equipped state up and down.
+  function ensureRemoteHelmet(remote, equippedItemIds) {
+    const equipped = equippedItemIds?.[HELMET_SLOT] === HELMET_SILVERGUARD_ID;
+    if (equipped && remote.helmetAnchor === null) {
+      mountOnce(remote, RIGID_SILVERGUARD_HELMET.id, (anchor) => { remote.helmetAnchor = anchor; });
+    }
+    remote.helmetEquipped = equipped;
+    // Shown only once the anchor really exists; occlusion tracks the VISIBLE helmet, never a helmet
+    // still in flight, so a sibling is never briefly bald under nothing.
+    const worn = equipped && remote.helmetAnchor !== null;
+    if (remote.helmetAnchor) remote.helmetAnchor.visible = equipped;
+    setRemoteHelmetCoverage(remote, worn);
+  }
+
   /**
    * @param sampled  Map<id, {x, z, heading, speed}> from the interpolator
    * @param deltaSeconds  the CLAMPED frame delta, for locomotion and the swing
@@ -232,6 +280,7 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
       const reward = rewards[id] ?? null;
       ensureRemoteWeapon(remote, reward?.equippedWeaponId ?? null);
       ensureRemoteLantern(remote, reward?.lanternUnlocked === true);
+      ensureRemoteHelmet(remote, reward?.equippedItemIds ?? null);
 
       const hero = heroes[id] ?? null;
       const downSeconds = hero?.downSeconds ?? -1;
@@ -306,6 +355,12 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
         swinging: remote.swing?.isSwinging() === true,
         weaponId: remote.weaponId ?? null,
         lanternUnlocked: remote.lanternUnlocked === true,
+        // G1-C3: what this sibling is wearing on their head, and whether their hair/ears are hidden
+        // under it -- read off the body mesh's own geometry variant, not the equipped flag, so a
+        // harness sees what is actually drawn (the same "answer from whatever poses the body"
+        // discipline the down/swing fields above use).
+        helmetEquipped: remote.helmetEquipped === true,
+        helmetOccluded: Boolean(remote.bodyMesh?.geometry?.userData?.gqAnatomyCoverage),
         visible: remote.root.visible,
       }));
     },

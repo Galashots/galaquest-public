@@ -33,9 +33,13 @@ import {
 } from './audio/recipes.js';
 import {
   attachBeltLantern,
+  attachSilverguardHelmet,
   attachWildwoodBladeCandidate,
   BELT_LANTERN_URL,
   RIGID_BELT_LANTERN,
+  RIGID_SILVERGUARD_HELMET,
+  SILVERGUARD_HELMET_HIDES_ANATOMY,
+  SILVERGUARD_HELMET_URL,
   WILDWOOD_BLADE_CANDIDATE_URL,
 } from './character/gear.js';
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
@@ -61,11 +65,11 @@ import {
 // P2: how strong this hero actually is, and whether a level a presenter is about to show deserves a
 // ceremony. Both live in progression/ so the offline fallback here and net/gameServer.mjs's online
 // fight resolve ONE law -- see that module's own header on why there must not be two.
-import { levelUpTransition, resolveHeroStats } from './progression/heroStats.js';
+import { damageReductionPercentForEquipment, levelUpTransition, resolveHeroStats } from './progression/heroStats.js';
 import { cumulativeXpForLevel } from './progression/levels.js';
-import { formatPower, levelUpSummary, powerFor } from './progression/power.js';
+import { formatPower, levelUpSummary, powerChange, powerFor } from './progression/power.js';
 import { prefersReducedMotion } from './render/motionPreference.js';
-import { createHeroScreen, heroScreenViewModel, swatchHexFor } from './progression/heroScreen.js';
+import { createHeroScreen, heroScreenViewModel, swatchFor, swatchHexFor } from './progression/heroScreen.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
@@ -175,9 +179,9 @@ import {
   strikeBarrier,
 } from './world/blackthornHollow.js';
 import { bossBarState, createBossBar } from './ui/bossBar.js';
-import { createUnlockCard, unlockCardState } from './ui/unlockCard.js';
+import { HELMET_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
 import { SIEGE_EVENT_RECIPE_MAP, soundForSiegeEvent } from './audio/siegeRecipes.js';
-import { WILDWOOD_BLADE_ID, damageFor, itemDef } from './progression/items.js';
+import { HELMET_SILVERGUARD_ID, HELMET_SLOT, WILDWOOD_BLADE_ID, damageFor, itemDef } from './progression/items.js';
 import { predictionStep } from './net/prediction.js';
 import * as VILLAGE from './world/zones/village.js';
 
@@ -444,6 +448,11 @@ async function bootstrap() {
   let wardenModeSeen = 'dormant';
   let beaconLitSeen = false;
   let bladeOwnedSeen = null;
+  // G1-C3: the first earned armour, the same null-means-not-known-yet latch the Blade uses. A child
+  // who earned the Helmet in an earlier session adopts "owned" silently on their first frame; only a
+  // genuine false->true within a live session fires the acquisition card. Ownership, not equipment:
+  // the Helmet arrives owned-but-off, and putting it on is the card's Equip beat, never automatic.
+  let helmetOwnedSeen = null;
   // ARC 2, and the same null-means-not-known-yet shape bladeOwnedSeen uses above and for the same
   // reason: a returning child who already brought Wren the satchel yesterday adopts that answer
   // silently on their first frame rather than being handed the moment again on every page load.
@@ -675,22 +684,26 @@ async function bootstrap() {
   // before assignment: onOpenChange is a callback, not run until a real click, by which point
   // villageBoard below has long since been assigned.
   let villageBoard = null;
+  // Equip one item durably. ONE act, ONE identity: the device mints the fact -- eventId and durable
+  // revision together -- at the moment the child chose, journals it, and then tells the server about
+  // that same fact rather than asking the server to invent a second one. Both copies therefore carry
+  // the same name and the same place in the order, which is what makes holding two copies a union
+  // rather than a disagreement (docs/MISTAKES.md GQ-014).
+  //
+  // Journalled BEFORE it is sent, and sent only when there is a server: a child who equips with no
+  // network has equipped. The send is how the server finds out, not how it becomes true -- and if it
+  // never gets sent, the reconnect path below delivers it. Shared by the Hero screen's EQUIP button
+  // and G1-C3's acquisition-card EQUIP NOW, so the two beats mint one kind of fact, not two.
+  function equipHeroItem(itemId) {
+    if (!canEquip(itemId)) return;
+    const fact = profiles.mintEquipFact(profileId, itemId);
+    refreshProfileState();
+    if (netStatus === 'online') net.sendEquip(itemId, fact ?? undefined);
+  }
   const heroScreen = createHeroScreen({
     onSelect: (itemId) => { selectedHeroItemId = itemId; },
     onEquip: (itemId) => {
-      if (!canEquip(itemId)) return;
-      // ONE act, ONE identity. The device mints the fact -- eventId and durable revision together --
-      // at the moment the child chose, journals it, and then tells the server about that same fact
-      // rather than asking the server to invent a second one. Both copies therefore carry the same
-      // name and the same place in the order, which is what makes holding two copies a union rather
-      // than a disagreement (docs/MISTAKES.md GQ-014).
-      //
-      // Journalled BEFORE it is sent, and sent only when there is a server: a child who equips a
-      // sword with no network has equipped a sword. The send is how the server finds out, not how it
-      // becomes true -- and if it never gets sent, the reconnect path below delivers it.
-      const fact = profiles.mintEquipFact(profileId, itemId);
-      refreshProfileState();
-      if (netStatus === 'online') net.sendEquip(itemId, fact ?? undefined);
+      equipHeroItem(itemId);
       selectedHeroItemId = itemId;
     },
     // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
@@ -1476,6 +1489,22 @@ async function bootstrap() {
   let wildwoodBladeMount = null;
   let wildwoodMountInFlight = false;
   let wildwoodAssetMissing = false;
+  // G1-C3: the Silverguard Helmet, mounted the same lazy three-variable way. `helmetMount` latches
+  // only after a REAL attach (so a missing asset or an unloaded hero retries rather than sticking),
+  // `inFlight` stops a second load racing the first, and `assetMissing` latches on the first 404 so
+  // the warning fires once. Unlike the belt lantern's one-way unlock, a helmet EQUIPS AND UNEQUIPS,
+  // so the anchor is mounted once and then shown/hidden every frame from the equipped state -- the
+  // Blade's mount-once-then-toggle-visibility shape, not the lantern's mount-and-latch one. The
+  // helmet is loaded independently (assets/gear/helmet_silverguard.glb), never baked into the hero
+  // atlas, exactly like the lantern.
+  let helmetMount = null;
+  let helmetMountInFlight = false;
+  let helmetAssetMissing = false;
+  // The loaded Hero's anatomy-coverage surface (character/hero.js's heroAnatomyApi), captured at hero
+  // load so the helmet toggle can hide the hair and ears WHILE the helmet is on and show them again
+  // when it comes off. runtime.hero is the Object3D root and cannot do this; the API object can, and
+  // it is the same one net/remotes.js is handed for the sibling clones.
+  let localHeroAnatomy = null;
   // The id this rule LAST ACTED ON, recorded rather than re-derived. equippedWeaponMeshState() below
   // needs it, and the frame loop's own `ownRewards`/`currentEquippedWeaponId` are loop-locals it
   // cannot see -- but a second copy of "online ? server rewards : offline id" living in the accessor
@@ -1579,6 +1608,21 @@ async function bootstrap() {
       }
       return attachBeltLantern(clonedRoot, gltf.scene.clone(true)).anchor;
     }
+    if (gearId === RIGID_SILVERGUARD_HELMET.id) {
+      if (helmetAssetMissing) return null;
+      const gltf = await loadGLB(SILVERGUARD_HELMET_URL);
+      if (gltf.userData?.loadError) {
+        if (!helmetAssetMissing) {
+          helmetAssetMissing = true;
+          console.warn(
+            `[progression] ${SILVERGUARD_HELMET_URL} is missing -- a sibling wearing the Helmet is `
+            + 'drawn bare-headed until the asset lands.',
+          );
+        }
+        return null;
+      }
+      return attachSilverguardHelmet(clonedRoot, gltf.scene.clone(true)).anchor;
+    }
     return null;
   }
 
@@ -1603,6 +1647,55 @@ async function bootstrap() {
       lanternMountInFlight = false;
       console.warn('[rewards] failed to mount the belt lantern:', error);
     });
+  }
+
+  // The hair and ears vanish UNDER the helmet and reappear when it comes off, tracking the visible
+  // helmet and nothing else -- occlusion without a helmet on screen would just be a bald hero. Guarded
+  // so it only rebuilds the body geometry when the coverage actually changes (setAnatomyCoverage swaps
+  // the mesh's geometry, cheap but not free), and order-independently because setAnatomyCoverage
+  // normalises/sorts what it stores. Reads through localHeroAnatomy, the same API object that degrades
+  // to no occlusion on an anatomy-drifted hero rather than throwing (character/hero.js).
+  function setHelmetAnatomyCoverage(hidden) {
+    if (!localHeroAnatomy) return;
+    const want = hidden ? SILVERGUARD_HELMET_HIDES_ANATOMY : [];
+    const current = localHeroAnatomy.anatomyCoverage;
+    if (current.length === want.length && want.every((region) => current.includes(region))) return;
+    localHeroAnatomy.setAnatomyCoverage(want);
+  }
+
+  // G1-C3: mount the Silverguard Helmet lazily the first time THIS child equips it, then show or hide
+  // it every frame from the equipped state. The mount lands hidden and the per-frame call below reveals
+  // it, so there is never a frame where the helmet is drawn before the coverage that hides the hair
+  // under it -- worst case one 16ms frame of bare-headed hero with a helmet a beat late, never a helmet
+  // floating over uncovered hair. `ensureHelmetMounted` runs every frame (beside ensureEquippedWeaponMesh),
+  // which is what makes the reveal and the unequip toggle work.
+  function ensureHelmetMounted(shouldBeEquipped) {
+    if (!runtime.hero) return;
+    if (shouldBeEquipped && helmetMount === null && !helmetMountInFlight && !helmetAssetMissing) {
+      helmetMountInFlight = true;
+      loadGLB(SILVERGUARD_HELMET_URL).then((gltf) => {
+        helmetMountInFlight = false;
+        if (gltf.userData?.loadError) {
+          if (!helmetAssetMissing) {
+            helmetAssetMissing = true;
+            console.warn(
+              `[progression] ${SILVERGUARD_HELMET_URL} is missing -- equipping the Helmet still works `
+              + 'and still reads its defence; he goes bare-headed until the asset lands.',
+            );
+          }
+          return;
+        }
+        // Mounted hidden; the lines below (next frame) decide visibility and coverage together.
+        helmetMount = attachSilverguardHelmet(runtime.hero, gltf.scene);
+        helmetMount.anchor.visible = false;
+      }).catch((error) => {
+        helmetMountInFlight = false;
+        console.warn('[progression] failed to mount the Silverguard Helmet:', error);
+      });
+    }
+    const worn = shouldBeEquipped && helmetMount !== null;
+    if (helmetMount) helmetMount.anchor.visible = worn;
+    setHelmetAnatomyCoverage(worn);
   }
 
   // Phase D (D6): "observable without hearing it" (see audioDebug's own comment on runtime, below)
@@ -2591,6 +2684,9 @@ async function bootstrap() {
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
       : profileState;
     const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
+    // The whole equipped-per-slot map, resolved once so the fight below, the helmet mount and the
+    // Hero screen all read the same answer rather than three copies of "online ? wire : journal".
+    const currentEquippedItemIds = equippedItemIdsFromRewards(ownRewards);
     // HOW STRONG THIS HERO IS, resolved once per frame from whichever authority is live, and read by
     // everything downstream: both offline fights, the Hero screen, the HUD and the level-up watch.
     //
@@ -2602,7 +2698,7 @@ async function bootstrap() {
     heroStatsThisFrame = resolveHeroStats({
       totalXp: Number.isSafeInteger(ownRewards?.xp) ? ownRewards.xp : 0,
       equippedWeaponId: currentEquippedWeaponId,
-      equippedItemIds: equippedItemIdsFromRewards(ownRewards),
+      equippedItemIds: currentEquippedItemIds,
       charmOwned: ownRewards?.charmOwned === true,
     });
 
@@ -2641,6 +2737,9 @@ async function bootstrap() {
     if (heroScreenOpen) {
       heroScreen.render(heroScreenViewModel({
         equippedWeaponId: currentEquippedWeaponId,
+        // The whole equipped-per-slot map, so the Shield and Helmet slots read the truth the fight
+        // reads -- the same map heroStatsThisFrame was resolved from this frame (G1-C3).
+        equippedItemIds: currentEquippedItemIds,
         ownedItemIds: ownedItemIdsFromRewards(ownRewards),
         selectedItemId: selectedHeroItemId,
         // The SAME object the fight is being fed this frame, so the screen cannot print a hero the
@@ -2658,6 +2757,12 @@ async function bootstrap() {
     // about which weapon this is. Runs whether the screen is open or closed -- the swap has to be
     // true in ordinary gameplay too, not only while a child is looking at the menu.
     ensureEquippedWeaponMesh(currentEquippedWeaponId);
+    // G1-C3: the helmet he is actually wearing, from the SAME equipped map the fight and the Hero
+    // screen read, so the world, the DOM and the showcase can never disagree about whether it is on.
+    // Runs every frame whether the screen is open or closed -- the armour has to be true in ordinary
+    // play, not only while a child is looking at the menu (heroPreview.update below re-reads the live
+    // hero, so a helmet mounted here joins the showcase preview on its own).
+    ensureHelmetMounted(currentEquippedItemIds[HELMET_SLOT] === HELMET_SILVERGUARD_ID);
     heroPreview.update({
       heroRoot: runtime.hero,
       accentColorHex: swatchHexFor(currentEquippedWeaponId),
@@ -2999,6 +3104,47 @@ async function bootstrap() {
         // the banner -- silent until a real tap has asked for it. See unlockCardState for why the
         // spoken wording is not the four strings on the card.
         speakKeeperLineIfUnlocked(unlocked.spoken);
+        audio.play('blade-unlock');
+      }
+
+      // ── G1-C3: THE HELMET, ACQUIRED ─────────────────────────────────────────────────────────
+      //
+      // Diffed off owned items exactly as the Blade is -- a durable per-guest latch, adopted silently
+      // on the first known frame so a returning child who earned it yesterday is not handed the moment
+      // again, and firing only on a genuine false->true within a live session (which is also what a
+      // reconnect is NOT: the folded ownership does not move when a fact the child already had is
+      // re-announced). The one real difference is the OFFER. A helmet's worth is a POWER move, not a
+      // DAMAGE line, so the card carries the resolved before->after POWER of wearing it and asks
+      // EQUIP NOW?; ownership and equipment stay two beats, and putting it on is the child's, never
+      // automatic. The card reuses ui/unlockCard rather than a second reward-card system, restyled
+      // with the Helmet's own swatch and icon.
+      const ownsHelmetNow = ownedItemIdsFromRewards(ownRewards).includes(HELMET_SILVERGUARD_ID);
+      if (helmetOwnedSeen === null) {
+        helmetOwnedSeen = ownsHelmetNow;
+      } else if (ownsHelmetNow && !helmetOwnedSeen) {
+        helmetOwnedSeen = true;
+        // Hold the body and the arm still, move only the defence into the Helmet slot -- the same law
+        // the Hero screen's compare card and the fight read, so the ceremony cannot promise a POWER
+        // the Gear screen a child opens ten seconds later disagrees with.
+        const afterEquipped = { ...currentEquippedItemIds, [HELMET_SLOT]: HELMET_SILVERGUARD_ID };
+        const withHelmetPower = powerFor({
+          maxHp: heroStatsThisFrame.maxHp,
+          heroDamage: heroStatsThisFrame.heroDamage,
+          damageReductionPercent: damageReductionPercentForEquipment(afterEquipped),
+        });
+        const acquired = unlockCardState({
+          itemName: itemDef(HELMET_SILVERGUARD_ID)?.name ?? 'Silverguard Helmet',
+          power: powerChange(powerFor(heroStatsThisFrame), withHelmetPower),
+          prompt: 'EQUIP NOW?',
+        });
+        unlockCard.show(acquired, {
+          accent: swatchFor(HELMET_SILVERGUARD_ID),
+          icon: HELMET_ICON_SVG,
+          // The second beat, the child's to take. EQUIP NOW mints the same durable equip fact the
+          // Hero screen would; LATER leaves it owned-but-off for the owned strip to equip later.
+          onEquip: () => equipHeroItem(HELMET_SILVERGUARD_ID),
+        });
+        speakKeeperLineIfUnlocked(acquired.spoken);
         audio.play('blade-unlock');
       }
 
@@ -4030,6 +4176,9 @@ async function bootstrap() {
   loadingLabel = null;
   scene.add(hero.root);
   runtime.hero = hero.root;
+  // The coverage surface for the helmet's hair/ear occlusion (G1-C3). Held separately from
+  // runtime.hero, which is the Object3D root and has no such method -- this is the hero API object.
+  localHeroAnatomy = hero;
   // GP1-C4: the shipping sword's anchor, so ensureEquippedWeaponMesh can hide it when the Blade is
   // the equipped weapon. Nullable on purpose -- a failed hero load leaves rigidGear empty, and a
   // missing sword must not throw on a frame loop that is otherwise still playable.
