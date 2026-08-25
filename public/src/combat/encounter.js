@@ -886,9 +886,15 @@ function wolfFromParty(wolf) {
   };
 }
 
+/** `maxHp` makes the round trip for the same reason the patrol index does: the solo state is rebuilt
+ *  from the published one on every call, so anything the party engine advances has to come home.
+ *  reconcileMaxHp grants the DIFFERENCE between the stated max and the one the hero already had --
+ *  drop the second and it falls back to HERO_MAX_HP, sees a gain on every tick, and hands a levelled
+ *  child that same gain again, sixty times a second. It is also the field createEncounterState
+ *  has always seeded, so publishing it makes a fresh hero and a stepped one the same shape. */
 function heroFromParty(hero) {
   return {
-    hp: hero.hp, swingSeconds: hero.swingSeconds, cooldown: hero.cooldown,
+    hp: hero.hp, maxHp: hero.maxHp, swingSeconds: hero.swingSeconds, cooldown: hero.cooldown,
     swingLanded: hero.swingLanded, downSeconds: hero.downSeconds,
   };
 }
@@ -937,7 +943,9 @@ export function requestAttack(state, commandId = null) {
 /**
  * Advance the fight by one command.
  *
- * `command` is { commandId, deltaSeconds, heroPosition, heroHeading, attack }. The attack is applied
+ * `command` is { commandId, deltaSeconds, heroPosition, heroHeading, heroDamage, maxHp,
+ * heroTargetable, wolfHostile, attack } -- the ones the fight has always taken, plus what the caller
+ * knows about the hero that the rules do not. The attack is applied
  * before time advances, which is the order main.js has always used -- press, then tick -- and the
  * order that makes a swing land on the frame it was asked for rather than the one after. Composed
  * here from the party engine's two calls (request, then step) rather than from one combined
@@ -956,6 +964,12 @@ export function stepEncounter(state, command = {}) {
     // Named heroDamage rather than heroWeaponDamage since P2: the number is the weapon PLUS the
     // level bonus, so the old name described half of its own value (GQ-002).
     heroDamage = null,
+    // The BODY the caller knows about, carried across the same seam and for the same reason: since
+    // P2 a Hero LEVEL grows max HP as well as damage, and forwarding one without the other ships
+    // half a level-up -- a child hitting for their new blow out of the body they had before it.
+    // Omitted falls to HERO_MAX_HP inside reconcileMaxHp, so a caller that states no body still
+    // fights the one this game has always given it.
+    maxHp = null,
     // One more thing the caller knows and the rules do not, carried exactly as position and weapon
     // damage are. Defaults to targetable so every existing caller fights unchanged.
     heroTargetable = true,
@@ -984,6 +998,7 @@ export function stepEncounter(state, command = {}) {
         position: heroPosition,
         heading: heroHeading,
         heroDamage,
+        maxHp,
         targetable: heroTargetable !== false,
       },
     },

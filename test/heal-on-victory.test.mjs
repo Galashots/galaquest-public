@@ -152,7 +152,7 @@ test("a brother's kill heals you too, but a hero who is down gets nothing", () =
   );
 });
 
-test('the solo API heals too, and its published hero keeps exactly its old shape', () => {
+test('the solo API heals too, and its published hero carries exactly the agreed fields', () => {
   const encounter = createEncounter({ wolfSpawn: { x: 0, z: 0 } });
   const position = { x: 0, z: -1 };
 
@@ -183,11 +183,18 @@ test('the solo API heals too, and its published hero keeps exactly its old shape
   assert.equal('heroId' in healed, false, 'solo events never carry a heroId -- Design ruling 1');
   assert.equal(healed.remaining, expected);
 
-  // Design ruling 1: the solo published hero is byte-identical to what it always was. A heal that
-  // needed a new field on this object would break every client that decodes it.
+  // Design ruling 1: the solo published hero is exactly the fields the fight owns, and no more. A
+  // HEAL that needed a new one would still break every client that decodes it, which is what this
+  // exact set is here to catch.
+  //
+  // `maxHp` joined it in P2 and did not come from the heal. createEncounterState has seeded it since
+  // Wren's charm, and stepEncounter now publishes it back so a caller-stated body survives the round
+  // trip through the party engine (test/encounter-seam.test.mjs). Before that it was seeded, dropped
+  // on the first tick, and re-granted on every tick after -- so the old list pinned an omission
+  // rather than a shape.
   assert.deepEqual(
     Object.keys(encounter.state.hero).sort(),
-    ['cooldown', 'downSeconds', 'hp', 'swingLanded', 'swingSeconds'],
+    ['cooldown', 'downSeconds', 'hp', 'maxHp', 'swingLanded', 'swingSeconds'],
   );
 });
 
