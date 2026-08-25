@@ -50,7 +50,8 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource, waitForSample,
+  authoredWolfSource, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK,
+  stopWatchSource, waitForSample,
 } from './in-page-driver.mjs';
 // A node process importing a runtime module directly, with no DOM and no three.js shim. That is the
 // whole point of combat/encounter.js being pure, and this harness is the first thing to cash it in:
@@ -579,9 +580,10 @@ const captions = [];
 const state = () => page.eval(`(() => {
   const r = window.__galaQuestRuntime;
   const published = r.encounterState();
+  const authoredWolf = ${authoredWolfSource()};
   const net = r.netState();
   return JSON.stringify({
-    wolf: { ...published.wolf }, hero: { ...published.hero }, revision: published.revision,
+    enemy: { ...authoredWolf }, hero: { ...published.hero }, revision: published.revision,
     clip: r.wolf()?.getState()?.clip ?? null,
     heroPos: [r.player.position.x, r.player.position.z],
     heading: r.follow.heading,
@@ -594,11 +596,11 @@ const state = () => page.eval(`(() => {
 })()`).then(JSON.parse).then((published) => ({ ...published, canAttack: canAttack(published) }));
 
 /** Centre-to-centre gap between the RENDERED hero and the published wolf. */
-const renderedGap = (s) => Math.hypot(s.heroPos[0] - s.wolf.x, s.heroPos[1] - s.wolf.z);
+const renderedGap = (s) => Math.hypot(s.heroPos[0] - s.enemy.x, s.heroPos[1] - s.enemy.z);
 /** Centre-to-centre gap between the AUTHORITATIVE hero and the published wolf, from one snapshot. */
 const authoritativeGap = (s) => (s.serverPos === null
   ? null
-  : Math.hypot(s.serverPos[0] - s.wolf.x, s.serverPos[1] - s.wolf.z));
+  : Math.hypot(s.serverPos[0] - s.enemy.x, s.serverPos[1] - s.enemy.z));
 
 // Centre of the attack button: 1rem inset plus half of its 112px.
 // `let`, not `const`: the landscape sanity pass at the end of this file rotates the viewport, and
@@ -626,7 +628,7 @@ async function pollUntil(predicate, { intervalMs = 25, timeoutMs = 3000 } = {}) 
 // ── the loop ───────────────────────────────────────────────────────────────────────────────────
 const start = await state();
 check('the wolf starts outside its aggro range, so nobody is ambushed on load',
-  start.wolf.mode === 'idle', `mode ${start.wolf.mode}, clip ${start.clip}`);
+  start.enemy.mode === 'idle', `mode ${start.enemy.mode}, clip ${start.clip}`);
 await measureShutter('01-start');
 
 // Deliberately thrown from 8+m away, against a 1.7m reach -- a guaranteed miss, with the wolf far too
@@ -652,7 +654,7 @@ const beforeMiss = await state();
 // still not aggroed (the run's first check is that it starts outside its aggro range), but now
 // visibly standing there not reacting. Distance is untouched -- this stays the real play camera.
 await page.eval(`window.__galaQuestRuntime.follow.setHeading(${headingToward(
-  beforeMiss.heroPos[0], beforeMiss.heroPos[1], beforeMiss.wolf.x, beforeMiss.wolf.z,
+  beforeMiss.heroPos[0], beforeMiss.heroPos[1], beforeMiss.enemy.x, beforeMiss.enemy.z,
 )})`);
 await sleep(400);
 // RECORDED, not polled -- the landscape miss check below already learned this and this one was left
@@ -675,7 +677,7 @@ check('the miss capture actually contains the miss feedback, rather than a hero 
       .map((sample) => sample.feedback || 'none'))])}`);
 const afterMiss = await state();
 check('a swing thrown well outside reach is a miss, not silent damage',
-  afterMiss.wolf.hp === beforeMiss.wolf.hp, `wolf hp ${beforeMiss.wolf.hp} -> ${afterMiss.wolf.hp}`);
+  afterMiss.enemy.hp === beforeMiss.enemy.hp, `wolf hp ${beforeMiss.enemy.hp} -> ${afterMiss.enemy.hp}`);
 
 // Walk at the wolf, steering. The first version of this pushed the stick straight up for four
 // seconds and sailed past the wolf to z=13.4 while it chased from behind -- every swing then missed
@@ -761,14 +763,14 @@ async function walkToward(aim, stopWithin, maxMillis, { faceTarget = false } = {
   return last;
 }
 
-const closed = await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 14000);
+const closed = await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.2, 14000);
 check('walking closes the distance to the wolf',
-  Math.hypot(closed.heroPos[0] - closed.wolf.x, closed.heroPos[1] - closed.wolf.z) < 2.2,
-  `hero ${closed.heroPos[0].toFixed(2)},${closed.heroPos[1].toFixed(2)} vs wolf ${closed.wolf.x.toFixed(2)},${closed.wolf.z.toFixed(2)}`);
-const engaged = await pollUntil((s) => s.wolf.mode !== 'idle' || s.wolf.hp < WOLF_MAX_HP, { timeoutMs: 3000 });
+  Math.hypot(closed.heroPos[0] - closed.enemy.x, closed.heroPos[1] - closed.enemy.z) < 2.2,
+  `hero ${closed.heroPos[0].toFixed(2)},${closed.heroPos[1].toFixed(2)} vs wolf ${closed.enemy.x.toFixed(2)},${closed.enemy.z.toFixed(2)}`);
+const engaged = await pollUntil((s) => s.enemy.mode !== 'idle' || s.enemy.hp < WOLF_MAX_HP, { timeoutMs: 3000 });
 check('the wolf noticed and came for the hero',
-  engaged.wolf.mode !== 'idle' || engaged.wolf.hp < WOLF_MAX_HP,
-  `mode ${engaged.wolf.mode}, clip ${engaged.clip}`);
+  engaged.enemy.mode !== 'idle' || engaged.enemy.hp < WOLF_MAX_HP,
+  `mode ${engaged.enemy.mode}, clip ${engaged.clip}`);
 
 // This harness walks the hero straight at the wolf while the wolf walks straight at the hero, which
 // is the worst case for overlap and exactly what a child does on meeting a monster. Before
@@ -872,7 +874,7 @@ for (let settleSample = 0; ; settleSample += 1) {
     drift: sample.drift ?? 0,
     snapped: Boolean(sample.snapped),
     revision: sample.revision,
-    wolfMode: sample.wolf.mode,
+    wolfMode: sample.enemy.mode,
   });
   settled = sample;
   if (authoritative !== null && Math.abs(rendered - authoritative) <= CONVERGED_EPSILON) break;
@@ -949,7 +951,7 @@ await shot('02-engaged');
 // recorder makes the claim directly: at some frame, the hero had less health than he had on the
 // frame before. That is what a bite landing IS, and no respawn can forge it.
 await page.eval(startWatch('bite', '({ hp: window.__galaQuestRuntime.encounterState().hero.hp })'));
-await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.0, 4000, { faceTarget: true });
+await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.0, 4000, { faceTarget: true });
 const bitten = await waitForSample(page, 'bite', (sample, index, all) =>
   index > 0 && sample.hp < all[index - 1].hp, { timeoutMs: 12000 });
 await page.eval(stopWatchSource('bite'));
@@ -1146,13 +1148,14 @@ async function orbitToFront() {
 const FIGHT_SAMPLE = `(() => {
   const runtime = window.__galaQuestRuntime;
   const published = runtime.encounterState();
+  const authoredWolf = ${authoredWolfSource()};
   return {
     t: Math.round(performance.now()),
     heroHp: published.hero.hp,
     downSeconds: published.hero.downSeconds,
     swingSeconds: published.hero.swingSeconds,
-    wolfMode: published.wolf.mode,
-    wolfHp: published.wolf.hp,
+    wolfMode: authoredWolf.mode,
+    wolfHp: authoredWolf.hp,
     // The CLIP, not just the mode, because "stays dead" is a claim about what is being played.
     wolfClip: runtime.wolf()?.getState()?.clip ?? null,
     // WHAT THE CHILD ACTUALLY SAW OF THE HIT FLASH, not what the constant says they should have.
@@ -1166,8 +1169,8 @@ const FIGHT_SAMPLE = `(() => {
     // this presenter is handed the same clamped delta, so the same question gets asked of it.
     wolfHeight: ${WOLF_HEIGHT},
     // So the loop can tell "in the strike arc" from "the wolf backed off", without a second read.
-    gap: Math.hypot(runtime.player.position.x - published.wolf.x,
-      runtime.player.position.z - published.wolf.z),
+    gap: Math.hypot(runtime.player.position.x - authoredWolf.x,
+      runtime.player.position.z - authoredWolf.z),
   };
 })()`;
 await page.eval(startWatch('fight', FIGHT_SAMPLE));
@@ -1225,7 +1228,7 @@ console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEvery
 // here: the wolf brings itself to about a metre, and what the walk is really for is turning the
 // hero, since he only turns while moving. The held walk is kept for the one case with actual
 // distance in it -- coming back from a knockdown, which respawns him at spawn.
-const WOLF_TARGET = '(() => { const w = window.__galaQuestRuntime.encounterState().wolf; return { x: w.x, z: w.z }; })()';
+const WOLF_TARGET = authoredWolfSource();
 const HELD_APPROACH_SLACK_METRES = 3;
 async function heldLegToWolf(stopWithin, maxMillis) {
   await page.eval(startWalk(WOLF_TARGET, stopWithin));
@@ -1243,7 +1246,7 @@ async function closeOnWolf(gapMetres, stopWithin) {
   if (gapMetres > stopWithin + HELD_APPROACH_SLACK_METRES) {
     await heldLegToWolf(stopWithin + HELD_APPROACH_SLACK_METRES, 8000);
   }
-  await walkToward((live) => ({ x: live.wolf.x, z: live.wolf.z }), stopWithin, 900,
+  await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), stopWithin, 900,
     { faceTarget: true });
 }
 
@@ -1590,11 +1593,11 @@ await photographTheSwing();
 // The wolf respawns WOLF_RESPAWN_SECONDS after it dies (world rules, not this harness's doing), so
 // this waits for a live one rather than forcing anything.
 await useViewport(LANDSCAPE_VIEWPORT);
-const respawned = await pollUntil((s) => s.wolf.mode !== 'dead' && s.wolf.hp > 0,
+const respawned = await pollUntil((s) => s.enemy.mode !== 'dead' && s.enemy.hp > 0,
   { intervalMs: 200, timeoutMs: (WOLF_RESPAWN_SECONDS + 6) * 1000 });
 check('landscape: a fresh wolf is back to fight, rather than this pass photographing a corpse',
-  respawned.wolf.mode !== 'dead' && respawned.wolf.hp > 0,
-  `mode ${respawned.wolf.mode}, hp ${respawned.wolf.hp}`);
+  respawned.enemy.mode !== 'dead' && respawned.enemy.hp > 0,
+  `mode ${respawned.enemy.mode}, hp ${respawned.enemy.hp}`);
 
 // MISS, in landscape. Thrown from wherever the hero is standing after the swing photographs, which
 // is well outside reach of a wolf that has only just reappeared at its own spawn.
@@ -1674,11 +1677,11 @@ await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 1200
 // was standing out of range, and once that was fixed it recorded 185 because the beat above had
 // killed the wolf outright. Standing still and taking bites is still how the knockdown happens --
 // what is being arranged here is only that there is something alive nearby to do the biting.
-const biter = await pollUntil((s) => s.wolf.mode !== 'dead' && s.wolf.hp > 0,
+const biter = await pollUntil((s) => s.enemy.mode !== 'dead' && s.enemy.hp > 0,
   { intervalMs: 200, timeoutMs: (WOLF_RESPAWN_SECONDS + 8) * 1000 });
 check('landscape: there is a live wolf to be knocked out by',
-  biter.wolf.mode !== 'dead' && biter.wolf.hp > 0,
-  `mode ${biter.wolf.mode}, hp ${biter.wolf.hp}`);
+  biter.enemy.mode !== 'dead' && biter.enemy.hp > 0,
+  `mode ${biter.enemy.mode}, hp ${biter.enemy.hp}`);
 await closeOnWolf(Infinity, 1.0);
 const beforeDown = await state();
 await page.eval(startWatch('landscape-knockdown', `({

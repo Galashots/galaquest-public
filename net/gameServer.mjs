@@ -1,11 +1,12 @@
-// E1 C2 compatibility shell.
+// Final E1 compatibility adapter.
 //
-// The server implementation lives unchanged in gameServerCore.mjs for this checkpoint. C2's wire
-// and simulation authority are collection-shaped there. Older in-process tests/readers still ask
-// createSimulation().encounterSnapshot().wolf, so this public module adds only a derived,
-// non-enumerable view of the canonical enemies[] snapshot. attachGameServer is re-exported from the
-// core unchanged and therefore never publishes a singular Wolf field. C3 removes this shell once
-// every runtime/test reader is keyed by enemyId.
+// gameServerCore.mjs owns the collection-shaped simulation and wire snapshot. A small set of older
+// in-process fixtures still read createSimulation().encounterSnapshot().wolf, so this public entry
+// point exposes only a non-enumerable view derived from the kind:'wolf' entry in enemies[] for
+// older single-Wolf fixtures.
+// attachGameServer is re-exported unchanged and the adapter never publishes or mutates a singular
+// Wolf field on the wire. Removing this boundary would create broad, unrelated fixture churn while
+// preserving no additional authority.
 
 export * from './gameServerCore.mjs';
 import { createSimulation as createCoreSimulation } from './gameServerCore.mjs';

@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   BASE_HERO_DAMAGE,
   DEATH_SECONDS,
+  HERO_MAX_HP,
+  WOLF_BITE_DAMAGE,
   WOLF_MAX_HP,
   WOLF_RESPAWN_SECONDS,
   createPartyEncounterState,
@@ -65,6 +67,62 @@ test('reordering serialized enemies cannot retarget an equal-distance swing', ()
   }
   assert.equal(targetFor(['wolf-b', 'wolf-a']), 'wolf-a');
   assert.equal(targetFor(['wolf-a', 'wolf-b']), 'wolf-a');
+});
+
+test('two ordinary Wolves independently chase, acquire, bite, and damage their own Heroes', () => {
+  const heroes = {
+    'hero-a': { position: { x: 0, z: 1.5 }, heading: 0, targetable: true },
+    'hero-b': { position: { x: 10, z: 4 }, heading: 0, targetable: true },
+  };
+  let state = createPartyEncounterState({
+    enemies: [
+      { enemyId: 'wolf-a', kind: 'wolf', spawn: { x: 0, z: 0 } },
+      { enemyId: 'wolf-b', kind: 'wolf', spawn: { x: 10, z: 0 } },
+    ],
+    heroIds: ['hero-a', 'hero-b'],
+  });
+  const events = [];
+  const byId = () => Object.fromEntries(state.enemies.map((enemy) => [enemy.enemyId, enemy]));
+
+  // Wolf A starts in bite range while Wolf B must chase its own, distant Hero. The distinct modes
+  // and positions prove one enemy's hostile transition is not shared by the other.
+  for (let tick = 0; tick < 45; tick += 1) {
+    const result = stepParty(state, { deltaSeconds: STEP, heroes });
+    state = result.state;
+    events.push(...result.events);
+  }
+  let enemies = byId();
+  assert.equal(enemies['wolf-a'].targetId, 'hero-a');
+  assert.equal(enemies['wolf-a'].mode, 'bite');
+  assert.equal(enemies['wolf-b'].mode, 'walk');
+  assert.equal(enemies['wolf-b'].targetId, null, 'chasing does not borrow Wolf A\'s target');
+  assert.ok(enemies['wolf-b'].z > 0, 'Wolf B advanced toward Hero B independently');
+  assert.notEqual(enemies['wolf-a'].enemyId, enemies['wolf-b'].enemyId);
+
+  // Continue until both independent bites have landed. The Heroes are separated by 10m, well
+  // beyond aggro range, so a cross-target bite would be a simulation defect rather than a tie.
+  for (let tick = 45; tick < 240 && events.filter((event) => event.type === 'hero-hurt').length < 2; tick += 1) {
+    const result = stepParty(state, { deltaSeconds: STEP, heroes });
+    state = result.state;
+    events.push(...result.events);
+  }
+  enemies = byId();
+  const bites = events.filter((event) => event.type === 'hero-hurt');
+  assert.deepEqual(
+    bites.slice(0, 2).map(({ enemyId, heroId }) => ({ enemyId, heroId })),
+    [
+      { enemyId: 'wolf-a', heroId: 'hero-a' },
+      { enemyId: 'wolf-b', heroId: 'hero-b' },
+    ],
+  );
+  assert.equal(enemies['wolf-a'].targetId, 'hero-a');
+  assert.equal(enemies['wolf-b'].targetId, 'hero-b');
+  assert.equal(enemies['wolf-a'].hp, WOLF_MAX_HP, 'Wolf A was not damaged by its own bite');
+  assert.equal(enemies['wolf-b'].hp, WOLF_MAX_HP, 'Wolf B was not damaged by its own bite');
+  assert.equal(state.heroes['hero-a'].hp, HERO_MAX_HP - WOLF_BITE_DAMAGE);
+  assert.equal(state.heroes['hero-b'].hp, HERO_MAX_HP - WOLF_BITE_DAMAGE);
+  assert.notEqual(enemies['wolf-a'].mode, enemies['wolf-b'].mode,
+    'one Wolf entering bite does not force the other into the same lifecycle mode');
 });
 
 test('ordinary enemies keep independent hit/lifecycle state and respawn with the same stable id', () => {

@@ -36,6 +36,7 @@ import { worldToScreen } from '../../public/src/camera/rotation.js';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { deadlineAfter, movementPulseMillis } from './automation-timing.mjs';
 import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
+import { authoredWolfSource } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -166,6 +167,7 @@ async function waitForRuntime(tab, timeoutMs = 40000) {
 const state = (tab) => tab.page.eval(`JSON.stringify((() => {
   const r = window.__galaQuestRuntime;
   const published = r.encounterState();
+  const authoredWolf = ${authoredWolfSource()};
   const net = r.netState();
   const pips = [...document.querySelectorAll('#lantern-marks .mark')];
   const own = (() => {
@@ -174,7 +176,7 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
     return (id != null ? all[id] : null) ?? Object.values(all)[0] ?? null;
   })();
   return {
-    wolf: { ...published.wolf }, hero: { ...published.hero },
+    enemy: { ...authoredWolf }, hero: { ...published.hero },
     heroPos: [+r.player.position.x.toFixed(2), +r.player.position.z.toFixed(2)],
     serverPos: net.serverSelf ? [+net.serverSelf.x.toFixed(2), +net.serverSelf.z.toFixed(2)] : null,
     heading: r.follow.heading,
@@ -273,7 +275,7 @@ async function earnAMark(tab, budgetMs = 70000) {
   const attack = { x: VIEWPORT.width - 16 - 56, y: VIEWPORT.height - 16 - 56 };
   const startMarks = (await state(tab)).marks;
   const deadline = deadlineAfter(budgetMs);
-  await walkToward(tab, (live) => ({ x: live.wolf.x, z: live.wolf.z }), 1.2, 30000);
+  await walkToward(tab, (live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.2, 30000);
 
   // TAP ON A CLOCK, AND STOP TALKING TO THE PAGE BETWEEN TAPS.
   //
@@ -296,7 +298,7 @@ async function earnAMark(tab, budgetMs = 70000) {
     const net = r.netState();
     const all = r.rewards();
     const own = (net.selfId != null ? all[net.selfId] : null) ?? Object.values(all)[0] ?? null;
-    const w = r.encounterState().wolf;
+    const w = ${authoredWolfSource()};
     return { wolfHp: w.hp, mode: w.mode, marks: own?.marks ?? 0 };
   })())`).then(JSON.parse);
 
@@ -322,8 +324,8 @@ async function earnAMark(tab, budgetMs = 70000) {
       tapsSinceLook = 0;
       const live = await state(tab);
       const authority = live.serverPos ?? live.heroPos;
-      if (Math.hypot(authority[0] - live.wolf.x, authority[1] - live.wolf.z) > 1.4) {
-        await walkToward(tab, (l) => ({ x: l.wolf.x, z: l.wolf.z }), 1.2, 4000);
+      if (Math.hypot(authority[0] - live.enemy.x, authority[1] - live.enemy.z) > 1.4) {
+        await walkToward(tab, (l) => ({ x: l.enemy.x, z: l.enemy.z }), 1.2, 4000);
       }
     }
   }
@@ -413,11 +415,11 @@ async function run() {
     const earned = await earnAMark(tab, 25000);
     const authorityAt = earned.serverPos ?? earned.heroPos;
     const wouldLand = isWithinStrike(
-      { x: authorityAt[0], z: authorityAt[1] }, earned.heroHeading, { x: earned.wolf.x, z: earned.wolf.z },
+      { x: authorityAt[0], z: authorityAt[1] }, earned.heroHeading, { x: earned.enemy.x, z: earned.enemy.z },
     );
-    const earnedGap = Math.hypot(authorityAt[0] - earned.wolf.x, authorityAt[1] - earned.wolf.z);
+    const earnedGap = Math.hypot(authorityAt[0] - earned.enemy.x, authorityAt[1] - earned.enemy.z);
     diagnostic('a child can beat the opening wolf while the server is adjudicating', earned.marks >= 1,
-      `marks ${earned.marks}, wolf ${earned.wolf.mode} at ${earned.wolf.hp}hp, `
+      `marks ${earned.marks}, wolf ${earned.enemy.mode} at ${earned.enemy.hp}hp, `
       + `hero ${earnedGap.toFixed(1)} m away (reach ${ATTACK_REACH}), facing ${earned.heroHeading?.toFixed?.(2)}, `
       + `a swing from here would ${wouldLand ? 'LAND' : 'MISS'}, hero ${earned.hero.hp}hp`,
       {
@@ -453,14 +455,14 @@ async function run() {
     // WOLF_RESPAWN_SECONDS is imported rather than slept past, and the poll decides: a fixed sleep
     // would be right until somebody changed the constant.
     const respawned = await pollUntil(
-      tab, (s) => s.wolf.hp > 0 && s.wolf.mode !== 'dead' && s.wolf.mode !== 'dying',
+      tab, (s) => s.enemy.hp > 0 && s.enemy.mode !== 'dead' && s.enemy.mode !== 'dying',
       (WOLF_RESPAWN_SECONDS + 8) * 1000, 500,
     );
     // Stated as what the NEXT phase needs -- a wolf to fight -- rather than as "one respawned".
     // Those are the same thing only when the fight above actually killed one, and on the runs where
     // it does not, "a wolf came back" would report a success about an event that never happened.
-    check('there is a live wolf for the offline half to fight', respawned.wolf.hp > 0,
-      `wolf ${respawned.wolf.mode} at ${respawned.wolf.hp}hp`
+    check('there is a live wolf for the offline half to fight', respawned.enemy.hp > 0,
+      `wolf ${respawned.enemy.mode} at ${respawned.enemy.hp}hp`
       + `${earned.marks >= 1 ? ' (the diagnostic fight killed one, so this one respawned)' : ' (the diagnostic fight did not land, so this is the original)'}`);
 
     console.log('\n── phase offline (a car, a holiday, a router that died) ──');
@@ -472,7 +474,7 @@ async function run() {
     const offlineEarned = await earnAMark(tab);
     check('a child can earn a Lantern Mark with nothing to connect to',
       offlineEarned.marks > marksBefore,
-      `marks ${marksBefore} -> ${offlineEarned.marks}, wolf ${offlineEarned.wolf.mode} at ${offlineEarned.wolf.hp}hp`);
+      `marks ${marksBefore} -> ${offlineEarned.marks}, wolf ${offlineEarned.enemy.mode} at ${offlineEarned.enemy.hp}hp`);
     await shot(tab, '01-earned-offline');
 
     const journal = await journalOf(tab, RECOVERY_PROFILE);

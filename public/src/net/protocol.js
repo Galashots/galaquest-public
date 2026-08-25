@@ -1,10 +1,11 @@
-// E1 C2 compatibility shell.
+// Final E1 compatibility adapter.
 //
-// protocolCore.js is the actual v4 protocol: decode is collection-only and rejects literal
-// encounter.wolf bytes. A few older in-process callers still pass a singular Wolf object INTO the
-// shared message builders, so this shell canonicalizes that builder input before the core serializes
-// it. The emitted v4 bytes have enemies[] only. C3 removes this shell when those callers/readers are
-// migrated to stable IDs.
+// protocolCore.js is the v4 authority: decode is collection-only and rejects literal encounter.wolf
+// bytes. A few older in-process fixtures still pass a legacy Wolf-shaped object into the shared
+// message builders, so this adapter canonicalizes that input before the core serializes it. The
+// emitted v4 bytes always have enemies[] only; this is a one-way fixture boundary, not a second
+// mutable Wolf authority. Removing it would cause broad, unrelated fixture churn without changing
+// the wire contract.
 
 export * from './protocolCore.js';
 import {
