@@ -32,7 +32,7 @@ import {
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
 // and the server consumes it rather than keeping a second list that drifts.
 import {
-  isProfileFact, isSemanticallyValidEquipmentFact, parseXpFactAmount, pendingLanternXpFact,
+  isClientRestorableProfileFact, isSemanticallyValidEquipmentFact, parseXpFactAmount, pendingLanternXpFact,
 } from '../public/src/progression/facts.js';
 import { LEVEL_1_STARTER_STATS, resolveHeroStats } from '../public/src/progression/heroStats.js';
 import {
@@ -731,9 +731,9 @@ export function createRewardCoordinator(options = {}) {
      * WHAT A DEVICE MAY SAY, precisely:
      *   - only about the guest THIS CONNECTION claimed; an ephemeral connection has no profile to
      *     restore into and is refused outright;
-     *   - only the fact types public/src/progression/facts.js already recognises as a profile's own
-     *     earnings, so a device cannot restore a WORLD fact (beacon-lit, village-upgrade) and change
-     *     something every other child shares;
+     *   - only profile facts the shared recovery boundary allows. Client-restored coin/shard rows
+     *     are refused because those currencies author the communal Village economy, and a personal
+     *     fact may not use a server-authored shared-world event namespace;
      *   - only real items, checked the same way the store checks an adjudicated award;
      *   - and only a weapon-equipped whose item the profile will actually own once this restore
      *     lands. Without that last check the derived state contradicts itself: a hero holding a
@@ -758,7 +758,7 @@ export function createRewardCoordinator(options = {}) {
       if (!guestId) return { restored: 0, refused: Array.isArray(facts) ? facts.length : 0 };
 
       const candidates = (Array.isArray(facts) ? facts : []).filter((fact) => (
-        isProfileFact(fact)
+        isClientRestorableProfileFact(fact, guestId)
         && !(fact.type === 'gear-owned' && !isKnownItem(fact.value))
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !isKnownItem(fact.value))
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')

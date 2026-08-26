@@ -21,6 +21,7 @@ import {
 } from '../public/src/progression/items.js';
 import {
   DURABLE_FACT_TYPES,
+  isClientRestorableProfileFact,
   isEquipmentFact,
   latestEquippedItemIds,
   latestEquippedWeaponId,
@@ -273,15 +274,22 @@ export function openRewardStore(path) {
     "SELECT MAX(rev) AS m FROM reward_events WHERE guest_id = ? AND type IN ('weapon-equipped', 'gear-equipped')",
   );
 
+  // H1: shared-world reads consume only server-adjudicated currency. `origin IS NULL` is the durable
+  // meaning of server authority in schema v4 (including every pre-v4 server row); client-attested
+  // rows may remain readable as personal provenance but can never spend physical loot for everyone.
   const creditedLootIdsStmt = db.prepare(
-    "SELECT id FROM reward_events WHERE type IN ('coin-earned', 'shard-earned')",
+    "SELECT id FROM reward_events WHERE type IN ('coin-earned', 'shard-earned') AND origin IS NULL",
   );
   // GP3: Village Supplies' whole read side -- ALSO not guest-scoped, for the reason the GP3 brief's
   // "economy ruling" gives (section 2.1): who physically picked a coin off the ground stays personal
-  // (coinsFor/shardsFor above), but what the Village can spend is communal. Deliberately the exact
-  // COUNT(*) shape coinsFor/shardsFor already use, just without the "AND guest_id = ?" clause.
-  const totalCoinsEarnedStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE type = 'coin-earned'");
-  const totalShardsEarnedStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE type = 'shard-earned'");
+  // (coinsFor/shardsFor above), but what the Village can spend is communal. H1 additionally requires
+  // that communal authority come from the server, never from a client-restored row.
+  const totalCoinsEarnedStmt = db.prepare(
+    "SELECT COUNT(*) AS c FROM reward_events WHERE type = 'coin-earned' AND origin IS NULL",
+  );
+  const totalShardsEarnedStmt = db.prepare(
+    "SELECT COUNT(*) AS c FROM reward_events WHERE type = 'shard-earned' AND origin IS NULL",
+  );
   // GP3: a village-upgrade row's mere existence IS ownership, by the brief's own ruling (section
   // 2.3) -- there is no separate mutable balance to drift from it. `id` is already the table's own
   // PRIMARY KEY, so this is an existence check on it; `type` is checked too only so a caller passing
@@ -330,6 +338,14 @@ export function openRewardStore(path) {
     }
     if (typeof award.eventId !== 'string' || award.eventId.length === 0) {
       throw new Error('reward store apply() requires a non-empty eventId');
+    }
+    // H1 defence in depth: restoreProfileFacts filters this boundary before batching, but the store
+    // must not rely on one caller forever. A client-attested row may recover personal history only;
+    // it may neither author shared currency nor reserve shared-world/another-profile identities.
+    if (award.origin === 'client' && !isClientRestorableProfileFact(award, award.guestId)) {
+      throw new Error(
+        `reward store apply() refuses client-restored fact ${JSON.stringify(award.type)} under eventId ${JSON.stringify(award.eventId)}`,
+      );
     }
     if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isKnownItem(award.value)) {
       // Business-rule validation, the same layer net/protocol.js's decodeRewards leaves to its

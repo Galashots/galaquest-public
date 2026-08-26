@@ -38,6 +38,7 @@
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
+import { sanitizeGuestId } from '../net/guestId.js';
 import { LEVEL_ONE, xpToAdvanceFrom } from './levels.js';
 import { EQUIPMENT_SLOTS, itemDef, WEAPON_SLOT } from './items.js';
 
@@ -246,6 +247,64 @@ export function isProfileFact(fact) {
     && typeof fact.type === 'string' && PROFILE_FACT_TYPE_SET.has(fact.type),
   );
   return structural && (!isEquipmentFactType(fact.type) || isSemanticallyValidEquipmentFact(fact));
+}
+
+// H1: local-first recovery is allowed to trust PERSONAL history, but that trust stops before facts
+// that author the shared world or occupy another profile's durable identity. Currency rows fund the
+// communal Village and determine whether physical loot is already spent, so a device may never
+// restore them. Shared-world ids are reserved outright; profile-scoped ids remain byte-identical
+// for the rightful profile so its local/server copies still reconcile exactly once.
+const CLIENT_RESTORE_REFUSED_TYPES = new Set(['coin-earned', 'shard-earned']);
+const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
+  'cart-loot:',
+  'hollow-cache:',
+  'village-upgrade:',
+  'beacon-lit:',
+]);
+
+// These are current personal durable identity families whose id embeds the owning profile. They are
+// server-authored except equip and the offline Lantern identities, which are minted locally with the
+// same profile id. Keep their ids unchanged for the rightful profile and refuse them for every other
+// profile so one child cannot reserve a sibling's future durable row.
+const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
+  'own:',
+  'satchel:',
+  'charm:',
+  'lantern:',
+  'lantern-unlocked:',
+  'equip:',
+  'xp:lantern:',
+  'xp:lantern-unlocked:',
+]);
+
+function reservedProfileEventOwner(eventId) {
+  for (const prefix of PROFILE_SCOPED_EVENT_ID_PREFIXES) {
+    if (!eventId.startsWith(prefix)) continue;
+    const remainder = eventId.slice(prefix.length);
+    const separator = remainder.indexOf(':');
+    const owner = separator === -1 ? remainder : remainder.slice(0, separator);
+    return owner;
+  }
+
+  // Marks need one compatibility carve-out. Current server marks are `mark:<guestId>:<lifeId>`, but
+  // older/offline device journals also contain `mark:<label>:<lifeId>` identities such as
+  // `mark:old:one`, and offlineProgress deliberately uses `mark:offline-hero:<lifeId>`. Only a first
+  // segment that is itself a legal guest/profile id is therefore a reserved profile identity.
+  if (!eventId.startsWith('mark:')) return null;
+  const remainder = eventId.slice('mark:'.length);
+  const separator = remainder.indexOf(':');
+  if (separator === -1) return null;
+  const owner = remainder.slice(0, separator);
+  if (owner === 'offline-hero') return null;
+  return sanitizeGuestId(owner) === owner ? owner : null;
+}
+
+export function isClientRestorableProfileFact(fact, profileId) {
+  if (!isProfileFact(fact) || typeof profileId !== 'string' || profileId.length === 0) return false;
+  if (CLIENT_RESTORE_REFUSED_TYPES.has(fact.type)) return false;
+  if (SERVER_SHARED_WORLD_EVENT_ID_PREFIXES.some((prefix) => fact.eventId.startsWith(prefix))) return false;
+  const owner = reservedProfileEventOwner(fact.eventId);
+  return owner === null || owner === profileId;
 }
 
 export function isEquipmentFact(fact) {
