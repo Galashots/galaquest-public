@@ -9,7 +9,7 @@ import {
   WOLF_AGGRO_RANGE,
 } from '../public/src/combat/encounter.js';
 import { WOLF_LEVEL_STATS, wolfStatsForLevel } from '../public/src/combat/enemyStats.js';
-import { ENEMY_POPULATION, RECOVERY_SANCTUARY, ROAD } from '../public/src/world/zones/village.js';
+import { ENEMY_POPULATION, RECOVERY_SANCTUARY, ROAD, ROWAN } from '../public/src/world/zones/village.js';
 import { decode, encode, snapshotMessage } from '../public/src/net/protocol.js';
 import { createSimulation } from '../net/gameServerCore.mjs';
 
@@ -58,6 +58,15 @@ test('E2 keeps the opening Wolf outside the north-lane aggro envelope', () => {
   const laneDistance = distanceToPolyline(opening.home.x, opening.home.z, ROAD.points);
   assert.ok(laneDistance > WOLF_AGGRO_RANGE,
     `wolf-1 is ${laneDistance.toFixed(2)}m from the route, inside the ${WOLF_AGGRO_RANGE}m aggro range`);
+});
+
+test('E2 keeps Rowan approach outside the Level-4 Wolf aggro envelope', () => {
+  const wolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-5');
+  assert.ok(wolf);
+  assert.ok(
+    Math.hypot(wolf.home.x - ROWAN.at[0], wolf.home.z - ROWAN.at[1]) > WOLF_AGGRO_RANGE + 2,
+    'the Rowan approach needs speech-radius clearance from the recovery-test Wolf',
+  );
 });
 
 test('E2 C1 has one canonical Wolf level/stat table and preserves Level 1', () => {

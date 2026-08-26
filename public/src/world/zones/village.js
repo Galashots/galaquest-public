@@ -186,7 +186,9 @@ export const ENEMY_POPULATION = Object.freeze([
   authoredWolf('wolf-2', 1, -5.5, 5),
   authoredWolf('wolf-3', 2, 6.5, 15),
   authoredWolf('wolf-4', 2, -6.5, 14),
-  authoredWolf('wolf-5', 4, 7, 30),
+  // Keep the high-level recovery test in the clearing, but leave Rowan's approach outside its
+  // ordinary aggro envelope so a post-Lantern child is not body-blocked before the camp handoff.
+  authoredWolf('wolf-5', 4, 11, 30),
 ]);
 
 // Respawn relocation anchor and its authored no-hostility bubble. The simulation also refuses
