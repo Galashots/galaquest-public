@@ -407,6 +407,14 @@ async function heldWalkToward(targetExpression, stopWithin, maxMillis) {
   }
 }
 
+// A slow runner can reach the fourth-tap read while the child is still down. Starting the in-page
+// walker then spends its whole budget holding an input the rules correctly ignore. Wait for the
+// authoritative recovery first; this is re-engagement after a real knockdown, not a free retry.
+async function reengageAfterRecovery() {
+  await pollUntil((live) => live.hero.downSeconds < 0, { intervalMs: 100, timeoutMs: 15000 });
+  return heldWalkToward(WOLF_TARGET, 1.0, 15000);
+}
+
 await page.eval(startWatch('fight', FIGHT_SAMPLE));
 const readFight = () => page.eval(readWatchSource('fight')).then(JSON.parse);
 // This machine's own pace, measured rather than assumed.
@@ -480,7 +488,8 @@ for (let tap = 0; tap < 200 && !killed && Date.now() < killDeadline; tap += 1) {
   gapsAtTap.push(Number(lastGap.toFixed(2)));
   if (!killed && lastGap > ATTACK_REACH) {
     // eslint-disable-next-line no-await-in-loop
-    await heldWalkToward(WOLF_TARGET, 1.0, 15000);
+    const approach = await reengageAfterRecovery();
+    if (!approach?.arrived) continue;
   }
 }
 // The gap the hero was actually standing at when each swing went out. ATTACK_REACH is 1.7m, so
