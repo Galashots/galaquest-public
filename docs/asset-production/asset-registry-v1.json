@@ -3490,7 +3490,7 @@
       "recoverability": "VERIFIED_FROM_GIT",
       "source": {
         "path": "public/assets/enemies/candidates/README.md",
-        "sha256": "5881e5300d2021c62546a99b7c828c16a25fbb179c8960ecef755a71cee386cb",
+        "sha256": null,
         "size_bytes": 3335,
         "authority": "public-main"
       },

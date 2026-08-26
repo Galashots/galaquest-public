@@ -19,7 +19,8 @@ for (const abs of files(join(root, 'public/assets'))) {
   const path = relative(root, abs).replaceAll('\\', '/');
   const ext = path.split('.').pop().toLowerCase();
   const isCandidate = path.includes('/candidates/');
-  const record = { asset_id: slug(path), display_name: path.split('/').pop(), asset_kind: ext === 'glb' ? 'model' : 'texture', lifecycle: isCandidate ? 'QUALIFYING' : 'PRODUCTION', custody: 'IN_GIT', recoverability: 'VERIFIED_FROM_GIT', source: { path, sha256: sha256(abs), size_bytes: statSync(abs).size, authority: 'public-main' }, provider: { task_ids: [], context_alias: null }, parent_asset_id: null, derivative_of: null, qualification_gates: gates(), evidence_refs: [`git:${path}`], notes: isCandidate ? 'Candidate only; not runtime promotion.' : 'Current public runtime asset; gates remain independent.' };
+  const byteStable = ext === 'glb' || ext === 'jpg' || ext === 'png';
+  const record = { asset_id: slug(path), display_name: path.split('/').pop(), asset_kind: ext === 'glb' ? 'model' : 'texture', lifecycle: isCandidate ? 'QUALIFYING' : 'PRODUCTION', custody: 'IN_GIT', recoverability: 'VERIFIED_FROM_GIT', source: { path, sha256: byteStable ? sha256(abs) : null, size_bytes: statSync(abs).size, authority: 'public-main' }, provider: { task_ids: [], context_alias: null }, parent_asset_id: null, derivative_of: null, qualification_gates: gates(), evidence_refs: [`git:${path}`], notes: isCandidate ? 'Candidate only; not runtime promotion.' : (byteStable ? 'Current public runtime asset; gates remain independent.' : 'Repository documentation companion; text hash intentionally omitted because Git checkout line endings vary by platform.') };
   record.qualification_gates.provenance = 'PASS'; record.qualification_gates.structural = ext === 'glb' ? 'PASS' : 'N/A'; record.qualification_gates.runtime = isCandidate ? 'UNKNOWN' : 'PASS'; add(record);
 }
 
