@@ -253,8 +253,10 @@ try {
 
   await configure(tabA, PORTRAIT);
   await holdToward(tabA, { x: 7, z: 24.5 }, 0);
-  await holdToward(tabA, { x: 0, z: 24.5 }, 0);
-  const returning = await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), 3_000);
+  const movedAway = await holdToward(tabA, { x: 0, z: 24.5 }, 0);
+  const returning = movedAway.enemies.some((enemy) => enemy.mode === 'returning')
+    ? movedAway
+    : await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), 3_000);
   evidence.checkpoints.leash = returning;
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
