@@ -27,7 +27,9 @@ import {
   HERO_MAX_HP, WOLF_AGGRO_RANGE, createPartyEncounterState, stepParty,
 } from '../public/src/combat/encounter.js';
 import { rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
-import { RANGER, RANGER_CLAIM, SPAWNS } from '../public/src/world/zones/village.js';
+import {
+  RANGER, RANGER_CLAIM, SINGLE_WOLF_FIXTURE_SPAWN,
+} from '../public/src/world/zones/village.js';
 
 const STEP = 1 / 60;
 
@@ -41,7 +43,7 @@ const AT_WREN = { x: RANGER.at[0], z: RANGER.at[1] };
  * Somewhere the wolf can reach and Wren cannot protect. Derived rather than typed: it has to be
  * outside RANGER_CLAIM but inside WOLF_AGGRO_RANGE of the spawn, or seam 2 proves nothing.
  */
-const OUT_IN_THE_OPEN = { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] - 1.2 };
+const OUT_IN_THE_OPEN = { x: SINGLE_WOLF_FIXTURE_SPAWN.x, z: SINGLE_WOLF_FIXTURE_SPAWN.z - 1.2 };
 
 function sanctuaryFor(position, beaconLit) {
   return rangerSanctuaryHolds({
@@ -86,11 +88,11 @@ const downsOf = (events, heroId) => events.filter((e) => e.type === 'hero-down' 
 // If the geometry stopped being threatening, all four would pass for the wrong reason and read as
 // a working sanctuary. So pin the danger first, from the shipped zone data.
 test('the ground in front of Wren really is inside the wolf\'s reach, or the seams below are vacuous', () => {
-  const spawnToWren = Math.hypot(SPAWNS.wolf[0] - RANGER.at[0], SPAWNS.wolf[1] - RANGER.at[1]);
+  const spawnToWren = Math.hypot(SINGLE_WOLF_FIXTURE_SPAWN.x - RANGER.at[0], SINGLE_WOLF_FIXTURE_SPAWN.z - RANGER.at[1]);
   assert.ok(spawnToWren <= WOLF_AGGRO_RANGE,
     `the wolf spawns ${spawnToWren.toFixed(2)}m from Wren against an aggro range of `
     + `${WOLF_AGGRO_RANGE}m -- if that is no longer true, these tests prove nothing`);
-  const openToSpawn = Math.hypot(OUT_IN_THE_OPEN.x - SPAWNS.wolf[0], OUT_IN_THE_OPEN.z - SPAWNS.wolf[1]);
+  const openToSpawn = Math.hypot(OUT_IN_THE_OPEN.x - SINGLE_WOLF_FIXTURE_SPAWN.x, OUT_IN_THE_OPEN.z - SINGLE_WOLF_FIXTURE_SPAWN.z);
   assert.ok(openToSpawn <= WOLF_AGGRO_RANGE, 'the open position must be huntable');
   assert.equal(sanctuaryFor(OUT_IN_THE_OPEN, true), false, 'the open position must be unprotected');
   assert.equal(sanctuaryFor(AT_WREN, true), true, 'Wren\'s own spot must be protected');
@@ -99,7 +101,7 @@ test('the ground in front of Wren really is inside the wolf\'s reach, or the sea
 // --- seam 1: a conversation-length window at Wren costs no hearts -------------------------------
 
 test('seam 1: Beacon lit, a hero standing at Wren for a whole conversation is never bitten', () => {
-  const state = createPartyEncounterState({ wolfSpawn: { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }, heroIds: ['A'] });
+  const state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: ['A'] });
   const after = runFight(state, { A: AT_WREN }, { seconds: CONVERSATION_SECONDS });
 
   assert.deepEqual(hurtsTo(after.events, 'A'), [],
@@ -111,7 +113,7 @@ test('seam 1: Beacon lit, a hero standing at Wren for a whole conversation is ne
 // --- seam 2: per hero, not a global freeze ------------------------------------------------------
 
 test('seam 2: one hero protected at Wren, one out in the open -- only the open one is hunted', () => {
-  const state = createPartyEncounterState({ wolfSpawn: { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }, heroIds: ['A', 'B'] });
+  const state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: ['A', 'B'] });
   const after = runFight(state, { A: AT_WREN, B: OUT_IN_THE_OPEN }, { seconds: CONVERSATION_SECONDS });
 
   assert.deepEqual(hurtsTo(after.events, 'A'), [], 'the hero at Wren must be safe');
@@ -123,7 +125,7 @@ test('seam 2: one hero protected at Wren, one out in the open -- only the open o
 // --- seam 3: walking away gives the wolf its hero back ------------------------------------------
 
 test('seam 3: a hero who leaves the sanctuary is an ordinary target again', () => {
-  let state = createPartyEncounterState({ wolfSpawn: { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }, heroIds: ['A'] });
+  let state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: ['A'] });
   const sheltered = runFight(state, { A: AT_WREN }, { seconds: 4 });
   assert.deepEqual(hurtsTo(sheltered.events, 'A'), [], 'still safe while standing there');
 
@@ -136,7 +138,7 @@ test('seam 3: a hero who leaves the sanctuary is an ordinary target again', () =
 // --- seam 4: the wolf is still there for a sibling who arrives later ----------------------------
 
 test('seam 4: the village wolf is not retired by the Beacon -- a late sibling still gets the fight', () => {
-  const state = createPartyEncounterState({ wolfSpawn: { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }, heroIds: ['LATE'] });
+  const state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: ['LATE'] });
   const after = runFight(state, { LATE: OUT_IN_THE_OPEN }, { seconds: CONVERSATION_SECONDS });
 
   assert.ok(hurtsTo(after.events, 'LATE').length > 0,
@@ -148,7 +150,7 @@ test('seam 4: the village wolf is not retired by the Beacon -- a late sibling st
 
 test('before the Beacon burns there is nobody standing there, so the ground is ordinary village', () => {
   assert.equal(sanctuaryFor(AT_WREN, false), false);
-  const state = createPartyEncounterState({ wolfSpawn: { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }, heroIds: ['A'] });
+  const state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: ['A'] });
   const after = runFight(state, { A: AT_WREN }, { seconds: CONVERSATION_SECONDS, beaconLit: false });
   assert.ok(hurtsTo(after.events, 'A').length > 0,
     'an unlit Beacon means no Wren, and no Wren means no sanctuary');
@@ -177,7 +179,7 @@ test('a hero whose position is not a number is not accidentally protected', () =
 // rules as they shipped before this change, and require that it DOES bite. If this ever goes quiet,
 // seam 1 has stopped proving anything and the two must be fixed together.
 test('red-capable: without the targetable datum, the same twelve seconds at Wren is a mauling', () => {
-  const state = createPartyEncounterState({ wolfSpawn: { x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }, heroIds: ['A'] });
+  const state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: ['A'] });
   const after = runFight(state, { A: AT_WREN }, { seconds: CONVERSATION_SECONDS, protect: new Set() });
 
   assert.ok(hurtsTo(after.events, 'A').length > 0,

@@ -164,6 +164,10 @@ export const WOLF_SPAWN = Object.freeze({ x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] }
 export const WOLF_SPAWNS = Object.freeze(
   SPAWNS.patrol.map(([x, z]) => Object.freeze({ x, z })),
 );
+// Explicit one-Wolf fixture authority for historical combat/sanctuary tests. These tests model a
+// deliberately isolated serial encounter, not production's five-Wolf population, so they must not
+// borrow the production opening seam by implication.
+export const SINGLE_WOLF_FIXTURE_SPAWN = WOLF_SPAWNS[0];
 export const HERO_SPAWN = Object.freeze({ x: SPAWNS.heroes[0], z: SPAWNS.heroes[1] });
 
 // E2: the first fixed-world ordinary-enemy field. These are five distinct authored identities, not
