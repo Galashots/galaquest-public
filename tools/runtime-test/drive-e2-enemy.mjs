@@ -170,6 +170,18 @@ async function startProtectionSampler(tab) {
     window.__e2DownObserved = false;
     window.__e2DownSeconds = -1;
     window.__e2ProtectionSamples = [];
+    window.__e2ProtectionObserver = (async () => {
+      const deadline = performance.now() + 60_000;
+      while (performance.now() < deadline) {
+        const seconds = window.__galaQuestRuntime.encounterState().hero.protectionSeconds;
+        if (seconds > 0) {
+          window.__e2ProtectionSamples.push(seconds);
+          return true;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 16));
+      }
+      return false;
+    })();
     window.__e2ProtectionTimer = window.setInterval(() => {
       const seconds = window.__galaQuestRuntime.encounterState().hero.protectionSeconds;
       if (seconds > 0) window.__e2ProtectionSamples.push(seconds);
