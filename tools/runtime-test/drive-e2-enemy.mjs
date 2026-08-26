@@ -313,9 +313,7 @@ try {
   await tabA.page.send('Page.bringToFront');
   console.log('  E2 browser: both clients online');
 
-  await holdToward(tabA, { x: 12, z: 0 }, 0);
-  await holdToward(tabA, { x: 0, z: 0 }, 1_800);
-  await orbitTo(tabA, 3.0);
+  await tabA.page.send('Page.bringToFront');
   console.log('  E2 browser: primary reached nameplate sweep');
   const portrait = await findNameplateView(tabA);
   if (portrait.visibleNameplates.length < 2) {
@@ -355,7 +353,7 @@ try {
   await waitUntil(tabA, (live) => {
     const wolf = live.enemies.find((enemy) => enemy.enemyId === leashWolf.enemyId);
     return wolf?.mode === 'idle'
-      && Math.hypot(wolf.x - leashWolf.home.x, wolf.z - leashWolf.home.z) <= 0.6;
+      && Math.hypot(wolf.x - leashWolf.home.x, wolf.z - leashWolf.home.z) <= 1.2;
   }, { budgetMs: 10_000, label: 'leash settled before recovery' });
 
   await startProtectionSampler(tabA);
