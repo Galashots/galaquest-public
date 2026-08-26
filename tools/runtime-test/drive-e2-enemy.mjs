@@ -201,24 +201,29 @@ async function findNameplateView(tab) {
 
 async function holdToward(tab, target, extraMillis = 1_500) {
   await tab.page.send('Page.bringToFront');
-  const live = await state(tab);
-  const dx = target.x - live.player.x;
-  const dz = target.z - live.player.z;
-  const distance = Math.hypot(dx, dz);
-  const cos = Math.cos(live.heading);
-  const sin = Math.sin(live.heading);
-  const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
-  const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
-  const keys = [];
-  if (screenX > 0.2) keys.push('KeyD'); else if (screenX < -0.2) keys.push('KeyA');
-  if (screenY > 0.2) keys.push('KeyW'); else if (screenY < -0.2) keys.push('KeyS');
-  for (const code of keys) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
-  try {
-    await sleep(Math.max(500, Math.ceil((distance / 2.8) * 1000) + extraMillis));
-  } finally {
-    for (const code of keys.reverse()) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
+  let live = await state(tab);
+  const deadline = deadlineAfter(30_000 + extraMillis);
+  while (Date.now() < deadline) {
+    const dx = target.x - live.player.x;
+    const dz = target.z - live.player.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 1.2) break;
+    const cos = Math.cos(live.heading);
+    const sin = Math.sin(live.heading);
+    const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
+    const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
+    const keys = [];
+    if (screenX > 0.2) keys.push('KeyD'); else if (screenX < -0.2) keys.push('KeyA');
+    if (screenY > 0.2) keys.push('KeyW'); else if (screenY < -0.2) keys.push('KeyS');
+    for (const code of keys) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
+    try {
+      await sleep(250);
+    } finally {
+      for (const code of keys.reverse()) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
+    }
+    live = await state(tab);
   }
-  return state(tab);
+  return live;
 }
 
 async function waitUntil(tab, predicate, { budgetMs = 25_000, intervalMs = 150, label = 'checkpoint' } = {}) {
