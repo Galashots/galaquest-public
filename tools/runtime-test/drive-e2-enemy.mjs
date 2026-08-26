@@ -170,6 +170,19 @@ async function startProtectionSampler(tab) {
     window.__e2DownObserved = false;
     window.__e2DownSeconds = -1;
     window.__e2ProtectionSamples = [];
+    window.__e2DownObserver = (async () => {
+      const deadline = performance.now() + 60_000;
+      while (performance.now() < deadline) {
+        const seconds = window.__galaQuestRuntime.encounterState().hero.downSeconds;
+        if (seconds >= 0) {
+          window.__e2DownObserved = true;
+          window.__e2DownSeconds = seconds;
+          return true;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 16));
+      }
+      return false;
+    })();
     window.__e2ProtectionObserver = (async () => {
       const deadline = performance.now() + 60_000;
       while (performance.now() < deadline) {
@@ -381,7 +394,12 @@ try {
   }, { budgetMs: 10_000, label: 'opening Wolf settled before recovery' });
 
   await startProtectionSampler(tabA);
-  await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 15_000);
+  await holdToward(
+    tabA,
+    { x: recoveryWolf.home.x, z: recoveryWolf.home.z },
+    15_000,
+    (live) => live.downObserved || live.protectionObserved,
+  );
   const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0 || live.downObserved, {
     budgetMs: 30_000, label: 'hero down checkpoint',
   });
