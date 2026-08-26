@@ -126,6 +126,9 @@ function collectDiagnostics(tab) {
 const state = (tab) => tab.page.eval(`JSON.stringify((() => {
   const r = window.__galaQuestRuntime;
   const e = r.encounterState();
+  if (e.hero.protectionSeconds > 0) {
+    (window.__e2ProtectionSamples ??= []).push(e.hero.protectionSeconds);
+  }
   const visible = [...document.querySelectorAll('.enemy-nameplate')]
     .filter((element) => !element.hidden)
     .map((element) => ({
@@ -343,12 +346,12 @@ try {
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
 
+  await startProtectionSampler(tabA);
   await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 1_000);
   const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0, {
     budgetMs: 30_000, label: 'hero down checkpoint',
   });
   evidence.checkpoints.down = down;
-  await startProtectionSampler(tabA);
   const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0 || live.protectionObserved, {
     budgetMs: 20_000, intervalMs: 50, label: 'safe recovery protection checkpoint',
   });
