@@ -13,7 +13,17 @@ const schemaPath = resolve(root, 'docs/asset-production/asset-registry-v1.schema
 const evidencePath = resolve(root, 'docs/asset-production/asset-registry-v1.evidence.json');
 const builderPath = resolve(root, 'tools/asset-registry/build-registry.mjs');
 
-execFileSync(process.execPath, [builderPath], { cwd: root, stdio: 'pipe' });
+const ghaEscape = (value) => String(value).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+const annotate = (level, title, message) => {
+  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::${level} title=${ghaEscape(title)}::${ghaEscape(message)}`);
+};
+
+try {
+  execFileSync(process.execPath, [builderPath], { cwd: root, stdio: 'pipe' });
+} catch (error) {
+  annotate('error', 'asset-registry-builder', error.stderr?.toString() || error.message);
+  throw error;
+}
 const registry = JSON.parse(readFileSync(registryPath, 'utf8'));
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
 const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
