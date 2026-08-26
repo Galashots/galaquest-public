@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galashots.github.io/galaquest-public/asset-registry-v1.schema.json",
+  "title": "GalaQuest Asset Registry v1",
+  "type": "object",
+  "required": ["schema", "generated_utc", "authority", "base_sha", "historical_sources", "provider_reconciliation", "animation_lab_interface", "records"],
+  "properties": {
+    "schema": { "const": "galaquest.asset-registry/1" }, "generated_utc": { "type": "string" }, "authority": { "const": "current canonical asset inventory" }, "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "historical_sources": { "type": "array", "items": { "type": "object", "required": ["path", "role"], "properties": { "path": { "type": "string" }, "role": { "type": "string" } } } },
+    "provider_reconciliation": { "type": "object", "required": ["method", "historical_task_records", "task_not_found", "stale_signed_url_tasks", "no_paid_operations", "records"], "properties": { "records": { "type": "array", "items": { "$ref": "#/$defs/provider-record" } } } }, "animation_lab_interface": { "type": "object", "required": ["consumer", "required_evidence", "exclusions"] },
+    "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+  },
+  "$defs": {
+    "gate": { "enum": ["PASS", "FAIL", "UNKNOWN", "N/A"] },
+    "provider-record": { "type": "object", "required": ["asset_id", "task_id", "task_kind", "provider_status", "consumed_credits", "output_handles", "download_available", "download_attempt_result", "recoverable_without_spend", "notes"], "properties": { "asset_id": { "type": "string" }, "task_id": { "type": "string" }, "task_kind": { "type": "string" }, "provider_status": { "type": "string" }, "consumed_credits": { "type": ["number", "null"] }, "output_handles": { "type": "array" }, "download_available": { "type": "boolean" }, "download_attempt_result": { "type": "string" }, "recoverable_without_spend": { "type": "boolean" }, "notes": { "type": "string" } } },
+    "record": { "type": "object", "required": ["asset_id", "display_name", "asset_kind", "lifecycle", "custody", "recoverability", "source", "provider", "parent_asset_id", "derivative_of", "qualification_gates", "evidence_refs", "notes"], "properties": {
+      "asset_id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$" }, "display_name": { "type": "string" }, "asset_kind": { "enum": ["model", "texture", "character", "gear"] },
+      "lifecycle": { "enum": ["PLANNED", "SOURCE_ONLY", "GENERATED", "QUALIFYING", "QUALIFIED", "PRODUCTION", "REJECTED", "SUPERSEDED", "HISTORICAL"] }, "custody": { "enum": ["IN_GIT", "IN_DRIVE", "PROVIDER_ONLY", "LOCAL_ONLY", "MULTIPLE", "MISSING", "UNKNOWN"] }, "recoverability": { "enum": ["VERIFIED", "VERIFIED_FROM_GIT", "VERIFIED_FROM_DRIVE", "VERIFIED_FROM_PROVIDER", "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT", "STALE_SIGNED_URL", "MISSING_BYTES", "UNKNOWN"] },
+      "source": { "type": "object", "required": ["path", "sha256", "size_bytes", "authority"] }, "provider": { "type": "object", "required": ["task_ids", "context_alias"] }, "parent_asset_id": { "type": ["string", "null"] }, "derivative_of": { "type": ["string", "null"] },
+      "qualification_gates": { "type": "object", "required": ["provenance", "structural", "materials", "rig", "animation", "performance", "visual", "runtime", "owner"], "properties": { "provenance": { "$ref": "#/$defs/gate" }, "structural": { "$ref": "#/$defs/gate" }, "materials": { "$ref": "#/$defs/gate" }, "rig": { "$ref": "#/$defs/gate" }, "animation": { "$ref": "#/$defs/gate" }, "performance": { "$ref": "#/$defs/gate" }, "visual": { "$ref": "#/$defs/gate" }, "runtime": { "$ref": "#/$defs/gate" }, "owner": { "$ref": "#/$defs/gate" } } }, "evidence_refs": { "type": "array", "items": { "type": "string" } }, "notes": { "type": "string" }
+    } }
+  }
+}
