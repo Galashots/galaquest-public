@@ -55,6 +55,12 @@
 //    the NEXT recordKills call's awards at the new level, because each call reads a fresh snapshot of
 //    `profiles.stateFor` at ITS OWN top -- see recordKills below.
 //
+// 5. R1-C2: AND THE SAME AWARD MAY ALSO GRANT GEAR. rewards/combatRewards.js's decideCombatReward is
+//    ONE decision, XP plus an ownership-aware low-probability gear roll -- not two reward loops, and
+//    not a second RNG call site to keep in step with the server's. Ownership only, journalled in the
+//    SAME recordFacts call as the award's own XP so the pair cannot half-land the way the lantern+xp
+//    pair already cannot; equipping remains the child's own choice through the existing G1 law.
+//
 // The server is still the only adjudicator when there IS one. Nothing here decides whether a wolf
 // died; combat/encounter.js does, exactly as before. This only writes down what was already true.
 
@@ -66,11 +72,14 @@ import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from './marks.js';
 import { pendingLanternXpFact } from '../progression/facts.js';
 // R1-C1: the same repeatable combat-XP law net/gameServerCore.mjs's createRewardCoordinator prices
 // awards through -- see combatRewards.js's own header for why this file imports it rather than
-// restating it.
-import { combatXpEventId, combatXpFor } from './combatRewards.js';
+// restating it. R1-C2's decideCombatReward is the SAME law, extended to also decide gear ownership.
+import { combatXpEventId, decideCombatReward } from './combatRewards.js';
 // The ONE authority for "what level is this total XP", so a level read here always agrees with the
 // level progression/heroStats.js resolves for the same profile a frame later.
 import { levelForXp } from '../progression/levels.js';
+// R1-C2: the SAME production ordinary-drop catalogue net/gameServerCore.mjs defaults to -- read only
+// as the default value of the injectable dropCatalogue option below, never restated.
+import { ORDINARY_DROP_ITEM_IDS } from '../progression/items.js';
 
 /** The hero id an offline session credits its kills to. foldEvents attributes a mark to a
  *  contributor, and a solo offline hero has no server-assigned player id to be one -- so it gets a
@@ -122,8 +131,18 @@ export function createLifeIdMinter(options = {}) {
  *   reason: defaulting it here would silently reinstate the life-index collision above. A caller
  *   with no source of unique ids has no business writing durable facts, so this throws rather than
  *   quietly producing ids that look fine until the second session.
+ * @param options.random  R1-C2: the RNG source the ordinary-drop decision rolls against. Defaults to
+ *   Math.random (production's real answer, same default net/gameServerCore.mjs's createRewardCoordinator
+ *   takes) and is injected purely so a test can hand in a scripted sequence -- passed straight through
+ *   to rewards/combatRewards.js's decideCombatReward, the only place it is ever actually called.
+ * @param options.dropCatalogue  R1-C2: the ordinary-drop eligible-id list, mirroring
+ *   net/gameServerCore.mjs's identical `dropCatalogue` option. Defaults to progression/items.js's
+ *   ORDINARY_DROP_ITEM_IDS (production's real, currently EMPTY answer); overridable only so a test
+ *   can prove the full offline round trip with a fixture id.
  */
-export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
+export function createOfflineProgress({
+  profiles, profileId, mintLifeId, random = Math.random, dropCatalogue = ORDINARY_DROP_ITEM_IDS,
+}) {
   if (typeof mintLifeId !== 'function') {
     throw new TypeError('createOfflineProgress needs a mintLifeId that is unique across sessions');
   }
@@ -172,13 +191,41 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
     // fold, not a second reward source. AFTER the mark loop on purpose (event ORDER is unchanged by
     // Fix 1 -- only the level input moved): main.js's dispatcher still journals marks before combat
     // XP for one batch, exactly as before.
+    //
+    // R1-C2: and, per award, ONE ordinary-drop decision alongside the XP -- decideCombatReward is the
+    // SAME law net/gameServerCore.mjs's applyCombatRewards calls, so "offline produces the same
+    // logical decision as online" is true by construction (GQ-007), not by two matching RNG call
+    // sites somebody has to keep in step. ownedItemIds is read FRESH per award (profiles.stateFor,
+    // never cached above this loop): eligibility is a real-time "what does this profile currently
+    // own" question, not a price -- an earlier award IN THIS SAME CALL that already granted an item
+    // must make that item ineligible for a later award's roll, the identical real-time-ownership
+    // reasoning the server side's own comment gives for reading ownedItemIdsFor fresh per lifeId group.
     for (const award of folded.awards) {
       if (award.type !== 'mark-earned') continue;
-      const xp = combatXpFor({ heroLevel, enemyLevel: award.enemyLevel });
-      if (xp <= 0) continue;
-      const eventId = combatXpEventId(profileId, award.lifeId);
-      profiles.recordFacts(profileId, [{ eventId, type: 'xp-earned', value: String(xp) }]);
-      raised.push({ type: 'xp-earned', eventId, value: String(xp) });
+      const { xp, gearItemId } = decideCombatReward({
+        heroLevel,
+        enemyLevel: award.enemyLevel,
+        ownedItemIds: profiles.stateFor(profileId).ownedItemIds,
+        random,
+        catalogue: dropCatalogue,
+      });
+
+      const xpEventId = combatXpEventId(profileId, award.lifeId);
+      // offlineProgress.js's OWN grant identity, but the SAME `own:<profile>:<item>` SHAPE
+      // net/gameServerCore.mjs's grantOwnership/applyCombatRewards already use -- one ownership
+      // identity law, online or offline, so a device that later reconnects and unions its journal
+      // with the server's cannot mint two different names for owning the identical item.
+      const gearEventId = gearItemId ? `own:${profileId}:${gearItemId}` : null;
+
+      // ONE recordFacts call for the pair, the same "cannot half-land" discipline the lantern+xp
+      // pair already keeps (this file's own header, point 3) -- now covering combat-xp+gear too.
+      const facts = [];
+      if (xp > 0) facts.push({ eventId: xpEventId, type: 'xp-earned', value: String(xp) });
+      if (gearEventId) facts.push({ eventId: gearEventId, type: 'gear-owned', value: gearItemId });
+      if (facts.length === 0) continue;
+
+      profiles.recordFacts(profileId, facts);
+      for (const fact of facts) raised.push({ type: fact.type, eventId: fact.eventId, value: fact.value });
     }
 
     // Derived from the durable count, never from a counter alongside it. A child who earned two

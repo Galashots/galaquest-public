@@ -26,6 +26,11 @@ import { LEVEL_ONE } from '../progression/levels.js';
 // combat/'s own pure data back out. See MAX_COMBAT_XP_PER_KILL below for the one thing this file
 // needs it for.
 import { WOLF_LEVEL_STATS } from '../combat/enemyStats.js';
+// R1-C2: the catalogue's OWN derived eligible-id list, read for data only -- exactly the same
+// "authority owns the data, this file only prices/decides against it" relationship this file already
+// has with WOLF_LEVEL_STATS above. items.js decides what CAN ever be an ordinary drop (currently
+// nothing); this file decides WHETHER one is granted this kill, never which items exist.
+import { ORDINARY_DROP_ITEM_IDS } from '../progression/items.js';
 
 function assertLevel(level, name) {
   if (!Number.isSafeInteger(level) || level < LEVEL_ONE) {
@@ -142,3 +147,67 @@ export const MAX_COMBAT_XP_PER_KILL = Math.max(
     (stats) => combatXpFor({ heroLevel: LEVEL_ONE, enemyLevel: stats.level }),
   ),
 );
+
+// ── R1-C2: THE ORDINARY-DROP DECISION -- MECHANISM, NOT CONTENT ────────────────────────────────────
+//
+// The starting per-distinct-eligible-profile, per-defeated-enemy-life chance
+// docs/briefs/PROGRESSION_R1_COMBAT_XP_LOOT_REWARD_SEAM.md names as V0 tuning. Re-tunable with
+// rationale the same way BASE_COMBAT_XP is; not Owner-locked.
+export const ORDINARY_DROP_CHANCE = 0.1;
+
+/**
+ * The unowned subset of `catalogue` this profile could still be granted -- eligibility, computed
+ * BEFORE any chance roll ever happens, per the brief's own ordering ("determine the profile's
+ * eligible unowned ordinary-drop items first"). Owned items are never re-promised; there is nothing
+ * else this function is for.
+ *
+ * SORTED, deliberately: `catalogue` is authored order (object insertion order via
+ * `Object.values(ITEM_DEFS)`, indirectly), which is stable but not itself a meaningful sequence for
+ * selection. Sorting makes `decideCombatReward`'s `Math.floor(random() * eligible.length)` index into
+ * the SAME array regardless of catalogue insertion order or Set/Map iteration quirks -- i.e.
+ * deterministic given the same ownedItemIds and the same injected random stream, which is what makes
+ * the fixture-proof path in test/progression-r1-c2.test.mjs reproducible at all.
+ */
+export function eligibleOrdinaryDropItemIds(ownedItemIds, catalogue = ORDINARY_DROP_ITEM_IDS) {
+  const owned = new Set(ownedItemIds);
+  return catalogue.filter((itemId) => !owned.has(itemId)).sort();
+}
+
+/**
+ * ONE combat reward decision -- the XP this kill is worth (combatXpFor, unchanged from C1) PLUS
+ * whether it also grants gear ownership. Pure: `random` is injected (never `Math.random` called
+ * directly, see the structural test below), `catalogue` is injected (so the gear branch is provable
+ * by fixture without R1 shipping fake production content), and nothing here writes anything --
+ * callers (net/gameServerCore.mjs's createRewardCoordinator, rewards/offlineProgress.js) decide what
+ * to do with the returned `{ xp, gearItemId }`.
+ *
+ * THE ORDER IS THE CONTRACT, and it is enforced by the shape of this function, not merely documented:
+ *   1. eligibility first (`eligibleOrdinaryDropItemIds`);
+ *   2. an EMPTY eligible set returns `gearItemId: null` immediately and calls `random` ZERO times --
+ *      an honest suppression (no gear promise, ever, when nothing could legitimately be granted) that
+ *      also keeps an injected RNG stream deterministic: a caller feeding a scripted sequence of
+ *      random() values does not have to account for a draw that silently didn't happen;
+ *   3. only once eligibility is known does the chance roll happen: `random() < chance`;
+ *   4. only on success is a selection made: `eligible[Math.floor(random() * eligible.length)]`.
+ * Selection is ownership-only -- this returns an itemId, never an equip fact; equipping remains the
+ * existing G1 choice/equip law's job alone, and this function has no way to bypass it even if a
+ * caller wanted to.
+ */
+export function decideCombatReward({
+  heroLevel,
+  enemyLevel,
+  ownedItemIds,
+  random,
+  chance = ORDINARY_DROP_CHANCE,
+  catalogue = ORDINARY_DROP_ITEM_IDS,
+}) {
+  const xp = combatXpFor({ heroLevel, enemyLevel });
+
+  const eligible = eligibleOrdinaryDropItemIds(ownedItemIds, catalogue);
+  if (eligible.length === 0) return { xp, gearItemId: null };
+
+  if (random() < chance) {
+    return { xp, gearItemId: eligible[Math.floor(random() * eligible.length)] };
+  }
+  return { xp, gearItemId: null };
+}

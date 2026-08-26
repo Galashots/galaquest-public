@@ -75,6 +75,7 @@ import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
 import { REWARD_EVENT_TYPES, createRewardFeedback, soundForRewardEvent } from './rewards/feedback.js';
 import { createMarkSparks } from './rewards/markSpark.js';
+import { createCeremonyGate } from './rewards/ceremonyGate.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
 import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
@@ -1179,6 +1180,11 @@ async function bootstrap() {
   // fire on the same frame, each banner replacing the last, and the capture of the child's first
   // level shows a toast reading "LANTERN MARK 3 / 3". The strongest routine progression celebration
   // in the game cannot be a queue slot that three other beats are also using.
+  //
+  // R1-C2, D7: THE CEREMONY GATE. Level-up remains the strongest routine celebration even now that a
+  // combat kill can also offer gear -- see rewards/ceremonyGate.js's own header for the queue/release
+  // contract. Constructed here, ahead of both ceremonies it arbitrates between.
+  const ceremonyGate = createCeremonyGate();
   const levelUpElement = document.querySelector('#level-up');
   const levelUpLevelElement = document.querySelector('#level-up-level-value');
   const levelUpHpElement = document.querySelector('#level-up-hp');
@@ -1238,8 +1244,14 @@ async function bootstrap() {
     levelUpPowerDeltaElement.textContent = summary.power.deltaText;
     levelUpPowerAfterElement.textContent = summary.power.afterText;
     levelUpElement.dataset.shown = 'true';
+    // D7: level-up now owns the ceremony gate for as long as this card is up -- a gear ceremony
+    // requested while this is true waits and is released the moment the timeout below fires.
+    ceremonyGate.levelUpStarted();
     window.clearTimeout(levelUpTimer);
-    levelUpTimer = window.setTimeout(() => { levelUpElement.dataset.shown = 'false'; }, LEVEL_UP_SHOWN_MS);
+    levelUpTimer = window.setTimeout(() => {
+      levelUpElement.dataset.shown = 'false';
+      ceremonyGate.levelUpEnded();
+    }, LEVEL_UP_SHOWN_MS);
 
     // Read aloud on the same terms every other line in the game is: only once the child has asked to
     // be read to. The numbers are spoken as words rather than as the on-screen arrows, which read
@@ -2162,7 +2174,20 @@ async function bootstrap() {
     // loop -- see the level-up beat there for why a one-shot beat must never hang off an
     // announcement. What this handler adds is the NAMED fact, journalled by the dispatch loop under
     // the id the store wrote it with, so this device keeps its own copy of the hundred XP.
-    'xp-earned'(event) { rewardEventLog.push(event); },
+    //
+    // R1-C2, D7: AND, ONLY WHEN THIS IS GENUINELY NEWS, the compact "+N XP" float. Gated on
+    // firstTimeSeen for the identical reason mark-earned/lantern-unlocked above are: a reconnect to a
+    // server that has never heard of this child teaches its own facts back and hears every one of
+    // them announced straight to it, and a float for XP earned minutes (or days) ago is not feedback,
+    // it is noise. The meter/Level/POWER pill itself is unaffected either way -- it always moves from
+    // the diffed rewards block, never from this event -- so hydration still LOOKS right; it is only
+    // this transient number that must stay silent on a re-announcement.
+    'xp-earned'(event, { firstTimeSeen }) {
+      rewardEventLog.push(event);
+      if (!firstTimeSeen) return;
+      const amount = Number(event.value);
+      if (Number.isSafeInteger(amount) && amount > 0) showXpFloat(amount);
+    },
   });
 
   // The gap that mattered most: previously a bitten hero got no feedback at all. See
@@ -2174,6 +2199,23 @@ async function bootstrap() {
     heroHurtFlashElement.dataset.shown = 'true';
     window.clearTimeout(heroHurtTimer);
     heroHurtTimer = window.setTimeout(() => { heroHurtFlashElement.dataset.shown = 'false'; }, 90);
+  }
+
+  // R1-C2, D7: the compact "+N XP" float -- see its own CSS comment in index.html for the element
+  // and the reduced-motion carve-out. Same one-element/one-attribute/one-timeout shape as
+  // flashHeroHurt just above; 900ms matches the CSS animation's own duration so the attribute
+  // resets right as the rise-and-fade finishes (or, under reduced motion, right as the flash ends).
+  const heroXpFloatElement = document.querySelector('#hero-xp-float');
+  let heroXpFloatTimer = null;
+  function showXpFloat(amount) {
+    heroXpFloatElement.textContent = `+${amount} XP`;
+    // Leaving the shown state and coming back needs a frame in between to re-trigger the CSS
+    // animation from its own start -- the same reason celebrateLevelUp's hero-progress-lift and
+    // celebrateMarkArrival both wait one.
+    delete heroXpFloatElement.dataset.shown;
+    window.requestAnimationFrame(() => { heroXpFloatElement.dataset.shown = 'true'; });
+    window.clearTimeout(heroXpFloatTimer);
+    heroXpFloatTimer = window.setTimeout(() => { heroXpFloatElement.dataset.shown = 'false'; }, 900);
   }
 
   // GP1-C5: going down is a STATE the whole screen enters, not a line of text. See #hero-down-veil
@@ -3199,12 +3241,19 @@ async function bootstrap() {
           fromDamage: damageFor(currentEquippedWeaponId),
           toDamage: damageFor(WILDWOOD_BLADE_ID),
         });
-        unlockCard.show(unlocked);
-        // And say it, for the child this card was always least use to. Same latch as the bubble and
-        // the banner -- silent until a real tap has asked for it. See unlockCardState for why the
-        // spoken wording is not the four strings on the card.
-        speakKeeperLineIfUnlocked(unlocked.spoken);
-        audio.play('blade-unlock');
+        // D7: routed through the ceremony gate -- shown immediately if nothing else is up, held and
+        // released after a level-up showing in the SAME beat, exactly the case a wolf that both
+        // crosses a threshold and (once G2 populates a pool) drops gear would create. The whole
+        // ceremony -- card, spoken line, sound -- moves together as one beat, never split so the
+        // sound/speech would announce a card the level-up is still holding off-screen.
+        ceremonyGate.requestGearCeremony(() => {
+          unlockCard.show(unlocked, () => ceremonyGate.gearCeremonyEnded());
+          // And say it, for the child this card was always least use to. Same latch as the bubble and
+          // the banner -- silent until a real tap has asked for it. See unlockCardState for why the
+          // spoken wording is not the four strings on the card.
+          speakKeeperLineIfUnlocked(unlocked.spoken);
+          audio.play('blade-unlock');
+        });
       }
 
       // ── G1-C3: THE HELMET, ACQUIRED ─────────────────────────────────────────────────────────
@@ -3237,15 +3286,19 @@ async function bootstrap() {
           power: powerChange(powerFor(heroStatsThisFrame), withHelmetPower),
           prompt: 'EQUIP NOW?',
         });
-        unlockCard.show(acquired, {
-          accent: swatchFor(HELMET_SILVERGUARD_ID),
-          icon: HELMET_ICON_SVG,
-          // The second beat, the child's to take. EQUIP NOW mints the same durable equip fact the
-          // Hero screen would; LATER leaves it owned-but-off for the owned strip to equip later.
-          onEquip: () => equipHeroItem(HELMET_SILVERGUARD_ID),
+        // D7: same ceremony gate as the Blade above -- see its own comment.
+        ceremonyGate.requestGearCeremony(() => {
+          unlockCard.show(acquired, {
+            accent: swatchFor(HELMET_SILVERGUARD_ID),
+            icon: HELMET_ICON_SVG,
+            // The second beat, the child's to take. EQUIP NOW mints the same durable equip fact the
+            // Hero screen would; LATER leaves it owned-but-off for the owned strip to equip later.
+            onEquip: () => equipHeroItem(HELMET_SILVERGUARD_ID),
+            onDone: () => ceremonyGate.gearCeremonyEnded(),
+          });
+          speakKeeperLineIfUnlocked(acquired.spoken);
+          audio.play('blade-unlock');
         });
-        speakKeeperLineIfUnlocked(acquired.spoken);
-        audio.play('blade-unlock');
       }
 
       // ── ARC 2: THE SATCHEL AND THE CHARM, adopted the same way ──────────────────────────────

@@ -26,10 +26,14 @@ import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessa
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
 // R1-C1: the one combat-XP law, imported rather than restated -- see combatRewards.js's own header
 // for why the offline fallback (public/src/rewards/offlineProgress.js) asks the SAME two functions.
-import { MAX_COMBAT_XP_PER_KILL, combatXpEventId, combatXpFor } from '../public/src/rewards/combatRewards.js';
+// R1-C2 adds decideCombatReward: the SAME law, extended to also decide gear ownership -- see its own
+// header for the eligibility-before-chance-before-selection contract this file never re-implements.
+import {
+  MAX_COMBAT_XP_PER_KILL, combatXpEventId, combatXpFor, decideCombatReward,
+} from '../public/src/rewards/combatRewards.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
-  isKnownItem, itemDef,
+  ORDINARY_DROP_ITEM_IDS, isKnownItem, itemDef,
 } from '../public/src/progression/items.js';
 // One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
@@ -127,9 +131,21 @@ export const DEFAULT_REWARD_STORE_PATH = fileURLToPath(new URL('../data/rewards.
  *
  * @param options.rewardStorePath  defaults to DEFAULT_REWARD_STORE_PATH (the real, tracked data/
  *   directory). Tests always override this to a path under the OS temp dir.
+ * @param options.random  R1-C2: the RNG source applyCombatRewards' gear-drop decision rolls against.
+ *   Defaults to Math.random -- production's real answer -- and is injected here (rather than called
+ *   directly anywhere in this file) purely so a test can hand in a scripted sequence. It is passed
+ *   straight through to rewards/combatRewards.js's decideCombatReward, which is the only place it is
+ *   ever actually called, and never inside public/src/combat/ (test/combat-purity.test.mjs's own ban).
+ * @param options.dropCatalogue  R1-C2: the ordinary-drop eligible-id list applyCombatRewards checks
+ *   against. Defaults to progression/items.js's ORDINARY_DROP_ITEM_IDS -- production's real answer,
+ *   currently EMPTY -- and exists ONLY so a test can prove the full server round trip (a real store,
+ *   a real transactional batch, a real reward event) with a fixture id, without R1 shipping actual
+ *   drop content. Never read from anywhere else in this file; this is the one seam.
  */
 export function createRewardCoordinator(options = {}) {
   const store = openRewardStore(options.rewardStorePath ?? DEFAULT_REWARD_STORE_PATH);
+  const random = options.random ?? Math.random;
+  const dropCatalogue = options.dropCatalogue ?? ORDINARY_DROP_ITEM_IDS;
   // playerId -> guestId, for connections that supplied one at join. A playerId with no entry here
   // is ephemeral: still rewarded for the session (`ephemeral` below), never persisted.
   const guestIdByPlayer = new Map();
@@ -689,18 +705,19 @@ export function createRewardCoordinator(options = {}) {
    * function only groups, dedupes and prices, never re-folds a single combat event.
    *
    * TWO DEDUPES, in a specific order and for different reasons:
-   *   1. by guestId, computed while grouping and therefore BEFORE combatXpFor is ever called for a
-   *      guest -- two heroIds/tabs sharing one guestId are ONE distinct profile and must get ONE
-   *      price, never two. Doing this before pricing (rather than after, and trusting the store's own
-   *      INSERT OR IGNORE to absorb the second row) is what keeps a future C2 gear roll from ever being
-   *      rolled twice for one profile -- rolling and then discarding the second roll would still have
-   *      consumed a random draw nobody asked for.
+   *   1. by guestId, computed while grouping and therefore BEFORE combatXpFor -- and, since R1-C2,
+   *      the gear-drop roll -- is ever run for a guest: two heroIds/tabs sharing one guestId are ONE
+   *      distinct profile and must get ONE price and AT MOST ONE loot roll, never two. Doing this
+   *      before pricing/rolling (rather than after, and trusting the store's own INSERT OR IGNORE to
+   *      absorb the second row) is what keeps a second tab from ever consuming a second random draw
+   *      -- rolling and then discarding the second roll would still have consumed one nobody asked for.
    *   2. the store's own idempotent write, per guest per lifeId -- a reprocessed tick or a redelivered
    *      wolf-defeated must mint nothing a second time and must not re-announce an already-durable fact.
    *
-   * An ephemeral (guestId-less) contributor earns no combat XP, on the same posture every other
-   * durable fact in this file already takes: there is no durable identity to write it under, so zero
-   * is the truth for it rather than a fallback (see rewardsFor's own comment on the same question).
+   * An ephemeral (guestId-less) contributor earns no combat XP and rolls no loot, on the same posture
+   * every other durable fact in this file already takes: there is no durable identity to write either
+   * one under, so zero/none is the truth for it rather than a fallback (see rewardsFor's own comment
+   * on the same question).
    *
    * @param awards           folded.awards straight off foldEvents -- the SAME array applyMarkAward walks.
    * @param heroLevelByGuest snapshotHeroLevelsForBatch's own return, taken before applyMarkAward ran
@@ -737,21 +754,48 @@ export function createRewardCoordinator(options = {}) {
         // header and snapshotHeroLevelsForBatch's for the ruling. Every guestId reaching this line
         // passed the identical filter snapshotHeroLevelsForBatch used, so this is always present.
         const heroLevel = heroLevelByGuest.get(guestId);
-        const xp = combatXpFor({ heroLevel, enemyLevel: group.enemyLevel });
-        if (xp <= 0) continue;
 
-        const eventId = combatXpEventId(guestId, lifeId);
-        // A one-row batch today; C2 appends the gear-owned row (D6) to this SAME array so the pair
-        // lands in one transaction -- see applyLanternUnlock's own header for the permanently
-        // half-landed state two sequential apply() calls would create.
-        const result = store.applyAll([{ guestId, heroId, type: 'xp-earned', eventId, value: String(xp) }]);
+        // R1-C2: ONE reward decision for this guest/life -- XP (C1's law, unchanged) and whether
+        // this kill also grants gear ownership (D6), decided TOGETHER so the drop roll -- if the
+        // eligible set is non-empty at all -- happens exactly once per guest per enemy life, per
+        // dedupe #1 above. ownedItemIdsFor is read fresh here (current true ownership, including
+        // any grant this SAME tick's earlier lifeId group already committed), never cached across
+        // the tick: eligibility is a real-time "what does this guest currently own" question, not a
+        // price that needs batch-start stabilizing the way heroLevel does.
+        const { xp, gearItemId } = decideCombatReward({
+          heroLevel,
+          enemyLevel: group.enemyLevel,
+          ownedItemIds: ownedItemIdsFor(heroId),
+          random,
+          catalogue: dropCatalogue,
+        });
+
+        const xpEventId = combatXpEventId(guestId, lifeId);
+        // grantOwnership's OWN identity shape, reused verbatim (never a second name for the same
+        // ownership fact): a duplicate can never be minted, and eligibility already excluded owned
+        // items above, so this can never re-promise something already owned.
+        const gearEventId = gearItemId ? `own:${guestId}:${gearItemId}` : null;
+
+        // A one-or-two-row batch: C2 appends the gear-owned row (D6) to the SAME array the XP row
+        // lands in, so the pair cannot half-land -- see applyLanternUnlock's own header for the
+        // permanently half-landed state two sequential apply() calls would create, which applies
+        // here identically to a combat-XP-plus-gear pair.
+        const batch = [];
+        if (xp > 0) batch.push({ guestId, heroId, type: 'xp-earned', eventId: xpEventId, value: String(xp) });
+        if (gearEventId) batch.push({ guestId, heroId, type: 'gear-owned', eventId: gearEventId, value: gearItemId });
+        if (batch.length === 0) continue;
+
+        const result = store.applyAll(batch);
         // Only a row the store actually inserted is announced -- checked by eventId, off applyAll's
         // own appliedEventIds, rather than the aggregate `applied` count: a replayed lifeId (a
-        // reprocessed tick, a redelivered wolf-defeated) must not raise a second xp-earned event for
-        // XP that is already on disk, and once C2 adds a second row to this same batch, the count
-        // alone stops being able to say WHICH row was new.
-        if (result.appliedEventIds.includes(eventId)) {
-          rewardEvents.push({ type: 'xp-earned', heroId, eventId, value: String(xp) });
+        // reprocessed tick, a redelivered wolf-defeated) must not raise a second event for a fact
+        // that is already on disk, and with two possible rows in one batch, the count alone cannot
+        // say WHICH row was new.
+        if (xp > 0 && result.appliedEventIds.includes(xpEventId)) {
+          rewardEvents.push({ type: 'xp-earned', heroId, eventId: xpEventId, value: String(xp) });
+        }
+        if (gearEventId && result.appliedEventIds.includes(gearEventId)) {
+          rewardEvents.push({ type: 'gear-owned', heroId, eventId: gearEventId, value: gearItemId });
         }
       }
     }
