@@ -409,23 +409,38 @@ export function openRewardStore(path) {
    * Replay stays a no-op exactly as it is for apply(): the INSERT OR IGNORE and the PRIMARY KEY are
    * doing the idempotency here too, so a device re-sending a journal the store already holds commits
    * an empty transaction rather than double-counting. `applied` counts rows actually added.
+   *
+   * `appliedEventIds` -- R1-C1 -- names WHICH rows those were, additively: `applied` stays the exact
+   * count every existing caller already reads, and this is threading a value insertAward already
+   * computes per row (`result.changes > 0`) rather than new machinery. It exists because
+   * net/gameServerCore.mjs's applyCombatRewards batches potentially many guests' XP facts into one
+   * transaction per tick and has to announce a reward event only for a row that actually landed, the
+   * same question apply()'s own per-row `{ applied: boolean }` already answers for a single-row
+   * caller. Without this, a caller of a multi-row applyAll batch has no way to ask "which of these
+   * were new" except re-deriving it with a second read against the store -- exactly the kind of second
+   * implementation of one answer GQ-007 exists to prevent.
    */
   function applyAll(awards) {
     const batch = [...awards];
     for (const award of batch) assertAppliable(award);
     // Nothing to write takes no write lock. A device whose every fact was refused upstream, or which
     // sent an empty journal, should not make every other writer wait on an empty BEGIN IMMEDIATE.
-    if (batch.length === 0) return { applied: 0 };
+    if (batch.length === 0) return { applied: 0, appliedEventIds: [] };
     let applied = 0;
+    const appliedEventIds = [];
     transaction(db, () => {
-      // Reset inside the transaction body: if this rolls back and a caller retries, the count must
-      // describe the attempt that succeeded rather than accumulating across attempts.
+      // Reset inside the transaction body: if this rolls back and a caller retries, the count and the
+      // id list must describe the attempt that succeeded rather than accumulating across attempts.
       applied = 0;
+      appliedEventIds.length = 0;
       for (const award of batch) {
-        if (insertAward(award).applied) applied += 1;
+        if (insertAward(award).applied) {
+          applied += 1;
+          appliedEventIds.push(award.eventId);
+        }
       }
     });
-    return { applied };
+    return { applied, appliedEventIds };
   }
 
   function marksFor(guestId) {

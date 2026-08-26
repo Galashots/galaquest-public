@@ -36,6 +36,15 @@
 //    is a pure function of the facts on record, calling it again on a profile that already holds it
 //    is a no-op rather than a second hundred XP.
 //
+// 4. R1: AND REPEATABLE COMBAT XP RIDES THE SAME MARK. Every mark-earned award already carries the
+//    enemy that died and the shared lifeId (rewards/marks.js's D1 generalization), which is exactly
+//    what rewards/combatRewards.js's law needs to price a kill -- so this adds one more fact per
+//    award rather than a second reward loop. Named `xp:combat:<profileId>:<lifeId>` (durable,
+//    profile-scoped, and never re-derivable to the same id twice for two different kills), and read
+//    against the CURRENT folded level on every award, so a hero who levels up mid-session prices
+//    their next kill at the new level -- the same "no stale level" requirement the mark/lantern pair
+//    above already satisfies by reading `profiles.stateFor` fresh rather than a cached count.
+//
 // The server is still the only adjudicator when there IS one. Nothing here decides whether a wolf
 // died; combat/encounter.js does, exactly as before. This only writes down what was already true.
 
@@ -45,6 +54,13 @@ import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from './marks.js';
 // produces the same logical one-time result" true by construction rather than by two matching
 // implementations somebody has to keep in step (GQ-007 hit 7).
 import { pendingLanternXpFact } from '../progression/facts.js';
+// R1-C1: the same repeatable combat-XP law net/gameServerCore.mjs's createRewardCoordinator prices
+// awards through -- see combatRewards.js's own header for why this file imports it rather than
+// restating it.
+import { combatXpEventId, combatXpFor } from './combatRewards.js';
+// The ONE authority for "what level is this total XP", so a level read here always agrees with the
+// level progression/heroStats.js resolves for the same profile a frame later.
+import { levelForXp } from '../progression/levels.js';
 
 /** The hero id an offline session credits its kills to. foldEvents attributes a mark to a
  *  contributor, and a solo offline hero has no server-assigned player id to be one -- so it gets a
@@ -131,6 +147,24 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
       if (award.type !== 'mark-earned') continue;
       profiles.recordFacts(profileId, [{ eventId: award.eventId, type: 'mark-earned' }]);
       raised.push({ type: 'mark-earned', eventId: award.eventId });
+    }
+
+    // R1-C1: repeatable combat XP, over the SAME awards the mark loop just walked -- not a second
+    // fold, not a second reward source. AFTER the mark loop on purpose: marks never move a hero's
+    // level, so ordering only matters for the loop below reading a level that reflects every mark
+    // already recorded above, and it does so unconditionally regardless of order.
+    for (const award of folded.awards) {
+      if (award.type !== 'mark-earned') continue;
+      // Read fresh on every iteration, not hoisted above the loop: two enemy lives folded from one
+      // frame's events (both dying to a single swing that also happened to be a killing blow to a
+      // second, adjacent life) must price the SECOND one at whatever level the FIRST one's XP just
+      // bought, exactly as a mid-session level-up has to price the next online kill differently too.
+      const heroLevel = levelForXp(profiles.stateFor(profileId).xp);
+      const xp = combatXpFor({ heroLevel, enemyLevel: award.enemyLevel });
+      if (xp <= 0) continue;
+      const eventId = combatXpEventId(profileId, award.lifeId);
+      profiles.recordFacts(profileId, [{ eventId, type: 'xp-earned', value: String(xp) }]);
+      raised.push({ type: 'xp-earned', eventId, value: String(xp) });
     }
 
     // Derived from the durable count, never from a counter alongside it. A child who earned two

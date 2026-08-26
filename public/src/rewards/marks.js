@@ -60,7 +60,10 @@ export function createRewardLedger() {
  * @param events  the events array off a single drainEvents() batch (or, for a replay/sabotage test,
  *                the exact same array/objects handed back through the exact same ledger).
  * @returns { ledger, awards } -- `ledger` threads into the next call; `awards` is
- *          [{ heroId, type: 'mark-earned' | 'lantern-unlocked', eventId }], new awards only.
+ *          [{ heroId, type: 'mark-earned' | 'lantern-unlocked', eventId, lifeId, enemyId, enemyLevel }],
+ *          new awards only. R1: `enemyId`/`enemyLevel` are ADDITIVE -- see the wolf-defeated branch's
+ *          own comment for where they come from and why. Every existing field keeps its existing
+ *          meaning; rewards/combatRewards.js is the only new reader of the two new ones.
  *
  * A wolf-life is delimited by wolf-defeated (the life ends in a kill, which is the only kind of life
  * end this fold rewards -- Sol's ruling is "a mark per KILL") and wolf-respawned (the life after
@@ -98,6 +101,14 @@ export function createRewardLedger() {
  */
 const LEGACY_WOLF_ID = '__legacy-wolf__';
 
+// R1: pre-E2's whole world was one Level-1 Wolf. The pre-E1 compatibility fixtures that
+// rewardableWolfId already falls back to LEGACY_WOLF_ID for carry no `level` field at all, so Level 1
+// is not a guess for them -- it is what "Wolf" meant before either field existed.
+// combat/encounter.js stamps a real `level` on every current wolf-hit/wolf-defeated (enemyEvent), so
+// this fallback is exercised only by those legacy shapes and by a malformed/absent value, never by a
+// genuine production kill.
+const LEGACY_ENEMY_LEVEL = 1;
+
 function rewardableWolfId(event) {
   // Identity-bearing non-Wolf events must never mint Lantern Marks. An event without `kind` is a
   // pre-E1 compatibility fixture and therefore historically meant Wolf.
@@ -105,6 +116,14 @@ function rewardableWolfId(event) {
   if (event?.enemyId === undefined || event.enemyId === null) return LEGACY_WOLF_ID;
   if (typeof event.enemyId !== 'string' || event.enemyId.length === 0) return null;
   return event.enemyId;
+}
+
+/** The level of the enemy THAT ACTUALLY DIED, read off the wolf-defeated event itself rather than
+ *  tracked across the life -- see this function's one call site for why that is sufficient: a life is
+ *  delimited by a single wolf-defeated event, and combat/encounter.js stamps `level` on it from the
+ *  same enemy record for as long as that life exists. */
+function levelOfDefeatedEnemy(event) {
+  return Number.isSafeInteger(event?.level) && event.level >= 1 ? event.level : LEGACY_ENEMY_LEVEL;
 }
 
 export function foldEvents(ledger, events, options = {}) {
@@ -141,8 +160,18 @@ export function foldEvents(ledger, events, options = {}) {
       // Once per ENEMY LIFE, not once per contributor. Interleaved enemies keep separate sets and
       // therefore cannot pay each other's contributors when either one dies.
       const lifeId = mintLifeId(livesCompleted);
+      // R1: stamped from THIS defeat event, not tracked across the life's earlier wolf-hits. A life
+      // is delimited by exactly one wolf-defeated, and combat/encounter.js's enemyEvent stamps every
+      // event for one enemy from the same record -- so the defeat event's own `level` already is
+      // "the enemy that actually died", and two interleaved enemies of different levels price
+      // independently for free: each wolf-defeated event only ever describes its own enemy.
+      // ADDITIVE fields only -- rewards/combatRewards.js (R1-C2) is their one reader; every existing
+      // field above keeps its exact pre-R1 meaning and this repo's marks-only readers.
+      const enemyLevel = levelOfDefeatedEnemy(event);
       for (const heroId of contributors) {
-        awards.push({ heroId, type: 'mark-earned', lifeId, eventId: `mark:${heroId}:${lifeId}` });
+        awards.push({
+          heroId, type: 'mark-earned', lifeId, eventId: `mark:${heroId}:${lifeId}`, enemyId, enemyLevel,
+        });
       }
       livesCompleted += 1;
       contributorsByEnemy.delete(enemyId);

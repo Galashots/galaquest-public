@@ -30,6 +30,9 @@ import {
 import { createProfileStore } from '../public/src/progression/profiles.js';
 import { LANTERN_UNLOCK_XP, lanternXpEventId } from '../public/src/progression/facts.js';
 import { levelForXp } from '../public/src/progression/levels.js';
+// R1: repeatable combat XP now rides every offline kill this file's killWolf() helper drives,
+// alongside the Lantern's one-time award -- see each comment marked R1 below for exactly why.
+import { combatXpFor } from '../public/src/rewards/combatRewards.js';
 
 const PROFILE = 'p-offline-1111-2222-3333';
 
@@ -149,20 +152,31 @@ test('three marks across two sessions unlock the lantern, and the unlock is dura
   const raised = second.killWolf();
   assert.equal(second.marks(), MARKS_TO_UNLOCK);
   assert.equal(second.lanternUnlocked(), true, 'the third mark unlocks the lantern across sessions');
+  // R1: this same kill ALSO earns its own repeatable combat XP, riding the same award marks already
+  // folded -- so the third kill now raises FOUR events in this fixed order (mark, its own combat XP,
+  // the unlock, and the Lantern's XP), rather than the pre-R1 three. Order is asserted because it is
+  // deterministic (offlineProgress.js's own mark-loop -> combat-loop -> lantern-check sequence), and
+  // the two xp-earned events are told apart by eventId rather than by position alone.
   assert.deepEqual(
     raised.map((event) => event.type),
-    ['mark-earned', 'lantern-unlocked', 'xp-earned'],
-    'and the ceremony is raised on the frame it becomes true -- P2 adds the XP the unlock is worth',
+    ['mark-earned', 'xp-earned', 'lantern-unlocked', 'xp-earned'],
+    'and the ceremony is raised on the frame it becomes true -- P2 adds the XP the unlock is worth, '
+    + 'R1 adds this same kill\'s own combat XP alongside it',
   );
+  assert.ok(raised[1].eventId.startsWith('xp:combat:'), 'R1: the SECOND event is this kill\'s own combat XP');
+  assert.equal(raised[3].eventId, lanternXpEventId(lanternUnlockEventId(PROFILE)),
+    'the FOURTH event is still the Lantern\'s own, named exactly as before R1');
 
   const third = pageLoad(storage);
   assert.equal(third.lanternUnlocked(), true, 'the unlock survives the next reload');
 
   // The ceremony must not be able to fire twice. A fourth kill re-derives the same unlock id, and
-  // the guard plus the journal's own idempotency both have to hold for this to stay quiet.
+  // the guard plus the journal's own idempotency both have to hold for this to stay quiet -- though
+  // R1: this fourth kill is a genuinely NEW kill and still earns its own combat XP.
   const afterMore = third.killWolf();
-  assert.deepEqual(afterMore.map((event) => event.type), ['mark-earned'],
-    'a later kill must not re-raise the unlock a child already had');
+  assert.deepEqual(afterMore.map((event) => event.type), ['mark-earned', 'xp-earned'],
+    'a later kill must not re-raise the Lantern unlock a child already had, but still earns combat XP');
+  assert.ok(afterMore[1].eventId.startsWith('xp:combat:'), 'not a re-announced Lantern XP');
   assert.equal(
     third.profiles.journalFor(PROFILE).filter((fact) => fact.type === 'lantern-unlocked').length,
     1,
@@ -186,17 +200,28 @@ test('the offline Lantern unlock earns exactly one 100-XP fact, and it lands a c
 
   loaded.killWolf();
   loaded.killWolf();
-  assert.equal(loaded.profiles.stateFor(PROFILE).xp, 0, 'marks alone are not XP -- R1 owns combat XP');
+  assert.equal(loaded.lanternUnlocked(), false, 'setup: two marks, no Lantern yet');
+  // R1 UPDATE: this used to read "marks alone are not XP" -- R1 makes that premise false by design,
+  // through this SAME killWolf() door, so the positive combat-XP amount is asserted here instead of
+  // the old zero.
+  const expectedCombatXpFirstTwo = 2 * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+  assert.equal(loaded.profiles.stateFor(PROFILE).xp, expectedCombatXpFirstTwo,
+    'R1: two ordinary kills earn their own combat XP even with no Lantern in sight');
 
   const raised = loaded.killWolf();
-  const xpEvents = raised.filter((event) => event.type === 'xp-earned');
-  assert.equal(xpEvents.length, 1, 'exactly one XP fact, on the frame the Lantern unlocks');
-  assert.equal(xpEvents[0].value, String(LANTERN_UNLOCK_XP));
-  assert.equal(xpEvents[0].eventId, lanternXpEventId(lanternUnlockEventId(PROFILE)),
+  const lanternEventId = lanternXpEventId(lanternUnlockEventId(PROFILE));
+  const lanternXpEvents = raised.filter((event) => event.type === 'xp-earned' && event.eventId === lanternEventId);
+  assert.equal(lanternXpEvents.length, 1, 'exactly one Lantern XP fact, on the frame the Lantern unlocks');
+  assert.equal(lanternXpEvents[0].value, String(LANTERN_UNLOCK_XP));
+  assert.equal(lanternXpEvents[0].eventId, lanternEventId,
     'named from the Lantern that earned it, so it cannot be minted twice');
 
+  // R1: the SAME third kill also earns its own combat XP alongside the Lantern.
+  const combatXpEvents = raised.filter((event) => event.type === 'xp-earned' && event.eventId !== lanternEventId);
+  assert.equal(combatXpEvents.length, 1, 'R1: the third kill still earns its own combat XP too');
+
   const state = loaded.profiles.stateFor(PROFILE);
-  assert.equal(state.xp, LANTERN_UNLOCK_XP);
+  assert.equal(state.xp, expectedCombatXpFirstTwo + Number(combatXpEvents[0].value) + LANTERN_UNLOCK_XP);
   assert.equal(levelForXp(state.xp), 2, 'the award IS the first level, which is why it is derived');
 });
 
@@ -204,27 +229,34 @@ test('the XP is written in the SAME journal call as the unlock, so neither can l
   // The failure the batching exists for: a Lantern that is permanently present with XP that can
   // never arrive, because the unlock is a latch and will never fire again. Proved by observing that
   // the journal never passes through a state where one is present and the other is not.
+  //
+  // R1 UPDATE: scoped to the LANTERN's own eventIds rather than the bare `xp-earned` TYPE -- R1's
+  // combat-XP fact is a legitimate, independently-recorded xp-earned row (it pays per kill, not per
+  // Lantern), so a bare type check would now see it land alone on the first two kills and misread
+  // that as the exact half-landed state this test exists to catch.
   const storage = deviceStorage();
   const loaded = pageLoad(storage);
   loaded.killWolf();
   loaded.killWolf();
 
+  const lanternEventId = lanternUnlockEventId(PROFILE);
+  const lanternXpId = lanternXpEventId(lanternEventId);
   const seen = [];
   const realRecord = loaded.profiles.recordFacts;
   loaded.profiles.recordFacts = (profileId, facts) => {
     const result = realRecord(profileId, facts);
-    seen.push(loaded.profiles.journalFor(profileId).map((fact) => fact.type));
+    seen.push(loaded.profiles.journalFor(profileId).map((fact) => fact.eventId));
     return result;
   };
   loaded.killWolf();
 
-  for (const snapshot of seen) {
-    const hasLantern = snapshot.includes('lantern-unlocked');
-    const hasXp = snapshot.includes('xp-earned');
-    assert.equal(hasLantern, hasXp,
-      `the journal was observed holding one without the other: ${JSON.stringify(snapshot)}`);
+  for (const eventIds of seen) {
+    const hasLantern = eventIds.includes(lanternEventId);
+    const hasLanternXp = eventIds.includes(lanternXpId);
+    assert.equal(hasLantern, hasLanternXp,
+      `the journal was observed holding the Lantern without its XP (or the reverse): ${JSON.stringify(eventIds)}`);
   }
-  assert.ok(seen.some((snapshot) => snapshot.includes('xp-earned')), 'setup: the XP was written at all');
+  assert.ok(seen.some((eventIds) => eventIds.includes(lanternXpId)), 'setup: the Lantern XP was written at all');
 });
 
 test('replaying the unlock across reloads never adds a second hundred XP', () => {
@@ -233,22 +265,33 @@ test('replaying the unlock across reloads never adds a second hundred XP', () =>
   first.killWolf();
   first.killWolf();
   first.killWolf();
-  assert.equal(first.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP);
+  // R1: the total is the Lantern PLUS the same three kills' own combat XP, computed through the law
+  // (all three price at Level 1: the third kill's own combat component is priced BEFORE the Lantern
+  // lands within that same call -- offlineProgress.js runs its combat-xp loop before its lantern
+  // check) rather than restated as a number.
+  let expectedTotal = LANTERN_UNLOCK_XP + 3 * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+  assert.equal(first.profiles.stateFor(PROFILE).xp, expectedTotal);
 
-  // Four more reloads, each with another kill: the unlock latch, the derived id and the journal's own
-  // idempotency all have to hold, and the total must not move by a single point.
+  // Four more reloads, each with another kill: the LANTERN's unlock latch, its derived id and the
+  // journal's own idempotency all have to hold, and R1 combat XP legitimately keeps accruing on every
+  // genuinely new kill.
+  const lanternXpId = lanternXpEventId(lanternUnlockEventId(PROFILE));
   for (let reload = 0; reload < 4; reload += 1) {
     const later = pageLoad(storage);
+    const heroLevelBeforeThisKill = levelForXp(later.profiles.stateFor(PROFILE).xp);
     const raised = later.killWolf();
-    assert.deepEqual(raised.map((event) => event.type), ['mark-earned'],
-      `reload ${reload + 1} re-raised a beat the child already had`);
-    assert.equal(later.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP,
-      `reload ${reload + 1} moved a total that must not move`);
+    assert.deepEqual(raised.map((event) => event.type), ['mark-earned', 'xp-earned'],
+      `reload ${reload + 1} re-raised a beat the child already had, or failed to earn its own combat XP`);
+    assert.ok(raised[1].eventId.startsWith('xp:combat:'),
+      `reload ${reload + 1} re-announced the Lantern XP instead of its own combat XP`);
+    expectedTotal += combatXpFor({ heroLevel: heroLevelBeforeThisKill, enemyLevel: 1 });
+    assert.equal(later.profiles.stateFor(PROFILE).xp, expectedTotal,
+      `reload ${reload + 1} moved the total by something other than its own combat XP`);
   }
 
   const journal = pageLoad(storage).profiles.journalFor(PROFILE);
-  assert.equal(journal.filter((fact) => fact.type === 'xp-earned').length, 1,
-    'one lantern, one XP row, however many sessions asked');
+  assert.equal(journal.filter((fact) => fact.eventId === lanternXpId).length, 1,
+    'one Lantern XP row, however many sessions asked');
   assert.equal(levelForXp(pageLoad(storage).profiles.stateFor(PROFILE).xp), 2,
     'and the child is still Level 2, not Level 3');
 });
@@ -267,13 +310,24 @@ test('a child who already met a server is not paid twice for one lantern', () =>
   ]);
   assert.equal(seeded.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP, 'setup: paid once already');
 
-  seeded.killWolf();
-  seeded.killWolf();
+  const lanternXpId = lanternXpEventId(serverLanternId);
+  let expectedTotal = LANTERN_UNLOCK_XP;
+  for (let kill = 0; kill < 2; kill += 1) {
+    const heroLevel = levelForXp(expectedTotal);
+    seeded.killWolf();
+    expectedTotal += combatXpFor({ heroLevel, enemyLevel: 1 });
+  }
+  const heroLevelBeforeThird = levelForXp(expectedTotal);
   const raised = seeded.killWolf();
 
-  assert.equal(raised.filter((event) => event.type === 'xp-earned').length, 0,
+  // R1: the LANTERN must not pay twice; the SAME kill still earns its own combat XP regardless,
+  // since a profile's combat-XP law has nothing to do with whether its Lantern was already spent.
+  assert.equal(raised.filter((event) => event.eventId === lanternXpId).length, 0,
     'the offline path must not pay a second time for a lantern the server already paid for');
-  assert.equal(seeded.profiles.stateFor(PROFILE).xp, LANTERN_UNLOCK_XP);
+  const combatXpEvents = raised.filter((event) => event.type === 'xp-earned');
+  assert.equal(combatXpEvents.length, 1, 'this third kill still earns its own combat XP');
+  expectedTotal += combatXpFor({ heroLevel: heroLevelBeforeThird, enemyLevel: 1 });
+  assert.equal(seeded.profiles.stateFor(PROFILE).xp, expectedTotal);
   assert.equal(levelForXp(seeded.profiles.stateFor(PROFILE).xp), 2, 'Level 2, not Level 3');
 });
 

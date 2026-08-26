@@ -275,6 +275,10 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   'equip:',
   'xp:lantern:',
   'xp:lantern-unlocked:',
+  // R1: rewards/combatRewards.js's combatXpEventId mints `xp:combat:<profileId>:<lifeId>`, server- and
+  // offline-minted alike -- reserved the same way every other personal durable identity above is, so
+  // one profile's client restore can never reserve a sibling's future combat-XP row (H1).
+  'xp:combat:',
 ]);
 
 function reservedProfileEventOwner(eventId) {
