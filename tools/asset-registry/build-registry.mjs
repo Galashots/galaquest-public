@@ -1,44 +1,277 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const historyPath = join(root, 'docs/asset-production/asset-platform-inventory.json');
+const evidencePath = join(root, 'docs/asset-production/asset-registry-v1.evidence.json');
+const structuralAuditPath = join(root, 'docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json');
 const outPath = join(root, 'docs/asset-production/asset-registry-v1.json');
-const gates = () => ({ provenance: 'UNKNOWN', structural: 'UNKNOWN', materials: 'UNKNOWN', rig: 'UNKNOWN', animation: 'UNKNOWN', performance: 'UNKNOWN', visual: 'UNKNOWN', runtime: 'UNKNOWN', owner: 'UNKNOWN' });
-const sha256 = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
-const files = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)]);
-const slug = (p) => `runtime_${p.replaceAll('\\', '_').replaceAll('/', '_').replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+const supportedExtensions = new Set(['.glb', '.jpg', '.jpeg', '.png', '.webp']);
+const gateNames = ['provenance', 'structural', 'materials', 'rig', 'animation', 'performance', 'visual', 'runtime', 'owner'];
+
 const history = JSON.parse(readFileSync(historyPath, 'utf8'));
+const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+const structuralAudit = JSON.parse(readFileSync(structuralAuditPath, 'utf8'));
 const records = [];
 const seen = new Set();
-const add = (record) => { if (!seen.has(record.asset_id)) { seen.add(record.asset_id); records.push(record); } };
 
-for (const abs of files(join(root, 'public/assets'))) {
-  const path = relative(root, abs).replaceAll('\\', '/');
-  const ext = path.split('.').pop().toLowerCase();
-  const isCandidate = path.includes('/candidates/');
-  const byteStable = ext === 'glb' || ext === 'jpg' || ext === 'png';
-  const record = { asset_id: slug(path), display_name: path.split('/').pop(), asset_kind: ext === 'glb' ? 'model' : 'texture', lifecycle: isCandidate ? 'QUALIFYING' : 'PRODUCTION', custody: 'IN_GIT', recoverability: 'VERIFIED_FROM_GIT', source: { path, sha256: byteStable ? sha256(abs) : null, size_bytes: statSync(abs).size, authority: 'public-main' }, provider: { task_ids: [], context_alias: null }, parent_asset_id: null, derivative_of: null, qualification_gates: gates(), evidence_refs: [`git:${path}`], notes: isCandidate ? 'Candidate only; not runtime promotion.' : (byteStable ? 'Current public runtime asset; gates remain independent.' : 'Repository documentation companion; text hash intentionally omitted because Git checkout line endings vary by platform.') };
-  record.qualification_gates.provenance = 'PASS'; record.qualification_gates.structural = ext === 'glb' ? 'PASS' : 'N/A'; record.qualification_gates.runtime = isCandidate ? 'UNKNOWN' : 'PASS'; add(record);
+const readBytes = (path) => readFileSync(path);
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const gitBlobOid = (bytes) => createHash('sha1').update(Buffer.from(`blob ${bytes.length}\0`)).update(bytes).digest('hex');
+const files = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
+const supportedFiles = () => files(join(root, 'public/assets')).filter((path) => supportedExtensions.has(extname(path).toLowerCase()));
+const gate = (status = 'UNKNOWN', evidenceRefs = []) => ({ status, evidence_refs: evidenceRefs });
+const gates = () => Object.fromEntries(gateNames.map((name) => [name, gate()]));
+const metric = (value = 'UNKNOWN') => value;
+const metrics = (sizeBytes, kind = 'model') => ({
+  file_size_bytes: Number.isInteger(sizeBytes) ? metric(sizeBytes) : metric(),
+  mesh_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  primitive_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  vertex_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  triangle_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  material_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  skin_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  joint_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+  animation_clip_count: metric(kind === 'texture' ? 'N/A' : 'UNKNOWN'),
+});
+const rights = (provenanceStatus = 'UNKNOWN', provenanceEvidence = []) => ({
+  provenance: { status: provenanceStatus, value: null, evidence_refs: provenanceEvidence },
+  license: { status: 'UNKNOWN', value: null, evidence_refs: [] },
+  usage_rights: { status: 'UNKNOWN', value: null, evidence_refs: [] },
+});
+const add = (record) => {
+  if (seen.has(record.asset_id)) throw new Error(`duplicate asset_id: ${record.asset_id}`);
+  seen.add(record.asset_id);
+  records.push(record);
+};
+const taskInput = (task) => typeof task === 'string' ? { id: task, kind: 'unknown' } : task;
+const taskObservation = evidence.provider_reconciliation.historical_inventory_task_observation;
+const observedTask = (task) => ({
+  task_id: task.id,
+  task_kind: task.kind ?? 'unknown',
+  provider_status: taskObservation.provider_status,
+  consumed_credits: taskObservation.consumed_credits,
+  output_handles: taskObservation.output_handles,
+  download_available: taskObservation.download_available,
+  download_attempt_result: taskObservation.download_attempt_result,
+  recoverable_without_spend: taskObservation.recoverable_without_spend,
+  notes: taskObservation.notes,
+  evidence_ref: `registry-evidence:${evidence.provider_reconciliation.observed_utc}`,
+});
+const currentRuntimePaths = new Set(evidence.runtime_assets.map((asset) => asset.path));
+const structuralByFilename = new Map(structuralAudit.entries.map((entry) => [entry.filename, entry]));
+
+const scannedRuntimePaths = supportedFiles().map((abs) => relative(root, abs).replaceAll('\\', '/')).sort();
+const declaredRuntimePaths = [...currentRuntimePaths].sort();
+if (JSON.stringify(scannedRuntimePaths) !== JSON.stringify(declaredRuntimePaths)) {
+  const undeclared = scannedRuntimePaths.filter((path) => !currentRuntimePaths.has(path));
+  const missing = declaredRuntimePaths.filter((path) => !scannedRuntimePaths.includes(path));
+  throw new Error(`runtime asset identity map mismatch; undeclared=${undeclared.join(',') || 'none'} missing=${missing.join(',') || 'none'}`);
+}
+
+for (const asset of evidence.runtime_assets) {
+  const abs = join(root, asset.path);
+  if (!existsSync(abs)) throw new Error(`declared runtime asset missing: ${asset.path}`);
+  const bytes = readBytes(abs);
+  const isCandidate = asset.lifecycle === 'QUALIFYING';
+  const recordGates = gates();
+  if (asset.asset_kind === 'texture') recordGates.structural = gate('N/A');
+  add({
+    asset_id: asset.asset_id,
+    display_name: asset.display_name,
+    asset_kind: asset.asset_kind,
+    lifecycle: asset.lifecycle,
+    custody: 'IN_GIT',
+    recoverability: 'VERIFIED_FROM_GIT',
+    custody_locations: [{
+      kind: 'GIT',
+      durable: true,
+      git_ref: evidence.snapshot.runtime_git_ref,
+      repo_path: asset.path,
+      git_blob_oid: gitBlobOid(bytes),
+    }],
+    source: {
+      path: asset.path,
+      sha256: sha256(bytes),
+      size_bytes: statSync(abs).size,
+      authority: 'runtime-asset-identity-snapshot',
+    },
+    provider: { task_ids: [], context_alias: null },
+    structural_metrics: metrics(bytes.length, asset.asset_kind),
+    rights: rights(),
+    parent_asset_id: null,
+    derivative_of: null,
+    qualification_gates: recordGates,
+    evidence_refs: [`registry-evidence:runtime-assets`, `git:${evidence.snapshot.runtime_git_ref}:${asset.path}`],
+    notes: isCandidate ? 'Candidate identity is registered without runtime promotion.' : 'Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.',
+  });
 }
 
 for (const item of history.items) {
-  const isProvider = item.category.startsWith('provider-task/'); const isBinary = item.category.startsWith('binary/'); if (!isProvider && !isBinary) continue;
-  const path = item.source_path?.startsWith('public/') ? item.source_path : null; const inCurrentTree = path && existsSync(join(root, path));
-  const taskInputs = [...(item.provider_task_ids ?? []), ...(item.rig_task_id ? [{ id: item.rig_task_id, kind: 'rigging' }] : [])];
-  const providerTasks = taskInputs.map((t) => ({ task_id: t.id, task_kind: t.kind, provider_status: 'HTTP_404_TASK_NOT_FOUND', consumed_credits: null, output_handles: [], download_available: false, download_attempt_result: 'not-attempted-no-current-task', recoverable_without_spend: false, notes: 'GET-only reconciliation: unavailable in current provider context; not classified as deleted.' }));
-  const rec = { asset_id: item.item_id, display_name: item.item_id, asset_kind: isProvider && item.category.includes('enemy') ? 'character' : isProvider ? 'gear' : 'model', lifecycle: isProvider ? 'GENERATED' : 'QUALIFYING', custody: isProvider ? 'PROVIDER_ONLY' : (item.archive_status === 'ARCHIVED_VERIFIED' ? 'IN_DRIVE' : (inCurrentTree ? 'IN_GIT' : 'UNKNOWN')), recoverability: isProvider ? 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT' : (item.archive_status === 'ARCHIVED_VERIFIED' ? 'VERIFIED_FROM_DRIVE' : (inCurrentTree ? 'VERIFIED_FROM_GIT' : 'UNKNOWN')), source: { path: path ?? item.source_path ?? null, sha256: item.sha256 ?? null, size_bytes: item.size_bytes ?? null, authority: 'historical-asset-platform-inventory' }, provider: { task_ids: providerTasks, context_alias: isProvider ? 'historical-meshy-context' : null }, parent_asset_id: null, derivative_of: null, qualification_gates: gates(), evidence_refs: [`historical-inventory:${item.item_id}`], notes: item.reason ?? 'Historical candidate identity preserved without promoting it.' };
-  rec.qualification_gates.provenance = item.provider_task_ids?.length || item.sha256 ? 'PASS' : 'UNKNOWN'; rec.qualification_gates.structural = inCurrentTree && path?.endsWith('.glb') ? 'PASS' : 'UNKNOWN'; if (item.item_id.includes('wren') || item.item_id.includes('bramble')) rec.notes += ' Archived bytes are external to the current public tree.'; add(rec);
+  const isProvider = item.category?.startsWith('provider-task/');
+  const isBinary = item.category?.startsWith('binary/');
+  if (!isProvider && !isBinary) continue;
+
+  const sourcePath = item.source_path ?? null;
+  const inCurrentRuntime = sourcePath ? currentRuntimePaths.has(sourcePath) : false;
+  const taskInputs = [...(item.provider_task_ids ?? []).map(taskInput), ...(item.rig_task_id ? [{ id: item.rig_task_id, kind: 'rigging' }] : [])];
+  const providerTasks = taskInputs.map(observedTask);
+  const custodyLocations = [];
+
+  if (item.source_ref && sourcePath && item.git_blob_oid) {
+    custodyLocations.push({
+      kind: 'GIT',
+      durable: true,
+      git_ref: item.source_ref,
+      git_commit_sha: item.source_sha ?? null,
+      repo_path: sourcePath,
+      git_blob_oid: item.git_blob_oid,
+    });
+  }
+  if (inCurrentRuntime) {
+    custodyLocations.push({
+      kind: 'GIT',
+      durable: true,
+      git_ref: evidence.snapshot.runtime_git_ref,
+      repo_path: sourcePath,
+      git_blob_oid: null,
+    });
+  }
+  if (item.archive_file_id || item.archive_file_url || item.archive_folder) {
+    custodyLocations.push({
+      kind: 'DRIVE',
+      durable: true,
+      drive_file_id: item.archive_file_id ?? null,
+      drive_file_url: item.archive_file_url ?? null,
+      archive_path: item.archive_folder ?? null,
+      drive_folder_url: item.archive_url ?? null,
+    });
+  }
+  if (providerTasks.length) {
+    custodyLocations.push({
+      kind: 'PROVIDER',
+      durable: false,
+      provider_context: `historical-provider-context observed ${evidence.provider_reconciliation.observed_utc}`,
+      provider_task_ids: providerTasks.map((task) => task.task_id),
+    });
+  }
+
+  const durableLocations = custodyLocations.filter((location) => location.durable);
+  const custodyKinds = new Set(custodyLocations.map((location) => location.kind));
+  const custody = durableLocations.length > 1 ? 'MULTIPLE'
+    : custodyKinds.has('GIT') ? 'IN_GIT'
+      : custodyKinds.has('DRIVE') ? 'IN_DRIVE'
+        : custodyKinds.has('PROVIDER') ? 'PROVIDER_ONLY'
+          : 'UNKNOWN';
+  const recoverability = durableLocations.length > 1 ? 'VERIFIED'
+    : custodyKinds.has('GIT') ? 'VERIFIED_FROM_GIT'
+      : custodyKinds.has('DRIVE') ? 'VERIFIED_FROM_DRIVE'
+        : custodyKinds.has('PROVIDER') ? 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT'
+          : 'UNKNOWN';
+
+  const assetKind = isProvider && item.category.includes('enemy') ? 'character' : isProvider ? 'gear' : 'model';
+  const recordGates = gates();
+  const provenanceRef = `historical-inventory:${item.item_id}`;
+  recordGates.provenance = gate('PASS', [provenanceRef]);
+  const recordMetrics = metrics(item.size_bytes ?? null, assetKind);
+  const audit = sourcePath ? structuralByFilename.get(basename(sourcePath)) : null;
+  if (audit?.result === 'PASS_STRUCTURAL') {
+    recordGates.structural = gate('PASS', [`structural-audit:${audit.filename}`]);
+    recordMetrics.file_size_bytes = audit.bytes;
+    recordMetrics.mesh_count = audit.meshes;
+    recordMetrics.material_count = audit.materials;
+    recordMetrics.skin_count = audit.skins;
+    recordMetrics.joint_count = audit.joints;
+    recordMetrics.animation_clip_count = audit.embeddedAnimations;
+  }
+
+  add({
+    asset_id: item.item_id,
+    display_name: item.item_id,
+    asset_kind: assetKind,
+    lifecycle: isProvider ? 'GENERATED' : 'QUALIFYING',
+    custody,
+    recoverability,
+    custody_locations: custodyLocations,
+    source: {
+      path: sourcePath,
+      sha256: item.sha256 ?? null,
+      size_bytes: item.size_bytes ?? null,
+      authority: 'historical-asset-platform-inventory',
+    },
+    provider: {
+      task_ids: providerTasks,
+      context_alias: providerTasks.length ? `historical-context-observed-${evidence.provider_reconciliation.observed_utc}` : null,
+    },
+    structural_metrics: recordMetrics,
+    rights: rights('KNOWN', [provenanceRef]),
+    parent_asset_id: null,
+    derivative_of: null,
+    qualification_gates: recordGates,
+    evidence_refs: [provenanceRef, ...recordGates.structural.evidence_refs],
+    notes: 'Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.',
+  });
 }
 
-add({ asset_id: 'frog-meshy-download-v1', display_name: 'Frog local Meshy download', asset_kind: 'character', lifecycle: 'QUALIFYING', custody: 'LOCAL_ONLY', recoverability: 'UNKNOWN', source: { path: null, sha256: '8fbb30b04883f8e79cdd51a8b2bb6968cbdf5144aec5246de34db42be3381355', size_bytes: 5956692, authority: 'local-evidence-2026-08-25' }, provider: { task_ids: [], context_alias: null }, parent_asset_id: null, derivative_of: null, qualification_gates: { ...gates(), provenance: 'UNKNOWN', structural: 'PASS', rig: 'PASS', animation: 'PASS' }, evidence_refs: ['local-evidence:frog-24-joint-rig', 'local-evidence:frog-local-idle-hop-export'], notes: 'Downloads/staging custody is deliberately not durable repository custody; no production promotion.' });
-add({ asset_id: 'fox-meshy-download-v1', display_name: 'Fox local Meshy download', asset_kind: 'character', lifecycle: 'QUALIFYING', custody: 'LOCAL_ONLY', recoverability: 'UNKNOWN', source: { path: null, sha256: 'e346e5f26b761045e14bfeab07b52cb0f6c18cd36f3e93995e02bd1b9d2b44e2', size_bytes: 5752116, authority: 'local-evidence-2026-08-25' }, provider: { task_ids: [], context_alias: null }, parent_asset_id: null, derivative_of: null, qualification_gates: { ...gates(), provenance: 'UNKNOWN', structural: 'PASS', rig: 'PASS', visual: 'FAIL' }, evidence_refs: ['local-evidence:fox-scale-bind-diagnosis'], notes: 'Blank render classified as scale/bind-transform defect; repair deferred.' });
+for (const item of evidence.local_evidence) {
+  const recordGates = gates();
+  for (const [name, value] of Object.entries(item.qualification_gates ?? {})) recordGates[name] = value;
+  add({
+    asset_id: item.asset_id,
+    display_name: item.display_name,
+    asset_kind: item.asset_kind,
+    lifecycle: item.lifecycle,
+    custody: 'LOCAL_ONLY',
+    recoverability: 'UNKNOWN',
+    custody_locations: [{ kind: 'LOCAL', durable: false, local_evidence_label: item.local_evidence_label }],
+    source: { path: null, sha256: item.source.sha256, size_bytes: item.source.size_bytes, authority: item.source.authority },
+    provider: { task_ids: [], context_alias: null },
+    structural_metrics: metrics(item.source.size_bytes, item.asset_kind),
+    rights: rights(),
+    parent_asset_id: null,
+    derivative_of: null,
+    qualification_gates: recordGates,
+    evidence_refs: [...new Set(Object.values(recordGates).flatMap((value) => value.evidence_refs))],
+    notes: item.notes,
+  });
+}
 
-const reconciliation_records = records.flatMap((record) => record.provider.task_ids.filter((task) => ['image-to-3d', 'rigging'].includes(task.task_kind)).map((task) => ({ asset_id: record.asset_id, ...task }))).concat([
-  { asset_id: 'provider-task-unresolved-1', task_id: 'fc65f158-cd42-4188-9ab1-c54a9befef1e', task_kind: 'image-to-3d', provider_status: 'SUCCEEDED', consumed_credits: 0, output_handles: ['glb'], download_available: false, download_attempt_result: 'HTTP_403_STALE_SIGNED_URL', recoverable_without_spend: false, notes: 'Task metadata remains readable; repeated GET returns same expired CloudFront URL.' },
-  { asset_id: 'provider-task-unresolved-2', task_id: '3d0a6ad8-27dd-47a3-a847-baa35d669505', task_kind: 'image-to-3d', provider_status: 'SUCCEEDED', consumed_credits: 0, output_handles: ['glb'], download_available: false, download_attempt_result: 'HTTP_403_STALE_SIGNED_URL', recoverable_without_spend: false, notes: 'Task metadata remains readable; repeated GET returns same expired CloudFront URL.' },
-]);
-const registry = { schema: 'galaquest.asset-registry/1', generated_utc: '2026-08-25', authority: 'current canonical asset inventory', base_sha: 'b7abb7113386f1ce37d65d460f2475007d7fcb02', historical_sources: [{ path: 'docs/asset-production/asset-platform-inventory.json', role: 'historical consolidation evidence; immutable authority' }, { path: 'docs/asset-production/ENEMY_WAVE_1_PROVENANCE.json', role: 'historical enemy provider provenance' }], provider_reconciliation: { method: 'GET-only direct REST reconciliation; no POST operations', historical_task_records: 61, task_not_found: 61, stale_signed_url_tasks: 2, status: 'current-context evidence only', no_paid_operations: true, records: reconciliation_records }, animation_lab_interface: { consumer: 'Package B Animation Lab v1', required_evidence: ['source asset and target rig IDs', 'rest-pose/skeleton compatibility report', 'clip inventory and root-motion report', 'visual playback evidence', 'export hash and qualification gates'], exclusions: ['authoring implementation', 'retarget promotion', 'runtime integration'] }, records: records.sort((a, b) => a.asset_id.localeCompare(b.asset_id)) };
-writeFileSync(outPath, `${JSON.stringify(registry, null, 2)}\n`); console.log(`wrote ${registry.records.length} records to ${outPath}`);
+const reconciliationRecords = records
+  .flatMap((record) => record.provider.task_ids.map((task) => ({ asset_id: record.asset_id, ...task })))
+  .concat(evidence.provider_reconciliation.additional_records);
+const taskNotFound = reconciliationRecords.filter((record) => record.provider_status === 'HTTP_404_TASK_NOT_FOUND').length;
+const staleSignedUrlTasks = reconciliationRecords.filter((record) => record.download_attempt_result === 'HTTP_403_STALE_SIGNED_URL').length;
+
+const registry = {
+  schema: 'galaquest.asset-registry/1',
+  generated_utc: evidence.snapshot.observed_utc,
+  authority: 'current canonical asset inventory',
+  base_sha: evidence.snapshot.package_base_sha,
+  historical_sources: [
+    { path: 'docs/asset-production/asset-platform-inventory.json', role: 'historical consolidation evidence; immutable authority' },
+    { path: 'docs/asset-production/ENEMY_WAVE_1_PROVENANCE.json', role: 'historical enemy provider provenance' },
+    { path: 'docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json', role: 'dated structural qualification evidence' },
+    { path: 'docs/asset-production/asset-registry-v1.evidence.json', role: 'Package A dated observations and stable runtime identity map' },
+  ],
+  provider_reconciliation: {
+    observed_utc: evidence.provider_reconciliation.observed_utc,
+    method: evidence.provider_reconciliation.method,
+    historical_task_records: reconciliationRecords.length - evidence.provider_reconciliation.additional_records.length,
+    task_not_found: taskNotFound,
+    stale_signed_url_tasks: staleSignedUrlTasks,
+    status: 'dated evidence snapshot; refresh the evidence input before treating provider state as current',
+    no_paid_operations: evidence.provider_reconciliation.no_paid_operations,
+    records: reconciliationRecords,
+  },
+  animation_lab_interface: {
+    consumer: 'Package B Animation Lab v1',
+    required_evidence: ['source asset and target rig IDs', 'rest-pose/skeleton compatibility report', 'clip inventory and root-motion report', 'visual playback evidence', 'export hash and qualification gates'],
+    exclusions: ['authoring implementation', 'retarget promotion', 'runtime integration'],
+  },
+  records: records.sort((a, b) => a.asset_id.localeCompare(b.asset_id)),
+};
+
+writeFileSync(outPath, `${JSON.stringify(registry, null, 2)}\n`);
+console.log(`wrote ${registry.records.length} records to ${outPath}`);
