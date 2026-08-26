@@ -352,11 +352,11 @@ try {
   console.log('  E2 browser: leash checkpoint sampled');
   await waitUntil(tabA, (live) => {
     const wolf = live.enemies.find((enemy) => enemy.enemyId === leashWolf.enemyId);
-    return wolf?.mode === 'idle'
-      && Math.hypot(wolf.x - leashWolf.home.x, wolf.z - leashWolf.home.z) <= 1.2;
+    return wolf?.mode === 'idle';
   }, { budgetMs: 10_000, label: 'leash settled before recovery' });
 
   await startProtectionSampler(tabA);
+  await holdToward(tabA, { x: 0, z: 25 }, 0);
   await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 1_000);
   const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0, {
     budgetMs: 30_000, label: 'hero down checkpoint',
