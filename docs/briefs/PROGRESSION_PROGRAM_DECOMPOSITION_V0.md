@@ -1,9 +1,9 @@
 # Progression Program Decomposition v0
 
-**Program fixed point:** `main@480fe426cb915e03071c08ae047bf32ce0a57dbc`  
+**Program fixed point:** `main@b7abb7113386f1ce37d65d460f2475007d7fcb02`  
 **Governing design:** `docs/product/PROGRESSION_CONTRACT_V0.md`  
 **Owning product records:** #43 Hero XP/levels, #44 meaningful gear, #47 enemy variety, #41 kid-readable POWER, #35 Pet Companions v1  
-**Status:** Owner-approved decomposition plan. P1, P2, E1, A1, and A2 are complete. **G1 is the next core implementation package.** A3-S1 is parked pending its bounded locomotion follow-up. Package scope/order may be reforecast only through the repository workflow.
+**Status:** Owner-approved decomposition plan. P1, P2, E1, A1, A2, G1, and engineering interlock H1 are complete. **E2 is the next core implementation package; H2 / Issue #63 follows E2 before R1.** A3-S1 is parked pending its bounded locomotion follow-up. Package scope/order may be reforecast only through the repository workflow.
 
 ## Purpose
 
@@ -20,7 +20,10 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 - **E1 — Enemy Collection Foundation:** COMPLETE. PR #59 merged as `480fe426cb915e03071c08ae047bf32ce0a57dbc`; ordinary enemies now have collection-shaped stable identity end-to-end while the shipped default remains one ordinary Wolf.
 - **A1 — Armor Bank Inventory:** COMPLETE. Working first-vertical leads are Silverguard Helmet + Ironwood Shield; broader local armor content remains thin. Durable result is recorded on #44.
 - **A2 — Mob Bank Inventory:** COMPLETE. Recoverable Wave-1 candidate bank exists; working leads are Spriggan Scrapper, Magmahorn Juggernaut, and conditional Graveflame Reaper. Durable corrected result is recorded on #47.
-- **G1 — First Visible Armor Vertical:** NEXT core write package.
+- **G1 — First Visible Armor Vertical:** COMPLETE. PR #70 merged; Ironwood Shield and Silverguard Helmet now form the first truthful non-weapon armor vertical with real mitigation/POWER/equipment recovery.
+- **H1 — Shared-World Restore Integrity:** COMPLETE. PR #72 merged as `b7abb7113386f1ce37d65d460f2475007d7fcb02`; client restore can no longer author shared economy or reserve another profile's server-authored durable identity while legitimate local-first personal recovery remains exactly once.
+- **E2 — Enemy Population, Levels & Safety:** NEXT core write package. Prepared on `feat/progression-e2-enemy-population-levels-safety` under `docs/briefs/PROGRESSION_E2_ENEMY_POPULATION_LEVELS_SAFETY.md`.
+- **H2 — Issue #63 inbound WebSocket backpressure:** sequenced immediately after E2 and before R1 so two invisible engineering packages do not run back-to-back.
 - **A3-S1 — Spriggan Qualification:** PARKED on draft PR #57 at `e6eb12b2895d34bb4255180f270083edc3f85202`, disposition **ADVANCE AFTER BOUNDED FOLLOW-UP**. Static/source/material evidence supports Spriggan as the current skirmisher lead, but the already-generated Meshy walk/run outputs still need recovery and inspection. Current provider retrieval fails before reaching Meshy; do not regenerate substitute locomotion or spend provider credits.
 
 ## Operating model
@@ -40,8 +43,8 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 | **P1 — XP / Level Authority** | M | Create the canonical XP->Level authority and make `xp-earned` safe/durable through current profile recovery | prior main | **COMPLETE — PR #53 merged** | no HUD, combat stat scaling, XP reward sources, POWER UI, gear, enemies, learning, assets |
 | **P2 — First Hero Level-Up Vertical** | L | Make gaining a Hero level visible, satisfying, and mechanically stronger | P1 | **COMPLETE — PR #56 merged** | no armor economy, random loot, learning system, enemy expansion, pet work, or Level-5 special |
 | **E1 — Enemy Collection Foundation** | L | Convert singular ordinary-enemy state into scalable identified enemy collection architecture end-to-end | P2 recommended; P1 minimum | **COMPLETE — PR #59 merged** | preserve existing fight semantics; no new archetype, density tuning, drops, or geography |
-| **G1 — First Visible Armor Vertical** | L | Earn/equip first real non-weapon armor and visibly/statistically improve | P2 + A1 + E1 | **NEXT — current progression-push routing applies** | first content centered on qualified Silverguard Helmet / Ironwood Shield; no broad armor library or loot economy |
-| **E2 — Enemy Population, Levels & Safety** | L | Build a real fixed-world mob field with levels/nameplates and safe recovery | E1 + P2 | current progression-push routing applies | use known active enemy assets first; no new archetype integration yet |
+| **G1 — First Visible Armor Vertical** | L | Earn/equip first real non-weapon armor and visibly/statistically improve | P2 + A1 + E1 | **COMPLETE — PR #70 merged** | first content centered on qualified Silverguard Helmet / Ironwood Shield; no broad armor library or loot economy |
+| **E2 — Enemy Population, Levels & Safety** | L | Build a real fixed-world mob field with levels/nameplates and safe recovery | E1 + P2 + G1 + H1 | **NEXT — Codex / GPT-5.6 Luna worktree/browser lane** | use the production Wolf population first; no new archetype integration yet |
 | **R1 — Combat XP + Loot Reward Seam** | M | Award level-gap-adjusted combat XP and low-probability ownership-aware loot | P1 + E2 + G1 | worker selected under current routing from the actual runtime/tooling surface | no large loot table, salvage economy, random affixes, crafting, elaborate physical drops |
 | **G2 — Gear Content Batch + Aspiration** | M | Add qualified gear variety and establish first “how do I get THAT?” aspiration | G1 + A1 | worker selected under current routing after G1 evidence | bounded content batch; no fresh provider generation unless separately authorized |
 | **L1 — Learning Interaction v0** | L | One fun-first nonfarmable learning interaction with material progression reward | P1 + G2 | current progression-push routing applies | one interaction, not a curriculum platform/framework |
@@ -54,11 +57,11 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 
 Completed core sequence:
 
-`P1 -> P2 -> E1`
+`P1 -> P2 -> E1 -> G1 -> H1`
 
 Next core sequence:
 
-`G1 -> E2 -> R1 -> G2 -> L1 -> E3 -> M1 -> V1`
+`E2 -> H2 (#63) -> R1 -> G2 -> L1 -> E3 -> M1 -> V1`
 
 Completed supporting predecessors:
 
@@ -66,7 +69,7 @@ Completed supporting predecessors:
 
 Asset qualification lane:
 
-`A3-S1` may resume independently when the already-generated Spriggan locomotion outputs can be recovered. A3 must finish before E3 selects/integrates new enemy assets, but it is not a prerequisite to G1/E2. Do not create replacement provider jobs merely to unblock the parked retrieval seam.
+`A3-S1` may resume independently when the already-generated Spriggan locomotion outputs can be recovered. A3 must finish before E3 selects/integrates new enemy assets, but it is not a prerequisite to E2. Do not create replacement provider jobs merely to unblock the parked retrieval seam.
 
 Pets remain sequenced after the Hero/gear/enemy/learning opening vertical. This does not demote #35; the first vertical intentionally uses the Progression Contract's pet-delayed operational strength budget before real Fox/Bear/Frog combat contribution is added.
 
@@ -76,15 +79,15 @@ Pets remain sequenced after the Hero/gear/enemy/learning opening vertical. This 
 
 `docs/MISTAKES.md` already owns this as **GQ-013 — “A reward the rules never read is a lie with a ceremony attached.”** Do not create a duplicate lesson.
 
-P2 exposed the exact failure shape during Director audit: the offline Wolf caller supplied both resolved `heroDamage` and `maxHp`, but the solo encounter adapter forwarded only damage, leaving Level-2/charm max HP stuck on the Level-1 fallback. The final P2 correction made the resolved max HP reach the actual fight body as well as the UI. Future progression packages—especially G1 armor/mitigation—must therefore prove the new strength reaches the mechanics it claims to change, not merely the item catalogue, Hero screen, POWER calculation, or celebration.
+P2 exposed the exact failure shape during Director audit: the offline Wolf caller supplied both resolved `heroDamage` and `maxHp`, but the solo encounter adapter forwarded only damage, leaving Level-2/charm max HP stuck on the Level-1 fallback. The final P2 correction made the resolved max HP reach the actual fight body as well as the UI. Future progression packages must therefore prove the new strength reaches the mechanics it claims to change, not merely the item catalogue, Hero screen, POWER calculation, or celebration.
 
 ### E1 is architecture complete, not enemy-content complete
 
-E1 established stable ordinary-enemy identity through simulation -> events -> server/wire -> client presenter and proved simultaneous enemies mechanically, but intentionally preserved one authored Wolf in the shipped world. Population, enemy levels/nameplates/safety remain E2; new archetypes remain E3 after A3 qualification. G1 must not absorb either lane merely because the collection foundation now exists.
+E1 established stable ordinary-enemy identity through simulation -> events -> server/wire -> client presenter and proved simultaneous enemies mechanically, but intentionally preserved one authored Wolf in the shipped world. E2 now owns population, enemy levels/nameplates/safety; new archetypes remain E3 after A3 qualification. E2 must not absorb A3/E3 asset/archetype work merely because the collection foundation now exists.
 
 ### Final-checkpoint diagnostic chasing is bounded
 
-The reusable P2 process lesson is already ratcheted into `docs/WORKFLOW.md` by PR #58: once a final checkpoint is feature-complete, broad diagnostic failures are classified by causality; only proven in-scope regressions are repaired on that package. G1 inherits that stop boundary rather than reopening unrelated browser-matrix debt.
+The reusable P2 process lesson is already ratcheted into `docs/WORKFLOW.md` by PR #58: once a final checkpoint is feature-complete, broad diagnostic failures are classified by causality; only proven in-scope regressions are repaired on that package. E2 inherits that stop boundary rather than reopening unrelated browser-matrix debt.
 
 ## A1/A2 evidence ratchets
 
@@ -131,7 +134,7 @@ A1 and A2 established Codex/Terra as useful for bounded read-only investigation.
 
 A3-S1's historical planning text named Terra/Codex, but live PR #57 records that the actual slice was executed by a fresh regular non-project GPT-5.6 Sol XHigh chat and independently audited by the Director. The Owner's later progression-push routing therefore supersedes the old fixed model labels: use fresh non-project GPT-5.6 Sol XHigh by default, and choose Luna/Codex when a concrete execution/tooling need or explicit Owner direction makes it the better worker.
 
-Evaluate future workers by **cost per accepted result**, including Director correction burden, not raw token count alone.
+E2 is such a concrete exception: multi-enemy placement, leash behavior, safe respawn, responsive nameplates, and final running-game evidence require repeated local/browser feedback, so its committed brief routes the single semantic writer to Codex / GPT-5.6 Luna. Evaluate future workers by **cost per accepted result**, including Director correction burden, not raw token count alone.
 
 ## Program gate
 
