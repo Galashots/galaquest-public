@@ -843,9 +843,14 @@ async function bootstrap() {
     return encounterState.enemies.find((enemy) => enemy.enemyId === enemyId) ?? null;
   }
 
-  function soleEnemyOfKind(kind) {
+  // Runtime-test compatibility keeps the old singular Wolf presenter meaningful after E2 made
+  // ordinary enemies a collection. A fixture with one Wolf may use any id; a multi-Wolf world
+  // must name the opening authored identity rather than falling back to collection order.
+  function openingEnemyOfKind(kind, preferredEnemyId = 'wolf-1') {
     const matches = encounterState.enemies.filter((enemy) => enemy.kind === kind);
-    return matches.length === 1 ? matches[0] : null;
+    if (matches.length === 1) return matches[0];
+    const preferred = matches.filter((enemy) => enemy.enemyId === preferredEnemyId);
+    return preferred.length === 1 ? preferred[0] : null;
   }
 
   function mirrorPublishedEnemy(enemy) {
@@ -2081,10 +2086,10 @@ async function bootstrap() {
       // The reward now speaks when its light arrives, about a second later, with the frame to itself.
       // See celebrateMarkArrival.
       marksInTheAir += 1;
-      // mark-earned does not carry combat identity yet; in the shipped E1 world there is exactly
-      // one rewardable Wolf. Derive that Wolf by kind, never by collection position. Hit/defeat
-      // feedback below is fully enemyId-addressed.
-      const source = soleEnemyOfKind('wolf');
+      // mark-earned does not carry combat identity yet; use the opening authored Wolf by stable
+      // identity for this legacy reward presentation. Hit/defeat feedback below is fully
+      // enemyId-addressed.
+      const source = openingEnemyOfKind('wolf');
       if (source) markSparks?.launch({ x: source.x, z: source.z });
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
@@ -2351,9 +2356,9 @@ async function bootstrap() {
     // this object could drive the fight down a path no child can reach; reading state cannot.
     encounterState: () => encounterState,
     // Runtime-test compatibility only: derive the shipped Wolf presenter from stable collection
-    // identity. Gameplay/presentation code never reads this alias; C3's real surface is keyed.
+    // identity, with the single-Wolf fixture fallback kept for older isolated tests.
     wolf: () => {
-      const wolf = soleEnemyOfKind('wolf');
+      const wolf = openingEnemyOfKind('wolf');
       return wolf ? enemyPresenters.get(wolf.enemyId) : null;
     },
     enemyPresenter: (enemyId) => enemyPresenters.get(enemyId),
@@ -3236,9 +3241,9 @@ async function bootstrap() {
 
       // The published state, read once and shared by every consumer below. Nothing here calls back
       // into the rules -- online or offline, `encounterState` is just data by this point. Enemy
-      // identity comes from the collection; the shipped status line still describes the one Wolf.
+      // identity comes from the collection; the legacy status line follows the opening Wolf.
       const { hero } = encounterState;
-      const wolf = soleEnemyOfKind('wolf');
+      const wolf = openingEnemyOfKind('wolf');
       // The server's own swingSeconds (mirrored into `hero` above) takes over the instant it
       // confirms, or the prediction times out on its own clock -- either way nothing downstream of
       // this line ever decides whether a swing lands; that stays server truth online.

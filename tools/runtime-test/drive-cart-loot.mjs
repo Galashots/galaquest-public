@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { CAMP, CART_SEARCH, ROWAN } from '../../public/src/world/zones/village.js';
 import { CART_LOOT_TABLE, COIN_KIND, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
+import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -79,8 +80,10 @@ function freshStorePath(label) {
  * would triple its length to prove something play-fight.mjs already proves on its own. Instead this
  * seeds a fresh guest directly into THIS PHASE'S OWN isolated store (net/rewardStore.mjs's own
  * idempotent apply(), the exact convention drive-relight.mjs already established for this file), the
- * same way a returning guest who fought that fight in an earlier session would arrive here. A
- * brand-new randomUUID() guestId every run/phase, never reused: the store's own idempotency is by
+ * same way a returning guest who fought that fight in an earlier session would arrive here. The
+ * fixture includes the P2 XP fact awarded alongside the Lantern latch; omitting it would describe
+ * an impossible post-Lantern player. A brand-new randomUUID() guestId every run/phase, never reused:
+ * the store's own idempotency is by
  * eventId, not guestId, and this file's whole subject is a pickup that can only ever be durably
  * credited to the FIRST guestId that claims it (see net/gameServer.mjs's applyLootAward) -- reusing a
  * guestId across runs would silently poison every later run's ability to prove the credit actually
@@ -92,8 +95,17 @@ function seedUnlockedGuest(storePath, label) {
   for (let i = 1; i <= 3; i += 1) {
     store.apply({ guestId, type: 'mark-earned', eventId: `gp2-fixture:mark:${guestId}:${i}` });
   }
-  store.apply({ guestId, type: 'lantern-unlocked', eventId: `gp2-fixture:unlock:${guestId}` });
-  const seeded = store.marksFor(guestId) === 3 && store.unlockedFor(guestId);
+  const lanternEventId = `gp2-fixture:unlock:${guestId}`;
+  store.apply({ guestId, type: 'lantern-unlocked', eventId: lanternEventId });
+  store.apply({
+    guestId,
+    type: 'xp-earned',
+    eventId: `xp:${lanternEventId}`,
+    value: String(LANTERN_UNLOCK_XP),
+  });
+  const seeded = store.marksFor(guestId) === 3
+    && store.unlockedFor(guestId)
+    && store.xpFor(guestId) === LANTERN_UNLOCK_XP;
   store.close();
   if (!seeded) throw new Error(`seeding ${guestId} did not take`);
   return guestId;
