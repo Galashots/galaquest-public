@@ -145,6 +145,8 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
     serverSelf: r.netState().serverSelf,
     heading: r.follow.heading,
     hero: { ...e.hero },
+    protectionObserved: Boolean(window.__e2ProtectionSamples?.length),
+    maxProtectionObserved: Math.max(0, ...(window.__e2ProtectionSamples ?? [])),
     enemies: e.enemies.map((enemy) => ({
       enemyId: enemy.enemyId, level: enemy.level, hp: enemy.hp, maxHp: enemy.maxHp,
       x: enemy.x, z: enemy.z, mode: enemy.mode, targetId: enemy.targetId,
@@ -153,6 +155,20 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
     viewport: { width: innerWidth, height: innerHeight },
   };
 })())`).then(JSON.parse);
+
+async function startProtectionSampler(tab) {
+  await tab.page.eval(`(() => {
+    window.__e2ProtectionSamples = [];
+    window.__e2ProtectionTimer = window.setInterval(() => {
+      const seconds = window.__galaQuestRuntime.encounterState().hero.protectionSeconds;
+      if (seconds > 0) window.__e2ProtectionSamples.push(seconds);
+    }, 25);
+  })()`);
+}
+
+async function stopProtectionSampler(tab) {
+  await tab.page.eval('window.clearInterval(window.__e2ProtectionTimer)');
+}
 
 async function capture(tab, name) {
   const { data } = await tab.page.send('Page.captureScreenshot', { format: 'png' });
@@ -253,7 +269,9 @@ const checkedOutSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'ut
 let candidateSha = checkedOutSha;
 try {
   // Pull-request workflows check out a synthetic merge; its second parent is the exact PR head.
-  candidateSha = execFileSync('git', ['rev-parse', 'HEAD^2'], { encoding: 'utf8' }).trim();
+  candidateSha = execFileSync('git', ['rev-parse', 'HEAD^2'], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
 } catch {
   // A local branch checkout has no second parent, so its HEAD is already the candidate.
 }
@@ -330,9 +348,14 @@ try {
     budgetMs: 30_000, label: 'hero down checkpoint',
   });
   evidence.checkpoints.down = down;
-  const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0, {
+  await startProtectionSampler(tabA);
+  const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0 || live.protectionObserved, {
     budgetMs: 20_000, intervalMs: 50, label: 'safe recovery protection checkpoint',
   });
+  await stopProtectionSampler(tabA);
+  if (recovered.maxProtectionObserved <= 0 && recovered.hero.protectionSeconds <= 0) {
+    throw new Error(`safe recovery protection checkpoint was not observed; last state: ${JSON.stringify(recovered)}`);
+  }
   evidence.checkpoints.recovered = recovered;
   evidence.captures.push(await capture(tabA, 'c3-safe-recovery'));
   await tabB.page.send('Page.bringToFront');
