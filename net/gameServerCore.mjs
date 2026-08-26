@@ -54,8 +54,8 @@ import {
   transferSiegeHeroBody,
 } from '../public/src/world/beaconSiege.js';
 import {
-  BEACON_ARENA, BEACON_WARDEN, CART_SEARCH, COLD_SEALS, HOLLOW, RANGER_CLAIM, ROWAN_CLAIM, WOLF_SPAWN,
-  WOLF_SPAWNS,
+  BEACON_ARENA, BEACON_WARDEN, CART_SEARCH, COLD_SEALS, ENEMY_POPULATION, HERO_SPAWN, HOLLOW,
+  RANGER_CLAIM, RECOVERY_SANCTUARY, ROWAN_CLAIM, WOLF_SPAWN, WOLF_SPAWNS,
 } from '../public/src/world/zones/village.js';
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
 import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
@@ -901,12 +901,17 @@ export function createSimulation(options = {}) {
   let tick = 0;
 
   // Hero id = player id (Task B3's binding interface). One ordinary-enemy collection for the whole
-  // simulation. Production still authors exactly the existing one Wolf/patrol; `options.enemies` is
-  // a test/config seam for E1 multi-enemy proof and does not add default-world population.
+  // simulation. Production authors the fixed E2 population; `options.enemies` remains a bounded
+  // test/config seam for alternate authored collections.
   const ordinaryEnemyOptions = Array.isArray(options.enemies)
     ? { enemies: options.enemies }
-    : { wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS };
-  let encounterState = createPartyEncounterState({ ...ordinaryEnemyOptions, heroIds: [] });
+    : { enemies: ENEMY_POPULATION };
+  let encounterState = createPartyEncounterState({
+    ...ordinaryEnemyOptions,
+    heroIds: [],
+    heroSpawn: HERO_SPAWN,
+    recoverySanctuary: RECOVERY_SANCTUARY,
+  });
   // Events accumulate here from both requestPartyAttack (on attack arrival) and stepParty (each
   // tick) and are drained only when a snapshot broadcasts -- Design ruling 7, "events ride
   // snapshots". Nothing here is time-based, so nothing needs `now`.
@@ -1220,6 +1225,15 @@ export function createSimulation(options = {}) {
     const partyResult = stepParty(encounterState, { deltaSeconds, heroes: commandHeroes });
     encounterState = partyResult.state;
     for (const event of partyResult.events) {
+      if (event.type !== 'hero-respawned') continue;
+      const player = players.get(event.heroId);
+      if (!player) continue;
+      player.x = encounterState.heroSpawn.x;
+      player.z = encounterState.heroSpawn.z;
+      player.heading = 0;
+      player.speed = 0;
+    }
+    for (const event of partyResult.events) {
       if (keepEvent(event, WOLF_BODY_EVENTS, WOLF_ARENA)) pendingEvents.push(event);
     }
 
@@ -1283,6 +1297,7 @@ export function createSimulation(options = {}) {
         swingSeconds: roundToWire(source.swingSeconds),
         cooldown: roundToWire(source.cooldown),
         downSeconds: roundToWire(source.downSeconds),
+        protectionSeconds: roundToWire(source.protectionSeconds ?? 0),
       };
     }
     return {
@@ -1290,6 +1305,8 @@ export function createSimulation(options = {}) {
       enemies: encounterState.enemies.map((enemy) => ({
         enemyId: enemy.enemyId,
         kind: enemy.kind,
+        level: enemy.level,
+        maxHp: enemy.maxHp,
         x: roundToWire(enemy.x),
         z: roundToWire(enemy.z),
         heading: roundToWire(enemy.heading),

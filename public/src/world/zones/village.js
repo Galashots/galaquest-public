@@ -163,6 +163,38 @@ export const WOLF_SPAWNS = Object.freeze(
 );
 export const HERO_SPAWN = Object.freeze({ x: SPAWNS.heroes[0], z: SPAWNS.heroes[1] });
 
+// E2: the first fixed-world ordinary-enemy field. These are five distinct authored identities, not
+// five reads of the old serial patrol. The two Level-1 Wolves are the reachable opening fights;
+// Level 2 sits farther north in separate bowls; the one Level-4 danger Wolf is visible/reachable in
+// the existing northward slice but its territory cannot touch the recovery sanctuary.
+function authoredWolf(enemyId, level, x, z) {
+  const home = Object.freeze({ x, z });
+  return Object.freeze({
+    enemyId,
+    kind: 'wolf',
+    level,
+    home,
+    leashRadius: 4.4,
+    patrol: Object.freeze([home]),
+  });
+}
+
+export const ENEMY_POPULATION = Object.freeze([
+  authoredWolf('wolf-1', 1, 2.5, 8),
+  authoredWolf('wolf-2', 1, -5.5, 5),
+  authoredWolf('wolf-3', 2, 6.5, 15),
+  authoredWolf('wolf-4', 2, -6.5, 14),
+  authoredWolf('wolf-5', 4, 7, 30),
+]);
+
+// Respawn relocation anchor and its authored no-hostility bubble. The simulation also refuses
+// protected/sanctuary heroes as ordinary targets, so this is a law shared by online and offline
+// paths rather than a placement-only promise.
+export const RECOVERY_SANCTUARY = Object.freeze({
+  at: HERO_SPAWN,
+  radiusMeters: 3,
+});
+
 // The one pure data definition for the road's control points, read by world/ground.js to build the
 // integrated grass+road ground mesh -- not restated there (docs/MISTAKES.md GQ-007). A polyline,
 // not a network: one continuous spine reads clearly as "the route" at a glance (the brief's own

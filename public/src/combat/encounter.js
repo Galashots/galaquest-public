@@ -1,16 +1,17 @@
 // Pure ordinary-enemy combat authority. No three.js, DOM, progression, or world imports.
 //
 import { resolveIncomingDamage } from './damage.js';
+import { isSupportedWolfLevel, wolfStatsForLevel } from './enemyStats.js';
 
 // E1 replaces the old mutable `wolf` slot with one canonical `enemies` collection. Every ordinary
 // enemy carries a stable enemyId plus a kind discriminator, its own patrol cursor, and its own
 // combat/lifecycle clocks. The temporary `.wolf` / wolfSpawn* properties exposed below are derived
 // compatibility views only; no state transition ever mutates or publishes a second wolf authority.
 
-export const WOLF_MAX_HP = 30;
+export const WOLF_MAX_HP = wolfStatsForLevel(1).maxHp;
 export const HERO_MAX_HP = 30;
 export const BASE_HERO_DAMAGE = 10;
-export const WOLF_BITE_DAMAGE = 10;
+export const WOLF_BITE_DAMAGE = wolfStatsForLevel(1).biteDamage;
 export const VICTORY_HEAL_HP = WOLF_BITE_DAMAGE;
 
 export const ATTACK_REACH = 1.7;
@@ -21,7 +22,7 @@ export const ATTACK_COOLDOWN_SECONDS = 0;
 
 export const WOLF_AGGRO_RANGE = 6;
 export const WOLF_BITE_RANGE = 1.6;
-export const WOLF_SPEED = 1.15;
+export const WOLF_SPEED = wolfStatsForLevel(1).speed;
 export const WOLF_BITE_SECONDS = 1.2;
 export const WOLF_BITE_COOLDOWN_SECONDS = 2.6;
 export const WOLF_ARRIVAL_GRACE_SECONDS = 0.6;
@@ -31,6 +32,9 @@ export const DEATH_SECONDS = 1.75;
 export const RESPAWN_SECONDS = 2;
 export const WOLF_RESPAWN_SECONDS = 10;
 export const MIN_BODY_SEPARATION = 1;
+export const RESPAWN_PROTECTION_SECONDS = 2;
+export const DEFAULT_WOLF_LEASH_RADIUS = 12;
+export const WOLF_HOME_EPSILON = 0.05;
 
 const DEFAULT_ENEMY_ID = 'wolf-1';
 const SOLO_HERO_ID = 'hero';
@@ -45,6 +49,7 @@ function compareStableIds(a, b) {
 
 function freezeEnemy(enemy) {
   for (const point of enemy.patrol) Object.freeze(point);
+  Object.freeze(enemy.home);
   Object.freeze(enemy.patrol);
   return Object.freeze(enemy);
 }
@@ -95,6 +100,11 @@ function freezePartyState(state) {
   Object.freeze(state.enemies);
   for (const hero of Object.values(state.heroes)) Object.freeze(hero);
   Object.freeze(state.heroes);
+  Object.freeze(state.heroSpawn);
+  if (state.recoverySanctuary) {
+    Object.freeze(state.recoverySanctuary.at);
+    Object.freeze(state.recoverySanctuary);
+  }
   addLegacyEnemyViews(state, { includeTargetId: true });
   return Object.freeze(state);
 }
@@ -104,6 +114,10 @@ function freezeSoloState(state) {
   Object.freeze(state.enemies);
   Object.freeze(state.hero);
   Object.freeze(state.heroSpawn);
+  if (state.recoverySanctuary) {
+    Object.freeze(state.recoverySanctuary.at);
+    Object.freeze(state.recoverySanctuary);
+  }
   addLegacyEnemyViews(state, { includeTargetId: false });
   return Object.freeze(state);
 }
@@ -115,27 +129,43 @@ function normalizeEnemyDefinition(definition, fallbackId = DEFAULT_ENEMY_ID) {
     ? definition.patrol
     : definition?.spawns?.length
       ? definition.spawns
-      : [definition?.spawn ?? { x: 0, z: -4 }];
+      : [definition?.spawn ?? definition?.home ?? { x: 0, z: -4 }];
   const patrol = sourcePatrol.map(clonePoint);
   const spawnIndex = Math.max(0, Math.min(
     Number.isInteger(definition?.spawnIndex) ? definition.spawnIndex : 0,
     patrol.length - 1,
   ));
-  return { enemyId, kind, patrol, spawnIndex };
+  const level = definition?.level ?? 1;
+  if (!isSupportedWolfLevel(level)) throw new TypeError(`unsupported Wolf level: ${JSON.stringify(level)}`);
+  const spawn = patrol[spawnIndex];
+  const homeAuthored = definition?.home !== undefined;
+  const home = clonePoint(definition?.home ?? spawn);
+  const leashRadius = Number.isFinite(definition?.leashRadius) && definition.leashRadius > 0
+    ? definition.leashRadius
+    : DEFAULT_WOLF_LEASH_RADIUS;
+  return { enemyId, kind, level, patrol, spawnIndex, home, homeAuthored, leashRadius };
 }
 
 function freshEnemy(definition) {
   const normalized = normalizeEnemyDefinition(definition, definition?.enemyId);
+  const stats = wolfStatsForLevel(normalized.level);
   const spawn = normalized.patrol[normalized.spawnIndex];
   return {
     enemyId: normalized.enemyId,
     kind: normalized.kind,
+    level: normalized.level,
+    maxHp: stats.maxHp,
+    biteDamage: stats.biteDamage,
+    speed: stats.speed,
     patrol: normalized.patrol,
     spawnIndex: normalized.spawnIndex,
+    home: normalized.home,
+    homeAuthored: normalized.homeAuthored,
+    leashRadius: normalized.leashRadius,
     x: spawn.x,
     z: spawn.z,
     heading: 0,
-    hp: WOLF_MAX_HP,
+    hp: stats.maxHp,
     mode: 'idle',
     modeSeconds: 0,
     biteCooldown: WOLF_ARRIVAL_GRACE_SECONDS,
@@ -163,10 +193,28 @@ function enemyDefinitionsFromOptions({ enemies, wolfSpawn = { x: 0, z: -4 }, wol
 }
 
 function enemiesFromLegacyState(state) {
-  if (Array.isArray(state.enemies)) return state.enemies.map((enemy) => ({
-    ...enemy,
-    patrol: (enemy.patrol?.length ? enemy.patrol : [enemy]).map(clonePoint),
-  }));
+  if (Array.isArray(state.enemies)) return state.enemies.map((enemy) => {
+    const normalized = normalizeEnemyDefinition({
+      ...enemy,
+      patrol: enemy.patrol?.length ? enemy.patrol : [enemy],
+      home: enemy.home,
+      leashRadius: enemy.leashRadius,
+      level: enemy.level,
+    }, enemy.enemyId);
+    const stats = wolfStatsForLevel(normalized.level);
+    return {
+      ...normalized,
+      ...enemy,
+      level: normalized.level,
+      maxHp: stats.maxHp,
+      biteDamage: stats.biteDamage,
+      speed: stats.speed,
+      patrol: normalized.patrol,
+      home: normalized.home,
+      homeAuthored: normalized.homeAuthored,
+      leashRadius: normalized.leashRadius,
+    };
+  });
 
   if (!state.wolf) return [];
   // Legacy-only hand-built states still have to carry the legacy spawn seam they always required.
@@ -175,12 +223,24 @@ function enemiesFromLegacyState(state) {
   // Deliberately reading x/z here preserves the old fail-loud behavior when wolfSpawn is absent.
   const legacySpawn = { x: state.wolfSpawn.x, z: state.wolfSpawn.z };
   const patrol = (state.wolfSpawns?.length ? state.wolfSpawns : [legacySpawn]).map(clonePoint);
-  return [{
+  const normalized = normalizeEnemyDefinition({
     enemyId: DEFAULT_ENEMY_ID,
     kind: 'wolf',
     patrol,
     spawnIndex: state.wolfSpawnIndex ?? 0,
+    level: state.wolf?.level ?? 1,
+  });
+  const stats = wolfStatsForLevel(normalized.level);
+  return [{
+    ...normalized,
     ...state.wolf,
+    level: normalized.level,
+    maxHp: stats.maxHp,
+    biteDamage: stats.biteDamage,
+    speed: stats.speed,
+    home: normalized.home,
+    homeAuthored: normalized.homeAuthored,
+    leashRadius: normalized.leashRadius,
     targetId: state.wolf.targetId ?? null,
   }];
 }
@@ -251,6 +311,7 @@ function freshHero() {
     cooldown: 0,
     swingLanded: false,
     downSeconds: -1,
+    protectionSeconds: 0,
     lastCommandId: null,
   };
 }
@@ -275,7 +336,7 @@ function withHeroId(event, heroId) {
 }
 
 function enemyEvent(event, enemy, heroId) {
-  return withHeroId({ ...event, enemyId: enemy.enemyId, kind: enemy.kind }, heroId);
+  return withHeroId({ ...event, enemyId: enemy.enemyId, kind: enemy.kind, level: enemy.level }, heroId);
 }
 
 function nextSpawnIndex(enemy) {
@@ -288,18 +349,52 @@ function resetEnemy(enemy, { moveOn = false } = {}) {
   const reset = freshEnemy({
     enemyId: enemy.enemyId,
     kind: enemy.kind,
+    level: enemy.level,
     patrol: enemy.patrol,
     spawnIndex,
+    ...(enemy.homeAuthored ? { home: enemy.home } : {}),
+    leashRadius: enemy.leashRadius,
   });
   Object.assign(enemy, reset);
 }
 
 function publishParty(state, enemies, heroes) {
+  const publishedHeroes = Object.fromEntries(
+    Object.entries(heroes).map(([heroId, hero]) => [heroId, publishHero(hero)]),
+  );
   return freezePartyState({
     revision: (state.revision ?? 0) + 1,
     enemies,
-    heroes,
+    heroes: publishedHeroes,
+    heroSpawn: clonePoint(state.heroSpawn),
+    recoverySanctuary: cloneSanctuary(state.recoverySanctuary),
   });
+}
+
+function publishHero(hero) {
+  const published = { ...hero };
+  Object.defineProperty(published, 'protectionSeconds', {
+    enumerable: false,
+    value: hero.protectionSeconds ?? 0,
+  });
+  return published;
+}
+
+function cloneSanctuary(sanctuary) {
+  if (!sanctuary) return null;
+  return {
+    at: clonePoint(sanctuary.at),
+    radiusMeters: sanctuary.radiusMeters,
+  };
+}
+
+function pointInSanctuary(point, sanctuary) {
+  if (!sanctuary || !Number.isFinite(sanctuary.radiusMeters)) return false;
+  return Math.hypot(point.x - sanctuary.at.x, point.z - sanctuary.at.z) <= sanctuary.radiusMeters;
+}
+
+function enemyDistanceFromHome(enemy) {
+  return Math.hypot(enemy.x - enemy.home.x, enemy.z - enemy.home.z);
 }
 
 /** Fresh canonical party encounter. `enemies` is the E1 authority; wolfSpawn* remain input adapters. */
@@ -307,7 +402,13 @@ export function createPartyEncounterState(options = {}) {
   const heroes = {};
   for (const heroId of options.heroIds ?? []) heroes[heroId] = freshHero();
   const enemies = enemyDefinitionsFromOptions(options).map(freshEnemy);
-  return freezePartyState({ revision: 0, enemies, heroes });
+  return freezePartyState({
+    revision: 0,
+    enemies,
+    heroes,
+    heroSpawn: clonePoint(options.heroSpawn ?? { x: 0, z: 0 }),
+    recoverySanctuary: cloneSanctuary(options.recoverySanctuary),
+  });
 }
 
 /** Fresh solo encounter over the same ordinary-enemy collection engine. */
@@ -321,6 +422,7 @@ export function createEncounterState(options = {}) {
     lastCommandId: null,
     enemies,
     heroSpawn: clonePoint(options.heroSpawn ?? { x: 0, z: 0 }),
+    recoverySanctuary: cloneSanctuary(options.recoverySanctuary),
     hero: {
       hp: HERO_MAX_HP,
       maxHp: HERO_MAX_HP,
@@ -328,6 +430,7 @@ export function createEncounterState(options = {}) {
       cooldown: 0,
       swingLanded: false,
       downSeconds: -1,
+      protectionSeconds: 0,
     },
   });
 }
@@ -411,14 +514,17 @@ function findSwingTarget(enemies, position, heading) {
   return best;
 }
 
-function nearestTargetableHero(enemy, heroes, heroIds, commandHeroes) {
+function nearestTargetableHero(enemy, heroes, heroIds, commandHeroes, recoverySanctuary) {
   let best = null;
   let bestDistance = Infinity;
   let dx = 0;
   let dz = 0;
   for (const heroId of heroIds) {
-    if (heroes[heroId].downSeconds >= 0 || commandHeroes[heroId]?.targetable === false) continue;
+    if (heroes[heroId].downSeconds >= 0
+      || heroes[heroId].protectionSeconds > 0
+      || commandHeroes[heroId]?.targetable === false) continue;
     const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
+    if (pointInSanctuary(position, recoverySanctuary)) continue;
     const candidateDx = position.x - enemy.x;
     const candidateDz = position.z - enemy.z;
     const distance = Math.hypot(candidateDx, candidateDz);
@@ -459,6 +565,31 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
     return;
   }
 
+  // Ordinary pursuit has a bounded territory. Returning is a distinct rules mode so a Wolf cannot
+  // keep biting while its presenter is visibly walking home. Reaching home restores the full
+  // authored body, which prevents indefinite kiting of a dangerous target.
+  const outsideTerritory = enemyDistanceFromHome(enemy) > enemy.leashRadius;
+  if (enemy.mode === 'returning' || outsideTerritory) {
+    enemy.targetId = null;
+    enemy.biteLanded = false;
+    const distance = enemyDistanceFromHome(enemy);
+    if (distance <= WOLF_HOME_EPSILON) {
+      enemy.x = enemy.home.x;
+      enemy.z = enemy.home.z;
+      enemy.hp = enemy.maxHp;
+      enemy.mode = 'idle';
+      enemy.modeSeconds = 0;
+      enemy.biteCooldown = WOLF_ARRIVAL_GRACE_SECONDS;
+      return;
+    }
+    const moved = stepTowards(enemy, enemy.home, enemy.speed, deltaSeconds);
+    enemy.x = moved.x;
+    enemy.z = moved.z;
+    enemy.heading = moved.heading;
+    enemy.mode = 'returning';
+    return;
+  }
+
   if (enemy.mode === 'hit') {
     if (enemy.modeSeconds >= STAGGER_SECONDS) {
       enemy.mode = 'idle';
@@ -475,10 +606,10 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
       const target = targetId == null ? null : heroes[targetId];
       const targetPosition = targetId == null ? null : (commandHeroes[targetId]?.position ?? { x: 0, z: 0 });
       const stillTargetable = targetId == null || commandHeroes[targetId]?.targetable !== false;
-      if (target && target.downSeconds < 0 && stillTargetable
+      if (target && target.downSeconds < 0 && (target.protectionSeconds ?? 0) <= 0 && stillTargetable
         && isWithinStrike(enemy, enemy.heading, targetPosition, WOLF_BITE_RANGE)) {
         target.hp -= resolveIncomingDamage(
-          WOLF_BITE_DAMAGE,
+          enemy.biteDamage,
           commandHeroes[targetId]?.damageReductionPercent,
         );
         events.push(enemyEvent({ type: 'hero-hurt', remaining: Math.max(0, target.hp) }, enemy, targetId));
@@ -497,7 +628,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
     return;
   }
 
-  const nearest = nearestTargetableHero(enemy, heroes, heroIds, commandHeroes);
+  const nearest = nearestTargetableHero(enemy, heroes, heroIds, commandHeroes, command.recoverySanctuary);
   if (nearest.heroId === null) {
     enemy.mode = 'idle';
     return;
@@ -518,7 +649,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
     const moved = stepTowards(
       enemy,
       commandHeroes[nearest.heroId]?.position ?? { x: 0, z: 0 },
-      WOLF_SPEED,
+      enemy.speed,
       deltaSeconds,
     );
     enemy.x = moved.x;
@@ -533,6 +664,10 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
 
 export function stepParty(state, command = {}) {
   const { deltaSeconds = 0, heroes: commandHeroes = {} } = command;
+  const rulesCommand = {
+    ...command,
+    recoverySanctuary: command.recoverySanctuary ?? state.recoverySanctuary,
+  };
   const heroIds = Object.keys(state.heroes).sort(compareStableIds);
   const heroes = {};
   for (const heroId of heroIds) heroes[heroId] = { ...state.heroes[heroId] };
@@ -548,13 +683,15 @@ export function stepParty(state, command = {}) {
 
     reconcileMaxHp(hero, cmd?.maxHp);
     hero.cooldown = Math.max(0, hero.cooldown - deltaSeconds);
+    hero.protectionSeconds = Math.max(0, (hero.protectionSeconds ?? 0) - deltaSeconds);
 
     if (hero.downSeconds >= 0) {
       hero.downSeconds += deltaSeconds;
       if (hero.downSeconds >= RESPAWN_SECONDS) {
         hero.downSeconds = -1;
         hero.hp = hero.maxHp;
-        events.push(withHeroId({ type: 'hero-respawned' }, heroId));
+        hero.protectionSeconds = RESPAWN_PROTECTION_SECONDS;
+        events.push(withHeroId({ type: 'hero-respawned', protectionSeconds: RESPAWN_PROTECTION_SECONDS }, heroId));
         respawnedIds.push(heroId);
       }
     }
@@ -611,7 +748,7 @@ export function stepParty(state, command = {}) {
   // never change which lifecycle transition is evaluated first.
   enemies.sort((a, b) => compareStableIds(a.enemyId, b.enemyId));
   for (const enemy of enemies) {
-    advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSeconds, command);
+    advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSeconds, rulesCommand);
   }
 
   return { state: publishParty(state, enemies, heroes), events };
@@ -625,7 +762,15 @@ function toPartyState(state) {
   return {
     revision: 0,
     enemies,
-    heroes: { [SOLO_HERO_ID]: { ...state.hero, lastCommandId: null } },
+    heroes: {
+      [SOLO_HERO_ID]: {
+        ...state.hero,
+        protectionSeconds: state.hero.protectionSeconds ?? 0,
+        lastCommandId: null,
+      },
+    },
+    heroSpawn: clonePoint(state.heroSpawn),
+    recoverySanctuary: cloneSanctuary(state.recoverySanctuary),
   };
 }
 
@@ -637,7 +782,7 @@ function soloEnemiesFromParty(enemies) {
 }
 
 function heroFromParty(hero) {
-  return {
+  const published = {
     hp: hero.hp,
     maxHp: hero.maxHp,
     swingSeconds: hero.swingSeconds,
@@ -645,6 +790,11 @@ function heroFromParty(hero) {
     swingLanded: hero.swingLanded,
     downSeconds: hero.downSeconds,
   };
+  Object.defineProperty(published, 'protectionSeconds', {
+    enumerable: false,
+    value: hero.protectionSeconds ?? 0,
+  });
+  return published;
 }
 
 function stripHeroId(event) {
@@ -659,6 +809,7 @@ function publishSolo(state, commandId, partyState) {
     lastCommandId: commandId ?? null,
     enemies: soloEnemiesFromParty(partyState.enemies),
     heroSpawn: clonePoint(state.heroSpawn),
+    recoverySanctuary: cloneSanctuary(state.recoverySanctuary),
     hero: heroFromParty(partyState.heroes[SOLO_HERO_ID]),
   });
 }

@@ -102,10 +102,13 @@ function oneWolfBehaviorStep(state, events) {
   });
 
   const projectedEvents = events.map((event) => {
-    if (!('enemyId' in event) && !('kind' in event)) return event;
+    if (!('enemyId' in event) && !('kind' in event)) {
+      const { protectionSeconds, ...legacyEvent } = event;
+      return legacyEvent;
+    }
     assert.equal(event.enemyId, enemy.enemyId, 'enemy event must carry the stable default Wolf id');
     assert.equal(event.kind, enemy.kind, 'enemy event must carry the default Wolf kind');
-    const { enemyId, kind, ...legacyEvent } = event;
+    const { enemyId, kind, level, protectionSeconds, ...legacyEvent } = event;
     return legacyEvent;
   });
 

@@ -79,6 +79,7 @@ import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
 import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
 import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
+import { createEnemyNameplateLayer, ENEMY_NAMEPLATE_MAX_DISTANCE } from './enemies/nameplate.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -197,14 +198,19 @@ const EMPTY_SERVER_ENCOUNTER = Object.freeze({
 // The wire's hero shape (protocol.js decodeHeroes): only the four fields a client needs to
 // predict its own attack button and render health. Matches createPartyEncounterState's freshHero
 // on those same four fields.
-const DEFAULT_HERO_VIEW = Object.freeze({ hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1 });
+const DEFAULT_HERO_VIEW = Object.freeze({
+  hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1, protectionSeconds: 0,
+});
 // Shared with net/gameServer.mjs through the zone data both sides import (Phase R2, GQ-007). These
 // used to be two hand-written copies of `{ x: 2.5, z: 8 }` kept equal by a human noticing, because
 // gameServer.mjs is server-only and cannot be imported here -- the fix was not to import the server,
 // it was to give both sides the same PURE data module to read. Used to boot the offline fallback
 // below and to give the online mirror a real spawn to carry (see the frame loop's
 // `netStatus === 'online'` branch and its comment).
-const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
+const {
+  ENEMY_POPULATION, HERO_SPAWN, RECOVERY_SANCTUARY, WOLF_SPAWN, WOLF_SPAWNS,
+} = VILLAGE;
+const ENEMY_DEFINITIONS = new Map(ENEMY_POPULATION.map((enemy) => [enemy.enemyId, enemy]));
 
 // Phase D, offline fallback (brief D4): rewards/marks.js's foldEvents attributes a mark to whoever
 // landed the hit, read off event.heroId -- but the OFFLINE solo path's events (combat/encounter.js's
@@ -826,7 +832,11 @@ async function bootstrap() {
   // status line -- reads THIS, and none of them reach into the rules, whether it holds the local
   // step's result or the server's mirror. That is what made the move to a server-owned fight a
   // change of who calls stepParty rather than a rewrite of every reader.
-  let encounterState = createEncounterState({ wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS, heroSpawn: HERO_SPAWN });
+  let encounterState = createEncounterState({
+    enemies: ENEMY_POPULATION,
+    heroSpawn: HERO_SPAWN,
+    recoverySanctuary: RECOVERY_SANCTUARY,
+  });
 
   function enemyById(enemyId) {
     if (typeof enemyId !== 'string') return null;
@@ -843,13 +853,18 @@ async function bootstrap() {
     // shipped kind is Wolf, so reconnect-to-offline preserves the exact authored Wolf patrol the
     // legacy singular mirror used. A future kind with no authored client patrol remains where the
     // server last published it rather than borrowing Wolf geography.
-    const patrol = enemy.kind === 'wolf'
-      ? WOLF_SPAWNS.map((point) => ({ x: point.x, z: point.z }))
-      : [{ x: enemy.x, z: enemy.z }];
+    const authored = ENEMY_DEFINITIONS.get(enemy.enemyId);
+    const patrol = authored?.patrol?.map((point) => ({ x: point.x, z: point.z }))
+      ?? (enemy.kind === 'wolf'
+        ? WOLF_SPAWNS.map((point) => ({ x: point.x, z: point.z }))
+        : [{ x: enemy.x, z: enemy.z }]);
     const { targetId, ...published } = enemy;
     return {
       ...published,
       patrol,
+      home: authored?.home ? { x: authored.home.x, z: authored.home.z } : { x: enemy.x, z: enemy.z },
+      homeAuthored: authored?.home !== undefined,
+      leashRadius: authored?.leashRadius,
       spawnIndex: 0,
       biteCooldown: 0,
       biteLanded: false,
@@ -995,6 +1010,20 @@ async function bootstrap() {
     // the same reason a CSS transition never fires on an element's own first paint.
     window.requestAnimationFrame(() => { el.dataset.rise = 'true'; });
     window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
+  }
+
+  const enemyNameplates = createEnemyNameplateLayer({
+    container: document.querySelector('#enemy-nameplates'),
+  });
+  function projectEnemyNameplate(enemy) {
+    const distance = Math.hypot(player.position.x - enemy.x, player.position.z - enemy.z);
+    if (distance > ENEMY_NAMEPLATE_MAX_DISTANCE) return null;
+    const projected = new THREE.Vector3(enemy.x, 1.65, enemy.z).project(camera);
+    if (projected.z < -1 || projected.z > 1) return null;
+    const rect = gameSurface.getBoundingClientRect();
+    const { x, y } = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    if (x < -80 || x > rect.width + 80 || y < -80 || y > rect.height + 40) return null;
+    return { visible: true, x, y };
   }
 
   // Phase D (D4): three lantern-mark pips under the health readout, filling as marks arrive. Same read-only,
@@ -2847,6 +2876,7 @@ async function bootstrap() {
         lastCommandId: null,
         enemies: published.enemies.map(mirrorPublishedEnemy),
         heroSpawn: HERO_SPAWN,
+        recoverySanctuary: RECOVERY_SANCTUARY,
         hero: { swingLanded: false, ...ownHero },
       };
     }
@@ -2997,6 +3027,12 @@ async function bootstrap() {
         // table expects.
         const drained = pendingServerEvents.splice(0, pendingServerEvents.length);
         for (const event of drained) {
+          if (event.type === 'hero-respawned' && event.heroId === ownHeroId) {
+            player.position.x = HERO_SPAWN.x;
+            player.position.z = HERO_SPAWN.z;
+            player.heading = 0;
+            player.groundSpeed = 0;
+          }
           // The siege's own events go to the siege's own table (see SIEGE_EVENT_TYPES). Filtered to
           // this hero the same way the wolf's are, EXCEPT the ones that are nobody's in particular
           // (a seal bursting, the Beacon catching, the Warden waking): those are world events, and
@@ -3052,6 +3088,12 @@ async function bootstrap() {
         });
         encounterState = stepped.state;
         events.push(...stepped.events);
+        if (stepped.events.some((event) => event.type === 'hero-respawned')) {
+          player.position.x = HERO_SPAWN.x;
+          player.position.z = HERO_SPAWN.z;
+          player.heading = 0;
+          player.groundSpeed = 0;
+        }
 
         // Offline fallback reward loop (brief D4): the same D1 fold net/gameServer.mjs runs online,
         // run here against the solo hero's own (heroId-less) events -- see rewards/offlineProgress.js
@@ -3246,6 +3288,10 @@ async function bootstrap() {
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
       }
       enemyPresenters.update(deltaSeconds, encounterState.enemies);
+      enemyNameplates.update(encounterState.enemies, {
+        heroLevel: heroStatsThisFrame.level,
+        project: projectEnemyNameplate,
+      });
       const companionState = companionPresenter?.update(deltaSeconds, {
         x: player.position.x,
         z: player.position.z,
