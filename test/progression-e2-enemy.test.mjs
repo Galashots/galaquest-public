@@ -236,8 +236,6 @@ test('E2 C2 recovery relocates one hero into protection without resetting a livi
   assert.equal(respawned, true);
   assert.equal(state.heroes.downed.hp, state.heroes.downed.maxHp);
   assert.equal(state.heroes.sibling.hp, siblingHp);
-  const wire = JSON.parse(JSON.stringify(state));
-  assert.ok(wire.heroes.downed.protectionSeconds > 0, 'recovery protection must survive the authoritative wire');
 
   const protectedHp = state.heroes.downed.hp;
   for (let tick = 0; tick < 10; tick += 1) {
@@ -271,6 +269,8 @@ test('E2 C2 server recovery moves only the downed player to HERO_SPAWN', () => {
     }
   }
   assert.equal(protectionSeen, true);
+  const wire = JSON.parse(JSON.stringify(simulation.encounterSnapshot()));
+  assert.ok(wire.heroes[downed.id].protectionSeconds > 0, 'server recovery protection must survive the authoritative wire');
   const relocated = simulation.snapshot().find((player) => player.id === downed.id);
   assert.deepEqual({ x: relocated.x, z: relocated.z }, { x: 0, z: 0 });
   assert.equal(simulation.encounterSnapshot().heroes[sibling.id].hp, siblingHp);

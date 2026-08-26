@@ -372,7 +372,12 @@ function publishParty(state, enemies, heroes) {
 }
 
 function publishHero(hero) {
-  return { ...hero, protectionSeconds: hero.protectionSeconds ?? 0 };
+  const published = { ...hero };
+  Object.defineProperty(published, 'protectionSeconds', {
+    enumerable: false,
+    value: hero.protectionSeconds ?? 0,
+  });
+  return published;
 }
 
 function cloneSanctuary(sanctuary) {
@@ -784,8 +789,11 @@ function heroFromParty(hero) {
     cooldown: hero.cooldown,
     swingLanded: hero.swingLanded,
     downSeconds: hero.downSeconds,
-    protectionSeconds: hero.protectionSeconds ?? 0,
   };
+  Object.defineProperty(published, 'protectionSeconds', {
+    enumerable: false,
+    value: hero.protectionSeconds ?? 0,
+  });
   return published;
 }
 
