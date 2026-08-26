@@ -22,6 +22,8 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const gitBlobOid = (bytes) => createHash('sha1').update(Buffer.from(`blob ${bytes.length}\0`)).update(bytes).digest('hex');
 const files = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
 const supportedFiles = () => files(join(root, 'public/assets')).filter((path) => supportedExtensions.has(extname(path).toLowerCase()));
+const isAssetSourcePath = (path) => Boolean(path) && supportedExtensions.has(extname(path).toLowerCase());
+const isGenerationTaskKind = (kind) => kind === 'image-to-3d' || kind === 'rigging';
 const gate = (status = 'UNKNOWN', evidenceRefs = []) => ({ status, evidence_refs: evidenceRefs });
 const gates = () => Object.fromEntries(gateNames.map((name) => [name, gate()]));
 const metric = (value = 'UNKNOWN') => value;
@@ -115,12 +117,14 @@ for (const item of history.items) {
   if (!isProvider && !isBinary) continue;
 
   const sourcePath = item.source_path ?? null;
+  const sourcePathIsAsset = isAssetSourcePath(sourcePath);
   const inCurrentRuntime = sourcePath ? currentRuntimePaths.has(sourcePath) : false;
   const taskInputs = [...(item.provider_task_ids ?? []).map(taskInput), ...(item.rig_task_id ? [{ id: item.rig_task_id, kind: 'rigging' }] : [])];
   const providerTasks = taskInputs.map(observedTask);
+  const hasGenerationTask = taskInputs.some((task) => isGenerationTaskKind(task.kind));
   const custodyLocations = [];
 
-  if (item.source_ref && sourcePath && item.git_blob_oid) {
+  if (item.source_ref && sourcePath && item.git_blob_oid && sourcePathIsAsset) {
     custodyLocations.push({
       kind: 'GIT',
       durable: true,
@@ -191,14 +195,14 @@ for (const item of history.items) {
     asset_id: item.item_id,
     display_name: item.item_id,
     asset_kind: assetKind,
-    lifecycle: isProvider ? 'GENERATED' : 'QUALIFYING',
+    lifecycle: isProvider ? (hasGenerationTask ? 'GENERATED' : 'SOURCE_ONLY') : 'QUALIFYING',
     custody,
     recoverability,
     custody_locations: custodyLocations,
     source: {
-      path: sourcePath,
-      sha256: item.sha256 ?? null,
-      size_bytes: item.size_bytes ?? null,
+      path: sourcePathIsAsset ? sourcePath : null,
+      sha256: sourcePathIsAsset ? (item.sha256 ?? null) : null,
+      size_bytes: sourcePathIsAsset ? (item.size_bytes ?? null) : null,
       authority: 'historical-asset-platform-inventory',
     },
     provider: {
