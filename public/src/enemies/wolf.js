@@ -23,6 +23,7 @@ export const WOLF_URL = 'assets/enemies/wolf.glb';
 export const WOLF_CLIP_FOR_MODE = Object.freeze({
   idle: 'idle',
   walk: 'walk',
+  returning: 'walk',
   bite: 'bite',
   hit: 'hit',
   dying: 'death',
@@ -261,7 +262,7 @@ export function createWolfPresenter(root, animations) {
   let sparkSeconds = 0;
 
   function tickSpark(deltaSeconds, wolf) {
-    const target = wolfSparkTarget(wolf.mode, wolf.hp) * WOLF_SPARK_STRENGTH;
+    const target = wolfSparkTarget(wolf.mode, wolf.hp, wolf.maxHp) * WOLF_SPARK_STRENGTH;
     if (sparkStrength !== target) {
       const step = WOLF_SPARK_FADE_PER_SECOND * deltaSeconds;
       sparkStrength = Math.abs(target - sparkStrength) <= step

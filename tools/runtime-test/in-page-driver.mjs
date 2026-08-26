@@ -54,22 +54,30 @@ const WATCH_STORE = 'window.__gqWatch';
 const WALK_STATE = 'window.__gqWalk';
 
 /**
- * JavaScript source for the one authored Wolf in today's shipped-world harnesses.
+ * JavaScript source for the opening authored Wolf.
  *
- * The runtime is collection-shaped. These harnesses exercise today's one-Wolf world, so they may
- * select by the authored kind only after proving that the collection contains exactly one such
- * enemy. That keeps a future second Wolf from silently changing which entity the evidence follows.
+ * The runtime is collection-shaped. Ordinary-fight harnesses follow the stable `wolf-1` identity
+ * in the current five-Wolf world; an intentional single-Wolf fixture remains valid regardless of
+ * its fixture id. A multi-Wolf world without exactly one requested identity fails loudly rather
+ * than silently changing which entity the evidence follows.
  */
-export function authoredWolfSource(runtimeExpression = 'window.__galaQuestRuntime') {
+export function authoredWolfSource(runtimeExpression = 'window.__galaQuestRuntime', preferredEnemyId = 'wolf-1') {
+  const requestedId = JSON.stringify(preferredEnemyId);
   return `(() => {
   const encounter = ${runtimeExpression}.encounterState();
   const wolves = Array.isArray(encounter?.enemies)
     ? encounter.enemies.filter((enemy) => enemy?.kind === 'wolf')
     : [];
-  if (wolves.length !== 1) {
-    throw new Error('expected exactly one authored Wolf, found ' + wolves.length);
+  if (wolves.length === 0) {
+    throw new Error('expected an authored Wolf, found none');
   }
-  return wolves[0];
+  if (wolves.length === 1) return wolves[0];
+  const matches = wolves.filter((enemy) => enemy?.enemyId === ${requestedId});
+  if (matches.length !== 1) {
+    throw new Error('expected exactly one authored Wolf with enemyId ' + ${requestedId}
+      + ', found ' + matches.length + ' among ' + wolves.length);
+  }
+  return matches[0];
 })()`;
 }
 

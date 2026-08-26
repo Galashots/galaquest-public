@@ -78,6 +78,7 @@ export const HARNESSES = {
   // never about how any of it looks. Its captures are the human evidence; its exit code is not a
   // claim that anybody has looked at them.
   'drive-first-level-up': { gate: true, why: 'the first Hero level earned on the real path: Lantern -> 100 XP -> Level 2 -> bigger body and harder blow in both fights, surviving a reload without replaying the ceremony' },
+  'drive-e2-enemy': { gate: true, why: 'E2 enemy population, level-aware nameplates, leash return, safe recovery, portrait and landscape, and two-client isolation' },
   'drive-ranger': { gate: true, why: 'the Beacon is answered: Wren is standing in the village because of it, takes her brother\'s satchel, and the charm grows the health bar in a way that survives a reload' },
   // G1-C3's own end-to-end proof: a child owning no helmet is granted one mid-session, the acquisition
   // card fires with the real resolved POWER move and asks EQUIP NOW?, EQUIP NOW mounts it, the Hero
@@ -104,6 +105,6 @@ export const SUITES = {
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
-    'drive-helmet-vertical',
+    'drive-e2-enemy', 'drive-helmet-vertical',
   ],
 };

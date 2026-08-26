@@ -575,6 +575,29 @@
         opacity: 1; transition: transform 750ms ease-out, opacity 750ms ease-out;
       }
       .damage-number[data-rise="true"] { transform: translate(-50%, -260%); opacity: 0; }
+      /* E2: compact projected identity for nearby ordinary enemies. This is deliberately one small
+         label per stable enemy id, not a dashboard: the layer is bounded by main.js's useful-world
+         distance and hides off-screen/dead enemies. DANGER is text as well as red treatment so a
+         Level-4 gap cannot be missed by a child who does not distinguish colours reliably. */
+      #enemy-nameplates { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .enemy-nameplate {
+        position: absolute; transform: translate(-50%, -100%); min-width: 4.2rem;
+        padding: 0.22rem 0.34rem 0.28rem; border: 1px solid rgb(255 255 255 / 28%);
+        border-radius: 0.32rem; background: rgb(12 20 31 / 82%); color: #fff;
+        font: 800 0.68rem/1.1 system-ui, sans-serif; text-align: center;
+        text-shadow: 0 1px 2px rgb(0 0 0 / 90%);
+      }
+      .enemy-nameplate-name, .enemy-nameplate-level, .enemy-nameplate-danger { display: block; }
+      .enemy-nameplate-level { color: #f2d28d; font-size: 0.62rem; margin-top: 0.08rem; }
+      .enemy-nameplate-danger { min-height: 0.7em; color: #ff6b6b; font-size: 0.57rem; letter-spacing: 0.08em; }
+      .enemy-nameplate-health { display: block; height: 0.2rem; margin-top: 0.15rem; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 24%); }
+      .enemy-nameplate-health > span { display: block; height: 100%; background: #83d77b; transform-origin: left center; }
+      .enemy-nameplate[data-danger="true"] { border-color: rgb(255 91 91 / 88%); box-shadow: 0 0 0.55rem rgb(255 45 45 / 48%); }
+      .enemy-nameplate[data-danger="true"] .enemy-nameplate-health > span { background: #ff6262; }
+      @media (max-width: 32rem) {
+        .enemy-nameplate { min-width: 3.7rem; padding: 0.17rem 0.27rem 0.22rem; font-size: 0.61rem; }
+        .enemy-nameplate-level, .enemy-nameplate-danger { font-size: 0.53rem; }
+      }
       @media (prefers-reduced-motion: reduce) {
         #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
         /* THE CEREMONY STILL HAPPENS UNDER REDUCED MOTION -- it just stops moving.
@@ -1241,6 +1264,7 @@
            real state, this is juice on top of it -- so aria-hidden, same as the hurt flash above.
            Populated/emptied by main.js's popDamageNumber(); see screenProjection.js for the maths. -->
       <div id="damage-numbers" aria-hidden="true"></div>
+      <div id="enemy-nameplates" aria-live="off"></div>
       <!-- P2: A BAR AND A NUMBER, not a fixed row of pips.
            This was four <span class="heart"> elements, one per pip, with a hand-maintained count
            pinned to HERO_MAX_HP_CEILING -- because the markup could not draw a variable number and

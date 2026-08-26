@@ -37,7 +37,7 @@ import {
 // `{ x: 2.5, z: 8 }`, and the drift guard that existed only watched the other two -- so this one
 // could have gone stale silently and re-pinned the golden trace against a spawn the game no longer
 // used. The value is byte-identical to the literal it replaces, so the fixture does NOT regenerate.
-import { WOLF_SPAWN } from '../public/src/world/zones/village.js';
+import { SINGLE_WOLF_FIXTURE_SPAWN } from '../public/src/world/zones/village.js';
 
 const FIXTURE_PATH = fileURLToPath(new URL('./fixtures/encounter-golden-trace.json', import.meta.url));
 
@@ -102,10 +102,13 @@ function oneWolfBehaviorStep(state, events) {
   });
 
   const projectedEvents = events.map((event) => {
-    if (!('enemyId' in event) && !('kind' in event)) return event;
+    if (!('enemyId' in event) && !('kind' in event)) {
+      const { protectionSeconds, ...legacyEvent } = event;
+      return legacyEvent;
+    }
     assert.equal(event.enemyId, enemy.enemyId, 'enemy event must carry the stable default Wolf id');
     assert.equal(event.kind, enemy.kind, 'enemy event must carry the default Wolf kind');
-    const { enemyId, kind, ...legacyEvent } = event;
+    const { enemyId, kind, level, protectionSeconds, ...legacyEvent } = event;
     return legacyEvent;
   });
 
@@ -127,7 +130,7 @@ function oneWolfBehaviorStep(state, events) {
  * already JSON-safe. E1 identity is asserted by oneWolfBehaviorStep before the projection happens.
  */
 function runTrace() {
-  let state = createPartyEncounterState({ wolfSpawn: WOLF_SPAWN, heroIds: [] });
+  let state = createPartyEncounterState({ wolfSpawn: SINGLE_WOLF_FIXTURE_SPAWN, heroIds: [] });
   state = addHero(state, 'A');
   state = addHero(state, 'B');
 
@@ -139,8 +142,8 @@ function runTrace() {
   for (let tick = 0; tick < MAX_TICKS; tick += 1) {
     const posA = positionA(tick);
     const posB = positionB(tick, aDownTick);
-    const headingA = headingToward(posA, WOLF_SPAWN);
-    const headingB = headingToward(posB, WOLF_SPAWN);
+    const headingA = headingToward(posA, SINGLE_WOLF_FIXTURE_SPAWN);
+    const headingB = headingToward(posB, SINGLE_WOLF_FIXTURE_SPAWN);
 
     if (aDownTick === null && state.heroes.A.downSeconds >= 0) aDownTick = tick;
 

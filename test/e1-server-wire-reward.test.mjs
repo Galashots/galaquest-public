@@ -88,18 +88,19 @@ test('protocol v4 rejects malformed, duplicate, unsupported-kind, and invalid-mo
   })), ProtocolError);
 });
 
-test('server default snapshot still contains exactly the shipped wolf-1 and no singular wire slot', () => {
+test('server default snapshot contains the authored E2 population and no singular wire slot', () => {
   const simulation = createSimulation();
   const snapshot = simulation.encounterSnapshot();
 
-  assert.equal(snapshot.enemies.length, 1);
-  assert.equal(snapshot.enemies[0].enemyId, 'wolf-1');
-  assert.equal(snapshot.enemies[0].kind, 'wolf');
+  assert.deepEqual(snapshot.enemies.map((enemy) => enemy.enemyId), [
+    'wolf-1', 'wolf-2', 'wolf-3', 'wolf-4', 'wolf-5',
+  ]);
+  assert.ok(snapshot.enemies.every((enemy) => enemy.kind === 'wolf'));
   assert.equal(Object.keys(snapshot).includes('wolf'), false, 'derived C2 bridge is not enumerable/wire state');
   assert.equal(JSON.stringify(snapshot).includes('\"wolf\":'), false, 'singular Wolf is absent from serialized server state');
 });
 
-test('server fixture can own two stable ordinary enemies without changing default population', () => {
+test('server fixture can own two stable ordinary enemies through the same collection seam', () => {
   const simulation = createSimulation({
     enemies: [
       { enemyId: 'wolf-a', kind: 'wolf', spawn: { x: -2, z: 8 } },

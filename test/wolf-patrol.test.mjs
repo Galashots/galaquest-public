@@ -23,7 +23,7 @@ import {
   stepEncounter,
   stepParty,
 } from '../public/src/combat/encounter.js';
-import { SPAWNS, WOLF_SPAWN, WOLF_SPAWNS } from '../public/src/world/zones/village.js';
+import { ENEMY_POPULATION, SPAWNS, WOLF_SPAWN, WOLF_SPAWNS } from '../public/src/world/zones/village.js';
 
 const STEP = 1 / 60;
 const PATROL = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 0, z: 10 }];
@@ -164,9 +164,13 @@ test('the solo wrapper walks the patrol too, and carries the index across ticks'
 
 // ── the village's own patrol ────────────────────────────────────────────────────────────────────
 
-test('the village patrol starts where the fight has always started', () => {
-  assert.deepEqual(WOLF_SPAWNS[0], WOLF_SPAWN);
-  assert.deepEqual(SPAWNS.patrol[0], SPAWNS.wolf);
+test('the production opening seam follows authored wolf-1; legacy patrol stays isolated', () => {
+  const opening = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-1');
+  assert.ok(opening);
+  assert.deepEqual(WOLF_SPAWN, opening.home);
+  assert.deepEqual(SPAWNS.wolf, [opening.home.x, opening.home.z]);
+  assert.notDeepEqual(WOLF_SPAWNS[0], WOLF_SPAWN);
+  assert.deepEqual(SPAWNS.patrol[0], [WOLF_SPAWNS[0].x, WOLF_SPAWNS[0].z]);
 });
 
 test('every spot is somewhere a child has to walk to, and nowhere they are standing', () => {

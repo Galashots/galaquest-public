@@ -27,6 +27,8 @@ const roundTrip = (message) => decode(encode(message));
 const WOLF_FIXTURE = {
   enemyId: 'wolf-1',
   kind: 'wolf',
+  level: 1,
+  maxHp: 30,
   x: 2.5,
   z: 8,
   heading: 0.1,

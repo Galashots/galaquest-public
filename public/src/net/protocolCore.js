@@ -27,6 +27,7 @@
 // this module does. The alternative was a second copy of the durable fact vocabulary living here,
 // which is the drift docs/MISTAKES.md GQ-007 exists to stop.
 import { isDurableFactType, parseXpFactAmount } from '../progression/facts.js';
+import { isSupportedWolfLevel, wolfStatsForLevel } from '../combat/enemyStats.js';
 
 export const PROTOCOL_VERSION = 4;
 
@@ -56,7 +57,7 @@ const ENEMY_ID_MAX_LENGTH = 64;
 const ENEMY_KIND_MAX_LENGTH = 32;
 const ENEMY_COLLECTION_MAX_LENGTH = 128;
 const ENEMY_KINDS = ['wolf'];
-const ENEMY_MODES = ['idle', 'walk', 'bite', 'hit', 'dying', 'dead'];
+const ENEMY_MODES = ['idle', 'walk', 'bite', 'hit', 'returning', 'dying', 'dead'];
 
 // Inputs are sent at 15 Hz while the stick is live, plus exactly one zero-magnitude message on
 // release so the server stops immediately rather than waiting for the stale-input timeout.
@@ -369,6 +370,19 @@ function decodeEnemy(enemy, index) {
   if (!ENEMY_MODES.includes(enemy.mode)) {
     fail(`${field}.mode must be one of ${ENEMY_MODES.join(', ')}, got ${JSON.stringify(enemy.mode)}`);
   }
+  // Level/maxHp are E2 additions inside protocol v4. Production always sends them; an older v4
+  // fixture/client that omits them remains an honest Level-1 decode rather than failing before the
+  // additive field was introduced. When present, both values are strict and must agree with the
+  // canonical table.
+  const level = enemy.level === undefined ? 1 : requireInteger(enemy.level, `${field}.level`);
+  if (!isSupportedWolfLevel(level)) {
+    fail(`${field}.level is not a supported Wolf level, got ${JSON.stringify(level)}`);
+  }
+  const maxHp = enemy.maxHp === undefined ? wolfStatsForLevel(level).maxHp
+    : requireInteger(enemy.maxHp, `${field}.maxHp`);
+  if (maxHp !== wolfStatsForLevel(level).maxHp) {
+    fail(`${field}.maxHp must match Level-${level} Wolf stats`);
+  }
 
   const targetId = enemy.targetId === null
     ? null
@@ -376,6 +390,8 @@ function decodeEnemy(enemy, index) {
   const decoded = {
     enemyId,
     kind,
+    level,
+    maxHp,
     x: requireFiniteNumber(enemy.x, `${field}.x`),
     z: requireFiniteNumber(enemy.z, `${field}.z`),
     heading: requireFiniteNumber(enemy.heading, `${field}.heading`),
@@ -427,6 +443,15 @@ function decodeHeroes(heroes) {
       const maxHp = requireInteger(hero.maxHp, `encounter.heroes[${id}].maxHp`);
       if (maxHp < 1) fail(`encounter.heroes[${id}].maxHp must be >= 1, got ${maxHp}`);
       result[id].maxHp = maxHp;
+    }
+    if (hero.protectionSeconds !== undefined) {
+      const protectionSeconds = requireFiniteNumber(
+        hero.protectionSeconds, `encounter.heroes[${id}].protectionSeconds`,
+      );
+      if (protectionSeconds < 0) {
+        fail(`encounter.heroes[${id}].protectionSeconds must be >= 0, got ${protectionSeconds}`);
+      }
+      result[id].protectionSeconds = protectionSeconds;
     }
   }
   return result;

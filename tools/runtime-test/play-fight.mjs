@@ -1088,7 +1088,10 @@ check('the hero visibly falls over while he is down, rather than standing throug
 await page.eval(startWatch('swing-start', '({ swingSeconds: window.__galaQuestRuntime.encounterState().hero.swingSeconds })'));
 await touch('touchStart', [{ x: attackX, y: attackY }]);
 const swingStart = await waitForSample(page, 'swing-start', (sample) => sample.swingSeconds >= 0,
-  { timeoutMs: SWING_SECONDS * 2 * 1000 });
+  // Two swing lengths are ample at normal cadence, but a hosted no-GPU page can spend several
+  // seconds on one rendered frame before the authoritative reply is observable. Keep the exact
+  // predicate and give that transport/frame path a bounded, still-short observation budget.
+  { timeoutMs: Math.max(SWING_SECONDS * 2 * 1000, 10_000) });
 await touch('touchEnd', []);
 await page.eval(stopWatchSource('swing-start'));
 const startedSwinging = swingStart.samples.filter((sample) => sample.swingSeconds >= 0);

@@ -34,7 +34,9 @@ test('world/zones/ files contain zero imports of any kind', () => {
 test('village.js exports the shape the brief specifies', () => {
   assert.equal(VILLAGE.ZONE.size, 28);
   assert.deepEqual(VILLAGE.SPAWNS.heroes, [0, 0]);
-  assert.deepEqual(VILLAGE.SPAWNS.wolf, [2.5, 8]);
+  const openingWolf = VILLAGE.ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-1');
+  assert.ok(openingWolf, 'the canonical opening Wolf must be authored');
+  assert.deepEqual(VILLAGE.SPAWNS.wolf, [openingWolf.home.x, openingWolf.home.z]);
   assert.ok(Array.isArray(VILLAGE.LANDMARKS) && VILLAGE.LANDMARKS.length > 0);
   assert.ok(Array.isArray(VILLAGE.PROPS) && VILLAGE.PROPS.length > 0);
   assert.equal(typeof VILLAGE.KEEPER.model, 'string');

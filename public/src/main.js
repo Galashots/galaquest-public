@@ -79,6 +79,13 @@ import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
 import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
 import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
+import {
+  createEnemyNameplateLayer,
+  ENEMY_NAMEPLATE_MAX_DISTANCE,
+  ENEMY_NAMEPLATE_SAFE_WIDTH,
+  clampNameplateProjection,
+  nameplateProjectionIsSafe,
+} from './enemies/nameplate.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -197,14 +204,19 @@ const EMPTY_SERVER_ENCOUNTER = Object.freeze({
 // The wire's hero shape (protocol.js decodeHeroes): only the four fields a client needs to
 // predict its own attack button and render health. Matches createPartyEncounterState's freshHero
 // on those same four fields.
-const DEFAULT_HERO_VIEW = Object.freeze({ hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1 });
+const DEFAULT_HERO_VIEW = Object.freeze({
+  hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1, protectionSeconds: 0,
+});
 // Shared with net/gameServer.mjs through the zone data both sides import (Phase R2, GQ-007). These
 // used to be two hand-written copies of `{ x: 2.5, z: 8 }` kept equal by a human noticing, because
 // gameServer.mjs is server-only and cannot be imported here -- the fix was not to import the server,
 // it was to give both sides the same PURE data module to read. Used to boot the offline fallback
 // below and to give the online mirror a real spawn to carry (see the frame loop's
 // `netStatus === 'online'` branch and its comment).
-const { WOLF_SPAWN, WOLF_SPAWNS, HERO_SPAWN } = VILLAGE;
+const {
+  ENEMY_POPULATION, HERO_SPAWN, RECOVERY_SANCTUARY, WOLF_SPAWN, WOLF_SPAWNS,
+} = VILLAGE;
+const ENEMY_DEFINITIONS = new Map(ENEMY_POPULATION.map((enemy) => [enemy.enemyId, enemy]));
 
 // Phase D, offline fallback (brief D4): rewards/marks.js's foldEvents attributes a mark to whoever
 // landed the hit, read off event.heroId -- but the OFFLINE solo path's events (combat/encounter.js's
@@ -826,16 +838,25 @@ async function bootstrap() {
   // status line -- reads THIS, and none of them reach into the rules, whether it holds the local
   // step's result or the server's mirror. That is what made the move to a server-owned fight a
   // change of who calls stepParty rather than a rewrite of every reader.
-  let encounterState = createEncounterState({ wolfSpawn: WOLF_SPAWN, wolfSpawns: WOLF_SPAWNS, heroSpawn: HERO_SPAWN });
+  let encounterState = createEncounterState({
+    enemies: ENEMY_POPULATION,
+    heroSpawn: HERO_SPAWN,
+    recoverySanctuary: RECOVERY_SANCTUARY,
+  });
 
   function enemyById(enemyId) {
     if (typeof enemyId !== 'string') return null;
     return encounterState.enemies.find((enemy) => enemy.enemyId === enemyId) ?? null;
   }
 
-  function soleEnemyOfKind(kind) {
+  // Runtime-test compatibility keeps the old singular Wolf presenter meaningful after E2 made
+  // ordinary enemies a collection. A fixture with one Wolf may use any id; a multi-Wolf world
+  // must name the opening authored identity rather than falling back to collection order.
+  function openingEnemyOfKind(kind, preferredEnemyId = 'wolf-1') {
     const matches = encounterState.enemies.filter((enemy) => enemy.kind === kind);
-    return matches.length === 1 ? matches[0] : null;
+    if (matches.length === 1) return matches[0];
+    const preferred = matches.filter((enemy) => enemy.enemyId === preferredEnemyId);
+    return preferred.length === 1 ? preferred[0] : null;
   }
 
   function mirrorPublishedEnemy(enemy) {
@@ -843,13 +864,18 @@ async function bootstrap() {
     // shipped kind is Wolf, so reconnect-to-offline preserves the exact authored Wolf patrol the
     // legacy singular mirror used. A future kind with no authored client patrol remains where the
     // server last published it rather than borrowing Wolf geography.
-    const patrol = enemy.kind === 'wolf'
-      ? WOLF_SPAWNS.map((point) => ({ x: point.x, z: point.z }))
-      : [{ x: enemy.x, z: enemy.z }];
+    const authored = ENEMY_DEFINITIONS.get(enemy.enemyId);
+    const patrol = authored?.patrol?.map((point) => ({ x: point.x, z: point.z }))
+      ?? (enemy.kind === 'wolf'
+        ? WOLF_SPAWNS.map((point) => ({ x: point.x, z: point.z }))
+        : [{ x: enemy.x, z: enemy.z }]);
     const { targetId, ...published } = enemy;
     return {
       ...published,
       patrol,
+      home: authored?.home ? { x: authored.home.x, z: authored.home.z } : { x: enemy.x, z: enemy.z },
+      homeAuthored: authored?.home !== undefined,
+      leashRadius: authored?.leashRadius,
       spawnIndex: 0,
       biteCooldown: 0,
       biteLanded: false,
@@ -863,6 +889,11 @@ async function bootstrap() {
   // merged into it; `encounterState` itself is overwritten every online frame with a collection-
   // shaped solo view for the existing local hero consumers (see the frame loop).
   let serverEncounter = null;
+  // The server's respawn event is a durable proof edge, not a render-frame sample. Keep the last
+  // protection value carried by that authoritative event so slow hosted polling can prove that the
+  // sanctuary rule happened even if the two-second countdown has already elapsed by the next read.
+  let authoritativeRecoveryProtectionSeconds = 0;
+  let authoritativeDownObserved = false;
   // Events queued between frames by onEncounter (snapshots arrive at 10 Hz, independent of the
   // 60fps frame loop) and drained once per frame, the same shape the offline path builds locally.
   let pendingServerEvents = [];
@@ -995,6 +1026,48 @@ async function bootstrap() {
     // the same reason a CSS transition never fires on an element's own first paint.
     window.requestAnimationFrame(() => { el.dataset.rise = 'true'; });
     window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
+  }
+
+  const enemyNameplates = createEnemyNameplateLayer({
+    container: document.querySelector('#enemy-nameplates'),
+  });
+  function projectEnemyNameplate(enemy) {
+    const distance = Math.hypot(player.position.x - enemy.x, player.position.z - enemy.z);
+    if (distance > ENEMY_NAMEPLATE_MAX_DISTANCE) return null;
+    const projected = new THREE.Vector3(enemy.x, 1.65, enemy.z).project(camera);
+    if (projected.z < -1 || projected.z > 1) return null;
+    const rect = gameSurface.getBoundingClientRect();
+    const projectedPixels = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    if (projectedPixels.x < -80 || projectedPixels.x > rect.width + 80
+      || projectedPixels.y < -80 || projectedPixels.y > rect.height + 40) return null;
+    // Projected labels yield to the controls and child-facing prompts already occupying the screen.
+    // Read live DOM rectangles in the same game-surface coordinate system instead of maintaining a
+    // second portrait/landscape layout table that could drift from CSS.
+    const reservedRects = [
+      '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#minimap', '#objective-pointer',
+    ].flatMap((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return [];
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return [];
+      const box = element.getBoundingClientRect();
+      return [{
+        left: box.left - rect.left,
+        top: box.top - rect.top,
+        right: box.right - rect.left,
+        bottom: box.bottom - rect.top,
+      }];
+    });
+    const clamped = clampNameplateProjection(projectedPixels, rect);
+    const centre = rect.width / 2;
+    const direction = clamped.x < centre ? 1 : -1;
+    const halfLabelWidth = ENEMY_NAMEPLATE_SAFE_WIDTH / 2;
+    const safeX = Array.from({ length: Math.ceil(rect.width / 2 / 12) + 1 }, (_, index) => (
+      Math.max(halfLabelWidth, Math.min(rect.width - halfLabelWidth, clamped.x + direction * index * 12))
+    )).find((candidate) => nameplateProjectionIsSafe({ x: candidate, y: clamped.y }, reservedRects));
+    if (safeX === undefined) return null;
+    return { visible: true, x: safeX, y: clamped.y };
   }
 
   // Phase D (D4): three lantern-mark pips under the health readout, filling as marks arrive. Same read-only,
@@ -2052,10 +2125,10 @@ async function bootstrap() {
       // The reward now speaks when its light arrives, about a second later, with the frame to itself.
       // See celebrateMarkArrival.
       marksInTheAir += 1;
-      // mark-earned does not carry combat identity yet; in the shipped E1 world there is exactly
-      // one rewardable Wolf. Derive that Wolf by kind, never by collection position. Hit/defeat
-      // feedback below is fully enemyId-addressed.
-      const source = soleEnemyOfKind('wolf');
+      // mark-earned does not carry combat identity yet; use the opening authored Wolf by stable
+      // identity for this legacy reward presentation. Hit/defeat feedback below is fully
+      // enemyId-addressed.
+      const source = openingEnemyOfKind('wolf');
       if (source) markSparks?.launch({ x: source.x, z: source.z });
     },
     // Says what to DO, not what changed state. "Lantern unlocked!" was accurate and useless: it
@@ -2306,6 +2379,15 @@ async function bootstrap() {
     // frame (Task B4) rather than reacting mid-frame to a message event.
     onEncounter: (encounter, events) => {
       serverEncounter = encounter;
+      for (const event of events) {
+        if (event.type === 'hero-down' && event.heroId === net.selfId) {
+          authoritativeDownObserved = true;
+        }
+        if (event.type === 'hero-respawned' && event.heroId === net.selfId
+          && Number.isFinite(event.protectionSeconds) && event.protectionSeconds > 0) {
+          authoritativeRecoveryProtectionSeconds = event.protectionSeconds;
+        }
+      }
       if (events.length > 0) pendingServerEvents.push(...events);
     },
   });
@@ -2322,9 +2404,9 @@ async function bootstrap() {
     // this object could drive the fight down a path no child can reach; reading state cannot.
     encounterState: () => encounterState,
     // Runtime-test compatibility only: derive the shipped Wolf presenter from stable collection
-    // identity. Gameplay/presentation code never reads this alias; C3's real surface is keyed.
+    // identity, with the single-Wolf fixture fallback kept for older isolated tests.
     wolf: () => {
-      const wolf = soleEnemyOfKind('wolf');
+      const wolf = openingEnemyOfKind('wolf');
       return wolf ? enemyPresenters.get(wolf.enemyId) : null;
     },
     enemyPresenter: (enemyId) => enemyPresenters.get(enemyId),
@@ -2429,6 +2511,11 @@ async function bootstrap() {
     // GP1-C5: whether the screen is currently in the knocked-out state, so a harness can assert
     // the state exists rather than inferring it from a banner that has already faded.
     heroDownShown: () => heroDownVeilElement.dataset.shown === 'true',
+    // E2 hosted safety proof: expose the last decoded authoritative encounter separately from the
+    // client-facing solo projection, so a slow render loop cannot hide a real server protection state.
+    authoritativeEncounterState: () => serverEncounter,
+    authoritativeDownObserved: () => authoritativeDownObserved,
+    authoritativeRecoveryProtectionSeconds: () => authoritativeRecoveryProtectionSeconds,
     /** The swing the ANIMATION is playing, which online is the local prediction until the server
      *  confirms and the server's own number afterwards. Read-only, and published for the same
      *  reason heroDownShown is: a claim about what is on screen has to be answerable from what is
@@ -2847,6 +2934,7 @@ async function bootstrap() {
         lastCommandId: null,
         enemies: published.enemies.map(mirrorPublishedEnemy),
         heroSpawn: HERO_SPAWN,
+        recoverySanctuary: RECOVERY_SANCTUARY,
         hero: { swingLanded: false, ...ownHero },
       };
     }
@@ -2997,6 +3085,12 @@ async function bootstrap() {
         // table expects.
         const drained = pendingServerEvents.splice(0, pendingServerEvents.length);
         for (const event of drained) {
+          if (event.type === 'hero-respawned' && event.heroId === ownHeroId) {
+            player.position.x = HERO_SPAWN.x;
+            player.position.z = HERO_SPAWN.z;
+            player.heading = 0;
+            player.groundSpeed = 0;
+          }
           // The siege's own events go to the siege's own table (see SIEGE_EVENT_TYPES). Filtered to
           // this hero the same way the wolf's are, EXCEPT the ones that are nobody's in particular
           // (a seal bursting, the Beacon catching, the Warden waking): those are world events, and
@@ -3052,6 +3146,12 @@ async function bootstrap() {
         });
         encounterState = stepped.state;
         events.push(...stepped.events);
+        if (stepped.events.some((event) => event.type === 'hero-respawned')) {
+          player.position.x = HERO_SPAWN.x;
+          player.position.z = HERO_SPAWN.z;
+          player.heading = 0;
+          player.groundSpeed = 0;
+        }
 
         // Offline fallback reward loop (brief D4): the same D1 fold net/gameServer.mjs runs online,
         // run here against the solo hero's own (heroId-less) events -- see rewards/offlineProgress.js
@@ -3194,9 +3294,9 @@ async function bootstrap() {
 
       // The published state, read once and shared by every consumer below. Nothing here calls back
       // into the rules -- online or offline, `encounterState` is just data by this point. Enemy
-      // identity comes from the collection; the shipped status line still describes the one Wolf.
+      // identity comes from the collection; the legacy status line follows the opening Wolf.
       const { hero } = encounterState;
-      const wolf = soleEnemyOfKind('wolf');
+      const wolf = openingEnemyOfKind('wolf');
       // The server's own swingSeconds (mirrored into `hero` above) takes over the instant it
       // confirms, or the prediction times out on its own clock -- either way nothing downstream of
       // this line ever decides whether a swing lands; that stays server truth online.
@@ -3246,6 +3346,10 @@ async function bootstrap() {
         swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
       }
       enemyPresenters.update(deltaSeconds, encounterState.enemies);
+      enemyNameplates.update(encounterState.enemies, {
+        heroLevel: heroStatsThisFrame.level,
+        project: projectEnemyNameplate,
+      });
       const companionState = companionPresenter?.update(deltaSeconds, {
         x: player.position.x,
         z: player.position.z,
