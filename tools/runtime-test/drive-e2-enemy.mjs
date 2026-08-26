@@ -168,33 +168,19 @@ async function holdToward(tab, target, extraMillis = 1_500) {
   const originX = 72;
   const originY = Math.max(120, (await tab.page.eval('innerHeight')) - 90);
   const pointerId = 900 + Math.floor(Math.random() * 100);
-  await tab.page.eval(`(() => {
-    const surface = document.querySelector('#game');
-    // Synthetic PointerEvents are not trusted pointer streams, so Chrome does not establish
-    // capture for them. The production handler releases capture before clearing its input state;
-    // make that browser-only API a no-op for this synthetic, otherwise the test pointer can remain
-    // held after the final pointerup and drive into the world bound.
-    surface.setPointerCapture = () => {};
-    surface.releasePointerCapture = () => {};
-    const event = (type, x, y) => surface.dispatchEvent(new PointerEvent(type, {
-      bubbles: true, cancelable: true, pointerId: ${pointerId}, pointerType: 'touch',
-      isPrimary: true, clientX: x, clientY: y,
-    }));
-    event('pointerdown', ${originX}, ${originY});
-    event('pointermove', ${originX + screenX * 56}, ${originY - screenY * 56});
-  })()`);
+  // Use Chrome's touch input path rather than page-created PointerEvents. The latter are useful for
+  // small DOM probes but are not trusted pointer streams, so their capture/gesture bookkeeping can
+  // silently leave the production stick at zero on a cold or backgrounded tab.
+  const touch = (type, points) => tab.page.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: points.map((point) => ({ ...point, id: pointerId })),
+  });
+  await touch('touchStart', [{ x: originX, y: originY }]);
+  await touch('touchMove', [{ x: originX + screenX * 56, y: originY - screenY * 56 }]);
   try {
     await sleep(Math.max(400, Math.ceil((distance / 2.8) * 1000) + extraMillis));
   } finally {
-  await tab.page.eval(`(() => {
-    const surface = document.querySelector('#game');
-    surface.setPointerCapture = () => {};
-    surface.releasePointerCapture = () => {};
-      surface.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true, cancelable: true, pointerId: ${pointerId}, pointerType: 'touch', isPrimary: true,
-        clientX: ${originX + screenX * 56}, clientY: ${originY - screenY * 56},
-      }));
-    })()`);
+    await touch('touchEnd', []);
   }
   return state(tab);
 }
