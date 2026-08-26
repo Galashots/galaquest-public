@@ -17,6 +17,8 @@ const PORTRAIT = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true }
 const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, mobile: true };
 const recoveryWolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-5');
 if (!recoveryWolf) throw new Error('E2 recovery evidence requires authored wolf-5');
+const leashWolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-3');
+if (!leashWolf) throw new Error('E2 leash evidence requires authored wolf-3');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class CDP {
@@ -300,7 +302,7 @@ try {
   console.log('  E2 browser: portrait and landscape captured');
 
   await configure(tabA, PORTRAIT);
-  await holdToward(tabA, { x: 7, z: 24.5 }, 0);
+  await holdToward(tabA, { x: leashWolf.home.x, z: leashWolf.home.z + 2 }, 0);
   const movedAway = await holdToward(tabA, { x: 0, z: 24.5 }, 0);
   const returning = movedAway.enemies.some((enemy) => enemy.mode === 'returning')
     ? movedAway
