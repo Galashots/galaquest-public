@@ -59,6 +59,10 @@ const ENEMY_COLLECTION_MAX_LENGTH = 128;
 const ENEMY_KINDS = ['wolf'];
 const ENEMY_MODES = ['idle', 'walk', 'bite', 'hit', 'returning', 'dying', 'dead'];
 
+// Directional abuse bound only: welcome/profileFacts remains intentionally uncapped so a legitimate
+// long-lived profile is never truncated merely because restore-profile accepts hostile client input.
+export const MAX_RESTORE_PROFILE_FACTS = 128;
+
 // Inputs are sent at 15 Hz while the stick is live, plus exactly one zero-magnitude message on
 // release so the server stops immediately rather than waiting for the stale-input timeout.
 export const INPUT_SEND_HZ = 15;
@@ -263,8 +267,12 @@ export function decode(text) {
     // work. Reuses decodeProfileFacts, the SAME validation the welcome direction uses: this is
     // literally the same fact shape travelling the other way, and two validators for one shape is
     // the GQ-007 defect in its usual form.
-    case 'restore-profile':
+    case 'restore-profile': {
+      if (Array.isArray(raw.facts) && raw.facts.length > MAX_RESTORE_PROFILE_FACTS) {
+        fail(`restore-profile facts must contain at most ${MAX_RESTORE_PROFILE_FACTS} facts`);
+      }
       return { v: PROTOCOL_VERSION, type: 'restore-profile', facts: decodeProfileFacts(raw.facts) };
+    }
 
     // Client -> server only, same direction as 'attack'/'equip'. Shape validation only -- whether
     // pickupId names a real, unclaimed, in-reach pickup is world/cartLoot.js's own business rule,
