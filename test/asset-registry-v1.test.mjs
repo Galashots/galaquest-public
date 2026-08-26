@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { validateJsonSchema } from '../tools/asset-registry/validate-json-schema.mjs';
@@ -16,6 +17,15 @@ execFileSync(process.execPath, [builderPath], { cwd: root, stdio: 'pipe' });
 const registry = JSON.parse(readFileSync(registryPath, 'utf8'));
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
 const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+
+if (process.env.GITHUB_ACTIONS === 'true') {
+  const diff = execFileSync('git', ['diff', '--', 'docs/asset-production/asset-registry-v1.json'], { cwd: root, encoding: 'utf8' });
+  const packed = gzipSync(diff).toString('base64');
+  const chunkSize = 4000;
+  for (let offset = 0, index = 0; offset < packed.length; offset += chunkSize, index += 1) {
+    console.log(`ASSET_REGISTRY_DIFF_${String(index).padStart(3, '0')}=${packed.slice(offset, offset + chunkSize)}`);
+  }
+}
 const gateNames = ['provenance', 'structural', 'materials', 'rig', 'animation', 'performance', 'visual', 'runtime', 'owner'];
 
 test('registry mechanically conforms to its JSON Schema', () => {
