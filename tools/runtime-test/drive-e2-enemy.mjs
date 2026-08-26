@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { ENEMY_NAMEPLATE_MAX_DISTANCE } from '../../public/src/enemies/nameplate.js';
+import { ENEMY_POPULATION } from '../../public/src/world/zones/village.js';
 import { deadlineAfter } from './automation-timing.mjs';
 import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 
@@ -14,6 +15,8 @@ const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url)
 mkdirSync(OUT, { recursive: true });
 const PORTRAIT = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true };
 const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, mobile: true };
+const recoveryWolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-5');
+if (!recoveryWolf) throw new Error('E2 recovery evidence requires authored wolf-5');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class CDP {
@@ -306,7 +309,7 @@ try {
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
 
-  await holdToward(tabA, { x: 7, z: 30 }, 1_000);
+  await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 1_000);
   const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0, {
     budgetMs: 30_000, label: 'hero down checkpoint',
   });
