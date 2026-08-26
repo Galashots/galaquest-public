@@ -7,6 +7,16 @@ export const ENEMY_NAMEPLATE_MAX_DISTANCE = 16;
 export const ENEMY_NAMEPLATE_SAFE_WIDTH = 84;
 export const ENEMY_NAMEPLATE_SAFE_HEIGHT = 48;
 
+/** Keep a projected label card fully inside the horizontal overlay before testing HUD overlap. */
+export function clampNameplateProjection(
+  { x, y }, { width, height }, { width: labelWidth = ENEMY_NAMEPLATE_SAFE_WIDTH, height: labelHeight = ENEMY_NAMEPLATE_SAFE_HEIGHT } = {},
+) {
+  return {
+    x: Math.max(labelWidth / 2, Math.min(width - labelWidth / 2, x)),
+    y,
+  };
+}
+
 /** Return whether a projected label rectangle would enter a reserved HUD/control rectangle. */
 export function nameplateProjectionIsSafe(
   { x, y }, reservedRects, { width = ENEMY_NAMEPLATE_SAFE_WIDTH, height = ENEMY_NAMEPLATE_SAFE_HEIGHT } = {},

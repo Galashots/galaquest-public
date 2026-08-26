@@ -2,10 +2,18 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
 import {
+  clampNameplateProjection,
   createEnemyNameplateLayer,
   enemyNameplateModel,
   nameplateProjectionIsSafe,
 } from '../public/src/enemies/nameplate.js';
+
+test('E2 C3 clamps an edge projection so the full card remains readable', () => {
+  assert.deepEqual(
+    clampNameplateProjection({ x: 420, y: -10 }, { width: 390, height: 844 }),
+    { x: 348, y: -10 },
+  );
+});
 
 test('E2 C3 rejects projected labels that overlap a reserved HUD rectangle', () => {
   const joystick = { left: 0, top: 700, right: 112, bottom: 812 };

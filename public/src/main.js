@@ -82,6 +82,7 @@ import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
 import {
   createEnemyNameplateLayer,
   ENEMY_NAMEPLATE_MAX_DISTANCE,
+  clampNameplateProjection,
   nameplateProjectionIsSafe,
 } from './enemies/nameplate.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
@@ -1035,8 +1036,9 @@ async function bootstrap() {
     const projected = new THREE.Vector3(enemy.x, 1.65, enemy.z).project(camera);
     if (projected.z < -1 || projected.z > 1) return null;
     const rect = gameSurface.getBoundingClientRect();
-    const { x, y } = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
-    if (x < -80 || x > rect.width + 80 || y < -80 || y > rect.height + 40) return null;
+    const projectedPixels = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    if (projectedPixels.x < -80 || projectedPixels.x > rect.width + 80
+      || projectedPixels.y < -80 || projectedPixels.y > rect.height + 40) return null;
     // Projected labels yield to the controls and child-facing prompts already occupying the screen.
     // Read live DOM rectangles in the same game-surface coordinate system instead of maintaining a
     // second portrait/landscape layout table that could drift from CSS.
@@ -1056,8 +1058,14 @@ async function bootstrap() {
         bottom: box.bottom - rect.top,
       }];
     });
-    if (!nameplateProjectionIsSafe({ x, y }, reservedRects)) return null;
-    return { visible: true, x, y };
+    const clamped = clampNameplateProjection(projectedPixels, rect);
+    const centre = rect.width / 2;
+    const direction = clamped.x < centre ? 1 : -1;
+    const safeX = Array.from({ length: Math.ceil(rect.width / 2 / 12) + 1 }, (_, index) => (
+      Math.max(42, Math.min(rect.width - 42, clamped.x + direction * index * 12))
+    )).find((candidate) => nameplateProjectionIsSafe({ x: candidate, y: clamped.y }, reservedRects));
+    if (safeX === undefined) return null;
+    return { visible: true, x: safeX, y: clamped.y };
   }
 
   // Phase D (D4): three lantern-mark pips under the health readout, filling as marks arrive. Same read-only,
