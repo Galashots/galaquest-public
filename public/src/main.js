@@ -82,6 +82,7 @@ import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
 import {
   createEnemyNameplateLayer,
   ENEMY_NAMEPLATE_MAX_DISTANCE,
+  ENEMY_NAMEPLATE_SAFE_WIDTH,
   clampNameplateProjection,
   nameplateProjectionIsSafe,
 } from './enemies/nameplate.js';
@@ -1061,8 +1062,9 @@ async function bootstrap() {
     const clamped = clampNameplateProjection(projectedPixels, rect);
     const centre = rect.width / 2;
     const direction = clamped.x < centre ? 1 : -1;
+    const halfLabelWidth = ENEMY_NAMEPLATE_SAFE_WIDTH / 2;
     const safeX = Array.from({ length: Math.ceil(rect.width / 2 / 12) + 1 }, (_, index) => (
-      Math.max(42, Math.min(rect.width - 42, clamped.x + direction * index * 12))
+      Math.max(halfLabelWidth, Math.min(rect.width - halfLabelWidth, clamped.x + direction * index * 12))
     )).find((candidate) => nameplateProjectionIsSafe({ x: candidate, y: clamped.y }, reservedRects));
     if (safeX === undefined) return null;
     return { visible: true, x: safeX, y: clamped.y };
