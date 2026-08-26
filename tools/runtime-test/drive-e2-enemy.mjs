@@ -354,6 +354,11 @@ try {
     const wolf = live.enemies.find((enemy) => enemy.enemyId === leashWolf.enemyId);
     return wolf?.mode === 'idle';
   }, { budgetMs: 10_000, label: 'leash settled before recovery' });
+  await holdToward(tabA, { x: 0, z: 0 }, 1_000);
+  await waitUntil(tabA, (live) => {
+    const wolf = live.enemies.find((enemy) => enemy.enemyId === 'wolf-1');
+    return wolf?.mode === 'idle';
+  }, { budgetMs: 10_000, label: 'opening Wolf settled before recovery' });
 
   await startProtectionSampler(tabA);
   await holdToward(tabA, { x: 0, z: 25 }, 0);
