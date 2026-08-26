@@ -911,6 +911,7 @@ export function createSimulation(options = {}) {
     heroIds: [],
     heroSpawn: HERO_SPAWN,
     recoverySanctuary: RECOVERY_SANCTUARY,
+    resetEnemiesOnPartyWipe: options.resetEnemiesOnPartyWipe ?? false,
   });
   // Events accumulate here from both requestPartyAttack (on attack arrival) and stepParty (each
   // tick) and are drained only when a snapshot broadcasts -- Design ruling 7, "events ride

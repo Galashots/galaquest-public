@@ -4,7 +4,14 @@ import test from 'node:test';
 import {
   createEnemyNameplateLayer,
   enemyNameplateModel,
+  nameplateProjectionIsSafe,
 } from '../public/src/enemies/nameplate.js';
+
+test('E2 C3 rejects projected labels that overlap a reserved HUD rectangle', () => {
+  const joystick = { left: 0, top: 700, right: 112, bottom: 812 };
+  assert.equal(nameplateProjectionIsSafe({ x: 56, y: 735 }, [joystick]), false);
+  assert.equal(nameplateProjectionIsSafe({ x: 220, y: 500 }, [joystick]), true);
+});
 
 test('E2 C3 nameplate model exposes bounded health and the locked danger threshold', () => {
   const ordinary = enemyNameplateModel({ kind: 'wolf', level: 2, hp: 20, maxHp: 40 }, { heroLevel: 1 });

@@ -368,6 +368,7 @@ function publishParty(state, enemies, heroes) {
     heroes: publishedHeroes,
     heroSpawn: clonePoint(state.heroSpawn),
     recoverySanctuary: cloneSanctuary(state.recoverySanctuary),
+    resetEnemiesOnPartyWipe: state.resetEnemiesOnPartyWipe,
   });
 }
 
@@ -408,6 +409,10 @@ export function createPartyEncounterState(options = {}) {
     heroes,
     heroSpawn: clonePoint(options.heroSpawn ?? { x: 0, z: 0 }),
     recoverySanctuary: cloneSanctuary(options.recoverySanctuary),
+    // Legacy/isolated fixtures retain the old wipe reset by default. Production E2 passes false so
+    // a slow child can resume a partially damaged Wolf after safe recovery; leash/home still restores
+    // the full authored body when that Wolf actually reaches home.
+    resetEnemiesOnPartyWipe: options.resetEnemiesOnPartyWipe ?? true,
   });
 }
 
@@ -630,6 +635,8 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
 
   const nearest = nearestTargetableHero(enemy, heroes, heroIds, commandHeroes, command.recoverySanctuary);
   if (nearest.heroId === null) {
+    enemy.targetId = null;
+    enemy.biteLanded = false;
     enemy.mode = 'idle';
     return;
   }
@@ -741,7 +748,9 @@ export function stepParty(state, command = {}) {
     const otherAlive = heroIds.some(
       (otherId) => otherId !== heroId && state.heroes[otherId].downSeconds < 0,
     );
-    if (!otherAlive) for (const enemy of enemies) resetEnemy(enemy);
+    if (!otherAlive && state.resetEnemiesOnPartyWipe !== false) {
+      for (const enemy of enemies) resetEnemy(enemy);
+    }
   }
 
   // Enemy iteration order is canonicalized by stable identity so serialization/insertion order can

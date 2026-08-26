@@ -126,12 +126,21 @@ function collectDiagnostics(tab) {
 const state = (tab) => tab.page.eval(`JSON.stringify((() => {
   const r = window.__galaQuestRuntime;
   const e = r.encounterState();
-  if (e.hero.downSeconds >= 0) {
+  const net = r.netState();
+  const authoritative = r.authoritativeEncounterState?.();
+  const authoritativeHero = authoritative?.heroes?.[net.selfId] ?? null;
+  const protectionSeconds = authoritativeHero?.protectionSeconds ?? e.hero.protectionSeconds ?? 0;
+  const downEventObserved = r.authoritativeDownObserved?.() ?? false;
+  const recoveryEventProtectionSeconds = r.authoritativeRecoveryProtectionSeconds?.() ?? 0;
+  if (authoritativeHero?.downSeconds >= 0 || e.hero.downSeconds >= 0) {
     window.__e2DownObserved = true;
-    window.__e2DownSeconds = e.hero.downSeconds;
+    window.__e2DownSeconds = Math.max(authoritativeHero?.downSeconds ?? -1, e.hero.downSeconds);
   }
-  if (e.hero.protectionSeconds > 0) {
-    (window.__e2ProtectionSamples ??= []).push(e.hero.protectionSeconds);
+  if (protectionSeconds > 0) {
+    (window.__e2ProtectionSamples ??= []).push(protectionSeconds);
+  }
+  if (recoveryEventProtectionSeconds > 0) {
+    (window.__e2ProtectionSamples ??= []).push(recoveryEventProtectionSeconds);
   }
   const visible = [...document.querySelectorAll('.enemy-nameplate')]
     .filter((element) => !element.hidden)
@@ -146,13 +155,15 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
       }; })(),
     }));
   return {
-    status: r.netState().status,
+    status: net.status,
     player: { x: +r.player.position.x.toFixed(2), z: +r.player.position.z.toFixed(2) },
     groundSpeed: r.player.groundSpeed,
-    serverSelf: r.netState().serverSelf,
+    serverSelf: net.serverSelf,
     heading: r.follow.heading,
     hero: { ...e.hero },
-    downObserved: Boolean(window.__e2DownObserved),
+    authoritativeHero: authoritativeHero ? { ...authoritativeHero } : null,
+    recoveryEventProtectionSeconds,
+    downObserved: Boolean(window.__e2DownObserved || downEventObserved),
     observedDownSeconds: window.__e2DownSeconds ?? -1,
     protectionObserved: Boolean(window.__e2ProtectionSamples?.length),
     maxProtectionObserved: Math.max(0, ...(window.__e2ProtectionSamples ?? [])),
@@ -170,10 +181,15 @@ async function startProtectionSampler(tab) {
     window.__e2DownObserved = false;
     window.__e2DownSeconds = -1;
     window.__e2ProtectionSamples = [];
+    window.__e2SamplerStopped = false;
     window.__e2DownObserver = (async () => {
       const deadline = performance.now() + 60_000;
-      while (performance.now() < deadline) {
-        const seconds = window.__galaQuestRuntime.encounterState().hero.downSeconds;
+      while (!window.__e2SamplerStopped && performance.now() < deadline) {
+        const r = window.__galaQuestRuntime;
+        const net = r.netState();
+        const authoritative = r.authoritativeEncounterState?.();
+        const seconds = authoritative?.heroes?.[net.selfId]?.downSeconds
+          ?? r.encounterState().hero.downSeconds;
         if (seconds >= 0) {
           window.__e2DownObserved = true;
           window.__e2DownSeconds = seconds;
@@ -185,9 +201,17 @@ async function startProtectionSampler(tab) {
     })();
     window.__e2ProtectionObserver = (async () => {
       const deadline = performance.now() + 60_000;
-      while (performance.now() < deadline) {
-        const seconds = window.__galaQuestRuntime.encounterState().hero.protectionSeconds;
-        if (seconds > 0) {
+      while (!window.__e2SamplerStopped && performance.now() < deadline) {
+        const r = window.__galaQuestRuntime;
+        const net = r.netState();
+        const authoritative = r.authoritativeEncounterState?.();
+        const seconds = authoritative?.heroes?.[net.selfId]?.protectionSeconds
+          ?? r.encounterState().hero.protectionSeconds;
+        const recoveryEventProtectionSeconds = r.authoritativeRecoveryProtectionSeconds?.() ?? 0;
+        if (seconds > 0 || recoveryEventProtectionSeconds > 0) {
+          if (recoveryEventProtectionSeconds > 0) {
+            window.__e2ProtectionSamples.push(recoveryEventProtectionSeconds);
+          }
           window.__e2ProtectionSamples.push(seconds);
           return true;
         }
@@ -196,14 +220,23 @@ async function startProtectionSampler(tab) {
       return false;
     })();
     window.__e2ProtectionTimer = window.setInterval(() => {
-      const seconds = window.__galaQuestRuntime.encounterState().hero.protectionSeconds;
+      const r = window.__galaQuestRuntime;
+      const net = r.netState();
+      const authoritative = r.authoritativeEncounterState?.();
+      const seconds = authoritative?.heroes?.[net.selfId]?.protectionSeconds
+        ?? r.encounterState().hero.protectionSeconds;
       if (seconds > 0) window.__e2ProtectionSamples.push(seconds);
+      const recoveryEventProtectionSeconds = r.authoritativeRecoveryProtectionSeconds?.() ?? 0;
+      if (recoveryEventProtectionSeconds > 0) window.__e2ProtectionSamples.push(recoveryEventProtectionSeconds);
     }, 25);
   })()`);
 }
 
 async function stopProtectionSampler(tab) {
-  await tab.page.eval('window.clearInterval(window.__e2ProtectionTimer)');
+  await tab.page.eval(`(() => {
+    window.__e2SamplerStopped = true;
+    window.clearInterval(window.__e2ProtectionTimer);
+  })()`);
 }
 
 async function capture(tab, name) {
@@ -404,11 +437,13 @@ try {
     budgetMs: 30_000, label: 'hero down checkpoint',
   });
   evidence.checkpoints.down = down;
-  const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0 || live.protectionObserved, {
+  const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0
+    || live.protectionObserved || live.recoveryEventProtectionSeconds > 0, {
     budgetMs: 20_000, intervalMs: 50, label: 'safe recovery protection checkpoint',
   });
   await stopProtectionSampler(tabA);
-  if (recovered.maxProtectionObserved <= 0 && recovered.hero.protectionSeconds <= 0) {
+  if (recovered.maxProtectionObserved <= 0 && recovered.hero.protectionSeconds <= 0
+    && recovered.recoveryEventProtectionSeconds <= 0) {
     throw new Error(`safe recovery protection checkpoint was not observed; last state: ${JSON.stringify(recovered)}`);
   }
   evidence.checkpoints.recovered = recovered;
@@ -425,10 +460,16 @@ try {
 } finally {
   evidence.failure = failure;
   evidence.outcome = failure ? 'FAIL' : 'PASS';
-  await Promise.allSettled([
-    browser.send('Target.closeTarget', { targetId: tabA.targetId }),
-    browser.send('Target.closeTarget', { targetId: tabB.targetId }),
-  ]);
+  // Do not await target-close replies here: page-side proof observers are intentionally
+  // asynchronous, and a slow browser can leave a close request waiting behind them. Fire the
+  // cancellation/close commands, then close both CDP sockets and independently confirm the owned
+  // server is gone. This keeps a failed checkpoint red without allowing teardown to hang.
+  for (const tab of [tabA, tabB]) {
+    tab.page.fire('Runtime.evaluate', {
+      expression: 'window.__e2SamplerStopped = true; window.clearInterval(window.__e2ProtectionTimer)',
+    });
+    browser.fire('Target.closeTarget', { targetId: tab.targetId });
+  }
   tabA.page.close();
   tabB.page.close();
   browser.close();

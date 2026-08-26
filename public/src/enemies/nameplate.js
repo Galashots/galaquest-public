@@ -2,6 +2,19 @@
 // this adapter only projects stable enemy identities into a bounded, readable overlay.
 
 export const ENEMY_NAMEPLATE_MAX_DISTANCE = 16;
+// Slightly larger than the rendered compact Wolf card, leaving a small buffer for font/layout drift
+// without hiding otherwise readable labels in the narrow portrait viewport.
+export const ENEMY_NAMEPLATE_SAFE_WIDTH = 84;
+export const ENEMY_NAMEPLATE_SAFE_HEIGHT = 48;
+
+/** Return whether a projected label rectangle would enter a reserved HUD/control rectangle. */
+export function nameplateProjectionIsSafe(
+  { x, y }, reservedRects, { width = ENEMY_NAMEPLATE_SAFE_WIDTH, height = ENEMY_NAMEPLATE_SAFE_HEIGHT } = {},
+) {
+  const label = { left: x - width / 2, right: x + width / 2, top: y - height, bottom: y };
+  return !reservedRects.some((reserved) => label.left < reserved.right
+    && label.right > reserved.left && label.top < reserved.bottom && label.bottom > reserved.top);
+}
 
 export function enemyNameplateModel(enemy, { heroLevel = 1 } = {}) {
   const level = Number.isSafeInteger(enemy?.level) ? enemy.level : 1;

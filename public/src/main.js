@@ -79,7 +79,11 @@ import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
 import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
 import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
-import { createEnemyNameplateLayer, ENEMY_NAMEPLATE_MAX_DISTANCE } from './enemies/nameplate.js';
+import {
+  createEnemyNameplateLayer,
+  ENEMY_NAMEPLATE_MAX_DISTANCE,
+  nameplateProjectionIsSafe,
+} from './enemies/nameplate.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -883,6 +887,11 @@ async function bootstrap() {
   // merged into it; `encounterState` itself is overwritten every online frame with a collection-
   // shaped solo view for the existing local hero consumers (see the frame loop).
   let serverEncounter = null;
+  // The server's respawn event is a durable proof edge, not a render-frame sample. Keep the last
+  // protection value carried by that authoritative event so slow hosted polling can prove that the
+  // sanctuary rule happened even if the two-second countdown has already elapsed by the next read.
+  let authoritativeRecoveryProtectionSeconds = 0;
+  let authoritativeDownObserved = false;
   // Events queued between frames by onEncounter (snapshots arrive at 10 Hz, independent of the
   // 60fps frame loop) and drained once per frame, the same shape the offline path builds locally.
   let pendingServerEvents = [];
@@ -1028,6 +1037,26 @@ async function bootstrap() {
     const rect = gameSurface.getBoundingClientRect();
     const { x, y } = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
     if (x < -80 || x > rect.width + 80 || y < -80 || y > rect.height + 40) return null;
+    // Projected labels yield to the controls and child-facing prompts already occupying the screen.
+    // Read live DOM rectangles in the same game-surface coordinate system instead of maintaining a
+    // second portrait/landscape layout table that could drift from CSS.
+    const reservedRects = [
+      '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#minimap', '#objective-pointer',
+    ].flatMap((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return [];
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return [];
+      const box = element.getBoundingClientRect();
+      return [{
+        left: box.left - rect.left,
+        top: box.top - rect.top,
+        right: box.right - rect.left,
+        bottom: box.bottom - rect.top,
+      }];
+    });
+    if (!nameplateProjectionIsSafe({ x, y }, reservedRects)) return null;
     return { visible: true, x, y };
   }
 
@@ -2340,6 +2369,15 @@ async function bootstrap() {
     // frame (Task B4) rather than reacting mid-frame to a message event.
     onEncounter: (encounter, events) => {
       serverEncounter = encounter;
+      for (const event of events) {
+        if (event.type === 'hero-down' && event.heroId === net.selfId) {
+          authoritativeDownObserved = true;
+        }
+        if (event.type === 'hero-respawned' && event.heroId === net.selfId
+          && Number.isFinite(event.protectionSeconds) && event.protectionSeconds > 0) {
+          authoritativeRecoveryProtectionSeconds = event.protectionSeconds;
+        }
+      }
       if (events.length > 0) pendingServerEvents.push(...events);
     },
   });
@@ -2463,6 +2501,11 @@ async function bootstrap() {
     // GP1-C5: whether the screen is currently in the knocked-out state, so a harness can assert
     // the state exists rather than inferring it from a banner that has already faded.
     heroDownShown: () => heroDownVeilElement.dataset.shown === 'true',
+    // E2 hosted safety proof: expose the last decoded authoritative encounter separately from the
+    // client-facing solo projection, so a slow render loop cannot hide a real server protection state.
+    authoritativeEncounterState: () => serverEncounter,
+    authoritativeDownObserved: () => authoritativeDownObserved,
+    authoritativeRecoveryProtectionSeconds: () => authoritativeRecoveryProtectionSeconds,
     /** The swing the ANIMATION is playing, which online is the local prediction until the server
      *  confirms and the server's own number afterwards. Read-only, and published for the same
      *  reason heroDownShown is: a claim about what is on screen has to be answerable from what is

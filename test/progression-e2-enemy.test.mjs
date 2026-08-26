@@ -9,7 +9,7 @@ import {
   WOLF_AGGRO_RANGE,
 } from '../public/src/combat/encounter.js';
 import { WOLF_LEVEL_STATS, wolfStatsForLevel } from '../public/src/combat/enemyStats.js';
-import { ENEMY_POPULATION, RECOVERY_SANCTUARY, ROAD, ROWAN } from '../public/src/world/zones/village.js';
+import { ENEMY_POPULATION, RECOVERY_SANCTUARY, ROAD, ROWAN, WOLF_SPAWN } from '../public/src/world/zones/village.js';
 import { decode, encode, snapshotMessage } from '../public/src/net/protocol.js';
 import { createSimulation } from '../net/gameServerCore.mjs';
 
@@ -140,6 +140,31 @@ test('E2 C1 server default consumes the same five authored definitions as offlin
   const serverEnemies = simulation.encounterSnapshot().enemies;
   assert.deepEqual(serverEnemies.map((enemy) => [enemy.enemyId, enemy.level, enemy.maxHp]),
     ENEMY_POPULATION.map((enemy) => [enemy.enemyId, enemy.level, wolfStatsForLevel(enemy.level).maxHp]));
+});
+
+test('E2 production recovery preserves opening-Wolf damage across a solo party wipe', () => {
+  const simulation = createSimulation();
+  const player = simulation.addPlayer('recovery kid', { x: WOLF_SPAWN.x, z: WOLF_SPAWN.z - 1 });
+  assert.equal(simulation.applyAttack(player.id, { seq: 1 }), true);
+  let nowMs = 0;
+  let downed = false;
+  for (let tick = 0; tick < 240; tick += 1) {
+    nowMs += 50;
+    simulation.step(0.05, nowMs);
+    const hero = simulation.encounterSnapshot().heroes[player.id];
+    const opening = simulation.encounterSnapshot().enemies.find((enemy) => enemy.enemyId === 'wolf-1');
+    if (!downed && hero.downSeconds >= 0) {
+      downed = true;
+      assert.equal(opening.hp, opening.maxHp - 10, 'the first opening hit must remain credited before recovery');
+    }
+    if (downed && hero.downSeconds < 0) {
+      assert.equal(opening.hp, opening.maxHp - 10,
+        'production recovery must not party-wipe/reset the partially damaged opening Wolf');
+      assert.equal(opening.targetId, null);
+      return;
+    }
+  }
+  assert.fail('the production recovery fixture never completed a down/up cycle');
 });
 
 test('E2 C2 leash clears pursuit, suppresses bites, and restores the authored home body', () => {
