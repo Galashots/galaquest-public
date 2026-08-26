@@ -6,9 +6,10 @@ import {
   stepEncounter,
   createPartyEncounterState,
   stepParty,
+  WOLF_AGGRO_RANGE,
 } from '../public/src/combat/encounter.js';
 import { WOLF_LEVEL_STATS, wolfStatsForLevel } from '../public/src/combat/enemyStats.js';
-import { ENEMY_POPULATION, RECOVERY_SANCTUARY } from '../public/src/world/zones/village.js';
+import { ENEMY_POPULATION, RECOVERY_SANCTUARY, ROAD } from '../public/src/world/zones/village.js';
 import { decode, encode, snapshotMessage } from '../public/src/net/protocol.js';
 import { createSimulation } from '../net/gameServerCore.mjs';
 
@@ -33,6 +34,30 @@ test('E2 C1 authors exactly five Wolves with the locked level mix and separated 
         `${ENEMY_POPULATION[i].enemyId}/${ENEMY_POPULATION[j].enemyId} can chain-pull from stacked homes`);
     }
   }
+});
+
+function distanceToPolyline(x, z, points) {
+  let best = Infinity;
+  for (let i = 0; i + 1 < points.length; i += 1) {
+    const [ax, az] = points[i];
+    const [bx, bz] = points[i + 1];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const lengthSquared = dx * dx + dz * dz;
+    const projection = lengthSquared === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / lengthSquared));
+    best = Math.min(best, Math.hypot(x - (ax + projection * dx), z - (az + projection * dz)));
+  }
+  return best;
+}
+
+test('E2 keeps the opening Wolf outside the north-lane aggro envelope', () => {
+  const opening = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-1');
+  assert.ok(opening);
+  const laneDistance = distanceToPolyline(opening.home.x, opening.home.z, ROAD.points);
+  assert.ok(laneDistance > WOLF_AGGRO_RANGE,
+    `wolf-1 is ${laneDistance.toFixed(2)}m from the route, inside the ${WOLF_AGGRO_RANGE}m aggro range`);
 });
 
 test('E2 C1 has one canonical Wolf level/stat table and preserves Level 1', () => {

@@ -1,6 +1,7 @@
 // E2 running-game acceptance instrument. It owns its server and Chrome tabs, clears storage once
 // before the first navigation, and leaves the final judgement to the captured gameplay frames.
 
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -68,6 +69,10 @@ class CDP {
   fire(method, params = {}) {
     const id = ++this.id;
     this.ws.send(JSON.stringify({ id, method, params }));
+  }
+
+  close() {
+    this.ws.close();
   }
 }
 
@@ -194,12 +199,15 @@ async function holdToward(tab, target, extraMillis = 1_500) {
   return state(tab);
 }
 
-async function waitUntil(tab, predicate, budgetMs = 25_000) {
+async function waitUntil(tab, predicate, { budgetMs = 25_000, label = 'checkpoint' } = {}) {
   const deadline = deadlineAfter(budgetMs);
   let live = await state(tab);
   while (!predicate(live) && Date.now() < deadline) {
     await sleep(150);
     live = await state(tab);
+  }
+  if (!predicate(live)) {
+    throw new Error(`${label} was not reached within ${budgetMs}ms; last state: ${JSON.stringify(live)}`);
   }
   return live;
 }
@@ -213,7 +221,8 @@ const tabB = await openPage(browser);
 const diagnosticsA = collectDiagnostics(tabA);
 const diagnosticsB = collectDiagnostics(tabB);
 const evidence = {
-  sha: process.env.GALAQUEST_E2_SHA ?? 'unbound-worktree',
+  sha: process.env.GALAQUEST_E2_SHA
+    ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   origin: server.origin,
   maxNameplateDistance: ENEMY_NAMEPLATE_MAX_DISTANCE,
   captures: [],
@@ -221,6 +230,7 @@ const evidence = {
   checkpoints: {},
 };
 
+let failure = null;
 try {
   console.log('  E2 browser: tabs configured');
   await configure(tabA, PORTRAIT);
@@ -230,23 +240,28 @@ try {
   await waitForRuntime(tabA);
   await tabB.page.send('Page.navigate', { url: gameUrlFor(server.origin, 'E2-Sibling') });
   await waitForRuntime(tabB);
-  const primaryOnline = await waitUntil(tabA, (live) => live.status === 'online');
-  const siblingOnline = await waitUntil(tabB, (live) => live.status === 'online');
-  if (primaryOnline.status !== 'online' || siblingOnline.status !== 'online') {
-    throw new Error(`clients did not connect: primary=${primaryOnline.status}, sibling=${siblingOnline.status}`);
-  }
+  const primaryOnline = await waitUntil(tabA, (live) => live.status === 'online', {
+    label: 'primary online',
+  });
+  const siblingOnline = await waitUntil(tabB, (live) => live.status === 'online', {
+    label: 'sibling online',
+  });
   await tabA.page.send('Page.bringToFront');
   console.log('  E2 browser: both clients online');
 
   await holdToward(tabA, { x: 7, z: 20 }, 1_800);
   console.log('  E2 browser: primary reached nameplate sweep');
-  const portrait = await waitUntil(tabA, (live) => live.visibleNameplates.length >= 4, 10_000);
+  const portrait = await waitUntil(tabA, (live) => live.visibleNameplates.length >= 4, {
+    budgetMs: 10_000, label: 'portrait four-nameplate checkpoint',
+  });
   evidence.checkpoints.portrait = portrait;
   evidence.captures.push(await capture(tabA, 'c3-portrait-nameplates'));
 
   await configure(tabA, LANDSCAPE);
   await sleep(800);
-  const landscape = await state(tabA);
+  const landscape = await waitUntil(tabA, (live) => live.visibleNameplates.length >= 4, {
+    budgetMs: 10_000, label: 'landscape four-nameplate checkpoint',
+  });
   evidence.checkpoints.landscape = landscape;
   evidence.captures.push(await capture(tabA, 'c3-landscape-nameplates'));
   console.log('  E2 browser: portrait and landscape captured');
@@ -256,15 +271,24 @@ try {
   const movedAway = await holdToward(tabA, { x: 0, z: 24.5 }, 0);
   const returning = movedAway.enemies.some((enemy) => enemy.mode === 'returning')
     ? movedAway
-    : await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), 3_000);
+    : await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), {
+      budgetMs: 3_000, label: 'leash returning checkpoint',
+    });
+  if (!returning.enemies.some((enemy) => enemy.mode === 'returning')) {
+    throw new Error(`leash returning checkpoint was not reached; last state: ${JSON.stringify(returning)}`);
+  }
   evidence.checkpoints.leash = returning;
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
 
   await holdToward(tabA, { x: 7, z: 30 }, 1_000);
-  const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0, 30_000);
+  const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0, {
+    budgetMs: 30_000, label: 'hero down checkpoint',
+  });
   evidence.checkpoints.down = down;
-  const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0, 20_000);
+  const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0, {
+    budgetMs: 20_000, label: 'safe recovery protection checkpoint',
+  });
   evidence.checkpoints.recovered = recovered;
   evidence.captures.push(await capture(tabA, 'c3-safe-recovery'));
   await tabB.page.send('Page.bringToFront');
@@ -273,12 +297,20 @@ try {
   evidence.captures.push(await capture(tabB, 'c3-two-client-sibling'));
   console.log('  E2 browser: recovery and sibling captured');
 
-  writeFileSync(`${OUT}e2-evidence.json`, JSON.stringify(evidence, null, 2));
-  console.log(`  wrote ${OUT}e2-evidence.json`);
+} catch (error) {
+  failure = { message: error instanceof Error ? error.message : String(error) };
+  throw error;
 } finally {
+  evidence.failure = failure;
+  evidence.outcome = failure ? 'FAIL' : 'PASS';
+  writeFileSync(`${OUT}e2-evidence.json`, JSON.stringify(evidence, null, 2));
+  console.log(`  wrote ${OUT}e2-evidence.json (${evidence.outcome}, ${evidence.sha})`);
   await Promise.allSettled([
     browser.send('Target.closeTarget', { targetId: tabA.targetId }),
     browser.send('Target.closeTarget', { targetId: tabB.targetId }),
   ]);
+  tabA.page.close();
+  tabB.page.close();
+  browser.close();
   await server.kill();
 }

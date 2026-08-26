@@ -165,8 +165,10 @@ export const HERO_SPAWN = Object.freeze({ x: SPAWNS.heroes[0], z: SPAWNS.heroes[
 
 // E2: the first fixed-world ordinary-enemy field. These are five distinct authored identities, not
 // five reads of the old serial patrol. The two Level-1 Wolves are the reachable opening fights;
-// Level 2 sits farther north in separate bowls; the one Level-4 danger Wolf is visible/reachable in
-// the existing northward slice but its territory cannot touch the recovery sanctuary.
+// wolf-1 sits just east of the north lane so the legitimate post-Lantern walk to Rowan does not
+// force an ordinary fight/reset loop. Level 2 sits farther north in separate bowls; the one Level-4
+// danger Wolf is visible/reachable in the existing northward slice but its territory cannot touch
+// the recovery sanctuary.
 function authoredWolf(enemyId, level, x, z) {
   const home = Object.freeze({ x, z });
   return Object.freeze({
@@ -180,7 +182,7 @@ function authoredWolf(enemyId, level, x, z) {
 }
 
 export const ENEMY_POPULATION = Object.freeze([
-  authoredWolf('wolf-1', 1, 2.5, 8),
+  authoredWolf('wolf-1', 1, 9, 8),
   authoredWolf('wolf-2', 1, -5.5, 5),
   authoredWolf('wolf-3', 2, 6.5, 15),
   authoredWolf('wolf-4', 2, -6.5, 14),
@@ -252,11 +254,11 @@ export const ROAD = Object.freeze({
     Object.freeze([1.2, 2.2]),
     Object.freeze([1.8, 4.2]),
     Object.freeze([2.3, 6.5]),
-    // Past the wolf and on into the trees. It used to stop dead at [2.4, 7.5], which painted as a
-    // patch of bare earth ending in the middle of a field -- a road has to go somewhere or it reads
-    // as a stain. Running it to the treeline also puts the wolf ON the path rather than beside it
-    // (the spawn is [2.5, 8]), so the thing blocking the way is the thing you have to fight, and
-    // leaves the village with a visible way OUT for whatever comes after the Lantern Tree.
+    // Past the historic Wolf bowl and on into the trees. It used to stop dead at [2.4, 7.5], which
+    // painted as a patch of bare earth ending in the middle of a field -- a road has to go somewhere
+    // or it reads as a stain. The active E2 opening Wolf is now just east of this lane, leaving the
+    // route open for a legitimate post-Lantern child while preserving the visible way OUT for
+    // whatever comes after the Lantern Tree.
     Object.freeze([2.5, 8.0]),
     Object.freeze([2.7, 10.0]),
     // THROUGH THE ARCH, not past it. The gate's own coordinate, so the two can never drift apart
