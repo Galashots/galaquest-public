@@ -73,6 +73,7 @@ jobs:
           - drive-recovery
           - drive-guidance-rescue
           - drive-first-level-up
+          - drive-e2-enemy
           - drive-helmet-vertical
     runs-on: ubuntu-latest
     timeout-minutes: 18
