@@ -227,6 +227,8 @@ test('E2 C2 recovery relocates one hero into protection without resetting a livi
   assert.equal(respawned, true);
   assert.equal(state.heroes.downed.hp, state.heroes.downed.maxHp);
   assert.equal(state.heroes.sibling.hp, siblingHp);
+  const wire = JSON.parse(JSON.stringify(state));
+  assert.ok(wire.heroes.downed.protectionSeconds > 0, 'recovery protection must survive the authoritative wire');
 
   const protectedHp = state.heroes.downed.hp;
   for (let tick = 0; tick < 10; tick += 1) {

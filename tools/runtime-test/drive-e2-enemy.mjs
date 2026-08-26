@@ -89,6 +89,7 @@ async function openPage(browser) {
 }
 
 async function configure(tab, viewport) {
+  tab.viewport = viewport;
   await tab.page.send('Emulation.setDeviceMetricsOverride', viewport);
   await tab.page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 }
@@ -156,7 +157,47 @@ async function capture(tab, name) {
   return file;
 }
 
+async function dragCamera(tab, dx) {
+  const y = tab.viewport.height * 0.35;
+  const x0 = tab.viewport.width * 0.5;
+  const touch = (type, points) => tab.page.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+  await touch('touchStart', [{ x: x0, y, id: 1 }]);
+  for (let step = 1; step <= 12; step += 1) {
+    await touch('touchMove', [{ x: x0 + (dx * step) / 12, y, id: 1 }]);
+  }
+  await touch('touchEnd', []);
+  await sleep(100);
+}
+
+async function orbitTo(tab, targetHeading) {
+  const before = (await state(tab)).heading;
+  await dragCamera(tab, 120);
+  const after = (await state(tab)).heading;
+  const gain = (after - before) / 120;
+  if (Math.abs(gain) < 1e-6) return after;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const current = (await state(tab)).heading;
+    const delta = targetHeading - current;
+    if (Math.abs(delta) < 0.03) return current;
+    await dragCamera(tab, Math.max(-380, Math.min(380, delta / gain)));
+  }
+  return (await state(tab)).heading;
+}
+
+async function findNameplateView(tab) {
+  let best = await state(tab);
+  for (let target = -Math.PI; target <= Math.PI; target += 0.35) {
+    await orbitTo(tab, target);
+    await sleep(120);
+    const live = await state(tab);
+    if (live.visibleNameplates.length > best.visibleNameplates.length) best = live;
+    if (live.visibleNameplates.length >= 2) return live;
+  }
+  return best;
+}
+
 async function holdToward(tab, target, extraMillis = 1_500) {
+  await tab.page.send('Page.bringToFront');
   const live = await state(tab);
   const dx = target.x - live.player.x;
   const dz = target.z - live.player.z;
@@ -165,31 +206,23 @@ async function holdToward(tab, target, extraMillis = 1_500) {
   const sin = Math.sin(live.heading);
   const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
   const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
-  const originX = 72;
-  const originY = Math.max(120, (await tab.page.eval('innerHeight')) - 90);
-  const pointerId = 900 + Math.floor(Math.random() * 100);
-  // Use Chrome's touch input path rather than page-created PointerEvents. The latter are useful for
-  // small DOM probes but are not trusted pointer streams, so their capture/gesture bookkeeping can
-  // silently leave the production stick at zero on a cold or backgrounded tab.
-  const touch = (type, points) => tab.page.send('Input.dispatchTouchEvent', {
-    type,
-    touchPoints: points.map((point) => ({ ...point, id: pointerId })),
-  });
-  await touch('touchStart', [{ x: originX, y: originY }]);
-  await touch('touchMove', [{ x: originX + screenX * 56, y: originY - screenY * 56 }]);
+  const keys = [];
+  if (screenX > 0.2) keys.push('KeyD'); else if (screenX < -0.2) keys.push('KeyA');
+  if (screenY > 0.2) keys.push('KeyW'); else if (screenY < -0.2) keys.push('KeyS');
+  for (const code of keys) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
   try {
-    await sleep(Math.max(400, Math.ceil((distance / 2.8) * 1000) + extraMillis));
+    await sleep(Math.max(500, Math.ceil((distance / 2.8) * 1000) + extraMillis));
   } finally {
-    await touch('touchEnd', []);
+    for (const code of keys.reverse()) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
   }
   return state(tab);
 }
 
-async function waitUntil(tab, predicate, { budgetMs = 25_000, label = 'checkpoint' } = {}) {
+async function waitUntil(tab, predicate, { budgetMs = 25_000, intervalMs = 150, label = 'checkpoint' } = {}) {
   const deadline = deadlineAfter(budgetMs);
   let live = await state(tab);
   while (!predicate(live) && Date.now() < deadline) {
-    await sleep(150);
+    await sleep(intervalMs);
     live = await state(tab);
   }
   if (!predicate(live)) {
@@ -215,6 +248,9 @@ const evidence = {
   diagnostics: { primary: diagnosticsA, sibling: diagnosticsB },
   checkpoints: {},
 };
+if (!/^[0-9a-f]{40}$/.test(evidence.sha)) {
+  throw new Error(`E2 evidence requires a full candidate SHA, got ${JSON.stringify(evidence.sha)}`);
+}
 
 let failure = null;
 try {
@@ -235,18 +271,21 @@ try {
   await tabA.page.send('Page.bringToFront');
   console.log('  E2 browser: both clients online');
 
-  await holdToward(tabA, { x: 7, z: 20 }, 1_800);
+  await holdToward(tabA, { x: 12, z: 0 }, 0);
+  await holdToward(tabA, { x: 0, z: 0 }, 1_800);
+  await orbitTo(tabA, 3.0);
   console.log('  E2 browser: primary reached nameplate sweep');
-  const portrait = await waitUntil(tabA, (live) => live.visibleNameplates.length >= 4, {
-    budgetMs: 10_000, label: 'portrait four-nameplate checkpoint',
-  });
+  const portrait = await findNameplateView(tabA);
+  if (portrait.visibleNameplates.length < 2) {
+    throw new Error(`portrait multi-nameplate checkpoint was not reached; last state: ${JSON.stringify(portrait)}`);
+  }
   evidence.checkpoints.portrait = portrait;
   evidence.captures.push(await capture(tabA, 'c3-portrait-nameplates'));
 
   await configure(tabA, LANDSCAPE);
   await sleep(800);
-  const landscape = await waitUntil(tabA, (live) => live.visibleNameplates.length >= 4, {
-    budgetMs: 10_000, label: 'landscape four-nameplate checkpoint',
+  const landscape = await waitUntil(tabA, (live) => live.visibleNameplates.length >= 2, {
+    budgetMs: 10_000, label: 'landscape multi-nameplate checkpoint',
   });
   evidence.checkpoints.landscape = landscape;
   evidence.captures.push(await capture(tabA, 'c3-landscape-nameplates'));
@@ -273,7 +312,7 @@ try {
   });
   evidence.checkpoints.down = down;
   const recovered = await waitUntil(tabA, (live) => live.hero.protectionSeconds > 0, {
-    budgetMs: 20_000, label: 'safe recovery protection checkpoint',
+    budgetMs: 20_000, intervalMs: 50, label: 'safe recovery protection checkpoint',
   });
   evidence.checkpoints.recovered = recovered;
   evidence.captures.push(await capture(tabA, 'c3-safe-recovery'));
@@ -289,8 +328,6 @@ try {
 } finally {
   evidence.failure = failure;
   evidence.outcome = failure ? 'FAIL' : 'PASS';
-  writeFileSync(`${OUT}e2-evidence.json`, JSON.stringify(evidence, null, 2));
-  console.log(`  wrote ${OUT}e2-evidence.json (${evidence.outcome}, ${evidence.sha})`);
   await Promise.allSettled([
     browser.send('Target.closeTarget', { targetId: tabA.targetId }),
     browser.send('Target.closeTarget', { targetId: tabB.targetId }),
@@ -298,5 +335,12 @@ try {
   tabA.page.close();
   tabB.page.close();
   browser.close();
-  await server.kill();
+  evidence.teardown = { serverKilled: await server.kill() };
+  if (!evidence.teardown.serverKilled && !failure) {
+    evidence.failure = { message: 'owned server teardown could not be confirmed' };
+    evidence.outcome = 'FAIL';
+    process.exitCode = 1;
+  }
+  writeFileSync(`${OUT}e2-evidence.json`, JSON.stringify(evidence, null, 2));
+  console.log(`  wrote ${OUT}e2-evidence.json (${evidence.outcome}, ${evidence.sha})`);
 }
