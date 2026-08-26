@@ -15,8 +15,8 @@ const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url)
 mkdirSync(OUT, { recursive: true });
 const PORTRAIT = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true };
 const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, mobile: true };
-const recoveryWolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-5');
-if (!recoveryWolf) throw new Error('E2 recovery evidence requires authored wolf-5');
+const recoveryWolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-1');
+if (!recoveryWolf) throw new Error('E2 recovery evidence requires authored wolf-1');
 const leashWolf = ENEMY_POPULATION.find((enemy) => enemy.enemyId === 'wolf-3');
 if (!leashWolf) throw new Error('E2 leash evidence requires authored wolf-3');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -381,7 +381,6 @@ try {
   }, { budgetMs: 10_000, label: 'opening Wolf settled before recovery' });
 
   await startProtectionSampler(tabA);
-  await holdToward(tabA, { x: 0, z: 25 }, 0);
   await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 15_000);
   const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0 || live.downObserved, {
     budgetMs: 30_000, label: 'hero down checkpoint',
