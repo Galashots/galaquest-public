@@ -249,9 +249,18 @@ const tabA = await openPage(browser);
 const tabB = await openPage(browser);
 const diagnosticsA = collectDiagnostics(tabA);
 const diagnosticsB = collectDiagnostics(tabB);
+const checkedOutSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+let candidateSha = checkedOutSha;
+try {
+  // Pull-request workflows check out a synthetic merge; its second parent is the exact PR head.
+  candidateSha = execFileSync('git', ['rev-parse', 'HEAD^2'], { encoding: 'utf8' }).trim();
+} catch {
+  // A local branch checkout has no second parent, so its HEAD is already the candidate.
+}
 const evidence = {
   sha: process.env.GALAQUEST_E2_SHA
-    ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    ?? candidateSha,
+  checkoutSha: checkedOutSha,
   origin: server.origin,
   maxNameplateDistance: ENEMY_NAMEPLATE_MAX_DISTANCE,
   captures: [],
