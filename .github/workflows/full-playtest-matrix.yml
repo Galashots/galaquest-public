@@ -134,6 +134,8 @@ jobs:
         # A measuring instrument expresses "no automated verdict" by exiting 0 and publishing its
         # evidence. Any non-zero exit is therefore an execution/infrastructure failure and must stay
         # red; converting it to success made missing Chrome, syntax errors and crashes fail open.
+        env:
+          GALAQUEST_E2_SHA: ${{ matrix.name == 'drive-e2-enemy' && (github.event.pull_request.head.sha || github.sha) || '' }}
         run: node tools/runtime-test/${{ matrix.name }}.mjs
       - name: Upload evidence
         if: always()

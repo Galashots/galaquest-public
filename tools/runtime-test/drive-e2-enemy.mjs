@@ -220,11 +220,12 @@ async function findNameplateView(tab) {
   return best;
 }
 
-async function holdToward(tab, target, extraMillis = 1_500) {
+async function holdToward(tab, target, extraMillis = 1_500, observe = null) {
   await tab.page.send('Page.bringToFront');
   let live = await state(tab);
   const deadline = deadlineAfter(30_000 + extraMillis);
   while (Date.now() < deadline) {
+    if (observe?.(live)) return live;
     const dx = target.x - live.player.x;
     const dz = target.z - live.player.z;
     const distance = Math.hypot(dx, dz);
@@ -243,6 +244,7 @@ async function holdToward(tab, target, extraMillis = 1_500) {
       for (const code of keys.reverse()) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
     }
     live = await state(tab);
+    if (observe?.(live)) return live;
   }
   return live;
 }
@@ -333,7 +335,12 @@ try {
 
   await configure(tabA, PORTRAIT);
   await holdToward(tabA, { x: leashWolf.home.x, z: leashWolf.home.z + 2 }, 0);
-  const movedAway = await holdToward(tabA, { x: 0, z: 24.5 }, 0);
+  const movedAway = await holdToward(
+    tabA,
+    { x: 0, z: 24.5 },
+    0,
+    (live) => live.enemies.some((enemy) => enemy.mode === 'returning'),
+  );
   const returning = movedAway.enemies.some((enemy) => enemy.mode === 'returning')
     ? movedAway
     : await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), {
@@ -345,6 +352,11 @@ try {
   evidence.checkpoints.leash = returning;
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
+  await waitUntil(tabA, (live) => {
+    const wolf = live.enemies.find((enemy) => enemy.enemyId === leashWolf.enemyId);
+    return wolf?.mode === 'idle'
+      && Math.hypot(wolf.x - leashWolf.home.x, wolf.z - leashWolf.home.z) <= 0.6;
+  }, { budgetMs: 10_000, label: 'leash settled before recovery' });
 
   await startProtectionSampler(tabA);
   await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 1_000);
