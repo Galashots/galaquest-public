@@ -239,7 +239,7 @@ for (const item of evidence.local_evidence) {
 }
 
 const reconciliationRecords = records
-  .flatMap((record) => record.provider.task_ids.map((task) => ({ asset_id: record.asset_id, ...task })))
+  .flatMap((record) => record.provider.task_ids.filter((task) => ['image-to-3d', 'rigging'].includes(task.task_kind)).map((task) => ({ asset_id: record.asset_id, ...task })))
   .concat(evidence.provider_reconciliation.additional_records);
 const taskNotFound = reconciliationRecords.filter((record) => record.provider_status === 'HTTP_404_TASK_NOT_FOUND').length;
 const staleSignedUrlTasks = reconciliationRecords.filter((record) => record.download_attempt_result === 'HTTP_403_STALE_SIGNED_URL').length;

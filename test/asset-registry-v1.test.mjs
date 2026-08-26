@@ -89,6 +89,7 @@ test('structural metrics and rights are explicit without inferred facts', () => 
     assert.ok(record.rights.usage_rights);
     if (record.rights.license.status === 'UNKNOWN') assert.equal(record.rights.license.value, null);
     if (record.rights.usage_rights.status === 'UNKNOWN') assert.equal(record.rights.usage_rights.value, null);
+  }
   const audited = registry.records.find((record) => record.asset_id === 'cinderfang-raider-v1');
   assert.equal(audited.structural_metrics.mesh_count, 1);
   assert.equal(audited.structural_metrics.joint_count, 24);
@@ -96,7 +97,6 @@ test('structural metrics and rights are explicit without inferred facts', () => 
   assert.equal(audited.qualification_gates.structural.status, 'PASS');
   const unaudited = registry.records.find((record) => record.asset_id === 'enemy.wolf');
   assert.equal(unaudited.structural_metrics.mesh_count, 'UNKNOWN');
-  }
 });
 
 test('provider reconciliation is dated machine-readable evidence and spend-safe', () => {
