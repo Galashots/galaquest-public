@@ -126,6 +126,10 @@ function collectDiagnostics(tab) {
 const state = (tab) => tab.page.eval(`JSON.stringify((() => {
   const r = window.__galaQuestRuntime;
   const e = r.encounterState();
+  if (e.hero.downSeconds >= 0) {
+    window.__e2DownObserved = true;
+    window.__e2DownSeconds = e.hero.downSeconds;
+  }
   if (e.hero.protectionSeconds > 0) {
     (window.__e2ProtectionSamples ??= []).push(e.hero.protectionSeconds);
   }
@@ -148,6 +152,8 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
     serverSelf: r.netState().serverSelf,
     heading: r.follow.heading,
     hero: { ...e.hero },
+    downObserved: Boolean(window.__e2DownObserved),
+    observedDownSeconds: window.__e2DownSeconds ?? -1,
     protectionObserved: Boolean(window.__e2ProtectionSamples?.length),
     maxProtectionObserved: Math.max(0, ...(window.__e2ProtectionSamples ?? [])),
     enemies: e.enemies.map((enemy) => ({
@@ -161,6 +167,8 @@ const state = (tab) => tab.page.eval(`JSON.stringify((() => {
 
 async function startProtectionSampler(tab) {
   await tab.page.eval(`(() => {
+    window.__e2DownObserved = false;
+    window.__e2DownSeconds = -1;
     window.__e2ProtectionSamples = [];
     window.__e2ProtectionTimer = window.setInterval(() => {
       const seconds = window.__galaQuestRuntime.encounterState().hero.protectionSeconds;
@@ -362,8 +370,8 @@ try {
 
   await startProtectionSampler(tabA);
   await holdToward(tabA, { x: 0, z: 25 }, 0);
-  await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 1_000);
-  const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0, {
+  await holdToward(tabA, { x: recoveryWolf.home.x, z: recoveryWolf.home.z }, 15_000);
+  const down = await waitUntil(tabA, (live) => live.hero.downSeconds >= 0 || live.downObserved, {
     budgetMs: 30_000, label: 'hero down checkpoint',
   });
   evidence.checkpoints.down = down;
