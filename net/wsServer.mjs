@@ -22,12 +22,30 @@ export const DEFAULT_MAX_CLIENTS = 32;
 export const DEFAULT_MAX_CLIENTS_PER_IP = 8;
 export const DEFAULT_MAX_BUFFERED_BYTES = 1024 * 1024;
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+export const DEFAULT_INBOUND_MESSAGES_PER_SECOND = 60;
+export const DEFAULT_INBOUND_MESSAGE_BURST = 120;
 
 function positiveInteger(value, name, { allowZero = false } = {}) {
   if (!Number.isInteger(value) || value < (allowZero ? 0 : 1)) {
     throw new Error(`${name} must be ${allowZero ? 'a non-negative' : 'a positive'} integer`);
   }
   return value;
+}
+
+function createInboundMessageLimiter(messagesPerSecond, burst, now) {
+  let tokens = burst;
+  let lastRefillMs = now();
+  return () => {
+    const currentMs = now();
+    const elapsedMs = Math.max(0, currentMs - lastRefillMs);
+    if (elapsedMs > 0) {
+      tokens = Math.min(burst, tokens + ((elapsedMs * messagesPerSecond) / 1000));
+      lastRefillMs = currentMs;
+    }
+    if (tokens < 1) return false;
+    tokens -= 1;
+    return true;
+  };
 }
 
 function sameOriginOrNonBrowser(request, allowMissingOrigin) {
@@ -65,7 +83,8 @@ function refuse(socket, status, message) {
  * @param handlers    { onConnect(client), onMessage(client, text), onClose(client) }
  * @param options     {
  *   path = '/ws', maxClients, maxClientsPerIp, maxBufferedBytes,
- *   heartbeatIntervalMs, allowMissingOrigin, isOriginAllowed(request)
+ *   heartbeatIntervalMs, inboundMessagesPerSecond, inboundMessageBurst, now,
+ *   allowMissingOrigin, isOriginAllowed(request)
  * }
  */
 export function attachWebSocketServer(httpServer, handlers = {}, options = {}) {
@@ -84,6 +103,15 @@ export function attachWebSocketServer(httpServer, handlers = {}, options = {}) {
     'heartbeatIntervalMs',
     { allowZero: true },
   );
+  const inboundMessagesPerSecond = positiveInteger(
+    options.inboundMessagesPerSecond ?? DEFAULT_INBOUND_MESSAGES_PER_SECOND,
+    'inboundMessagesPerSecond',
+  );
+  const inboundMessageBurst = positiveInteger(
+    options.inboundMessageBurst ?? DEFAULT_INBOUND_MESSAGE_BURST,
+    'inboundMessageBurst',
+  );
+  const now = options.now ?? Date.now;
   const allowMissingOrigin = options.allowMissingOrigin ?? true;
   const isOriginAllowed = options.isOriginAllowed
     ?? ((request) => sameOriginOrNonBrowser(request, allowMissingOrigin));
@@ -143,6 +171,9 @@ export function attachWebSocketServer(httpServer, handlers = {}, options = {}) {
 
     let buffer = Buffer.alloc(0);
     let closed = false;
+    const allowInboundMessage = createInboundMessageLimiter(
+      inboundMessagesPerSecond, inboundMessageBurst, now,
+    );
 
     const client = {
       id: `c${nextClientId += 1}`,
@@ -219,6 +250,10 @@ export function attachWebSocketServer(httpServer, handlers = {}, options = {}) {
         buffer = buffer.subarray(frame.consumed);
 
         if (frame.opcode === OPCODE.text) {
+          if (!allowInboundMessage()) {
+            failConnection(CLOSE.policyViolation, 'inbound message rate limit');
+            return;
+          }
           try {
             handlers.onMessage?.(client, frame.payload.toString('utf8'));
           } catch (error) {

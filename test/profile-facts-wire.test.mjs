@@ -27,12 +27,14 @@ import test from 'node:test';
 import { attachGameServer } from '../net/gameServer.mjs';
 import { openRewardStore } from '../net/rewardStore.mjs';
 import {
+  MAX_RESTORE_PROFILE_FACTS,
   PROTOCOL_VERSION,
   ProtocolError,
   decode,
   encode,
   equipMessage,
   joinMessage,
+  restoreProfileMessage,
   welcomeMessage,
 } from '../public/src/net/protocol.js';
 import { createProfileStore } from '../public/src/progression/profiles.js';
@@ -329,4 +331,44 @@ test('an equip made with no server survives the reconnect that had never heard o
     c.socket.close();
     returning.socket.close();
   });
+});
+
+test('restore-profile caps inbound fact count while preserving the existing fact validator', () => {
+  const fact = (index) => ({ eventId: `restore:mark:${index}`, type: 'mark-earned' });
+  const normal = [fact(0), fact(1)];
+  assert.deepEqual(
+    decode(encode(restoreProfileMessage(normal))).facts,
+    normal,
+    'normal restore-profile facts must decode unchanged',
+  );
+
+  const atCap = Array.from({ length: MAX_RESTORE_PROFILE_FACTS }, (_, index) => fact(index));
+  assert.equal(
+    decode(encode(restoreProfileMessage(atCap))).facts.length,
+    MAX_RESTORE_PROFILE_FACTS,
+    'the exact cap remains legal',
+  );
+  const overCap = [...atCap, fact(MAX_RESTORE_PROFILE_FACTS)];
+  assert.throws(
+    () => decode(encode(restoreProfileMessage(overCap))),
+    (error) => error instanceof ProtocolError
+      && error.message === `restore-profile facts must contain at most ${MAX_RESTORE_PROFILE_FACTS} facts`,
+    'cap + 1 must be refused before durable restore work can start',
+  );
+
+  assert.throws(
+    () => decode(encode(restoreProfileMessage([{ type: 'mark-earned' }]))),
+    ProtocolError,
+    'below the cap, malformed facts still fail through the existing shape validator',
+  );
+});
+
+test('the restore cap does not narrow server-to-client welcome profileFacts', () => {
+  const profileFacts = Array.from(
+    { length: MAX_RESTORE_PROFILE_FACTS + 1 },
+    (_, index) => ({ eventId: `welcome:mark:${index}`, type: 'mark-earned' }),
+  );
+  const decoded = decode(encode({ ...welcomeMessage('p1', 0, []), profileFacts }));
+  assert.equal(decoded.profileFacts.length, profileFacts.length,
+    'welcome history remains intentionally uncapped');
 });
