@@ -125,11 +125,22 @@ test('the third kill unlocks the Lantern AND earns exactly one 100-XP fact', () 
 
     // R1: positive coverage that combat XP DID also arrive, priced through the one law rather than a
     // second number restated here -- test/progression-r1-c1.test.mjs pins the law itself.
+    //
+    // FIX 3 (Sonnet B adversarial pass, re-tightened): the total below used to be checked against
+    // `combatXpEvents`' OWN reduced sum -- self-referential, and toothless against a pricing
+    // regression that moved every event's own `.value` together. Computed explicitly instead: three
+    // legacy-fixture (level-defaulted, i.e. Level 1) wolves, each killed in its OWN processTick, each
+    // priced at Level 1 under Fix 1's batch-start snapshot -- the third tick's own snapshot is taken
+    // BEFORE that tick's mark loop lands the Lantern, so all three price identically even though the
+    // Lantern's own hundred lands inside the very same tick as the third kill's combat XP.
+    const expectedCombatXpTotal = MARKS_TO_UNLOCK * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
     const combatXpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId !== lanternEventId);
-    assert.ok(combatXpEvents.length > 0, 'R1: three ordinary kills must also earn their own combat XP');
-    assert.equal(bound.store.xpFor(GUEST),
-      LANTERN_UNLOCK_XP + combatXpEvents.reduce((sum, e) => sum + Number(e.value), 0),
-      'the total is the Lantern plus every kill\'s own combat XP, never a mutable counter');
+    assert.equal(combatXpEvents.length, MARKS_TO_UNLOCK, 'R1: three ordinary kills must each earn their own combat XP');
+    assert.equal(combatXpEvents.reduce((sum, e) => sum + Number(e.value), 0), expectedCombatXpTotal,
+      'each of the three L1 kills must be worth exactly combatXpFor({heroLevel:1, enemyLevel:1})');
+    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP + expectedCombatXpTotal,
+      'the total is the Lantern plus exactly three L1 kills\' worth of combat XP, computed explicitly '
+      + '-- never a mutable counter, and never merely self-consistent with the events above');
     assert.equal(bound.facts().filter((fact) => fact.eventId === lanternEventId).length, 1,
       'one Lantern XP row on disk, not two');
   } finally {
@@ -251,9 +262,13 @@ test('the award survives a server restart, and the restarted server does not pay
   const first = coordinatorOn(path);
   killToTheLantern(first.rewards);
   const xpAfterLantern = first.store.xpFor(GUEST);
-  // R1: at least the Lantern's hundred -- the exact total also includes the same three kills' own
-  // combat XP, asserted precisely in "the third kill unlocks the Lantern..." above.
-  assert.ok(xpAfterLantern >= LANTERN_UNLOCK_XP);
+  // FIX 3 (Sonnet B adversarial pass, re-tightened): was `>= LANTERN_UNLOCK_XP`, which passes even if
+  // combat XP silently stopped accruing. Computed explicitly instead, the same way and for the same
+  // reason as "the third kill unlocks the Lantern..." above: three legacy-fixture (Level 1) kills,
+  // each its own processTick, each priced at Level 1 under Fix 1's batch-start snapshot.
+  const expectedCombatXpTotal = MARKS_TO_UNLOCK * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+  assert.equal(xpAfterLantern, LANTERN_UNLOCK_XP + expectedCombatXpTotal,
+    'exact total: the Lantern plus three L1 kills\' own combat XP -- not merely "at least the Lantern"');
   first.rewards.close();
 
   const second = coordinatorOn(path);

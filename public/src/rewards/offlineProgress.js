@@ -40,10 +40,20 @@
 //    enemy that died and the shared lifeId (rewards/marks.js's D1 generalization), which is exactly
 //    what rewards/combatRewards.js's law needs to price a kill -- so this adds one more fact per
 //    award rather than a second reward loop. Named `xp:combat:<profileId>:<lifeId>` (durable,
-//    profile-scoped, and never re-derivable to the same id twice for two different kills), and read
-//    against the CURRENT folded level on every award, so a hero who levels up mid-session prices
-//    their next kill at the new level -- the same "no stale level" requirement the mark/lantern pair
-//    above already satisfies by reading `profiles.stateFor` fresh rather than a cached count.
+//    profile-scoped, and never re-derivable to the same id twice for two different kills).
+//
+//    FIX 1 (Opus ruling on Sonnet B's adversarial pass -- this point used to argue the OPPOSITE rule
+//    and the code below matched it; both were wrong together). Every award folded from ONE
+//    recordKills call is now priced off ONE heroLevel snapshot, read ONCE before the mark loop runs
+//    -- not read fresh per award. The previous per-award read meant an enemy life folded from the
+//    SAME frame's events could price its second kill at whatever the first kill's own XP just
+//    bought, which is order-dependent (fold order/event order, not anything about the kills) and,
+//    worse, disagreed with the server: a server tick prices every kill in it off the level at the
+//    START of that tick (net/gameServerCore.mjs's snapshotHeroLevelsForBatch), so an offline session
+//    that repriced mid-call was quietly computing a different total for the identical three kills.
+//    Cross-CALL levelling is unaffected and still exactly right: a mid-session level-up still prices
+//    the NEXT recordKills call's awards at the new level, because each call reads a fresh snapshot of
+//    `profiles.stateFor` at ITS OWN top -- see recordKills below.
 //
 // The server is still the only adjudicator when there IS one. Nothing here decides whether a wolf
 // died; combat/encounter.js does, exactly as before. This only writes down what was already true.
@@ -142,6 +152,15 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
     );
     ledger = folded.ledger;
 
+    // FIX 1 (Opus ruling, batch-start pricing parity -- see this file's header, point 4): ONE
+    // snapshot for this ENTIRE recordKills call, taken before the mark loop below records anything.
+    // Every award folded from this call's events prices off the level the hero was at when this
+    // batch started, matching net/gameServerCore.mjs's identical snapshotHeroLevelsForBatch on the
+    // server side by construction rather than by two orderings kept in step. A mid-SESSION level-up
+    // still prices the NEXT recordKills call correctly, because the next call takes its own fresh
+    // snapshot here -- only pricing WITHIN one call is now fixed to its own start.
+    const heroLevel = levelForXp(profiles.stateFor(profileId).xp);
+
     const raised = [];
     for (const award of folded.awards) {
       if (award.type !== 'mark-earned') continue;
@@ -150,16 +169,11 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
     }
 
     // R1-C1: repeatable combat XP, over the SAME awards the mark loop just walked -- not a second
-    // fold, not a second reward source. AFTER the mark loop on purpose: marks never move a hero's
-    // level, so ordering only matters for the loop below reading a level that reflects every mark
-    // already recorded above, and it does so unconditionally regardless of order.
+    // fold, not a second reward source. AFTER the mark loop on purpose (event ORDER is unchanged by
+    // Fix 1 -- only the level input moved): main.js's dispatcher still journals marks before combat
+    // XP for one batch, exactly as before.
     for (const award of folded.awards) {
       if (award.type !== 'mark-earned') continue;
-      // Read fresh on every iteration, not hoisted above the loop: two enemy lives folded from one
-      // frame's events (both dying to a single swing that also happened to be a killing blow to a
-      // second, adjacent life) must price the SECOND one at whatever level the FIRST one's XP just
-      // bought, exactly as a mid-session level-up has to price the next online kill differently too.
-      const heroLevel = levelForXp(profiles.stateFor(profileId).xp);
       const xp = combatXpFor({ heroLevel, enemyLevel: award.enemyLevel });
       if (xp <= 0) continue;
       const eventId = combatXpEventId(profileId, award.lifeId);

@@ -703,3 +703,213 @@ test('offline: two children on one tablet do not share a combat-xp fact', () => 
   const siblingProfiles = offlineSession(storage);
   assert.equal(siblingProfiles.stateFor(sibling).xp, 0, 'the sibling earned none of this profile\'s XP');
 });
+
+// ── FIX 1 (Opus ruling on Sonnet B's adversarial pass): batch-start pricing parity ─────────────────
+//
+// The original C1 shipment priced each award as applyCombatRewards/recordKills reached it, reading
+// the hero's level FRESH per award -- which meant three L1-Wolf kills paid 27 XP folded into one
+// server tick, 39 XP spread across three separate ticks, and 45 XP offline: three different answers
+// for the identical three kills, because "which award the loop reached first" is an artifact of
+// event order and Map iteration, not of the kills. The ruling: a kill is priced at the hero level as
+// of the START of the batch that contains it, captured before any of that batch's own rewards are
+// applied, identically on both the server (net/gameServerCore.mjs's snapshotHeroLevelsForBatch) and
+// offline (rewards/offlineProgress.js's recordKills). These tests are the direct proof of that: the
+// three numbers above must now be the SAME number, on all three paths, computed here rather than
+// merely trusted from the module headers.
+
+/** Every one of these helpers keeps the SAME heroId/profile across three kills of three DIFFERENT
+ *  enemyIds, so each kill folds its own mark/life (foldEvents keys marks by contributor+lifeId,
+ *  never by enemyId alone) while still being the exact "three L1-Wolf kills" case that crosses the
+ *  Lantern on the third -- the shape Sonnet B actually reproduced the divergence with. */
+const THREE_ENEMY_IDS = ['wolf-parity-a', 'wolf-parity-b', 'wolf-parity-c'];
+
+function combatXpTotal(events) {
+  return events
+    .filter((event) => event.type === 'xp-earned' && event.eventId.startsWith('xp:combat:'))
+    .reduce((sum, event) => sum + Number(event.value), 0);
+}
+
+test('FIX 1: three L1-Wolf kills pay the SAME total combat XP batched into one tick, spread across '
+  + 'three ticks, and offline -- the exact case that used to pay 27 / 39 / 45', () => {
+  const expectedTotal = THREE_ENEMY_IDS.length * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+
+  // Path A: all three kills folded into ONE processTick -- the case this suite had NO coverage for
+  // before this fix, and the case that most exposed the old per-award repricing (it used to pay 27).
+  const pathA = tempDbPath('galaquest-r1c1-parity-onetick-');
+  const boundA = coordinatorOn(pathA);
+  let totalA;
+  try {
+    boundA.rewards.join('hero-1', GUEST);
+    const oneTickEvents = THREE_ENEMY_IDS.flatMap((enemyId) => [hit(enemyId, 1, 'hero-1'), defeated(enemyId, 1, 'hero-1')]);
+    totalA = combatXpTotal(boundA.rewards.processTick(oneTickEvents));
+  } finally {
+    boundA.close();
+  }
+
+  // Path B: the identical three kills, one processTick per kill (it used to pay 39).
+  const pathB = tempDbPath('galaquest-r1c1-parity-threeticks-');
+  const boundB = coordinatorOn(pathB);
+  let totalB = 0;
+  try {
+    boundB.rewards.join('hero-1', GUEST);
+    for (const enemyId of THREE_ENEMY_IDS) {
+      totalB += combatXpTotal(killWolf(boundB.rewards, { heroId: 'hero-1', enemyId, level: 1 }));
+    }
+  } finally {
+    boundB.close();
+  }
+
+  // Path C: the identical three kills, offline, one recordKills call per kill (it already paid 45,
+  // and must keep doing so -- offline's own per-call pricing was already batch-of-one).
+  const storage = deviceStorage();
+  const session = offlinePageLoad(storage);
+  let totalC = 0;
+  for (const enemyId of THREE_ENEMY_IDS) {
+    totalC += combatXpTotal(session.killWolf(1, enemyId));
+  }
+
+  assert.equal(totalA, expectedTotal, 'one tick: three L1 kills must total exactly 3x the L1/L1 price (was 27)');
+  assert.equal(totalB, expectedTotal, 'three ticks: same total as one tick (was 39)');
+  assert.equal(totalC, expectedTotal, 'offline: same total as both server paths (was already 45)');
+  assert.equal(totalA, totalB, 'PARITY: one-tick and three-tick server totals must agree');
+  assert.equal(totalB, totalC, 'PARITY: server and offline totals must agree');
+});
+
+test('FIX 1: multiple kills batched into one processTick price identically to the same kills spread '
+  + 'across separate ticks, at a HETEROGENEOUS mix of enemy levels', () => {
+  const kills = [
+    { enemyId: 'wolf-mix-a', level: 1 },
+    { enemyId: 'wolf-mix-b', level: 2 },
+    { enemyId: 'wolf-mix-c', level: 4 },
+  ];
+
+  const pathA = tempDbPath('galaquest-r1c1-parity-mix-onetick-');
+  const boundA = coordinatorOn(pathA);
+  let totalA;
+  try {
+    boundA.rewards.join('hero-1', GUEST);
+    const events = kills.flatMap(({ enemyId, level }) => [hit(enemyId, level, 'hero-1'), defeated(enemyId, level, 'hero-1')]);
+    totalA = combatXpTotal(boundA.rewards.processTick(events));
+  } finally {
+    boundA.close();
+  }
+
+  const pathB = tempDbPath('galaquest-r1c1-parity-mix-manyticks-');
+  const boundB = coordinatorOn(pathB);
+  let totalB = 0;
+  try {
+    boundB.rewards.join('hero-1', GUEST);
+    for (const { enemyId, level } of kills) {
+      totalB += combatXpTotal(killWolf(boundB.rewards, { heroId: 'hero-1', enemyId, level }));
+    }
+  } finally {
+    boundB.close();
+  }
+
+  // All three prices at heroLevel 1 (none of these three kills alone crosses Level 2), so the
+  // expected total is independently computable from the law rather than merely "A equals B".
+  const expectedTotal = kills.reduce((sum, { level }) => sum + combatXpFor({ heroLevel: 1, enemyLevel: level }), 0);
+  assert.equal(totalA, expectedTotal, 'one tick: a heterogeneous batch prices each kill off the batch-start level');
+  assert.equal(totalB, expectedTotal, 'separate ticks: same total as the one-tick batch');
+});
+
+test('FIX 1: offline -- multiple kills folded from ONE recordKills call price identically to the '
+  + 'same kills across separate calls, when neither crosses a level boundary', () => {
+  const expectedTotal = THREE_ENEMY_IDS.length * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+
+  // Path A: all three defeats folded from ONE encounter-events array, i.e. ONE recordKills call --
+  // the offline equivalent of "batched into one processTick", and a shape the per-call `killWolf()`
+  // test helper elsewhere in this file can never exercise (it always calls recordKills once per
+  // kill). Driven directly against createOfflineProgress so this scenario is reachable.
+  const storageA = deviceStorage();
+  const profilesA = offlineSession(storageA);
+  const offlineA = createOfflineProgress({
+    profiles: profilesA,
+    profileId: OFFLINE_PROFILE,
+    mintLifeId: createLifeIdMinter(),
+  });
+  const raisedA = offlineA.recordKills(
+    THREE_ENEMY_IDS.map((enemyId) => ({ type: 'wolf-defeated', enemyId, kind: 'wolf', level: 1 })),
+  );
+  const totalA = combatXpTotal(raisedA);
+
+  // Path B: the identical three kills, one recordKills call per kill.
+  const storageB = deviceStorage();
+  const sessionB = offlinePageLoad(storageB);
+  let totalB = 0;
+  for (const enemyId of THREE_ENEMY_IDS) {
+    totalB += combatXpTotal(sessionB.killWolf(1, enemyId));
+  }
+
+  assert.equal(totalA, expectedTotal, 'one offline batch: three L1 kills total exactly 3x the L1/L1 price');
+  assert.equal(totalB, expectedTotal, 'three offline batches: same total as one batch');
+  assert.equal(totalA, totalB, 'PARITY: one-call and three-call offline totals must agree');
+});
+
+test('FIX 1: offline -- eight kills folded from ONE recordKills call ALL price at the level the '
+  + 'hero started that batch at, even though the batch\'s own combat XP crosses the Level-2 '
+  + 'threshold partway through it (this is the scenario the pre-fix per-award-fresh-read bug gets '
+  + 'wrong: the batch-of-one killWolf() helper used above can never reach it, since no single kill '
+  + 'is worth enough to cross a level on its own)', () => {
+  const storage = deviceStorage();
+  const profiles = offlineSession(storage);
+  const offline = createOfflineProgress({
+    profiles, profileId: OFFLINE_PROFILE, mintLifeId: createLifeIdMinter(),
+  });
+
+  // Eight Level-1 wolves at 15 XP apiece cross the 100-XP Level-2 threshold on the seventh kill
+  // (7*15 = 105) -- ALL EIGHT are folded from ONE recordKills call, so under the pre-fix per-award
+  // read, kill 8 would have read the (by-then Level-2) hero back and priced at the +1-gap rate.
+  const enemyIds = Array.from({ length: 8 }, (_, i) => `wolf-crossing-${i}`);
+  const raised = offline.recordKills(
+    enemyIds.map((enemyId) => ({ type: 'wolf-defeated', enemyId, kind: 'wolf', level: 1 })),
+  );
+  const combatEvents = raised.filter((event) => event.type === 'xp-earned' && event.eventId.startsWith('xp:combat:'));
+  assert.equal(combatEvents.length, 8, 'every one of the eight kills earns its own combat-XP row');
+
+  const perKillPrice = combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+  assert.ok(combatEvents.every((event) => Number(event.value) === perKillPrice),
+    `every kill in this ONE batch must price at ${perKillPrice} (the level the batch STARTED at), `
+    + `saw ${JSON.stringify(combatEvents.map((event) => Number(event.value)))}`);
+  assert.equal(combatEvents.reduce((sum, event) => sum + Number(event.value), 0), 8 * perKillPrice,
+    'sum: eight identically-priced kills, never seven at one price and an eighth at a lower one');
+
+  // Sanity: the hero really DID cross Level 2 by the end of this very batch -- Fix 1 decides what
+  // price THIS batch's OWN kills paid, it does not suppress the level-up the batch as a whole earns.
+  assert.equal(levelForXp(profiles.stateFor(OFFLINE_PROFILE).xp), 2,
+    'setup/sanity: 8*15 = 120 combat XP alone already crosses Level 2');
+});
+
+test('FIX 1: same-tick kills by two different profiles price independently -- neither guest\'s '
+  + 'in-batch writes move the other guest\'s price', () => {
+  const path = tempDbPath('galaquest-r1c1-parity-crossguest-');
+  const bound = coordinatorOn(path);
+  try {
+    bound.rewards.join('hero-a', 'guest-aaaaaaaa');
+    bound.rewards.join('hero-b', 'guest-bbbbbbbb');
+
+    // Level guest-a to Level 2 first (three marks/lantern), leaving guest-b untouched at Level 1 --
+    // reusing the same warm-up shape as "hero level feeds the price" above.
+    for (let i = 0; i < MARKS_TO_UNLOCK; i += 1) {
+      killWolf(bound.rewards, { heroId: 'hero-a', enemyId: `warmup-${i}`, level: 1 });
+    }
+    assert.equal(bound.rewards.heroStatsFor('hero-a').level, 2, 'setup: guest-a is now Level 2');
+    assert.equal(bound.rewards.heroStatsFor('hero-b').level, 1, 'setup: guest-b untouched, still Level 1');
+
+    // ONE shared tick: guest-a and guest-b each kill their OWN separate Level-1 wolf.
+    const events = bound.rewards.processTick([
+      hit('wolf-a', 1, 'hero-a'), defeated('wolf-a', 1, 'hero-a'),
+      hit('wolf-b', 1, 'hero-b'), defeated('wolf-b', 1, 'hero-b'),
+    ]);
+    const xpByHero = Object.fromEntries(
+      events.filter((event) => event.type === 'xp-earned').map((event) => [event.heroId, Number(event.value)]),
+    );
+    assert.equal(xpByHero['hero-a'], combatXpFor({ heroLevel: 2, enemyLevel: 1 }),
+      'guest-a prices off its OWN Level 2 snapshot, unaffected by sharing the tick with guest-b');
+    assert.equal(xpByHero['hero-b'], combatXpFor({ heroLevel: 1, enemyLevel: 1 }),
+      'guest-b prices off its OWN Level 1 snapshot, unaffected by sharing the tick with guest-a');
+    assert.notEqual(xpByHero['hero-a'], xpByHero['hero-b'], 'sanity: the two guests really did price differently');
+  } finally {
+    bound.close();
+  }
+});
