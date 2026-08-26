@@ -176,21 +176,23 @@ export const HERO_SPAWN = Object.freeze({ x: SPAWNS.heroes[0], z: SPAWNS.heroes[
 // force an ordinary fight/reset loop. Level 2 sits farther north in separate bowls; the one Level-4
 // danger Wolf is visible/reachable in the existing northward slice but its territory cannot touch
 // the recovery sanctuary.
-function authoredWolf(enemyId, level, x, z) {
+function authoredWolf(enemyId, level, x, z, leashRadius = 4.4) {
   const home = Object.freeze({ x, z });
   return Object.freeze({
     enemyId,
     kind: 'wolf',
     level,
     home,
-    leashRadius: 4.4,
+    leashRadius,
     patrol: Object.freeze([home]),
   });
 }
 
 export const ENEMY_POPULATION = Object.freeze(
   [
-    authoredWolf('wolf-1', 1, OPENING_WOLF_HOME[0], OPENING_WOLF_HOME[1]),
+    // The opening fight needs enough territory to keep a partially damaged Wolf present while a
+    // downed child safely returns to the sanctuary; 8m remains short of the sanctuary boundary.
+    authoredWolf('wolf-1', 1, OPENING_WOLF_HOME[0], OPENING_WOLF_HOME[1], 8),
     authoredWolf('wolf-2', 1, -5.5, 5),
     authoredWolf('wolf-3', 2, 6.5, 15),
     authoredWolf('wolf-4', 2, -6.5, 14),
