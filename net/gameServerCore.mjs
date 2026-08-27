@@ -24,6 +24,9 @@ import { RUN_SPEED, groundSpeedForInput } from '../public/src/character/speed.js
 import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessage, welcomeMessage }
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
+// R1: repeatable combat XP's own fold -- the second real xp-earned source, riding P2's lantern-XP
+// path unchanged (see rewards/killXp.js's own header for why that is the whole design).
+import { createKillXpLedger, foldKillXpEvents } from '../public/src/rewards/killXp.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
   isKnownItem, itemDef,
@@ -135,6 +138,11 @@ export function createRewardCoordinator(options = {}) {
   // persistence, marks still count in-memory for the session)".
   const ephemeral = new Map();
   let ledger = createRewardLedger();
+  // R1: the identical per-tick fold marks/lantern already use, kept as its own ledger rather than
+  // folded into `ledger` above -- the two answer different questions (a Lantern Mark is Wolf-only
+  // and Wren's own reward; kill XP is every kind) and a shared ledger would tangle their contributor
+  // bookkeeping for no reason either fold needs.
+  let killXpLedger = createKillXpLedger();
   // playerId -> itemId, for the ephemeral (guestId-less) equip fallback -- mirrors `ephemeral` above,
   // kept as its own map rather than folded into that one's shape because equip has nothing to do with
   // marks/lantern and every one of that map's three fields (marks, unlocked, seenEventIds) would sit
@@ -621,6 +629,28 @@ export function createRewardCoordinator(options = {}) {
   }
 
   /**
+   * R1: kill XP, applied durably per contributing guest -- the SAME "durable, guestId-scoped, once
+   * per enemy life" shape applyMarkAward already gives Lantern Marks, riding the identical xp-earned
+   * fact type P2 already established rather than inventing a second one. `award.lifeId` is minted by
+   * processTick below the same way applyMarkAward's own award.lifeId is (randomUUID per completed
+   * life, never the fold's own in-process counter -- see rewards/killXp.js's own header for why).
+   *
+   * An ephemeral (guestId-less) connection earns nothing durable, on purpose: this is the SAME
+   * posture the Lantern's own XP award has always taken (applyLanternUnlock above requires a
+   * guestId, and rewardsFor's ephemeral branch has always reported `xp: 0`), not a new restriction
+   * invented for kills specifically. XP is a durable-identity currency in this game, full stop.
+   */
+  function applyKillXpAward(award) {
+    const guestId = guestIdByPlayer.get(award.heroId);
+    if (!guestId) return [];
+    const eventId = `kill-xp:${guestId}:${award.enemyId}:${award.lifeId}`;
+    const result = store.apply({
+      guestId, heroId: award.heroId, type: 'xp-earned', eventId, value: String(award.value),
+    });
+    return announcementFor(result, { type: 'xp-earned', heroId: award.heroId, eventId, value: String(award.value) });
+  }
+
+  /**
    * Fold one drainEvents() batch into awards (D1) and apply each (D2/D3), returning the events to
    * append to the SAME outgoing snapshot the combat events ride, per the brief: clients hear
    * mark-earned/lantern-unlocked "the way they hear wolf-defeated" -- one array, one broadcast.
@@ -631,8 +661,14 @@ export function createRewardCoordinator(options = {}) {
     // lesson and for why the id is minted per LIFE rather than per contributor.
     const folded = foldEvents(ledger, events, { mintLifeId: () => randomUUID() });
     ledger = folded.ledger;
+    // R1: the identical fold, over the identical events batch, through its OWN ledger -- see
+    // killXpLedger's own declaration for why marks and kill XP do not share one. Both read the same
+    // wolf-defeated events independently; neither fold's WeakSet interferes with the other's.
+    const killXpFolded = foldKillXpEvents(killXpLedger, events, { mintLifeId: () => randomUUID() });
+    killXpLedger = killXpFolded.ledger;
     const rewardEvents = [];
     for (const award of folded.awards) rewardEvents.push(...applyMarkAward(award));
+    for (const award of killXpFolded.awards) rewardEvents.push(...applyKillXpAward(award));
     return rewardEvents;
   }
 
