@@ -490,6 +490,7 @@ console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEv
 // AFTER the fact via gapsAtRead, keeping the aim diagnostics the readiness rework introduced.
 let killed = false;
 let lastGap = 0;
+let lastSeenWolfHp = WOLF_MAX_HP;
 const gapsAtRead = [];
 const killDeadline = Date.now() + 120000;
 // The wall clock stays the real budget (review-suite.test.mjs requires it); this iteration cap is
@@ -517,6 +518,8 @@ for (let tap = 0; tap < 20000 && !killed && Date.now() < killDeadline; tap += 1)
   })) {
     gapsAtRead.push(Number(lastGap.toFixed(2)));
   }
+  const landedSinceLastRead = (latest?.hp ?? lastSeenWolfHp) < lastSeenWolfHp;
+  lastSeenWolfHp = latest?.hp ?? lastSeenWolfHp;
   if (latest?.heroDown || lastGap > ATTACK_REACH - 0.3) {
     // RE-CLOSE ON A MARGIN INSIDE REACH, not on its edge (drive-first-level-up's own lesson): a
     // swing thrown while drifting outward from 1.5m misses by contact time. A knocked-down hero is
@@ -524,6 +527,16 @@ for (let tap = 0; tap < 20000 && !killed && Date.now() < killDeadline; tap += 1)
     // down state before it walks, so this one call covers "down" and "drifting out" alike.
     // eslint-disable-next-line no-await-in-loop
     await reengageAfterRecovery();
+  } else if (!landedSinceLastRead) {
+    // IN REACH, TAPS GOING OUT, AND THE WOLF'S HP NOT MOVING: the swings are whiffing on FACING.
+    // The hero swings where his body points and he only turns while moving; the wolf circles to
+    // its own side between bites, and a stationary hero can throw every swing of a life into empty
+    // air (measured at 17e53bc: taps at ready gaps of 1.0-1.4m, exactly two landed swings per
+    // life, six knockdowns, wolf never below 10hp). One faceTarget pulse is this file's own
+    // documented cure -- "what the walk is really for is turning the hero" -- and faceTarget
+    // forces the turn even when the feet are already close enough.
+    // eslint-disable-next-line no-await-in-loop
+    await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), 1.0, 3000, { faceTarget: true });
   }
 }
 // The gap at each every-other-frame read that found the hero standing, swing-free and in reach --
