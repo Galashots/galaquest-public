@@ -252,8 +252,17 @@ export const ENEMY_POPULATION = Object.freeze(
     authoredWolf('wolf-7', 1, 12, -2),
 
     // ── R1 variety: Ember Wolves along the Dark Trail's own wilderness (z 14..33) ────────────────
+    //
+    // FLANKS, NEVER THE WALKLINE. The trail's six dormant lamps zig-zag through x -2.3..6.9 over
+    // z 15..33, and waking them IS the walk -- so any home whose 6 m aggro circle touches that
+    // zig-zag turns Chapter 2's one mandatory route into a body-block (wolf-5's own comment already
+    // names this rule for the camp handoff). ember-wolf-2 first sat at [-0.5, 22.5], square between
+    // the third and fourth lamps; drive-cart-loot's driven hero stalled against it at [2.5, 23.6]
+    // and campFound never latched -- and a child on the same errand meets the same wall. Both
+    // Embers now hold the WESTERN flank: in view from the trail, close enough to hunt by choice,
+    // far enough (>6 m from every lamp-to-lamp leg) that the errand itself never aggros them.
     authoredEnemy('ember-wolf-1', 'ember-wolf', 1, -8, 30),
-    authoredEnemy('ember-wolf-2', 'ember-wolf', 1, -0.5, 22.5),
+    authoredEnemy('ember-wolf-2', 'ember-wolf', 1, -8.5, 21),
 
     // ── R1 variety: Frost Wolves further out, along the Old Beacon road's own flanks (z 33..49) ──
     authoredEnemy('frost-wolf-1', 'frost-wolf', 1, -8, 45),
