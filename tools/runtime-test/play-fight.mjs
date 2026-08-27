@@ -44,6 +44,7 @@ import { SNAPSHOT_HZ, WIRE_POSITION_QUANTUM } from '../../public/src/net/protoco
 // free to drift from the one reconcile() actually uses.
 import { SNAP_DRIFT_UNITS } from '../../public/src/net/client.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -1263,6 +1264,36 @@ async function closeOnWolf(gapMetres, stopWithin) {
     { faceTarget: true });
 }
 
+// THE FIGHT HOLD, ported from drive-marks.mjs where it was probed live: the stick stays HELD into
+// the wolf for the whole fight while the in-page walk (stopWithin 0, so it never latches) re-aims
+// it at the live wolf every frame, and the attack taps ride on top as a SECOND touch point. Facing
+// is continuously wolf-ward because the hero never stops moving toward it, the gap self-corrects,
+// canAttack has no is-moving condition, and after a knockdown the respawned hero walks himself back
+// on the SAME hold -- the rules simply ignore held input on a down body. The held deflection is the
+// WALK push (RUN_DEFLECTION exactly), so the per-frame input quantum orbits contact inside
+// ATTACK_REACH instead of blowing past it.
+//
+// CDP multi-touch semantics, MEASURED (drive-marks' probe): touchStart's touchPoints are the full
+// active set -- Chrome diffs it and presses only the new point -- but touchEnd's touchPoints are
+// the points BEING RELEASED. The tap's touchEnd must list the ATTACK point alone; listing the held
+// stick there lifts the stick on the first tap of every fight, which read hosted as a hero standing
+// READY at spawn with every input dead and the wolf never below 20hp.
+const FIGHT_STICK_POINT = () => ({ x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1 });
+async function holdFightStick() {
+  await page.eval(startWalk(WOLF_TARGET, 0));
+  await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+  await touch('touchMove', [FIGHT_STICK_POINT()]);
+}
+async function releaseFightStick() {
+  await page.eval(STOP_WALK);
+  await touch('touchEnd', [FIGHT_STICK_POINT()]);
+}
+async function tapAttackOnHold() {
+  await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
+  await sleep(60);
+  await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
+}
+
 // READINESS-KEYED, NOT BLIND-INTERVAL. Every iteration reads the recorder FIRST -- ONE READ PER
 // ITERATION, not per burst of four, for the same reason the every-fourth reach check below was
 // widened to every iteration: reading in bursts is cheaper and it is what let `a dead wolf stays
@@ -1289,45 +1320,33 @@ async function closeOnWolf(gapMetres, stopWithin) {
 let killed = false;
 let sawHit = false;
 let shotSwing = false;
-let lastGap = 0;
 // The wall clock is the real budget, same length drive-marks gives the identical "the wolf can
 // actually be killed" check; the iteration cap under it is only a runaway guard, sized generously
 // above the fastest this loop could plausibly cycle so it never trips first on any machine.
 const fightDeadline = Date.now() + 120000;
-for (let tap = 0; tap < 20000 && !killed && Date.now() < fightDeadline; tap += 1) {
-  const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  const log = await readFight();
-  sawHit = log.samples.some((sample) => sample.wolfMode === 'hit');
-  killed = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
-  if (killed) break;
-  const latest = log.samples[log.samples.length - 1];
-  lastGap = latest?.gap ?? 0;
-  const ready = latest !== undefined && canAttack({
-    hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
-  });
-  if (lastGap > ATTACK_REACH) {
+await holdFightStick();
+try {
+  for (let tap = 0; tap < 20000 && !killed && Date.now() < fightDeadline; tap += 1) {
+    const cycleStart = Date.now();
     // eslint-disable-next-line no-await-in-loop
-    await closeOnWolf(lastGap, 1.0);
-  } else if (ready) {
+    await tapAttackOnHold();
     // eslint-disable-next-line no-await-in-loop
-    await touch('touchStart', [{ x: attackX, y: attackY }]);
+    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+    if (tap % 2 !== 0) continue;
     // eslint-disable-next-line no-await-in-loop
-    await sleep(60);
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', []);
-    if (!shotSwing) {
+    const log = await readFight();
+    sawHit = sawHit || log.samples.some((sample) => sample.wolfMode === 'hit');
+    killed = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
+    if (!shotSwing && (log.samples[log.samples.length - 1]?.swingSeconds ?? -1) >= 0) {
+      // Mid-swing by EVIDENCE now, not by construction: the recorder's own latest frame says a
+      // swing is in flight, which is stronger than trusting whichever blind tap was accepted.
       shotSwing = true;
-      // Mid-swing by construction: the clip runs SWING_SECONDS and this is the frame after a tap
-      // the loop already confirmed the rules were ready to accept.
       // eslint-disable-next-line no-await-in-loop
       await shot('03-swing');
     }
   }
-  // Mid-swing and in reach: neither branch above fires, and the iteration spends nothing beyond the
-  // read that decided so -- the tap that actually lands is the one after the swing ends.
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+} finally {
+  await releaseFightStick();
 }
 const fight = await readFight();
 // The recorder is the evidence for both of these, so report what it actually saw. `dropped` is
@@ -1677,29 +1696,26 @@ check('landscape: the miss ring is thrown from the button in its new corner too'
 // at once. Same cadence math as the portrait loop's own header -- SWING_SECONDS plus one frame.
 await page.eval(startWatch('landscape-hit', FIGHT_SAMPLE));
 const readLandscapeHit = () => page.eval(readWatchSource('landscape-hit')).then(JSON.parse);
-await closeOnWolf(Infinity, 1.0);
 let landscapeHit = false;
-for (let attempt = 0; attempt < 60 && !landscapeHit; attempt += 1) {
-  const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  const log = await readLandscapeHit();
-  landscapeHit = log.samples.some((sample) => sample.wolfMode === 'hit');
-  const dead = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
-  if (dead || landscapeHit) break;
-  const latest = log.samples[log.samples.length - 1];
-  const gap = latest?.gap ?? 0;
-  const ready = latest !== undefined && canAttack({
-    hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
-  });
-  if (gap > ATTACK_REACH) {
+// The same fight hold the portrait loop uses; 60 seconds of wall clock replaces the old 60-attempt
+// cap, which at this cadence is the same budget with the runaway guard riding above it.
+const landscapeHitDeadline = Date.now() + 60000;
+await holdFightStick();
+try {
+  for (let attempt = 0; attempt < 20000 && !landscapeHit && Date.now() < landscapeHitDeadline; attempt += 1) {
+    const cycleStart = Date.now();
     // eslint-disable-next-line no-await-in-loop
-    await closeOnWolf(gap, 1.0);
-  } else if (ready) {
+    await tapAttackOnHold();
     // eslint-disable-next-line no-await-in-loop
-    await tapAttack();
+    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+    if (attempt % 2 !== 0) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const log = await readLandscapeHit();
+    landscapeHit = log.samples.some((sample) => sample.wolfMode === 'hit');
+    if (log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead')) break;
   }
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+} finally {
+  await releaseFightStick();
 }
 const landscapeHitLog = await readLandscapeHit();
 await page.eval(stopWatchSource('landscape-hit'));
@@ -1786,35 +1802,27 @@ await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000
 await page.eval(startWatch('landscape-fight', FIGHT_SAMPLE));
 const readLandscape = () => page.eval(readWatchSource('landscape-fight')).then(JSON.parse);
 let landscapeKilled = false;
-let landscapeGap = 0;
 const landscapeDeadline = Date.now() + 180_000;
 // Same runaway-guard shape as the portrait loop: the wall clock above is the real budget, and this
 // cap only has to sit above the fastest this loop could plausibly cycle.
-for (let attempt = 0; attempt < 20000 && !landscapeKilled && Date.now() < landscapeDeadline; attempt += 1) {
-  const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  const log = await readLandscape();
-  landscapeKilled = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
-  if (landscapeKilled) {
+await holdFightStick();
+try {
+  for (let attempt = 0; attempt < 20000 && !landscapeKilled && Date.now() < landscapeDeadline; attempt += 1) {
+    const cycleStart = Date.now();
     // eslint-disable-next-line no-await-in-loop
-    await shot('landscape-defeated');
-    break;
+    await tapAttackOnHold();
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+    if (attempt % 2 !== 0) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const log = await readLandscape();
+    landscapeKilled = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
   }
-  const latest = log.samples[log.samples.length - 1];
-  landscapeGap = latest?.gap ?? 0;
-  const ready = latest !== undefined && canAttack({
-    hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
-  });
-  if (landscapeGap > ATTACK_REACH) {
-    // eslint-disable-next-line no-await-in-loop
-    await closeOnWolf(landscapeGap, 1.0);
-  } else if (ready) {
-    // eslint-disable-next-line no-await-in-loop
-    await tapAttack();
-  }
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+} finally {
+  await releaseFightStick();
 }
+// Best-effort, per this beat's own header: the CHECK reads the recorder; the picture is a bonus.
+if (landscapeKilled) await shot('landscape-defeated');
 await page.eval(stopWatchSource('landscape-fight'));
 check('landscape: the finishing blow was photographed too', landscapeKilled,
   `wolf reached its death state: ${landscapeKilled}`);
