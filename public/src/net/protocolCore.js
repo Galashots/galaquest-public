@@ -36,9 +36,8 @@ export const MESSAGE_TYPES = [
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
   'restore-profile',
   // R1: kill drops -- the same client->server, no-business-rule-here shape 'collect-loot' already
-  // is (see that message's own decode comment). Reusing PICKUP_ID_MAX_LENGTH's string cap below
-  // rather than a new constant, exactly as 'village-upgrade-purchase' already does for the same
-  // "a short, caller-built, colon-namespaced token" reason.
+  // is (see that message's own decode comment). Its dropId cap is DROP_ID_MAX_LENGTH, NOT
+  // PICKUP_ID_MAX_LENGTH -- see the correction note on those constants below.
   'collect-drop',
 ];
 
@@ -53,6 +52,17 @@ const EVENT_ID_MAX_LENGTH = 160;
 // GP2 pickup ids look like "cart-loot:shard:1" -- world/cartLoot.js's own table entries -- longer
 // than an item id but still a short, caller-built token, never player-authored text.
 const PICKUP_ID_MAX_LENGTH = 48;
+// A kill-drop id is NOT that shape, and the day this file assumed it was cost a playtest: R1 ids
+// are `drop:<enemyId>:<lifeId>:<index>` with the server's randomUUID() as lifeId -- 50 characters
+// for the shortest authored enemy, 56 for a frost wolf -- minted per kill, never authored. The
+// original 'collect-drop' decoder reused PICKUP_ID_MAX_LENGTH "exactly as village-upgrade-purchase
+// does", so every legitimate collection died in decode, the server closed the socket (1008), the
+// client rejoined as a fresh player at {x:0,z:0}, and the Owner's children were teleported to spawn
+// each time they picked up their own loot. One id crosses this wire in BOTH directions -- outbound
+// in encounter.drops[].id, inbound in collect-drop -- so both legs share this single authority.
+// Declared here beside the other string caps because the inbound decoder reads it; the outbound
+// drops block below uses the same constant. test/collect-drop-wire.test.mjs pins both legs to it.
+const DROP_ID_MAX_LENGTH = 96;
 
 // E1 ordinary-enemy identity is explicit on the wire. The collection is bounded like every other
 // wire aggregate/string so a malformed frame cannot turn validation itself into unbounded work.
@@ -292,9 +302,12 @@ export function decode(text) {
 
     // R1: the same shape and reasoning as 'collect-loot' just above, for the dynamic kill-drop
     // pickups world/enemyDrops.js spawns -- whether dropId names a real, uncollected, in-reach drop
-    // is that module's own business rule, not this layer's.
+    // is that module's own business rule, not this layer's. The cap is DROP_ID_MAX_LENGTH, the same
+    // authority the outbound encounter.drops[].id leg uses: this is that exact id coming back, and
+    // capping it at PICKUP_ID_MAX_LENGTH here once rejected every real minted id (see the
+    // constant's own correction note).
     case 'collect-drop': {
-      const dropId = requireString(raw.dropId, 'dropId', PICKUP_ID_MAX_LENGTH);
+      const dropId = requireString(raw.dropId, 'dropId', DROP_ID_MAX_LENGTH);
       if (dropId.length === 0) fail('dropId must not be empty');
       return { v: PROTOCOL_VERSION, type: 'collect-drop', dropId };
     }
@@ -674,7 +687,8 @@ function decodeLoot(loot) {
 // (server-only bookkeeping -- ageSeconds past the point a presenter cares, per-life counters -- stays
 // server-side, the identical boundary decodeEnemy already draws against patrol/spawn cursors).
 const DROP_KINDS = ['coin', 'heart', 'gear'];
-const DROP_ID_MAX_LENGTH = 96;
+// DROP_ID_MAX_LENGTH lives with the other string caps at the top of this file -- the inbound
+// 'collect-drop' decoder shares it, and the two legs of the same id must never drift apart again.
 // A little above world/enemyDrops.js's own MAX_CONCURRENT_DROPS server-side cap, so the brief linger
 // window a just-collected drop stays on the wire for its attraction flight (see that module's own
 // COLLECTED_LINGER_SECONDS) can never itself trip this ceiling.

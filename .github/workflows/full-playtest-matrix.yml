@@ -75,6 +75,7 @@ jobs:
           - drive-first-level-up
           - drive-e2-enemy
           - drive-helmet-vertical
+          - drive-drop-collect
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

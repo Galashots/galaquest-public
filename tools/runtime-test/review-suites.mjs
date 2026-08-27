@@ -22,6 +22,7 @@ export const HARNESSES = {
   'drive-cart-loot': { gate: true, why: 'GP2 cart loot: search, burst, HUD-gated collection, and a two-client double-collect proof, portrait and landscape' },
   'drive-village-board': { gate: true, why: 'GP3 Village Board: Workshop I purchase, 3D transformation, shared-balance two-client and race proofs, and a real server restart, portrait and landscape' },
   'drive-profile-gate': { gate: true, why: 'Stage 1 family profile gate: name a first hero, add a sibling, switch, reload, per-child isolation, the four-hero cap, two-tap remove, and the 44px tap floor, portrait and landscape' },
+  'drive-drop-collect': { gate: true, why: 'the kill-drop pickup over the REAL socket: production drop ids survive collect-drop decode, the connection never closes, the playerId never changes, the hero is never reseated at spawn without an honest knockdown, and the screen never blinks (GQ-023)' },
   'drive-recovery': { gate: true, why: 'the recovery boundary through the real client: a Mark earned by killing a wolf survives the reward database being replaced with an empty one, is restored INTO that empty server, and a Mark earned with no server at all survives a reload' },
   'drive-guidance-rescue': { gate: true, why: 'Checkpoint 2 "never lost": turning away loses the objective off-camera, a tap on empty ground does NOT recover it, and the rescue button turns the camera back -- the recovery path itself, which nothing covered before' },
   'drive-old-beacon': { gate: true, why: 'G1 Old Beacon road: the whole approach walked with the stick, visibility before arrival, one-shot arrival, honest post-arrival objective, world edge, portrait, landscape, reduced motion and a reload' },
@@ -105,6 +106,6 @@ export const SUITES = {
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
-    'drive-e2-enemy', 'drive-helmet-vertical',
+    'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect',
   ],
 };

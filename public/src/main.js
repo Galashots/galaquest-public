@@ -3038,6 +3038,14 @@ async function bootstrap() {
     companion: () => companionPresenter?.getState() ?? null,
     net,
     remotes: () => remotes,
+    // R1 runtime-test evidence: the drops the child can currently see, under the SAME
+    // online/offline selection rule the frame loop's own collect pass uses (the
+    // `netStatus === 'online'` branch over serverEncounter?.drops vs dropsState.drops). Read-only
+    // published state, the identical boundary encounterState() draws -- a harness that could spawn
+    // or collect a drop through this hook could walk a path no child can.
+    dropsOnGround: () => (netStatus === 'online'
+      ? (serverEncounter?.drops ?? [])
+      : dropsState.drops),
     netState: () => ({
       status: netStatus,
       selfId: net.selfId,
