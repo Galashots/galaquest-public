@@ -1092,6 +1092,40 @@ check('the hero visibly falls over while he is down, rather than standing throug
 // changed is that a recorder inside the page holds every frame, so a slow read delays the answer
 // instead of missing the event. The window is two whole swings, taken from the rules rather than
 // from a stopwatch: a swing that has not begun within that has not begun.
+// THE FIGHT HOLD, ported from drive-marks.mjs where it was probed live: the stick stays HELD into
+// the wolf for the whole fight while the in-page walk (stopWithin 0, so it never latches) re-aims
+// it at the live wolf every frame, and the attack taps ride on top as a SECOND touch point. Facing
+// is continuously wolf-ward because the hero never stops moving toward it, the gap self-corrects,
+// canAttack has no is-moving condition, and after a knockdown the respawned hero walks himself back
+// on the SAME hold -- the rules simply ignore held input on a down body. The held deflection is the
+// WALK push (RUN_DEFLECTION exactly), so the per-frame input quantum orbits contact inside
+// ATTACK_REACH instead of blowing past it.
+//
+// CDP multi-touch semantics, MEASURED (drive-marks' probe): touchStart's touchPoints are the full
+// active set -- Chrome diffs it and presses only the new point -- but touchEnd's touchPoints are
+// the points BEING RELEASED. The tap's touchEnd must list the ATTACK point alone; listing the held
+// stick there lifts the stick on the first tap of every fight, which read hosted as a hero standing
+// READY at spawn with every input dead and the wolf never below 20hp.
+//
+// Defined HERE, above the swing-start beat, because that beat fights on the same hold the three
+// fight loops below do -- its own header says why every stationary shape of it lost hosted.
+const WOLF_TARGET = authoredWolfSource();
+const FIGHT_STICK_POINT = () => ({ x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1 });
+async function holdFightStick() {
+  await page.eval(startWalk(WOLF_TARGET, 0));
+  await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+  await touch('touchMove', [FIGHT_STICK_POINT()]);
+}
+async function releaseFightStick() {
+  await page.eval(STOP_WALK);
+  await touch('touchEnd', [FIGHT_STICK_POINT()]);
+}
+async function tapAttackOnHold() {
+  await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
+  await sleep(60);
+  await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
+}
+
 await page.eval(startWatch('swing-start', '({ swingSeconds: window.__galaQuestRuntime.encounterState().hero.swingSeconds })'));
 // RE-TAPPED ON A BOUNDED CADENCE, not one press edge held across the whole window. A press is an
 // EDGE: takeAttack() fires once per press, so a single tap whose one eligible frame lands wrong --
@@ -1101,61 +1135,41 @@ await page.eval(startWatch('swing-start', '({ swingSeconds: window.__galaQuestRu
 // stays down. That run's own fight loop swung and killed seconds later, so the control works; the
 // single edge is what is fragile. The assertion is unchanged -- a tap started a swing -- and on a
 // healthy machine the first tap satisfies it before any retry happens.
-// ...and with the tap shape the fight loops VALIDATED on these runners: an explicit touch id and
-// an explicit-point release. The retapped version of this beat still failed hosted at 06090a0
-// (best swingSeconds -1 across sixteen frames and four press edges) while the two-point fight
-// taps right after it swung and killed -- the difference being exactly the id-0-and-empty-list
-// shape this beat shared with every earlier tap in the file. Explicit ids alias with nothing.
-// ...and each tap SPENT ON A HERO THE RULES CAN ACCEPT IT FROM. This beat runs beside a live,
-// re-aggroed wolf on purpose, and a downed hero refuses the press edge -- hosted at fda0cf4 the
-// explicit-id shape above was in place and the beat still recorded 15 frames with best
-// swingSeconds -1, because at 836ms frames the hero cycles down-and-up faster than four blind
-// taps can straddle: every edge landed on a body the rules were ignoring. So the loop reads the
-// imported canAttack (the same rule the fight loops key on) and taps only when it says yes;
-// otherwise it waits a beat and asks again. The assertion is unchanged -- one accepted tap must
-// start a swing -- and the window is sized in down-cycles rather than swings, since surviving a
-// knockdown (RESPAWN plus the wolf's next approach) is what the wait is actually for.
+// ...ON THE FIGHT HOLD, because every stationary shape of this beat eventually lost hosted and
+// each loss ruled something out. Explicit-id taps with explicit-point releases (the fight loops'
+// own tap shape) still read best swingSeconds -1 at 06090a0. Gating each tap on the imported
+// canAttack still lost at 180b37a, and that run's per-tap gate reads ruled out every eater the
+// harness can see: button present, unobstructed, dataset.suspended unset, canAttack true at all
+// four taps -- and no swing. What is left is the gate reading's own age: at that run's 849ms
+// frames a "canAttack true" sample is two frames stale by the time the press is sampled, and the
+// adjacent wolf's bite cycle re-downs the hero inside that window. The fight loop forty lines
+// down swung and killed at the very same frame rate, every hosted run, because it never stands
+// still and never asks first: the stick is HELD into the wolf (so a knocked-down hero walks
+// himself back on the same input) and blind frame-cadence taps ride on top, where a refused edge
+// costs nothing. So this beat now uses that exact choreography -- the helpers are shared with the
+// fight loops below -- and stops at the FIRST recorded swing. The assertion is unchanged: a tap
+// on ATTACK started a real published swing.
 const swingDeadline = Date.now() + Math.max(SWING_SECONDS * 4 * 1000, 30_000);
 let swingStart = { frames: 0, samples: [] };
-// Per refused pass: what actually sits under the tap point, and whether main.js has the button
-// suspended -- so a failure NAMES the eater (an overlay that drains attack presses unheard, a
-// covered button) instead of leaving "best swingSeconds -1" to be theorised about.
-const tapGateReads = [];
-while (Date.now() < swingDeadline) {
-  // eslint-disable-next-line no-await-in-loop
-  const ready = await state();
-  if (!ready.canAttack) {
+await holdFightStick();
+try {
+  for (let tap = 0; tap < 20000 && Date.now() < swingDeadline; tap += 1) {
     // eslint-disable-next-line no-await-in-loop
-    await sleep(400);
-    continue;
+    await tapAttackOnHold();
+    if (tap % 2 !== 0) continue;
+    // eslint-disable-next-line no-await-in-loop
+    swingStart = await waitForSample(page, 'swing-start', (sample) => sample.swingSeconds >= 0,
+      { timeoutMs: 1500 });
+    if ((swingStart.samples ?? []).some((sample) => sample.swingSeconds >= 0)) break;
   }
-  // eslint-disable-next-line no-await-in-loop
-  const gate = await page.eval(`(() => {
-    const button = document.querySelector('#attack-button');
-    const topmost = document.elementFromPoint(${attackX}, ${attackY});
-    return JSON.stringify({
-      suspended: button?.dataset.suspended ?? 'unset',
-      topmost: topmost ? (topmost.id || topmost.className || topmost.tagName) : 'nothing',
-    });
-  })()`).then(JSON.parse);
-  tapGateReads.push(gate);
-  // eslint-disable-next-line no-await-in-loop
-  await touch('touchStart', [{ x: attackX, y: attackY, id: 9 }]);
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(60);
-  // eslint-disable-next-line no-await-in-loop
-  await touch('touchEnd', [{ x: attackX, y: attackY, id: 9 }]);
-  // eslint-disable-next-line no-await-in-loop
-  swingStart = await waitForSample(page, 'swing-start', (sample) => sample.swingSeconds >= 0,
-    { timeoutMs: 2500 });
-  if ((swingStart.samples ?? []).some((sample) => sample.swingSeconds >= 0)) break;
+} finally {
+  await releaseFightStick();
 }
 await page.eval(stopWatchSource('swing-start'));
 const startedSwinging = swingStart.samples.filter((sample) => sample.swingSeconds >= 0);
 check('tapping ATTACK starts a swing', startedSwinging.length > 0,
   `${swingStart.frames} frames recorded, best swingSeconds `
-    + `${swingStart.samples.reduce((best, sample) => Math.max(best, sample.swingSeconds), -1)}`
-    + (startedSwinging.length > 0 ? '' : `; at each tap ${JSON.stringify(tapGateReads.slice(-6))}`));
+    + `${swingStart.samples.reduce((best, sample) => Math.max(best, sample.swingSeconds), -1)}`);
 
 // The hero swings with a procedural arc, because the rig ships no attack clip. From the chase camera
 // that happens behind his back and cannot be judged, so orbit round to the front and shoot the swing
@@ -1293,7 +1307,6 @@ console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEvery
 // here: the wolf brings itself to about a metre, and what the walk is really for is turning the
 // hero, since he only turns while moving. The held walk is kept for the one case with actual
 // distance in it -- coming back from a knockdown, which respawns him at spawn.
-const WOLF_TARGET = authoredWolfSource();
 const HELD_APPROACH_SLACK_METRES = 3;
 async function heldLegToWolf(stopWithin, maxMillis) {
   await page.eval(startWalk(WOLF_TARGET, stopWithin));
@@ -1315,35 +1328,9 @@ async function closeOnWolf(gapMetres, stopWithin) {
     { faceTarget: true });
 }
 
-// THE FIGHT HOLD, ported from drive-marks.mjs where it was probed live: the stick stays HELD into
-// the wolf for the whole fight while the in-page walk (stopWithin 0, so it never latches) re-aims
-// it at the live wolf every frame, and the attack taps ride on top as a SECOND touch point. Facing
-// is continuously wolf-ward because the hero never stops moving toward it, the gap self-corrects,
-// canAttack has no is-moving condition, and after a knockdown the respawned hero walks himself back
-// on the SAME hold -- the rules simply ignore held input on a down body. The held deflection is the
-// WALK push (RUN_DEFLECTION exactly), so the per-frame input quantum orbits contact inside
-// ATTACK_REACH instead of blowing past it.
-//
-// CDP multi-touch semantics, MEASURED (drive-marks' probe): touchStart's touchPoints are the full
-// active set -- Chrome diffs it and presses only the new point -- but touchEnd's touchPoints are
-// the points BEING RELEASED. The tap's touchEnd must list the ATTACK point alone; listing the held
-// stick there lifts the stick on the first tap of every fight, which read hosted as a hero standing
-// READY at spawn with every input dead and the wolf never below 20hp.
-const FIGHT_STICK_POINT = () => ({ x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1 });
-async function holdFightStick() {
-  await page.eval(startWalk(WOLF_TARGET, 0));
-  await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
-  await touch('touchMove', [FIGHT_STICK_POINT()]);
-}
-async function releaseFightStick() {
-  await page.eval(STOP_WALK);
-  await touch('touchEnd', [FIGHT_STICK_POINT()]);
-}
-async function tapAttackOnHold() {
-  await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
-  await sleep(60);
-  await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
-}
+// The fight hold's helpers (FIGHT_STICK_POINT, holdFightStick, releaseFightStick, tapAttackOnHold)
+// are defined above the swing-start beat, which fights on the same hold -- the full measured
+// reasoning rides with the definitions there.
 
 // READINESS-KEYED, NOT BLIND-INTERVAL. Every iteration reads the recorder FIRST -- ONE READ PER
 // ITERATION, not per burst of four, for the same reason the every-fourth reach check below was
@@ -1422,9 +1409,10 @@ console.log(`  hit flash: brightest peak ${brightest.peak.toFixed(2)} over ${bri
   + `longest ${longest.frames} frame(s) at peak ${longest.peak.toFixed(2)}; `
   + `${flashes.length} of ${fight.samples.length} sampled frames had a flash up`);
 // Best-effort, and only best-effort on a starved runner: WOLF_HIT_FLASH_SECONDS is 0.18s and a
-// screenshot round trip is longer than that below ~10fps. The CHECK above reads the recorder, which
-// cannot miss it; this is the picture, which can.
-if (sawHit) await shot('wolf-hit-flash');
+// screenshot round trip is longer than that below ~10fps. The CHECK below reads the recorder,
+// which cannot miss the reaction's persistent half; this is the picture, which can.
+const flashedHit = flashes.length > 0;
+if (sawHit || flashedHit) await shot('wolf-hit-flash');
 if (killed) await shot('04-defeated');
 
 // FROM THE RECORDER, because by the time the loop notices the kill and this line runs, the wolf can
@@ -1433,7 +1421,17 @@ if (killed) await shot('04-defeated');
 // lowest health the wolf was ever recorded at is the honest answer to "did tapping damage it".
 check('tapping ATTACK damages the wolf', lowestWolfHp < WOLF_MAX_HP,
   `wolf reached ${lowestWolfHp}hp of ${WOLF_MAX_HP} across ${fight.samples.length} recorded frames`);
-check('a struck wolf plays its hit reaction', sawHit);
+// TWO KINDS OF EVIDENCE, because the reaction has two halves and only one of them is sampleable on
+// a starved runner. The rules' 'hit' MODE runs on the server's real clock for well under a second,
+// so at the 849ms frames hosted measured at 180b37a it fits ENTIRELY between two recorded frames --
+// that run's recorder proved thirty points of damage (30hp -> 0) across 151 frames and never once
+// sampled the mode. The flash accumulator is the reaction's other half and it cannot be missed:
+// flashSeen() latches the brightest intensity written to the wolf's materials SINCE THE LAST HIT,
+// so a hit's visible reaction survives until some later frame samples it (that same run recorded a
+// hit-kind flash on 124 of 151 frames). Either one recorded is a struck wolf visibly reacting.
+check('a struck wolf plays its hit reaction', sawHit || flashedHit,
+  `mode 'hit' sampled: ${sawHit}; hit-kind flash recorded: ${flashedHit} `
+    + `(${flashes.length} flash frame(s) of ${fight.samples.length})`);
 check('the wolf can actually be killed', killed,
   `wolf reached ${lowestWolfHp}hp; modes seen `
     + `${JSON.stringify([...new Set(fight.samples.map((sample) => sample.wolfMode))])}`);
@@ -1785,7 +1783,11 @@ try {
     if (attempt % 2 !== 0) continue;
     // eslint-disable-next-line no-await-in-loop
     const log = await readLandscapeHit();
-    landscapeHit = log.samples.some((sample) => sample.wolfMode === 'hit');
+    // Mode OR the latched hit-kind flash -- the portrait check's own two-evidence rule, for the
+    // same reason: at 849ms frames (hosted, 180b37a) the sub-second 'hit' mode can fit entirely
+    // between recorded frames, while flashSeen() latches until a later frame samples it.
+    landscapeHit = log.samples.some((sample) => sample.wolfMode === 'hit'
+      || (sample.flash && sample.flash.kind === 'hit' && sample.flash.frames > 0));
     if (log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead')) break;
   }
 } finally {
