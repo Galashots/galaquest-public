@@ -1,6 +1,11 @@
 // Lightweight DOM presentation for ordinary enemies. Simulation and network state stay upstream;
 // this adapter only projects stable enemy identities into a bounded, readable overlay.
 
+// R1: the display name and the danger-plate accent both come from the ONE kind->appearance table
+// (enemies/enemyKindPresentation.js) wolf.js's tint/scale and this plate now share -- so "Ember Wolf"
+// on the card and the ember tint on the body can never name two different animals (GQ-007).
+import { displayNameForKind, presentationForKind } from './enemyKindPresentation.js';
+
 export const ENEMY_NAMEPLATE_MAX_DISTANCE = 16;
 // Slightly larger than the rendered compact Wolf card, leaving a small buffer for font/layout drift
 // without hiding otherwise readable labels in the narrow portrait viewport.
@@ -32,12 +37,15 @@ export function enemyNameplateModel(enemy, { heroLevel = 1 } = {}) {
   const hp = Number.isFinite(enemy?.hp) ? Math.max(0, Math.min(maxHp, enemy.hp)) : 0;
   const danger = level >= heroLevel + 2;
   return {
-    name: enemy?.kind === 'wolf' ? 'Wolf' : String(enemy?.kind ?? 'Enemy'),
+    name: displayNameForKind(enemy?.kind),
     level,
     levelText: `Lv ${level}`,
     healthFraction: hp / maxHp,
     danger,
     dangerText: danger ? 'DANGER' : '',
+    // R1: the Alpha's own danger accent, independent of the level-vs-hero threshold `danger` reads --
+    // a Level-1 Alpha is still meant to read as meaner than a Level-1 Wolf standing beside it.
+    menacing: presentationForKind(enemy?.kind).menacing,
     visible: enemy?.mode !== 'dead' && enemy?.mode !== 'dying' && hp > 0,
   };
 }
@@ -79,6 +87,7 @@ export function createEnemyNameplateLayer({ container } = {}) {
       entry.element.hidden = !visible;
       if (!visible) continue;
       entry.element.dataset.danger = String(model.danger);
+      entry.element.dataset.menacing = String(model.menacing);
       entry.element.dataset.enemyId = id;
       entry.element.style.left = `${projection.x}px`;
       entry.element.style.top = `${projection.y}px`;
