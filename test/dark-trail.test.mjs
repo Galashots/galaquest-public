@@ -202,7 +202,7 @@ test('the chip points up the trail before any light is woken, then counts down',
   assert.equal(questObjectiveFor(LIT, true, true, true, trail(0)), OBJECTIVE_FOLLOW_THE_DARK_TRAIL);
   assert.equal(questObjectiveFor(LIT, true, true, true, trail(1)), objectiveWakeLights(5));
   assert.equal(questObjectiveFor(LIT, true, true, true, trail(5)), objectiveWakeLights(1));
-  assert.match(objectiveWakeLights(1), /1 more/, 'singular, not "1 more dark lights"');
+  assert.match(objectiveWakeLights(1).text, /1 more/, 'singular, not "1 more dark lights"');
 });
 
 test('reaching the camp ends the stretch even with a light still dark', () => {
@@ -257,7 +257,7 @@ test('reaching the Beacon replaces "find it" with an objective that promises not
   assert.equal(arrived, OBJECTIVE_BEACON_IS_COLD);
   assert.notEqual(arrived, OBJECTIVE_FIND_THE_BEACON, 'do not tell someone standing on it to find it');
   assert.doesNotMatch(
-    arrived, /light|wake|fix|repair|defend|fight|guard/i,
+    arrived.text, /light|wake|fix|repair|defend|fight|guard/i,
     'G2 is not built: the chip may not name an action that does not exist',
   );
 });

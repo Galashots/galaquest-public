@@ -8,7 +8,10 @@ import {
   KEEPER_LINE_UNLOCKED,
   keeperLineFor,
   keeperSpeechState,
+  readAloudUnlocked,
+  resetReadAloudForTests,
   speakKeeperLine,
+  speakKeeperLineIfUnlocked,
 } from '../public/src/world/keeperSpeech.js';
 import { KEEPER_WAVE_RADIUS_METERS } from '../public/src/world/zoneLoader.js';
 
@@ -141,4 +144,43 @@ test('sabotage: speakKeeperLine is not a no-op -- a real line reaches the inject
   let calls = 0;
   speakKeeperLine(KEEPER_LINE_UNLOCKED, () => { calls += 1; });
   assert.equal(calls, 1);
+});
+
+// ── read-aloud, for the child this game is actually for ─────────────────────────────────────────
+//
+// The whole of this game's narrative reached a pre-reader only through a 44px grey circle they had
+// to notice and guess the purpose of. Nothing ever spoke on its own, because iOS will not make a
+// sound until speechSynthesis has been called inside a real gesture. So the first line buys the
+// permission and every line after it speaks itself.
+
+test('nothing is read aloud before the child has asked to be read to', () => {
+  resetReadAloudForTests();
+  const spoken = [];
+  const said = speakKeeperLineIfUnlocked(KEEPER_LINE_QUEST, (text) => spoken.push(text));
+  assert.equal(said, false, 'a line spoke itself to a child who never tapped the button');
+  assert.deepEqual(spoken, []);
+});
+
+test('one tap on the button, and every line after it reads itself', () => {
+  resetReadAloudForTests();
+  const spoken = [];
+  const speak = (text) => spoken.push(text);
+
+  assert.equal(readAloudUnlocked(), false, 'premise: a fresh page has not been unlocked');
+  speakKeeperLine(KEEPER_LINE_QUEST, speak);
+  assert.equal(readAloudUnlocked(), true, 'the tap did not record that read-aloud is wanted');
+
+  speakKeeperLineIfUnlocked(KEEPER_LINE_ONE_MARK, speak);
+  speakKeeperLineIfUnlocked(KEEPER_LINE_TWO_MARKS, speak);
+  assert.deepEqual(spoken, [KEEPER_LINE_QUEST, KEEPER_LINE_ONE_MARK, KEEPER_LINE_TWO_MARKS],
+    'the child tapped once and the game stopped reading to them');
+});
+
+test('an empty line is not read aloud, unlocked or not', () => {
+  resetReadAloudForTests();
+  const spoken = [];
+  speakKeeperLine(KEEPER_LINE_QUEST, (text) => spoken.push(text));
+  assert.equal(speakKeeperLineIfUnlocked(null, (text) => spoken.push(text)), false);
+  assert.equal(speakKeeperLineIfUnlocked('', (text) => spoken.push(text)), false);
+  assert.deepEqual(spoken, [KEEPER_LINE_QUEST], 'silence was announced out loud');
 });

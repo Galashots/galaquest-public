@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 
 // Active guidance is explicit at the top level, then recursive inside stable guidance directories so
-// new runbooks/skills are picked up automatically. docs/MISTAKES.md is historical and deliberately
-// not current-path linted: it must be allowed to explain removed implementations.
+// new product/runbook/skill Markdown is picked up automatically. docs/MISTAKES.md is historical and
+// deliberately not current-path linted: it must be allowed to explain removed implementations.
 const GUIDANCE_FILES = [
   'AGENTS.md',
   'README.md',
@@ -31,6 +31,7 @@ const GUIDANCE_FILES = [
 ];
 
 const GUIDANCE_DIRS = [
+  'docs/product',
   'docs/pipeline',
   'docs/review-guides',
   '.agents/skills',
@@ -131,6 +132,13 @@ test('active guidance corpus is explicit and substantial', () => {
     assert.ok(existsSync(join(REPO, rel)), `required guidance file is missing: ${rel}`);
     assert.ok(statSync(join(REPO, rel)).isFile(), `required guidance path is not a file: ${rel}`);
   }
+});
+
+test('Claude bootstrap imports the canonical root authority exactly', () => {
+  const claude = join(REPO, 'CLAUDE.md');
+  assert.ok(existsSync(claude), 'root CLAUDE.md is missing');
+  assert.equal(readFileSync(claude, 'utf8'), '@AGENTS.md\n',
+    'root CLAUDE.md must remain the exact pointer-only bootstrap');
 });
 
 test('active guidance has no broken relative Markdown links', () => {

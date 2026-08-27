@@ -15,6 +15,26 @@ export function screenToWorld(screen, heading) {
   };
 }
 
+// The same rotation, the other way round: a world offset -> where it sits relative to the camera,
+// with +y FORWARD (away from the camera) and +x to the camera's right. Used by the minimap, which
+// has to place a world point on a hero-centred, camera-up dial.
+//
+// It delegates to screenToWorld rather than restating the matrix, and that is exact rather than a
+// convenient approximation: the transform is its own inverse. Writing it as
+//
+//     M = [ -cos  sin ]      screenToWorld(s) = M s
+//         [  sin  cos ]
+//
+// then M M = [ cos^2 + sin^2, -cos sin + sin cos ; sin(-cos) + cos sin, sin^2 + cos^2 ] = I.
+//
+// So there is one trig definition in this file and no second copy to drift from it (GQ-007), and
+// the round trip is pinned by a test rather than by this comment. The separate name exists because
+// calling something `screenToWorld` to go the other way reads as a bug at every call site.
+export function worldToScreen(world, heading) {
+  const screen = screenToWorld({ x: world.x, y: world.z }, heading);
+  return { x: screen.x, y: screen.z };
+}
+
 // Unit-or-zero world direction for a stick input. Normalising here is the whole point: `screen`
 // carries the stick's deflection magnitude and groundSpeedForInput() has already priced that
 // magnitude in, so a direction that kept its length would multiply it twice. The first wiring

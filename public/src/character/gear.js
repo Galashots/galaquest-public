@@ -106,6 +106,60 @@ export const RIG_ROOT_NAME = 'Armature';
 // not a measured fact, and this file already records one case where a self-consistent derivation was
 // simply wrong until six World of Warcraft screenshots settled it. Search for how equipped weapon
 // meshes are authored and confirm the hand is part of the weapon before anyone models one that way.
+// SUPERSEDED 2026-08-24 BY OWNER VISUAL REJECTION. Everything above is the history of how this
+// mount was derived; it is kept because it records what was tried and why, and because two of its
+// lessons still hold (aim first then seat; this rig's arm chain ends at the wrist). But its
+// MEASUREMENTS -- 0.055 m past the bone, 68.8 degrees below horizontal, tip at y=0.414 -- describe
+// the RETIRED sword transform and are no longer true of the value below. Nor is the word
+// "Sol-approved" authority for it any more: the Owner looked at the shipping sword on a real iPhone
+// and on the Forge and rejected the carry. Running-game pixels outrank a prior review.
+//
+// What the rejection actually was, photographed rather than inferred: in the Forge's bind fit pose
+// the blade pointed [-0.999, -0.026, -0.026] -- straight out along the arm -- so the sword lay FLAT
+// ACROSS THE BACK OF THE HAND with the guard behind the knuckles. It was not held; it was balanced.
+// At idle it read as an unidentifiable stub at the hip.
+//
+// The re-fit, made in the Forge against the Owner-approved Dawnwarden carry as the visual reference:
+// rack entry "Starter Sword (Ironwood)" -> loadout shipping-sword-only (shield hidden so the
+// silhouette reads) -> world-XYZ delta position [-0.0115, -0.0192, 0.0158] m, rotation
+// [-63.57, 64.18, 49.26] degrees, scale unchanged. The rotation was not guessed and not copied: both
+// meshes carry the +Y-blade, origin-at-grip convention (see normalizeSwordPayload), so the delta is
+// the world rotation that lands this blade on the direction the Owner already accepted for
+// Dawnwarden. The position is a small seat down and outboard so the guard clears the fingers.
+// Dawnwarden's own ownerFit was NOT touched; it was read as a reference and nothing else.
+//
+// Baked through forge/runtimeBake.js, which is the exact inverse of attachRigidTier2Gear and reads
+// the bind pose out of the skeleton's boneInverses -- so unlike the 2026-08-17 remediation this
+// number was not measured in whatever pose happened to be on screen. See
+// test/forge-runtime-bake.test.mjs and test/gear-bake-frame-contract.test.mjs.
+//
+// SEATED IN THE HAND 2026-08-24, second Owner rejection of the same carry. The re-fit above got the
+// ANGLE right and left the sword in the wrong PLACE: the Owner's shipping-hero and Studio captures
+// showed the blade hanging off the fingertips with the guard outboard of the fingers -- held by
+// nobody, "dangling", against a Dawnwarden reference that plainly reads as gripped.
+//
+// This time the relationship was measured rather than eyeballed, in the Forge's bind fit pose,
+// against the Owner-approved Dawnwarden carry -- the SAME hand, the SAME pose, so the two numbers
+// are directly comparable. Distances are from the RightHand bone (the wrist; this rig has no finger
+// joints) to the middle of each sword's own handle segment, where a fist would close:
+//
+//                            handle midpoint      guard        pommel     blade axis
+//   Dawnwarden (approved)         0.065 m        0.163 m      0.111 m     reference
+//   Starter Sword (rejected)      0.175 m        0.147 m      0.217 m     1.15 deg off Dawnwarden
+//   Starter Sword (this fit)      0.065 m        0.112 m      0.080 m     unchanged
+//
+// The hand mesh reaches 0.188 m from the wrist, so 0.175 m WAS the fingertips: the measurement and
+// the photograph agree, which is why this is a seat correction and not another angle experiment.
+// Dawnwarden's own grip sits at 0.12 of its length from the pommel -- the middle of its handle --
+// and that is the point this fit reproduces for a handle of a different length.
+//
+// So the change is a PURE TRANSLATION and deliberately nothing else. The blade axis was already
+// within 1.15 degrees of the Owner-approved Dawnwarden direction (the re-fit above did that part
+// correctly), and re-aiming a sword whose angle is already accepted is how the 2026-08-14 re-grip
+// moved its own error somewhere else. Forge rack entry "Starter Sword (Ironwood)" -> loadout
+// shipping-sword-only -> world-XYZ delta position [0.026, -0.015, 0.1377] m, rotation [0, 0, 0],
+// scale unchanged; baked through forge/runtimeBake.js exactly as above. Only `position` below moved.
+// Dawnwarden's ownerFit was read as the reference and NOT touched -- candidateGear.js is unchanged.
 export const RIGID_TIER2_GEAR = Object.freeze([
   Object.freeze({
     id: 'sword_ironwood',
@@ -114,8 +168,12 @@ export const RIGID_TIER2_GEAR = Object.freeze([
       // Carried to twelve places and normalised on purpose. Rounded to six, the quaternion is
       // 1.0000003 long, and Matrix4.decompose reads that surplus as scale -- enough to miss the
       // attachment test's 1e-6 tolerance on a magnitude-29 local scale.
-      position: Object.freeze([-63.70592, 99.06745, 1.00951]),
-      quaternion: Object.freeze([0.74529070327, -0.562439008148, -0.180036303612, -0.309501307129]),
+      position: Object.freeze([-62.25592, 95.64749, 16.35949]),
+      quaternion: Object.freeze([-0.560465386086, 0.623437925195, 0.475258689008, -0.267082165168]),
+      // Unchanged, twice over: the 2026-08-24 seat correction is a pure translation, so the bake
+      // returned this quaternion back to within 1e-8 and it is kept at its normalised twelve places
+      // rather than re-pasted with round-trip noise. The bake reported 47.00001 on two axes, which
+      // is decompose noise, not a decision.
       scale: Object.freeze([47, 47, 47]),
     }),
   }),
@@ -169,6 +227,38 @@ function requiredObject(root, name, kind) {
     throw new Error(`Cannot attach Tier 2 gear: missing ${kind} ${name}.`);
   }
   return object;
+}
+
+/**
+ * The bone's matrixWorld AS AUTHORED, not as the clip currently has it.
+ *
+ * Every rest transform in this file is root-relative, so mounting one means solving
+ * `inverse(bone.matrixWorld) x rigRoot.matrixWorld x rest` -- and the answer depends entirely on
+ * WHICH bone.matrixWorld. All of them were baked against the bind pose (the fit-*.mjs tools pose the
+ * skeleton before measuring), so a mount that reads the LIVE bone bakes the delta between bind and
+ * whatever pose happened to be playing into the anchor's local transform permanently: a rigid child
+ * inherits that error every subsequent frame. attachRigidTier2Gear never notices because its only
+ * caller is loadHero(), which runs before the AnimationMixer's first update. The lazy mounts below
+ * -- a reward unlocking mid-play, a sibling's gear arriving over the network, a Studio loadout swap
+ * -- always land mid-clip, and on the shipped rig the Hips bone leaves bind in EVERY clip (least in
+ * `idle`, 3.57 units and 12.20 degrees at its extreme; most in `death`, 80.03 and 97.03).
+ *
+ * Computed from the skeleton's own boneInverses (matrixWorld = invert(boneInverse), exactly what
+ * Skeleton.pose() does internally) rather than by calling skeleton.pose(): pose() OVERWRITES every
+ * bone's live position/quaternion/scale, and on this rig doing that visibly destroys the character
+ * -- confirmed directly, not assumed. Reading boneInverses never touches a live bone, so there is
+ * nothing to restore afterwards.
+ *
+ * Degrades to the live matrix on a rig with no SkinnedMesh (the synthetic heroes in the unit tests),
+ * where bind is the only pose there is.
+ */
+export function bindPoseMatrixWorld(heroRoot, bone) {
+  let skinned = null;
+  heroRoot.traverse((object) => { if (!skinned && object.isSkinnedMesh) skinned = object; });
+  if (!skinned) return bone.matrixWorld;
+  const boneIndex = skinned.skeleton.bones.indexOf(bone);
+  if (boneIndex === -1) return bone.matrixWorld;
+  return new THREE.Matrix4().copy(skinned.skeleton.boneInverses[boneIndex]).invert();
 }
 
 /**
@@ -273,9 +363,14 @@ export function attachBeltLantern(heroRoot, lanternRoot) {
   }
   heroRoot.updateMatrixWorld(true);
 
+  // Bind, never the live Hips -- see bindPoseMatrixWorld. NEITHER caller of this function mounts at
+  // load time: main.js's ensureLanternMounted fires when the reward unlocks mid-play, and its
+  // mountGearOnRemote fires when a sibling's gear arrives, both after an await. Reading the live
+  // bone here put the lantern 18.24 units and 30.04 degrees off its authored seat under a bone
+  // perturbation no larger than the idle loop's own (test/lazy-mount-bind-frame.test.mjs).
   const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_BELT_LANTERN.restRelativeToHeroRoot);
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
-  const local = new THREE.Matrix4().copy(bone.matrixWorld).invert().multiply(world);
+  const local = new THREE.Matrix4().copy(bindPoseMatrixWorld(heroRoot, bone)).invert().multiply(world);
   const anchor = new THREE.Group();
   anchor.name = rigidAnchorName(RIGID_BELT_LANTERN.id, RIGID_BELT_LANTERN.boneName);
   local.decompose(anchor.position, anchor.quaternion, anchor.scale);
@@ -324,7 +419,7 @@ export const RIGID_WILDWOOD_BLADE_CANDIDATE = Object.freeze({
     // (blade direction, flat-face normal, grip-to-tip length) rather than hardcoded angles, so a
     // future re-tune of sword_ironwood's own mount is picked up automatically by re-running this tool.
     // The grip point is seated 0.055m past the RightHand bone along the forearm's own direction --
-    // sword_ironwood's own already-Sol-approved convention (gear.js's Tier 2 header, "THE SWORD WAS
+    // sword_ironwood's own documented convention (gear.js's Tier 2 header, "THE SWORD WAS
     // RE-GRIPPED 2026-08-14").
     //
     // Verified visually against real Character Studio captures (gameplay + inspection, front +
@@ -373,29 +468,12 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   // matrices -- the same assumption attachRigidTier2Gear gets for free by running inside loadHero()
   // before the AnimationMixer's first update() ever runs. This mount is lazy (Character Studio's
   // on-demand loadout swap, scene.js's setLoadout), so by the time it actually runs the skeleton is
-  // almost always already mid-animation. Reading bone.matrixWorld in that state bakes the DELTA
-  // between bind pose and whatever pose happened to be active at mount time into the anchor's local
-  // transform permanently (a rigid child inherits that error every subsequent frame) -- caught by
+  // almost always already mid-animation. Reading bone.matrixWorld in that state was caught by
   // comparing this candidate's own live, pre-bake fit-tool screenshots (good) against a fresh-page
-  // reload of the same baked value at the same animation time (blade floating off the hand entirely).
-  //
-  // The bind-pose matrixWorld is computed directly from the skeleton's own boneInverses (exactly
-  // what Skeleton.pose() does internally: matrixWorld = invert(boneInverse)) rather than by calling
-  // skeleton.pose() itself -- pose() OVERWRITES every bone's live position/quaternion/scale, and on
-  // this rig that visibly SHRINKS the whole character (fit-sword.mjs's own header documents the
-  // same ~100x glTF-inverseBindMatrix/Armature-unit collapse): confirmed directly, calling pose()
-  // here made the entire hero disappear from every subsequent frame, because the animation clip has
-  // no scale track to restore what pose() overwrote. Reading boneInverses instead never touches a
-  // single live bone, so there is nothing to restore afterward.
-  let bindMatrixWorld = bone.matrixWorld;
-  let skinned = null;
-  heroRoot.traverse((o) => { if (!skinned && o.isSkinnedMesh) skinned = o; });
-  if (skinned) {
-    const boneIndex = skinned.skeleton.bones.indexOf(bone);
-    if (boneIndex !== -1) {
-      bindMatrixWorld = new THREE.Matrix4().copy(skinned.skeleton.boneInverses[boneIndex]).invert();
-    }
-  }
+  // reload of the same baked value at the same animation time (blade floating off the hand
+  // entirely). bindPoseMatrixWorld is the shared answer -- see its comment for the arithmetic and
+  // for why calling skeleton.pose() is not it.
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
 
   const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_WILDWOOD_BLADE_CANDIDATE.restRelativeToHeroRoot);
   const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
@@ -408,6 +486,75 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   anchor.add(bladeRoot);
 
   return { id: RIGID_WILDWOOD_BLADE_CANDIDATE.id, anchor, bone, gear: bladeRoot };
+}
+
+// ---------------------------------------------------------------------------
+// G1-C3: the Silverguard Helmet (progression-g1-first-visible-armor)
+// ---------------------------------------------------------------------------
+//
+// The first piece of earned armour. Mounted on the Head bone the same independently-loaded-GLB way
+// the belt lantern is -- a separate file, loaded only when THIS child equips the helmet, never baked
+// into the hero's own merged atlas. Anatomy occlusion (hair/ears hidden while equipped) is handled
+// by main.js calling hero.setAnatomyCoverage; this module only owns the geometry.
+export const SILVERGUARD_HELMET_BONE_NAME = 'Head';
+export const SILVERGUARD_HELMET_URL = 'assets/gear/helmet_silverguard.glb';
+export const SILVERGUARD_HELMET_ID = 'helmet_silverguard';
+
+// What an open-face helmet hides so the hair and ears do not poke through it -- the shipping
+// Silverguard's own occlusion, stated here with the rest of its geometry authority rather than
+// borrowed from the studio's Dawnwarden candidate profile (gearFitProfiles.js), which happens to
+// hide the same two regions but is a different, owner-locked mesh. main.js and net/remotes.js both
+// import THIS when they toggle coverage for the local hero and for siblings; the region names are
+// validated against the baked anatomy by hero.setAnatomyCoverage at the seam (it throws on an
+// unknown region), so a typo here cannot pass silently.
+export const SILVERGUARD_HELMET_HIDES_ANATOMY = Object.freeze(['hair', 'ears']);
+
+export const RIGID_SILVERGUARD_HELMET = Object.freeze({
+  id: SILVERGUARD_HELMET_ID,
+  boneName: SILVERGUARD_HELMET_BONE_NAME,
+  restRelativeToHeroRoot: Object.freeze({
+    // Measured 2026-08-25 by tools/runtime-test/fit-helmet.mjs --up 0.12 --fwd 0.01 --height 0.26,
+    // baked from the live game the same bind-frame way the sword, shield and lantern were. The Head
+    // bone sits at the base of the skull, not its centre, so the seat is raised 0.12m to cap the
+    // crown rather than swallow the face; height 0.26m matches the head and leaves the face open, the
+    // open-face read the anatomy occlusion (hair/ears) is authored for. Judged in head-framed captures
+    // from four angles: crown covered, face clear, no clip through the shoulders, Shield unregressed.
+    position: Object.freeze([-0.4735, 122.46235, 1.66404]),
+    quaternion: Object.freeze([-0.084336314711, 0.000883790884, 0.006155776196, 0.9964179401]),
+    scale: Object.freeze([32.71, 32.71, 32.71]),
+  }),
+});
+
+/**
+ * Mount an already-loaded Silverguard helmet root onto the hero's Head bone -- the same
+ * independently-loaded-GLB pattern attachBeltLantern uses. Unlike the Tier 2 gear baked into the
+ * atlas, this is loaded and parented in only when a child equips the helmet, not at hero load time.
+ */
+export function attachSilverguardHelmet(heroRoot, helmetRoot) {
+  const rigRoot = requiredObject(heroRoot, RIG_ROOT_NAME, 'rig root');
+  const bone = heroRoot.getObjectByName(RIGID_SILVERGUARD_HELMET.boneName);
+  if (!bone) {
+    throw new Error(`Cannot attach the Silverguard Helmet: missing bone ${RIGID_SILVERGUARD_HELMET.boneName}.`);
+  }
+  if (!bone.isBone) {
+    throw new Error(`Cannot attach the Silverguard Helmet: ${RIGID_SILVERGUARD_HELMET.boneName} is not a Bone.`);
+  }
+
+  heroRoot.updateMatrixWorld(true);
+
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
+
+  const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_SILVERGUARD_HELMET.restRelativeToHeroRoot);
+  const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
+  const local = new THREE.Matrix4().copy(bindMatrixWorld).invert().multiply(world);
+  const anchor = new THREE.Group();
+  anchor.name = rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, RIGID_SILVERGUARD_HELMET.boneName);
+  local.decompose(anchor.position, anchor.quaternion, anchor.scale);
+
+  bone.add(anchor);
+  anchor.add(helmetRoot);
+
+  return { id: RIGID_SILVERGUARD_HELMET.id, anchor, bone, gear: helmetRoot };
 }
 
 // The reward is a LANTERN, and it shipped dark. Looked at in the running game at the plaza camera

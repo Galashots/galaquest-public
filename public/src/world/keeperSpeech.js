@@ -3,7 +3,7 @@
 // W1: the game's first tap-to-hear speech line. PURE state->text mapping plus one small
 // injectable-speak wrapper -- no three.js, no DOM read here (main.js owns the one place this ever
 // meets a <span> and a real SpeechSynthesisUtterance, the same discipline rewards/hud.js's
-// pipsForMarks and combat/feedback.js's heartsForHp already follow for their own HUD pieces).
+// pipsForMarks and combat/feedback.js's healthReadout already follow for their own HUD pieces).
 //
 // WRITTEN FOR a younger player, who is in the younger bracket. What shipped first was one 27-word sentence
 // with an em dash, the word "wilderness", and the speaker's name eating the first line -- and it
@@ -93,11 +93,56 @@ export function keeperSpeechState({
  * only in direct response to the tap that requested it).
  */
 export function speakKeeperLine(line, speak = defaultSpeak) {
-  if (!line) return;
+  if (!line) return false;
+  unlocked = true;
   speak(line);
+  return true;
 }
+
+/**
+ * WHY A CHILD WHO CANNOT READ WAS BEING HANDED FOUR LINES OF TEXT.
+ *
+ * `speakKeeperLine` had exactly one caller: the click handler on the little speaker button in the
+ * corner of the speech bubble. Nothing ever spoke on its own. So the whole of this game's narrative
+ * -- the quest, the count of marks left, where to go next -- reached its stated audience only if a
+ * pre-reader noticed a 44px grey circle and guessed what it was for. Every other route to that
+ * information is a sentence.
+ *
+ * The obvious fix, speaking each line as it appears, does not work and cannot be made to: iOS will
+ * not let `speechSynthesis` make a sound until it has been called once inside a real user gesture,
+ * and a tablet is what this game is for. main.js says the same thing at the click handler, which is
+ * why speak() runs directly in there rather than being deferred a frame.
+ *
+ * So: the FIRST line still needs the button, and every line after it speaks itself. One tap, ever,
+ * and the game starts reading to you. The latch is what that tap bought -- both the platform's
+ * permission and the child's own signal that they want to be read to -- so nothing here speaks to a
+ * child who never asked, and nobody has to find the button twice.
+ *
+ * @returns whether it spoke, so a caller can tell "not yet unlocked" from "no line".
+ */
+export function speakKeeperLineIfUnlocked(line, speak = defaultSpeak) {
+  if (!unlocked || !line) return false;
+  speak(line);
+  return true;
+}
+
+/** Whether a real tap has unlocked read-aloud yet. Exported for a harness to read, and reset for
+ *  tests -- module state that only a test can clear is module state nobody can test around. */
+export function readAloudUnlocked() {
+  return unlocked;
+}
+
+export function resetReadAloudForTests() {
+  unlocked = false;
+}
+
+let unlocked = false;
 
 function defaultSpeak(text) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  // CANCEL FIRST. Without it a child walking between two speakers, or tapping the button twice,
+  // queues utterances and then listens to the stale one finish before the current one starts. The
+  // line on screen and the line being read have to be the same line.
+  window.speechSynthesis.cancel();
   window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
 }

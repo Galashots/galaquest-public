@@ -1,4 +1,5 @@
 import * as THREE from '../../vendor/three.module.min.js';
+import { clone as cloneSkinned } from '../../vendor/utils/SkeletonUtils.js';
 import { normaliseCharacterMaterial } from '../character/hero.js';
 import {
   flashIntensity,
@@ -22,6 +23,7 @@ export const WOLF_URL = 'assets/enemies/wolf.glb';
 export const WOLF_CLIP_FOR_MODE = Object.freeze({
   idle: 'idle',
   walk: 'walk',
+  returning: 'walk',
   bite: 'bite',
   hit: 'hit',
   dying: 'death',
@@ -142,15 +144,24 @@ export function wolfSparkTarget(mode, hp = WOLF_MAX_HP, maxHp = WOLF_MAX_HP) {
   return WOLF_SPARK_LAST_HIT_STRENGTH + (1 - WOLF_SPARK_LAST_HIT_STRENGTH) * remaining;
 }
 
-export async function loadWolf() {
-  const gltf = await loadGLB(WOLF_URL);
-  const root = setLayer(gltf.scene, CHARACTER);
+function prepareWolfRoot(source) {
+  // loadGLB caches the GLTF scene. E1 can present more than one stable ordinary enemy, so every
+  // presenter needs its own skinned hierarchy AND its own materials. SkeletonUtils gives the rig
+  // independent bones; cloning materials prevents one Wolf's hit flash/dissolve from tinting every
+  // other Wolf that happens to share the same cached atlas/material objects. Geometry and textures
+  // stay shared, which is both safe and the cheap path.
+  const root = setLayer(cloneSkinned(source), CHARACTER);
   root.name = 'wolf';
   root.scale.setScalar(WOLF_SCALE);
   root.traverse((object) => {
     if (!object.isMesh) return;
     object.castShadow = false;
     object.receiveShadow = false;
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => material?.clone?.() ?? material);
+    } else if (object.material?.clone) {
+      object.material = object.material.clone();
+    }
     // The same two export defects the hero had, and the wolf has both: emissiveFactor [1,1,1] with
     // an emissiveTexture that is the base colour atlas again (both glTF textures resolve to image
     // source 0), and metallicFactor/roughnessFactor omitted so glTF defaults each to 1.0. Left
@@ -167,7 +178,27 @@ export async function loadWolf() {
       }
     }
   });
-  return { animations: gltf.animations ?? [], failed: Boolean(gltf.userData?.loadError), root };
+  return root;
+}
+
+export async function loadWolfFactory() {
+  const gltf = await loadGLB(WOLF_URL);
+  const animations = gltf.animations ?? [];
+  const failed = Boolean(gltf.userData?.loadError);
+  return Object.freeze({
+    failed,
+    create() {
+      return { animations, root: prepareWolfRoot(gltf.scene) };
+    },
+  });
+}
+
+// Kept as the simple one-Wolf loader for existing callers/tests. The implementation now comes from
+// the same factory C3 uses for keyed presenters, so one Wolf and several Wolves cannot drift into
+// different scale/material/animation preparation paths.
+export async function loadWolf() {
+  const factory = await loadWolfFactory();
+  return { ...factory.create(), failed: factory.failed };
 }
 
 /**
@@ -231,7 +262,7 @@ export function createWolfPresenter(root, animations) {
   let sparkSeconds = 0;
 
   function tickSpark(deltaSeconds, wolf) {
-    const target = wolfSparkTarget(wolf.mode, wolf.hp) * WOLF_SPARK_STRENGTH;
+    const target = wolfSparkTarget(wolf.mode, wolf.hp, wolf.maxHp) * WOLF_SPARK_STRENGTH;
     if (sparkStrength !== target) {
       const step = WOLF_SPARK_FADE_PER_SECOND * deltaSeconds;
       sparkStrength = Math.abs(target - sparkStrength) <= step
@@ -262,7 +293,14 @@ export function createWolfPresenter(root, animations) {
     root.visible = presence > 0;
   }
 
-  function beginFlash(durationSeconds, color) {
+  function beginFlash(durationSeconds, color, kind) {
+    // Counters reset HERE rather than in flashHit(), so a defeat flash cannot pile its frames onto
+    // the last hit's tally. Written the wrong way round first: with the reset in flashHit(), the
+    // 0.5s defeat flash landed on the same counters as the 0.18s hit before it, and the number a
+    // harness read back was the defeat's wearing the hit's label.
+    flashPeak = 0;
+    flashFrames = 0;
+    flashKind = kind;
     flash = {
       durationSeconds: prefersReducedMotion() ? REDUCED_MOTION_FLASH_SECONDS : durationSeconds,
       elapsedSeconds: 0,
@@ -270,11 +308,22 @@ export function createWolfPresenter(root, animations) {
     };
   }
 
+  // WHAT WAS ACTUALLY WRITTEN TO THE MATERIALS, kept so a harness can ask what a child SAW rather
+  // than what the constants say they should have seen. The two are not the same on a starved page:
+  // the flash is authored in seconds (WOLF_HIT_FLASH_SECONDS, 0.18) while combat/feedback.js's own
+  // header describes the technique in FRAMES ("solid white for a couple of frames"), and elapsed
+  // advances by a whole frame delta before this computes anything. Read-only, and a peak rather
+  // than an instant, because a per-frame poll on a page painting three frames a second cannot see
+  // an instant -- the same reason startWatch exists.
+  let flashPeak = 0;
+  let flashFrames = 0;
+  let flashKind = null;
   function tickFlash(deltaSeconds) {
     if (!flash) return;
     flash.elapsedSeconds += deltaSeconds;
     const t = flashIntensity(flash.elapsedSeconds, flash.durationSeconds);
     for (const target of flashTargets) target.material.emissive.lerpColors(target.base, flash.color, t);
+    if (t > 0) { flashFrames += 1; if (t > flashPeak) flashPeak = t; }
     if (t <= 0) flash = null;
   }
 
@@ -308,13 +357,16 @@ export function createWolfPresenter(root, animations) {
     },
     /** Call when encounter.js raises wolf-hit. A quick white flash -- see FLASH_COLOR above. */
     flashHit() {
-      beginFlash(WOLF_HIT_FLASH_SECONDS, FLASH_COLOR);
+      beginFlash(WOLF_HIT_FLASH_SECONDS, FLASH_COLOR, 'hit');
     },
+    /** For a harness: the brightest THIS flash ever actually got, over how many rendered frames, and
+     *  which flash it was. `{ peak: 0, frames: 0 }` means the child saw no flash at all. */
+    flashSeen: () => ({ peak: flashPeak, frames: flashFrames, kind: flashKind }),
     /** Call when encounter.js raises wolf-defeated. Longer than flashHit() AND a different colour --
      *  the length keeps it on screen, the colour is what actually tells the two apart. See
      *  DEFEAT_FLASH_COLOR above for why the original duration-only claim did not survive a capture. */
     flashDefeated() {
-      beginFlash(WOLF_DEFEAT_FLASH_SECONDS, DEFEAT_FLASH_COLOR);
+      beginFlash(WOLF_DEFEAT_FLASH_SECONDS, DEFEAT_FLASH_COLOR, 'defeat');
     },
     getState() {
       return { clip: currentName, presence: +presence.toFixed(3), spark: +sparkStrength.toFixed(3) };

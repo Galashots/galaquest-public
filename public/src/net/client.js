@@ -12,6 +12,7 @@ import {
   decode,
   encode,
   equipMessage,
+  restoreProfileMessage,
   inputMessage,
   joinMessage,
   claimBladeMessage,
@@ -77,10 +78,11 @@ export function createNetClient(options = {}) {
   let lastSentAtMs = -Infinity;
   let lastSentMagnitude = 0;
   let latestSelf = null;
-  // True from the moment a snapshot updates latestSelf until reconcile() next consumes it. Without
-  // this, reconcile() has no way to tell "a new authoritative position arrived" from "called again
-  // this render frame" -- see the frame-rate note on reconcile() itself.
-  let hasNewSnapshot = false;
+  // How many snapshots have updated latestSelf since reconcile() last consumed them. A COUNT rather
+  // than a flag, and the difference is the whole of the frame-rate note on reconcile() below: a flag
+  // can only say "at least one", which silently throws away every snapshot after the first whenever
+  // frames come slower than snapshots do.
+  let pendingSnapshots = 0;
   let reconnectTimer = null;
   let disposed = false;
 
@@ -138,7 +140,7 @@ export function createNetClient(options = {}) {
       if (message.type === 'snapshot') {
         buffer.record(message, now());
         latestSelf = message.players.find((player) => player.id === selfId) ?? null;
-        hasNewSnapshot = true;
+        pendingSnapshots += 1;
         options.onSnapshot?.(message);
         options.onEncounter?.(message.encounter, message.events);
         return;
@@ -152,7 +154,7 @@ export function createNetClient(options = {}) {
       socket = null;
       selfId = null;
       latestSelf = null;
-      hasNewSnapshot = false;
+      pendingSnapshots = 0;
       buffer.reset();
       scheduleReconnect();
     });
@@ -227,9 +229,27 @@ export function createNetClient(options = {}) {
    * idempotent on the server (net/gameServer.mjs's applyEquip just records "the latest choice"), so
    * there is nothing a seq would protect here that the store's own latest-wins read does not already.
    */
-  function sendEquip(itemId) {
+  /** @param identity the device's own `{ eventId, rev }` for this choice, minted at the moment the
+   *  child tapped EQUIP (progression/profiles.js's mintEquipFact) and journalled before it is sent.
+   *  Passing it through unchanged is what lets the server store the SAME fact the device holds, so
+   *  the two copies merge instead of becoming two equips; omitted, the server mints its own, which
+   *  is the pre-1b behaviour a harness or an older client still gets. */
+  function sendEquip(itemId, identity) {
     if (status !== 'online') return false;
-    return send(equipMessage(itemId));
+    return send(equipMessage(itemId, identity));
+  }
+
+  /**
+   * Hand the server durable facts this device still holds, for a store that has lost them.
+   *
+   * Same online-only guard as every other send. No sequence number and no reply expected: the facts
+   * carry their own ids, so the server's INSERT OR IGNORE makes a resend a no-op, and there is
+   * nothing to acknowledge that the next welcome does not already say.
+   */
+  function sendRestoreProfile(facts) {
+    if (status !== 'online') return false;
+    if (!Array.isArray(facts) || facts.length === 0) return false;
+    return send(restoreProfileMessage(facts));
   }
 
   /** GP2: ask the server to search the shared cart. Same online-only guard and no-sequence-number
@@ -295,29 +315,43 @@ export function createNetClient(options = {}) {
    * Pull the local prediction back towards the server's version of us. Returns the correction applied,
    * for diagnostics, so a harness can measure drift rather than infer it.
    *
-   * Gated on hasNewSnapshot rather than applied every call: the caller (main.js) invokes this once
-   * per rendered frame (~60 Hz), but snapshots only arrive at ~10 Hz, and NUDGE_FRACTION above is
-   * calibrated per snapshot, not per frame. Without the gate, six frame-rate calls would take six
-   * bites out of the same drift between snapshots -- six times the documented correction rate.
+   * PER SNAPSHOT, IN BOTH DIRECTIONS, and the second direction is the bug this counter fixes.
+   * NUDGE_FRACTION's own comment states the contract -- "fraction of the remaining error taken per
+   * snapshot... at 10 Hz this closes a 0.3-unit error to under a centimetre in about three seconds"
+   * -- and main.js calls this once per RENDERED FRAME, which is not the same clock. The original
+   * flag fixed the fast half: at 60 fps six calls would otherwise take six bites out of one
+   * snapshot's drift. It left the slow half wrong. Below 10 fps the snapshots keep arriving and the
+   * flag can still only say "at least one", so a runner painting 3 frames a second applies 3
+   * corrections where the contract promises 10, and the hero takes ten seconds to arrive where he
+   * was promised to arrive in three. That is not a hypothetical device: the hosted playtest runners
+   * measure 3-4 fps, a cheap tablet is the machine this game is FOR, and what a child sees during
+   * those seconds is their own hero sliding sideways on his own.
+   *
+   * So consume the whole backlog and compound the same fraction over it. 1-(1-f)^n IS n separate
+   * f-sized bites, exactly -- not a bigger nudge picked to feel right, which is the tuning mistake
+   * this codebase keeps a ledger about. At any frame rate at or above the snapshot rate n is 1 and
+   * every number here is unchanged.
    */
   function reconcile(position) {
-    if (latestSelf === null) return { drift: 0, snapped: false };
-    if (!hasNewSnapshot) return { drift: 0, snapped: false };
-    hasNewSnapshot = false;
+    if (latestSelf === null) return { drift: 0, snapped: false, corrections: 0 };
+    if (pendingSnapshots === 0) return { drift: 0, snapped: false, corrections: 0 };
+    const corrections = pendingSnapshots;
+    pendingSnapshots = 0;
     const driftX = latestSelf.x - position.x;
     const driftZ = latestSelf.z - position.z;
     const drift = Math.hypot(driftX, driftZ);
-    if (drift === 0) return { drift: 0, snapped: false };
+    if (drift === 0) return { drift: 0, snapped: false, corrections };
 
     if (drift > SNAP_DRIFT_UNITS) {
       // Too far to walk back without looking like the hero is being dragged.
       position.x = latestSelf.x;
       position.z = latestSelf.z;
-      return { drift, snapped: true };
+      return { drift, snapped: true, corrections };
     }
-    position.x += driftX * NUDGE_FRACTION;
-    position.z += driftZ * NUDGE_FRACTION;
-    return { drift, snapped: false };
+    const fraction = 1 - (1 - NUDGE_FRACTION) ** corrections;
+    position.x += driftX * fraction;
+    position.z += driftZ * fraction;
+    return { drift, snapped: false, corrections };
   }
 
   connect();
@@ -326,6 +360,7 @@ export function createNetClient(options = {}) {
     setIntent,
     sendAttack,
     sendEquip,
+    sendRestoreProfile,
     sendSearchCart,
     sendClaimBlade,
     sendClaimSatchel,

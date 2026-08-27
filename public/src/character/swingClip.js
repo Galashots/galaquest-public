@@ -116,6 +116,11 @@ export function createClipSwingAnimator(root, animations = []) {
     isSwinging() {
       return running;
     },
+    /** See reactClips.js's dispose(): the local hero never needed one, a remote clone does. */
+    dispose() {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(root);
+    },
     clipDuration: clip.duration,
     mixer,
   };

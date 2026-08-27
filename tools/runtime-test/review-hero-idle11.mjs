@@ -43,7 +43,12 @@ import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
 const args = process.argv.slice(2);
-const CANDIDATE = args.includes('--candidate') ? args[args.indexOf('--candidate')] : 'tmp/ap2/hero-idle11-raw.glb';
+// `+ 1`, which was missing: `args[args.indexOf('--candidate')]` is the FLAG, so passing a candidate
+// explicitly set CANDIDATE to the literal string '--candidate' and the existsSync below rejected it.
+// The flag has never worked; only the default path has. Same shape as review-keeper-turn.mjs's.
+const CANDIDATE = args.includes('--candidate')
+  ? args[args.indexOf('--candidate') + 1]
+  : 'tmp/ap2/hero-idle11-raw.glb';
 if (!existsSync(CANDIDATE)) {
   console.error(`candidate not found: ${CANDIDATE}\n(gitignored -- see this file's header for the two build commands)`);
   process.exit(2);

@@ -1,6 +1,10 @@
 import { CHARACTER, setLayer } from '../render/layers.js';
 import { loadGLB } from '../world/assets.js';
 import { attachRigidTier2Gear } from './gear.js';
+import {
+  attachTriangleAnatomyRegions, geometryForAnatomyCoverage, normalizeHiddenRegions,
+} from './anatomyOcclusion.js';
+import { HERO_ANATOMY_SOURCE, HERO_ANATOMY_TRIANGLES } from './heroAnatomyRegions.js';
 
 export const HERO_URL = 'assets/hero/hero_lod1_ironwood_atlas.glb';
 
@@ -83,6 +87,97 @@ export function normaliseCharacterMaterial(material) {
   return changed;
 }
 
+function installHeroAnatomy(root) {
+  const skinnedBodies = [];
+  root.traverse((object) => {
+    if (object.isSkinnedMesh && object.geometry) skinnedBodies.push(object);
+  });
+  if (skinnedBodies.length !== 1) {
+    throw new Error(`Hero anatomy proof expected exactly one skinned body mesh, found ${skinnedBodies.length}`);
+  }
+  if (HERO_ANATOMY_SOURCE.assetPath !== HERO_URL) {
+    throw new Error(`Hero anatomy sidecar targets ${HERO_ANATOMY_SOURCE.assetPath}, runtime loads ${HERO_URL}`);
+  }
+
+  const body = skinnedBodies[0];
+  const sourceGeometry = body.geometry;
+  attachTriangleAnatomyRegions(sourceGeometry, HERO_ANATOMY_TRIANGLES, HERO_ANATOMY_SOURCE);
+  let coverage = Object.freeze([]);
+
+  return {
+    setCoverage(hiddenRegions = []) {
+      const normalized = Object.freeze(normalizeHiddenRegions(hiddenRegions));
+      body.geometry = geometryForAnatomyCoverage(sourceGeometry, normalized);
+      coverage = normalized;
+      return [...coverage];
+    },
+    get coverage() { return [...coverage]; },
+    body,
+    sourceGeometry,
+  };
+}
+
+/**
+ * Install semantic anatomy, degrading loudly instead of taking the process down.
+ *
+ * `test/hero-anatomy-proof.test.mjs` remains the hard gate: if the Hero bytes or topology change
+ * without the semantic anatomy being re-authored, CI fails and must keep failing. That proof reads
+ * the GLB and calls anatomyOcclusion.js directly, so it does not route through this function and is
+ * unaffected by the softening here.
+ *
+ * At runtime the trade runs the other way. Game boot, Character Studio and the Asset Forge all
+ * `await loadHero()` with no try/catch, so an anatomy mismatch used to reject that promise and take
+ * all three surfaces down — losing the Forge at exactly the moment someone needed it to re-author
+ * the anatomy that broke. Losing helmet hair/ear occlusion is a visible blemish; losing boot is a
+ * wall.
+ *
+ * `install` and `log` are injectable so the degrade path is testable without a GLB or a renderer.
+ */
+export function tryInstallHeroAnatomy(root, install = installHeroAnatomy, log = console.error) {
+  try {
+    return { anatomy: install(root), anatomyError: null };
+  } catch (error) {
+    log(
+      '[hero] Semantic anatomy could not be installed, so the Hero renders with NO ANATOMY '
+      + 'OCCLUSION: helmets will not hide hair or ears. The baked anatomy no longer matches the '
+      + 'Hero mesh. Re-author it with tools/blender/bake_anatomy_regions.py; '
+      + 'test/hero-anatomy-proof.test.mjs fails hard on exactly this drift. Cause: '
+      + `${error?.message ?? error}`,
+    );
+    return { anatomy: null, anatomyError: error };
+  }
+}
+
+/**
+ * The anatomy-coverage surface of a loaded Hero, separated so its three states stay testable.
+ *
+ * - anatomy present         -> apply coverage normally
+ * - anatomy drifted         -> degrade to no occlusion, never throw (see tryInstallHeroAnatomy)
+ * - Hero GLB failed to load -> preserve the original contract and throw on a real coverage request
+ */
+export function heroAnatomyApi({ anatomy, anatomyError }) {
+  return {
+    setAnatomyCoverage(hiddenRegions = []) {
+      if (anatomy) return anatomy.setCoverage(hiddenRegions);
+      if (anatomyError) return [];
+      if (hiddenRegions.length) throw new Error('cannot apply anatomy coverage to failed Hero fallback');
+      return [];
+    },
+    get anatomyCoverage() { return anatomy?.coverage ?? []; },
+    get anatomyAvailable() { return Boolean(anatomy); },
+    get anatomyError() { return anatomyError ?? null; },
+    // The UN-occluded body geometry, with the anatomy regions attached. Exposed for net/remotes.js:
+    // a sibling wearing the Helmet needs the SAME hair/ear occlusion the local hero gets, and a clone
+    // shares whatever geometry the template's body held at clone time -- which is the occluded variant
+    // if the local child happened to be wearing a helmet then. Reading the true source here lets a
+    // clone toggle its own coverage from a fixed origin (geometryForAnatomyCoverage caches per source
+    // geometry, so every clone shares one variant), independent of what the local hero is wearing.
+    // null on the degraded/failed path, where a clone simply shows hair under the helmet like the
+    // local hero does.
+    get anatomySourceGeometry() { return anatomy?.sourceGeometry ?? null; },
+  };
+}
+
 export async function loadHero() {
   const gltf = await loadGLB(HERO_URL);
   const root = setLayer(gltf.scene, CHARACTER);
@@ -97,15 +192,20 @@ export async function loadHero() {
     }
   });
   const failed = Boolean(gltf.userData?.loadError);
+  const { anatomy, anatomyError } = failed
+    ? { anatomy: null, anatomyError: null }
+    : tryInstallHeroAnatomy(root);
 
   // This runs before the local hero becomes the remote-player template, so
   // SkeletonUtils clones each solved anchor with the rest of the rig.
   const rigidGear = failed ? [] : attachRigidTier2Gear(root);
 
-  return {
+  // Assign onto the anatomy API rather than spreading it: its accessors must stay live, because
+  // anatomyCoverage changes every time setAnatomyCoverage runs.
+  return Object.assign(heroAnatomyApi({ anatomy, anatomyError }), {
     animations: gltf.animations ?? [],
     failed,
     rigidGear,
     root,
-  };
+  });
 }

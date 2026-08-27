@@ -33,6 +33,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { startOwnedServer } from './owned-server.mjs';
+// The bite, imported rather than assumed. This file used to soften the hero to `hp <= 1`, which was
+// "one bite from the floor" on the pre-P2 scale and became unreachable when the fight was rescaled:
+// a hero now goes 30 -> 20 -> 10 -> 0 and never passes through 1, so the loop would have run to its
+// deadline and the scenario would have swung at full health -- exactly the vacuous pass GQ-017 warns
+// about, where a probe stops meaning anything without going red.
+import { HERO_MAX_HP, WOLF_BITE_DAMAGE } from '../../public/src/combat/encounter.js';
+import { authoredWolfSource } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const args = process.argv.slice(2);
@@ -276,9 +283,10 @@ await mark('walk-to-wolf-start');
 const liveState = () => page.eval(`(() => {
   const r = window.__galaQuestRuntime;
   const s = r.encounterState() ?? {};
+  const authoredWolf = ${authoredWolfSource()};
   return JSON.stringify({
     hero: { x: r.player.position.x, z: r.player.position.z, hp: s.hero?.hp, down: s.hero?.downSeconds ?? -1 },
-    wolf: s.wolf ? { x: s.wolf.x, z: s.wolf.z, hp: s.wolf.hp } : null,
+    enemy: { enemyId: authoredWolf.enemyId, x: authoredWolf.x, z: authoredWolf.z, hp: authoredWolf.hp },
     heading: r.follow.heading,
   });
 })()`).then(JSON.parse);
@@ -296,14 +304,14 @@ async function stickToward(nx, nz, heading) {
 }
 
 let live = await liveState();
-if (live.wolf) {
+if (live.enemy) {
   await touch('touchStart', [{ x: stickX, y: stickY, id: 0 }]);
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     live = await liveState();
-    if (!live.wolf) break;
-    const dx = live.wolf.x - live.hero.x;
-    const dz = live.wolf.z - live.hero.z;
+    if (!live.enemy) break;
+    const dx = live.enemy.x - live.hero.x;
+    const dz = live.enemy.z - live.hero.z;
     if (Math.hypot(dx, dz) < 1.3) break;
     await stickToward(dx, dz, live.heading);
     await sleep(120);
@@ -314,12 +322,12 @@ if (live.wolf) {
   // Keep swinging until he goes down. A swing is 1.5 s and the wolf bites every 2.6 s, so a hero
   // who never disengages loses eventually -- which is the state this scenario needs.
   // DO NOT ATTACK YET. The first version swung continuously and simply won every fight -- 2425
-  // frames of swing and zero frames down. Standing and taking bites until one heart is left, and
+  // frames of swing and zero frames down. Standing and taking bites until one bite is left, and
   // only THEN swinging, is what makes the killing bite land while a swing is actually running.
   const softenDeadline = Date.now() + 40000;
   while (Date.now() < softenDeadline) {
     live = await liveState();
-    if (live.hero.down >= 0 || (live.hero.hp ?? 3) <= 1) break;
+    if (live.hero.down >= 0 || (live.hero.hp ?? HERO_MAX_HP) <= WOLF_BITE_DAMAGE) break;
     await sleep(200);
   }
   await mark(`softened-to-hp-${live.hero.hp}`);

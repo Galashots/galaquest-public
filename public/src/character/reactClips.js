@@ -136,6 +136,17 @@ export function createReactionAnimator(root, animations = []) {
       };
     },
 
+    /**
+     * The local hero has one of these for the lifetime of the page and never needed this. A REMOTE
+     * hero does: siblings join and leave, and net/remotes.js builds one of these per clone. Same two
+     * calls locomotion.js's dispose() makes, and for the same reason -- a mixer keeps its bindings
+     * keyed by root, and removing the root from the scene does not touch them.
+     */
+    dispose() {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(root);
+    },
+
     mixer,
   };
 }

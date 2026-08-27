@@ -16,7 +16,7 @@
 // addSiegeHero / requestSiegeAttack / stepSiege over frozen plain data, replay guarded per hero by
 // commandId -- because the integrator already knows how to wire that shape: main.js drives it the
 // way it drives stepParty, and net/gameServer.mjs re-hosts it the same way. Where a number already
-// has an owner over there (the hero's swing, reach, hearts, respawn clock) it is IMPORTED rather
+// has an owner over there (the hero's swing, reach, body, respawn clock) it is IMPORTED rather
 // than restated: GQ-007, one number, one owner. A hero fights the same way everywhere; only the
 // enemy is new.
 //
@@ -33,9 +33,10 @@ import {
   STAGGER_SECONDS,
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
-  WOLF_DAMAGE_PER_HIT,
+  BASE_HERO_DAMAGE,
   isWithinStrike,
 } from '../combat/encounter.js';
+import { resolveIncomingDamage } from '../combat/damage.js';
 
 // ---------------------------------------------------------------------------
 // The seals
@@ -65,17 +66,27 @@ export const SEAL_EXTRA_REACH_METERS = 0.9;
 // tuned to that sentence -- its menace is inevitability, not speed, and every attack telegraphs
 // long enough for a child to learn the answer.
 
-// Twelve landed swings solo at damage 1 -- a real boss next to a 3hp wolf. With dodging and the
+// TWELVE STARTER BLOWS SOLO -- a real boss next to a wolf that takes three. With dodging and the
 // Warden's own attacks in the way that is around forty seconds of fighting alone, and roughly half
 // that with a sibling swinging too, which is the co-op payoff without making the solo fight
-// unwinnable. Like WOLF_MAX_HP this is a hit counter standing in for the future stat system
-// (encounter.js's FUTURE note); do not grow it into one here.
-export const WARDEN_MAX_HP = 12;
+// unwinnable.
+//
+// It was 12 against a 1-damage sword. P2 rescaled the whole fight by ten (see encounter.js's
+// combat-scale header) so that a Hero level can be worth +5 max HP and +2 damage without a wolf
+// having three hit points; this moved with it, and the twelve-blow promise is preserved exactly
+// rather than re-derived. It is no longer standing in for a future stat system -- the Hero half of
+// that system is progression/heroStats.js and it is live -- but the WARDEN's own numbers are still
+// authored rather than derived from an enemy level, because enemy levels are E1's package and
+// explicitly outside P2. test/level-one-preservation.test.mjs pins the blow counts.
+export const WARDEN_MAX_HP = 120;
 
-// One heart per landed attack. The hero has 3 hearts (HERO_MAX_HP), so the Warden is three
-// mistakes, not one -- a boss that two-shots a young player teaches fear of trying, and one that
-// one-shots teaches quitting.
-export const WARDEN_DAMAGE_PER_HIT = 1;
+// A third of a fresh hero's body per landed attack. A Level-1 hero has HERO_MAX_HP, so the Warden is
+// THREE MISTAKES, not one -- a boss that two-shots a young player teaches fear of trying, and one
+// that one-shots teaches quitting. Written as its own number rather than as HERO_MAX_HP / 3 because
+// what the Warden hits for is the Warden's to state: the day a hero at Level 10 walks in, this must
+// stay the blow it always was and simply take a smaller share of a bigger body, which is the whole
+// point of a fixed-world progression (docs/product/PROGRESSION_CONTRACT_V0.md section 8).
+export const WARDEN_DAMAGE_PER_HIT = 10;
 
 // Slower than the wolf's 1.15 (encounter.js WOLF_SPEED), on purpose: a child can always walk away
 // from the Warden. Its pressure comes from being unavoidable in the arena over time, not from
@@ -193,9 +204,10 @@ function freshSiegeHero() {
   // a hero is a hero, whichever fight he is standing in.
   return {
     hp: HERO_MAX_HP,
-    // ...plus the ceiling, for the same reason encounter.js's own freshHero carries one: how many
-    // hearts a body has is part of what it IS, and this fight has to know it about a hero nobody
-    // sent a command for this frame. Wren's charm is the only thing that moves it today.
+    // ...plus the ceiling, for the same reason encounter.js's own freshHero carries one: how big a
+    // body is is part of what it IS, and this fight has to know it about a hero nobody sent a
+    // command for this frame. Wren's charm moves it, and since P2 so does every Hero level
+    // (progression/heroStats.js's resolvedMaxHp) -- which is why it stays a caller-stated number.
     maxHp: HERO_MAX_HP,
     swingSeconds: -1,
     cooldown: 0,
@@ -377,11 +389,11 @@ export function addSiegeHero(state, heroId) {
  * A child has one body. Two engines each keeping their own `hp`/`downSeconds`/`cooldown` for the
  * same hero is fine only while nobody crosses between them -- and the moment somebody does, merely
  * CHOOSING which copy to publish is not continuity, it is a coin flip with a stale side. Take wolf
- * damage, walk to the Beacon, and the Warden's untouched copy publishes full hearts; walk back and
+ * damage, walk to the Beacon, and the Warden's untouched copy publishes a full body; walk back and
  * the wolf's copy resurrects the old state. Down and cooldown jump the same way.
  *
  * So the arena boundary is an explicit HANDOFF, and this is the receiving half: the persistent parts
- * of the body (hearts, being down, the attack cooldown) move across intact.
+ * of the body (health, being down, the attack cooldown) move across intact.
  *
  * THE SWING IS DELIBERATELY NOT CARRIED. A swing belongs to the fight it was thrown in -- it was
  * aimed at something in that engine and its contact frame would resolve against a different world
@@ -511,7 +523,7 @@ function advanceSiege(draft, commandHeroes, events, deltaSeconds) {
       const contactReached = !droppedIt && hero.swingSeconds >= SWING_CONTACT_SECONDS;
       if (contactReached && !hero.swingLanded) {
         hero.swingLanded = true;
-        resolveSiegeSwing(draft, position, heading, heroId, events, cmd?.weaponDamage);
+        resolveSiegeSwing(draft, position, heading, heroId, events, cmd?.heroDamage);
       }
       if (hero.swingSeconds >= SWING_SECONDS) {
         hero.swingSeconds = -1;
@@ -551,7 +563,9 @@ function wardenFightable(warden) {
 // can be fought -- so swings beside it pass to seals or miss; same while it wakes (invulnerable by
 // design, see WARDEN_WAKE_SECONDS) and once it is dying or dead.
 //
-// `damage` is what the swinging hero's own weapon is worth (encounter.js's swingDamageFor). Note
+// `damage` is what the swinging hero is worth -- their weapon plus what their LEVEL adds to the arm
+// (progression/heroStats.js's resolvedHeroDamage, resolved by the caller before it ever gets here,
+// exactly as the wolf engine's own heroDamage command field is). Note
 // that it reaches the WARDEN and not the seals: a seal is not a health bar, it is two blows and
 // then it bursts, and a sharper sword does not make a stone crack in one. That asymmetry is
 // deliberate -- it keeps the arc's opening beat the same for every child regardless of what they
@@ -619,11 +633,11 @@ function strikeSeal(draft, index, heroId, events) {
 function strikeWarden(draft, heroId, events, damage) {
   const { warden, heroes, heroIds } = draft;
   // WHAT THE HERO IS ACTUALLY CARRYING, passed down from the swing that threw it. This used to be a
-  // flat WOLF_DAMAGE_PER_HIT, which was honest while nothing in the game could hit harder and became
-  // a lie the day the Wildwood Blade shipped. WOLF_DAMAGE_PER_HIT survives as the floor for a caller
+  // flat one point, which was honest while nothing in the game could hit harder and became a lie the
+  // day the Wildwood Blade shipped. BASE_HERO_DAMAGE survives as the floor for a caller
   // that named no weapon -- see encounter.js's swingDamageFor for why a swing never resolves to
   // nothing just because equipment went unmentioned.
-  warden.hp -= Number.isFinite(damage) ? damage : WOLF_DAMAGE_PER_HIT;
+  warden.hp -= Number.isFinite(damage) ? damage : BASE_HERO_DAMAGE;
   warden.blowsTaken += 1;
 
   if (warden.hp <= 0) {
@@ -636,16 +650,16 @@ function strikeWarden(draft, heroId, events, damage) {
     draft.beaconLit = true;
     events.push({ type: 'beacon-ignited' });
     // MIRRORED from encounter.js's healTheStanding rather than imported -- it is not exported, and
-    // the generosity is deliberately bigger here: everyone standing goes to FULL, not +1, because
-    // a boss falls once per save and the moment after it is for cheering, not for limping to the
-    // next fight on the hearts you happened to have left. Same skip for the downed, same reason:
-    // they stand up on full hearts anyway (RESPAWN_SECONDS), and a heal event under a death banner
-    // is noise.
+    // the generosity is deliberately bigger here: everyone standing goes to FULL, not by one
+    // VICTORY_HEAL_HP, because a boss falls once per save and the moment after it is for cheering,
+    // not for limping to the next fight on whatever health you happened to have left. Same skip for
+    // the downed, same reason: they stand up whole anyway (RESPAWN_SECONDS), and a heal event under
+    // a death banner is noise.
     for (const otherId of heroIds) {
       const other = heroes[otherId];
       if (other.downSeconds >= 0) continue;
-      // Each hero's OWN ceiling -- a brother carrying Wren's charm is restored to four hearts, not
-      // to whatever the shortest body in the party happens to hold.
+      // Each hero's OWN ceiling -- a brother carrying Wren's charm, or simply a level ahead, is
+      // restored to HIS body, not to whatever the shortest one in the party happens to hold.
       const ceiling = other.maxHp ?? HERO_MAX_HP;
       if (other.hp >= ceiling) continue;
       other.hp = ceiling;
@@ -675,8 +689,8 @@ function strikeWarden(draft, heroId, events, damage) {
 
 // ── the Warden's own clock ──────────────────────────────────────────────────────────────────────
 
-function hurtHero(hero, heroId, events) {
-  hero.hp -= WARDEN_DAMAGE_PER_HIT;
+function hurtHero(hero, heroId, events, damageReductionPercent) {
+  hero.hp -= resolveIncomingDamage(WARDEN_DAMAGE_PER_HIT, damageReductionPercent);
   // warden-hurt-hero, as distinct from warden-hit: the names are one letter of carelessness away
   // from each other in a lesser scheme, so both say who did what to whom in full. Here heroId is
   // the hero who WAS struck; on warden-hit it is the hero who struck.
@@ -847,7 +861,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
       const position = targetId == null ? null : (commandHeroes[targetId]?.position ?? { x: 0, z: 0 });
       if (target && target.downSeconds < 0
         && isWithinStrike(warden, warden.heading, position, WARDEN_MELEE_RANGE)) {
-        hurtHero(target, targetId, events);
+        hurtHero(target, targetId, events, commandHeroes[targetId]?.damageReductionPercent);
       }
     }
     if (warden.modeSeconds >= WARDEN_OVERHEAD_SECONDS) endAttack(warden);
@@ -864,7 +878,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
         if (hero.downSeconds >= 0) continue;
         const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
         if (isWithinStrike(warden, warden.heading, position, WARDEN_MELEE_RANGE, WARDEN_SWEEP_HALF_ARC_RADIANS)) {
-          hurtHero(hero, heroId, events);
+          hurtHero(hero, heroId, events, commandHeroes[heroId]?.damageReductionPercent);
         }
       }
     }
@@ -882,7 +896,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
         if (hero.downSeconds >= 0) continue;
         const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
         if (Math.hypot(position.x - warden.x, position.z - warden.z) <= WARDEN_PULSE_RANGE) {
-          hurtHero(hero, heroId, events);
+          hurtHero(hero, heroId, events, commandHeroes[heroId]?.damageReductionPercent);
         }
       }
     }

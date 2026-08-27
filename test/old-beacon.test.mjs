@@ -506,7 +506,7 @@ test('the state a suppressed stir leaves behind is the Beacon\'s real, cold one'
 
 test('nothing G1 says at the Beacon names an action the game has not built', () => {
   const PROMISES = /(light it|wake the|relight|repair|defend|fight|guard the)/i;
-  assert.doesNotMatch(OBJECTIVE_BEACON_IS_COLD, PROMISES);
+  assert.doesNotMatch(OBJECTIVE_BEACON_IS_COLD.text, PROMISES);
   assert.doesNotMatch(ROWAN_LINE_BEACON_FOUND, PROMISES);
   // The one place a promise IS allowed is Rowan's locked intro prose, where it is a character's hope
   // rather than the game's instruction -- and that line is untouched by G1.
@@ -514,13 +514,13 @@ test('nothing G1 says at the Beacon names an action the game has not built', () 
 });
 
 test('the objective chip names the destination on the way and asks a question once you are there', () => {
-  assert.match(OBJECTIVE_FIND_THE_BEACON, /Beacon/);
-  assert.match(OBJECTIVE_BEACON_IS_COLD, /Beacon/);
+  assert.match(OBJECTIVE_FIND_THE_BEACON.text, /Beacon/);
+  assert.match(OBJECTIVE_BEACON_IS_COLD.text, /Beacon/);
   assert.notEqual(OBJECTIVE_FIND_THE_BEACON, OBJECTIVE_BEACON_IS_COLD);
   // Every objective in this game leads with a symbol, because it reads before it is read.
   for (const line of [OBJECTIVE_FIND_THE_BEACON, OBJECTIVE_BEACON_IS_COLD]) {
-    assert.doesNotMatch(line[0], /[A-Za-z]/, `'${line}' has to lead with its symbol`);
-    assert.ok(line.split(' ').length <= 6, `'${line}' is too long to read at a glance`);
+    assert.doesNotMatch(line.text[0], /[A-Za-z]/, `'${line}' has to lead with its symbol`);
+    assert.ok(line.text.split(' ').length <= 6, `'${line}' is too long to read at a glance`);
   }
 });
 

@@ -1,0 +1,65 @@
+name: Product signal
+description: Capture a playtest, player, research, or implementation observation that may affect product judgment.
+title: "[SIGNAL] "
+labels: ["product", "type:signal", "stage:inbox"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for evidence or observation that deserves independent search/lifecycle. If the signal only matters to an existing Requirement or Initiative, prefer a concise comment there instead. A signal is not automatically a product decision.
+  - type: input
+    id: origin_date
+    attributes:
+      label: Origin date
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: dropdown
+    id: origin_type
+    attributes:
+      label: Origin type
+      options:
+        - Child/player observation
+        - Owner observation
+        - Playtest
+        - Research/reference
+        - Agent review
+        - Implementation discovery
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: source_context
+    attributes:
+      label: Source/context
+      description: Concise origin context. Use role-based descriptions rather than personal identifiers when possible.
+      placeholder: Child playtest of current combat loop
+    validations:
+      required: true
+  - type: textarea
+    id: observation
+    attributes:
+      label: Observation
+      description: What actually happened or was found? Keep this separate from interpretation.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Link screenshots, PRs, tests, notes, repeated observations, or other supporting material when available.
+  - type: textarea
+    id: interpretation
+    attributes:
+      label: Interpretation / hypothesis
+      description: What might this signal mean for the product? Mark uncertainty clearly.
+  - type: textarea
+    id: implication
+    attributes:
+      label: Possible product implication
+      description: What decision, experiment, or follow-up might this justify?
+  - type: textarea
+    id: related
+    attributes:
+      label: Related records
+      description: Link relevant Issues, PRs, requirements, initiatives, briefs, or research.

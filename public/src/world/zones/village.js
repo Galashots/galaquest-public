@@ -77,7 +77,9 @@
 // CELL_METERS, not a smaller world.
 export const ZONE = Object.freeze({ name: 'lantern-village', size: 28, northMeters: 44, eastMeters: 12 });
 
-// WHERE THE WOLVES ARE. Three spots, walked in order, one wolf alive at a time.
+// LEGACY SERIAL-PATROL COMPATIBILITY. These three positions are retained only for deliberately
+// isolated one-Wolf fixtures. Production uses ENEMY_POPULATION below; the opening seam is authored
+// separately as OPENING_WOLF_HOME so it cannot drift from stable wolf-1 (GQ-007).
 //
 // It used to be one spot. The quest is three kills, so a child spent the whole thing standing in a
 // single two-metre circle hitting the same animal three times over, with a ten-second wait in the
@@ -91,9 +93,10 @@ export const ZONE = Object.freeze({ name: 'lantern-village', size: 28, northMete
 // each other so each is a real walk. The east half is full of the rock huddle and the treeline, which
 // is why the second is the west meadow and the third is the far side of the plaza.
 //
-//   [ 2.5,  8.0]  the north lane, straight up the road -- the first wolf a child ever meets
+//   [ 2.5,  8.0]  the historic north-lane fixture
 //   [-5.5,  5.0]  the west meadow, 8.5 m away, in the open between the village and the treeline
-//   [ 7.0, -1.5]  east of the plaza, 14 m further still, and close enough to the village to alarm
+//   [ 7.0, -1.5]  historic east-of-plaza fixture
+const OPENING_WOLF_HOME = Object.freeze([9, 8]);
 const WOLF_PATROL = Object.freeze([
   Object.freeze([2.5, 8]),
   Object.freeze([-5.5, 5]),
@@ -102,9 +105,9 @@ const WOLF_PATROL = Object.freeze([
 
 export const SPAWNS = Object.freeze({
   heroes: Object.freeze([0, 0]),
-  // The FIRST spot on the patrol, not a fourth copy of the number -- everything that means "where
-  // does the fight start" still reads this.
-  wolf: WOLF_PATROL[0],
+  // The production opening Wolf, not the legacy serial-patrol fixture below. Everything that means
+  // "where does the fight start" reads this authored stable wolf-1 home.
+  wolf: OPENING_WOLF_HOME,
   patrol: WOLF_PATROL,
   // Moved twice. First, from [-3.8, -3.2] (Task D): that position sat almost exactly on the
   // spawn->tree sightline (both spawn and the old keeper spot are near the x=z diagonal toward the
@@ -136,9 +139,9 @@ export const SPAWNS = Object.freeze({
   keeper: Object.freeze([-2.8, -5.8]),
 });
 
-// The SAME two placements as SPAWNS above, in the `{ x, z }` shape the rules layer, the client and
-// the server all take. Derived here, from SPAWNS, rather than written out again -- so the numbers
-// live in exactly one place in this repo (docs/MISTAKES.md GQ-007, and the reason Phase R2 exists).
+// The production opening placement in the `{ x, z }` shape the rules layer, the client and the server
+// all take. Derived from SPAWNS rather than written out again -- so its number lives in exactly one
+// place in this repo (docs/MISTAKES.md GQ-007). WOLF_SPAWNS remains the legacy fixture adapter.
 //
 // WHY HERE, and not in public/src/combat/encounter.js as the post-Phase-Y plan guessed. Two module
 // boundaries decide it, and both are deliberate and test-enforced:
@@ -157,11 +160,55 @@ export const SPAWNS = Object.freeze({
 // re-exports WOLF_SPAWN so its own callers and tests keep one import site.
 export const WOLF_SPAWN = Object.freeze({ x: SPAWNS.wolf[0], z: SPAWNS.wolf[1] });
 // The whole patrol in the same `{ x, z }` shape, for the one argument the rules layer takes. Derived
-// from SPAWNS.patrol for the same reason WOLF_SPAWN is derived from SPAWNS.wolf.
+// from SPAWNS.patrol for isolated one-Wolf compatibility fixtures.
 export const WOLF_SPAWNS = Object.freeze(
   SPAWNS.patrol.map(([x, z]) => Object.freeze({ x, z })),
 );
+// Explicit one-Wolf fixture authority for historical combat/sanctuary tests. These tests model a
+// deliberately isolated serial encounter, not production's five-Wolf population, so they must not
+// borrow the production opening seam by implication.
+export const SINGLE_WOLF_FIXTURE_SPAWN = WOLF_SPAWNS[0];
 export const HERO_SPAWN = Object.freeze({ x: SPAWNS.heroes[0], z: SPAWNS.heroes[1] });
+
+// E2: the first fixed-world ordinary-enemy field. These are five distinct authored identities, not
+// five reads of the old serial patrol. The two Level-1 Wolves are the reachable opening fights;
+// wolf-1 sits just east of the north lane so the legitimate post-Lantern walk to Rowan does not
+// force an ordinary fight/reset loop. Level 2 sits farther north in separate bowls; the one Level-4
+// danger Wolf is visible/reachable in the existing northward slice but its territory cannot touch
+// the recovery sanctuary.
+function authoredWolf(enemyId, level, x, z, leashRadius = 4.4) {
+  const home = Object.freeze({ x, z });
+  return Object.freeze({
+    enemyId,
+    kind: 'wolf',
+    level,
+    home,
+    leashRadius,
+    patrol: Object.freeze([home]),
+  });
+}
+
+export const ENEMY_POPULATION = Object.freeze(
+  [
+    // The opening fight needs enough territory to keep a partially damaged Wolf present while a
+    // downed child safely returns to the sanctuary; 8m remains short of the sanctuary boundary.
+    authoredWolf('wolf-1', 1, OPENING_WOLF_HOME[0], OPENING_WOLF_HOME[1], 8),
+    authoredWolf('wolf-2', 1, -5.5, 5),
+    authoredWolf('wolf-3', 2, 6.5, 15),
+    authoredWolf('wolf-4', 2, -6.5, 14),
+    // Keep the high-level recovery test in the clearing, but leave Rowan's approach outside its
+    // ordinary aggro envelope so a post-Lantern child is not body-blocked before the camp handoff.
+    authoredWolf('wolf-5', 4, 11, 30),
+  ],
+);
+
+// Respawn relocation anchor and its authored no-hostility bubble. The simulation also refuses
+// protected/sanctuary heroes as ordinary targets, so this is a law shared by online and offline
+// paths rather than a placement-only promise.
+export const RECOVERY_SANCTUARY = Object.freeze({
+  at: HERO_SPAWN,
+  radiusMeters: 3,
+});
 
 // The one pure data definition for the road's control points, read by world/ground.js to build the
 // integrated grass+road ground mesh -- not restated there (docs/MISTAKES.md GQ-007). A polyline,
@@ -220,11 +267,11 @@ export const ROAD = Object.freeze({
     Object.freeze([1.2, 2.2]),
     Object.freeze([1.8, 4.2]),
     Object.freeze([2.3, 6.5]),
-    // Past the wolf and on into the trees. It used to stop dead at [2.4, 7.5], which painted as a
-    // patch of bare earth ending in the middle of a field -- a road has to go somewhere or it reads
-    // as a stain. Running it to the treeline also puts the wolf ON the path rather than beside it
-    // (the spawn is [2.5, 8]), so the thing blocking the way is the thing you have to fight, and
-    // leaves the village with a visible way OUT for whatever comes after the Lantern Tree.
+    // Past the historic Wolf bowl and on into the trees. It used to stop dead at [2.4, 7.5], which
+    // painted as a patch of bare earth ending in the middle of a field -- a road has to go somewhere
+    // or it reads as a stain. The active E2 opening Wolf is now just east of this lane, leaving the
+    // route open for a legitimate post-Lantern child while preserving the visible way OUT for
+    // whatever comes after the Lantern Tree.
     Object.freeze([2.5, 8.0]),
     Object.freeze([2.7, 10.0]),
     // THROUGH THE ARCH, not past it. The gate's own coordinate, so the two can never drift apart

@@ -95,3 +95,78 @@ test('sabotage: the regression guard actually fires on a reintroduced literal', 
   assert.ok(!LITERAL.test('createEncounterState({ wolfSpawn: WOLF_SPAWN, heroSpawn: HERO_SPAWN })'),
     'must NOT fire on passing the imported constant through');
 });
+
+// ── GQ-007 hit 8: a gear transform restated outside gear.js ──────────────────────────────────────
+// 2026-08-24. tools/runtime-test/fit-shield.mjs carried a hand-typed COPY of sword_ironwood's rest
+// transform as the reference for its own bake self-check. It was silent for as long as the constant
+// never moved. The moment the sword was legitimately re-fitted the copy went stale, and the guard
+// did the worst possible thing with it: compared a CORRECT bake against a retired value, reported a
+// 2.73954 rig-unit error, and declared its own good output UNTRUSTWORTHY. A duplicate does not fail
+// when it is created; it fails when the original changes, and it blames the change.
+//
+// The scan above cannot catch that: its SCANNED list is a fixed set of files and it only knows about
+// spawn literals. This one is keyed on the transforms themselves, so any future copy anywhere in the
+// executable tree is caught wherever it is typed.
+import { readdirSync, statSync } from 'node:fs';
+import { RIGID_TIER2_GEAR } from '../public/src/character/gear.js';
+
+const GEAR_SOURCE = 'public/src/character/gear.js';
+const TREES = ['public/src', 'tools', 'net', 'test'];
+
+function everyFileUnder(relative) {
+  const absolute = fileURLToPath(new URL(`../${relative}`, import.meta.url));
+  const out = [];
+  const walk = (dir, prefix) => {
+    for (const entry of readdirSync(dir)) {
+      if (entry === 'node_modules' || entry.startsWith('.')) continue;
+      const full = `${dir}/${entry}`;
+      const rel = `${prefix}/${entry}`;
+      if (statSync(full).isDirectory()) walk(full, rel);
+      else if (/\.(mjs|js)$/.test(entry)) out.push({ full, rel });
+    }
+  };
+  walk(absolute, relative);
+  return out;
+}
+
+test('no file outside gear.js restates a Tier 2 gear transform', () => {
+  const files = TREES.flatMap(everyFileUnder)
+    // owner-accepted-fits.test.mjs is the ONE deliberate exception. It carries the sword's transform
+    // on purpose: it is the record of an Owner decision whose whole job is to disagree with gear.js
+    // when someone changes the value. Excluding it here is not a hole in the scan -- a duplicate that
+    // is SUPPOSED to fail on divergence is the opposite of the defect this scan exists for.
+    .filter((f) => f.rel !== GEAR_SOURCE
+      && !f.rel.endsWith('shared-constants.test.mjs')
+      && !f.rel.endsWith('owner-accepted-fits.test.mjs'));
+
+  // The quaternion components are twelve significant places of solved fit data: distinctive enough
+  // that a match is a copy, never a coincidence.
+  const fingerprints = RIGID_TIER2_GEAR.flatMap((item) => [
+    { item: item.id, what: 'quaternion', literal: String(item.restRelativeToHeroRoot.quaternion[0]) },
+    { item: item.id, what: 'position', literal: String(item.restRelativeToHeroRoot.position[0]) },
+  ]);
+
+  const offenders = [];
+  for (const { full, rel } of files) {
+    const source = readFileSync(full, 'utf8');
+    for (const fp of fingerprints) {
+      if (source.includes(fp.literal)) offenders.push(`${rel} restates ${fp.item}.${fp.what} (${fp.literal})`);
+    }
+  }
+
+  assert.deepEqual(offenders, [],
+    'a Tier 2 gear transform is typed somewhere other than gear.js. Import it from '
+    + `${GEAR_SOURCE} instead -- a copy goes stale the moment the fit is redone, and then it `
+    + 'reports the NEW value as the broken one.');
+});
+
+test('red-capable: the fingerprint scan really does find a restated transform', () => {
+  // Stated rather than assumed (GQ-022). If the literals stopped appearing in the shipped source at
+  // all -- a formatting change, a move to a data file -- the scan above would go quiet while proving
+  // nothing. Require the fingerprints to be findable in the one file that is SUPPOSED to hold them.
+  const gearSource = readFileSync(fileURLToPath(new URL(`../${GEAR_SOURCE}`, import.meta.url)), 'utf8');
+  for (const item of RIGID_TIER2_GEAR) {
+    assert.ok(gearSource.includes(String(item.restRelativeToHeroRoot.quaternion[0])),
+      `${item.id}'s quaternion is no longer a literal in ${GEAR_SOURCE}, so the scan cannot fire`);
+  }
+});

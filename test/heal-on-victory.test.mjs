@@ -1,16 +1,21 @@
-// Beating a wolf gives a heart back.
+// Beating a wolf gives health back.
 //
-// WHY THIS EXISTS, in one sentence: before it, the only way a hero ever returned to three hearts was
+// WHY THIS EXISTS, in one sentence: before it, the only way a hero ever returned to a full body was
 // to DIE. the child playtesters played the quest on 2026-08-15 and "died a few times" -- and the quest is
-// three kills, so a child who won the first fight on one heart walked into the second fight on one
-// heart and the third on whatever was left. The difficulty of any single fight was never the
+// three kills, so a child who won the first fight one bite from the floor walked into the second
+// fight there too, and the third on whatever was left. The difficulty of any single fight was never the
 // problem; the absence of any recovery between them was.
 //
 // This is deliberately NOT passive regeneration. Two reasons, both about a young player:
-//   - Cause and effect. "I killed it and got a heart back" is legible the instant it happens. "My
-//     hearts slowly come back if I stand still" is a rule nobody will notice or be taught.
+//   - Cause and effect. "I killed it and got health back" is legible the instant it happens. "My
+//     health slowly comes back if I stand still" is a rule nobody will notice or be taught.
 //   - It rewards winning rather than waiting, so no fight ever becomes easier by retreating from it.
-//     Within a single fight NOTHING here changes: same wolf, same bite, same three hero hearts.
+//     Within a single fight NOTHING here changes: same wolf, same bite, same body.
+//
+// AMOUNTS ARE WRITTEN AS VICTORY_HEAL_HP, never as literals. P2 rescaled the fight by ten, so the
+// "one heart" this file was written about is now ten hit points -- the same third of a fresh body,
+// and the same promise. A hard-typed 2 here would have gone from "one heart back" to "a fifth of a
+// bite" with no word of the test changing (GQ-018).
 //
 // And it is a co-op beat, which is the pillar the 2026-08-15 playtest promoted: your BROTHER'S kill
 // heals you too, so standing next to each other pays.
@@ -20,6 +25,7 @@ import test from 'node:test';
 
 import {
   HERO_MAX_HP,
+  VICTORY_HEAL_HP,
   createEncounter,
   createPartyEncounterState,
   requestPartyAttack,
@@ -38,11 +44,21 @@ const STEP = 1 / 60;
  * full hearts part-way through. (The first draft of this file did exactly that, and every expected
  * hp was wrong for reasons that had nothing to do with the heal.) The realistic end-to-end path,
  * bites and all, is covered by the solo test at the bottom.
+ *
+ * E1 moved ordinary-enemy authority to `enemies[]`. This fixture therefore edits the canonical
+ * Wolf entity instead of the derived `.wolf` compatibility view; writing the view would create two
+ * contradictory truths in a hand-built state and would no longer be a valid fixture.
  */
 function killTheWolf(state, heroesCommand, killerId) {
+  const wolf = state.enemies.find((enemy) => enemy.kind === 'wolf');
+  assert.ok(wolf, 'fixture needs the ordinary Wolf');
   state = {
     ...state,
-    wolf: { ...state.wolf, hp: 1, mode: 'idle', modeSeconds: 0, biteCooldown: 99 },
+    enemies: state.enemies.map((enemy) => (
+      enemy.enemyId === wolf.enemyId
+        ? { ...enemy, hp: 1, mode: 'idle', modeSeconds: 0, biteCooldown: 99 }
+        : enemy
+    )),
   };
   const seen = [];
   for (let elapsed = 0; elapsed < 5; elapsed += STEP) {
@@ -57,7 +73,7 @@ function killTheWolf(state, heroesCommand, killerId) {
   throw new Error('the wolf never went down');
 }
 
-test('a hurt hero gets one heart back when the wolf is beaten', () => {
+test('a hurt hero gets one kill\'s worth of health back when the wolf is beaten', () => {
   let state = createPartyEncounterState({ wolfSpawn: { x: 0, z: 0 }, heroIds: ['A'] });
   // Hurt him first, without involving the wolf's own bite timing: this test is about the heal, and
   // a scripted bite would couple it to WOLF_BITE_COOLDOWN_SECONDS for no reason.
@@ -69,11 +85,11 @@ test('a hurt hero gets one heart back when the wolf is beaten', () => {
   const heroesCommand = { A: { position: { x: 0, z: -1 }, heading: 0 } };
   const { state: after, seen } = killTheWolf(state, heroesCommand, 'A');
 
-  assert.equal(after.heroes.A.hp, 2, 'one heart back, not a full heal');
+  assert.equal(after.heroes.A.hp, 1 + VICTORY_HEAL_HP, 'one kill\'s worth back, not a full heal');
   const healed = seen.filter((event) => event.type === 'hero-healed');
   assert.equal(healed.length, 1, `expected exactly one hero-healed event, saw ${JSON.stringify(seen.map((e) => e.type))}`);
-  assert.equal(healed[0].heroId, 'A', 'the heal is addressed to a hero, so the right hearts light up');
-  assert.equal(healed[0].remaining, 2, 'carries the new total, the same shape hero-hurt does');
+  assert.equal(healed[0].heroId, 'A', 'the heal is addressed to a hero, so the right bar lights up');
+  assert.equal(healed[0].remaining, 1 + VICTORY_HEAL_HP, 'carries the new total, the same shape hero-hurt does');
 });
 
 test('a hero already at full health is not healed, and no event is raised for him', () => {
@@ -86,11 +102,11 @@ test('a hero already at full health is not healed, and no event is raised for hi
   };
   const { state: after, seen } = killTheWolf(state, heroesCommand, 'A');
 
-  assert.equal(after.heroes.B.hp, HERO_MAX_HP, 'still three');
+  assert.equal(after.heroes.B.hp, HERO_MAX_HP, 'still whole');
   assert.equal(
     seen.filter((event) => event.type === 'hero-healed' && event.heroId === 'B').length,
     0,
-    'a heal that changes nothing must not flash a heart at the child',
+    'a heal that changes nothing must not flash the bar at the child',
   );
 });
 
@@ -123,8 +139,8 @@ test("a brother's kill heals you too, but a hero who is down gets nothing", () =
       // B is hurt and standing well away from the fight -- the heal is for being on the team, not
       // for being in range, because "come and stand here to be healed" is a rule and this is a gift.
       B: { ...state.heroes.B, hp: 1 },
-      // C is down. He is about to respawn on full hearts anyway; healing him would mean a knocked-out
-      // player quietly banking a heart he never earned.
+      // C is down. He is about to respawn whole anyway; healing him would mean a knocked-out
+      // player quietly banking health he never earned.
       C: { ...state.heroes.C, hp: 0, downSeconds: 0 },
     },
   };
@@ -137,8 +153,8 @@ test("a brother's kill heals you too, but a hero who is down gets nothing", () =
   // Only A swings; B is miles away and C is on the floor.
   const { state: after, seen } = killTheWolf(state, heroesCommand, 'A');
 
-  assert.equal(after.heroes.A.hp, 3, 'the one who landed the blow');
-  assert.equal(after.heroes.B.hp, 2, 'the brother across the map');
+  assert.equal(after.heroes.A.hp, 2 + VICTORY_HEAL_HP, 'the one who landed the blow');
+  assert.equal(after.heroes.B.hp, 1 + VICTORY_HEAL_HP, 'the brother across the map');
   assert.equal(after.heroes.C.hp, 0, 'the one who is down');
   assert.deepEqual(
     new Set(seen.filter((event) => event.type === 'hero-healed').map((event) => event.heroId)),
@@ -146,7 +162,7 @@ test("a brother's kill heals you too, but a hero who is down gets nothing", () =
   );
 });
 
-test('the solo API heals too, and its published hero keeps exactly its old shape', () => {
+test('the solo API heals too, and its published hero carries exactly the agreed fields', () => {
   const encounter = createEncounter({ wolfSpawn: { x: 0, z: 0 } });
   const position = { x: 0, z: -1 };
 
@@ -166,18 +182,29 @@ test('the solo API heals too, and its published hero keeps exactly its old shape
   }
   assert.equal(defeated, true, 'the wolf never went down');
   // The wolf gets its bites in during a real fight, so this hero is genuinely hurt by the time he
-  // wins -- which is the case worth pinning: he ends the fight one heart better off than he was.
-  assert.ok(hpBeforeTheKill < HERO_MAX_HP, `expected the fight to cost him a heart, hp was ${hpBeforeTheKill}`);
-  assert.equal(encounter.state.hero.hp, hpBeforeTheKill + 1);
+  // wins -- which is the case worth pinning: he ends the fight better off than he went into it.
+  assert.ok(hpBeforeTheKill < HERO_MAX_HP, `expected the fight to cost him health, hp was ${hpBeforeTheKill}`);
+  // Clamped at the ceiling, which is new since P2 and is the reason the heal is a Math.min rather
+  // than a bare += : VICTORY_HEAL_HP is a real amount now, so the last heal before full would
+  // otherwise carry a hero past their own maximum.
+  const expected = Math.min(HERO_MAX_HP, hpBeforeTheKill + VICTORY_HEAL_HP);
+  assert.equal(encounter.state.hero.hp, expected);
   assert.ok(healed, 'the solo wrapper must pass the heal event through');
   assert.equal('heroId' in healed, false, 'solo events never carry a heroId -- Design ruling 1');
-  assert.equal(healed.remaining, hpBeforeTheKill + 1);
+  assert.equal(healed.remaining, expected);
 
-  // Design ruling 1: the solo published hero is byte-identical to what it always was. A heal that
-  // needed a new field on this object would break every client that decodes it.
+  // Design ruling 1: the solo published hero is exactly the fields the fight owns, and no more. A
+  // HEAL that needed a new one would still break every client that decodes it, which is what this
+  // exact set is here to catch.
+  //
+  // `maxHp` joined it in P2 and did not come from the heal. createEncounterState has seeded it since
+  // Wren's charm, and stepEncounter now publishes it back so a caller-stated body survives the round
+  // trip through the party engine (test/encounter-seam.test.mjs). Before that it was seeded, dropped
+  // on the first tick, and re-granted on every tick after -- so the old list pinned an omission
+  // rather than a shape.
   assert.deepEqual(
     Object.keys(encounter.state.hero).sort(),
-    ['cooldown', 'downSeconds', 'hp', 'swingLanded', 'swingSeconds'],
+    ['cooldown', 'downSeconds', 'hp', 'maxHp', 'swingLanded', 'swingSeconds'],
   );
 });
 

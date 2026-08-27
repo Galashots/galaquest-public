@@ -242,6 +242,23 @@ async function shot(name) {
 // TOP of this file, through net/rewardStore.mjs's own apply() (eventIds prefixed `fit:`, so they are
 // identifiable in the store forever) -- pin this page to that guest and reload so the welcome state
 // carries lanternUnlocked and main.js mounts the real asset.
+//
+// THE CLEAR IS LOAD-BEARING, and leaving it out is what turned this harness red. Setting the guest
+// id is no longer enough on its own. The first navigate above BOOTS THE APP, and booting mints a
+// profile; progression/profiles.js folds a legacy gq-guest-id into a profile only while the device
+// holds none yet -- migrateLegacyGuest() returns null the moment one exists. So a guest id written
+// beside an already-minted profile is not an identity, it is a dead string: the seeded marks stay
+// on the server under a name nothing on the device points at, the lantern never unlocks, and the
+// whole thing surfaces as a MISSING MESH rather than as a missing identity, which is why it read
+// as an asset problem. Clearing first puts the device back to "no profiles", which is the only
+// state the migration is defined for.
+//
+// An about:blank tab cannot hold localStorage for the real origin, so navigate once to establish
+// it, THEN clear, THEN set the key, THEN navigate for real -- the same two-step drive-relight.mjs
+// and drive-hero-screen.mjs already use for their own seeded guests.
+await page.send('Page.navigate', { url: `${ORIGIN_UNDER_TEST}/favicon.ico` });
+await sleep(300);
+await page.send('Storage.clearDataForOrigin', { origin: ORIGIN_UNDER_TEST, storageTypes: 'local_storage' });
 await page.eval(`localStorage.setItem('gq-guest-id', '${FIT_LANTERN_GUEST_ID}')`);
 await page.send('Page.navigate', { url: URL_UNDER_TEST });
 

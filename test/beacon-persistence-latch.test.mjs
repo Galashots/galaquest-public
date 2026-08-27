@@ -8,11 +8,15 @@ import { readFileSync } from 'node:fs';
 // anyway and never retries when a durable guest later joins. The store and siege can both be
 // individually correct while a restart still puts the Beacon out.
 //
+// E1 C2 keeps gameServer.mjs as a compatibility adapter over the authoritative implementation in
+// gameServerCore.mjs. This guard deliberately follows that authority rather than inspecting the
+// adapter: every invariant below is unchanged, only the source seam moved.
+//
 // Prefer replacing this with a full attachGameServer restart test once that harness has a cheap
 // injectable WebSocket/server clock seam. Until then, this red gate prevents the exact unconditional
 // latch from surviving a review fix disguised as prose.
 test('Beacon persistence latch is set only after a durable write actually succeeds', () => {
-  const source = readFileSync(new URL('../net/gameServer.mjs', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../net/gameServerCore.mjs', import.meta.url), 'utf8');
   const block = source.match(
     /if \(!beaconLitRecorded && simulation\.beaconIsLit\(\)\) \{([\s\S]*?)\n    \}/,
   )?.[1] ?? '';

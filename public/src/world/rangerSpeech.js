@@ -141,3 +141,49 @@ export function rangerOwesCharm({ inRange, beaconLit, satchelCarried, charmOwned
   return inRange === true && beaconLit === true
     && satchelCarried === true && charmOwned !== true;
 }
+
+/**
+ * WHETHER A HERO IS STANDING IN WREN'S CONVERSATION SANCTUARY -- and is therefore not something the
+ * village wolf may pick as a target this tick.
+ *
+ * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Wren stands at [-1.2, 5.0]. The village wolf spawns 4.76m from her and two of its three patrol
+ * nodes sit 4.76m and 4.30m away, against a WOLF_AGGRO_RANGE of 6m. So the ground a child must
+ * stand on to hear Wren -- inside the two-metre speech radius -- has always been inside the wolf's
+ * ambient threat envelope, at every moment of the game.
+ *
+ * A hero who goes down does not move: the respawn restores hearts and resets the wolf, and touches
+ * no position. He stands up where he fell and the wolf, put back 4.76m away, comes again. Measured
+ * in a real browser standing at her feet under a 12x CPU throttle: hearts 3-2-1-0-3 three times in
+ * about 25 seconds, position constant at 0.34m from her, drawn and authoritative agreeing to the
+ * centimetre. A child CAN run away once they are standing -- so this is not a trap with no exit --
+ * but a conversation the game requires them to hold still for has to be safe long enough to have.
+ *
+ * ── WHY IT IS SHAPED LIKE THIS ──────────────────────────────────────────────────────────────────
+ *
+ * PER HERO, never a global pause. A second child fighting the wolf out in the open keeps their
+ * fight; only the one standing in the sanctuary stops being a target. The village wolf is not
+ * retired when the Beacon is lit either, because a younger sibling who joins later would arrive to
+ * a village whose first fight had already been taken away from them.
+ *
+ * RADIUS TAKEN AS A PARAMETER, and both callers pass RANGER_CLAIM.radiusMeters -- the radius the
+ * charm handover already uses, which net/gameServer.mjs already imports. A fourth number describing
+ * "how close to Wren" would be a fourth thing to keep in step (GQ-007); the same argument
+ * RANGER_CLAIM itself is written under.
+ *
+ * GATED ON THE BEACON, because that is what puts Wren in the world at all. Before it burns there is
+ * nobody standing there and the ground is ordinary village, so the wolf may hunt across it.
+ *
+ * The combat layer never learns any of this. It is handed one boolean per hero and does not know
+ * the word Wren -- see the `targetable` datum in combat/encounter.js and the purity rule
+ * test/combat-purity.test.mjs enforces.
+ */
+export function rangerSanctuaryHolds({
+  heroX, heroZ, rangerX, rangerZ, claimRadiusMeters, beaconLit,
+}) {
+  if (beaconLit !== true) return false;
+  if (!Number.isFinite(heroX) || !Number.isFinite(heroZ)) return false;
+  if (!Number.isFinite(claimRadiusMeters)) return false;
+  return Math.hypot(heroX - rangerX, heroZ - rangerZ) <= claimRadiusMeters;
+}

@@ -14,6 +14,7 @@ import test from 'node:test';
 import { MARKS_TO_UNLOCK } from '../public/src/rewards/marks.js';
 import { RECIPES } from '../public/src/audio/recipes.js';
 import { pipsForMarks } from '../public/src/rewards/hud.js';
+import { PROFILE_FACT_TYPES } from '../public/src/progression/facts.js';
 import {
   REWARD_EVENT_TYPES,
   REWARD_RECIPE_MAP,
@@ -37,27 +38,106 @@ test('pipsForMarks defaults its length to MARKS_TO_UNLOCK', () => {
   assert.equal(pipsForMarks(0).length, MARKS_TO_UNLOCK);
 });
 
-test('REWARD_EVENT_TYPES is exactly the two award types marks.js can produce', () => {
-  assert.deepEqual([...REWARD_EVENT_TYPES].sort(), ['lantern-unlocked', 'mark-earned']);
+// The list is pinned rather than derived, and the pin is the point: anything not in it falls through
+// to the COMBAT dispatcher, which logs "no handler" -- and a console error is itself a harness
+// failure ("no console errors across the whole run"). So a reward event type is only half-added
+// until it is here, and this test is what makes the other half impossible to forget.
+//
+// It used to read "exactly the two award types marks.js can produce", which stopped being the right
+// description before it stopped being the right list: these are the durable-fact events the reward
+// coordinator ANNOUNCES, and net/gameServer.mjs's applyLootAward announces currency for the same
+// reason applyMarkAward announces a mark -- so a device can journal the fact under the store's own
+// id instead of receiving a count it cannot deduplicate.
+test('REWARD_EVENT_TYPES is exactly the durable facts the reward coordinator announces', () => {
+  assert.deepEqual(
+    [...REWARD_EVENT_TYPES].sort(),
+    [
+      'charm-earned', 'coin-earned', 'gear-equipped', 'gear-owned',
+      'lantern-unlocked', 'mark-earned', 'satchel-taken', 'shard-earned',
+      // P2: the Lantern unlock is worth a level now, and the XP that pays for it is announced with
+      // its durable id for the same reason currency is -- so the device journals the fact rather
+      // than receiving a total it cannot deduplicate.
+      'xp-earned',
+    ],
+  );
+});
+
+// The other half of the same guard, from the other end: this list must not fall BEHIND the fact
+// vocabulary either. Every profile fact the coordinator can write is a fact it can announce, and one
+// that arrives with no handler falls through to the combat dispatcher and logs "no handler" -- which
+// is itself a harness failure. `weapon-equipped` is the deliberate exception and the only one: a
+// device MINTS its own equip fact (progression/profiles.js's mintEquipFact) rather than being told
+// about it, so there is nothing to announce back to it.
+test('no profile fact type can be added without a reward handler for it', () => {
+  const announced = new Set(REWARD_EVENT_TYPES);
+  const unhandled = PROFILE_FACT_TYPES
+    .filter((type) => type !== 'weapon-equipped' && !announced.has(type));
+  assert.deepEqual(unhandled, [],
+    'these durable facts can be written but not announced -- add a handler in main.js and list them '
+    + 'in REWARD_EVENT_TYPES, or the device cannot journal them under the store\'s own id');
 });
 
 test('createRewardFeedback refuses to build with a missing handler', () => {
   assert.throws(() => createRewardFeedback({ 'mark-earned': () => {} }), /lantern-unlocked/);
 });
 
+/** A complete table, built from the list rather than typed out, so this helper cannot go stale the
+ *  way the assertions above deliberately can. */
+function completeHandlers(onEvent = () => {}) {
+  return Object.fromEntries(REWARD_EVENT_TYPES.map((type) => [type, onEvent]));
+}
+
 test('createRewardFeedback accepts a complete handler table and dispatches by type', () => {
   const seen = [];
-  const onRewardEvent = createRewardFeedback({
-    'mark-earned': (event) => seen.push(event),
-    'lantern-unlocked': (event) => seen.push(event),
-  });
-  onRewardEvent({ type: 'mark-earned', heroId: 'p1' });
-  onRewardEvent({ type: 'lantern-unlocked', heroId: 'p1' });
-  assert.deepEqual(seen.map((event) => event.type), ['mark-earned', 'lantern-unlocked']);
+  const onRewardEvent = createRewardFeedback(completeHandlers((event) => seen.push(event)));
+  for (const type of REWARD_EVENT_TYPES) onRewardEvent({ type, heroId: 'p1' });
+  assert.deepEqual(seen.map((event) => event.type), [...REWARD_EVENT_TYPES]);
+});
+
+// ── a fact seen twice is not a beat owed twice ─────────────────────────────────────────────────
+//
+// Local-first means a device that reconnects to a server which has never heard of it TEACHES that
+// server its own facts -- and the server announces every one of them straight back. Those arrive at
+// this dispatcher looking exactly like something that just happened.
+
+test('every handler is told whether this is the first time this device has seen the fact', () => {
+  const seen = [];
+  const onRewardEvent = createRewardFeedback(
+    completeHandlers((event, context) => seen.push({ type: event.type, context })),
+  );
+  onRewardEvent({ type: 'mark-earned', eventId: 'm1' }, { firstTimeSeen: false });
+  onRewardEvent({ type: 'mark-earned', eventId: 'm2' }, { firstTimeSeen: true });
+  assert.deepEqual(seen.map((s) => s.context.firstTimeSeen), [false, true]);
+});
+
+test('a caller that says nothing gets the loud answer, so nothing goes quiet by omission', () => {
+  // The default matters more than it looks. A ceremony that vanishes because a call site was not
+  // updated is a silent regression -- the child simply stops being told they earned something, and
+  // no test that was not looking for it would notice.
+  const seen = [];
+  const onRewardEvent = createRewardFeedback(
+    completeHandlers((event, context) => seen.push(context.firstTimeSeen)),
+  );
+  onRewardEvent({ type: 'mark-earned' });
+  onRewardEvent({ type: 'mark-earned' }, {});
+  assert.deepEqual(seen, [true, true]);
+});
+
+test('only an explicit false is quiet', () => {
+  // Guards against the shape where a truthy-ish absence (undefined, null, 0) silences a real reward.
+  const seen = [];
+  const onRewardEvent = createRewardFeedback(
+    completeHandlers((event, context) => seen.push(context.firstTimeSeen)),
+  );
+  for (const value of [undefined, null, 0, '', false]) {
+    onRewardEvent({ type: 'mark-earned' }, { firstTimeSeen: value });
+  }
+  assert.deepEqual(seen, [true, true, true, true, false],
+    'only a literal false means "this device already knew"');
 });
 
 test('an event type outside the known set is logged rather than crashing the frame loop', () => {
-  const onRewardEvent = createRewardFeedback({ 'mark-earned': () => {}, 'lantern-unlocked': () => {} });
+  const onRewardEvent = createRewardFeedback(completeHandlers());
   assert.doesNotThrow(() => onRewardEvent({ type: 'not-a-real-reward-event' }));
 });
 
@@ -69,17 +149,33 @@ test('an event type outside the known set is logged rather than crashing the fra
 // They were both explicit `null` and are both real recipes now. The rule this test protects is
 // unchanged and is the one that matters: neither may be UNDECIDED, and both names have to exist in
 // RECIPES rather than being a string nothing can play.
-test('both reward events are decided, and point at recipes that actually exist', () => {
-  for (const type of ['mark-earned', 'lantern-unlocked']) {
+test('every reward event is decided, and any sound it names actually exists', () => {
+  // DECIDED, not necessarily audible. Explicit `null` is a decision and this file's own history is
+  // why: mark-earned and lantern-unlocked were both null on purpose while their sound was an open
+  // taste call. What is forbidden is UNDECIDED -- a type with no entry at all, which reads the same
+  // as silence and means nobody thought about it.
+  for (const type of REWARD_EVENT_TYPES) {
     assert.ok(Object.prototype.hasOwnProperty.call(REWARD_RECIPE_MAP, type), `${type} is undecided`);
     const name = soundForRewardEvent(type);
     assert.equal(name, REWARD_RECIPE_MAP[type]);
-    assert.ok(name !== null && Object.prototype.hasOwnProperty.call(RECIPES, name),
-      `${type} maps to "${name}", which is not a recipe`);
+    if (name !== null) {
+      assert.ok(Object.prototype.hasOwnProperty.call(RECIPES, name),
+        `${type} maps to "${name}", which is not a recipe`);
+    }
   }
-  // The two must not be the SAME sound: they fire seconds apart at the end of the same fight, and a
-  // child has to be able to tell "another mark" from "that was the last one".
+
+  // The quest beats must not be the SAME sound: they fire seconds apart at the end of the same
+  // fight, and a child has to be able to tell "another mark" from "that was the last one".
   assert.notEqual(soundForRewardEvent('mark-earned'), soundForRewardEvent('lantern-unlocked'));
+
+  // Currency is deliberately silent HERE, because the pickup already has its own sound and its own
+  // burst -- a second one fired from the durable announcement would play one moment twice, which is
+  // the defect GP1-C6 fixed for marks in the other direction. Asserted rather than assumed, so
+  // giving them a sound later is a deliberate edit to this line and not an accident.
+  for (const durableOnly of ['coin-earned', 'shard-earned', 'gear-owned', 'satchel-taken', 'charm-earned']) {
+    assert.equal(soundForRewardEvent(durableOnly), null,
+      `${durableOnly} announces a fact for the journal; its beat is fired by diffing the rewards block`);
+  }
 });
 
 test('soundForRewardEvent never throws on an unknown type', () => {

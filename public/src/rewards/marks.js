@@ -1,5 +1,5 @@
 // The Lantern Marks pure fold. Turns combat/encounter.js's own events into mark-earned award
-// decisions -- one per wolf-life, one per contributing hero -- with no I/O, no clock, no randomness,
+// decisions -- one per Wolf life, one per contributing hero -- with no I/O, no clock, no randomness,
 // and no reach into public/src/combat/ or the DOM. `rewards/` is a deliberate sibling of `combat/`
 // rather than living inside it: encounter.js stays the one file that owns the rules of the fight, and
 // this file only READS the events it already publishes. Copy the discipline, not the directory --
@@ -44,7 +44,10 @@ export const MARKS_TO_UNLOCK = 3;
 export function createRewardLedger() {
   return {
     livesCompleted: 0,
-    contributors: new Set(),
+    // E1: contributors belong to ONE stable enemy life, not to "the Wolf" globally. A Map keeps two
+    // interleaved Wolves from sharing participation credit. The default shipped world still authors
+    // exactly one Wolf; this is collection correctness, not density.
+    contributorsByEnemy: new Map(),
     processedEvents: new WeakSet(),
   };
 }
@@ -67,18 +70,54 @@ export function createRewardLedger() {
  * contact branch pushes either wolf-hit OR wolf-defeated, never both), so it must be credited here or
  * a solo killing blow would earn nothing.
  *
- * eventIds are derived as `mark:<heroId>:<lifeIndex>` -- deterministic and reproducible from the same
- * inputs, which is what makes them usable as D2's idempotency keys: two servers (or one server
- * restarted) folding the same true history of a guest's kills produce the same eventId for the same
- * life, so INSERT OR IGNORE at the store layer is the actual no-op enforcement; this fold's own
- * processedEvents guard is the belt to that store's braces, catching a double-fold before it ever
- * reaches the wire.
+ * eventIds are derived as `mark:<heroId>:<lifeId>`, where lifeId identifies THE WOLF-LIFE rather
+ * than the hero's own count of them. That distinction is the whole point, and it was learned twice:
+ *
+ *   - A life INDEX (this fold's `livesCompleted`) is reproducible, but only WITHIN one process: it
+ *     restarts at 0, and so does createSimulation's `p<n>`, so the first kill after a restart
+ *     recomputes an eventId already on record and INSERT OR IGNORE silently swallows a real kill.
+ *   - Deriving the durable key from the STORE's current count instead (the fix that replaced it)
+ *     cured that but was not idempotent at all: two heroIds mapped to one guestId -- two tabs in one
+ *     browser share localStorage, so they share a guestId -- produce two awards for one wolf-life,
+ *     and the count is re-read BETWEEN them, so the second computes a different key and inserts.
+ *     One kill, two marks. See test/profile-identity.test.mjs, which fails against that version.
+ *
+ * What both attempts were reaching for is a name for the FACT being paid for. `mintLifeId` supplies
+ * it: called exactly once per wolf-defeated, so every contributor to that life carries the SAME
+ * lifeId. Two heroes of one guest then derive one identical durable key and the store's INSERT OR
+ * IGNORE does its job; two different guests derive different keys and are both paid, which is the
+ * participation-credit rule this file exists to keep. A server passes randomUUID, which cannot
+ * collide across a restart the way an index could.
+ *
+ * The default keeps the historical `String(lifeIndex)` so a caller that does not care about
+ * durability -- the offline fallback in main.js, and every existing test -- gets byte-identical
+ * eventIds to before. This fold's own processedEvents guard is unchanged: it still catches a
+ * double-fold of the same event objects before anything reaches the wire.
+ *
+ * @param options.mintLifeId  (lifeIndex) => string, called once per completed wolf-life.
  */
-export function foldEvents(ledger, events) {
+const LEGACY_WOLF_ID = '__legacy-wolf__';
+
+function rewardableWolfId(event) {
+  // Identity-bearing non-Wolf events must never mint Lantern Marks. An event without `kind` is a
+  // pre-E1 compatibility fixture and therefore historically meant Wolf.
+  if (event?.kind !== undefined && event.kind !== 'wolf') return null;
+  if (event?.enemyId === undefined || event.enemyId === null) return LEGACY_WOLF_ID;
+  if (typeof event.enemyId !== 'string' || event.enemyId.length === 0) return null;
+  return event.enemyId;
+}
+
+export function foldEvents(ledger, events, options = {}) {
+  const mintLifeId = options.mintLifeId ?? ((lifeIndex) => String(lifeIndex));
   const start = ledger ?? createRewardLedger();
   let livesCompleted = start.livesCompleted;
-  let contributors = new Set(start.contributors);
-  const processedEvents = start.processedEvents;
+
+  // Compatibility is intentionally one-way: an old opaque ledger can be threaded into E1 without
+  // losing the current Wolf's contributors, but every ledger returned from here is collection-shaped.
+  const contributorsByEnemy = start.contributorsByEnemy instanceof Map
+    ? new Map([...start.contributorsByEnemy].map(([enemyId, contributors]) => [enemyId, new Set(contributors)]))
+    : new Map(start.contributors instanceof Set ? [[LEGACY_WOLF_ID, new Set(start.contributors)]] : []);
+  const processedEvents = start.processedEvents instanceof WeakSet ? start.processedEvents : new WeakSet();
   const awards = [];
 
   for (const event of events) {
@@ -86,26 +125,35 @@ export function foldEvents(ledger, events) {
     processedEvents.add(event);
 
     if (event.type === 'wolf-hit') {
+      const enemyId = rewardableWolfId(event);
+      if (enemyId === null) continue;
+      const contributors = contributorsByEnemy.get(enemyId) ?? new Set();
       if (event.heroId != null) contributors.add(event.heroId);
+      contributorsByEnemy.set(enemyId, contributors);
       continue;
     }
 
     if (event.type === 'wolf-defeated') {
+      const enemyId = rewardableWolfId(event);
+      if (enemyId === null) continue;
+      const contributors = contributorsByEnemy.get(enemyId) ?? new Set();
       if (event.heroId != null) contributors.add(event.heroId);
-      const lifeIndex = livesCompleted;
+      // Once per ENEMY LIFE, not once per contributor. Interleaved enemies keep separate sets and
+      // therefore cannot pay each other's contributors when either one dies.
+      const lifeId = mintLifeId(livesCompleted);
       for (const heroId of contributors) {
-        awards.push({ heroId, type: 'mark-earned', eventId: `mark:${heroId}:${lifeIndex}` });
+        awards.push({ heroId, type: 'mark-earned', lifeId, eventId: `mark:${heroId}:${lifeId}` });
       }
       livesCompleted += 1;
-      contributors = new Set();
+      contributorsByEnemy.delete(enemyId);
       continue;
     }
 
-    // wolf-respawned and every other event type carry no contributor information this fold needs.
+    // respawn and every other event type carry no contributor information this fold needs.
   }
 
   return {
-    ledger: { livesCompleted, contributors, processedEvents },
+    ledger: { livesCompleted, contributorsByEnemy, processedEvents },
     awards,
   };
 }

@@ -48,6 +48,10 @@ export const MAX_PREDICTION_BACKLOG_SECONDS = 1;
  * @param backlogSeconds   time carried over from previous frames (0 on the first)
  * @param moving           whether the hero has any input THIS frame
  * @param wasMoving        whether the hero had input on the PREVIOUS frame
+ * @param maxStepSeconds     the largest slice integrated in one frame. Defaulted; declared because
+ *   it is read, and a caller building its argument from this list alone must be able to see it.
+ * @param maxBacklogSeconds  how much carried-over time may accumulate before the rest is dropped.
+ *   Same reasoning.
  * @returns `{ deltaSeconds, backlogSeconds }` -- how much to integrate now, and what to carry
  *
  * Two gates, and they are different questions:

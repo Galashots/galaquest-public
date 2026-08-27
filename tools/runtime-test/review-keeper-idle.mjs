@@ -239,7 +239,7 @@ console.log(`keeper node: ${keeperNode ? `${keeperNode.name} at [${keeperNode.x.
  *
  * Not cosmetic. The first framed run put "Keeper Aldric is waving you over!" straight across his
  * shins in every front capture, and the ruling asks specifically for planted feet and foot sliding
- * -- so the banner was covering one of the exact things the review exists to judge. The hearts, the
+ * -- so the banner was covering one of the exact things the review exists to judge. The health bar, the
  * objective chip, the stick, the ATTACK button and the debug pill all crop the frame the same way.
  * The GAME is unchanged; only this tab's overlay is hidden, and only after the zone has loaded.
  */

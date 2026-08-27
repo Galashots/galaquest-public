@@ -21,11 +21,15 @@ export const HARNESSES = {
   'drive-hero-screen': { gate: true, why: 'GP1 Hero screen: open, compare, equip via a real server round trip, portrait and landscape' },
   'drive-cart-loot': { gate: true, why: 'GP2 cart loot: search, burst, HUD-gated collection, and a two-client double-collect proof, portrait and landscape' },
   'drive-village-board': { gate: true, why: 'GP3 Village Board: Workshop I purchase, 3D transformation, shared-balance two-client and race proofs, and a real server restart, portrait and landscape' },
+  'drive-profile-gate': { gate: true, why: 'Stage 1 family profile gate: name a first hero, add a sibling, switch, reload, per-child isolation, the four-hero cap, two-tap remove, and the 44px tap floor, portrait and landscape' },
+  'drive-recovery': { gate: true, why: 'the recovery boundary through the real client: a Mark earned by killing a wolf survives the reward database being replaced with an empty one, is restored INTO that empty server, and a Mark earned with no server at all survives a reload' },
+  'drive-guidance-rescue': { gate: true, why: 'Checkpoint 2 "never lost": turning away loses the objective off-camera, a tap on empty ground does NOT recover it, and the rescue button turns the camera back -- the recovery path itself, which nothing covered before' },
   'drive-old-beacon': { gate: true, why: 'G1 Old Beacon road: the whole approach walked with the stick, visibility before arrival, one-shot arrival, honest post-arrival objective, world edge, portrait, landscape, reduced motion and a reload' },
   'fit-shield': { gate: true, why: 'shield carry fit; exits non-zero when its own bake is untrustworthy' },
   'fit-sword': { gate: false, why: 'sword carry measurement; always exits 0 by design' },
   'fit-carry': { gate: false, why: 'carry-pose measurement; always exits 0 by design' },
   'fit-lantern': { gate: false, why: 'lantern mount measurement; always exits 0 by design' },
+  'fit-helmet': { gate: false, why: 'G1-C3 Silverguard Helmet mount measurement + baked-value round-trip captures; exits 0/2 like its fit-* neighbours, never a verdict' },
   // Wave 1A (CSB): Character-Studio-only, not the running game -- drives public/studio.html rather
   // than main.js, but is otherwise the same measuring-instrument contract as its fit-* neighbours.
   'fit-wildwood-blade': { gate: false, why: 'Wildwood Blade candidate mount measurement; always exits 0 by design' },
@@ -66,7 +70,24 @@ export const HARNESSES = {
   // never about how any of it looks. Its captures are the human evidence; its exit code is not a
   // claim that anybody has looked at them.
   'drive-beacon-siege': { gate: true, why: 'the whole Beacon arc played end to end: seals, Warden, ignition, and the objective chain' },
-  'drive-ranger': { gate: true, why: 'the Beacon is answered: Wren is standing in the village because of it, takes her brother\'s satchel, and the charm puts a fourth heart on the bar that survives a reload' },
+  // P2's own end-to-end proof: a child one kill short of the Lantern earns it for real, watches the
+  // XP meter complete, LEVELS UP, and walks away with a bigger body and a harder blow that BOTH
+  // fights actually use -- then reloads and finds all of it still there with no ceremony replayed.
+  // A GATE, and firmly so: every check in it is a question about behaviour a script can answer
+  // honestly (did the level land, did the fight take the bigger blow, did hydration stay quiet),
+  // never about how any of it looks. Its captures are the human evidence; its exit code is not a
+  // claim that anybody has looked at them.
+  'drive-first-level-up': { gate: true, why: 'the first Hero level earned on the real path: Lantern -> 100 XP -> Level 2 -> bigger body and harder blow in both fights, surviving a reload without replaying the ceremony' },
+  'drive-e2-enemy': { gate: true, why: 'E2 enemy population, level-aware nameplates, leash return, safe recovery, portrait and landscape, and two-client isolation' },
+  'drive-ranger': { gate: true, why: 'the Beacon is answered: Wren is standing in the village because of it, takes her brother\'s satchel, and the charm grows the health bar in a way that survives a reload' },
+  // G1-C3's own end-to-end proof: a child owning no helmet is granted one mid-session, the acquisition
+  // card fires with the real resolved POWER move and asks EQUIP NOW?, EQUIP NOW mounts it, the Hero
+  // screen tells the truth about the Shield and Helmet slots, and a reload restores the worn pixels
+  // WITHOUT replaying the ceremony. A GATE, and firmly so: every check is a question about behaviour a
+  // script can answer honestly (did the card appear, did EQUIP mount it, did the reload stay quiet),
+  // never about how it looks. Its captures are the human evidence; its exit code is not a claim anyone
+  // has looked at them.
+  'drive-helmet-vertical': { gate: true, why: 'the Silverguard Helmet vertical played end to end: mid-session grant, the acquisition card and its POWER move, EQUIP NOW mounts it, truthful Hero screen, and a reload that restores the worn Helmet without replaying the ceremony' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -75,13 +96,15 @@ export const HARNESSES = {
  */
 export const SUITES = {
   keeper: ['drive-village', 'drive-relight', 'review-keeper-idle', 'review-keeper-material', 'review-keeper-turn', 'review-shipping-assets'],
-  hero: ['fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern', 'fit-wildwood-blade', 'play-fight', 'review-hero-attack', 'review-hero-idle11', 'review-shipping-assets', 'review-studio', 'review-owner-annotations', 'drive-hero-screen'],
+  hero: ['fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern', 'fit-helmet', 'fit-wildwood-blade', 'play-fight', 'review-hero-attack', 'review-hero-idle11', 'review-shipping-assets', 'review-studio', 'review-owner-annotations', 'drive-hero-screen'],
   full: [
     'drive-village', 'drive-relight', 'drive-lifecycle', 'drive-marks', 'drive-touch',
     'drive-two-clients', 'play-fight', 'fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern',
-    'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
+    'fit-helmet', 'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
+    'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
+    'drive-e2-enemy', 'drive-helmet-vertical',
   ],
 };

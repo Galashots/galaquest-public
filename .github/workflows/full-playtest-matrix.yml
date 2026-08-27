@@ -52,6 +52,7 @@ jobs:
           - fit-sword
           - fit-shield
           - fit-lantern
+          - fit-helmet
           - fit-wildwood-blade
           - review-keeper-idle
           - review-hero-attack
@@ -68,6 +69,12 @@ jobs:
           - drive-old-beacon
           - drive-beacon-siege
           - drive-ranger
+          - drive-profile-gate
+          - drive-recovery
+          - drive-guidance-rescue
+          - drive-first-level-up
+          - drive-e2-enemy
+          - drive-helmet-vertical
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -127,6 +134,8 @@ jobs:
         # A measuring instrument expresses "no automated verdict" by exiting 0 and publishing its
         # evidence. Any non-zero exit is therefore an execution/infrastructure failure and must stay
         # red; converting it to success made missing Chrome, syntax errors and crashes fail open.
+        env:
+          GALAQUEST_E2_SHA: ${{ matrix.name == 'drive-e2-enemy' && (github.event.pull_request.head.sha || github.sha) || '' }}
         run: node tools/runtime-test/${{ matrix.name }}.mjs
       - name: Upload evidence
         if: always()

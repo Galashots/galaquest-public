@@ -6,9 +6,14 @@ import { HERO_URL } from '../public/src/character/hero.js';
 import {
   BELT_LANTERN_BONE_NAME,
   RIGID_BELT_LANTERN,
+  RIGID_SILVERGUARD_HELMET,
   RIGID_TIER2_GEAR,
+  SILVERGUARD_HELMET_BONE_NAME,
+  SILVERGUARD_HELMET_HIDES_ANATOMY,
   attachBeltLantern,
   attachRigidTier2Gear,
+  attachSilverguardHelmet,
+  rigidAnchorName,
 } from '../public/src/character/gear.js';
 
 const EPSILON = 1e-6;
@@ -209,6 +214,96 @@ test('attachBeltLantern throws if the named node exists but is not actually a Bo
   armature.add(notABone);
 
   assert.throws(() => attachBeltLantern(hero, new THREE.Group()), /Hips is not a Bone/);
+});
+
+// ── G1-C3: the Silverguard Helmet ────────────────────────────────────────────────────────────────
+
+// The Head bone the shipped rig actually names, on the same 0.01 Armature the other fixtures use. No
+// SkinnedMesh, so attachSilverguardHelmet's bindPoseMatrixWorld degrades to the live bone matrix --
+// which is exactly the synthetic-rig fallback its own comment documents, so the expected world is the
+// same armature.matrixWorld x rest the lantern's is.
+function makeHeroWithHead() {
+  const hero = new THREE.Group();
+  hero.name = 'hero';
+  hero.position.set(2, -1, 5);
+  hero.rotation.set(0.15, -0.25, -0.1);
+
+  const armature = new THREE.Group();
+  armature.name = 'Armature';
+  armature.scale.setScalar(0.01);
+  hero.add(armature);
+
+  const head = new THREE.Bone();
+  head.name = 'Head';
+  head.position.set(0, 150, 6);
+  head.rotation.set(-0.08, 0.12, 0.03);
+  head.scale.setScalar(1.3);
+  armature.add(head);
+
+  hero.updateMatrixWorld(true);
+  return { hero, armature, head };
+}
+
+test('the Silverguard Helmet mounts onto the Head bone through the bind-frame bone matrix', () => {
+  const { hero, armature, head } = makeHeroWithHead();
+  const helmetRoot = new THREE.Group();
+  helmetRoot.name = 'helmet_silverguard';
+
+  const expectedWorld = new THREE.Matrix4().multiplyMatrices(armature.matrixWorld, restMatrixFor(RIGID_SILVERGUARD_HELMET));
+
+  const attachment = attachSilverguardHelmet(hero, helmetRoot);
+  hero.updateMatrixWorld(true);
+
+  assert.equal(attachment.bone, head);
+  assert.equal(attachment.id, 'helmet_silverguard');
+  assert.equal(attachment.anchor.name, rigidAnchorName('helmet_silverguard', SILVERGUARD_HELMET_BONE_NAME));
+  assert.equal(helmetRoot.parent, attachment.anchor);
+  assert.equal(attachment.anchor.parent, head);
+  assertMatrixNear(helmetRoot.matrixWorld, expectedWorld, 'helmet world transform');
+});
+
+test('attachSilverguardHelmet parents in a freshly-loaded root rather than requiring one already present', () => {
+  const { hero } = makeHeroWithHead();
+  const helmetRoot = new THREE.Group();
+  helmetRoot.name = 'freshly-loaded-helmet';
+  assert.equal(hero.getObjectByName('freshly-loaded-helmet'), undefined,
+    'must not already be reachable from the hero root before attaching');
+
+  attachSilverguardHelmet(hero, helmetRoot);
+  assert.equal(hero.getObjectByName('freshly-loaded-helmet'), helmetRoot,
+    'the helmet should be reachable from the hero root once attached');
+});
+
+test('attachSilverguardHelmet throws a clear error when the rig has no Head bone', () => {
+  const hero = new THREE.Group();
+  hero.name = 'hero';
+  const armature = new THREE.Group();
+  armature.name = 'Armature';
+  hero.add(armature);
+
+  assert.throws(
+    () => attachSilverguardHelmet(hero, new THREE.Group()),
+    new RegExp(`missing bone ${SILVERGUARD_HELMET_BONE_NAME}`),
+  );
+});
+
+test('attachSilverguardHelmet throws if the named node exists but is not actually a Bone', () => {
+  const hero = new THREE.Group();
+  hero.name = 'hero';
+  const armature = new THREE.Group();
+  armature.name = 'Armature';
+  hero.add(armature);
+  const notABone = new THREE.Group();
+  notABone.name = 'Head';
+  armature.add(notABone);
+
+  assert.throws(() => attachSilverguardHelmet(hero, new THREE.Group()), /Head is not a Bone/);
+});
+
+test('the Helmet occludes exactly the hair and ears while worn -- an open-face read', () => {
+  assert.deepEqual([...SILVERGUARD_HELMET_HIDES_ANATOMY], ['hair', 'ears']);
+  assert.equal(RIGID_SILVERGUARD_HELMET.boneName, 'Head');
+  assert.equal(RIGID_SILVERGUARD_HELMET.id, 'helmet_silverguard');
 });
 
 test('hero loading uses the passing one-image equipped GLB', () => {

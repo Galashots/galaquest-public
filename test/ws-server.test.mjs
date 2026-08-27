@@ -2,7 +2,12 @@ import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
 import test from 'node:test';
 
-import { attachWebSocketServer } from '../net/wsServer.mjs';
+import {
+  DEFAULT_INBOUND_MESSAGE_BURST,
+  DEFAULT_INBOUND_MESSAGES_PER_SECOND,
+  attachWebSocketServer,
+} from '../net/wsServer.mjs';
+import { INPUT_SEND_HZ } from '../public/src/net/protocolCore.js';
 
 // These drive the server through node's built-in WebSocket client over a real TCP socket. That
 // matters: the client is an independent implementation of RFC 6455, so it masks its own frames,
@@ -379,4 +384,90 @@ test('the wrong path and the wrong version are refused, and plain http still wor
     assert.ok(reply.toString().includes('Sec-WebSocket-Version: 13'), 'should advertise 13');
     socket.destroy();
   });
+});
+
+test('gameplay-cadence application traffic remains below the inbound rate budget', async () => {
+  assert.ok(
+    DEFAULT_INBOUND_MESSAGES_PER_SECOND >= INPUT_SEND_HZ * 4,
+    'the sustained allowance should retain at least 4x headroom over the input cadence',
+  );
+  let fakeNowMs = 0;
+  const dispatched = [];
+  const messageCount = DEFAULT_INBOUND_MESSAGE_BURST + DEFAULT_INBOUND_MESSAGES_PER_SECOND;
+  await withServer(
+    { onMessage: (_client, text) => dispatched.push(text) },
+    async ({ url }) => {
+      const socket = new WebSocket(url);
+      await opened(socket);
+      for (let i = 0; i < messageCount; i += 1) socket.send(`input-${i}`);
+      const deadline = Date.now() + 3000;
+      while (dispatched.length < messageCount && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.equal(dispatched.length, messageCount, 'ordinary gameplay cadence must not be throttled');
+      assert.equal(socket.readyState, WebSocket.OPEN, 'ordinary traffic must keep the connection open');
+      socket.close();
+      await closedWith(socket);
+    },
+    {
+      heartbeatIntervalMs: 0,
+      inboundMessagesPerSecond: DEFAULT_INBOUND_MESSAGES_PER_SECOND,
+      inboundMessageBurst: DEFAULT_INBOUND_MESSAGE_BURST,
+      now: () => {
+        const current = fakeNowMs;
+        fakeNowMs += 1000 / INPUT_SEND_HZ;
+        return current;
+      },
+    },
+  );
+});
+
+test('an inbound text flood is policy-closed before excess reaches the game handler', async () => {
+  const dispatched = [];
+  await withServer(
+    { onMessage: (_client, text) => dispatched.push(text) },
+    async ({ url }) => {
+      const socket = new WebSocket(url);
+      await opened(socket);
+      const closure = closedWith(socket);
+      for (const message of ['one', 'two', 'three', 'four']) socket.send(message);
+      assert.deepEqual(await closure, { code: 1008, reason: 'inbound message rate limit' });
+      assert.deepEqual(dispatched, ['one', 'two', 'three'], 'the over-budget frame must not dispatch');
+    },
+    { heartbeatIntervalMs: 0, inboundMessagesPerSecond: 1, inboundMessageBurst: 3, now: () => 0 },
+  );
+});
+
+test('inbound application budgets are per connection and reset on reconnect', async () => {
+  await withServer(
+    { onMessage: (client, text) => client.send(`ack:${text}`) },
+    async ({ url }) => {
+      const flooder = new WebSocket(url);
+      const peer = new WebSocket(url);
+      await Promise.all([opened(flooder), opened(peer)]);
+
+      const flooderClosed = closedWith(flooder);
+      flooder.send('flood-1');
+      flooder.send('flood-2');
+      flooder.send('flood-3');
+      assert.equal((await flooderClosed).code, 1008);
+
+      peer.send('peer-1');
+      assert.equal(await nextMessage(peer), 'ack:peer-1', 'one client must not spend another allowance');
+      peer.send('peer-2');
+      assert.equal(await nextMessage(peer), 'ack:peer-2');
+      peer.close();
+      await closedWith(peer);
+
+      const fresh = new WebSocket(url);
+      await opened(fresh);
+      fresh.send('fresh-1');
+      assert.equal(await nextMessage(fresh), 'ack:fresh-1', 'a new connection starts with a fresh budget');
+      fresh.send('fresh-2');
+      assert.equal(await nextMessage(fresh), 'ack:fresh-2');
+      fresh.close();
+      await closedWith(fresh);
+    },
+    { heartbeatIntervalMs: 0, inboundMessagesPerSecond: 1, inboundMessageBurst: 2, now: () => 0 },
+  );
 });

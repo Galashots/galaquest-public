@@ -4,7 +4,7 @@ This workflow applies to the public active repository. It is deliberately recove
 
 ## Start from live authority
 
-1. Orient from the current checkout with the commands in `AGENTS.md`.
+1. Orient from the current checkout using the orientation sequence below.
 2. Confirm the repository is `Galashots/galaquest-public`, refresh public `main`, and record the exact starting SHA.
 3. Read `AGENTS.md`, then only the public authorities relevant to the task (`docs/GUIDANCE.md`, `docs/MISTAKES.md`, visual/pipeline docs, tests, workflows, contracts).
 4. Refresh live GitHub branch/PR/CI/deployment state before trusting a handoff or prior chat report.
@@ -12,17 +12,82 @@ This workflow applies to the public active repository. It is deliberately recove
 
 Do not recursively search the machine for another checkout when the intended repository is not already known.
 
+Use this orientation sequence at the known checkout:
+
+```bash
+git rev-parse --show-toplevel
+git status -sb
+git remote -v
+git rev-parse HEAD
+git worktree list
+git fetch origin main
+```
+
+Record the exact refreshed `main` SHA before creating a task branch. Inspect intervening commits when the
+dispatch brief names an expected base; stop for reforecast if they overlap the locked guidance surface.
+
+## Work-package contract and scope control
+
+Before a writer begins, frame every implementation package as:
+
+`objective -> size -> included surfaces -> explicit exclusions -> acceptance gates -> checkpoint plan -> side-quest destination`
+
+Keep the frame explicit and low-ceremony; do not require filler text for fields that do not apply.
+
+### Package classes
+
+Classify by change surface, coupling, and acceptance burden — not hours, token count, or lines changed.
+
+- **S — Bounded:** one behavior or narrow surface with an obvious causal seam and targeted acceptance.
+- **M — Coupled:** one coherent objective across several tightly related modules, documents, or surfaces;
+  a small number of deliberate checkpoints may help.
+- **L — Vertical:** one coherent player or production outcome crossing multiple disciplines or substantial
+  acceptance surfaces; an explicit checkpoint plan is required before execution.
+- **XL — Program:** too broad for an ordinary PR by default. Decompose it into S/M/L packages under one
+  shared Initiative, design, or contract. One XL PR requires an exceptional explicit Owner decision and
+  a reviewable checkpoint plan.
+
+### Scope reforecast gate
+
+A new request or discovery stays outside the active package until its effect is classified. Reforecast when
+it adds a new product outcome, subsystem/domain, persistence or networking, asset/provider work, a materially
+new acceptance surface, or enough coupling to move the package up a class.
+
+1. **Necessary to finish the locked objective:** include it and update the size/checkpoint frame if materially expanded.
+2. **Useful but scope-changing:** stop that addition and explicitly choose resize or split.
+3. **Valuable but separable:** report it as a side quest and keep the package moving.
+4. **Interesting but low-value:** leave it in conversation without creating backlog noise.
+
+Owner direction remains authoritative, but an Owner addition introduced mid-package does not silently rewrite
+the contract. Surface the choice plainly: “This is a useful addition, but it changes the locked package.
+Do we resize this PR, split a follow-up, or keep the current push moving?” If resize is chosen, update the
+package frame and checkpoint plan before implementing the expansion.
+
+### Side-quest destinations
+
+Do not create a parallel side-quest backlog. Route worthwhile separable findings to the existing authority:
+
+- product-facing lifecycle value -> an existing or new product Issue under `docs/product/PRODUCT_SYSTEM.md`;
+- engineering/process follow-up -> a normal engineering Issue or future brief;
+- small implementation note -> the PR or handoff;
+- asset/provenance observation -> the relevant asset inventory/provenance authority;
+- passing thought -> conversation only.
+
+A worker without authorization to create or update the durable destination reports the finding to the Production
+Director instead of broadening the PR.
+
 ## One coherent objective per public branch/PR
 
-- Branch from current public `main`; use one coherent product objective per branch and pull request.
+- Branch from current public `main`; use one coherent objective per branch and pull request, whether the
+  package is product-facing or engineering/process work.
 - Do not push directly to `main` or rewrite shared history.
-- Small tasks should stay small. Commits should separate generated/public assets from unrelated runtime logic when practical.
+- Keep the package size and included surfaces explicit. Commits should separate generated/public assets from
+  unrelated runtime logic when practical.
 - A worker brief or issue may define file ownership, scope, acceptance seams, and stop conditions, but the public GitHub diff and exact SHA remain the state under review.
-- Do not silently expand scope. New product decisions or owner-only transitions remain owner-controlled.
 
 ### Large PRs are reviewed by checkpoint, not by wishful thinking
 
-When the owner explicitly chooses a long-running, larger PR, keep the **product objective singular** even if implementation spans many commits.
+When the owner explicitly chooses a long-running, larger PR, keep the **coherent objective singular** even if implementation spans many commits.
 
 - Publish exact-SHA checkpoints that are runnable and reviewable on their own.
 - At each checkpoint, run the required unit gate plus the evidence relevant to the surface changed so far.
@@ -31,6 +96,57 @@ When the owner explicitly chooses a long-running, larger PR, keep the **product 
 - A checkpoint approval is not merge approval. Re-run final-head acceptance after the last change and before merge.
 
 This lets a substantial gameplay vertical be reviewed continuously without splitting one coherent experience into artificial PRs or postponing all scrutiny until the end.
+
+### Final-checkpoint stop boundary
+
+Once the final planned checkpoint is feature-complete, the worker's role shifts from implementation to
+**causality classification and handoff**. Do not turn broad validation into an open-ended cleanup phase.
+
+- Run the required final-head gates and, when warranted, one broad diagnostic pass such as the full browser matrix.
+- A newly red check may be investigated far enough to determine whether the active package plausibly caused it.
+- If the failure reproduces on the package base/current `main`, is asset-gated, is timing/flaky without causal evidence,
+  or belongs to another package or engineering surface, record that classification and route any worthwhile follow-up;
+  do not repair it on the completed feature branch.
+- If evidence establishes a new in-scope regression caused by the package, make the smallest causal correction,
+  rerun the affected acceptance seam, then return to handoff.
+- Do not keep cycling through baseline debt, harness hardening, unrelated cleanup, opportunistic polish, or repeated
+  broad revalidation after causality is closed.
+- When required gates are PASS and any remaining reds are evidence-backed non-blocking/UNKNOWN items, stop and hand off.
+  The Production Director or Owner decides whether a separate follow-up package is worth opening.
+
+This stop boundary is part of package discipline: a conscientious worker finding more things to investigate is not,
+by itself, evidence that the current package should continue.
+
+## Writer topology
+
+Default to one write-worker per bounded package. Read-only investigation, research, playtesting, specialist
+review, and independent audit may fan out in parallel. Multiple simultaneous write lanes are allowed only
+when they are genuinely independent, file/authority ownership is explicit, and the merge plan is obvious
+before work begins.
+
+A reviewer or auditor does not silently become a second writer. A worker should not edit another active
+package's branch merely because it found a related problem. Roles are capability- and task-based; do not
+encode fixed model assignments.
+
+## Context and session health
+
+Treat a session as degraded when practical signals accumulate, such as a converged task changing domain,
+competing superseded SHAs/branches/decisions, runtime-reported context pressure, expensive recovery of the
+current state, reliance on memory instead of live authority, accumulating unrelated side quests, or a fresh
+independent validation becoming more valuable than more discussion in the same context. Do not use token or
+context percentages or a fixed conversation-length limit as the gate.
+
+When pressure becomes material:
+
+1. stop broadening the active package;
+2. ratchet durable decisions and lessons to their existing authority;
+3. pin the exact branch, PR, and SHA;
+4. record required gates as PASS / FAIL / UNKNOWN and list unresolved Owner decisions;
+5. record the next permitted action;
+6. hand off by reference rather than duplicating large source material;
+7. continue in a fresh session/runtime when that reduces stale-context risk.
+
+Keep the fixed-point record proportional to the task rather than imposing a giant handoff template.
 
 ## Evidence and acceptance
 

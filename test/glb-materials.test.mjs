@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -195,6 +195,46 @@ const KNOWN_DORMANT_DEFECTS = new Map([
   // which sums triangle/primitive/byte counts and never constructs a material. No renderer
   // reaches this file today.
   ['public/assets/hero/hero_lod1_6800.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  // PR #26 raw Meshy candidates: Wren Ranger and Bramble Stalker, base plus walk/run. Measured
+  // signature is the raw provider export -- generator "Khronos glTF Blender I/O v4.0.43",
+  // emissiveFactor [1,1,1] with the albedo bound as an emissive texture, and no metallic/roughness
+  // factors at all.
+  //
+  // These six files are NOT in the tree. The 2026-08-21 asset-platform consolidation moved them to
+  // the external source archive; see docs/asset-production/asset-platform-inventory.json for each
+  // one's SHA-256, git blob OID and recovery command. The entries stay because the walk below is
+  // filesystem-driven -- an absent file is simply never looked up -- so they cost nothing, they keep
+  // the measured defect knowledge next to the assets it describes, and they let a candidate be
+  // pulled back out of the archive for review without anyone having to edit this test first.
+  //
+  // The Dawnwarden helmet and sword are deliberately NOT listed. They were listed here on #26/#28,
+  // but that was wrong: both measure clean (generator "pygltflib@v1.16.5", no emissive, explicit
+  // metallicFactor 0 / roughnessFactor 0.8) -- the same already-processed signature as the shipped
+  // Wildwood sword, not the raw-Meshy signature above. Listing a clean asset as a known defect is
+  // misleading dead data, and the guard at the end of this file now fails if it reappears.
+  ['public/assets/characters/candidates/wren-ranger-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/characters/candidates/wren-ranger-v1-walk.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/characters/candidates/wren-ranger-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/bramble-stalker-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/bramble-stalker-v1-walk.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/bramble-stalker-v1-run.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  // Enemy Wave 1 rigged Meshy candidates. Structural intake passed, but the raw provider export
+  // keeps the same flooded emissive / PBR-default material signature. These files are candidate-only
+  // and have no active runtime load path; promotion requires material cleanup/re-export or a loader
+  // path that applies normaliseCharacterMaterial().
+  ['public/assets/enemies/candidates/spriggan-scrapper-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/thornback-orc-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/stagroot-warden-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/coalclaw-kobold-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/cinderfang-raider-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/magmahorn-juggernaut-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/snowfang-marauder-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/iceback-ogre-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/frostbound-warden-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/boneguard-raider-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/tombmaul-knight-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/graveflame-reaper-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
+  ['public/assets/enemies/candidates/stormbreaker-colossus-v1.glb', { emissiveFlooded: true, pbrDefaulted: true }],
 ]);
 
 test('every actively-loaded character GLB has its material defect, if any, either absent or fully neutralised by normaliseCharacterMaterial', () => {
@@ -385,4 +425,34 @@ test('a correctly authored gear export is recognised as clean, not merely unlist
   assert.equal(facts.roughnessFactorPresent, true);
   assert.equal(isEmissiveFlooded(facts), false);
   assert.equal(isPbrDefaulted(facts), false);
+});
+
+test('every file still in the tree that is listed as a known dormant defect actually has one', () => {
+  // The registry is an allowlist for measured defects, so a CLEAN file listed here is dead data that
+  // quietly misreports the state of an asset. That is exactly how the Dawnwarden helmet and sword --
+  // both already re-exported clean through pygltflib -- came to be filed next to raw Meshy output and
+  // described as flooded. Entries whose file is not in the tree are skipped: those are deliberate
+  // archive records for bytes held outside Git.
+  let checked = 0;
+
+  for (const [relPath] of KNOWN_DORMANT_DEFECTS) {
+    const absolutePath = resolve(repoRoot, ...relPath.split('/'));
+    if (!existsSync(absolutePath)) continue;
+    checked += 1;
+
+    const json = readGlbJson(absolutePath);
+    const defective = (json.materials ?? []).some((material) => {
+      const facts = materialFacts(json, material);
+      return isEmissiveFlooded(facts) || isPbrDefaulted(facts)
+        || isMetallicByOmission(facts) || isAlbedoBoundAsEmissive(facts);
+    });
+
+    assert.ok(defective, [
+      `${relPath} is listed in KNOWN_DORMANT_DEFECTS but measures CLEAN.`,
+      'Either it was re-exported and the entry should be deleted, or it never had the defect it was',
+      'filed under. Do not leave a clean asset described as broken.',
+    ].join(' '));
+  }
+
+  assert.ok(checked > 0, 'the guard must actually measure something, not vacuously pass');
 });

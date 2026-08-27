@@ -5,7 +5,9 @@ import { WOLF_MAX_HP } from '../public/src/combat/encounter.js';
 import {
   DEFAULT_EQUIPPED_WEAPON_ID,
   DEFAULT_OWNED_ITEM_IDS,
+  HELMET_SILVERGUARD_ID,
   ITEM_DEFS,
+  SHIELD_IRONWOOD_ID,
   STARTER_SWORD_ID,
   WEAPON_SLOT,
   WILDWOOD_BLADE_ID,
@@ -16,9 +18,13 @@ import {
   swingDamageFor,
 } from '../public/src/progression/items.js';
 
-test('starter sword and Wildwood Blade are both defined weapons with the plan-specified damage', () => {
-  assert.equal(itemDef(STARTER_SWORD_ID).damage, 1);
-  assert.equal(itemDef(WILDWOOD_BLADE_ID).damage, 2);
+test('starter sword and Wildwood Blade are both defined weapons with the brief-specified damage', () => {
+  // P2's values (docs/briefs/PROGRESSION_P2_FIRST_HERO_LEVEL_UP.md). They were 1 and 2 -- hit
+  // counters against a 3hp wolf -- and the rescale is what gives a Hero level room to be worth +2
+  // damage on top of a weapon. The RATIO is the promise and it is unchanged; see the blow-count
+  // tests below, which is where that promise is actually pinned.
+  assert.equal(itemDef(STARTER_SWORD_ID).damage, 10);
+  assert.equal(itemDef(WILDWOOD_BLADE_ID).damage, 20);
   assert.equal(itemDef(STARTER_SWORD_ID).slot, WEAPON_SLOT);
   assert.equal(itemDef(WILDWOOD_BLADE_ID).slot, WEAPON_SLOT);
 });
@@ -27,10 +33,12 @@ test('the starter sword is the default equipped weapon', () => {
   assert.equal(DEFAULT_EQUIPPED_WEAPON_ID, STARTER_SWORD_ID);
 });
 
-test('GP1-C1: a fresh player owns ONLY the starter sword -- the Blade is not pre-owned', () => {
-  assert.deepEqual(DEFAULT_OWNED_ITEM_IDS, [STARTER_SWORD_ID]);
+test('G1-C1: a fresh player owns the starter sword and truthful baseline Shield -- the Blade/Helmet are not pre-owned', () => {
+  assert.deepEqual(DEFAULT_OWNED_ITEM_IDS, [STARTER_SWORD_ID, SHIELD_IRONWOOD_ID]);
   assert.ok(!DEFAULT_OWNED_ITEM_IDS.includes(WILDWOOD_BLADE_ID),
     'the Blade must only become owned through GP9\'s reward ceremony (or an explicit test/harness grant)');
+  assert.ok(!DEFAULT_OWNED_ITEM_IDS.includes(HELMET_SILVERGUARD_ID),
+    'the Helmet must only become owned through G1\'s reward ceremony (or an explicit test/harness grant)');
 });
 
 test('itemDef/damageFor/isKnownItem/isKnownWeapon all degrade to a safe "unknown" answer, never throw', () => {
@@ -40,19 +48,20 @@ test('itemDef/damageFor/isKnownItem/isKnownWeapon all degrade to a safe "unknown
   assert.equal(isKnownWeapon('not-a-real-item'), false);
 });
 
-test('sabotage: isKnownWeapon is not just isKnownItem in disguise -- a non-weapon slot must read false', () => {
-  // No non-weapon item is defined yet (GP1 scope), so prove the distinction structurally: every key
-  // in ITEM_DEFS must currently be a weapon, and the function must be checking .slot to know that
-  // rather than returning true for anything present in the table.
+test('sabotage: isKnownWeapon is not just isKnownItem in disguise -- non-weapon slots read false', () => {
   for (const id of Object.keys(ITEM_DEFS)) {
-    assert.equal(ITEM_DEFS[id].slot, WEAPON_SLOT, `${id} is expected to be a weapon in GP1's item table`);
+    assert.equal(isKnownWeapon(id), ITEM_DEFS[id].slot === WEAPON_SLOT,
+      `${id} must be classified by its slot`);
   }
   assert.equal(isKnownWeapon(STARTER_SWORD_ID), true);
+  assert.equal(isKnownWeapon(SHIELD_IRONWOOD_ID), false);
+  assert.equal(isKnownWeapon(HELMET_SILVERGUARD_ID), false);
 });
 
 test('the Wildwood Blade damage is a meaningful, non-breaking upgrade against the current wolf', () => {
-  // Plan section 9/29's own worked example: WOLF_MAX_HP stays 3, so 1 damage takes three hits and
-  // 2 damage takes two -- an upgrade a child can feel without becoming a one-shot.
+  // THE PROMISE, and it survived the P2 rescale unchanged because it was always about blow COUNTS:
+  // the starter sword takes three and the Blade takes two -- an upgrade a child can feel without
+  // becoming a one-shot. Both the wolf and both weapons moved by ten; this test did not have to.
   const starterHits = Math.ceil(WOLF_MAX_HP / damageFor(STARTER_SWORD_ID));
   const bladeHits = Math.ceil(WOLF_MAX_HP / damageFor(WILDWOOD_BLADE_ID));
   assert.equal(starterHits, 3);

@@ -1,0 +1,57 @@
+name: Product requirement
+description: Track a bounded Owner-selected product behavior or outcome.
+title: "[REQ] "
+labels: ["product", "type:requirement", "stage:inbox"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a bounded behavior or outcome the Owner has selected, usually deliverable by one or a few coherent PRs. New records enter Inbox; the Production Director moves selected near-term work to Next or Building only when the live state supports it.
+  - type: input
+    id: origin_date
+    attributes:
+      label: Origin date
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: input
+    id: source_context
+    attributes:
+      label: Owner decision / source context
+      description: Summarize the Owner direction or durable authority that selected this requirement.
+    validations:
+      required: true
+  - type: textarea
+    id: requirement
+    attributes:
+      label: Requirement
+      description: What bounded player/product behavior or outcome must become true?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: What observable behavior or evidence would prove the requirement is satisfied?
+    validations:
+      required: true
+  - type: textarea
+    id: preserve
+    attributes:
+      label: Preserve / constraints
+      description: What adjacent behavior must not change while implementing this requirement?
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Not decided / out of scope
+      description: Keep unresolved product choices and unrelated expansion separate from this bounded requirement.
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation history / current state
+      description: Link active or historical briefs, branches, PRs, checkpoints, or evidence using dated/history-safe wording.
+  - type: textarea
+    id: related
+    attributes:
+      label: Related records
+      description: Link relevant initiatives, ideas, signals, PRs, briefs, research, or evidence.

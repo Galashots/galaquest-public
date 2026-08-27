@@ -27,9 +27,8 @@ export function isInStickRegion(x, y, width, height) {
 }
 
 export function orbitDeltaForDrag(dx, dy) {
-  // Drag right turns the view right; drag up raises the camera so it looks further down at the hero.
-  // If that reads backwards on the device it is these two signs and nothing else.
-  return { yaw: dx * YAW_RADIANS_PER_PX, pitch: -dy * PITCH_RADIANS_PER_PX };
+  // Drag right turns the view left; drag up lowers the camera so it looks less down at the hero.
+  return { yaw: -dx * YAW_RADIANS_PER_PX, pitch: dy * PITCH_RADIANS_PER_PX };
 }
 
 export function pinchSeparation(a, b) {

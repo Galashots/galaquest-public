@@ -17,22 +17,46 @@
 
 import { MARKS_TO_UNLOCK } from '../rewards/marks.js';
 
+/**
+ * An objective is a THING WITH A NAME, not a sentence.
+ *
+ * CP2's keystone. Checkpoint 0's finding was that nothing in the game can answer "where is the
+ * current objective?" -- objectives were strings, and a string has no place. The obvious fix is a
+ * second module that re-derives the same branch and returns a coordinate, checked against this one
+ * by a paired test. That is GQ-011 almost verbatim: two simulations of one decision, with a test as
+ * the mitigation rather than the design. It is also the exact set-up GQ-015 describes -- a
+ * comparison of two hand-maintained branches passes for as long as somebody keeps both edited, and
+ * the day it stops is the day nobody notices.
+ *
+ * So the branch below stays the single decision and an objective carries an `id` alongside its
+ * words. world/destinations.js answers `id -> coordinate`. The arrow and the words then come from
+ * the same choice and CANNOT disagree, rather than being checked for agreement afterwards.
+ *
+ * INTERNED, and that is load-bearing rather than an optimisation: these are value objects, and
+ * callers -- including every test in this repo -- compare objectives with `===`. Two calls that mean
+ * the same objective must be the same object or equality silently stops working. `toString` is here
+ * for the same reason: an objective interpolated into a template still reads as its own words.
+ */
+function objective(id, text) {
+  return Object.freeze({ id, text, toString: () => text });
+}
+
 // THE FIRST OBJECTIVE, and the reason it exists: the chip used to read "3 more Lantern Marks" on
 // the very first frame, before the child had met anybody. The game announced the quest and then the
 // quest-giver announced it again, which makes the old man decoration -- a child who already knows
 // what to do has no reason to walk over and find out. Now the chip points AT him first, and hunting
 // marks is something he tells you.
-export const OBJECTIVE_MEET_THE_KEEPER = '💬 Talk to Keeper Aldric';
+export const OBJECTIVE_MEET_THE_KEEPER = objective('meet-the-keeper', '💬 Talk to Keeper Aldric');
 
 // NAMES THE DESTINATION. This read "Take the light home", which is the one step of the quest where
 // a child has to walk to a specific place eighteen metres away and nothing on screen said where --
 // "home" is a word an adult reads as "the tree" and a young player reads as "somewhere". The
 // Keeper's own line for this state already says "stand by the tree"; now the chip agrees with him.
-export const OBJECTIVE_LIGHT_THE_TREE = '🏮 Light the Lantern Tree';
+export const OBJECTIVE_LIGHT_THE_TREE = objective('light-the-tree', '🏮 Light the Lantern Tree');
 // Where the finished quest points. The relight's last two lanterns stand at the north treeline, so
 // once the tree is burning there is a lit way out of the village and the quest log names it rather
 // than going blank.
-export const OBJECTIVE_FIND_THE_GATE = '🌲 Follow the lit path north';
+export const OBJECTIVE_FIND_THE_GATE = objective('find-the-gate', '🌲 Follow the lit path north');
 
 // AND THEN WHAT. Finding the gate used to blank the chip, which is what a finished quest looks like
 // from the inside and what a dead end looks like to a child: no hearts to earn, nothing named, no
@@ -42,24 +66,32 @@ export const OBJECTIVE_FIND_THE_GATE = '🌲 Follow the lit path north';
 // is a thing you can do forever and it never becomes anything. Chapter 2 is what it becomes. Past
 // the gate the trail is dark and the old lights along it are out; the lantern earned in Chapter 1 is
 // what wakes them. So the chip points UP THE TRAIL the moment a child walks under the arch.
-export const OBJECTIVE_FOLLOW_THE_DARK_TRAIL = '🌑 Follow the dark trail';
+export const OBJECTIVE_FOLLOW_THE_DARK_TRAIL = objective('follow-the-dark-trail', '🌑 Follow the dark trail');
 // COUNTS DOWN, the same way objectiveFindMarks does and for the same reason -- "two more" is the
 // question a child is actually asking. Named "lights" and not "markers" or "lanterns": it is the
 // word they will use for them.
+const objectiveWakeLightsCache = new Map();
 export function objectiveWakeLights(remaining) {
-  return remaining === 1 ? '🏮 1 more dark light' : `🏮 ${remaining} more dark lights`;
+  // Interned per count, for the reason objective() gives: callers compare with `===`,
+  // and a factory handing back a fresh object each call would break every one of them.
+  // The cache is bounded by how many of the thing there are, which is a handful.
+  if (!objectiveWakeLightsCache.has(remaining)) {
+    const text = remaining === 1 ? '🏮 1 more dark light' : `🏮 ${remaining} more dark lights`;
+    objectiveWakeLightsCache.set(remaining, objective('wake-lights', text));
+  }
+  return objectiveWakeLightsCache.get(remaining);
 }
 // A sword can be used on the WORLD. This is the only line in the game that says so, and it has to
 // carry the whole idea, so it is the verb and the thing and nothing else -- a child who reads
 // "cut" while holding a sword in front of a black tangle has the entire instruction.
-export const OBJECTIVE_CUT_THE_BRAMBLE = '🗡️ Cut the black bramble';
+export const OBJECTIVE_CUT_THE_BRAMBLE = objective('cut-the-bramble', '🗡️ Cut the black bramble');
 // The end of the built trail. There is more Wildwood coming and this must not pretend otherwise, so
 // it names the mystery rather than declaring the game finished.
-export const OBJECTIVE_THE_CAMP = '❓ Who left this camp?';
+export const OBJECTIVE_THE_CAMP = objective('the-camp', '❓ Who left this camp?');
 // ROWAN ANSWERS THE MYSTERY. The camp used to ask a question and never answer it -- a dead end with
 // a fresh coat of paint on it. Now Rowan tells the story and hands the child something physical to
 // do, which is what turns "who left this camp?" from a mood into a beat.
-export const OBJECTIVE_SEARCH_THE_CART = '🔎 Search the broken cart';
+export const OBJECTIVE_SEARCH_THE_CART = objective('search-the-cart', '🔎 Search the broken cart');
 // AFTER THE CART. This used to read "🏕️ Guard the camp for Rowan", and the comment above it said,
 // honestly, that the world did not extend past the camp so the chip must not promise the Beacon.
 // That was true and it was still a dead end: guarding is not a verb this game implements, so the
@@ -68,7 +100,7 @@ export const OBJECTIVE_SEARCH_THE_CART = '🔎 Search the broken cart';
 // G1 built the road, so the chip can now say where it goes. NAMES THE DESTINATION, for the same
 // reason OBJECTIVE_LIGHT_THE_TREE had to stop saying "home": "the old Beacon" is a thing Rowan has
 // already said out loud and a thing a child can now see from where they are standing.
-export const OBJECTIVE_FIND_THE_BEACON = '🗼 Find the old Beacon';
+export const OBJECTIVE_FIND_THE_BEACON = objective('find-the-beacon', '🗼 Find the old Beacon');
 // AND THE HONEST END OF G1. The child has arrived; nothing here can be lit, repaired or fought yet,
 // and the chip must not say otherwise -- "the game promised somewhere it could not walk to" is a
 // defect this project has shipped once already and is not going to ship as "the game promised a
@@ -78,7 +110,7 @@ export const OBJECTIVE_FIND_THE_BEACON = '🗼 Find the old Beacon';
 // reason: a question is the one form of objective that is still true when the answer is not built.
 // It uses ROWAN'S OWN WORD -- they say the Beacon "has gone cold", and the chip agreeing with the
 // person who sent you is what makes it read as the story continuing rather than as the game shrugging.
-export const OBJECTIVE_BEACON_IS_COLD = '❄️ Why is the Beacon cold?';
+export const OBJECTIVE_BEACON_IS_COLD = objective('beacon-is-cold', '❄️ Why is the Beacon cold?');
 // ── G2/G3/G4: THE BEACON ANSWERS ────────────────────────────────────────────────────────────────
 //
 // G1 shipped a question, on the honest grounds that a question is the one form of objective still
@@ -91,46 +123,62 @@ export const OBJECTIVE_BEACON_IS_COLD = '❄️ Why is the Beacon cold?';
 // same reason: "one more" is the question a child is actually asking, and it turns three identical
 // objects into a target. The verb is the one they are already holding -- they have been cutting
 // bramble with it since Chapter 2 -- so nothing here has to teach a new word.
+const objectiveBreakSealsCache = new Map();
 export function objectiveBreakSeals(remaining) {
-  return remaining === 1 ? '🗡️ 1 more cold seal' : `🗡️ ${remaining} cold seals left`;
+  // Interned per count, for the reason objective() gives: callers compare with `===`,
+  // and a factory handing back a fresh object each call would break every one of them.
+  // The cache is bounded by how many of the thing there are, which is a handful.
+  if (!objectiveBreakSealsCache.has(remaining)) {
+    const text = remaining === 1 ? '🗡️ 1 more cold seal' : `🗡️ ${remaining} cold seals left`;
+    objectiveBreakSealsCache.set(remaining, objective('break-seals', text));
+  }
+  return objectiveBreakSealsCache.get(remaining);
 }
 // THE "UH OH" BEAT, and it is deliberately not an instruction. Between the third seal bursting and
 // the Warden finishing standing up there is a beat where the game must not say "fight the Warden" --
 // the child has not seen it yet, and naming a thing before it exists on screen is the same defect as
 // promising a place you cannot walk to. So this says only that something happened, in the fewest
 // words that carry dread.
-export const OBJECTIVE_SOMETHING_ANSWERED = '⚠️ Something answered';
+export const OBJECTIVE_SOMETHING_ANSWERED = objective('something-answered', '⚠️ Something answered');
 // AND NOW IT IS ON SCREEN, so it can be named. This is the only objective in the game that names an
 // enemy, because it is the only enemy in the game with a name.
-export const OBJECTIVE_FIGHT_THE_WARDEN = '🗡️ Beat the Beacon Warden';
+export const OBJECTIVE_FIGHT_THE_WARDEN = objective('fight-the-warden', '🗡️ Beat the Beacon Warden');
 // THE PAYOFF POINTS HOME. Rowan's own promise ("Wake the Beacon. This Wildwood Blade is yours.") is
 // the oldest unkept promise in the game; the moment the Beacon is lit, the chip goes and collects
 // on it. NAMES THE PERSON, not "go back" -- the same rule OBJECTIVE_LIGHT_THE_TREE follows.
-export const OBJECTIVE_RETURN_TO_ROWAN = '🏕️ Return to Rowan';
+export const OBJECTIVE_RETURN_TO_ROWAN = objective('return-to-rowan', '🏕️ Return to Rowan');
 // G5. Only ever shown to a child who actually OWNS the Blade, because it is the only objective in
 // the game that is impossible with the wrong weapon in your hand -- and a chip telling a child to do
 // something their sword cannot do is the game lying to them.
-export const OBJECTIVE_CUT_THE_BLACKTHORN = '🌿 Cut the blackthorn open';
+export const OBJECTIVE_CUT_THE_BLACKTHORN = objective('cut-the-blackthorn', '🌿 Cut the blackthorn open');
 // THE END OF THE ARC, and it points at the one thing left in it rather than going blank -- the same
 // dead-end rule this whole file is written from. It stops being shown once they are inside.
-export const OBJECTIVE_SEARCH_THE_HOLLOW = '🔦 Search the hollow';
+export const OBJECTIVE_SEARCH_THE_HOLLOW = objective('search-the-hollow', '🔦 Search the hollow');
 // ARC 2. Names the DESTINATION, the same rule OBJECTIVE_FIND_THE_BEACON follows and for the same
 // reason: "the old road" is a thing a child can now see under their feet, running east out of the
 // Beacon's clearing, and the Lodge at the end of it is a thing Wren has already talked about. It is
 // safe to say only because the road exists -- world/zones/village.js grew the world east in the same
 // change that added this line, which is the whole of the discipline this file keeps: never promise a
 // place a child cannot walk to.
-export const OBJECTIVE_FIND_THE_LODGE = '🏚️ Follow the old road east';
+export const OBJECTIVE_FIND_THE_LODGE = objective('find-the-lodge', '🏚️ Follow the old road east');
 
 // The fallback for a zone with no trail at all. It is honest and it is a verb -- wolves really do
 // keep coming back on their patrol -- and it is what the village said between the gate landing and
 // the Dark Trail landing. Kept so that a zone which places no dormant lights still says something.
-export const OBJECTIVE_KEEP_THE_VILLAGE_SAFE = '🐺 Keep the wolves away';
+export const OBJECTIVE_KEEP_THE_VILLAGE_SAFE = objective('keep-the-village-safe', '🐺 Keep the wolves away');
 
 /** The hunting objective COUNTS DOWN, for the same reason the Keeper's lines do: "two more" is the
  *  question a child is actually asking, and it turns the three pips from a score into a target. */
+const objectiveFindMarksCache = new Map();
 export function objectiveFindMarks(remaining) {
-  return remaining === 1 ? '🐺 1 more Lantern Mark' : `🐺 ${remaining} more Lantern Marks`;
+  // Interned per count, for the reason objective() gives: callers compare with `===`,
+  // and a factory handing back a fresh object each call would break every one of them.
+  // The cache is bounded by how many of the thing there are, which is a handful.
+  if (!objectiveFindMarksCache.has(remaining)) {
+    const text = remaining === 1 ? '🐺 1 more Lantern Mark' : `🐺 ${remaining} more Lantern Marks`;
+    objectiveFindMarksCache.set(remaining, objective('find-marks', text));
+  }
+  return objectiveFindMarksCache.get(remaining);
 }
 
 /**

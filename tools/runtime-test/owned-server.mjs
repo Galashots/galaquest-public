@@ -35,6 +35,37 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
+/** The hero every harness plays as. One fixed name so a harness run is reproducible and so two
+ *  harnesses never disagree about who they are; it is a display name, not an identity -- the durable
+ *  profile id is still minted per device and per clear. */
+const HARNESS_HERO_NAME = 'Harness';
+
+/**
+ * The URL a harness must navigate to in order to land IN THE GAME.
+ *
+ * Exported because `startOwnedServer().url` is not enough on its own: several harnesses build their
+ * own address from a port or an origin -- they pin a specific gq-guest-id first and navigate by
+ * hand -- and those bypassed the `?hero=` on `url` entirely. The result was silent and total: they
+ * landed on the profile gate's naming question, with the world behind a modal and input suspended,
+ * and reported the game not answering. drive-ranger and drive-beacon-siege both went from green to
+ * red that way while the fix that was supposed to cover them looked complete.
+ *
+ * So the rule is one function rather than one field, and test/harness-game-url.test.mjs enforces
+ * that no harness hand-builds a game root without it.
+ *
+ * `heroName` exists for the ONE case that genuinely needs two children: drive-two-clients puts two
+ * tabs on the same origin, which is what makes them two siblings sharing an iPad rather than two
+ * devices. Same origin means one localStorage and one profile keyring, so two tabs asking for the
+ * same name get the SAME profile -- `adoptNamedHero` finds it and selects it, correctly. The file
+ * used to force them apart by clearing storage per tab, which worked by accident and raced: the
+ * second tab's wipe can take the first tab's freshly minted profile row with it, and then a reload
+ * comes back as a stranger with the granted gear orphaned. Naming the second child is the product's
+ * own answer to "two children, one device", so the harness uses that instead of fighting storage.
+ */
+export function gameUrlFor(origin, heroName = HARNESS_HERO_NAME) {
+  return `${origin}/?hero=${encodeURIComponent(heroName)}`;
+}
+
 /**
  * The pool every harness draws from, tried in order and never randomised.
  *
@@ -169,7 +200,22 @@ export async function startOwnedServer({
   process.on('exit', () => { if (!exited) child.kill(); });
 
   const origin = `http://127.0.0.1:${port}`;
-  const url = `${origin}/`;
+  // The game URL every harness drives, and it NAMES A HERO on purpose.
+  //
+  // Stage 1 added a family profile gate: a device with no named hero opens the game by asking what
+  // the child's hero is called, as a modal over the world. That is correct for a child and it broke
+  // all 28 harnesses at once -- every one of them clears localStorage before its first navigation
+  // (GQ-008), so every one of them landed on an unanswered question with the ATTACK button behind
+  // it. drive-hero-screen reported `elementFromPoint at its centre -> profile-gate`.
+  //
+  // `?hero=` is the product's own answer to that (public/src/progression/profiles.js's
+  // adoptNamedHero, and the README's "players join by URL"), not a test-only backdoor: it is how a
+  // family gives one child a link. Putting it HERE rather than in 28 harnesses is the same reason
+  // this module exists at all -- see the header on GQ-007 and the ~540 duplicated lines it replaced.
+  //
+  // `origin` stays clean, because Storage.clearDataForOrigin takes an origin and not a URL, and a
+  // harness that wants another page under this server builds it from `origin` too.
+  const url = gameUrlFor(origin);
 
   let up = false;
   for (let i = 0; i < 40 && !up && !exited; i += 1) {
