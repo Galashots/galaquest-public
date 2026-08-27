@@ -246,6 +246,16 @@ const STATE_EXPR = `JSON.stringify((() => {
     // anything, so the hero's own facing is not a question this harness has to ask.
     heading: r.follow.heading,
     netStatus: r.netState().status,
+    // THE AUTHORITATIVE BODY, not just the rendered one. At 12x throttle the client's predicted
+    // hero can render metres ahead of where the server actually has him -- and the server's copy
+    // is the one the wolf bites and the one the sanctuary rule measures. A walk judged on
+    // heroPos alone "arrives", releases, and then snaps back to an authority still standing out
+    // in wolf country (measured hosted at c545f48: rendered latched 0.23m from Wren, authority
+    // never came, the child was mauled to 0 at ~5m).
+    serverPos: (() => {
+      const net = r.netState();
+      return net.serverSelf ? [net.serverSelf.x, net.serverSelf.z] : null;
+    })(),
     zone: r.zoneDebug(),
     guestId: r.guestId(),
     rewards: (() => {
@@ -447,10 +457,17 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   }
   const deadline = deadlineAfter(maxMillis);
   while (Date.now() < deadline) {
-    const dx = targetX - last.heroPos[0];
-    const dz = targetZ - last.heroPos[1];
+    // Steer and judge from AUTHORITY (drive-cart-loot.mjs's own pattern): rendered-only arrival is
+    // how this file's sanctuary phase "arrived" at Wren while the server still had the hero metres
+    // out in the wolf's range. Rendered must be inside too before stopping, so the recorder's own
+    // frames (which read the rendered body) agree the walk ended where it says.
+    const authority = last.serverPos ?? last.heroPos;
+    const dx = targetX - authority[0];
+    const dz = targetZ - authority[1];
     const distance = Math.hypot(dx, dz);
-    if (distance <= stopWithin) break;
+    const renderedDistance = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+    if (distance <= stopWithin && renderedDistance <= stopWithin) break;
+    if (distance === 0) break;
     const nx = dx / distance;
     const nz = dz / distance;
     const cos = Math.cos(last.heading);
@@ -744,17 +761,32 @@ async function phaseSanctuary() {
     // on top of Wren, then settled outside her radius before the conversation was recorded.
     // releaseOnArrival above removes the mechanism; this loop is the belt for the suspenders, the
     // same pair drive-old-beacon.mjs wears at Rowan. The assertions below are untouched.
+    // Judged from AUTHORITY: the sanctuary rule and the wolf both measure the server's copy of the
+    // hero, so a settle that only checks the rendered body can pronounce the child safe while the
+    // server still has him out in the aggro band.
+    const wrenAway = (sample) => {
+      const body = sample.serverPos ?? sample.heroPos;
+      return Math.hypot(body[0] - RANGER.at[0], body[1] - RANGER.at[1]);
+    };
     let stood = await state(tab);
-    let away = Math.hypot(stood.heroPos[0] - RANGER.at[0], stood.heroPos[1] - RANGER.at[1]);
-    for (let retry = 0; retry < 2 && away > 1.6; retry += 1) {
+    for (let retry = 0; retry < 3 && wrenAway(stood) > 1.6; retry += 1) {
       // eslint-disable-next-line no-await-in-loop
       await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 20000);
       // eslint-disable-next-line no-await-in-loop
       stood = await state(tab);
-      away = Math.hypot(stood.heroPos[0] - RANGER.at[0], stood.heroPos[1] - RANGER.at[1]);
     }
     const walkUp = await approachStory(tab, 'wren-approach');
-    console.log(`    walk-up: ${walkUp.summary}`);
+    console.log(`    walk-up: ${walkUp.summary} · settled ${wrenAway(stood).toFixed(2)}m (authority)`);
+
+    // LET THE JOURNEY'S COST COME BACK BEFORE THE STAND IS JUDGED. The sanctuary is 3m around Wren
+    // (RANGER_CLAIM -- test/wren-sanctuary.test.mjs's "exactly RANGER_CLAIM and not a centimetre
+    // further"), not the whole road in: at this frame rate the authoritative hero can be bitten,
+    // even knocked down, while the walk fights to bring him through the wolf's band. Both endings
+    // hand the health back on their own -- out-of-combat regen inside the sanctuary, or the
+    // respawn's own hp = maxHp -- so this waits, bounded, for the full bar and then asks the real
+    // question. It does NOT soften the assertions: a sanctuary that fails to protect the stand
+    // still fails them with the real numbers printed.
+    await pollUntil(tab, (s) => s.healthCurrentDrawn === HERO_MAX_HP, 45_000);
 
     // THE VERDICT WINDOW IS THE STAND, so the recorder for it starts once the child is actually
     // standing there. The first version started one recorder before the walk and judged everything

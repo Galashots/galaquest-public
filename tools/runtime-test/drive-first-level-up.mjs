@@ -45,6 +45,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ATTACK_REACH, HERO_MAX_HP, WOLF_MAX_HP } from '../../public/src/combat/encounter.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
 import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import { cumulativeXpForLevel } from '../../public/src/progression/levels.js';
@@ -430,7 +431,9 @@ try {
   const attackY = VIEWPORT.height - 68;
   const stickX = VIEWPORT.width * 0.18;
   const stickY = VIEWPORT.height * 0.86;
-  const STICK_PX = 56;
+  // DERIVED, not retyped (GQ-007): a hand-typed 56 went stale when the 2026-08-27 speed-up grew
+  // input/touch.js's STICK_RADIUS_PX to 64px -- see drive-village.mjs's identical constant.
+  const STICK_PX = STICK_RADIUS_PX;
   const WOLF_TARGET = authoredWolfSource();
 
   /** Pulsed, camera-relative steering -- exact rather than fast, which is what matters for getting
@@ -643,7 +646,34 @@ try {
   if (wolfBefore) {
     await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.2, 20000);
     await page.eval(startWatch('blow', `({ hp: ${authoredWolfSource()}.hp })`));
-    for (let tap = 0; tap < 40; tap += 1) {
+    // READINESS-KEYED, the kill loop's own lesson re-learned in this phase: this proof used to tap
+    // 40 times on a blind cadence with no re-closing, and the respawned wolf MOVES -- hosted at
+    // c545f48 every one of the 40 went out mid-swing or out of reach and the check read
+    // `landed blows took []`. Same treatment drive-marks.mjs and play-fight.mjs got: spend a tap
+    // only when the rules would accept it (standing, not mid-swing, wolf actually in reach),
+    // re-close when it is not, and let the wall clock bound the proof instead of a tap count.
+    const blowDeadline = Date.now() + 90000;
+    let landed = false;
+    while (!landed && Date.now() < blowDeadline) {
+      // eslint-disable-next-line no-await-in-loop
+      const now = await state();
+      const at = now.serverPos ?? now.heroPos;
+      const gap = Math.hypot(at[0] - now.enemy.x, at[1] - now.enemy.z);
+      if (now.hero.downSeconds >= 0 || gap > ATTACK_REACH + 2) {
+        // eslint-disable-next-line no-await-in-loop
+        await heldWalkToward(1.0, 20000);
+        continue;
+      }
+      if (gap > RECLOSE_WITHIN_METRES) {
+        // eslint-disable-next-line no-await-in-loop
+        await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.0, 4000);
+        continue;
+      }
+      if (now.hero.swingSeconds >= 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(tapEveryMs);
+        continue;
+      }
       // eslint-disable-next-line no-await-in-loop
       await touch('touchStart', [{ x: attackX, y: attackY }]);
       // eslint-disable-next-line no-await-in-loop
@@ -651,10 +681,10 @@ try {
       // eslint-disable-next-line no-await-in-loop
       await touch('touchEnd', []);
       // eslint-disable-next-line no-await-in-loop
-      const log = JSON.parse(await page.eval(readWatchSource('blow')));
-      if (log.samples.some((sample) => sample.hp < WOLF_MAX_HP)) break;
-      // eslint-disable-next-line no-await-in-loop
       await sleep(tapEveryMs);
+      // eslint-disable-next-line no-await-in-loop
+      const log = JSON.parse(await page.eval(readWatchSource('blow')));
+      landed = log.samples.some((sample) => sample.hp < WOLF_MAX_HP);
     }
     const blows = JSON.parse(await page.eval(readWatchSource('blow')));
     await page.eval(stopWatchSource('blow'));
