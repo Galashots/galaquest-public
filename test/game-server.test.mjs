@@ -418,16 +418,24 @@ test('GP1: equipping rides the next snapshot for every connected client, not jus
 });
 
 test('GP1-C1: equipping an item this player does not own is refused rather than silently accepted', async () => {
+  // The PROPERTY is the refusal -- the weapon must not change. The MECHANISM used to be a 1008
+  // close, which issue #82 retired: after a mid-session reconnect reseats a player as an identity
+  // that owns nothing, an honest EQUIP tap could land here, and answering it with a disconnect cost
+  // the whole connection (the claim-blade posture, "a refused claim is a clean silence, not a
+  // disconnect", now applies). test/equip-wildwood-wire.test.mjs pins the connection half; this
+  // test keeps pinning the refusal half.
   await withGameServer(async ({ url }) => {
     const a = client(url);
     await a.open();
     a.send(joinMessage('kid', 'guest-equip-unowned-fixture'));
-    await a.waitFor('welcome');
-    const closed = new Promise((resolve) => {
-      a.socket.addEventListener('close', (event) => resolve(event.code), { once: true });
-    });
+    const [welcome] = await a.waitFor('welcome');
     a.send(equipMessage(WILDWOOD_BLADE_ID));
-    assert.equal(await closed, 1008, 'expected a policy-violation close, same as any other rejected message');
+    // Snapshots keep flowing on the same socket, and the equipped weapon never moves.
+    const snapshot = (await a.waitFor('snapshot', 3)).at(-1);
+    assert.equal(snapshot.encounter.rewards[welcome.id].equippedWeaponId, DEFAULT_EQUIPPED_WEAPON_ID,
+      'the refused equip must leave the default weapon equipped');
+    assert.equal(a.socket.readyState, WebSocket.OPEN,
+      'a refused equip is a clean silence, not a disconnect (issue #82)');
   });
 });
 
