@@ -46,6 +46,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ATTACK_REACH, HERO_MAX_HP, WOLF_MAX_HP } from '../../public/src/combat/encounter.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
 import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import { cumulativeXpForLevel } from '../../public/src/progression/levels.js';
@@ -501,50 +502,45 @@ try {
   console.log(`  fight cadence: ~${tapEveryMs}ms a frame`);
 
   const readLevelUp = () => page.eval(readWatchSource('levelup')).then(JSON.parse);
-  // RE-CLOSE ON A MARGIN, NOT ON THE EDGE OF REACH, AND CHECK OFTEN.
-  //
-  // First measured run of this file: 19 knockdowns, wolf never below full, level never reached. The
-  // diagnostic line is what named it -- swings were going out from gaps of up to 2.34m against an
-  // ATTACK_REACH of 1.7. Re-closing only when the gap EXCEEDS reach means every swing thrown while
-  // drifting outward misses, and a solo hero who wipes heals the wolf to full (Design ruling 5), so
-  // three missed swings is not a slow fight, it is a fight that cannot be won.
-  //
-  // Closing to a margin inside reach instead, and asking every other tap rather than every fourth,
-  // costs a few round trips and buys the three landed hits that have to fit inside one hero life.
-  const RECLOSE_WITHIN_METRES = ATTACK_REACH - 0.3;
-  const REACH_CHECK_EVERY = 2;
+  // FIGHT WITH THE STICK HELD INTO THE WOLF, ATTACK MASHED ON TOP -- drive-marks.mjs's own fight
+  // hold, ported after this loop's stationary-tapping version lost the same race on a 500ms-frame
+  // runner (run 33042741183: 708 frames, 10 knockdowns, wolf never below 20hp, level never
+  // reached, every downstream check cascading). The in-page walk (startWalk with the LIVE wolf
+  // expression and stopWithin 0) re-aims a permanently held stick at the wolf every frame, so
+  // facing is continuously wolf-ward, the gap self-corrects, and after a knockdown the respawned
+  // hero walks himself back on the SAME hold -- the rules simply ignore held input on a down body,
+  // and dropping/re-establishing the hold is exactly the choreography that died in drive-marks at
+  // 98d83e9. The held deflection is the WALK push (RUN_DEFLECTION exactly), so the per-frame input
+  // quantum orbits contact inside ATTACK_REACH instead of blowing past it. The attack taps ride on
+  // top as a SECOND touch point: every CDP dispatch carries the full active-point set, so the tap's
+  // touchStart lists the stick plus the attack point and its touchEnd lists the stick alone.
+  const FIGHT_STICK_POINT = () => ({
+    x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1,
+  });
   let levelled = false;
   const killDeadline = Date.now() + 240000;
-  for (let tap = 0; tap < 900 && !levelled && Date.now() < killDeadline; tap += 1) {
-    const cycleStart = Date.now();
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchStart', [{ x: attackX, y: attackY }]);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(60);
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', []);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-    if (tap % REACH_CHECK_EVERY !== 0) continue;
-    // eslint-disable-next-line no-await-in-loop
-    const log = await readLevelUp();
-    levelled = log.samples.some((sample) => sample.level >= AFTER.level);
-    if (levelled) break;
-    // eslint-disable-next-line no-await-in-loop
-    const now = await state();
-    const at = now.serverPos ?? now.heroPos;
-    const gap = Math.hypot(at[0] - now.enemy.x, at[1] - now.enemy.z);
-    // A knockdown respawns the hero at spawn, metres away: that is the one case with real ground in
-    // it, and the held walk crosses it at distance-over-speed instead of one pulse per round trip.
-    // Everything else is a nudge, which is mostly about TURNING -- the hero only turns while moving,
-    // so a swing thrown without re-closing is thrown at where the wolf was.
-    if (now.hero.downSeconds >= 0 || gap > ATTACK_REACH + 2) {
+  await page.eval(startWalk(WOLF_TARGET, 0));
+  await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+  await touch('touchMove', [FIGHT_STICK_POINT()]);
+  try {
+    for (let tap = 0; tap < 900 && !levelled && Date.now() < killDeadline; tap += 1) {
+      const cycleStart = Date.now();
       // eslint-disable-next-line no-await-in-loop
-      await heldWalkToward(1.0, 20000);
-    } else if (gap > RECLOSE_WITHIN_METRES) {
+      await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
       // eslint-disable-next-line no-await-in-loop
-      await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.0, 4000);
+      await sleep(60);
+      // eslint-disable-next-line no-await-in-loop
+      await touch('touchEnd', [FIGHT_STICK_POINT()]);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+      if (tap % 2 !== 0) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const log = await readLevelUp();
+      levelled = log.samples.some((sample) => sample.level >= AFTER.level);
     }
+  } finally {
+    await page.eval(STOP_WALK);
+    await touch('touchEnd', []);
   }
 
   // ── TRANSITION ────────────────────────────────────────────────────────────────────────────────
@@ -652,6 +648,9 @@ try {
     // `landed blows took []`. Same treatment drive-marks.mjs and play-fight.mjs got: spend a tap
     // only when the rules would accept it (standing, not mid-swing, wolf actually in reach),
     // re-close when it is not, and let the wall clock bound the proof instead of a tap count.
+    // RE-CLOSE ON A MARGIN INSIDE REACH, not on its edge: a swing thrown while drifting outward
+    // from 1.5m misses by contact time.
+    const RECLOSE_WITHIN_METRES = ATTACK_REACH - 0.3;
     const blowDeadline = Date.now() + 90000;
     let landed = false;
     while (!landed && Date.now() < blowDeadline) {
