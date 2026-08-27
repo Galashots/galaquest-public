@@ -343,6 +343,39 @@ async function holdToward(tab, target, extraMillis = 1_500, observe = null) {
   }
 }
 
+// 'returning' IS A TRANSIENT the CDP poll can miss whole: a leashed wolf that barely chased is home
+// again in a couple of seconds, and at the pace a throttled runner answers Runtime.evaluate the
+// entire give-up-and-walk-home beat can fit between two harness reads -- measured at 2c77492, where
+// the flee genuinely outran every wolf (hero 26/30hp at the flee target, no knockdown) and every
+// wolf was already back in 'idle' by the first post-flee sample. So the mode history is recorded
+// IN-PAGE at frame pace, the same trick startProtectionSampler already plays for the down beat, and
+// the leash checkpoint accepts either a live 'returning' read or the recording.
+async function startLeashModeSampler(tab) {
+  await tab.page.eval(`(() => {
+    window.__e2LeashModes = {};
+    window.__e2LeashSamplerStopped = false;
+    window.__e2LeashSampler = (async () => {
+      const deadline = performance.now() + 120_000;
+      while (!window.__e2LeashSamplerStopped && performance.now() < deadline) {
+        const enemies = window.__galaQuestRuntime.encounterState().enemies ?? [];
+        for (const enemy of enemies) {
+          const history = (window.__e2LeashModes[enemy.enemyId] ??= []);
+          if (history[history.length - 1] !== enemy.mode) history.push(enemy.mode);
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 16));
+      }
+    })();
+    return true;
+  })()`);
+}
+
+async function readLeashModeSampler(tab) {
+  return tab.page.eval(`(() => {
+    window.__e2LeashSamplerStopped = true;
+    return JSON.stringify(window.__e2LeashModes ?? {});
+  })()`).then(JSON.parse);
+}
+
 async function waitUntil(tab, predicate, { budgetMs = 25_000, intervalMs = 150, label = 'checkpoint' } = {}) {
   const deadline = deadlineAfter(budgetMs);
   let live = await state(tab);
@@ -426,6 +459,7 @@ try {
   console.log('  E2 browser: portrait and landscape captured');
 
   await configure(tabA, PORTRAIT);
+  await startLeashModeSampler(tabA);
   await holdToward(tabA, { x: leashWolf.home.x, z: leashWolf.home.z + 2 }, 0);
   const movedAway = await holdToward(
     tabA,
@@ -433,15 +467,22 @@ try {
     0,
     (live) => live.enemies.some((enemy) => enemy.mode === 'returning'),
   );
-  const returning = movedAway.enemies.some((enemy) => enemy.mode === 'returning')
-    ? movedAway
-    : await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), {
-      budgetMs: 3_000, label: 'leash returning checkpoint',
-    });
+  let returning = movedAway;
   if (!returning.enemies.some((enemy) => enemy.mode === 'returning')) {
-    throw new Error(`leash returning checkpoint was not reached; last state: ${JSON.stringify(returning)}`);
+    returning = await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), {
+      budgetMs: 3_000, label: 'leash returning checkpoint',
+    }).catch(() => movedAway);
   }
-  evidence.checkpoints.leash = returning;
+  const leashModes = await readLeashModeSampler(tabA);
+  const returnedIds = Object.entries(leashModes)
+    .filter(([, modes]) => modes.includes('returning'))
+    .map(([enemyId]) => enemyId);
+  if (!returning.enemies.some((enemy) => enemy.mode === 'returning') && returnedIds.length === 0) {
+    throw new Error('leash returning checkpoint was not reached: no live read and no recorded frame '
+      + `ever saw a wolf in 'returning'; recorded mode histories ${JSON.stringify(leashModes)}; `
+      + `last state: ${JSON.stringify(returning)}`);
+  }
+  evidence.checkpoints.leash = { ...returning, leashModeHistories: leashModes, returnedIds };
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
   await waitUntil(tabA, (live) => {
