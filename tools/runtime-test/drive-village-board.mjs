@@ -770,6 +770,33 @@ async function runPurchasePhase(viewport, label) {
     // proximity-gated (main.js diffs village.workshopOwned regardless of hero position) but
     // #workshop-interact's own availability IS (WORKSHOP_INTERACT.radiusMeters).
     await walkToward(tab, WORKSHOP_INTERACT.at[0], WORKSHOP_INTERACT.at[1], WORKSHOP_INTERACT.radiusMeters * 0.5, 120000);
+    // ARRIVAL RE-JUDGED SETTLED, BOTH BODIES, because everything after this point stands on it.
+    // walkToward's own break can fire on a mid-stride reading, and the release coast plus
+    // reconciliation can then park the hero outside the ring it believed it reached -- the
+    // drive-relight class, and hosted at 61ce482 the likely mechanism behind `the deliberate
+    // interact prompt becomes available` polling false for its whole budget while every workshop
+    // field read true: #workshop-interact's availability is gated on the RENDERED hero being
+    // inside WORKSHOP_INTERACT.radiusMeters (main.js's reachedCamp condition), and nothing between
+    // here and that poll moves him on purpose. Half the radius settled leaves the other half as
+    // margin for everything reconciliation does during the board beat.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(200);
+      // eslint-disable-next-line no-await-in-loop
+      const settled = await pollUntil(tab, (s) => s.serverPos !== null && s.serverSpeed === 0,
+        { timeoutMs: 4000 });
+      const worst = Math.max(
+        Math.hypot(settled.heroPos[0] - WORKSHOP_INTERACT.at[0], settled.heroPos[1] - WORKSHOP_INTERACT.at[1]),
+        settled.serverPos
+          ? Math.hypot(settled.serverPos[0] - WORKSHOP_INTERACT.at[0], settled.serverPos[1] - WORKSHOP_INTERACT.at[1])
+          : Infinity,
+      );
+      if (worst <= WORKSHOP_INTERACT.radiusMeters * 0.5) break;
+      console.log(`  workshop approach: settled ${worst.toFixed(2)}m out, walking the last leg again`);
+      // eslint-disable-next-line no-await-in-loop
+      await walkToward(tab, WORKSHOP_INTERACT.at[0], WORKSHOP_INTERACT.at[1],
+        WORKSHOP_INTERACT.radiusMeters * 0.5, 30000);
+    }
     const beforeWorkshop = await state(tab);
     check(`${label}: the hero actually reached the Workshop's own spot before any purchase`,
       Math.hypot(beforeWorkshop.heroPos[0] - WORKSHOP_INTERACT.at[0], beforeWorkshop.heroPos[1] - WORKSHOP_INTERACT.at[1])
@@ -835,9 +862,24 @@ async function runPurchasePhase(viewport, label) {
     // interacting again reopens it (reusable, not once-ever).
     const ceremonyDone = await pollUntil(tab, (s) => s.workshop?.transforming === false && s.workshopInteractAvailable === true,
       { timeoutMs: CEREMONY_BUDGET_MS });
+    // BOTH HEROES AND THE DISTANCE RIDE ON THE VERDICT, because availability is gated on the
+    // RENDERED hero being inside WORKSHOP_INTERACT's radius (main.js's own reachedCamp condition)
+    // and that was the one gate the first hosted failure of this check (61ce482: every workshop
+    // field true, available false for the whole budget, then the deliberate tap right after it
+    // succeeded) could not rule in or out from its own detail.
     check(`${label}: once the ceremony finishes, the deliberate interact prompt becomes available`,
       ceremonyDone.workshop?.transforming === false && ceremonyDone.workshopInteractAvailable === true,
-      JSON.stringify({ workshop: ceremonyDone.workshop, workshopInteractAvailable: ceremonyDone.workshopInteractAvailable }));
+      JSON.stringify({
+        workshop: ceremonyDone.workshop,
+        workshopInteractAvailable: ceremonyDone.workshopInteractAvailable,
+        heroPos: ceremonyDone.heroPos,
+        serverPos: ceremonyDone.serverPos,
+        metresFromInteractPoint: +Math.hypot(
+          ceremonyDone.heroPos[0] - WORKSHOP_INTERACT.at[0],
+          ceremonyDone.heroPos[1] - WORKSHOP_INTERACT.at[1],
+        ).toFixed(2),
+        interactRadius: WORKSHOP_INTERACT.radiusMeters,
+      }));
     check(`${label}: proximity alone (even with the ceremony finished) still has not opened Hero/Gear -- a tap is required`,
       ceremonyDone.heroScreenOpen === false, JSON.stringify(ceremonyDone.heroScreenOpen));
     await shot(tab, `workshop-interact-available-${label}`);
