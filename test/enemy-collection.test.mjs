@@ -176,3 +176,68 @@ test('defeat event carries stable identity and kind for contribution/reward cons
     { enemyId: 'collection-wolf', kind: 'wolf', heroId: 'H' },
   );
 });
+
+// ── HOW LONG A DEAD WOLF STAYS DEAD, PINNED WHERE IT CAN ACTUALLY BE MEASURED ────────────────────
+//
+// This assertion used to live only in tools/runtime-test/drive-lifecycle.mjs, which measures it
+// through a browser: it watches the CLIENT's mirror of the server's published enemy, one sample per
+// rendered frame, and times the gap between the first frame it sees 'dead' and the first frame it
+// sees the wolf back. On the hosted runners that browser paints at roughly two frames a second, so
+// a ten-second interval is observed through about twenty samples, each of which can land anywhere
+// inside half a second of real time -- and the check needed a +/-2.5 s tolerance to survive at all.
+// It still produced three false failures in one day (5.57 s, 7.18 s and 7.44 s "measured" against
+// the 10 s rule), the last of them missing the bar by 60 ms.
+//
+// So the timing claim moves here, where the rules run at a fixed step with nothing between the
+// assertion and the clock, and it gets STRONGER on the way: exact equality, not a tolerance band.
+// A browser cannot resolve this and should not be asked to; what the browser harness is good for is
+// the thing only it can see -- that a real client, driven by real touches, watches a wolf die and
+// come back at all -- and that is what it now asserts.
+//
+// Red-capable by construction: it is derived from the same imported constants the rules use, so a
+// change to WOLF_RESPAWN_SECONDS or DEATH_SECONDS moves both sides together, while a change to the
+// state machine (starting the respawn clock at the moment of death rather than on entry to 'dead',
+// say -- which is exactly what the failing browser numbers looked like) fails it immediately.
+test('a dead wolf stays dead for exactly WOLF_RESPAWN_SECONDS, measured from entering "dead"', () => {
+  const heroes = { H: HERO };
+  let state = createPartyEncounterState({ enemies: twoWolves(['solo-wolf']), heroIds: ['H'] });
+  let elapsed = 0;
+  let enteredDying = null;
+  let enteredDead = null;
+  let cameBack = null;
+  let previousMode = null;
+
+  for (let frame = 0; frame < 60 * 40 && cameBack === null; frame += 1) {
+    const enemy = state.enemies[0];
+    if (enemy.mode !== 'dying' && enemy.mode !== 'dead') {
+      state = requestPartyAttack(state, 'H', `swing-${frame}`).state;
+    }
+    state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
+    elapsed += STEP;
+    const mode = state.enemies[0].mode;
+    if (mode !== previousMode) {
+      if (mode === 'dying' && enteredDying === null) enteredDying = elapsed;
+      if (mode === 'dead' && enteredDead === null) enteredDead = elapsed;
+      if (enteredDead !== null && mode !== 'dead' && mode !== 'dying') cameBack = elapsed;
+      previousMode = mode;
+    }
+  }
+
+  assert.ok(enteredDying !== null, 'the wolf never died, so this proves nothing about respawning');
+  assert.ok(enteredDead !== null, 'the wolf never reached true "dead" after its death animation');
+  assert.ok(cameBack !== null, 'the wolf never came back');
+
+  // The death animation is its own clock and is NOT part of the respawn wait.
+  assert.ok(Math.abs((enteredDead - enteredDying) - DEATH_SECONDS) <= STEP,
+    `the death animation ran ${(enteredDead - enteredDying).toFixed(3)}s against DEATH_SECONDS `
+    + `${DEATH_SECONDS}`);
+  // ...and the respawn wait is measured from entry to 'dead', to the frame resolution of the step.
+  assert.ok(Math.abs((cameBack - enteredDead) - WOLF_RESPAWN_SECONDS) <= STEP,
+    `a dead wolf came back after ${(cameBack - enteredDead).toFixed(3)}s against a `
+    + `${WOLF_RESPAWN_SECONDS}s rule -- if this reads as roughly WOLF_RESPAWN_SECONDS minus `
+    + 'DEATH_SECONDS, the respawn clock has started at the moment of death instead of on entry to '
+    + '"dead"');
+  // Belt and braces on the whole beat, so a future refactor cannot make the two halves cancel out.
+  assert.ok(Math.abs((cameBack - enteredDying) - (DEATH_SECONDS + WOLF_RESPAWN_SECONDS)) <= STEP * 2,
+    'death animation plus respawn wait no longer add up to the whole time a killed wolf is away');
+});
