@@ -45,6 +45,9 @@ import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zo
 import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
 import { BEACON_TOTAL_HEIGHT_METERS } from '../../public/src/world/oldBeacon.js';
 import { ATTACK_REACH, isWithinStrike } from '../../public/src/combat/encounter.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
+import { startWalk, STOP_WALK } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = '.local/runtime-test/';
@@ -112,7 +115,9 @@ function assertBudget(where) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const deadlineAfter = (ms) => Date.now() + ms;
-const STICK_PX = 46;
+// DERIVED, not retyped (GQ-007): a hand-typed 46 went stale when the 2026-08-27 speed-up grew
+// input/touch.js's STICK_RADIUS_PX to 64px -- see drive-village.mjs's identical constant.
+const STICK_PX = STICK_RADIUS_PX;
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -650,21 +655,47 @@ async function run() {
     const fightDeadline = deadlineAfter(Math.min(FIGHT_BUDGET_MS, Math.max(30000, msLeft())));
     let shotPhase2 = false;
     let last = bossBar;
-    while (Date.now() < fightDeadline && !last.siege.beaconLit) {
-      const w = last.siege.warden;
-      if (Math.hypot(last.heroPos[0] - w.x, last.heroPos[1] - w.z) > 1.6) {
-        await walkToward(tab, w.x, w.z, 1.5, 12000);
+    // THE FIGHT HOLD, ported from drive-marks.mjs where it was probed live. The walk-face-wait-tap
+    // cycle above this fight used per-swing cost several CDP round trips, and hosted at d4e6041 it
+    // spent SEVEN MINUTES against the Warden without landing a single blow (overhead hp still 120).
+    // Instead: the stick stays HELD into the Warden for the whole fight while the in-page walk
+    // (stopWithin 0, so it never latches) re-aims it at the LIVE warden position every frame, and
+    // the attack taps ride on top as a second touch point. Facing is continuously warden-ward
+    // because the hero never stops moving toward it; a knockdown needs no handling, because the
+    // respawned hero walks himself back on the same hold. The held deflection is the WALK push
+    // (RUN_DEFLECTION exactly), so the per-frame input quantum orbits contact inside ATTACK_REACH.
+    // CDP semantics, MEASURED: touchEnd's touchPoints are the points BEING RELEASED, so the tap's
+    // touchEnd lists the attack point alone and the final release names the stick.
+    const stickOrigin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+    const FIGHT_STICK_POINT = () => ({
+      x: stickOrigin.x, y: stickOrigin.y - Math.round(STICK_PX * RUN_DEFLECTION), id: 1,
+    });
+    const attackBox = await tab.page.eval(`JSON.stringify((() => {
+      const r = document.querySelector('#attack-button').getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })())`).then(JSON.parse);
+    await tab.page.eval(startWalk(`(() => {
+      const w = window.__galaQuestRuntime.zoneSiegeState().warden;
+      return { x: w.x, z: w.z };
+    })()`, 0));
+    await touch(tab, 'touchStart', [{ x: stickOrigin.x, y: stickOrigin.y, id: 1 }]);
+    await touch(tab, 'touchMove', [FIGHT_STICK_POINT()]);
+    try {
+      while (Date.now() < fightDeadline && !last.siege.beaconLit) {
+        await touch(tab, 'touchStart', [FIGHT_STICK_POINT(), { x: attackBox.x, y: attackBox.y, id: 2 }]);
+        await sleep(60);
+        await touch(tab, 'touchEnd', [{ x: attackBox.x, y: attackBox.y, id: 2 }]);
+        await sleep(250);
+        last = await state(tab);
+        if (!shotPhase2 && last.siege.warden.phase >= 2) {
+          shotPhase2 = true;
+          check(true, 'the Warden reaches a second phase', `hp ${last.siege.warden.hp}/${WARDEN_MAX_HP}`);
+          await shot(tab, 'portrait-05-phase-two');
+        }
       }
-      await faceHero(tab, w.x, w.z, ATTACK_REACH);
-      await waitUntilSwingReady(tab);
-      await tapAttack(tab);
-      await sleep(250);
-      last = await state(tab);
-      if (!shotPhase2 && last.siege.warden.phase >= 2) {
-        shotPhase2 = true;
-        check(true, 'the Warden reaches a second phase', `hp ${last.siege.warden.hp}/${WARDEN_MAX_HP}`);
-        await shot(tab, 'portrait-05-phase-two');
-      }
+    } finally {
+      await tab.page.eval(STOP_WALK);
+      await touch(tab, 'touchEnd', [FIGHT_STICK_POINT()]);
     }
     check(last.siege.beaconLit === true, 'the Warden falls and the Old Beacon CATCHES',
       `warden ${last.siege.warden.mode} hp ${last.siege.warden.hp}, beaconLit ${last.siege.beaconLit}`);
