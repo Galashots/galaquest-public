@@ -225,13 +225,21 @@ async function openTab(expectedPlayers = 1) {
   };
 }
 
-async function navigateFresh(tab, origin, url, viewport, guestId) {
+async function navigateFresh(tab, origin, url, viewport, guestId, { clearOrigin = true } = {}) {
   tab.viewport = viewport;
   await tab.page.send('Emulation.setDeviceMetricsOverride', viewport);
   await tab.page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-  await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
+  // Skippable for the same reason drive-cart-loot.mjs's own navigateFresh grew this option: the
+  // clear is only safe while this tab is ALONE on the origin. The two-client phase clears once for
+  // the run -- a per-tab clear there wipes the profile keyring the other, already-running tab is
+  // standing on, and the keyring's storage-event heal then races the second boot's read.
+  if (clearOrigin) {
+    await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
+  }
   await navigateToWaypoint(tab, `${origin}/favicon.ico`);
-  await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+  if (guestId !== null) {
+    await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+  }
   await tab.page.send('Page.navigate', { url });
   let ready = false;
   for (let i = 0; i < 60 && !ready; i += 1) {
@@ -927,8 +935,21 @@ async function runTwoClientPhase() {
   const b = await openTab(2);
   const front = (tab) => tab.page.send('Page.bringToFront');
   try {
-    await navigateFresh(a, server.origin, server.url, PORTRAIT, guestA);
-    await navigateFresh(b, server.origin, server.url, PORTRAIT, guestB);
+    // TWO TABS, ONE DEVICE, TWO CHILDREN -- BY NAME, NOT BY RACE. Both tabs used to load the same
+    // `?hero=Harness` with different pinned guest ids, which only produced two heroes while the
+    // profile keyring's two-tab lost-update bug was open. Once the keyring healed itself
+    // (progression/profiles.js's storage-event reconcile), tab B's boot correctly FOUND the profile
+    // named Harness and adopted it -- same name on one device IS the same child, adoptNamedHero's
+    // documented contract -- and this phase's first check failed against working code. Same fix as
+    // drive-cart-loot.mjs's own two-client phase: one run-level clear, distinct hero names, and no
+    // pinned id left behind for B's boot to fold in. guestB stays a pure STORE identity: its seeded
+    // currency reaches the communal balance whichever child either tab turns out to be.
+    await a.page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
+    const siblingUrl = server.url.replace('hero=Harness', 'hero=Sibling');
+    if (siblingUrl === server.url) throw new Error(`expected ?hero=Harness in ${server.url}`);
+    await navigateFresh(a, server.origin, server.url, PORTRAIT, guestA, { clearOrigin: false });
+    await a.page.eval("localStorage.removeItem('gq-guest-id')");
+    await navigateFresh(b, server.origin, siblingUrl, PORTRAIT, null, { clearOrigin: false });
     check('two-client: A and B are two DIFFERENT heroes, not one tab double-counted',
       (await state(a)).guestId !== (await state(b)).guestId);
 
