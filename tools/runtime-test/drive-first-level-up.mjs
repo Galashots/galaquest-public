@@ -622,9 +622,16 @@ try {
   check('AFTER: and the FIGHT is using that body, not just the stat',
     after.hero.maxHp === AFTER.maxHp,
     `the encounter's own hero reads maxHp ${after.hero.maxHp}`);
+  // POLLED ON ITS OWN, because the DRAWN bar is a frame behind the state on purpose -- the DOM
+  // repaints on the next rendered frame, and the pollUntil above resolves the instant the STATE
+  // reads level 2. Hosted at 2c8ba29, on a 500ms-a-frame runner, that instant was one frame before
+  // the repaint: `drawn 30/30` against a fight already reading maxHp 35, with the same run's
+  // RELOAD phase drawing 35 moments later. The claim is unchanged -- the bar draws the earned
+  // body -- judged after the page has had a frame to draw it; a bar that NEVER redraws still fails.
+  const drawnAfter = await pollUntil((s) => s.drawn.healthMax === String(AFTER.maxHp), 8000);
   check('AFTER: and the health bar is DRAWING it',
-    after.drawn.healthMax === String(AFTER.maxHp),
-    `drawn ${after.drawn.healthCurrent}/${after.drawn.healthMax}`);
+    drawnAfter.drawn.healthMax === String(AFTER.maxHp),
+    `drawn ${drawnAfter.drawn.healthCurrent}/${drawnAfter.drawn.healthMax}`);
   check(`AFTER: resolved Starter damage ${AFTER.damage} -- +${AFTER.damage - BEFORE.damage}`,
     after.progress.heroDamage === AFTER.damage, `damage ${after.progress.heroDamage}`);
   check(`AFTER: POWER ${formatPower(AFTER.power)} -- +${AFTER.power - BEFORE.power} from ${formatPower(BEFORE.power)}, ON THE HUD`,
