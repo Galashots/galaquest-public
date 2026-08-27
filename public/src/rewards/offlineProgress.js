@@ -45,6 +45,10 @@ import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from './marks.js';
 // produces the same logical one-time result" true by construction rather than by two matching
 // implementations somebody has to keep in step (GQ-007 hit 7).
 import { pendingLanternXpFact } from '../progression/facts.js';
+// R1: repeatable combat XP, folded the SAME way net/gameServerCore.mjs's own applyKillXpAward does --
+// this file's own header already explains why marks.js's fold is reused rather than reimplemented,
+// and the identical reasoning applies here: one fold, run by whichever engine holds the fight.
+import { foldKillXpEvents } from './killXp.js';
 
 /** The hero id an offline session credits its kills to. foldEvents attributes a mark to a
  *  contributor, and a solo offline hero has no server-assigned player id to be one -- so it gets a
@@ -103,6 +107,12 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
   }
 
   let ledger = createRewardLedger();
+  // R1: a SEPARATE ledger from marks' own -- foldKillXpEvents keeps its own contributor bookkeeping
+  // and its own life-index counter, and threading one fold's ledger through the other's function would
+  // mix two unrelated tallies. Both still mint life ids off the SAME `mintLifeId`, which is fine: each
+  // call returns a fresh, durable id regardless of which fold asked for it, and the two id families
+  // (`mark:offline-hero:<lifeId>` / `kill-xp:offline-hero:<enemyId>:<lifeId>`) never collide.
+  let killXpLedger = null;
 
   /**
    * Fold one frame's combat events and record whatever they earned.
@@ -119,11 +129,8 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
    * keyed by id, it is the property the whole two-copy design rests on.
    */
   function recordKills(encounterEvents) {
-    const folded = foldEvents(
-      ledger,
-      encounterEvents.map((event) => ({ ...event, heroId: OFFLINE_HERO_ID })),
-      { mintLifeId },
-    );
+    const stamped = encounterEvents.map((event) => ({ ...event, heroId: OFFLINE_HERO_ID }));
+    const folded = foldEvents(ledger, stamped, { mintLifeId });
     ledger = folded.ledger;
 
     const raised = [];
@@ -131,6 +138,17 @@ export function createOfflineProgress({ profiles, profileId, mintLifeId }) {
       if (award.type !== 'mark-earned') continue;
       profiles.recordFacts(profileId, [{ eventId: award.eventId, type: 'mark-earned' }]);
       raised.push({ type: 'mark-earned', eventId: award.eventId });
+    }
+
+    // R1: repeatable combat XP -- every kill this game defines is priced (killXpForKind), not just a
+    // Wolf's own Lantern Mark, so this reads the SAME stamped events rather than the mark-only subset
+    // foldEvents above already filtered. eventId already rides the award (killXp.js's own header:
+    // `kill-xp:<heroId>:<enemyId>:<lifeId>`), so `value` is the only extra thing this device journals.
+    const foldedXp = foldKillXpEvents(killXpLedger, stamped, { mintLifeId });
+    killXpLedger = foldedXp.ledger;
+    for (const award of foldedXp.awards) {
+      profiles.recordFacts(profileId, [{ eventId: award.eventId, type: 'xp-earned', value: String(award.value) }]);
+      raised.push({ type: 'xp-earned', eventId: award.eventId, value: String(award.value) });
     }
 
     // Derived from the durable count, never from a counter alongside it. A child who earned two

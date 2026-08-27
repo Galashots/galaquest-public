@@ -286,33 +286,103 @@ async function findNameplateView(tab) {
   return best;
 }
 
-async function holdToward(tab, target, extraMillis = 1_500, observe = null) {
+// KEYS STAY HELD ACROSS THE STATE READS, and the hero RUNS. The first version pressed the keys for
+// 250ms, released them, and only then read state over CDP -- so every iteration spent its round
+// trips standing still, and the effective ground speed came out UNDER a wolf's own 1.15 m/s on a
+// hosted runner. That was survivable when this route crossed one wolf's range; the density push
+// authored a second wolf onto it, and the flee leg was run down mid-journey (measured at afc9cd5:
+// downed at 0.96s, then camped at 8hp by a biting wolf while the passive leash wait timed out).
+// A child holding W does not let go of it to look at the screen. Shift is held with the movement
+// keys because that is input/keyboard.js's own run chord, and "run away is a real option" is the
+// double-aggro property the game itself guarantees (test/double-aggro-recovery.test.mjs).
+// `target` may be a fixed { x, z } OR a resolver (live) => ({ x, z }), re-read every iteration.
+// GQ-001's stale-position steering, applied to the one caller that needed it: an authored home is
+// only where a body STARTS. A wolf dragged around by an earlier phase and released inside its own
+// leash radius stays where it was left -- it is idle, not 'returning' -- so walking to its authored
+// home can walk to empty grass while the wolf stands eight metres away. Measured hosted at e658eea:
+// the recovery phase walked at wolf-1's home while wolf-1 sat at (7.63, 15.71), and the hero waited
+// out a 30 s knockdown budget at full health with every enemy idle and the nearest 7.5 m off,
+// outside WOLF_AGGRO_RANGE. Aiming at the body rather than at its address removes the whole class.
+async function holdToward(tab, target, extraMillis = 1_500, observe = null, { run = true } = {}) {
   await tab.page.send('Page.bringToFront');
   let live = await state(tab);
   const deadline = deadlineAfter(30_000 + extraMillis);
-  while (Date.now() < deadline) {
-    if (observe?.(live)) return live;
-    const dx = target.x - live.player.x;
-    const dz = target.z - live.player.z;
-    const distance = Math.hypot(dx, dz);
-    if (distance <= 1.2) break;
-    const cos = Math.cos(live.heading);
-    const sin = Math.sin(live.heading);
-    const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
-    const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
-    const keys = [];
-    if (screenX > 0.2) keys.push('KeyD'); else if (screenX < -0.2) keys.push('KeyA');
-    if (screenY > 0.2) keys.push('KeyW'); else if (screenY < -0.2) keys.push('KeyS');
-    for (const code of keys) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
-    try {
-      await sleep(250);
-    } finally {
-      for (const code of keys.reverse()) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
+  const held = new Set();
+  const holdExactly = async (wanted) => {
+    for (const code of [...held]) {
+      if (!wanted.has(code)) {
+        // eslint-disable-next-line no-await-in-loop
+        await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
+        held.delete(code);
+      }
     }
-    live = await state(tab);
-    if (observe?.(live)) return live;
+    for (const code of wanted) {
+      if (!held.has(code)) {
+        // eslint-disable-next-line no-await-in-loop
+        await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
+        held.add(code);
+      }
+    }
+  };
+  try {
+    while (Date.now() < deadline) {
+      if (observe?.(live)) return live;
+      const aim = typeof target === 'function' ? target(live) : target;
+      const dx = aim.x - live.player.x;
+      const dz = aim.z - live.player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance <= 1.2) break;
+      const cos = Math.cos(live.heading);
+      const sin = Math.sin(live.heading);
+      const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
+      const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
+      const keys = new Set(run ? ['ShiftLeft'] : []);
+      if (screenX > 0.2) keys.add('KeyD'); else if (screenX < -0.2) keys.add('KeyA');
+      if (screenY > 0.2) keys.add('KeyW'); else if (screenY < -0.2) keys.add('KeyS');
+      // eslint-disable-next-line no-await-in-loop
+      await holdExactly(keys);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(250);
+      // eslint-disable-next-line no-await-in-loop
+      live = await state(tab);
+    }
+    return live;
+  } finally {
+    await holdExactly(new Set());
   }
-  return live;
+}
+
+// 'returning' IS A TRANSIENT the CDP poll can miss whole: a leashed wolf that barely chased is home
+// again in a couple of seconds, and at the pace a throttled runner answers Runtime.evaluate the
+// entire give-up-and-walk-home beat can fit between two harness reads -- measured at 2c77492, where
+// the flee genuinely outran every wolf (hero 26/30hp at the flee target, no knockdown) and every
+// wolf was already back in 'idle' by the first post-flee sample. So the mode history is recorded
+// IN-PAGE at frame pace, the same trick startProtectionSampler already plays for the down beat, and
+// the leash checkpoint accepts either a live 'returning' read or the recording.
+async function startLeashModeSampler(tab) {
+  await tab.page.eval(`(() => {
+    window.__e2LeashModes = {};
+    window.__e2LeashSamplerStopped = false;
+    window.__e2LeashSampler = (async () => {
+      const deadline = performance.now() + 120_000;
+      while (!window.__e2LeashSamplerStopped && performance.now() < deadline) {
+        const enemies = window.__galaQuestRuntime.encounterState().enemies ?? [];
+        for (const enemy of enemies) {
+          const history = (window.__e2LeashModes[enemy.enemyId] ??= []);
+          if (history[history.length - 1] !== enemy.mode) history.push(enemy.mode);
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 16));
+      }
+    })();
+    return true;
+  })()`);
+}
+
+async function readLeashModeSampler(tab) {
+  return tab.page.eval(`(() => {
+    window.__e2LeashSamplerStopped = true;
+    return JSON.stringify(window.__e2LeashModes ?? {});
+  })()`).then(JSON.parse);
 }
 
 async function waitUntil(tab, predicate, { budgetMs = 25_000, intervalMs = 150, label = 'checkpoint' } = {}) {
@@ -398,22 +468,38 @@ try {
   console.log('  E2 browser: portrait and landscape captured');
 
   await configure(tabA, PORTRAIT);
+  await startLeashModeSampler(tabA);
   await holdToward(tabA, { x: leashWolf.home.x, z: leashWolf.home.z + 2 }, 0);
+  // THE RETREAT WALKS -- deliberately no Shift. 'returning' fires only when the wolf is dragged
+  // BEYOND its own leashRadius (encounter.js keys it on enemyDistanceFromHome), and a hero fleeing
+  // at RUN_SPEED outgrows the 6m aggro range while the wolf is still inside its 4.4m territory --
+  // measured at 7b3913d, where the recording read idle->walk->bite->walk->idle and no frame ever
+  // said 'returning': the wolf gave up by losing aggro, not by hitting its leash. Walking retreats
+  // at 1.7 m/s against the wolf's 1.15: slow enough that the chase crosses the leash boundary,
+  // fast enough that the gap still opens and the hero escapes with a nick at worst.
   const movedAway = await holdToward(
     tabA,
     { x: 0, z: 24.5 },
     0,
     (live) => live.enemies.some((enemy) => enemy.mode === 'returning'),
+    { run: false },
   );
-  const returning = movedAway.enemies.some((enemy) => enemy.mode === 'returning')
-    ? movedAway
-    : await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), {
-      budgetMs: 3_000, label: 'leash returning checkpoint',
-    });
+  let returning = movedAway;
   if (!returning.enemies.some((enemy) => enemy.mode === 'returning')) {
-    throw new Error(`leash returning checkpoint was not reached; last state: ${JSON.stringify(returning)}`);
+    returning = await waitUntil(tabA, (live) => live.enemies.some((enemy) => enemy.mode === 'returning'), {
+      budgetMs: 3_000, label: 'leash returning checkpoint',
+    }).catch(() => movedAway);
   }
-  evidence.checkpoints.leash = returning;
+  const leashModes = await readLeashModeSampler(tabA);
+  const returnedIds = Object.entries(leashModes)
+    .filter(([, modes]) => modes.includes('returning'))
+    .map(([enemyId]) => enemyId);
+  if (!returning.enemies.some((enemy) => enemy.mode === 'returning') && returnedIds.length === 0) {
+    throw new Error('leash returning checkpoint was not reached: no live read and no recorded frame '
+      + `ever saw a wolf in 'returning'; recorded mode histories ${JSON.stringify(leashModes)}; `
+      + `last state: ${JSON.stringify(returning)}`);
+  }
+  evidence.checkpoints.leash = { ...returning, leashModeHistories: leashModes, returnedIds };
   evidence.captures.push(await capture(tabA, 'c3-leash-returning'));
   console.log('  E2 browser: leash checkpoint sampled');
   await waitUntil(tabA, (live) => {
@@ -429,7 +515,10 @@ try {
   await startProtectionSampler(tabA);
   await holdToward(
     tabA,
-    { x: recoveryWolf.home.x, z: recoveryWolf.home.z },
+    (live) => {
+      const wolf = live.enemies.find((enemy) => enemy.enemyId === recoveryWolf.enemyId);
+      return wolf ? { x: wolf.x, z: wolf.z } : { x: recoveryWolf.home.x, z: recoveryWolf.home.z };
+    },
     15_000,
     (live) => live.downObserved || live.protectionObserved,
   );

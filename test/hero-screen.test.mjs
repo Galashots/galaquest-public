@@ -32,22 +32,22 @@ const GRANTED = { equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID, ownedItemIds: [S
 // Same discipline test/feedback.test.mjs's "index.html draws exactly HERO_MAX_HP hearts" uses: the
 // markup is hand-written, not generated, so this is what makes the coupling between it and the view
 // model's own 5-slot list safe rather than merely commented.
-test('index.html hardcodes the 5 slots; weapon/shield/helmet unlocked, shoulders/chest locked (G1-C3)', () => {
+test('index.html hardcodes the 5 slots; weapon/shield/helmet/shoulders unlocked, chest locked (R1)', () => {
   const source = readFileSync(resolve(repoRoot, 'public/index.html'), 'utf8');
   const slotIds = [...source.matchAll(/class="hero-slot" data-slot="(\w+)"/g)].map((m) => m[1]);
   assert.deepEqual(slotIds, ['weapon', 'shield', 'helmet', 'shoulders', 'chest']);
-  // The three slots the catalogue now has items for (weapon, Shield, Helmet) must not be statically
-  // locked -- renderSlots drives them live, and a stale lock glyph would flash before the first frame.
-  for (const id of ['weapon', 'shield', 'helmet']) {
+  // The four slots the catalogue now has items for (weapon, Shield, Helmet, R1's Shoulders) must not
+  // be statically locked -- renderSlots drives them live, and a stale lock glyph would flash before
+  // the first frame. Shoulders moved into this group the moment SHOULDER_SILVERGUARD_ID shipped in
+  // progression/items.js; this pin moved with it rather than staying a stale G1-C3 snapshot.
+  for (const id of ['weapon', 'shield', 'helmet', 'shoulders']) {
     assert.ok(!new RegExp(`data-slot="${id}"[^>]*data-locked`).test(source), `${id} must not render locked`);
   }
-  // The two slots with no item yet stay locked until their first item ships.
-  for (const id of ['shoulders', 'chest']) {
-    assert.ok(new RegExp(`data-slot="${id}"[^>]*data-locked="true"`).test(source), `${id} must render locked`);
-  }
+  // Chest remains the one slot with genuinely no item defined anywhere in the catalogue.
+  assert.ok(new RegExp('data-slot="chest"[^>]*data-locked="true"').test(source), 'chest must render locked');
 });
 
-test('five slots render; weapon/shield/helmet unlock from the catalogue, shoulders/chest stay locked', () => {
+test('five slots render; weapon/shield/helmet/shoulders unlock from the catalogue, chest stays locked', () => {
   const view = heroScreenViewModel({ ...BASE, selectedItemId: null });
   assert.equal(view.slots.length, 5);
   const byId = Object.fromEntries(view.slots.map((s) => [s.id, s]));
@@ -63,10 +63,14 @@ test('five slots render; weapon/shield/helmet unlock from the catalogue, shoulde
   // unlocked-and-empty, not locked, and not filled.
   assert.equal(byId.helmet.locked, false);
   assert.equal(byId.helmet.filled, false);
-  for (const id of ['shoulders', 'chest']) {
-    assert.equal(byId[id].locked, true, `${id} must be locked (no item defined)`);
-    assert.equal(byId[id].filled, false);
-  }
+  // R1: the Shoulders slot unlocks the same way Helmet did -- a real item (Silverguard Shoulders)
+  // now exists for it, so SLOTS_WITH_ITEMS (derived from ITEM_DEFS, never a hand-kept list) reports
+  // it unlocked automatically. A fresh player owns none, so unlocked-and-empty, not filled.
+  assert.equal(byId.shoulders.locked, false);
+  assert.equal(byId.shoulders.filled, false);
+  // Chest remains the one slot with genuinely no item defined anywhere in the catalogue.
+  assert.equal(byId.chest.locked, true, 'chest must stay locked (no item defined)');
+  assert.equal(byId.chest.filled, false);
 });
 
 test('G1-C3: the owned strip shows every owned item -- a fresh player has the starter sword AND the baseline Shield, but not the Blade', () => {

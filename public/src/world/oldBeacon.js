@@ -109,7 +109,17 @@ export const BEACON_EMBER_COLD_COLOR = 0x5b6b7a;
 
 // The stack, bottom to top. Every band is expressed against the one above and below it rather than
 // as an absolute y, so changing one height cannot silently leave a gap.
-const PLINTH_RADIUS_METERS = 2.05;
+//
+// EXPORTED (as of world/obstacles.js) for exactly one reason beyond the geometry above: this is the
+// one number a hero's own footwork must never cross. "Nothing in this game collides" a few lines
+// down is still the rule for every prop, house and tree in the Village -- a real playtest is what
+// changed the Beacon's own case, not a change of mind about the rule. Two children walked straight
+// through the tower's stone base on camera, and a landmark a child can stand HALF INSIDE reads as
+// broken scenery, not as an open world -- the opposite of the "somebody built this" read the plinth
+// height above is fighting for. So the Beacon (and, per the same measured complaint, the Lantern
+// Tree's own trunk) get the one exception: a simple circular blocker, radius stated here once and
+// consumed by the shared pure resolver rather than re-typed at either collision call site (GQ-007).
+export const PLINTH_RADIUS_METERS = 2.05;
 // KNEE-HIGH IS TOO HIGH, and the number is the difference between a built place and a bug. Nothing
 // in this game collides -- world/bramble.js's header says so plainly, and a child already walks
 // through houses and trees -- but a broad flat octagon reads as a FLOOR in a way a tree trunk never

@@ -26,13 +26,18 @@
 export const WEAPON_SLOT = 'weapon';
 export const SHIELD_SLOT = 'shield';
 export const HELMET_SLOT = 'helmet';
+// R1: the first kill-drop gear slot. heroScreen.js's own SLOTS_WITH_ITEMS is derived from ITEM_DEFS
+// (not a hand-kept slot list), so this slot auto-unlocks in the Hero screen the instant an item
+// exists for it below -- no separate UI change required for a new slot to appear.
+export const SHOULDERS_SLOT = 'shoulders';
 
-export const EQUIPMENT_SLOTS = Object.freeze([WEAPON_SLOT, SHIELD_SLOT, HELMET_SLOT]);
+export const EQUIPMENT_SLOTS = Object.freeze([WEAPON_SLOT, SHIELD_SLOT, HELMET_SLOT, SHOULDERS_SLOT]);
 
 export const STARTER_SWORD_ID = 'starter_sword';
 export const WILDWOOD_BLADE_ID = 'wildwood_blade';
 export const SHIELD_IRONWOOD_ID = 'shield_ironwood';
 export const HELMET_SILVERGUARD_ID = 'helmet_silverguard';
+export const SHOULDER_SILVERGUARD_ID = 'shoulder_silverguard';
 
 export const ITEM_DEFS = Object.freeze({
   [STARTER_SWORD_ID]: Object.freeze({
@@ -65,6 +70,16 @@ export const ITEM_DEFS = Object.freeze({
     slot: HELMET_SLOT,
     name: 'Silverguard Helmet',
     damageReductionPercent: 10,
+  }),
+  // R1: the first item a kill drop can grant, not a claim ceremony -- see world/enemyDrops.js's own
+  // gear pool. shield_ironwood is deliberately NOT raised alongside this one: G1's own
+  // damageReductionPercent: 0 is a pinned "truthful baseline" (test/progression-g1-c1.test.mjs), and
+  // R1 does not have standing to re-tune a G1 decision in passing.
+  [SHOULDER_SILVERGUARD_ID]: Object.freeze({
+    id: SHOULDER_SILVERGUARD_ID,
+    slot: SHOULDERS_SLOT,
+    name: 'Silverguard Shoulders',
+    damageReductionPercent: 8,
   }),
 });
 

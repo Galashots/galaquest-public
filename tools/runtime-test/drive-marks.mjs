@@ -24,6 +24,8 @@ import {
   ATTACK_REACH, SWING_CONTACT_SECONDS, WOLF_MAX_HP, canAttack,
 } from '../../public/src/combat/encounter.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -31,7 +33,7 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  authoredWolfSource, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK,
+  authoredWolfSource, readWatchSource, startWalk, startWatch, STOP_WALK,
   stopWatchSource, waitForSample,
 } from './in-page-driver.mjs';
 
@@ -228,7 +230,12 @@ const attackX = VIEWPORT.width - 68;
 const attackY = VIEWPORT.height - 68;
 const stickX = VIEWPORT.width * 0.18;
 const stickY = VIEWPORT.height * 0.86;
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): stale against input/touch.js's own STICK_RADIUS_PX since the
+// 2026-08-27 speed-up grew it to 64px. Both uses below (the approach walk and the post-knockdown
+// held re-engage) want full deflection -- covering real ground fast -- so unlike the tighter-ring
+// harnesses this file needs no separate fine deflection: the re-close before every swing is a
+// pulsed, exact placement already (see walkToward below), never a held leg against a small ring.
+const STICK_PX = STICK_RADIUS_PX;
 
 // Cribbed near-verbatim from play-fight.mjs: `aim` is re-derived from the freshly-polled state on
 // every loop tick, not captured once outside the loop, because the wolf is server-authoritative and
@@ -373,47 +380,18 @@ const FIGHT_SAMPLE = `(() => {
     hp: authoredWolf.hp,
     mode: authoredWolf.mode,
     heroDown: encounter.hero.downSeconds >= 0,
+    // The three fields heroCanAttack (encounter.js) actually reads. Carried raw, not pre-reduced to
+    // a boolean, so the loop below can hand them straight to the imported canAttack() and ask the
+    // real rule rather than a re-derived guess about it.
+    downSeconds: encounter.hero.downSeconds,
+    swingSeconds: encounter.hero.swingSeconds,
+    cooldown: encounter.hero.cooldown,
     gap: Math.hypot(at[0] - authoredWolf.x, at[1] - authoredWolf.z),
     // Rides along because the flight is ~0.4s and the kill is noticed a burst late. See the spark
     // check below for why a poll cannot be the evidence for this one.
     sparks: runtime.markSparksInFlight(),
   };
 })()`;
-
-// THE RE-CLOSE PULSES UNLESS THERE IS REAL GROUND TO COVER. A held walk cannot stop on a mark --
-// the release costs a poll and a round trip while authority keeps walking, which at a full-deflection
-// stick is a metre and a half. Ask it to stop at 1.0m from the wolf and it hands back a hero 2.5m
-// away, outside ATTACK_REACH, so the swing that follows hits nothing. Hosted at 3c43815 that read as
-// a hero knocked down sixteen times with the wolf never below 1hp, with the re-close present and
-// doing harm. The pulsed walker is slow per metre and exact, and exact is what matters here: the
-// wolf brings itself to about a metre, and what the walk is really for is turning the hero, since he
-// only turns while moving. The held leg is kept for the one case with actual distance in it --
-// coming back from a knockdown, which respawns him at spawn.
-const HELD_APPROACH_SLACK_METRES = 3;
-
-// The stick held straight up is pure camera-forward -- the same `sy = 1` case the pulsed steering
-// above computes -- so with the heading re-aimed in-page every frame, "hold forward" means "walk at
-// the wolf".
-async function heldWalkToward(targetExpression, stopWithin, maxMillis) {
-  await page.eval(startWalk(targetExpression, stopWithin));
-  await touch('touchStart', [{ x: stickX, y: stickY }]);
-  await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
-  try {
-    return await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
-      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
-  } finally {
-    await touch('touchEnd', []);
-    await page.eval(STOP_WALK);
-  }
-}
-
-// A slow runner can reach the fourth-tap read while the child is still down. Starting the in-page
-// walker then spends its whole budget holding an input the rules correctly ignore. Wait for the
-// authoritative recovery first; this is re-engagement after a real knockdown, not a free retry.
-async function reengageAfterRecovery() {
-  await pollUntil((live) => live.hero.downSeconds < 0, { intervalMs: 100, timeoutMs: 15000 });
-  return heldWalkToward(WOLF_TARGET, 1.0, 15000);
-}
 
 await page.eval(startWatch('fight', FIGHT_SAMPLE));
 const readFight = () => page.eval(readWatchSource('fight')).then(JSON.parse);
@@ -433,68 +411,122 @@ const paced = await readFight();
 // game can even notice: main.js samples input once per rendered frame, so tapping faster than the
 // frame period cannot help and tapping slower wastes eligibility. In practice the two CDP round
 // trips a tap costs put the real rate near 0.7s, which is what the original 600ms here had by
-// instinct. The recorder is read every few taps rather than every one, so noticing the kill stays
-// prompt without paying a round trip per press.
+// instinct. This is also the poll period the loop below reads the recorder at, once per iteration
+// (see its own header for why every-iteration replaced every-fourth): a tap this cheap to refuse is
+// worth checking readiness for at the same rate it would have been thrown at blind.
 const framePeriodMs = paced.frames > 0 ? Math.round(1000 / paced.frames) : 17;
 const tapEveryMs = framePeriodMs;
 console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEveryMs}ms`);
 
-// RE-CLOSE BEFORE EVERY SWING, INSIDE THE CADENCE RATHER THAN INSTEAD OF IT.
+// READINESS-KEYED, NOT BLIND-INTERVAL. Every iteration reads the recorder FIRST and only ever
+// spends a touch on a tap the rules can actually accept -- canAttack (imported from encounter.js,
+// GQ-007) is exactly heroCanAttack applied to the hero's own three fields, so this asks the real
+// rule instead of a re-derived guess about it. A tap is dispatched only when canAttack is true AND
+// the last known gap is within ATTACK_REACH; otherwise the iteration spends nothing on a touch that
+// the rules would have refused anyway, or -- when the gap says the hero cannot reach the wolf at
+// all -- re-closes instead of tapping into empty air.
 //
-// Checking the gap once per pair of taps was still too coarse, and hosted at e68cf54 it showed:
-// `hero knocked down 13 time(s)`, `wolf reached 1hp`. Two hits a life, needing three, over and over,
-// because Design ruling 5 heals the wolf on every knockdown. The wolf backs off after a bite and
-// the hero only turns while walking, so a swing thrown without re-closing is thrown at where the
-// wolf was.
+// This replaces two earlier, narrower fixes and keeps what both got right. Blind-interval tapping
+// (every rendered frame, unconditionally) wasted most of its touches mid-swing or out of reach, and
+// checking the gap only once every four taps left the walk-back too coarse to correct for it inside
+// one hero life -- hosted this measured `swing gaps: [10.77, 9.49, 8.21, 7.16, 7.4, 6.81]` seconds
+// between LANDED swings against a hero knocked down 6 times, because between the every-fourth-tap
+// reads the hero could drift or be respawned out of ATTACK_REACH for several tap cycles running
+// before anything noticed. Reading every iteration (not every fourth) makes that window one frame
+// wide instead of four.
 //
-// The walk now runs before EVERY tap, and the time it takes is subtracted from the wait before the
-// next one rather than added to it -- so re-closing costs position, not cadence, and the cadence is
-// what decides whether three hits fit inside one hero life. In reach, the walker latches on its
-// first frame and the whole thing is a short nudge, which is all that is needed since turning is
-// what it is for.
+// CADENCE MATH. SWING_SECONDS is 1.5s and ATTACK_COOLDOWN_SECONDS is 0 (both encounter.js's own,
+// imported rather than restated), so canAttack reopens the instant a swing's animation ends -- there
+// is no separate cooldown tail to wait out. Polling once every loop iteration, at this machine's own
+// measured frame period (tapEveryMs), means the first ready-and-in-reach read after that reopening
+// moment lands at most one frame late. So a landed swing should repeat roughly every
+// SWING_SECONDS + one frame, e.g. at a 4fps (250ms) frame that is a landed swing about every 1.75s,
+// not whatever multiple of it a blind interval and a stale four-tap-old gap happened to land on.
+// FIGHT LIKE A CHILD ACTUALLY FIGHTS: STICK HELD INTO THE WOLF, ATTACK MASHED ON TOP.
+//
+// Two stationary-tapping generations of this loop each fixed half the problem and lost hosted
+// anyway. Readiness-keyed taps aimed right but traded too slow (cf5905c: 8 swings in 91s); blind
+// frame-cadence taps traded fast but whiffed on FACING -- the hero swings where his body points and
+// only turns while moving, so a wolf circling a stationary hero eats whole lives of swings
+// (27b429f: one landed swing per life, seven knockdowns, wolf never below 20hp; the CDP-paced
+// faceTarget nudge could not keep up). Both halves resolve at once by never standing still: an
+// in-page walk (startWalk with a LIVE wolf-position expression and stopWithin 0, so it re-aims
+// every frame and never latches) steers a PERMANENTLY HELD stick at the wolf while the attack taps
+// ride on top as a SECOND touch point. Facing is continuously wolf-ward because the hero never
+// stops moving toward it; the gap self-corrects the same way. The held deflection is the WALK push
+// (RUN_DEFLECTION exactly -- drive-village.mjs's derivation), so the per-frame input quantum at a
+// 3fps runner is ~0.6m: the hero orbits contact instead of blowing metres past it, and every point
+// of the orbit is inside ATTACK_REACH's 1.7m and the swing's forgiving 151-degree arc. canAttack
+// has no is-moving condition, so nothing about walking costs a swing.
+//
+// CDP multi-touch choreography, MEASURED rather than assumed (probed live against this game):
+// touchStart's touchPoints are the full active set -- Chrome diffs it and presses only the NEW
+// point, leaving the held stick untouched -- but touchEnd's touchPoints are the points BEING
+// RELEASED. The first version listed the still-held stick in the tap's touchEnd, believing it
+// described what remained, and Chrome dutifully lifted the stick on every tap: the probe read
+// groundSpeed 1.725 while held and 0 the instant the first tap's end went out, which is exactly
+// the dead-stick-at-spawn signature both hosted failures showed. The tap's touchEnd must list the
+// ATTACK point alone. touchEnd with an empty list remains the full release.
+const FIGHT_STICK_POINT = () => ({ x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1 });
+async function holdFightStick() {
+  await page.eval(startWalk(WOLF_TARGET, 0));
+  await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+  await touch('touchMove', [FIGHT_STICK_POINT()]);
+}
+async function releaseFightStick() {
+  await page.eval(STOP_WALK);
+  // Named explicitly rather than the empty-list "release everything": touchEnd's points are the
+  // points being released, and naming the stick is the unambiguous way to lift it.
+  await touch('touchEnd', [FIGHT_STICK_POINT()]);
+}
 let killed = false;
 let lastGap = 0;
-const gapsAtTap = [];
+const gapsAtRead = [];
 const killDeadline = Date.now() + 120000;
-// WHAT THE LOOP SPENDS ITS FIGHT ON IS ROUND TRIPS, so the tap path has as few as it can.
-//
-// Walking before every swing was measured at 4.4 SECONDS a tap -- 28 swings in the 124s the fight
-// was given, against a hero who is knocked down every nine or ten. The pulsed walker alone is five
-// round trips and a pulse, and at 333ms a frame that is most of a hero's life spent repositioning
-// by a metre. The gap log said the repositioning was not even needed: every swing went out from
-// between 1.0m and 1.6m, all of them inside ATTACK_REACH, because the wolf brings itself to
-// MIN_BODY_SEPARATION and stays there.
-//
-// So the tap path is two touches and nothing else, and the walk happens only when the recorder says
-// the hero is actually out of reach -- which is what a knockdown does, since respawning puts him
-// back at spawn. Reading every fourth tap keeps that decision current without paying for it every
-// time.
-const REACH_CHECK_EVERY = 4;
-for (let tap = 0; tap < 200 && !killed && Date.now() < killDeadline; tap += 1) {
-  const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  await touch('touchStart', [{ x: attackX, y: attackY }]);
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(60);
-  // eslint-disable-next-line no-await-in-loop
-  await touch('touchEnd', []);
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-  if (tap % REACH_CHECK_EVERY !== 0) continue;
-  // eslint-disable-next-line no-await-in-loop
-  const log = await readFight();
-  killed = log.samples.some((sample) => sample.hp <= 0 || sample.mode === 'dying' || sample.mode === 'dead');
-  lastGap = log.samples[log.samples.length - 1]?.gap ?? 0;
-  gapsAtTap.push(Number(lastGap.toFixed(2)));
-  if (!killed && lastGap > ATTACK_REACH) {
+await holdFightStick();
+try {
+  // The wall clock stays the real budget (review-suite.test.mjs requires it); this iteration cap is
+  // only a runaway guard, sized generously above the fastest this loop could plausibly cycle so it
+  // never trips before killDeadline does on any machine, fast or starved.
+  for (let tap = 0; tap < 20000 && !killed && Date.now() < killDeadline; tap += 1) {
+    const cycleStart = Date.now();
     // eslint-disable-next-line no-await-in-loop
-    const approach = await reengageAfterRecovery();
-    if (!approach?.arrived) continue;
+    await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(60);
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+    if (tap % 2 !== 0) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const log = await readFight();
+    killed = log.samples.some((sample) => sample.hp <= 0 || sample.mode === 'dying' || sample.mode === 'dead');
+    if (killed) break;
+    const latest = log.samples[log.samples.length - 1];
+    lastGap = latest?.gap ?? 0;
+    if (latest !== undefined && canAttack({
+      hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
+    })) {
+      gapsAtRead.push(Number(lastGap.toFixed(2)));
+    }
+    // NO knockdown branch, on purpose. The first version of this hold released the stick on a
+    // down read, reengaged with a separate held leg, and re-established the hold -- and the
+    // three-way touch choreography died on its first real knockdown (98d83e9: two downs, then
+    // fourteen straight reads at gap 8.25 with the hero standing READY at spawn and every input
+    // dead). None of it is needed: the in-page walk never latches and re-aims at the LIVE wolf
+    // from wherever the hero is, the rules simply ignore held input on a down body, and the
+    // respawned hero walks himself back into the fight on the same hold. The one cost is
+    // crossing the respawn gap at the walk push instead of the run push, ~4 extra seconds the
+    // wolf spends idling at full hp anyway.
   }
+} finally {
+  await releaseFightStick();
 }
-// The gap the hero was actually standing at when each swing went out. ATTACK_REACH is 1.7m, so
-// this is the line that says whether a missed swing missed because of RANGE or something else.
-console.log(`  swing gaps: ${JSON.stringify(gapsAtTap)}`);
+// The gap at each every-other-frame read that found the hero standing, swing-free and in reach --
+// i.e. the moments a blind tap was actually eligible to land. ATTACK_REACH is 1.7m, so this is the
+// line that says whether a fight that stalls stalled on RANGE or on something else.
+console.log(`  ready-and-in-reach gaps at read: ${JSON.stringify(gapsAtRead)}`);
 const fightLog = await readFight();
 const knockdowns = fightLog.samples.filter((sample, index) =>
   sample.heroDown && !fightLog.samples[index - 1]?.heroDown).length;
@@ -514,9 +546,10 @@ check('the wolf can actually be killed', killed);
 // READ FROM THE RECORDER, not polled, and this check is the reason the fight recorder above is
 // still running. The flight lasts about 0.4s. The poll this replaces asked the page for
 // markSparksInFlight() every 20ms, which on a 3fps runner is really every ~333ms, and it could not
-// start asking until the harness had NOTICED the kill -- which, now that taps go out in bursts, is
-// up to a burst late. Both halves miss a 0.4s window. The recorder was already watching every frame
-// from before the killing blow, so the flight is in the log whether or not anyone was looking.
+// start asking until the harness had NOTICED the kill -- which is checked once every loop iteration
+// above (readiness-keyed, not bursted), but a CDP round trip on a starved runner is still slower
+// than the flight itself. The recorder was already watching every frame from before the killing
+// blow, so the flight is in the log whether or not anyone was looking.
 const sparkFrames = await waitForSample(page, 'fight', (sample) => sample.sparks >= 1,
   { intervalMs: 60, timeoutMs: 4000 });
 await page.eval(stopWatchSource('fight'));

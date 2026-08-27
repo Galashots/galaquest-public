@@ -1625,3 +1625,32 @@ landed on before checking the badge, so a wrong address costs one line rather th
 `ci-diff.py --sha` reads `/commits/{sha}/check-runs`, which returns every check on a commit whatever
 workflow raised it. The file mode still exists and now prints "one workflow only" beside its answer.
 **Foreknowledge helped:** not yet recorded.
+
+### GQ-023 — One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-27
+**Rule:** When the same physical id travels server->client in one message and client->server in
+another, both decoders must read the SAME limit constant -- a copied number, or a neighbouring
+constant reused because the ids "look similar", is two facts free to disagree. And every layer of
+testing that hands the value to the business module directly (fold tests, `sim.applyX(...)` server
+tests) leaves the decode seam unexercised: a decoder that rejects 100% of production traffic stays
+green everywhere until a human plays the game.
+**Incident (2026-08-27, PR #80, found by Owner playtest + Sol review):** world/enemyDrops.js mints
+`drop:<enemyId>:<randomUUID>:<index>` -- 50 chars minimum, 56 for `frost-wolf-*`. The outbound leg
+(`encounter.drops[].id`) already used DROP_ID_MAX_LENGTH (96); the inbound `collect-drop` decoder
+reused PICKUP_ID_MAX_LENGTH (48) "exactly as village-upgrade-purchase does", against cart tokens
+like `cart-loot:shard:1` that are a different shape entirely. Every legitimate pickup therefore
+died in decode; gameServerCore turns a ProtocolError into a 1008 close; the client silently
+reconnects as a NEW player seated at {0,0}. The child experiences: kill a wolf, walk at your coins,
+teleport to spawn -- with a screen blink as the world rebuilds. It shipped through 2,049 green
+tests and a fully green 34-job behavioural matrix, because the drop tests bypass decode and no
+harness watched the SOCKET across a pickup.
+**The tell:** the defect was visible in the file itself as a comment justifying the reuse -- the
+mistaken assumption was written down and reviewable long before it was executable. A reused cap
+deserves one sentence proving the NEW id's maximum against it, with the longest real producer named.
+**Repairs:** one shared DROP_ID_MAX_LENGTH for both legs (protocolCore.js);
+test/collect-drop-wire.test.mjs round-trips ids minted by the real requestEnemyDrop for every
+authored enemy and pins both caps equal at the boundary; test/collect-drop-connection.test.mjs
+kills a real enemy over a real WebSocket, collects through the real decode path, and asserts the
+socket, playerId, and position all survive; tools/runtime-test/drive-drop-collect.mjs stands the
+same watch in the real browser with CDP Network-level socket evidence.
+**Foreknowledge helped:** not yet recorded.

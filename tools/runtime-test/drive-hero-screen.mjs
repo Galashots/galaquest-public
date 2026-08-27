@@ -903,7 +903,15 @@ const HOSTILE_CONTEXTS = [
   { name: '4-cottage-edge', stand: [-9.9, -1.5], through: COTTAGE_PROP.at },
   // The control. Nothing to hide behind -- if the framing only looks right when something is in the
   // way, this is the capture that says so.
-  { name: '5-open-field', stand: [2.5, -7.0], through: null },
+  //
+  // MOVED off [2.5, -7.0] when the density push authored wolf-6 at [6, -8]: that put the old stand
+  // 3.64m from a live wolf's home against WOLF_AGGRO_RANGE 6, so the wolf reached the posing hero
+  // mid-phase and knocked him down -- hosted at fda0cf4 the portrait reading passed and the
+  // landscape reading two seconds later measured a FALLEN body (94.9% of frame height, spilling
+  // past the bottom edge, centred 0.705), taking the location-independence check down with it.
+  // The stand below was grid-searched against the authored population: 9.7m from the nearest
+  // enemy home (wolf-6) and 3.7m from the nearest prop, still bare grass.
+  { name: '5-open-field', stand: [-3.5, -10.0], through: null },
 ];
 
 const forwardKey = (type) => page.send('Input.dispatchKeyEvent', {

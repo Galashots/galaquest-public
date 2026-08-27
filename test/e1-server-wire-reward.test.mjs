@@ -88,14 +88,21 @@ test('protocol v4 rejects malformed, duplicate, unsupported-kind, and invalid-mo
   })), ProtocolError);
 });
 
-test('server default snapshot contains the authored E2 population and no singular wire slot', () => {
+test('server default snapshot contains the authored R1 population and no singular wire slot', () => {
   const simulation = createSimulation();
   const snapshot = simulation.encounterSnapshot();
 
+  // R1 grew this to twelve bodies across four kinds -- see village.js's own ENEMY_POPULATION header.
+  // Before the first tick (this is the fresh boot snapshot) the order is still authoring order, not
+  // stepParty's own stable-id sort, which is why this list is not simply alphabetical.
   assert.deepEqual(snapshot.enemies.map((enemy) => enemy.enemyId), [
-    'wolf-1', 'wolf-2', 'wolf-3', 'wolf-4', 'wolf-5',
+    'wolf-1', 'wolf-2', 'wolf-3', 'wolf-4', 'wolf-5', 'wolf-6', 'wolf-7',
+    'ember-wolf-1', 'ember-wolf-2', 'frost-wolf-1', 'frost-wolf-2', 'alpha-wolf-1',
   ]);
-  assert.ok(snapshot.enemies.every((enemy) => enemy.kind === 'wolf'));
+  assert.deepEqual(snapshot.enemies.map((enemy) => enemy.kind), [
+    'wolf', 'wolf', 'wolf', 'wolf', 'wolf', 'wolf', 'wolf',
+    'ember-wolf', 'ember-wolf', 'frost-wolf', 'frost-wolf', 'alpha-wolf',
+  ]);
   assert.equal(Object.keys(snapshot).includes('wolf'), false, 'derived C2 bridge is not enumerable/wire state');
   assert.equal(JSON.stringify(snapshot).includes('\"wolf\":'), false, 'singular Wolf is absent from serialized server state');
 });

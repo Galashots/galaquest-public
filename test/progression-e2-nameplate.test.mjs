@@ -30,6 +30,7 @@ test('E2 C3 nameplate model exposes bounded health and the locked danger thresho
     healthFraction: 0.5,
     danger: false,
     dangerText: '',
+    menacing: false,
     visible: true,
   });
 
@@ -38,6 +39,23 @@ test('E2 C3 nameplate model exposes bounded health and the locked danger thresho
   assert.equal(danger.dangerText, 'DANGER');
   assert.equal(enemyNameplateModel({ kind: 'wolf', level: 4, hp: 0, maxHp: 60 }).visible, false);
   assert.equal(enemyNameplateModel({ kind: 'wolf', level: 4, hp: 60, maxHp: 60, mode: 'dead' }).visible, false);
+});
+
+test('R1: each density-package kind carries its own display name, and only the Alpha is menacing', () => {
+  const ember = enemyNameplateModel({ kind: 'ember-wolf', level: 1, hp: 40, maxHp: 40 }, { heroLevel: 1 });
+  assert.equal(ember.name, 'Ember Wolf');
+  assert.equal(ember.menacing, false);
+
+  const frost = enemyNameplateModel({ kind: 'frost-wolf', level: 1, hp: 55, maxHp: 55 }, { heroLevel: 1 });
+  assert.equal(frost.name, 'Frost Wolf');
+  assert.equal(frost.menacing, false);
+
+  // Level 1 against a Level-1 hero: the ordinary danger threshold is NOT met, yet the plate still
+  // carries the Alpha's own accent -- the two are independent signals.
+  const alpha = enemyNameplateModel({ kind: 'alpha-wolf', level: 1, hp: 90, maxHp: 90 }, { heroLevel: 1 });
+  assert.equal(alpha.name, 'Alpha Wolf');
+  assert.equal(alpha.danger, false);
+  assert.equal(alpha.menacing, true);
 });
 
 class FakeElement {

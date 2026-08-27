@@ -8,6 +8,7 @@ import {
   INPUT_SEND_HZ,
   ProtocolError,
   attackMessage,
+  collectDropMessage,
   collectLootMessage,
   decode,
   encode,
@@ -270,6 +271,16 @@ export function createNetClient(options = {}) {
     return send(collectLootMessage(pickupId));
   }
 
+  /** R1: the same shape and reasoning as sendCollectLoot, for the dynamic kill-drop pickups
+   *  world/enemyDrops.js spawns -- online-only (there is no shared drop to collect offline; the
+   *  offline fallback runs its own local copy of the same rules instead), no sequence number, and a
+   *  resend of the same dropId is naturally idempotent server-side (requestCollectEnemyDrop rejects an
+   *  already-collected id outright, the identical "first request wins" rule requestCollectLoot uses). */
+  function sendCollectDrop(dropId) {
+    if (status !== 'online') return false;
+    return send(collectDropMessage(dropId));
+  }
+
   /** G4: ask Rowan for the Wildwood Blade. NO PAYLOAD AT ALL -- every fact that decides whether the
    *  promise is owed (where this hero is standing, whether the Beacon is burning, whether this guest
    *  already owns it) is server-side world state, so there is nothing here for a client to assert or
@@ -367,6 +378,7 @@ export function createNetClient(options = {}) {
     sendClaimCharm,
     sendClaimHollow,
     sendCollectLoot,
+    sendCollectDrop,
     sendVillageUpgradePurchase,
     reconcile,
     // Remote players only: self is drawn from the local prediction, which is always more current.

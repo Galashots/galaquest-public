@@ -45,6 +45,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ATTACK_REACH, HERO_MAX_HP, WOLF_MAX_HP } from '../../public/src/combat/encounter.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
 import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import { cumulativeXpForLevel } from '../../public/src/progression/levels.js';
@@ -53,6 +55,7 @@ import {
 } from '../../public/src/progression/heroStats.js';
 import { formatPower, powerFor } from '../../public/src/progression/power.js';
 import { STARTER_SWORD_ID } from '../../public/src/progression/items.js';
+import { killXpForKind } from '../../public/src/combat/enemyStats.js';
 import { sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
@@ -91,6 +94,12 @@ const AFTER = {
   damage: resolvedHeroDamage(2, STARTER_SWORD_ID),
   power: powerFor({ maxHp: resolvedMaxHp(2), heroDamage: resolvedHeroDamage(2, STARTER_SWORD_ID) }),
 };
+// R1 changed what one Lantern fight is worth. The kill that lands the third mark is ALSO a kill,
+// and kills grant XP now (combat/enemyStats.js's own kill-XP table) -- so the fight this file
+// drives banks LANTERN_UNLOCK_XP + one wolf's kill XP, not the Lantern alone. Derived, never
+// retyped, so a kill-XP re-tune moves these pins with it (GQ-007).
+const WOLF_KILL_XP = killXpForKind('wolf');
+const XP_AFTER_THE_FIGHT = LANTERN_UNLOCK_XP + WOLF_KILL_XP;
 
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -423,7 +432,9 @@ try {
   const attackY = VIEWPORT.height - 68;
   const stickX = VIEWPORT.width * 0.18;
   const stickY = VIEWPORT.height * 0.86;
-  const STICK_PX = 56;
+  // DERIVED, not retyped (GQ-007): a hand-typed 56 went stale when the 2026-08-27 speed-up grew
+  // input/touch.js's STICK_RADIUS_PX to 64px -- see drive-village.mjs's identical constant.
+  const STICK_PX = STICK_RADIUS_PX;
   const WOLF_TARGET = authoredWolfSource();
 
   /** Pulsed, camera-relative steering -- exact rather than fast, which is what matters for getting
@@ -491,50 +502,49 @@ try {
   console.log(`  fight cadence: ~${tapEveryMs}ms a frame`);
 
   const readLevelUp = () => page.eval(readWatchSource('levelup')).then(JSON.parse);
-  // RE-CLOSE ON A MARGIN, NOT ON THE EDGE OF REACH, AND CHECK OFTEN.
-  //
-  // First measured run of this file: 19 knockdowns, wolf never below full, level never reached. The
-  // diagnostic line is what named it -- swings were going out from gaps of up to 2.34m against an
-  // ATTACK_REACH of 1.7. Re-closing only when the gap EXCEEDS reach means every swing thrown while
-  // drifting outward misses, and a solo hero who wipes heals the wolf to full (Design ruling 5), so
-  // three missed swings is not a slow fight, it is a fight that cannot be won.
-  //
-  // Closing to a margin inside reach instead, and asking every other tap rather than every fourth,
-  // costs a few round trips and buys the three landed hits that have to fit inside one hero life.
-  const RECLOSE_WITHIN_METRES = ATTACK_REACH - 0.3;
-  const REACH_CHECK_EVERY = 2;
+  // FIGHT WITH THE STICK HELD INTO THE WOLF, ATTACK MASHED ON TOP -- drive-marks.mjs's own fight
+  // hold, ported after this loop's stationary-tapping version lost the same race on a 500ms-frame
+  // runner (run 33042741183: 708 frames, 10 knockdowns, wolf never below 20hp, level never
+  // reached, every downstream check cascading). The in-page walk (startWalk with the LIVE wolf
+  // expression and stopWithin 0) re-aims a permanently held stick at the wolf every frame, so
+  // facing is continuously wolf-ward, the gap self-corrects, and after a knockdown the respawned
+  // hero walks himself back on the SAME hold -- the rules simply ignore held input on a down body,
+  // and dropping/re-establishing the hold is exactly the choreography that died in drive-marks at
+  // 98d83e9. The held deflection is the WALK push (RUN_DEFLECTION exactly), so the per-frame input
+  // quantum orbits contact inside ATTACK_REACH instead of blowing past it. The attack taps ride on
+  // top as a SECOND touch point, with the CDP semantics drive-marks.mjs measured live: touchStart's
+  // touchPoints are the full active set (Chrome diffs and presses only the new point), but
+  // touchEnd's touchPoints are the points BEING RELEASED -- so the tap's touchEnd lists the ATTACK
+  // point alone. Listing the held stick there lifts the stick on every tap, which is the
+  // dead-stick-at-spawn signature both hosted failures showed.
+  const FIGHT_STICK_POINT = () => ({
+    x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1,
+  });
   let levelled = false;
   const killDeadline = Date.now() + 240000;
-  for (let tap = 0; tap < 900 && !levelled && Date.now() < killDeadline; tap += 1) {
-    const cycleStart = Date.now();
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchStart', [{ x: attackX, y: attackY }]);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(60);
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', []);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-    if (tap % REACH_CHECK_EVERY !== 0) continue;
-    // eslint-disable-next-line no-await-in-loop
-    const log = await readLevelUp();
-    levelled = log.samples.some((sample) => sample.level >= AFTER.level);
-    if (levelled) break;
-    // eslint-disable-next-line no-await-in-loop
-    const now = await state();
-    const at = now.serverPos ?? now.heroPos;
-    const gap = Math.hypot(at[0] - now.enemy.x, at[1] - now.enemy.z);
-    // A knockdown respawns the hero at spawn, metres away: that is the one case with real ground in
-    // it, and the held walk crosses it at distance-over-speed instead of one pulse per round trip.
-    // Everything else is a nudge, which is mostly about TURNING -- the hero only turns while moving,
-    // so a swing thrown without re-closing is thrown at where the wolf was.
-    if (now.hero.downSeconds >= 0 || gap > ATTACK_REACH + 2) {
+  await page.eval(startWalk(WOLF_TARGET, 0));
+  await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+  await touch('touchMove', [FIGHT_STICK_POINT()]);
+  try {
+    for (let tap = 0; tap < 900 && !levelled && Date.now() < killDeadline; tap += 1) {
+      const cycleStart = Date.now();
       // eslint-disable-next-line no-await-in-loop
-      await heldWalkToward(1.0, 20000);
-    } else if (gap > RECLOSE_WITHIN_METRES) {
+      await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
       // eslint-disable-next-line no-await-in-loop
-      await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.0, 4000);
+      await sleep(60);
+      // eslint-disable-next-line no-await-in-loop
+      await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+      if (tap % 2 !== 0) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const log = await readLevelUp();
+      levelled = log.samples.some((sample) => sample.level >= AFTER.level);
     }
+  } finally {
+    await page.eval(STOP_WALK);
+    // touchEnd's points are the points being released -- name the stick to lift it.
+    await touch('touchEnd', [FIGHT_STICK_POINT()]);
   }
 
   // ── TRANSITION ────────────────────────────────────────────────────────────────────────────────
@@ -580,9 +590,14 @@ try {
   check('the XP meter visibly COMPLETED rather than teleporting',
     drawnFull.length > 0,
     `the drawn meter read ${JSON.stringify([...new Set(samples.map((s) => s.drawnXp))].slice(-5))}`);
+  // The rollover lands on the Level-2 meter carrying the kill's own XP: the same wolf whose death
+  // finished the third mark also granted WOLF_KILL_XP, so the meter reads `20 / 150` rather than
+  // `0 / 150` when the two facts arrive in one snapshot -- and `0 / 150` for a beat when they do
+  // not. Both are the same honest rollover; only staying pinned at full would be the bug.
   check('...and then rolled over into the new level rather than staying full',
     drawnFull.length > 0 && samples.some((sample, index) =>
-      index > samples.indexOf(drawnFull[0]) && /^0 \//.test(sample.drawnXp ?? '')),
+      index > samples.indexOf(drawnFull[0])
+      && new RegExp(`^(0|${WOLF_KILL_XP}) /`).test(sample.drawnXp ?? '')),
     `held full for ${drawnFull.length} frame(s), then ${samples[samples.length - 1]?.drawnXp}`);
 
   // THE CEREMONY, and deliberately NOT read off a banner. It was a banner for one run of this file
@@ -607,19 +622,27 @@ try {
   check('AFTER: and the FIGHT is using that body, not just the stat',
     after.hero.maxHp === AFTER.maxHp,
     `the encounter's own hero reads maxHp ${after.hero.maxHp}`);
+  // POLLED ON ITS OWN, because the DRAWN bar is a frame behind the state on purpose -- the DOM
+  // repaints on the next rendered frame, and the pollUntil above resolves the instant the STATE
+  // reads level 2. Hosted at 2c8ba29, on a 500ms-a-frame runner, that instant was one frame before
+  // the repaint: `drawn 30/30` against a fight already reading maxHp 35, with the same run's
+  // RELOAD phase drawing 35 moments later. The claim is unchanged -- the bar draws the earned
+  // body -- judged after the page has had a frame to draw it; a bar that NEVER redraws still fails.
+  const drawnAfter = await pollUntil((s) => s.drawn.healthMax === String(AFTER.maxHp), 8000);
   check('AFTER: and the health bar is DRAWING it',
-    after.drawn.healthMax === String(AFTER.maxHp),
-    `drawn ${after.drawn.healthCurrent}/${after.drawn.healthMax}`);
+    drawnAfter.drawn.healthMax === String(AFTER.maxHp),
+    `drawn ${drawnAfter.drawn.healthCurrent}/${drawnAfter.drawn.healthMax}`);
   check(`AFTER: resolved Starter damage ${AFTER.damage} -- +${AFTER.damage - BEFORE.damage}`,
     after.progress.heroDamage === AFTER.damage, `damage ${after.progress.heroDamage}`);
   check(`AFTER: POWER ${formatPower(AFTER.power)} -- +${AFTER.power - BEFORE.power} from ${formatPower(BEFORE.power)}, ON THE HUD`,
     powerFor(after.progress) === AFTER.power && after.drawn.power === formatPower(AFTER.power),
     `derived ${formatPower(powerFor(after.progress))}, drawn ${after.drawn.power}`);
-  check(`AFTER: the HUD says LV ${AFTER.level} with a fresh meter`,
-    after.drawn.level === String(AFTER.level) && /^0 \/ \d+$/.test(after.drawn.xp ?? ''),
+  check(`AFTER: the HUD says LV ${AFTER.level} with the kill's own XP already on the new meter`,
+    after.drawn.level === String(AFTER.level)
+      && new RegExp(`^${XP_AFTER_THE_FIGHT - LANTERN_UNLOCK_XP} / \\d+$`).test(after.drawn.xp ?? ''),
     `LV ${after.drawn.level}, ${after.drawn.xp}`);
-  check(`AFTER: exactly ${LANTERN_UNLOCK_XP} XP, from one Lantern and nothing else`,
-    after.progress.totalXp === LANTERN_UNLOCK_XP, `${after.progress.totalXp} XP`);
+  check(`AFTER: exactly ${XP_AFTER_THE_FIGHT} XP -- one Lantern plus the one kill that finished it`,
+    after.progress.totalXp === XP_AFTER_THE_FIGHT, `${after.progress.totalXp} XP`);
   await shot('03-after-level-2');
 
   // ── AND IT IS REAL IN THE FIGHT ───────────────────────────────────────────────────────────────
@@ -630,7 +653,37 @@ try {
   if (wolfBefore) {
     await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.2, 20000);
     await page.eval(startWatch('blow', `({ hp: ${authoredWolfSource()}.hp })`));
-    for (let tap = 0; tap < 40; tap += 1) {
+    // READINESS-KEYED, the kill loop's own lesson re-learned in this phase: this proof used to tap
+    // 40 times on a blind cadence with no re-closing, and the respawned wolf MOVES -- hosted at
+    // c545f48 every one of the 40 went out mid-swing or out of reach and the check read
+    // `landed blows took []`. Same treatment drive-marks.mjs and play-fight.mjs got: spend a tap
+    // only when the rules would accept it (standing, not mid-swing, wolf actually in reach),
+    // re-close when it is not, and let the wall clock bound the proof instead of a tap count.
+    // RE-CLOSE ON A MARGIN INSIDE REACH, not on its edge: a swing thrown while drifting outward
+    // from 1.5m misses by contact time.
+    const RECLOSE_WITHIN_METRES = ATTACK_REACH - 0.3;
+    const blowDeadline = Date.now() + 90000;
+    let landed = false;
+    while (!landed && Date.now() < blowDeadline) {
+      // eslint-disable-next-line no-await-in-loop
+      const now = await state();
+      const at = now.serverPos ?? now.heroPos;
+      const gap = Math.hypot(at[0] - now.enemy.x, at[1] - now.enemy.z);
+      if (now.hero.downSeconds >= 0 || gap > ATTACK_REACH + 2) {
+        // eslint-disable-next-line no-await-in-loop
+        await heldWalkToward(1.0, 20000);
+        continue;
+      }
+      if (gap > RECLOSE_WITHIN_METRES) {
+        // eslint-disable-next-line no-await-in-loop
+        await walkToward((live2) => ({ x: live2.enemy.x, z: live2.enemy.z }), 1.0, 4000);
+        continue;
+      }
+      if (now.hero.swingSeconds >= 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(tapEveryMs);
+        continue;
+      }
       // eslint-disable-next-line no-await-in-loop
       await touch('touchStart', [{ x: attackX, y: attackY }]);
       // eslint-disable-next-line no-await-in-loop
@@ -638,10 +691,10 @@ try {
       // eslint-disable-next-line no-await-in-loop
       await touch('touchEnd', []);
       // eslint-disable-next-line no-await-in-loop
-      const log = JSON.parse(await page.eval(readWatchSource('blow')));
-      if (log.samples.some((sample) => sample.hp < WOLF_MAX_HP)) break;
-      // eslint-disable-next-line no-await-in-loop
       await sleep(tapEveryMs);
+      // eslint-disable-next-line no-await-in-loop
+      const log = JSON.parse(await page.eval(readWatchSource('blow')));
+      landed = log.samples.some((sample) => sample.hp < WOLF_MAX_HP);
     }
     const blows = JSON.parse(await page.eval(readWatchSource('blow')));
     await page.eval(stopWatchSource('blow'));
@@ -666,8 +719,14 @@ try {
   await waitForRuntime();
   const reloaded = await pollUntil((s) => s.ready && s.netStatus === 'online'
     && s.progress.level === AFTER.level, 45000);
+  // Not an exact pin any more: the Level-2-blow proof between AFTER and this reload swings at a
+  // live wolf, and whether those blows finish it is the fight's business, not this check's. What
+  // must survive the reload is the level, at least the fight's own XP, and a total that is exactly
+  // the Lantern plus a whole number of wolf kills -- any other number IS a durability bug.
   check('RELOAD: the level survived',
-    reloaded.progress.level === AFTER.level && reloaded.progress.totalXp === LANTERN_UNLOCK_XP,
+    reloaded.progress.level === AFTER.level
+      && reloaded.progress.totalXp >= XP_AFTER_THE_FIGHT
+      && (reloaded.progress.totalXp - LANTERN_UNLOCK_XP) % WOLF_KILL_XP === 0,
     `level ${reloaded.progress.level}, ${reloaded.progress.totalXp} XP`);
   check('RELOAD: and so did the body the fight uses',
     reloaded.hero.maxHp === AFTER.maxHp && reloaded.drawn.healthMax === String(AFTER.maxHp),

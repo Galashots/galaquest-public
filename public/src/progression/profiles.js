@@ -368,11 +368,15 @@ export function createProfileStore(options = {}) {
    * else comes from the device, which is where another tab's edits are. Cleared after a successful
    * write, because at that point the device holds them too.
    *
-   * A PROFILE THIS TAB HAS NOT TOUCHED AND THE DEVICE NO LONGER HAS IS ONE ANOTHER TAB DELETED, so
-   * it is dropped rather than carried forward -- that is how a delete propagates to tabs that were
-   * already open. `deleted` on the stored keyring is the other half: `deletedHere` alone only
-   * protects the tab that pressed delete, and every other tab would write the child straight back.
-   * Deleting also drops the journal, so what came back was a name with no earnings behind it.
+   * A PROFILE MISSING FROM THE DEVICE IS A DELETE ONLY IF IT IS TOMBSTONED. Deletes always write a
+   * tombstone (deleteProfile records both `deletedHere` and the stored `deleted` list), so absence
+   * WITHOUT one can only be a lost update -- another tab's read-modify-write straddled ours, and its
+   * stale snapshot landed second. The first version of this merge read bare absence as "another tab
+   * deleted it" and dropped the profile, which is exactly how drive-two-clients hosted lost tab A's
+   * child a second way: A persisted [Harness], B's boot (whose device read predated that write)
+   * persisted [Sibling] over it, and A's own next merge then agreed to forget the child it was
+   * actively playing. Un-tombstoned profiles this tab still holds are kept, always; the tombstone
+   * list is what a delete looks like, and it is the only thing allowed to mean one.
    */
   const deletedHere = new Set();
   const dirtyHere = new Set();
@@ -391,8 +395,7 @@ export function createProfileStore(options = {}) {
     }
     for (const profile of keyring.profiles) {
       if (tombstoned.has(profile.id) || taken.has(profile.id)) continue;
-      // Not on the device and not touched here: another tab deleted it while this tab held it.
-      if (!dirtyHere.has(profile.id)) continue;
+      // On this tab, off the device, no tombstone: a lost update, so the child is carried back.
       merged.push(profile);
       taken.add(profile.id);
     }
@@ -412,6 +415,34 @@ export function createProfileStore(options = {}) {
     keyring = mergedWithDevice();
     // Only on a successful write: if storage refused, this tab's edits are still the only copy.
     if (writeKeyring(storage, keyring)) dirtyHere.clear();
+  }
+
+  /**
+   * Heal a lost update the moment another tab's write makes one visible.
+   *
+   * The merge above can only repair the device copy when this tab next persists -- and a tab that
+   * booted, minted its child and settled into play may not persist again before its next reload,
+   * which is exactly the window drive-two-clients hosted kept landing in. The `storage` event fires
+   * in every OTHER tab whenever one tab writes, so it is the earliest moment this tab can notice its
+   * child has gone missing from the device and put it back.
+   *
+   * WRITES ONLY WHEN THE DEVICE COPY IS MISSING SOMETHING THIS TAB HOLDS -- a profile id or a
+   * tombstone -- never to push this tab's `activeProfileId` over another tab's. Each tab keeps its
+   * own idea of who is playing (mergedWithDevice's own rule), so a heal that wrote unconditionally
+   * would have two tabs flipping the stored active id back and forth forever, each write raising the
+   * event that provokes the next. Add-only writes reach a fixed point in one round: once the union
+   * is on the device, nobody is missing anything and nobody writes.
+   */
+  function reconcileWithDevice() {
+    const onDevice = readKeyring(storage);
+    const deviceIds = new Set(onDevice.profiles.map((profile) => profile.id));
+    const deviceTombstones = new Set(onDevice.deleted ?? []);
+    keyring = mergedWithDevice();
+    const missingProfile = keyring.profiles.some((profile) => !deviceIds.has(profile.id));
+    const missingTombstone = [...deletedHere].some((id) => !deviceTombstones.has(id));
+    if (!missingProfile && !missingTombstone) return false;
+    if (writeKeyring(storage, keyring)) dirtyHere.clear();
+    return true;
   }
 
   /**
@@ -713,6 +744,27 @@ export function createProfileStore(options = {}) {
     return keyring.activeProfileId ?? null;
   }
 
+  // The live half of reconcileWithDevice: the storage event is how another tab's write reaches
+  // this one. Browser only, and only against the real localStorage -- a test's injected storage
+  // raises no events, and the store still heals there through explicit reconcileWithDevice calls.
+  if (options.watchStorageEvents !== false
+    && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    try {
+      window.addEventListener('storage', (event) => {
+        // ONLY a write to the keyring's own key. key === null is clear() -- a deliberate
+        // whole-origin wipe (a person clearing site data, a harness resetting a phase) -- and
+        // healing against THAT resurrects a keyring whose journals are already gone: names with no
+        // earnings behind them, the exact orphaning deleteProfile's own comment warns about. The
+        // lost update this heal exists for is always a keyring WRITE landing over ours, so a write
+        // is the only event it answers. Measured before this guard: drive-old-beacon's
+        // reduced-motion phase cleared the origin under a still-loaded page and booted as the
+        // previous phase's child, because the old page had quietly written its keyring back.
+        if (event?.key !== PROFILES_STORAGE_KEY) return;
+        reconcileWithDevice();
+      });
+    } catch { /* a device without storage events just misses the live heal */ }
+  }
+
   return {
     listProfiles,
     activeProfile,
@@ -729,5 +781,6 @@ export function createProfileStore(options = {}) {
     mintEquipFact,
     ingestServerFacts,
     stateFor,
+    reconcileWithDevice,
   };
 }

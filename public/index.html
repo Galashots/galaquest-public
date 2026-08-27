@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- maximum-scale=1, user-scalable=no: a child trapped inside iOS's double-tap zoom, especially
+         in Add-to-Home-Screen STANDALONE mode where there is no browser chrome (no address bar, no
+         pinch-to-reset affordance) to rescue them, is indistinguishable from the game being broken.
+         This alone stops the platform from ever entering a zoomed state at all; index.html's own
+         touch-action rules and main.js's dblclick/touchend guards are the belt-and-braces for the
+         gestures a browser can still try to interpret as zoom intent even with scaling disabled. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <title>GalaQuest Runtime Slice</title>
     <!-- Zero-network: a bare "no icon yet" declaration, not a real icon asset (Y/Task F1). Without
          this, a browser with no <link rel="icon"> still auto-requests /favicon.ico and logs a 404 --
@@ -76,7 +82,8 @@
       #game[data-hero-screen-open="true"] #hero-health,
       #game[data-hero-screen-open="true"] #hero-progress,
       #game[data-hero-screen-open="true"] #lantern-marks,
-      #game[data-hero-screen-open="true"] #loot-hud {
+      #game[data-hero-screen-open="true"] #loot-hud,
+      #game[data-hero-screen-open="true"] #streak-meter {
         opacity: 0 !important; pointer-events: none !important;
       }
       /* MODAL ISOLATION, SECOND HALF: the navigation layer gets out of the way too.
@@ -90,6 +97,7 @@
          (so the button that opened it still closes it) and its own X. */
       #game[data-hero-screen-open="true"] #minimap,
       #game[data-hero-screen-open="true"] #objective-pointer,
+      #game[data-hero-screen-open="true"] #objective-marker,
       #game[data-hero-screen-open="true"] #guidance-rescue,
       #game[data-hero-screen-open="true"] #village-board-button {
         opacity: 0 !important; pointer-events: none !important;
@@ -105,7 +113,8 @@
       #game[data-village-board-open="true"] #banner,
       #game[data-village-board-open="true"] #hero-health,
       #game[data-village-board-open="true"] #lantern-marks,
-      #game[data-village-board-open="true"] #loot-hud {
+      #game[data-village-board-open="true"] #loot-hud,
+      #game[data-village-board-open="true"] #streak-meter {
         opacity: 0 !important; pointer-events: none !important;
       }
       /* MODAL ISOLATION, SECOND HALF: the navigation layer gets out of the way too.
@@ -119,6 +128,7 @@
          (so the button that opened it still closes it) and its own X. */
       #game[data-village-board-open="true"] #minimap,
       #game[data-village-board-open="true"] #objective-pointer,
+      #game[data-village-board-open="true"] #objective-marker,
       #game[data-village-board-open="true"] #guidance-rescue,
       #game[data-village-board-open="true"] #hero-button {
         opacity: 0 !important; pointer-events: none !important;
@@ -211,6 +221,17 @@
         transform: scale(1.16);
         box-shadow: 0 0 0.85rem 0.15rem rgb(126 226 138 / 75%);
         transition: transform 90ms ease-out, box-shadow 90ms ease-out;
+      }
+      /* R1: OUT-OF-COMBAT REGEN, and it must read as a DIFFERENT thing from the pop above. That pop
+         is a one-shot event (a kill's own heal, a heart), sharp and scale-driven; regen is a passive
+         climb with no single moment to announce, so it gets a slow LOOPING shimmer instead -- same
+         green (this is still "you are healing"), no scale change at all, so the two can never be
+         confused for the same cue even landing seconds apart. See combat/feedback.js's own
+         isOutOfCombatRegenRise for how main.js tells the two apart from the hp numbers alone. */
+      #hero-health[data-regen="true"] { animation: regen-shimmer 1.1s ease-in-out infinite; }
+      @keyframes regen-shimmer {
+        0%, 100% { box-shadow: 0 0 0 rgb(126 226 138 / 0%); }
+        50% { box-shadow: 0 0 0.55rem 0.05rem rgb(126 226 138 / 55%); }
       }
       /* P2: LEVEL, THE METER, AND POWER -- one pill, directly under the health readout, and the
          second member of the top-left status column rather than a new corner. See its own markup
@@ -352,6 +373,46 @@
          every arrival, so two pickups landing close together each get their own pop. */
       #loot-hud .loot-count[data-popped="true"] { animation: loot-pop 260ms ease-out; }
       @keyframes loot-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+      /* R1: THE STREAK METER. Directly under the loot HUD it shares a corner with -- appears at 2+
+         kills within progression/streaks.js's own STREAK_WINDOW_SECONDS, disappears the instant the
+         window lapses (main.js only renders it while progression/streakView.js's streakMeterView
+         returns non-null, the same "absent means nothing to show" discipline the quest objective row
+         already keeps). A ring rather than a number for the countdown -- combat/feedback.js's own
+         reference research already settled on a depleting shape over a ticking clock for exactly this
+         "time is running out, wordlessly" job. */
+      #streak-meter {
+        position: absolute; top: calc(0.75rem + 52px + 0.5rem + 2.55rem); right: 0.75rem;
+        display: flex; gap: 0.45rem; align-items: center;
+        padding: 0.25rem 0.7rem 0.25rem 0.25rem; border-radius: 999px;
+        background: rgb(12 20 31 / 78%);
+        opacity: 0; transform: scale(0.85);
+        transition: opacity 160ms ease-out, transform 160ms ease-out;
+        pointer-events: none; touch-action: none;
+      }
+      #streak-meter[data-shown="true"] { opacity: 1; transform: scale(1); }
+      /* Escalating colour by tier -- gold at x1/x2 (this game's own "reward" colour, #loot-hud's own
+         coin dot), a hotter orange-red for x3 ("ON FIRE"), so the ring's own colour already says
+         which of the three states progression/streaks.js's own header names a child is in. */
+      .streak-ring {
+        --streak-fraction: 1; --streak-color: #f2c14e;
+        width: 2.15rem; height: 2.15rem; border-radius: 50%;
+        background: conic-gradient(var(--streak-color) calc(var(--streak-fraction) * 360deg), rgb(255 255 255 / 18%) 0);
+        display: flex; align-items: center; justify-content: center;
+        transition: background 160ms linear;
+      }
+      #streak-meter[data-tier="3"] .streak-ring { --streak-color: #ff5c3d; }
+      .streak-ring .streak-count {
+        width: 1.55rem; height: 1.55rem; border-radius: 50%;
+        background: rgb(12 20 31 / 96%); display: flex; align-items: center; justify-content: center;
+        font: 800 0.72rem/1 system-ui, sans-serif; color: #fff; font-variant-numeric: tabular-nums;
+      }
+      .streak-label { font: 800 0.72rem/1.15 system-ui, sans-serif; letter-spacing: 0.04em; color: #fff; }
+      /* One pulse per kill -- stronger on the frame a tier is actually crossed (streakMeterView's own
+         justReachedTier2/3), same brief pop-and-settle #loot-hud's own count already uses on arrival. */
+      #streak-meter[data-pulse="true"] { animation: streak-pulse 260ms ease-out; }
+      #streak-meter[data-pulse="tier"] { animation: streak-pulse-tier 420ms ease-out; }
+      @keyframes streak-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.14); } 100% { transform: scale(1); } }
+      @keyframes streak-pulse-tier { 0% { transform: scale(1); } 35% { transform: scale(1.3); } 100% { transform: scale(1); } }
       /* The standing objective. Sits directly under #lantern-marks (0.75 + 2.5 for the health row,
          + 2 for the level/POWER row, + 2.2 for the pips row), same pill treatment, same
          read-only/out-of-touch-flow rules. Left aligned with the bar, the meter and the pips so the
@@ -575,6 +636,88 @@
         opacity: 1; transition: transform 750ms ease-out, opacity 750ms ease-out;
       }
       .damage-number[data-rise="true"] { transform: translate(-50%, -260%); opacity: 0; }
+      /* R1: the kill's own "+20 XP" toast, riding the SAME #damage-numbers overlay and the SAME
+         spawn/rise mechanics (main.js's popDamageNumber and its new popXpToast share the projection
+         plumbing) -- but a distinct COOL colour, never the damage number's warm gold, so a young
+         player never reads a reward as a second hit landing. */
+      .xp-toast {
+        position: absolute; transform: translate(-50%, -50%);
+        color: #cfe9ff; font: 800 1.7rem/1 system-ui, sans-serif;
+        -webkit-text-stroke: 3px rgb(12 20 31 / 88%); paint-order: stroke fill;
+        text-shadow: 0 3px 4px rgb(0 0 0 / 55%), 0 0 14px rgb(122 196 255 / 85%);
+        opacity: 1; transition: transform 900ms ease-out, opacity 900ms ease-out;
+      }
+      .xp-toast[data-rise="true"] { transform: translate(-50%, -320%); opacity: 0; }
+      /* THE HIDDEN LEARNING LAYER: the rune chest's own question card. Same OPAQUE-backdrop family
+         #profile-gate is (that file's own CSS comment: "it is a question that has to be answered,
+         not an overlay on play, and a half-visible village behind it invites a child to try to tap
+         the village") rather than #hero-screen's click-through vignette -- this is a five-second
+         modal beat, not a persistent panel a child dips in and out of, so it gets the same full
+         attention a profile question does. Gold-purple, matching world/runeChestPresenter.js's own
+         chest mesh, so the card a child is dropped into visually continues the object they just
+         walked up to. */
+      #rune-chest-card {
+        position: absolute; inset: 0; pointer-events: none;
+        display: grid; place-items: center;
+        background: rgb(9 15 24 / 94%);
+        z-index: 20;
+        opacity: 0; transition: opacity 160ms ease-out;
+      }
+      #rune-chest-card[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      /* Same closed-overlay trap #hero-screen/#profile-gate both had to fix: chrome inside sets
+         pointer-events auto, so without this a closed card keeps eating taps meant for the thumbs. */
+      #rune-chest-card[data-shown="false"] { pointer-events: none; }
+      #rune-chest-card[data-shown="false"] * { pointer-events: none; }
+      #rune-chest-card-panel {
+        width: min(92vw, 30rem); max-height: 88vh; overflow-y: auto;
+        padding: 1.2rem 1.3rem 1.4rem; border-radius: 1rem;
+        background: linear-gradient(180deg, #2a1f42 0%, #1a1330 100%);
+        border: 2px solid #c9a8ff;
+        box-shadow: 0 0.7rem 2.2rem rgb(0 0 0 / 55%), 0 0 1.8rem rgb(201 168 255 / 30%);
+        color: #fff; text-align: center;
+      }
+      #rune-chest-card-header {
+        display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+        margin-bottom: 0.6rem;
+      }
+      #rune-chest-card-title {
+        color: #f2b33d; font: 800 1.15rem/1.2 system-ui, sans-serif; letter-spacing: 0.1em;
+      }
+      /* 48px, the same floor every overlay's own way out holds (task 6's belt-and-braces). */
+      #rune-chest-card-close {
+        flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
+      }
+      /* Big friendly type for an early reader: this is the one sentence the whole card asks, so it
+         gets the largest text on the panel next to the answers themselves. */
+      #rune-chest-card-prompt {
+        margin: 0.4rem 0 0.2rem;
+        font: 800 1.6rem/1.3 system-ui, sans-serif;
+      }
+      /* Counting's own emoji row -- rendered large and set apart from the prompt line, per the brief:
+         a pre-reader answers this one by looking, not by reading. Empty/hidden for every other type. */
+      #rune-chest-card-visual {
+        margin: 0.3rem 0 0.5rem; font-size: 2.6rem; line-height: 1.3; letter-spacing: 0.1rem;
+      }
+      #rune-chest-card-visual[hidden] { display: none; }
+      #rune-chest-card-answers { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+      /* Three BIG tappable answers, comfortably past the 48px floor in both dimensions -- this is the
+         one decision the whole card exists for, so it gets the largest touch targets in the game. */
+      .rune-chest-answer {
+        min-height: 3.4rem; padding: 0.6rem 1rem; border-radius: 0.8rem;
+        border: 2px solid rgb(255 255 255 / 35%);
+        background: rgb(255 255 255 / 10%); color: #fff;
+        font: 800 1.35rem/1.2 system-ui, sans-serif; letter-spacing: 0.02em;
+        touch-action: none;
+        transition: background-color 90ms ease-out, transform 90ms ease-out;
+      }
+      .rune-chest-answer:active { background: rgb(242 179 61 / 30%); transform: scale(0.97); }
+      .rune-chest-answer[hidden] { display: none; }
+      @media (prefers-reduced-motion: reduce) {
+        #rune-chest-card, .rune-chest-answer { transition: none; }
+      }
       /* E2: compact projected identity for nearby ordinary enemies. This is deliberately one small
          label per stable enemy id, not a dashboard: the layer is bounded by main.js's useful-world
          distance and hides off-screen/dead enemies. DANGER is text as well as red treatment so a
@@ -592,6 +735,14 @@
       .enemy-nameplate-danger { min-height: 0.7em; color: #ff6b6b; font-size: 0.57rem; letter-spacing: 0.08em; }
       .enemy-nameplate-health { display: block; height: 0.2rem; margin-top: 0.15rem; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 24%); }
       .enemy-nameplate-health > span { display: block; height: 100%; background: #83d77b; transform-origin: left center; }
+      /* R1: the Alpha's own subtle menace, independent of the level-vs-hero danger threshold below --
+         enemies/enemyKindPresentation.js is the one home for which kinds carry this. Deliberately
+         quieter than the DANGER rule beneath it (which stays the louder, brighter warning): a
+         same-level Alpha should still read as meaner than a Wolf beside it without shouting over a
+         genuine over-level danger card when a child happens to meet both at once -- equal-specificity
+         source order (this rule first) is what lets the danger rule win when both apply. */
+      .enemy-nameplate[data-menacing="true"] { border-color: rgb(255 122 92 / 65%); box-shadow: 0 0 0.4rem rgb(255 78 46 / 35%); }
+      .enemy-nameplate[data-menacing="true"] .enemy-nameplate-name { color: #ffb199; }
       .enemy-nameplate[data-danger="true"] { border-color: rgb(255 91 91 / 88%); box-shadow: 0 0 0.55rem rgb(255 45 45 / 48%); }
       .enemy-nameplate[data-danger="true"] .enemy-nameplate-health > span { background: #ff6262; }
       @media (max-width: 32rem) {
@@ -599,7 +750,7 @@
         .enemy-nameplate-level, .enemy-nameplate-danger { font-size: 0.53rem; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-health[data-regen="true"], #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, .xp-toast, #loot-hud .loot-count, #streak-meter, #streak-meter[data-pulse="true"], #streak-meter[data-pulse="tier"], #workshop-interact, #objective-marker-glyph { transition: none; animation: none; }
         /* THE CEREMONY STILL HAPPENS UNDER REDUCED MOTION -- it just stops moving.
            The contract's requirement is that "essential Level/HP/POWER information must remain
            legible when motion is reduced; animation is enhancement, not the only communication
@@ -704,15 +855,19 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
-      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
-         and these two were the only controls in the game under that floor -- flagged in the
-         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
-         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
-         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
+      /* 48 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
+         and these two were the only controls in the game under the original 44px floor -- flagged in
+         the Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
+         held every one of ITS targets at 44 while these stayed short. Raised past that floor to 48
+         after the real-iPad playtest (task 6): the close button is the one control a stranded child
+         MUST be able to hit, so it gets margin above the platform minimum rather than exactly meeting
+         it. The ✕ glyph is left at 1.1rem: what has to grow is the thing a thumb has to hit, not the
+         thing an adult reads. */
       #hero-screen-close {
-        width: 44px; height: 44px; display: grid; place-items: center;
+        width: 48px; height: 48px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
-        background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
       }
       /* One box per slot, gold-ringed and named when filled, dim and lock-glyphed when GP1 has no
          item to put there yet -- section 8's five slots, only Weapon interactive today. */
@@ -863,15 +1018,12 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
-      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
-         and these two were the only controls in the game under that floor -- flagged in the
-         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
-         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
-         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
+      /* 48 px -- same reason and same history as #hero-screen-close's own comment above. */
       #village-board-close {
-        width: 44px; height: 44px; display: grid; place-items: center;
+        width: 48px; height: 48px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
-        background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
       }
       /* One box per node, section 4's own five. Gold-ringed when actionable (Workshop today), dim
          when future ("not yet" communicated by treatment, not by a fabricated lock icon implying a
@@ -992,7 +1144,12 @@
          at something the child can see is noise, and noise is how a child learns to stop looking. */
       #objective-pointer {
         position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px;
-        display: grid; place-items: center;
+        /* Flex column, not the grid this was before the distance readout: a grid with no explicit
+           template stacks both children in the same cell, and the arrow and the metres need to sit
+           one above the other rather than on top of each other. Height/width stay the anchor's own
+           44px hit-target size; the readout is free to overflow it a little, which is fine since
+           nothing here clips. */
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
         pointer-events: none; touch-action: none;
         transition: opacity 140ms ease-out;
       }
@@ -1049,13 +1206,54 @@
         display: block; font-size: 1.7rem; line-height: 1; color: #f2b33d;
         text-shadow: 0 0 0.35rem rgb(12 20 31 / 95%), 0 0 0.9rem rgb(12 20 31 / 75%);
       }
+      /* THE DISTANCE READOUT. "23m", set by render/guideArrow.js's own formatter so the number here
+         can never disagree with the arrow's own idea of how far the objective is. Centred under the
+         arrow glyph rather than beside it -- #objective-pointer is a 44px box and there is no room to
+         the side of the arrow without widening the box past its own edge-clamp margin. */
+      #objective-pointer-distance {
+        display: block; margin-top: 0.1rem; text-align: center;
+        font: 800 0.68rem/1 system-ui, sans-serif; color: #fff;
+        text-shadow: 0 0 0.3rem rgb(12 20 31 / 95%), 0 0 0.7rem rgb(12 20 31 / 80%);
+      }
+      /* ── The on-screen marker ───────────────────────────────────────────────────────────────
+         The other half of render/guideArrow.js's switch: while the arrow above is hidden because the
+         objective is already in frame, this takes over -- a small bouncing glyph hovering over the
+         actual spot. Positioned by main.js exactly where #objective-pointer's arrow would have
+         pointed FROM, i.e. the target's own projected pixel, so the two never disagree about where
+         "there" is. The glyph is a CHILD element with its own bounce animation, kept separate from
+         the outer div's transform: main.js overwrites the outer translate() every frame the target
+         moves on screen, and a single element cannot hold both "jump to this frame's pixel" and "keep
+         bouncing" in one CSS transform without one clobbering the other every frame. */
+      #objective-marker {
+        position: absolute; left: 0; top: 0; width: 0; height: 0;
+        pointer-events: none; touch-action: none;
+      }
+      #objective-marker[data-shown="false"] { display: none; }
+      #objective-marker[data-shown="true"] { display: block; }
+      #objective-marker-glyph {
+        position: absolute; left: 0; bottom: 0.35rem; transform: translateX(-50%);
+        display: block; font-size: 1.55rem; line-height: 1; color: #f2b33d;
+        text-shadow: 0 0 0.35rem rgb(12 20 31 / 95%), 0 0 0.9rem rgb(12 20 31 / 75%);
+        animation: objective-marker-bounce 1.15s ease-in-out infinite;
+      }
+      /* Bounces IN PLACE, above the spot, never below it -- "above the target location" is the brief,
+         and a marker that dipped below would read as sitting on the ground next to the thing rather
+         than calling it out. */
+      @keyframes objective-marker-bounce {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-0.5rem); }
+      }
       #game[data-pointer="mouse"] #desktop-keys { display: block; }
       /* Both live at bottom-centre, and on a desktop both can be on screen at once -- with ?debug=1,
          or on a fault, which is the one time #runtime-status shows without it. The DEVELOPER line is
          the one that moves: the child-facing hint keeps the natural position. Harmless when the
          status line is hidden, which is almost always. */
       #game[data-pointer="mouse"] #runtime-status { bottom: 3.2rem; }
-      #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 112px; height: 112px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
+      /* 128px = 2 x input/touch.js's STICK_RADIUS_PX (64). moveRingTo() there positions this
+         element's top-left corner as (touch x/y) - STICK_RADIUS_PX, which only lands the touch at
+         the ring's visual centre if the ring's own box is exactly 2 x that radius -- so this stays
+         in lockstep with that constant rather than being sized independently. */
+      #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 128px; height: 128px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
       #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / 72%); transform: translate(-50%, -50%); pointer-events: none; }
       /* RUNNING. younger players told us at the first child playtest that their character moved too slowly,
          and the most likely reason is that nothing in this game ever said a harder push was faster
@@ -1112,10 +1310,13 @@
         margin: 0; color: #f2b33d;
         font: 800 1.5rem/1.15 system-ui, sans-serif; letter-spacing: 0.02em;
       }
+      /* 48px, matching #hero-screen-close/#village-board-close's own bump -- one consistent floor
+         across every overlay's own way out, task 6's "belt and braces" applied here too. */
       #profile-gate-close {
-        flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+        flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
         background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
       }
       /* Hidden outright while a first hero is being named: there is nowhere to go back to, and a
          dismissable question a child cannot answer any other way is a dead end. */
@@ -1207,6 +1408,27 @@
         font: 600 0.85rem/1.35 system-ui, sans-serif;
       }
       #profile-gate-notice[data-shown="false"] { display: none; }
+      /* TASK 3(b): explicit touch-action on every piece of overlay chrome, rather than relying on it
+         being inherited from #game's own `touch-action: none` (line 15). Every OTHER interactive
+         control in this file already states its own value instead of leaning on that ancestor --
+         #hero-button, #attack-button, #touch-stick, #profile-chip all do -- and these three overlays'
+         own chrome was the gap a real-device audit found: nothing here said so explicitly, so a
+         double-tap on, say, the owned-item strip or a village node was one more way into iOS's zoom.
+         `none`, not `manipulation`, for all of these: nothing here needs the browser's own panning
+         or pinch-to-zoom gesture, only clicks. */
+      #hero-screen-header, #hero-screen-close, #hero-slots, .hero-slot, #hero-item-list, .hero-item,
+      #hero-item-card, #hero-equip-button,
+      #village-board-header, #village-board-close, #village-board-nodes, .village-board-node,
+      #village-board-detail, #village-board-upgrade-button,
+      #profile-gate, #profile-gate-panel, #profile-gate-header, #profile-gate-close,
+      .profile-card-choose, .profile-card-remove, .profile-card-add, #profile-gate-confirm {
+        touch-action: none;
+      }
+      /* The one text field in the game is the exception: `manipulation`, not `none`, so iOS's normal
+         text-editing touches (placing the caret, double-tapping to select a word) keep working, and
+         only the double-tap-to-ZOOM gesture -- the thing this whole task is about -- is suppressed.
+         That is exactly what `manipulation` is defined to allow. */
+      #profile-gate-name { touch-action: manipulation; }
       /* The HUD's own "who is playing" chip, and the only way back into the gate once a hero is
          chosen. Named rather than an icon: the child's own hero name is the most recognisable
          thing that could sit there. */
@@ -1243,6 +1465,7 @@
       #game[data-profile-gate-open="true"] #hero-health,
       #game[data-profile-gate-open="true"] #lantern-marks,
       #game[data-profile-gate-open="true"] #loot-hud,
+      #game[data-profile-gate-open="true"] #streak-meter,
       #game[data-profile-gate-open="true"] #runtime-status,
       #game[data-profile-gate-open="true"] #workshop-interact,
       #game[data-profile-gate-open="true"] #hero-button,
@@ -1312,6 +1535,12 @@
           <span class="loot-icon" aria-hidden="true"></span><span id="shard-count">0</span>
         </span>
       </div>
+      <!-- R1: the kill-streak meter. See its own CSS comment above for why a ring rather than a
+           number, and progression/streakView.js for the pure view-model main.js paints this from. -->
+      <div id="streak-meter" role="status" aria-live="polite" data-shown="false" data-tier="1">
+        <div class="streak-ring"><span class="streak-count"></span></div>
+        <span class="streak-label"></span>
+      </div>
       <!-- What to do next, always on screen while there is something to do. Under the pips, in the
            same dark-pill family, because it answers the question the pips raise ("one of three
            WHAT?"). world/quest.js decides the text; main.js only paints it. -->
@@ -1375,7 +1604,17 @@
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
       <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
-      <div id="objective-pointer" data-shown="false" aria-hidden="true"><span id="objective-pointer-arrow">➤</span></div>
+      <div id="objective-pointer" data-shown="false" aria-hidden="true">
+        <span id="objective-pointer-arrow">➤</span>
+        <span id="objective-pointer-distance"></span>
+      </div>
+      <!-- The on-screen half of render/guideArrow.js's three-way switch: the arrow above hides once
+           the objective is in frame, and THIS takes over -- a soft bouncing marker over the actual
+           spot, so a child looking straight at the right lantern among several dark ones still has
+           something confirming it is the one. main.js sets the transform every frame the mode is
+           'onscreen'; the bounce itself is CSS on the inner glyph so a fresh translate() each frame
+           does not fight the animation for the same property. -->
+      <div id="objective-marker" data-shown="false" aria-hidden="true"><span id="objective-marker-glyph">▾</span></div>
       <button id="guidance-rescue" type="button" data-shown="false">👀 Show me where</button>
       <canvas id="minimap" width="220" height="220" aria-hidden="true"></canvas>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
@@ -1383,7 +1622,12 @@
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/
            attack thumb zones, not a second stick or attack surface. -->
       <button id="hero-button" type="button" aria-label="Hero" aria-pressed="false">🗡</button>
-      <div id="hero-screen" role="dialog" aria-modal="true" aria-label="Hero" data-shown="false">
+      <!-- data-ui-surface: input/cameraGesture.js's isInteractiveUiTarget() refuses to adopt a
+           pointer whose event.target sits inside this attribute (matched via closest(), so any piece
+           of chrome below tags the whole panel) -- see that function's own header for why. Does NOT
+           cover the deliberately click-through middle: pointer-events: none there means a tap in the
+           empty centre never has a target inside this element at all. -->
+      <div id="hero-screen" role="dialog" aria-modal="true" aria-label="Hero" data-shown="false" data-ui-surface>
         <div id="hero-screen-header">
           <span id="hero-screen-title">HERO</span>
           <button id="hero-screen-close" type="button" aria-label="Close Hero screen">✕</button>
@@ -1394,7 +1638,7 @@
           <div class="hero-slot" data-slot="weapon"><span class="hero-slot-name hero-slot-label"></span></div>
           <div class="hero-slot" data-slot="shield"><span class="hero-slot-name hero-slot-label">Shield</span></div>
           <div class="hero-slot" data-slot="helmet"><span class="hero-slot-name hero-slot-label">Helmet</span></div>
-          <div class="hero-slot" data-slot="shoulders" data-locked="true"><span class="hero-slot-label">Shoulders</span></div>
+          <div class="hero-slot" data-slot="shoulders"><span class="hero-slot-name hero-slot-label">Shoulders</span></div>
           <div class="hero-slot" data-slot="chest" data-locked="true"><span class="hero-slot-label">Chest</span></div>
         </div>
         <!-- Owned-item strip. Rebuilt per render() by progression/heroScreen.js -- both v0 items
@@ -1432,7 +1676,8 @@
       <!-- Who is playing, and the way back to the gate. The hero's own NAME rather than an icon:
            it is the most recognisable thing that could sit here for the child it belongs to. -->
       <button id="profile-chip" type="button" aria-label="Change who is playing"></button>
-      <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false">
+      <!-- data-ui-surface: same reason and same mechanism as #hero-screen's own comment above. -->
+      <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false" data-ui-surface>
         <div id="village-board-header">
           <span id="village-board-title">VILLAGE</span>
           <button id="village-board-close" type="button" aria-label="Close Village Board">✕</button>
@@ -1485,7 +1730,12 @@
            which hero is theirs. Cards are BUILT by progression/profileGate.js rather than declared
            here, because the number of heroes genuinely varies from one to four and markup for four
            with three hidden is a shape that lies about what is on screen. -->
-      <div id="profile-gate" role="dialog" aria-modal="true" aria-label="Who is playing" data-shown="false">
+      <!-- data-ui-surface: same reason as #hero-screen's own comment above. This screen has no
+           click-through middle (it is opaque and pointer-events: auto across its whole area while
+           shown -- see its own CSS comment), so this is redundant with that today; kept for the same
+           reason the other two carry it, so the rule does not depend on which overlays currently
+           happen to be opaque. -->
+      <div id="profile-gate" role="dialog" aria-modal="true" aria-label="Who is playing" data-shown="false" data-ui-surface>
         <div id="profile-gate-panel">
           <!-- Only on the naming screen, where there are no cards and therefore nothing else a child
                who cannot read can look at. Above the question, because it is the part they can
@@ -1502,6 +1752,26 @@
             <button id="profile-gate-confirm" type="button" data-intent="create">START</button>
           </div>
           <p id="profile-gate-notice" data-shown="false"></p>
+        </div>
+      </div>
+      <!-- THE HIDDEN LEARNING LAYER: one quick question, three big answers, never a wrong door.
+           progression/runeChests.js owns the rules; ui/runeChestCard.js populates this from its own
+           question object every time it opens. data-ui-surface: same reason and same mechanism as
+           #hero-screen's own comment above -- input/cameraGesture.js's isInteractiveUiTarget() refuses
+           to adopt a pointer inside it. -->
+      <div id="rune-chest-card" role="dialog" aria-modal="true" aria-label="Rune Chest Question" data-shown="false" data-ui-surface>
+        <div id="rune-chest-card-panel">
+          <div id="rune-chest-card-header">
+            <span id="rune-chest-card-title">RUNE CHEST</span>
+            <button id="rune-chest-card-close" type="button" aria-label="Close">✕</button>
+          </div>
+          <div id="rune-chest-card-prompt"></div>
+          <div id="rune-chest-card-visual" aria-hidden="true" hidden></div>
+          <div id="rune-chest-card-answers">
+            <button class="rune-chest-answer" type="button" data-answer="0"></button>
+            <button class="rune-chest-answer" type="button" data-answer="1"></button>
+            <button class="rune-chest-answer" type="button" data-answer="2"></button>
+          </div>
         </div>
       </div>
     </main>

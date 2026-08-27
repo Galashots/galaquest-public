@@ -1,7 +1,13 @@
 import { RUN_DEFLECTION } from '../character/speed.js';
 import { isInStickRegion } from './cameraGesture.js';
 
-export const STICK_RADIUS_PX = 56;
+// Grown from 56 alongside the enlarged stick REGION (cameraGesture.js's STICK_REGION_*_FRACTION):
+// the second child playtest's own report was that the stick felt small under a real thumb once it
+// could appear anywhere in the bigger region, not only in a small marked circle a kid had trained on.
+// The ring/knob are re-measured off this constant everywhere they are drawn (renderKnob and
+// index.html's #touch-stick, which still measures the RESTING marker's size independently -- see its
+// own comment), so raising it here is the one edit that keeps them in sync.
+export const STICK_RADIUS_PX = 64;
 // Deflection past which the stick means "run". Touch previously hardcoded run: false, so the run
 // clip could not be reached on the iPad at all.
 //

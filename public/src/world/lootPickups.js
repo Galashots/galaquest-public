@@ -66,7 +66,10 @@ function flightBeat(elapsedSeconds, flightSeconds, hopMeters) {
   return { travel01: ease(clamped), hopMeters: Math.sin(Math.PI * clamped) * hopMeters, done: t >= 1 };
 }
 
-function buildCoinMesh() {
+// Exported for world/enemyDropsPresenter.js: a kill's own coin drop is meant to read as "the same
+// coin" a cart's own haul does (R1 brief: "coin = existing coin mesh style"), so it reuses this
+// builder rather than a second guess at what a coin looks like (GQ-007).
+export function buildCoinMesh() {
   const geometry = new THREE.CylinderGeometry(
     COIN_RADIUS_METERS, COIN_RADIUS_METERS, COIN_THICKNESS_METERS, 20,
   );
