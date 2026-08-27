@@ -91,7 +91,16 @@ test('a hero pulled by two wolves at once can run clear of both leashes', () => 
   const now0 = stepUntilHurtButStanding(sim, player.id, 1000);
 
   // Flee due north at a full run, far past both wolves' own leash radius.
-  let now = moveToward(sim, player.id, { x: 0, z: 7.5 }, { x: 0, z: 55 }, 25, now0);
+  // North to OPEN COUNTRY -- and deliberately short of the Old Beacon. The first version fled for a
+  // fixed 25 seconds, and moveToward's target only sets DIRECTION, so the hero ran clean past every
+  // leash and INTO BEACON_ARENA ([3.7, 51.8], r=7.5) -- where the arena handoff moves the hero's
+  // body into the siege engine and the wolf engine's own regen stops ticking. The hp froze at 27/30
+  // the tick the arena boundary crossed underfoot, and this test read that arena rule as a regen
+  // bug. The scenario here is "clear of both leashes in the open", so the drive time is DERIVED
+  // from the run speed to stop around z=40: past every leash in play, well outside the arena,
+  // inside world bounds -- and it stays correct however the speed law is next re-tuned.
+  const fleeSeconds = (40 - 7.5) / RUN_SPEED;
+  let now = moveToward(sim, player.id, { x: 0, z: 7.5 }, { x: 0, z: 40 }, fleeSeconds, now0);
 
   const fled = sim.encounterSnapshot();
   for (const enemy of fled.enemies) {
@@ -114,7 +123,16 @@ test('regen restores a double-aggro hero to full before a next engagement', () =
   const now0 = stepUntilHurtButStanding(sim, player.id, 1000);
   const maxHp = sim.encounterSnapshot().heroes[player.id].maxHp;
 
-  let now = moveToward(sim, player.id, { x: 0, z: 7.5 }, { x: 0, z: 55 }, 25, now0);
+  // North to OPEN COUNTRY -- and deliberately short of the Old Beacon. The first version fled for a
+  // fixed 25 seconds, and moveToward's target only sets DIRECTION, so the hero ran clean past every
+  // leash and INTO BEACON_ARENA ([3.7, 51.8], r=7.5) -- where the arena handoff moves the hero's
+  // body into the siege engine and the wolf engine's own regen stops ticking. The hp froze at 27/30
+  // the tick the arena boundary crossed underfoot, and this test read that arena rule as a regen
+  // bug. The scenario here is "clear of both leashes in the open", so the drive time is DERIVED
+  // from the run speed to stop around z=40: past every leash in play, well outside the arena,
+  // inside world bounds -- and it stays correct however the speed law is next re-tuned.
+  const fleeSeconds = (40 - 7.5) / RUN_SPEED;
+  let now = moveToward(sim, player.id, { x: 0, z: 7.5 }, { x: 0, z: 40 }, fleeSeconds, now0);
 
   // Idle clear of both leashes for the regen delay plus enough seconds to close the gap at
   // OUT_OF_COMBAT_REGEN_HP_PER_SECOND, with slack for the fractional-accumulation banking.
