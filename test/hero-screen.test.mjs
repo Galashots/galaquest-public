@@ -47,7 +47,7 @@ test('index.html hardcodes the 5 slots; weapon/shield/helmet unlocked, shoulders
   }
 });
 
-test('five slots render; weapon/shield/helmet unlock from the catalogue, shoulders/chest stay locked', () => {
+test('five slots render; weapon/shield/helmet/shoulders unlock from the catalogue, chest stays locked', () => {
   const view = heroScreenViewModel({ ...BASE, selectedItemId: null });
   assert.equal(view.slots.length, 5);
   const byId = Object.fromEntries(view.slots.map((s) => [s.id, s]));
@@ -63,10 +63,14 @@ test('five slots render; weapon/shield/helmet unlock from the catalogue, shoulde
   // unlocked-and-empty, not locked, and not filled.
   assert.equal(byId.helmet.locked, false);
   assert.equal(byId.helmet.filled, false);
-  for (const id of ['shoulders', 'chest']) {
-    assert.equal(byId[id].locked, true, `${id} must be locked (no item defined)`);
-    assert.equal(byId[id].filled, false);
-  }
+  // R1: the Shoulders slot unlocks the same way Helmet did -- a real item (Silverguard Shoulders)
+  // now exists for it, so SLOTS_WITH_ITEMS (derived from ITEM_DEFS, never a hand-kept list) reports
+  // it unlocked automatically. A fresh player owns none, so unlocked-and-empty, not filled.
+  assert.equal(byId.shoulders.locked, false);
+  assert.equal(byId.shoulders.filled, false);
+  // Chest remains the one slot with genuinely no item defined anywhere in the catalogue.
+  assert.equal(byId.chest.locked, true, 'chest must stay locked (no item defined)');
+  assert.equal(byId.chest.filled, false);
 });
 
 test('G1-C3: the owned strip shows every owned item -- a fresh player has the starter sword AND the baseline Shield, but not the Blade', () => {
