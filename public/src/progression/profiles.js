@@ -751,8 +751,15 @@ export function createProfileStore(options = {}) {
     && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     try {
       window.addEventListener('storage', (event) => {
-        // key === null is clear() -- everything changed, so that reconciles too.
-        if (event?.key !== null && event?.key !== PROFILES_STORAGE_KEY) return;
+        // ONLY a write to the keyring's own key. key === null is clear() -- a deliberate
+        // whole-origin wipe (a person clearing site data, a harness resetting a phase) -- and
+        // healing against THAT resurrects a keyring whose journals are already gone: names with no
+        // earnings behind them, the exact orphaning deleteProfile's own comment warns about. The
+        // lost update this heal exists for is always a keyring WRITE landing over ours, so a write
+        // is the only event it answers. Measured before this guard: drive-old-beacon's
+        // reduced-motion phase cleared the origin under a still-loaded page and booted as the
+        // previous phase's child, because the old page had quietly written its keyring back.
+        if (event?.key !== PROFILES_STORAGE_KEY) return;
         reconcileWithDevice();
       });
     } catch { /* a device without storage events just misses the live heal */ }
