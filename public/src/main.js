@@ -17,12 +17,16 @@ import {
   // worse than no bar, and this is precisely the "one number, one home" case GQ-007 names.
   RESPAWN_SECONDS,
   stepEncounter,
+  requestSoloHeroHeal,
 } from './combat/encounter.js';
-import { createEncounterFeedback, healthReadout } from './combat/feedback.js';
+import { createEncounterFeedback, healthReadout, isOutOfCombatRegenRise } from './combat/feedback.js';
+import { ENEMY_KINDS, killXpForKind } from './combat/enemyStats.js';
 import { createAudioEngine } from './audio/engine.js';
 import {
   CART_JOLT_RECIPE_NAME,
   COIN_PICKUP_RECIPE_NAME,
+  GEAR_PICKUP_RECIPE_NAME,
+  HEART_PICKUP_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
   LEVEL_UP_RECIPE_NAME,
   RELIGHT_RECIPE_NAME,
@@ -34,13 +38,16 @@ import {
 import {
   attachBeltLantern,
   attachSilverguardHelmet,
+  attachSilverguardShoulder,
   attachWildwoodBladeCandidate,
   BELT_LANTERN_URL,
   RIGID_BELT_LANTERN,
   RIGID_SILVERGUARD_HELMET,
   SILVERGUARD_HELMET_HIDES_ANATOMY,
   SILVERGUARD_HELMET_URL,
+  SILVERGUARD_SHOULDER_URL,
   WILDWOOD_BLADE_CANDIDATE_URL,
+  silverguardShoulderAnchorId,
 } from './character/gear.js';
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
   from './character/weaponLoadout.js';
@@ -50,10 +57,13 @@ import {
   createLifeIdMinter,
   createOfflineProgress,
 } from './rewards/offlineProgress.js';
+import { xpToastText } from './rewards/xpToastView.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS,
   DEFAULT_EQUIPPED_WEAPON_ID,
   DEFAULT_OWNED_ITEM_IDS,
+  SHOULDERS_SLOT,
+  SHOULDER_SILVERGUARD_ID,
   swingDamageFor,
 } from './progression/items.js';
 import {
@@ -77,8 +87,9 @@ import { REWARD_EVENT_TYPES, createRewardFeedback, soundForRewardEvent } from '.
 import { createMarkSparks } from './rewards/markSpark.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
-import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
+import { createWolfPresenter, loadWolfFactory, WOLF_SCALE, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
 import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
+import { presentationForKind } from './enemies/enemyKindPresentation.js';
 import {
   createEnemyNameplateLayer,
   ENEMY_NAMEPLATE_MAX_DISTANCE,
@@ -86,6 +97,19 @@ import {
   clampNameplateProjection,
   nameplateProjectionIsSafe,
 } from './enemies/nameplate.js';
+import { createGlowSprite, setGlowStrength } from './render/glow.js';
+import {
+  DROP_COLLECT_RADIUS_METERS,
+  createEnemyDropsState,
+  requestCollectEnemyDrop,
+  requestEnemyDrop,
+  stepEnemyDrops,
+} from './world/enemyDrops.js';
+import { createEnemyDropsPresenter } from './world/enemyDropsPresenter.js';
+import {
+  coinMultiplierForStreak, createStreakState, registerKill as registerStreakKill, stepStreak,
+} from './progression/streaks.js';
+import { streakMeterView } from './progression/streakView.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -113,7 +137,7 @@ import { createProfileStore } from './progression/profiles.js';
 import { createProfileGate, profileGateViewModel } from './progression/profileGate.js';
 import { foldFacts } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
-import { CHARACTER, WORLD } from './render/layers.js';
+import { CHARACTER, WORLD, setLayer } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
 import { createRimLight } from './render/rimLight.js';
 import { createRenderer } from './render/renderer.js';
@@ -193,7 +217,7 @@ import {
   strikeBarrier,
 } from './world/blackthornHollow.js';
 import { BOSS_BAR_SAFE_HEIGHT, BOSS_BAR_SAFE_WIDTH, bossBarState, createBossBar } from './ui/bossBar.js';
-import { HELMET_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
+import { HELMET_ICON_SVG, SHOULDER_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
 import { SIEGE_EVENT_RECIPE_MAP, soundForSiegeEvent } from './audio/siegeRecipes.js';
 import { HELMET_SILVERGUARD_ID, HELMET_SLOT, WILDWOOD_BLADE_ID, damageFor, itemDef } from './progression/items.js';
 import { predictionStep } from './net/prediction.js';
@@ -246,6 +270,14 @@ const SESSION_ONLY_PROFILE_ID = 'p-session-only';
 // Roughly a hero's chest, so the arrow aims at a person rather than at the ground under them. The
 // hero measures 1.479 m; a destination is a place on the map and has no height of its own.
 const POINTER_TARGET_HEIGHT_METERS = 1.0;
+
+// R1: the Alpha Wolf's own glowing eyes -- measured directly off wolf.glb's own bind-pose bone chain
+// (Armature -> Hips -> chest -> head -> headend), not guessed. See the enemy presenter's own comment
+// on these for the full method and the honest caveat about no live in-game confirmation being
+// possible in this sandbox.
+const ALPHA_EYE_LOCAL_LEFT = Object.freeze([0.03, 0.707, 0.697]);
+const ALPHA_EYE_LOCAL_RIGHT = Object.freeze([-0.03, 0.707, 0.697]);
+const ALPHA_EYE_SIZE_METERS = 0.05;
 
 const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
@@ -528,6 +560,7 @@ async function bootstrap() {
   // genuine false->true within a live session fires the acquisition card. Ownership, not equipment:
   // the Helmet arrives owned-but-off, and putting it on is the card's Equip beat, never automatic.
   let helmetOwnedSeen = null;
+  let shoulderOwnedSeen = null;
   // ARC 2, and the same null-means-not-known-yet shape bladeOwnedSeen uses above and for the same
   // reason: a returning child who already brought Wren the satchel yesterday adopts that answer
   // silently on their first frame rather than being handed the moment again on every page load.
@@ -852,7 +885,10 @@ async function bootstrap() {
   let wolfVisualFactory = null;
   const enemyPresenters = createEnemyPresenterRegistry({
     createPresenter(enemy) {
-      if (enemy.kind !== 'wolf') return null;
+      // R1: every density-package kind (ember-wolf, frost-wolf, alpha-wolf) reuses the SAME shipped
+      // wolf.glb -- no new GLBs were authored for it -- so any kind the rules table recognises gets a
+      // presenter; an unrecognised kind still returns null rather than drawing a default body.
+      if (!ENEMY_KINDS.includes(enemy.kind)) return null;
       // bootstrap loads the shared Wolf source after the render loop is already live. `undefined`
       // means "supported, not ready yet" to the registry, so the same stable id is retried next
       // frame rather than being replaced with a placeholder authority.
@@ -861,6 +897,43 @@ async function bootstrap() {
 
       const visual = wolfVisualFactory.create();
       visual.root.name = `wolf:${enemy.enemyId}`;
+
+      // THE KIND'S OWN APPEARANCE, read from the one table wolf.js is deliberately blind to
+      // (enemies/enemyKindPresentation.js) -- scale and tint, applied here rather than inside wolf.js
+      // so the shared Wolf presenter never has to know a density push exists. wolf.js's own
+      // prepareWolfRoot already clones every material per instance for exactly this reason (so one
+      // Wolf's hit flash cannot bleed onto another's), which is what makes multiplying `.color` here
+      // safe: it never touches a material another enemy or the local hero shares.
+      const appearance = presentationForKind(enemy.kind);
+      visual.root.scale.multiplyScalar(appearance.scaleMultiplier);
+      if (appearance.tintColor !== 0xffffff) {
+        const tint = new THREE.Color(appearance.tintColor);
+        visual.root.traverse((object) => {
+          if (!object.isMesh) return;
+          for (const material of [].concat(object.material)) material?.color?.multiply(tint);
+        });
+      }
+
+      // THE ALPHA'S OWN EYES. Positions are measured, not guessed, off wolf.glb's own bind-pose bone
+      // chain (Armature -> Hips -> chest -> head -> headend), the same "look before you derive"
+      // discipline every hand-fit gear anchor in character/gear.js already follows -- interpolated
+      // 35% of the way from the head joint toward the nose tip, in the same pre-WOLF_SCALE,
+      // root-relative space WOLF_SPARK_HEIGHT_METERS/WOLF_SCALE already uses for the lantern spark on
+      // this same body. No WebGL in this sandbox to confirm the placement in the running game (this
+      // repo's own hard rule); a future capture showing the eyes adrift is the real acceptance test.
+      const eyeSprites = [];
+      if (appearance.glowEyes) {
+        for (const local of [ALPHA_EYE_LOCAL_LEFT, ALPHA_EYE_LOCAL_RIGHT]) {
+          const eye = createGlowSprite(appearance.eyeColor, ALPHA_EYE_SIZE_METERS / WOLF_SCALE);
+          eye.name = 'alpha-wolf-eye';
+          eye.position.set(local[0], local[1], local[2]);
+          setLayer(eye, CHARACTER);
+          setGlowStrength(eye, 1);
+          visual.root.add(eye);
+          eyeSprites.push(eye);
+        }
+      }
+
       scene.add(visual.root);
       const wolfPresenter = createWolfPresenter(visual.root, visual.animations);
       const materials = new Set();
@@ -879,6 +952,7 @@ async function bootstrap() {
           wolfPresenter.dispose();
           scene.remove(visual.root);
           for (const material of materials) material.dispose?.();
+          for (const eye of eyeSprites) eye.material.dispose?.();
         },
       };
     },
@@ -906,6 +980,23 @@ async function bootstrap() {
     heroSpawn: HERO_SPAWN,
     recoverySanctuary: RECOVERY_SANCTUARY,
   });
+
+  // R1: kill drops and the streak meter. `dropsState` is the OFFLINE-ONLY authority -- online, drops
+  // live entirely on the server (serverEncounter.drops) and this client only ever renders/collects
+  // them, the same "the server owns physical truth" split the cart's own loot already keeps. The
+  // presenter itself is shared by both modes: it only ever reads whatever drops array it is handed.
+  let dropsState = createEnemyDropsState();
+  const dropsPresenter = createEnemyDropsPresenter(scene);
+  // Same throttled-retry shape LOOT_REQUEST_RETRY_MS/lootRequestedAt already give cart pickups (see
+  // that pair's own comment for why a one-shot Set undercounts a hero merely passing near a drop).
+  const dropRequestedAt = new Map();
+  const DROP_REQUEST_RETRY_MS = 500;
+  // The kill-streak meter's own rolling state, mirrored CLIENT-SIDE off observed wolf-defeated events
+  // (progression/streaks.js's own header: pure, caller-clocked). The server keeps its own per-player
+  // streak to size coin drops and never puts it on the wire, so this is deliberately a SEPARATE,
+  // cosmetic tally -- divergence from the server's own count is acceptable and offline-consistent,
+  // the same posture this push's own brief states for exactly this meter.
+  let streakState = createStreakState();
 
   function enemyById(enemyId) {
     if (typeof enemyId !== 'string') return null;
@@ -1727,6 +1818,13 @@ async function bootstrap() {
   let helmetMount = null;
   let helmetMountInFlight = false;
   let helmetAssetMissing = false;
+  // R1: the Silverguard Shoulders, mounted the same lazy way as the helmet but as TWO anchors --
+  // shoulder_silverguard.glb loaded once (loadGLB caches by URL) and attached twice, mirrored, the
+  // same "one glb, worn twice" arrangement test/glb-budget.test.mjs's own Tier 3 fixture prices.
+  let shoulderMountLeft = null;
+  let shoulderMountRight = null;
+  let shoulderMountInFlight = false;
+  let shoulderAssetMissing = false;
   // The loaded Hero's anatomy-coverage surface (character/hero.js's heroAnatomyApi), captured at hero
   // load so the helmet toggle can hide the hair and ears WHILE the helmet is on and show them again
   // when it comes off. runtime.hero is the Object3D root and cannot do this; the API object can, and
@@ -1850,6 +1948,28 @@ async function bootstrap() {
       }
       return attachSilverguardHelmet(clonedRoot, gltf.scene.clone(true)).anchor;
     }
+    // R1: the Silverguard Shoulders, one call per side -- net/remotes.js's own ensureRemoteShoulders
+    // asks for `shoulder_silverguard_left`/`shoulder_silverguard_right` (silverguardShoulderAnchorId),
+    // never the bare catalogue id, because ONE owned/equipped item mounts as TWO anchors here. Both
+    // ids load the SAME URL (loadGLB caches by it, so a dozen siblings and this hero cost one
+    // download between them) and share the one asset-missing flag, the identical "one fact about one
+    // file" reasoning every other branch in this function already follows.
+    if (gearId === silverguardShoulderAnchorId('left') || gearId === silverguardShoulderAnchorId('right')) {
+      if (shoulderAssetMissing) return null;
+      const gltf = await loadGLB(SILVERGUARD_SHOULDER_URL);
+      if (gltf.userData?.loadError) {
+        if (!shoulderAssetMissing) {
+          shoulderAssetMissing = true;
+          console.warn(
+            `[progression] ${SILVERGUARD_SHOULDER_URL} is missing -- a sibling wearing the Shoulders `
+            + 'is drawn bare-shouldered until the asset lands.',
+          );
+        }
+        return null;
+      }
+      const side = gearId === silverguardShoulderAnchorId('left') ? 'left' : 'right';
+      return attachSilverguardShoulder(clonedRoot, gltf.scene.clone(true), side).anchor;
+    }
     return null;
   }
 
@@ -1923,6 +2043,44 @@ async function bootstrap() {
     const worn = shouldBeEquipped && helmetMount !== null;
     if (helmetMount) helmetMount.anchor.visible = worn;
     setHelmetAnatomyCoverage(worn);
+  }
+
+  // R1: the Silverguard Shoulders, mounted and toggled the same lazy way as the Helmet -- one load
+  // request covers BOTH anchors (loadGLB's own URL cache means a single fetch, cloned per side), and
+  // both anchors land hidden so there is never a frame where a pauldron is drawn before the equipped
+  // check agrees. No anatomy occlusion: unlike the Helmet, the shoulders sit over the collar/upper
+  // arm, nowhere near the hair/ear regions the Helmet's own coverage exists to hide.
+  function ensureShouldersMounted(shouldBeEquipped) {
+    if (!runtime.hero) return;
+    if (shouldBeEquipped && shoulderMountLeft === null && !shoulderMountInFlight && !shoulderAssetMissing) {
+      shoulderMountInFlight = true;
+      loadGLB(SILVERGUARD_SHOULDER_URL).then((gltf) => {
+        shoulderMountInFlight = false;
+        if (gltf.userData?.loadError) {
+          if (!shoulderAssetMissing) {
+            shoulderAssetMissing = true;
+            console.warn(
+              `[progression] ${SILVERGUARD_SHOULDER_URL} is missing -- equipping the Shoulders still `
+              + 'works and still reads its defence; he goes bare-shouldered until the asset lands.',
+            );
+          }
+          return;
+        }
+        // Two independent clones of the one loaded scene -- an Object3D has one parent, so the same
+        // root cannot be attached to both arms at once (character/gear.js's own header on this exact
+        // point, for the belt lantern).
+        shoulderMountLeft = attachSilverguardShoulder(runtime.hero, gltf.scene.clone(true), 'left');
+        shoulderMountRight = attachSilverguardShoulder(runtime.hero, gltf.scene.clone(true), 'right');
+        shoulderMountLeft.anchor.visible = false;
+        shoulderMountRight.anchor.visible = false;
+      }).catch((error) => {
+        shoulderMountInFlight = false;
+        console.warn('[progression] failed to mount the Silverguard Shoulders:', error);
+      });
+    }
+    const worn = shouldBeEquipped && shoulderMountLeft !== null;
+    if (shoulderMountLeft) shoulderMountLeft.anchor.visible = worn;
+    if (shoulderMountRight) shoulderMountRight.anchor.visible = worn;
   }
 
   // Phase D (D6): "observable without hearing it" (see audioDebug's own comment on runtime, below)
@@ -3073,6 +3231,9 @@ async function bootstrap() {
     // play, not only while a child is looking at the menu (heroPreview.update below re-reads the live
     // hero, so a helmet mounted here joins the showcase preview on its own).
     ensureHelmetMounted(currentEquippedItemIds[HELMET_SLOT] === HELMET_SILVERGUARD_ID);
+    // R1: the shoulders he is actually wearing, from the same equipped map -- the identical "the
+    // world, the DOM and the showcase can never disagree" reasoning the helmet's own call gives.
+    ensureShouldersMounted(currentEquippedItemIds[SHOULDERS_SLOT] === SHOULDER_SILVERGUARD_ID);
     heroPreview.update({
       heroRoot: runtime.hero,
       accentColorHex: swatchHexFor(currentEquippedWeaponId),
@@ -3477,6 +3638,37 @@ async function bootstrap() {
           onEquip: () => equipHeroItem(HELMET_SILVERGUARD_ID),
         });
         speakKeeperLineIfUnlocked(acquired.spoken);
+        audio.play('blade-unlock');
+      }
+
+      // ── R1: THE SHOULDERS, ACQUIRED ─────────────────────────────────────────────────────────
+      //
+      // Ownership arrives from a kill drop (world/enemyDrops.js's own gear pool), not a claim
+      // ceremony, but the CEREMONY is the identical diff-off-ownership beat the Blade and Helmet
+      // already run -- a durable item became owned that was not a frame ago, online or off (the
+      // offline fold below journals the same 'gear-owned' fact shape). No new machinery.
+      const ownsShouldersNow = ownedItemIdsFromRewards(ownRewards).includes(SHOULDER_SILVERGUARD_ID);
+      if (shoulderOwnedSeen === null) {
+        shoulderOwnedSeen = ownsShouldersNow;
+      } else if (ownsShouldersNow && !shoulderOwnedSeen) {
+        shoulderOwnedSeen = true;
+        const afterEquipped = { ...currentEquippedItemIds, [SHOULDERS_SLOT]: SHOULDER_SILVERGUARD_ID };
+        const withShouldersPower = powerFor({
+          maxHp: heroStatsThisFrame.maxHp,
+          heroDamage: heroStatsThisFrame.heroDamage,
+          damageReductionPercent: damageReductionPercentForEquipment(afterEquipped),
+        });
+        const acquiredShoulders = unlockCardState({
+          itemName: itemDef(SHOULDER_SILVERGUARD_ID)?.name ?? 'Silverguard Shoulders',
+          power: powerChange(powerFor(heroStatsThisFrame), withShouldersPower),
+          prompt: 'EQUIP NOW?',
+        });
+        unlockCard.show(acquiredShoulders, {
+          accent: swatchFor(SHOULDER_SILVERGUARD_ID),
+          icon: SHOULDER_ICON_SVG,
+          onEquip: () => equipHeroItem(SHOULDER_SILVERGUARD_ID),
+        });
+        speakKeeperLineIfUnlocked(acquiredShoulders.spoken);
         audio.play('blade-unlock');
       }
 
