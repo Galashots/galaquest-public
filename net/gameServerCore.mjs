@@ -63,6 +63,10 @@ import { HELMET_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progress
 import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
 } from '../public/src/world/bounds.js';
+// G3 follow-up: the Beacon's own collision, imported the identical "one law, two consumers" way
+// bounds.js's world edge already is -- see world/obstacles.js's own header for why this cannot be a
+// server-only rule.
+import { resolveObstacleCollisions, worldObstacles } from '../public/src/world/obstacles.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
 import { openRewardStore } from './rewardStore.mjs';
 import { attachWebSocketServer } from './wsServer.mjs';
@@ -81,6 +85,11 @@ export const HOLLOW_CACHE_SHARDS = 3;
 // cannot import this server-only module. So the number moved to the one place both sides can read
 // it -- progression/heroStats.js's WREN_CHARM_MAX_HP_BONUS -- with its meaning preserved exactly
 // (10 of a 30hp body is the same third) rather than re-tuned on the way past.
+
+// Computed once, not per tick per player: the Village's own blockers never move mid-session, so
+// re-deriving them from zones/village.js on every tick (TICK_HZ below) for every connected child
+// would be pure waste. The pure resolver itself stays a per-call function (it has to -- a hero moves).
+const WORLD_OBSTACLES = worldObstacles();
 
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
@@ -1250,8 +1259,15 @@ export function createSimulation(options = {}) {
 
     for (const player of players.values()) {
       const separated = separateFromEnemies({ x: player.x, z: player.z }, encounterState.enemies);
-      player.x = clampToWorldX(separated.x);
-      player.z = clampToWorldZ(separated.z);
+      // G3 follow-up: two children walked straight through the Old Beacon's own stone base in a
+      // real playtest. The SAME pure resolver the client's own prediction runs (world/obstacles.js's
+      // own header explains why it has to be the same function, not merely the same rule) pushes a
+      // hero's feet back out of the Beacon and the Lantern Tree here, on the server's own
+      // authoritative position -- the one both sides eventually agree on, same as the world edge
+      // clamp two lines down.
+      const unstuck = resolveObstacleCollisions(separated, WORLD_OBSTACLES);
+      player.x = clampToWorldX(unstuck.x);
+      player.z = clampToWorldZ(unstuck.z);
     }
 
     return tick;
