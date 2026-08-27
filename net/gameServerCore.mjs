@@ -434,20 +434,25 @@ export function createRewardCoordinator(options = {}) {
    * path -- checked HERE too, before touching the store, so the ephemeral path (which never reaches
    * the store at all) gets the identical guarantee rather than a silently more permissive one.
    *
-   * GP1-C1: also rejects an itemId this player does not OWN. The Hero screen never offers a button
-   * for an unowned item (heroScreenViewModel filters the strip to ownedItemIds), so a legitimate
-   * client can never produce this message -- this is the same "stale or hostile client" posture
-   * attack/input already take on a message that is shaped correctly but makes no sense.
+   * GP1-C1: an itemId this player does not OWN is refused as a CLEAN SILENCE -- equipped weapon
+   * unchanged, connection kept -- the same posture claim-blade's own comment states for a message
+   * an honest client can send a beat early. This used to throw (closing the connection, issue #82),
+   * on the reasoning that the Hero screen never offers a button for an unowned item so only a stale
+   * or hostile client could send it. The GQ-023 playtest disproved that: a mid-session socket close
+   * reseats the player as a fresh identity that owns nothing, while the Hero screen still offers
+   * everything the child legitimately earned -- so the very next EQUIP tap was an honest message
+   * the server answered by closing the connection again. Ownership is still enforced; only the
+   * price of a miss changed. test/equip-wildwood-wire.test.mjs pins all three properties.
    */
   function applyEquip(playerId, itemId, identity) {
     if (!isKnownItem(itemId)) {
-      // Keep the long-standing client/test contract while this seam widens from weapon-only to
-      // slot-generic equipment. The value is still rejected before either durable or ephemeral
-      // state is touched.
+      // Still a throw (and a close): no client, however stale, ever holds a button for an item
+      // nobody defined -- that shape really is "stale or hostile", the posture attack/input take.
+      // The value is rejected before either durable or ephemeral state is touched.
       throw new Error(`applyEquip got an unknown weapon id ${JSON.stringify(itemId)}`);
     }
     if (!ownedItemIdsFor(playerId).includes(itemId)) {
-      throw new Error(`applyEquip: player ${playerId} does not own ${JSON.stringify(itemId)}`);
+      return { accepted: false };
     }
     const guestId = guestIdByPlayer.get(playerId);
     const slot = itemDef(itemId).slot;

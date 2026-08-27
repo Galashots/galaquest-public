@@ -268,15 +268,16 @@ test('two guests each get their own Helmet from the hollow independently', () =>
 
 // ── 9. Equip without ownership is refused ───────────────────────────────────────────────────────
 
-test('equipping Helmet without hollow ownership throws', () => {
+test('equipping Helmet without hollow ownership is cleanly refused', () => {
+  // Issue #82: an ownership miss returns { accepted: false } instead of throwing -- the refusal is
+  // the property, the throw (which closed the connection) was the mechanism. See applyEquip.
   const { rewards, cleanup } = freshCoordinator();
   try {
     rewards.join('hero-a', 'guest-a');
-    assert.throws(
-      () => rewards.applyEquip('hero-a', HELMET_SILVERGUARD_ID),
-      /does not own/,
-      'equip without ownership must be refused',
-    );
+    assert.deepEqual(rewards.applyEquip('hero-a', HELMET_SILVERGUARD_ID), { accepted: false },
+      'equip without ownership must be refused');
+    assert.equal(rewards.rewardsFor(['hero-a'])['hero-a'].equippedItemIds.helmet ?? null, null,
+      'the refused helmet must not be equipped');
   } finally {
     cleanup();
   }
