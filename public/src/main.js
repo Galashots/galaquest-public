@@ -99,7 +99,11 @@ import {
 } from './enemies/nameplate.js';
 import { createGlowSprite, setGlowStrength } from './render/glow.js';
 import {
+  COIN_DROP_KIND,
   DROP_COLLECT_RADIUS_METERS,
+  GEAR_DROP_KIND,
+  HEART_DROP_KIND,
+  HEART_HEAL_HP,
   createEnemyDropsState,
   requestCollectEnemyDrop,
   requestEnemyDrop,
@@ -108,6 +112,7 @@ import {
 import { createEnemyDropsPresenter } from './world/enemyDropsPresenter.js';
 import {
   coinMultiplierForStreak, createStreakState, registerKill as registerStreakKill, stepStreak,
+  streakStillActive,
 } from './progression/streaks.js';
 import { streakMeterView } from './progression/streakView.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
@@ -987,6 +992,11 @@ async function bootstrap() {
   // presenter itself is shared by both modes: it only ever reads whatever drops array it is handed.
   let dropsState = createEnemyDropsState();
   const dropsPresenter = createEnemyDropsPresenter(scene);
+  // Offline-only: world/enemyDrops.js's own lifeId is deliberately non-durable ("used only to keep
+  // this kill's drop ids distinct... never persisted or checked for durable idempotency"), so a
+  // fresh minter local to drops is correct -- it does not need to correlate with the mark/XP minter's
+  // own durable ids at all, only to never repeat within this session.
+  const mintDropLifeId = createLifeIdMinter();
   // Same throttled-retry shape LOOT_REQUEST_RETRY_MS/lootRequestedAt already give cart pickups (see
   // that pair's own comment for why a one-shot Set undercounts a hero merely passing near a drop).
   const dropRequestedAt = new Map();
@@ -1153,6 +1163,20 @@ async function bootstrap() {
     healthPopTimer = window.setTimeout(() => { delete healthElement.dataset.healing; }, 200);
   }
 
+  // R1: out-of-combat regen's own cue -- a slow LOOPING shimmer rather than a one-shot pop, so it
+  // never reads as the same event a real heal already announces. See combat/feedback.js's own
+  // isOutOfCombatRegenRise for how the frame loop tells the two apart, and index.html's own
+  // #hero-health[data-regen] rule for the animation itself. Held open for a beat past the last
+  // observed regen tick (rather than cleared the instant one frame shows no rise) so the shimmer
+  // does not flicker between individual ~0.25s regen ticks.
+  let healthRegenTimer = null;
+  const REGEN_SHIMMER_HOLD_MS = 700;
+  function pulseRegen() {
+    healthElement.dataset.regen = 'true';
+    window.clearTimeout(healthRegenTimer);
+    healthRegenTimer = window.setTimeout(() => { delete healthElement.dataset.regen; }, REGEN_SHIMMER_HOLD_MS);
+  }
+
   // Floating damage numbers. Until now a landed hit was only visible as the wolf's own spark
   // dimming one notch -- readable if you already know to look for it, invisible to a child watching
   // the swing land. Positioned by projecting the wolf's world position through the CURRENT camera
@@ -1182,6 +1206,58 @@ async function bootstrap() {
     window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
   }
 
+  // R1: the kill's own "+20 XP" toast. Same projection/rise/lifetime plumbing as popDamageNumber
+  // (riding the SAME #damage-numbers overlay -- both are floating combat text, and a second
+  // container would just be a second copy of this exact mechanism), but its own CSS class so the
+  // colour reads as a reward rather than a hit (see index.html's .xp-toast, deliberately cool where
+  // .damage-number is warm gold).
+  function popXpToast(worldX, worldY, worldZ, amount) {
+    const projected = new THREE.Vector3(worldX, worldY, worldZ).project(camera);
+    if (projected.z > 1) return;
+    const rect = gameSurface.getBoundingClientRect();
+    const { x, y } = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    const el = document.createElement('div');
+    el.className = 'xp-toast';
+    el.textContent = xpToastText(amount);
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    damageNumbersElement.appendChild(el);
+    window.requestAnimationFrame(() => { el.dataset.rise = 'true'; });
+    window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
+  }
+
+  // R1: THE STREAK METER. See index.html's own CSS comment for the ring/pulse mechanics; this is
+  // only the DOM wiring, painted from progression/streakView.js's pure view-model every frame.
+  const streakMeterElement = document.querySelector('#streak-meter');
+  const streakRingElement = streakMeterElement?.querySelector('.streak-ring') ?? null;
+  const streakCountElement = streakMeterElement?.querySelector('.streak-count') ?? null;
+  const streakLabelElement = streakMeterElement?.querySelector('.streak-label') ?? null;
+  let streakPulseTimer = null;
+  function renderStreakMeter(view) {
+    if (!streakMeterElement) return;
+    const shown = view !== null;
+    streakMeterElement.dataset.shown = String(shown);
+    if (!shown) return;
+    streakMeterElement.dataset.tier = view.multiplier >= 3 ? '3' : view.multiplier >= 2 ? '2' : '1';
+    streakRingElement?.style.setProperty('--streak-fraction', String(view.ringFraction));
+    if (streakCountElement) streakCountElement.textContent = view.countText;
+    if (streakLabelElement) streakLabelElement.textContent = view.tierLabel;
+  }
+  /** One pulse per kill, a bigger one on the frame a tier is actually crossed -- see index.html's
+   *  own streak-pulse/streak-pulse-tier keyframes. */
+  function pulseStreakMeter(view) {
+    if (!streakMeterElement) return;
+    delete streakMeterElement.dataset.pulse;
+    window.clearTimeout(streakPulseTimer);
+    // A frame between clearing and re-setting the attribute, the same reason popDamageNumber's own
+    // rise needs one -- re-triggering a CSS animation on the SAME attribute value needs a paint in
+    // between, or the browser coalesces both states and the pulse never plays a second time in a row.
+    window.requestAnimationFrame(() => {
+      streakMeterElement.dataset.pulse = (view.justReachedTier2 || view.justReachedTier3) ? 'tier' : 'true';
+      streakPulseTimer = window.setTimeout(() => { delete streakMeterElement.dataset.pulse; }, 500);
+    });
+  }
+
   const enemyNameplates = createEnemyNameplateLayer({
     container: document.querySelector('#enemy-nameplates'),
   });
@@ -1199,7 +1275,7 @@ async function bootstrap() {
     // second portrait/landscape layout table that could drift from CSS.
     const reservedRects = [
       '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
-      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#minimap', '#objective-pointer',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#streak-meter', '#minimap', '#objective-pointer',
     ].flatMap((selector) => {
       const element = document.querySelector(selector);
       if (!element) return [];
@@ -1243,7 +1319,7 @@ async function bootstrap() {
       || projectedPixels.y < -100 || projectedPixels.y > rect.height + 60) return null;
     const reservedRects = [
       '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
-      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#minimap', '#objective-pointer',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#streak-meter', '#minimap', '#objective-pointer',
     ].flatMap((selector) => {
       const element = document.querySelector(selector);
       if (!element) return [];
@@ -3345,6 +3421,10 @@ async function bootstrap() {
     const bodyNow = encounterState.hero;
     const bodyMax = bodyNow.maxHp ?? HERO_MAX_HP;
     if (bodyNow.hp !== healthShown.hp || bodyMax !== healthShown.maxHp) {
+      // R1: a rise shaped like out-of-combat regen (never a kill heal or a heart, which both jump by
+      // far more than isOutOfCombatRegenRise's own one-point ceiling) gets the shimmer. Read BEFORE
+      // healthShown moves, since the predicate compares the two hp values across this exact diff.
+      if (isOutOfCombatRegenRise(healthShown.hp, bodyNow.hp)) pulseRegen();
       healthShown = { hp: bodyNow.hp, maxHp: bodyMax };
       renderHealth(healthShown.hp, healthShown.maxHp);
     }
@@ -3456,6 +3536,13 @@ async function bootstrap() {
       // from both are collected and dispatched together below, which is the order this loop has
       // always used -- the presenters are updated to the newest state first, then told what changed.
       const events = [];
+      // R1: which of THIS frame's kills this hero personally landed the killing blow on -- the XP
+      // toast's own gate (see the dispatch loop below). Online, GLOBAL_ENCOUNTER_EVENT_TYPES lets a
+      // sibling's wolf-defeated through too (everyone's presenter should flash/celebrate together),
+      // and stripHeroId erases who it belonged to before `events` sees it -- so this has to be
+      // captured HERE, before the strip, or the toast could not tell "my kill" from "a kill I merely
+      // watched". Offline there is only one hero, so every defeat is unconditionally this one's own.
+      const myKillEnemyIds = new Set();
       if (netStatus === 'online') {
         // Combat commands are server-applied, presentation is client-predicted (Design ruling 3).
         // No local stepEncounter/requestAttack/separateFromEnemies here at all -- HP, enemy mode,
@@ -3491,6 +3578,9 @@ async function bootstrap() {
           if (SIEGE_EVENT_TYPES.has(event.type)) {
             if (isOwnSiegeEvent(event, ownHeroId)) pendingSiegeEvents.push(stripHeroId(event));
             continue;
+          }
+          if (event.type === 'wolf-defeated' && event.heroId === ownHeroId) {
+            myKillEnemyIds.add(event.enemyId);
           }
           if (GLOBAL_ENCOUNTER_EVENT_TYPES.has(event.type) || event.heroId === ownHeroId) {
             events.push(stripHeroId(event));
@@ -3556,6 +3646,36 @@ async function bootstrap() {
         if (earned.length > 0) {
           refreshProfileState();
           events.push(...earned);
+        }
+
+        // R1: kill drops, rolled locally with Math.random -- the SAME pure roll
+        // (world/enemyDrops.js's own requestEnemyDrop) net/gameServerCore.mjs runs online, so a
+        // child with no server gets the identical loop, just unseeded. One roll per wolf-defeated
+        // this frame, scattered at that enemy's own last published position.
+        for (const event of stepped.events) {
+          if (event.type !== 'wolf-defeated') continue;
+          // Solo offline: every defeat is this hero's own kill, unconditionally (see myKillEnemyIds'
+          // own header comment above).
+          myKillEnemyIds.add(event.enemyId);
+          const deadEnemy = enemyById(event.enemyId);
+          if (!deadEnemy) continue;
+          // Approximates the multiplier THIS kill is about to earn -- the streak meter's own
+          // registration runs a moment later, in the one dispatch loop every kill (online and off)
+          // passes through, so the count is not yet advanced when this roll needs it. A streak still
+          // alive continues, so this kill is one more than the count already showing. Cosmetic and
+          // allowed to diverge from a hair-perfect answer -- progression/streaks.js's own header and
+          // this push's own brief both say so.
+          const previewStreak = (streakStillActive(streakState) ? streakState.streak : 0) + 1;
+          const rolled = requestEnemyDrop(dropsState, {
+            enemyId: event.enemyId,
+            lifeId: mintDropLifeId(),
+            kind: event.kind,
+            x: deadEnemy.x,
+            z: deadEnemy.z,
+            streakMultiplier: coinMultiplierForStreak(previewStreak),
+            killerOwnedItemIds: ownedItemIdsFromRewards(profileState),
+          }, Math.random);
+          dropsState = rolled.state;
         }
       }
 
@@ -3807,6 +3927,12 @@ async function bootstrap() {
       // of encounter.js's own source) without either editing the guarded combat/ directory or
       // breaking that guard's own regression test. Same "every event accounted for, sound decided
       // explicitly" discipline, just addressed through its own two small tables.
+      //
+      // R1: the streak meter's own idle clock, advanced every frame regardless of whether anything
+      // died THIS frame -- progression/streaks.js's own header is explicit that stepStreak has to run
+      // every tick so the meter can read a live "about to expire" state rather than only learning
+      // about expiry in arrears, on the next kill.
+      streakState = stepStreak(streakState, deltaSeconds);
       for (const event of events) {
         // Journalled HERE rather than inside the two reward handlers that used to do it, so the
         // device keeps a copy of every durable fact it is told about rather than of the two types
@@ -3827,7 +3953,24 @@ async function bootstrap() {
         const recipeName = soundForEvent(event.type);
         if (recipeName) audio.play(recipeName);
         onEncounterEvent(event);
+        // R1: the streak meter and the kill's own XP toast. Every observed wolf-defeated continues
+        // the streak -- online, a sibling's kill nearby carries the party's momentum too, the
+        // "cosmetic divergence is acceptable" posture this push's own brief states plainly. The
+        // toast is narrower: only THIS hero's own killing blow (myKillEnemyIds, captured before
+        // stripHeroId erased who it belonged to), so a child never reads a reward for a fight they
+        // did not land the finishing hit on.
+        if (event.type === 'wolf-defeated') {
+          streakState = registerStreakKill(streakState);
+          const view = streakMeterView(streakState);
+          if (view) pulseStreakMeter(view);
+          if (myKillEnemyIds.has(event.enemyId)) {
+            const enemy = enemyById(event.enemyId);
+            const amount = killXpForKind(event.kind);
+            if (enemy && amount !== null) popXpToast(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, amount);
+          }
+        }
       }
+      renderStreakMeter(streakMeterView(streakState));
 
       const fight = !wolf
         ? `you ${Math.max(0, hero.hp)}hp`
@@ -4352,6 +4495,93 @@ async function bootstrap() {
             lootRequestedAt.set(pickup.id, frameStart);
             net.sendCollectLoot(pickup.id);
           }
+        }
+      }
+    }
+
+    if (runtime.hero) {
+      // R1: kill drops -- coins, hearts and gear scattered where an ordinary enemy fell. Online, the
+      // server owns physical truth entirely (serverEncounter.drops) and this client only ages nothing
+      // itself; offline, the same pure rules (world/enemyDrops.js's stepEnemyDrops) age and expire
+      // this client's own local roll every frame -- the identical "server owns it online, the same
+      // pure rules run locally offline" split the siege block just below already uses.
+      if (netStatus !== 'online') dropsState = stepEnemyDrops(dropsState, deltaSeconds);
+      const drops = netStatus === 'online' && serverEncounter?.drops ? serverEncounter.drops : dropsState.drops;
+      // Presenter arrivals only -- still-resting/still-appearing/someone-else's-despawn stay silent,
+      // the identical contract world/lootPickups.js's own update() keeps for the cart's pickups.
+      const dropArrivals = dropsPresenter.update(deltaSeconds, drops, net.selfId, player.position);
+      let dropsHudDirty = false;
+      for (const arrival of dropArrivals) {
+        if (arrival.kind === COIN_DROP_KIND) {
+          // No offline fallback for durable Village Supplies (see EMPTY_VILLAGE's own comment) -- a
+          // kill-drop coin routes through the SAME communal award a cart coin does online
+          // (net/gameServerCore.mjs's own applyLootAward), so offline this is a session-local bump
+          // only, the same honest "visible difference from the persisted loop" this fallback already
+          // carries elsewhere (rewards/offlineProgress.js's own header).
+          coinsDisplayed += 1;
+          dropsHudDirty = true;
+          audio.play(COIN_PICKUP_RECIPE_NAME);
+          popLootHud(COIN_KIND);
+        } else if (arrival.kind === HEART_DROP_KIND) {
+          // Online, the server's own applyHeroHeal already raised a real 'hero-healed' event that
+          // reaches THIS hero's dispatch loop the ordinary way (it carries heroId, filtered to
+          // ownHeroId) and already pops/renders the health row -- nothing left to do here but the
+          // pickup's own sound. Offline, there is no server to have raised it, so this client raises
+          // the identical heal itself through requestSoloHeroHeal (the seam encounter.js exports for
+          // exactly this), whose own 'hero-healed' event flows through the SAME dispatch loop this
+          // frame -- so the pop and the health-row update happen through the one real code path
+          // either way, never a second copy of "what a heal does" here.
+          if (netStatus !== 'online') {
+            // This frame's ONE dispatch loop (the identical single point every other event in this
+            // file funnels through) has already run by the time this drop's own attraction flight
+            // lands, so its 'hero-healed' event is dispatched directly here rather than pushed into
+            // an `events` array nobody will drain again this frame -- onEncounterEvent already does
+            // exactly the pop+render a heal needs; no second copy of that logic belongs here.
+            const healed = requestSoloHeroHeal(encounterState, HEART_HEAL_HP);
+            encounterState = healed.state;
+            for (const healEvent of healed.events) onEncounterEvent(healEvent);
+          }
+          audio.play(HEART_PICKUP_RECIPE_NAME);
+        } else if (arrival.kind === GEAR_DROP_KIND) {
+          // Online, the server's own grantOwnership already wrote the durable 'gear-owned' fact and
+          // announced it on the wire, which the G4/G1-C3-style ownership diff further up (the
+          // Blade/Helmet/Shoulders ceremonies) picks up on its own -- nothing extra here either.
+          // Offline, this client mints the identical fact shape itself: the same durable type
+          // net/gameServerCore.mjs's rewards.grantOwnership writes, journalled locally so the
+          // Shoulders ceremony's own ownedItemIdsFromRewards(profileState) diff fires for real.
+          if (netStatus !== 'online' && typeof arrival.itemId === 'string') {
+            profiles.recordFacts(profileId, [{
+              eventId: `gear-owned:offline:${arrival.itemId}:${mintDropLifeId()}`,
+              type: 'gear-owned',
+              value: arrival.itemId,
+            }]);
+            refreshProfileState();
+          }
+          audio.play(GEAR_PICKUP_RECIPE_NAME);
+        }
+      }
+      if (dropsHudDirty) renderLootHud();
+
+      // Ask the server to collect whatever is in reach and not yet gone -- throttled per drop, the
+      // identical shape the cart's own lootRequestedAt/LOOT_REQUEST_RETRY_MS give pickups above.
+      // Offline there is no server to ask: this client adjudicates its own reach directly against
+      // requestCollectEnemyDrop, the same pure function net/gameServerCore.mjs runs online, so the
+      // "first request wins, already-collected/out-of-reach is a clean no" rule is identical either
+      // way -- only WHO runs it differs.
+      for (const drop of drops) {
+        if (drop.collectedBy != null) continue;
+        const lastRequestedAt = dropRequestedAt.get(drop.id);
+        if (lastRequestedAt != null && frameStart - lastRequestedAt < DROP_REQUEST_RETRY_MS) continue;
+        const distance = Math.hypot(player.position.x - drop.x, player.position.z - drop.z);
+        if (distance > DROP_COLLECT_RADIUS_METERS) continue;
+        dropRequestedAt.set(drop.id, frameStart);
+        if (netStatus === 'online') {
+          net.sendCollectDrop(drop.id);
+        } else {
+          const collected = requestCollectEnemyDrop(
+            dropsState, OFFLINE_HERO_ID, drop.id, { x: player.position.x, z: player.position.z },
+          );
+          if (collected.accepted) dropsState = collected.state;
         }
       }
     }
