@@ -18,6 +18,7 @@ import {
   REWARD_XP_NORMAL,
   closeRuneChest,
   createRuneChestState,
+  heroInCombat,
   judgeRuneChestAnswer,
   openRuneChest,
   pickChestSpawnPoint,
@@ -262,4 +263,54 @@ test('collect radius matches the documented constant and is a sane walk-up dista
   assert.ok(CHEST_SPAWN_MIN_METERS < CHEST_SPAWN_MAX_METERS);
   assert.ok(CHEST_SPAWN_MIN_METERS > CHEST_COLLECT_RADIUS_METERS,
     'the chest must spawn further away than the radius that opens it, or it would open on arrival');
+});
+
+// ── the mid-fight gate ──────────────────────────────────────────────────────────────────────────
+//
+// The card is a modal that freezes movement and attack input while it is up (main.js's
+// anyOverlayOpen gate), so heroInCombat is the rule that keeps it from opening OVER a live fight.
+// The notice radius is passed in by the caller (main.js hands it WOLF_AGGRO_RANGE); these tests
+// exercise the rule with an explicit 6 so a radius change shows up where it is made, not here.
+
+test('a biting enemy within the notice radius holds the card', () => {
+  assert.equal(heroInCombat({
+    heroX: 0, heroZ: 0, noticeRadiusMeters: 6,
+    enemies: [{ mode: 'bite', x: 1, z: 1 }],
+  }), true);
+});
+
+test('an enemy closing in on walk within the notice radius holds the card', () => {
+  assert.equal(heroInCombat({
+    heroX: 0, heroZ: 0, noticeRadiusMeters: 6,
+    enemies: [{ mode: 'walk', x: 4, z: 0 }],
+  }), true);
+});
+
+test('an idle enemy nearby does NOT hold the card -- proximity alone is not a fight', () => {
+  assert.equal(heroInCombat({
+    heroX: 0, heroZ: 0, noticeRadiusMeters: 6,
+    enemies: [{ mode: 'idle', x: 1, z: 1 }],
+  }), false);
+});
+
+test('a hostile enemy beyond the notice radius does NOT hold the card', () => {
+  assert.equal(heroInCombat({
+    heroX: 0, heroZ: 0, noticeRadiusMeters: 6,
+    enemies: [{ mode: 'bite', x: 10, z: 10 }],
+  }), false);
+});
+
+test('dead, dying and returning enemies never hold the card', () => {
+  for (const mode of ['dead', 'dying', 'returning']) {
+    assert.equal(heroInCombat({
+      heroX: 0, heroZ: 0, noticeRadiusMeters: 6,
+      enemies: [{ mode, x: 1, z: 1 }],
+    }), false, mode);
+  }
+});
+
+test('no enemies, or a malformed list, reads as not-in-combat rather than throwing', () => {
+  assert.equal(heroInCombat({ heroX: 0, heroZ: 0, noticeRadiusMeters: 6, enemies: [] }), false);
+  assert.equal(heroInCombat({ heroX: 0, heroZ: 0, noticeRadiusMeters: 6, enemies: null }), false);
+  assert.equal(heroInCombat({ heroX: 0, heroZ: 0, noticeRadiusMeters: 6, enemies: [null] }), false);
 });

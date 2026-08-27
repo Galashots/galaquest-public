@@ -125,6 +125,7 @@ import {
   CHEST_COLLECT_RADIUS_METERS,
   closeRuneChest,
   createRuneChestState,
+  heroInCombat,
   judgeRuneChestAnswer,
   openRuneChest,
   pickChestSpawnPoint,
@@ -146,6 +147,7 @@ import {
   HERO_MAX_HP,
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
+  WOLF_AGGRO_RANGE,
   isWithinStrike,
   separateFromEnemies,
 } from './combat/encounter.js';
@@ -4170,7 +4172,17 @@ async function bootstrap() {
           player.position.x - runeChestState.chest.x, player.position.z - runeChestState.chest.z,
         );
         if (chestDistance <= CHEST_COLLECT_RADIUS_METERS) {
-          if (!runeChestCardSuppressed) runeChestCard.show(runeChestState.chest.question);
+          // NEVER MID-FIGHT: the card is a modal that freezes movement and attack input (this
+          // frame's own anyOverlayOpen gate), so it waits until no hostile enemy is on the hero --
+          // heroInCombat's own comment carries the full trap this closes. WOLF_AGGRO_RANGE is the
+          // rules' own notice radius, imported, never restated (GQ-007).
+          const inCombat = heroInCombat({
+            heroX: player.position.x,
+            heroZ: player.position.z,
+            enemies: encounterState.enemies,
+            noticeRadiusMeters: WOLF_AGGRO_RANGE,
+          });
+          if (!runeChestCardSuppressed && !inCombat) runeChestCard.show(runeChestState.chest.question);
         } else {
           // Left the radius: the dismiss guard (if any) is spent -- walking back in re-opens it, the
           // brief's own "dismissing leaves the chest for later" made literal.

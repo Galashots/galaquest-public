@@ -36,12 +36,13 @@ import { fileURLToPath } from 'node:url';
 import {
   ATTACK_REACH,
   DEATH_SECONDS,
-  SWING_CONTACT_SECONDS,
   WOLF_MAX_HP,
   WOLF_RESPAWN_SECONDS,
   canAttack,
 } from '../../public/src/combat/encounter.js';
 import { HERO_SPAWN } from '../../public/src/world/zones/village.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -285,7 +286,9 @@ try {
   const attackY = VIEWPORT.height - 68;
   const stickX = VIEWPORT.width * 0.18;
   const stickY = VIEWPORT.height * 0.86;
-  const STICK_PX = 56;
+  // DERIVED, not retyped (GQ-007) -- drive-marks.mjs's own derivation, so the fight hold below
+  // computes the same WALK deflection the validated fight loops use.
+  const STICK_PX = STICK_RADIUS_PX;
 
   async function tapAttack() {
     await touch('touchStart', [{ x: attackX, y: attackY }]);
@@ -418,10 +421,9 @@ try {
   // reaction that lasts WOLF_HIT_FLASH_SECONDS (0.18s), and on a runner painting at ~367ms a frame
   // that is looking less often than the thing it looks for lasts. The swings came out slower than
   // SWING_SECONDS allows, and since Design ruling 5 heals the wolf to full on every knockdown, a
-  // hero landing fewer than three hits between knockdowns can never finish it. The re-close stays,
-  // because the wolf backs off after a bite and the hero only turns while walking, but it is a held
-  // walk on the wolf's live position and its cost comes out of the wait before the next tap rather
-  // than being added to it.
+  // hero landing fewer than three hits between knockdowns can never finish it. Its successor's
+  // stationary taps then whiffed on FACING (hosted at fda0cf4: fourteen minutes, "hit" frames
+  // recorded, wolf never dead) -- resolved by the held-stick fight below.
   const WOLF_TARGET = authoredWolfSource();
   const readFight = () => page.eval(readWatchSource('lifecycle-fight')).then(JSON.parse);
   // A second of recording, so the frame count is the frame rate.
@@ -444,62 +446,62 @@ try {
   const framePeriodMs = paced.frames > 0 ? Math.round(1000 / paced.frames) : 17;
   const tapEveryMs = framePeriodMs;
 
-  // THE RE-CLOSE PULSES UNLESS THERE IS REAL GROUND TO COVER. A held walk cannot stop on a mark --
-  // the release costs a poll and a round trip while authority keeps walking, which at a full-deflection
-  // stick is a metre and a half. Ask it to stop at 1.0m from the wolf and it hands back a hero 2.5m
-  // away, outside ATTACK_REACH, so the swing that follows hits nothing. Hosted at 3c43815 that read as
-  // a hero knocked down sixteen times with the wolf never below 1hp, with the re-close present and
-  // doing harm. The pulsed walker is slow per metre and exact, and exact is what matters here: the
-  // wolf brings itself to about a metre, and what the walk is really for is turning the hero, since he
-  // only turns while moving. The held leg is kept for the one case with actual distance in it --
-  // coming back from a knockdown, which respawns him at spawn.
-  const HELD_APPROACH_SLACK_METRES = 3;
-
-  async function heldLegToWolf(stopWithin, maxMillis) {
-    await page.eval(startWalk(WOLF_TARGET, stopWithin));
-    await touch('touchStart', [{ x: stickX, y: stickY }]);
-    await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
-    try {
-      await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
-        (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
-    } finally {
-      await touch('touchEnd', []);
-      await page.eval(STOP_WALK);
-    }
+  // FIGHT ON THE HELD STICK, ATTACK TAPS RIDING ON TOP -- the same choreography drive-marks.mjs,
+  // drive-first-level-up.mjs and play-fight.mjs's fight loops carry, ported here after the tap-and-
+  // re-close generation of this loop starved hosted at fda0cf4: fourteen minutes of taps, "hit"
+  // seen on recorded frames, and the wolf never dead, because Design ruling 5 heals it to full on
+  // every knockdown and a stationary hero whiffs on FACING (he swings where his body points and
+  // only turns while moving). The full reasoning and the CDP multi-touch measurements live on
+  // drive-marks.mjs's fight loop; the load-bearing facts are: touchStart's touchPoints are the
+  // full active set (Chrome presses only the NEW point), touchEnd's touchPoints are the points
+  // BEING RELEASED (so the tap's end names the ATTACK point alone, and the final release names
+  // the stick), the held deflection is the WALK push so the per-frame input quantum orbits
+  // contact instead of overshooting it, and there is deliberately NO knockdown branch -- the
+  // rules ignore held input on a down body and the respawned hero walks himself back into the
+  // fight on the same hold.
+  const FIGHT_STICK_POINT = () => ({
+    x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1,
+  });
+  async function holdFightStick() {
+    await page.eval(startWalk(WOLF_TARGET, 0));
+    await touch('touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+    await touch('touchMove', [FIGHT_STICK_POINT()]);
   }
-  async function closeOnWolf(gapMetres, stopWithin) {
-    if (gapMetres > stopWithin + HELD_APPROACH_SLACK_METRES) {
-      await heldLegToWolf(stopWithin + HELD_APPROACH_SLACK_METRES, 8000);
-    }
-    await walkToward((live) => ({ x: live.enemy.x, z: live.enemy.z }), stopWithin, 900,
-      { faceTarget: true });
+  async function releaseFightStick() {
+    await page.eval(STOP_WALK);
+    await touch('touchEnd', [FIGHT_STICK_POINT()]);
   }
-
   let killed = false;
-  let lastGap = 0;
-  // WHAT THE LOOP SPENDS ITS FIGHT ON IS ROUND TRIPS, so the tap path has as few as it can. Walking
-  // before every swing was measured at 4.4 SECONDS a tap in drive-marks -- against a hero who is
-  // knocked down every nine or ten seconds, and a wolf that Design ruling 5 heals to full each time.
-  // The gap log said the repositioning was not even needed: every swing went out from between 1.0m
-  // and 1.6m, inside ATTACK_REACH, because the wolf brings itself to MIN_BODY_SEPARATION and stays
-  // there. So the tap path is two touches and nothing else, and the walk happens only when the
-  // recorder says the hero is actually out of reach -- which is what a knockdown does, since
-  // respawning puts him back at spawn.
-  const REACH_CHECK_EVERY = 4;
-  for (let swing = 0; swing < 200 && !killed; swing += 1) {
-    const cycleStart = Date.now();
-    // eslint-disable-next-line no-await-in-loop
-    await tapAttack();
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-    if (swing % REACH_CHECK_EVERY !== 0) continue;
-    // eslint-disable-next-line no-await-in-loop
-    const log = await readFight();
-    killed = log.samples.some((sample) => sample.mode === 'dying' || sample.mode === 'dead');
-    lastGap = log.samples[log.samples.length - 1]?.gap ?? 0;
-    // eslint-disable-next-line no-await-in-loop
-    if (!killed && lastGap > ATTACK_REACH) await closeOnWolf(lastGap, 1.0);
+  const gapsAtRead = [];
+  const killDeadline = Date.now() + 240_000;
+  await holdFightStick();
+  try {
+    // The wall clock is the real budget; the iteration cap is only a runaway guard sized far above
+    // the fastest this loop could plausibly cycle.
+    for (let tap = 0; tap < 20000 && !killed && Date.now() < killDeadline; tap += 1) {
+      const cycleStart = Date.now();
+      // eslint-disable-next-line no-await-in-loop
+      await touch('touchStart', [FIGHT_STICK_POINT(), { x: attackX, y: attackY, id: 2 }]);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(60);
+      // eslint-disable-next-line no-await-in-loop
+      await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+      if (tap % 2 !== 0) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const log = await readFight();
+      killed = log.samples.some((sample) =>
+        sample.hp <= 0 || sample.mode === 'dying' || sample.mode === 'dead');
+      const latest = log.samples[log.samples.length - 1];
+      if (latest !== undefined) gapsAtRead.push(Number(latest.gap.toFixed(2)));
+    }
+  } finally {
+    await releaseFightStick();
   }
+  // The gap at each every-other-tap read: against ATTACK_REACH this says whether a stalled fight
+  // stalled on RANGE or on something else.
+  console.log(`  gaps at read (reach ${ATTACK_REACH}m): ${JSON.stringify(gapsAtRead.slice(-40))}`);
   check('10. the wolf can actually be killed', killed);
 
   // RETREAT TO THE SPAWN SANCTUARY BEFORE THE RESPAWN STOPWATCH RUNS. The density push authored

@@ -413,7 +413,10 @@ async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis, deflectio
     console.log(`  walk: already inside ${holdWithin}m `
       + `(${metresOrUnknown(already.startMetres)}), not walking`);
     await page.eval(STOP_WALK);
-    return pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+    const settled = await pollUntil(
+      (next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+    settled.latchedWithin = holdWithin;
+    return settled;
   }
   await touch('touchStart', [{ x: stickX, y: stickY }]);
   await touch('touchMove', [{ x: stickX, y: stickY - deflectionPx }]);
@@ -435,7 +438,14 @@ async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis, deflectio
   // hero, and handed the caller one who drifted out the far side of the speech radius while the
   // greeting played -- which cost the wave its handoff to talk in one run out of two.
   await sleep(200);
-  return pollUntil((next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+  const settled = await pollUntil(
+    (next) => next.serverPos !== null && next.serverSpeed === 0, { timeoutMs: 4000 });
+  // The latch itself is evidence, and it is carried on the settled reading rather than lost with
+  // the local `walk`: the page decided arrival with BOTH bodies inside the ring on a real frame,
+  // and what the hero does after that moment (coast, reconcile, or get mauled by whatever is
+  // roaming the density push's wilderness) cannot un-happen it.
+  if (walk?.arrived) settled.latchedWithin = holdWithin;
+  return settled;
 }
 
 // HOLD, THEN PULSE, THEN LOOK -- AND GO ROUND AGAIN IF IT IS NOT THERE YET.
@@ -458,10 +468,20 @@ async function heldWalkToward(targetX, targetZ, holdWithin, maxMillis, deflectio
 // runner, so that is what to budget. The clock stays as a backstop against a page that has stopped
 // painting -- generous, because it is no longer the thing being budgeted.
 const APPROACH_PASSES = 6;
-async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
+// `acceptLatch` ends the approach the moment a held leg's in-page latch has seen both bodies
+// inside the CALLER'S OWN ring on a real frame, and reports that on the returned reading as
+// `everLatched`. It exists for callers whose question is "does walking get there" rather than
+// "is the hero still standing there afterwards" -- the lane walk below, whose waypoint the
+// density push put within a roaming wolf's reach (wolf-1's leash covers it), so the hero can be
+// killed AT the answer and respawned 4.8m away from it before any post-settle read looks.
+async function walkToward(targetX, targetZ, stopWithin, maxMillis, { acceptLatch = false } = {}) {
   const deadline = deadlineAfter(Math.max(maxMillis, 90_000));
   let last = await state();
   let passes = 0;
+  let everLatched = false;
+  const noteLatch = (reading) => {
+    if (reading.latchedWithin !== undefined && reading.latchedWithin <= stopWithin) everLatched = true;
+  };
   while (passes < APPROACH_PASSES && Date.now() < deadline) {
     // A FRESH READING EACH TIME ROUND, not the one the previous leg handed back. That leg returns as
     // soon as the SERVER hero has stopped, and the rendered hero keeps converging onto him for a
@@ -509,6 +529,8 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
     // loop stopped at 1.50m against a check that wants under 1.5, passing on the last centimetre.
     last = await heldWalkToward(targetX, targetZ, stopWithin,
       Math.max(2000, deadline - Date.now()), FINE_STICK_PX);
+    noteLatch(last);
+    if (acceptLatch && everLatched) break;
     // The pulse is the last resort now, not the placer: it runs only if the fine held leg could not
     // latch at all, which on a page that is still painting means the target is unreachable rather
     // than merely far.
@@ -521,7 +543,9 @@ async function walkToward(targetX, targetZ, stopWithin, maxMillis) {
   }
   const away = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
   const spent = passes >= APPROACH_PASSES ? ` -- SPENT ALL ${APPROACH_PASSES} PASSES` : '';
-  console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target${spent}`);
+  const latched = everLatched ? ', latched inside the ring' : '';
+  console.log(`  approach: ${passes} pass(es), ${metresOrUnknown(away)} from the target${latched}${spent}`);
+  last.everLatched = everLatched;
   return last;
 }
 
@@ -602,10 +626,20 @@ await shot('lane-to-wolf');
 // is evidence the combat-bowl guarantee (no prop within radius 4 of the wolf spawn) is actually
 // walkable, not just a data-module assertion (test/zone-data.test.mjs already checks the data;
 // this checks the loaded scene).
-const laneWalk = await walkToward(wolfX * 0.4, wolfZ * 0.4, 0.6, 12000);
+//
+// JUDGED ON THE LATCH AS WELL AS THE PARKING SPOT, because the density push made this waypoint
+// contested ground: it sits 7.2m from wolf-1's home against a leash of 8, so a wandering wolf-1
+// can aggro a hero standing on it. Hosted at fda0cf4 the walk latched at 0.46m -- both bodies
+// inside the 0.6m ring, question answered -- and the hero was then mauled, respawned at spawn
+// (the failing read's restarts measure exactly the 4.82m spawn-to-waypoint distance), and the
+// post-settle read judged the corpse's respawn point instead of the walk. Whether the hero
+// SURVIVES standing there is the fight harnesses' subject, not this walkability check's.
+const laneWalk = await walkToward(wolfX * 0.4, wolfZ * 0.4, 0.6, 12000, { acceptLatch: true });
 check('walking partway up the lane toward the wolf actually closes distance',
-  Math.hypot(laneWalk.heroPos[0] - wolfX * 0.4, laneWalk.heroPos[1] - wolfZ * 0.4) < 1.5,
-  `hero ${JSON.stringify(laneWalk.heroPos)}, target [${(wolfX * 0.4).toFixed(2)}, ${(wolfZ * 0.4).toFixed(2)}]`);
+  laneWalk.everLatched
+    || Math.hypot(laneWalk.heroPos[0] - wolfX * 0.4, laneWalk.heroPos[1] - wolfZ * 0.4) < 1.5,
+  `latched ${laneWalk.everLatched}, hero ${JSON.stringify(laneWalk.heroPos)}, `
+    + `target [${(wolfX * 0.4).toFixed(2)}, ${(wolfZ * 0.4).toFixed(2)}]`);
 
 // ── (b) walk up to the keeper and catch the wave ────────────────────────────────────────────────
 const [keeperX, keeperZ] = SPAWNS.keeper;

@@ -1106,9 +1106,39 @@ await page.eval(startWatch('swing-start', '({ swingSeconds: window.__galaQuestRu
 // (best swingSeconds -1 across sixteen frames and four press edges) while the two-point fight
 // taps right after it swung and killed -- the difference being exactly the id-0-and-empty-list
 // shape this beat shared with every earlier tap in the file. Explicit ids alias with nothing.
-const swingDeadline = Date.now() + Math.max(SWING_SECONDS * 2 * 1000, 10_000);
+// ...and each tap SPENT ON A HERO THE RULES CAN ACCEPT IT FROM. This beat runs beside a live,
+// re-aggroed wolf on purpose, and a downed hero refuses the press edge -- hosted at fda0cf4 the
+// explicit-id shape above was in place and the beat still recorded 15 frames with best
+// swingSeconds -1, because at 836ms frames the hero cycles down-and-up faster than four blind
+// taps can straddle: every edge landed on a body the rules were ignoring. So the loop reads the
+// imported canAttack (the same rule the fight loops key on) and taps only when it says yes;
+// otherwise it waits a beat and asks again. The assertion is unchanged -- one accepted tap must
+// start a swing -- and the window is sized in down-cycles rather than swings, since surviving a
+// knockdown (RESPAWN plus the wolf's next approach) is what the wait is actually for.
+const swingDeadline = Date.now() + Math.max(SWING_SECONDS * 4 * 1000, 30_000);
 let swingStart = { frames: 0, samples: [] };
+// Per refused pass: what actually sits under the tap point, and whether main.js has the button
+// suspended -- so a failure NAMES the eater (an overlay that drains attack presses unheard, a
+// covered button) instead of leaving "best swingSeconds -1" to be theorised about.
+const tapGateReads = [];
 while (Date.now() < swingDeadline) {
+  // eslint-disable-next-line no-await-in-loop
+  const ready = await state();
+  if (!ready.canAttack) {
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(400);
+    continue;
+  }
+  // eslint-disable-next-line no-await-in-loop
+  const gate = await page.eval(`(() => {
+    const button = document.querySelector('#attack-button');
+    const topmost = document.elementFromPoint(${attackX}, ${attackY});
+    return JSON.stringify({
+      suspended: button?.dataset.suspended ?? 'unset',
+      topmost: topmost ? (topmost.id || topmost.className || topmost.tagName) : 'nothing',
+    });
+  })()`).then(JSON.parse);
+  tapGateReads.push(gate);
   // eslint-disable-next-line no-await-in-loop
   await touch('touchStart', [{ x: attackX, y: attackY, id: 9 }]);
   // eslint-disable-next-line no-await-in-loop
@@ -1124,7 +1154,8 @@ await page.eval(stopWatchSource('swing-start'));
 const startedSwinging = swingStart.samples.filter((sample) => sample.swingSeconds >= 0);
 check('tapping ATTACK starts a swing', startedSwinging.length > 0,
   `${swingStart.frames} frames recorded, best swingSeconds `
-    + `${swingStart.samples.reduce((best, sample) => Math.max(best, sample.swingSeconds), -1)}`);
+    + `${swingStart.samples.reduce((best, sample) => Math.max(best, sample.swingSeconds), -1)}`
+    + (startedSwinging.length > 0 ? '' : `; at each tap ${JSON.stringify(tapGateReads.slice(-6))}`));
 
 // The hero swings with a procedural arc, because the rig ships no attack clip. From the chase camera
 // that happens behind his back and cannot be judged, so orbit round to the front and shoot the swing

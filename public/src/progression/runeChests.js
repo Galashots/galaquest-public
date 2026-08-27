@@ -370,6 +370,26 @@ export function closeRuneChest(state) {
 }
 
 /**
+ * MAY THE CARD OPEN RIGHT NOW? The question card is a MODAL: while it is up, main.js's
+ * anyOverlayOpen gate makes movement input inert and drains attack presses unheard. Auto-opening it
+ * on proximity was therefore a trap mid-fight: a child who backs over a chest while a wolf is on
+ * them gets a maths question over a frozen hero and keeps taking bites they can no longer answer.
+ * The fix is a rule, not a UI patch: hold the card while any live enemy is actively hostile
+ * (bite, or closing in on 'walk') within its own notice radius of the hero. The chest itself
+ * stays, the collect radius stays; the question simply waits for the fight to be over -- the next
+ * frame with no hostile within range opens it from the very same spot.
+ *
+ * Pure and dependency-free: the caller passes the notice radius (main.js hands it
+ * WOLF_AGGRO_RANGE -- imported there, never restated here, GQ-007).
+ */
+export function heroInCombat({ heroX, heroZ, enemies, noticeRadiusMeters }) {
+  if (!Array.isArray(enemies)) return false;
+  return enemies.some((enemy) => enemy
+    && (enemy.mode === 'bite' || enemy.mode === 'walk')
+    && Math.hypot((enemy.x ?? 0) - heroX, (enemy.z ?? 0) - heroZ) <= noticeRadiusMeters);
+}
+
+/**
  * THE XP FACT'S NAME. Scoped to the PROFILE, not a guestId, and that is the one deliberate difference
  * from rewards/killXp.js's own `kill-xp:<guestId>:...` -- a rune chest has no server-side counterpart
  * to ever mint a guestId-scoped copy of this fact (this file's own header: chests are never
