@@ -1332,8 +1332,36 @@ export function createSimulation(options = {}) {
 
     const partyResult = stepParty(encounterState, { deltaSeconds, heroes: commandHeroes });
     encounterState = partyResult.state;
+    // Put a respawned hero back at the village spawn -- gated by the SAME ownership rule the
+    // forwarding loop three lines below already applies, because moving a child's body is the
+    // loudest possible way of speaking for it.
+    //
+    // The Owner hit the ungated version in a live playtest on 2026-08-27 and corrected the first
+    // guess himself: nobody died, the hearts never moved, no veil and no banner -- the child was
+    // simply back at the start area, usually moments after killing a wolf up the Old Beacon road.
+    // A hero standing inside BEACON_ARENA is owned by the siege, but stepParty still steps the wolf
+    // engine's own copy of every hero every tick; an enemy whose teeth reached inside the rim
+    // (frost-wolf-2 shipped 0.047 m inside that envelope -- see village.js's own ENEMY_POPULATION
+    // header) mauled that copy, and keepEvent correctly kept every hero-hurt/hero-down/
+    // hero-respawned off the wire while encounterSnapshot correctly published the siege's untouched
+    // body. The child was shown nothing at all. This loop then obeyed the suppressed respawn and
+    // moved them 50 m, and position reconciliation dragged the client along with no event to
+    // explain it. Gating here removes THIS class -- the 50 m relocation -- for good: no second
+    // engine and no future placement mistake can send a body it does not own back to spawn.
+    //
+    // It deliberately does NOT claim to be the only thing in this function that writes a position.
+    // The separation/obstacle/world-clamp pass at the end of the tick still runs for every player
+    // regardless of which engine owns them, and that is correct: those are metre-scale pushes that
+    // keep any body out of an enemy, out of the Beacon's stone and inside the world, and a hero in
+    // the arena wants all three. The distinction that matters is scale and authorship -- a bounded
+    // push every body consents to, versus one engine teleporting a hero another engine is running.
+    //
+    // Nothing leaks by refusing: on leaving the arena settleArenas calls transferWolfHeroBody, which
+    // overwrites the wolf copy's private mauling with the siege's real body.
+    // test/beacon-arena-phantom-respawn.test.mjs pins both halves.
     for (const event of partyResult.events) {
       if (event.type !== 'hero-respawned') continue;
+      if (!keepEvent(event, WOLF_BODY_EVENTS, WOLF_ARENA)) continue;
       const player = players.get(event.heroId);
       if (!player) continue;
       player.x = encounterState.heroSpawn.x;

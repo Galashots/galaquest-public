@@ -207,18 +207,35 @@ function authoredWolf(enemyId, level, x, z, leashRadius = 4.4) {
 //
 // EVERY home below was checked, not eyeballed, against the same three rules E2's own authored five
 // were checked against (see WOLF_PATROL's own comment for the method) PLUS a fourth this push adds:
-// clear of every arrival/claim trigger's own radius plus its own leash, so a body at full aggro
-// range can never wander into the plaza, a story NPC's speech bubble, or the Beacon arena handoff
-// zone (see net/gameServerCore.mjs's own inBeaconArena for how that handoff works -- crossing its
-// boundary is a HANDOFF, not a place an ordinary enemy may ever stand watch over). Every home also
-// stays inside the walkable world with its own leash radius intact -- world/bounds.js's clamp only
-// ever applies to a HERO, never to an ordinary enemy, so a home placed too near the edge would let
-// that body wander (or be chased) straight off the ground mesh.
+// clear of every arrival/claim trigger's own radius plus that body's own REACH, so a body at full
+// aggro range can never fight into the plaza, a story NPC's speech bubble, or the Beacon arena
+// handoff zone (see net/gameServerCore.mjs's own inBeaconArena for how that handoff works --
+// crossing its boundary is a HANDOFF, not a place an ordinary enemy may ever stand watch over).
+//
+// REACH, not WANDER, and the difference is the whole reason this comment was rewritten. The first
+// version of this rule read `trigger radius + leashRadius` -- where a BODY can end up. What actually
+// matters is where a BITE can land, which is one of two larger numbers:
+//
+//     max(leashRadius + WOLF_BITE_RANGE, WOLF_AGGRO_RANGE)
+//
+// (it has to notice you at all, and once it has chased to its leash limit its teeth still carry
+// another WOLF_BITE_RANGE past that). Against BEACON_ARENA the two rules are 11.9 m and 13.5 m, and
+// frost-wolf-2 shipped at 13.453 m -- passing the rule as written and failing the rule as meant by
+// four and a half centimetres. The Owner hit the consequence in a live playtest on 2026-08-27: a
+// hero standing in the arena is owned by the SIEGE, so the wolf engine's own copy of that body was
+// bitten, downed and respawned entirely off-screen, and the child was silently teleported back to
+// the village start area at full hearts with no death, no veil and no banner. See
+// net/gameServerCore.mjs's hero-respawned teleport loop for the ownership half of that fix.
+//
+// Every home also stays inside the walkable world with its own leash radius intact --
+// world/bounds.js's clamp only ever applies to a HERO, never to an ordinary enemy, so a home placed
+// too near the edge would let that body wander (or be chased) straight off the ground mesh.
 // test/progression-e2-enemy.test.mjs pins the pairwise-spacing and sanctuary-clearance rules over
-// the full twelve; the trigger-clearance rule above was checked by hand against every named trigger
-// this module defines below (CART_SEARCH, WORKSHOP_INTERACT, WILDWOOD_GATE, CAMP, ROWAN_CLAIM,
-// OLD_BEACON, BEACON_ARENA, HOLLOW, RANGER_CLAIM, LODGE, BLACKTHORN) before these coordinates were
-// committed.
+// the full twelve, and test/beacon-arena-phantom-respawn.test.mjs now pins the arena reach rule over
+// the same twelve rather than trusting a hand-check -- because the hand-check against every named
+// trigger this module defines below (CART_SEARCH, WORKSHOP_INTERACT, WILDWOOD_GATE, CAMP,
+// ROWAN_CLAIM, OLD_BEACON, BEACON_ARENA, HOLLOW, RANGER_CLAIM, LODGE, BLACKTHORN) is exactly what
+// was wrong and stayed wrong.
 //
 // DOUBLE-AGGRO, checked explicitly rather than assumed away. WOLF_AGGRO_RANGE is 6m, so two homes
 // under 12m apart put a hero briefly inside BOTH aggro circles walking between them -- and a faster
@@ -265,8 +282,19 @@ export const ENEMY_POPULATION = Object.freeze(
     authoredEnemy('ember-wolf-2', 'ember-wolf', 1, -8.5, 21),
 
     // ── R1 variety: Frost Wolves further out, along the Old Beacon road's own flanks (z 33..49) ──
-    authoredEnemy('frost-wolf-1', 'frost-wolf', 1, -8, 45),
-    authoredEnemy('frost-wolf-2', 'frost-wolf', 1, 11, 40.5),
+    //
+    // BOTH MOVED SOUTH on 2026-08-27, off the Beacon arena's own doorstep. They first shipped at
+    // [-8, 45] and [11, 40.5], which sit 13.533 m and 13.453 m from BEACON_ARENA.at against a
+    // required 13.5 m (radius 7.5 + max(leash 4.4 + WOLF_BITE_RANGE, WOLF_AGGRO_RANGE)) -- one
+    // clearing the real envelope by 3 cm and the other failing it by 4.7 cm. A 3 cm margin is not a
+    // placement, it is luck, and the 4.7 cm miss is what let the Owner be teleported out of the
+    // Beacon fight by a wolf he could not see biting a copy of his body he was not being shown.
+    // The new homes clear it by 1.45 m and 1.52 m, on the same two flanks and the same latitude
+    // band, still in view from the road but never on it (8.75 m and 9.93 m off the nearest ROAD leg,
+    // so walking the Old Beacon road never aggros them), and further from the nearest prop centre
+    // than they were before the move (1.84 m and 2.02 m, up from 0.81 m and 1.50 m), not nearer.
+    authoredEnemy('frost-wolf-1', 'frost-wolf', 1, -8, 42.5),
+    authoredEnemy('frost-wolf-2', 'frost-wolf', 1, 13, 40),
 
     // ── R1: the one Alpha Wolf -- rarest, furthest from spawn, and the biggest territory of the
     // twelve, matching its own slower respawn (enemyStats.js's respawnSecondsForKind). Placed clear

@@ -369,6 +369,10 @@ export function closeRuneChest(state) {
   return Object.freeze({ ...state, chest: null });
 }
 
+/** Bodies that cannot threaten anyone: a corpse, one mid-death, and one walking home off its
+ *  leash. encounter.js's advanceEnemy owns these mode names; this is the inert subset. */
+const INERT_ENEMY_MODES = Object.freeze(['dead', 'dying', 'returning']);
+
 /**
  * MAY THE CARD OPEN RIGHT NOW? The question card is a MODAL: while it is up, main.js's
  * anyOverlayOpen gate makes movement input inert and drains attack presses unheard. Auto-opening it
@@ -379,14 +383,33 @@ export function closeRuneChest(state) {
  * stays, the collect radius stays; the question simply waits for the fight to be over -- the next
  * frame with no hostile within range opens it from the very same spot.
  *
- * Pure and dependency-free: the caller passes the notice radius (main.js hands it
- * WOLF_AGGRO_RANGE -- imported there, never restated here, GQ-007).
+ * TWO NAMES WERE MISSING, AND THE TRAP CAME BACK THROUGH THEM. combat/encounter.js's advanceEnemy
+ * has six live modes, and an enemy that is unmistakably fighting spends most of its bite cycle in
+ * neither 'bite' nor 'walk': one inside WOLF_BITE_RANGE * 0.9 whose biteCooldown has not run out
+ * falls through both of that function's branches to its closing `enemy.mode = 'idle'`, and one the
+ * child has just struck sits in 'hit' for STAGGER_SECONDS. MIN_BODY_SEPARATION parks a wolf pressed
+ * against a hero at exactly 1 m -- inside bite reach. Simulated at 20 Hz with one wolf adjacent to a
+ * stationary hero, this rule read NOT-in-combat for 1.45 s of every 2.65 s bite cycle while the hero
+ * lost 10 HP a cycle, which is a card opening over a frozen five-year-old mid-mauling.
+ *
+ * So the second clause is REACH, not two more mode names: anything close enough to bite is in the
+ * fight whatever mode it is resting in this frame, and a mode list would have to be revisited every
+ * time the state machine grows a state. The three genuinely inert bodies -- a corpse, a death
+ * animation, and an enemy walking home outside its leash, none of which can turn around and bite --
+ * are excluded explicitly instead, which is the small closed set.
+ *
+ * Pure and dependency-free: the caller passes both radii (main.js hands them WOLF_AGGRO_RANGE and
+ * WOLF_BITE_RANGE -- imported there, never restated here, GQ-007). `biteRangeMeters` defaults to 0
+ * so a caller that supplies only the notice radius gets exactly the old hostile-mode rule.
  */
-export function heroInCombat({ heroX, heroZ, enemies, noticeRadiusMeters }) {
+export function heroInCombat({ heroX, heroZ, enemies, noticeRadiusMeters, biteRangeMeters = 0 }) {
   if (!Array.isArray(enemies)) return false;
-  return enemies.some((enemy) => enemy
-    && (enemy.mode === 'bite' || enemy.mode === 'walk')
-    && Math.hypot((enemy.x ?? 0) - heroX, (enemy.z ?? 0) - heroZ) <= noticeRadiusMeters);
+  return enemies.some((enemy) => {
+    if (!enemy || INERT_ENEMY_MODES.includes(enemy.mode)) return false;
+    const distance = Math.hypot((enemy.x ?? 0) - heroX, (enemy.z ?? 0) - heroZ);
+    if (distance <= biteRangeMeters) return true;
+    return (enemy.mode === 'bite' || enemy.mode === 'walk') && distance <= noticeRadiusMeters;
+  });
 }
 
 /**

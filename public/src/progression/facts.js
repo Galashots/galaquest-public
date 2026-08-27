@@ -290,12 +290,39 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   'rune-chest:',
 ]);
 
+// The sentinel rewards/offlineProgress.js stamps every offline-earned event with (its own
+// OFFLINE_HERO_ID). It is NOT a profile id and never can be: it names "there was no server", so a
+// fact carrying it belongs to whichever profile is holding the journal it was written into.
+//
+// Deliberately a local constant rather than an import (docs/MISTAKES.md GQ-007 would prefer the
+// import): rewards/offlineProgress.js imports THIS module, so importing back would close a cycle.
+// test/offline-progress-kill-xp.test.mjs pins the agreement over facts the real offline producer
+// mints, so the two cannot drift apart silently.
+const OFFLINE_JOURNAL_OWNER = 'offline-hero';
+
+// ...and the ONLY profile-scoped families the offline fallback ever stamps with it. Kept narrow on
+// purpose rather than exempting the sentinel everywhere: `own:`, `equip:`, `charm:` and the rest are
+// ownership grants, and a blanket exemption would make `own:offline-hero:<item>` a row any client
+// could hand the restore door. rewards/offlineProgress.js mints exactly two sentinel-owned families
+// -- marks (handled by their own compatibility branch below, which predates this) and kill XP.
+const OFFLINE_SENTINEL_EVENT_ID_PREFIXES = Object.freeze(['kill-xp:']);
+
 function reservedProfileEventOwner(eventId) {
   for (const prefix of PROFILE_SCOPED_EVENT_ID_PREFIXES) {
     if (!eventId.startsWith(prefix)) continue;
     const remainder = eventId.slice(prefix.length);
     const separator = remainder.indexOf(':');
     const owner = separator === -1 ? remainder : remainder.slice(0, separator);
+    // The offline sentinel reserves nothing, exactly as it does for marks below.
+    //
+    // The Wi-Fi drops, a child fights on and kills fifteen wolves, levels up, and watches POWER and
+    // max HP rise on the Hero screen. Their journal now holds `kill-xp:offline-hero:<enemy>:<life>`
+    // rows. Reading `offline-hero` as an owner makes it a profile id nobody has, so the restore door
+    // (isClientRestorableProfileFact, which net/gameServerCore.mjs asks before ingesting a client's
+    // journal) refused every one of them, the server republished the pre-outage XP, and the level,
+    // the damage and the hearts all snapped backwards -- the exact "a reward the rules never read"
+    // class this door exists to prevent. Marks shipped with this carve-out; kill XP did not.
+    if (owner === OFFLINE_JOURNAL_OWNER && OFFLINE_SENTINEL_EVENT_ID_PREFIXES.includes(prefix)) return null;
     return owner;
   }
 
@@ -308,7 +335,7 @@ function reservedProfileEventOwner(eventId) {
   const separator = remainder.indexOf(':');
   if (separator === -1) return null;
   const owner = remainder.slice(0, separator);
-  if (owner === 'offline-hero') return null;
+  if (owner === OFFLINE_JOURNAL_OWNER) return null;
   return sanitizeGuestId(owner) === owner ? owner : null;
 }
 

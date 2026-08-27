@@ -5,6 +5,7 @@
 // way test/enemy-drops.test.mjs drives world/enemyDrops.js's own roll.
 
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   CHEST_COLLECT_RADIUS_METERS,
@@ -27,6 +28,7 @@ import {
   rewardXpForRuneChestAnswer,
   runeChestXpEventId,
 } from '../public/src/progression/runeChests.js';
+import { WOLF_AGGRO_RANGE, WOLF_BITE_RANGE } from '../public/src/combat/encounter.js';
 
 function scriptedRng(values) {
   let index = 0;
@@ -286,11 +288,26 @@ test('an enemy closing in on walk within the notice radius holds the card', () =
   }), true);
 });
 
-test('an idle enemy nearby does NOT hold the card -- proximity alone is not a fight', () => {
-  assert.equal(heroInCombat({
-    heroX: 0, heroZ: 0, noticeRadiusMeters: 6,
-    enemies: [{ mode: 'idle', x: 1, z: 1 }],
-  }), false);
+// REPAIRED RATHER THAN DELETED, and the repair is the point. This case used to stand an idle enemy
+// 1.41 m away and assert false. That was true while the gate knew only hostile MODES, and became a
+// LIE the moment the gate learned bite REACH: main.js passes WOLF_BITE_RANGE (1.6 m), so that same
+// enemy now correctly holds the card. It kept passing only because it omitted biteRangeMeters and
+// so tested a configuration production never uses -- a green test whose title asserted the opposite
+// of shipped behaviour, which is worse than no test at all. It now asserts the real rule at its
+// real boundary, under the parameters main.js actually passes, with both radii imported (GQ-007).
+test('idle proximity alone is not a fight -- but idle inside bite reach is', () => {
+  const idleAt = (metres) => heroInCombat({
+    heroX: 0,
+    heroZ: 0,
+    noticeRadiusMeters: WOLF_AGGRO_RANGE,
+    biteRangeMeters: WOLF_BITE_RANGE,
+    enemies: [{ mode: 'idle', x: metres, z: 0 }],
+  });
+  assert.equal(idleAt(WOLF_BITE_RANGE + 0.5), false,
+    'an idle body a stride away is scenery a child can walk past, not a fight');
+  assert.equal(idleAt(WOLF_BITE_RANGE - 0.1), true,
+    'an idle body already close enough to bite is mid-fight whatever mode it is resting in this '
+    + 'frame -- the bite cycle parks a live wolf in idle and in hit for most of its length');
 });
 
 test('a hostile enemy beyond the notice radius does NOT hold the card', () => {
@@ -307,6 +324,63 @@ test('dead, dying and returning enemies never hold the card', () => {
       enemies: [{ mode, x: 1, z: 1 }],
     }), false, mode);
   }
+});
+
+/**
+ * THE MODE NAME 'idle' IS OVERLOADED, and the gap it left is the trap this whole rule exists to
+ * close, reopened.
+ *
+ * combat/encounter.js's advanceEnemy has six live modes, and an enemy that is very much fighting
+ * spends most of its bite cycle in NONE of 'bite'/'walk': an enemy inside WOLF_BITE_RANGE * 0.9
+ * whose biteCooldown has not yet run out falls through both branches to the function's closing
+ * `enemy.mode = 'idle'`, and an enemy the child has just struck sits in 'hit' for STAGGER_SECONDS.
+ * MIN_BODY_SEPARATION parks a wolf pressed against a hero at exactly 1 m, well inside bite reach.
+ * Simulated at 20 Hz with one wolf adjacent to a stationary hero, the old rule read NOT-in-combat
+ * for 1.45 s out of every 2.65 s bite cycle -- while the hero lost 10 HP a cycle. The 8th kill
+ * spawns a chest 2-4 m away in a twelve-enemy wilderness, so a child walks onto it, a neighbouring
+ * wolf lands a bite, and on the very next frame the maths card opens over a hero whose movement and
+ * attacks main.js's anyOverlayOpen gate has just made inert. A five-year-old reading a question is
+ * then a punching bag.
+ *
+ * Fixed by reach rather than by adding two more mode names: anything close enough to bite is in the
+ * fight whatever it calls itself this frame. The reach comes from the caller, exactly as the notice
+ * radius already does (main.js hands it WOLF_BITE_RANGE).
+ */
+test('an enemy inside bite reach holds the card whatever mode it is resting in this frame', () => {
+  for (const mode of ['idle', 'hit', 'bite', 'walk']) {
+    assert.equal(heroInCombat({
+      heroX: 0, heroZ: 0, noticeRadiusMeters: 6, biteRangeMeters: 1.6,
+      // MIN_BODY_SEPARATION: where the server's own body separation parks a wolf on a hero.
+      enemies: [{ mode, x: 1, z: 0 }],
+    }), true, mode);
+  }
+});
+
+test('a truly inert body inside bite reach still does not hold the card', () => {
+  for (const mode of ['dead', 'dying', 'returning']) {
+    assert.equal(heroInCombat({
+      heroX: 0, heroZ: 0, noticeRadiusMeters: 6, biteRangeMeters: 1.6,
+      enemies: [{ mode, x: 1, z: 0 }],
+    }), false, mode);
+  }
+});
+
+test('an idle enemy beyond bite reach still does not hold the card -- proximity alone is not a fight', () => {
+  assert.equal(heroInCombat({
+    heroX: 0, heroZ: 0, noticeRadiusMeters: 6, biteRangeMeters: 1.6,
+    enemies: [{ mode: 'idle', x: 4, z: 0 }],
+  }), false);
+});
+
+test('main.js hands the mid-fight gate the rules\' own bite range', () => {
+  // Source-seam guard: the reach is caller-supplied by this module's own design, so the pure rule
+  // above cannot see whether its one real caller supplies it.
+  const source = readFileSync(new URL('../public/src/main.js', import.meta.url), 'utf8');
+  const callAt = source.indexOf('heroInCombat({');
+  assert.ok(callAt > 0, 'the mid-fight gate call has moved or been renamed');
+  const call = source.slice(callAt, source.indexOf('});', callAt));
+  assert.match(call, /biteRangeMeters:\s*WOLF_BITE_RANGE/,
+    'without the rules\' own bite range the gate misses an enemy standing on the hero between bites');
 });
 
 test('no enemies, or a malformed list, reads as not-in-combat rather than throwing', () => {

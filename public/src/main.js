@@ -148,6 +148,7 @@ import {
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
   WOLF_AGGRO_RANGE,
+  WOLF_BITE_RANGE,
   isWithinStrike,
   separateFromEnemies,
 } from './combat/encounter.js';
@@ -1041,9 +1042,14 @@ async function bootstrap() {
   const DROP_REQUEST_RETRY_MS = 500;
   // The kill-streak meter's own rolling state, mirrored CLIENT-SIDE off observed wolf-defeated events
   // (progression/streaks.js's own header: pure, caller-clocked). The server keeps its own per-player
-  // streak to size coin drops and never puts it on the wire, so this is deliberately a SEPARATE,
-  // cosmetic tally -- divergence from the server's own count is acceptable and offline-consistent,
-  // the same posture this push's own brief states for exactly this meter.
+  // streak to size coin drops and never puts it on the wire, so this is a mirror rather than a read
+  // of authority -- and it has to mirror the SAME kills the server counts, because the meter draws
+  // the very coin multiplier the server will pay (see the wolf-defeated dispatch below for the
+  // measured two-child divergence that made this explicit). It counts exactly the kills this hero
+  // personally finished; only the 30 s decay CLOCK is approximate, because this side steps it by
+  // frame delta and the server by tick delta, so a kill landing within a few hundred milliseconds of
+  // STREAK_WINDOW_SECONDS can still read one tier out for one kill. A page reload also starts the
+  // mirror at zero while the server holds its streak until the socket closes.
   let streakState = createStreakState();
 
   // THE HIDDEN LEARNING LAYER: rune chests. CLIENT-LOCAL AND OFFLINE-FIRST -- unlike dropsState just
@@ -3827,9 +3833,10 @@ async function bootstrap() {
           // Approximates the multiplier THIS kill is about to earn -- the streak meter's own
           // registration runs a moment later, in the one dispatch loop every kill (online and off)
           // passes through, so the count is not yet advanced when this roll needs it. A streak still
-          // alive continues, so this kill is one more than the count already showing. Cosmetic and
-          // allowed to diverge from a hair-perfect answer -- progression/streaks.js's own header and
-          // this push's own brief both say so.
+          // alive continues, so this kill is one more than the count already showing. Offline there
+          // is no second authority to disagree with: this same local streak IS what sizes the drop,
+          // so a one-frame ordering approximation is the whole of the error (progression/streaks.js's
+          // own header).
           const previewStreak = (streakStillActive(streakState) ? streakState.streak : 0) + 1;
           const rolled = requestEnemyDrop(dropsState, {
             enemyId: event.enemyId,
@@ -4118,29 +4125,43 @@ async function bootstrap() {
         const recipeName = soundForEvent(event.type);
         if (recipeName) audio.play(recipeName);
         onEncounterEvent(event);
-        // R1: the streak meter and the kill's own XP toast. Every observed wolf-defeated continues
-        // the streak -- online, a sibling's kill nearby carries the party's momentum too, the
-        // "cosmetic divergence is acceptable" posture this push's own brief states plainly. The
-        // toast is narrower: only THIS hero's own killing blow (myKillEnemyIds, captured before
-        // stripHeroId erased who it belonged to), so a child never reads a reward for a fight they
-        // did not land the finishing hit on.
-        if (event.type === 'wolf-defeated') {
+        // R1: the streak meter, the kill's own XP toast, and the rune chest's own counter. All
+        // three are gated on THIS hero's own killing blow (myKillEnemyIds, captured before
+        // stripHeroId erased who the event belonged to), so a child never reads a reward -- or a
+        // multiplier -- for a fight they did not land the finishing hit on.
+        //
+        // THE METER USED TO BE PARTY-WIDE, and that was a lie the server would not honour. It draws
+        // `x${multiplier}` straight out of coinMultiplierForStreak, which is the very function
+        // net/gameServerCore.mjs passes into the drop roll as `streakMultiplier` to size the coins a
+        // kill pays -- and the server credits a streak only to `event.heroId`, the hero who actually
+        // finished the enemy. `wolf-defeated` is a world event (it is not one of the server's own
+        // WOLF_BODY_EVENTS), so both brothers receive both brothers' kills: four kills by one child
+        // and one by the other made the second child's HUD read "x2 / ON A ROLL", pulse the tier
+        // crossing, and then pay him x1. A meter showing a kill count and a draining ring would have
+        // been cosmetic; one showing a payout number is a promise. test/streak-view.test.mjs pins
+        // both the arithmetic and this seam.
+        //
+        // Offline this changes nothing by construction: the offline branch further up adds EVERY
+        // wolf-defeated to myKillEnemyIds before any bail-out, because solo every defeat IS this
+        // hero's own kill -- so the local streak stays the sole authority exactly as it was.
+        //
+        // The shared celebration is untouched: the defeat sound and the presenter's own death flash
+        // run for everyone present, above this gate, because seeing your brother drop a wolf should
+        // still feel like something happened.
+        if (event.type === 'wolf-defeated' && myKillEnemyIds.has(event.enemyId)) {
           streakState = registerStreakKill(streakState);
           const view = streakMeterView(streakState);
           if (view) pulseStreakMeter(view);
-          if (myKillEnemyIds.has(event.enemyId)) {
-            const enemy = enemyById(event.enemyId);
-            const amount = killXpForKind(event.kind);
-            if (enemy && amount !== null) popXpToast(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, amount);
-            // THE HIDDEN LEARNING LAYER's own counter -- the SAME "this hero personally landed the
-            // killing blow" gate the XP toast just above uses, both online and offline (myKillEnemyIds
-            // is populated identically in both branches further up this loop), because a rune chest is
-            // a per-child beat and crediting a sibling's own kill toward THIS hero's next chest would
-            // be exactly the wrong kind of shared state (progression/runeChests.js's own header).
-            const chestResult = registerRuneChestKill(runeChestState);
-            runeChestState = chestResult.state;
-            if (chestResult.chestDue) runeChestSpawnDue = true;
-          }
+          const enemy = enemyById(event.enemyId);
+          const amount = killXpForKind(event.kind);
+          if (enemy && amount !== null) popXpToast(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, amount);
+          // THE HIDDEN LEARNING LAYER's own counter -- the same gate, for the same reason: a rune
+          // chest is a per-child beat and crediting a sibling's own kill toward THIS hero's next
+          // chest would be exactly the wrong kind of shared state (progression/runeChests.js's own
+          // header).
+          const chestResult = registerRuneChestKill(runeChestState);
+          runeChestState = chestResult.state;
+          if (chestResult.chestDue) runeChestSpawnDue = true;
         }
       }
       renderStreakMeter(streakMeterView(streakState));
@@ -4174,13 +4195,16 @@ async function bootstrap() {
         if (chestDistance <= CHEST_COLLECT_RADIUS_METERS) {
           // NEVER MID-FIGHT: the card is a modal that freezes movement and attack input (this
           // frame's own anyOverlayOpen gate), so it waits until no hostile enemy is on the hero --
-          // heroInCombat's own comment carries the full trap this closes. WOLF_AGGRO_RANGE is the
-          // rules' own notice radius, imported, never restated (GQ-007).
+          // heroInCombat's own comment carries the full trap this closes, including why the BITE
+          // range has to be handed over too: an enemy standing on the hero between bites reports
+          // mode 'idle', and without a reach clause the card opened straight over a live mauling.
+          // Both radii are the rules' own, imported, never restated (GQ-007).
           const inCombat = heroInCombat({
             heroX: player.position.x,
             heroZ: player.position.z,
             enemies: encounterState.enemies,
             noticeRadiusMeters: WOLF_AGGRO_RANGE,
+            biteRangeMeters: WOLF_BITE_RANGE,
           });
           if (!runeChestCardSuppressed && !inCombat) runeChestCard.show(runeChestState.chest.question);
         } else {
@@ -4727,7 +4751,18 @@ async function bootstrap() {
       const drops = netStatus === 'online' && serverEncounter?.drops ? serverEncounter.drops : dropsState.drops;
       // Presenter arrivals only -- still-resting/still-appearing/someone-else's-despawn stay silent,
       // the identical contract world/lootPickups.js's own update() keeps for the cart's pickups.
-      const dropArrivals = dropsPresenter.update(deltaSeconds, drops, net.selfId, player.position);
+      //
+      // WHICH HERO IS "ME" DEPENDS ON WHICH LOOP IS RUNNING. Online it is the socket's own id;
+      // offline there is no socket -- net/client.js holds selfId null before it ever connects and
+      // clears it again on disconnect -- while the offline collect below stamps the drop with
+      // OFFLINE_HERO_ID. Passing net.selfId unconditionally made a solo child's own drop compare
+      // unequal to its collector, so the presenter took the "somebody else collected it" branch:
+      // the mesh blinked out with no flight and returned no arrival. Every offline reward below is
+      // driven by those arrivals, so the coin never counted, requestSoloHeroHeal never ran, and the
+      // gear fact was never journalled -- a child at 8 HP walked onto the heart a Frost Wolf dropped
+      // and stayed at 8 HP. Same id on both sides of the comparison, derived from the same constant.
+      const collectingHeroId = netStatus === 'online' ? net.selfId : OFFLINE_HERO_ID;
+      const dropArrivals = dropsPresenter.update(deltaSeconds, drops, collectingHeroId, player.position);
       let dropsHudDirty = false;
       for (const arrival of dropArrivals) {
         if (arrival.kind === COIN_DROP_KIND) {
