@@ -1695,8 +1695,43 @@ async function photographTheSwing() {
   // Where the swing is sampled that thinly the answer is not FAIL, it is that this runner cannot
   // separate a swing from breathing, which is a fact about the runner. Three formulations was
   // enough; a fourth would be tuning until the red goes away, which is the thing not to do.
-  const swingsPhotographed = 3;
-  const sampledEnough = swinging.length >= SAMPLES_PER_SWING_NEEDED * swingsPhotographed;
+  // WHAT THE GATE HAS TO ASK, and what it asked instead.
+  //
+  // It counted swinging frames and divided by a hardcoded three. Two things are wrong with that
+  // now. The denominator is stale -- the feeder above can throw extra swings, so more frames no
+  // longer means better sampling of each swing, it can just mean more swings. And the numerator is
+  // the wrong question anyway: peak SPEED is a derivative, and a derivative is only as good as the
+  // spacing it is computed over. What decides whether this runner can tell a swing from breathing
+  // is the RECORDED FRAME PERIOD against the length of a swing, not how many frames were collected.
+  //
+  // Hosted at daf221d the count gate passed (16 frames, 5.3 per swing) on a runner recording one
+  // frame every ~590ms -- two and a half samples across a 1.5s arc -- and the check went red at
+  // 2.4x. The arm was fine: the same run measured the hand tracing 1.06m, and the arc-span check
+  // passed. What failed was an instrument being asked for a precision it does not have.
+  //
+  // (I tried subsampling rest to match the swing's frame count, to fix the documented
+  // more-draws-means-a-higher-max bias. It "passed" at 173.8x, which is not a physical ratio: even
+  // spacing stretched the time base of rest's derivative to ~2.4s per step and collapsed its peak
+  // from 1.73 to 0.02 m/s. A green number arrived at by changing what is being measured is worth
+  // less than a red one, so it was reverted. This block's header is right that the answer is not a
+  // fourth formulation.)
+  //
+  // So the gate now asks the question the DIAG's own excuse text has always asked in words -- can
+  // this machine resolve a swing at all -- and answers it from the recording itself. Nothing about
+  // the metric or the bar moves; a fast machine still judges this strictly, and a starved one says
+  // out loud that it cannot rather than reporting a number it cannot stand behind.
+  const swingsPhotographed = 3 + fedSwings;
+  const recordedIntervals = arm.samples
+    .slice(1)
+    .map((sample, index) => sample.t - arm.samples[index].t)
+    .filter((gap) => gap > 0)
+    .sort((a, b) => a - b);
+  const medianFramePeriodMs = recordedIntervals.length
+    ? recordedIntervals[Math.floor(recordedIntervals.length / 2)] : Infinity;
+  // A derivative needs at least SAMPLES_PER_SWING_NEEDED steps across the arc to mean anything.
+  const resolvableFramePeriodMs = (SWING_SECONDS * 1000) / SAMPLES_PER_SWING_NEEDED;
+  const sampledEnough = swinging.length >= SAMPLES_PER_SWING_NEEDED * swingsPhotographed
+    && medianFramePeriodMs <= resolvableFramePeriodMs;
   diagnostic('the sword arm actually moves when the hero swings, rather than the pose holding still',
     handSwinging !== null && handStill !== null
       && handSwinging > handStill * SWING_DWARFS_IDLE,
@@ -1712,10 +1747,12 @@ async function photographTheSwing() {
         + `hero himself moved ${rootTravel === null ? 'unreadably' : `${rootTravel.toFixed(3)}m`}`,
     {
       authoritative: sampledEnough,
-      reason: `${swinging.length} swinging frame(s) over ${swingsPhotographed} swings is `
-        + `${(swinging.length / swingsPhotographed).toFixed(1)} per swing, under the `
-        + `${SAMPLES_PER_SWING_NEEDED} a peak needs to be catchable -- and it is being compared `
-        + `against a peak drawn from ${still.length} frames at rest`,
+      reason: `this runner records one frame every ${medianFramePeriodMs}ms against a `
+        + `${SWING_SECONDS}s swing, so a peak speed needs a frame every `
+        + `${resolvableFramePeriodMs.toFixed(0)}ms or better to be catchable at all `
+        + `(${swinging.length} swinging frame(s) over ${swingsPhotographed} swings is `
+        + `${(swinging.length / swingsPhotographed).toFixed(1)} per swing, against a rest peak `
+        + `drawn from ${still.length} frames -- more draws, higher max)`,
     });
 }
 await photographTheSwing();
