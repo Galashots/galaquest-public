@@ -33,6 +33,8 @@ import {
   SHARD_PICKUP_RECIPE_NAME,
   WORKSHOP_BUILD_RECIPE_NAME,
   BEACON_ARRIVAL_RECIPE_NAME,
+  RUNE_CHEST_BRILLIANT_RECIPE_NAME,
+  RUNE_CHEST_OPEN_RECIPE_NAME,
   soundForEvent,
 } from './audio/recipes.js';
 import {
@@ -115,6 +117,23 @@ import {
   streakStillActive,
 } from './progression/streaks.js';
 import { streakMeterView } from './progression/streakView.js';
+// THE HIDDEN LEARNING LAYER: every 8th kill this hero personally lands spawns a rune chest. Pure
+// rules live in progression/runeChests.js (this module's own header explains why it is CLIENT-LOCAL
+// and offline-first rather than following R1's server-authoritative kill drops); the mesh is
+// world/runeChestPresenter.js and the question card is ui/runeChestCard.js.
+import {
+  CHEST_COLLECT_RADIUS_METERS,
+  closeRuneChest,
+  createRuneChestState,
+  judgeRuneChestAnswer,
+  openRuneChest,
+  pickChestSpawnPoint,
+  registerRuneChestKill,
+  rewardXpForRuneChestAnswer,
+  runeChestXpEventId,
+} from './progression/runeChests.js';
+import { createRuneChestPresenter } from './world/runeChestPresenter.js';
+import { createRuneChestCard } from './ui/runeChestCard.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -744,7 +763,7 @@ async function bootstrap() {
   const companionTapPointers = new Map();
   gameSurface.addEventListener('pointerdown', (event) => {
     const targetElement = event.target instanceof Element ? event.target : null;
-    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen');
+    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen, #rune-chest-card');
     const targetIsVisibleOverlay = targetLayer?.dataset.shown === 'true';
     if (targetElement?.closest('button, [data-thumb-surface]') || targetIsVisibleOverlay
       || touch.ownsPointer(event) || attack.ownsPointer(event)) return;
@@ -754,10 +773,10 @@ async function bootstrap() {
     const start = companionTapPointers.get(event.pointerId);
     companionTapPointers.delete(event.pointerId);
     const targetElement = event.target instanceof Element ? event.target : null;
-    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen');
+    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen, #rune-chest-card');
     const targetIsVisibleOverlay = targetLayer?.dataset.shown === 'true';
     if (!start || targetElement?.closest('button, [data-thumb-surface]') || targetIsVisibleOverlay
-      || heroScreen.isOpen() || villageBoard.isOpen()) return;
+      || heroScreen.isOpen() || villageBoard.isOpen() || runeChestCard.isOpen()) return;
     if (touch.ownsPointer(event) || attack.ownsPointer(event)) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
     if (companionPresenter?.hitTest(event.clientX, event.clientY, canvas, camera)) {
@@ -878,6 +897,23 @@ async function bootstrap() {
       touchStickElement.dataset.suspended = String(open);
       attackButtonElement.dataset.suspended = String(open);
       gameSurface.dataset.villageBoardOpen = String(open);
+    },
+  });
+  // THE HIDDEN LEARNING LAYER: the rune chest's own question card. Same suspend-input shape Hero and
+  // the Village Board both take (touch/attack suspended, the other two closed first) -- the brief's
+  // own "suspend movement like other overlays" -- but no camera dolly and no HUD-hiding data attribute
+  // beyond the shared `anyOverlayOpen` gate below: this is a five-second modal beat over whatever the
+  // world already looks like, not a screen a child dwells inside.
+  const runeChestCard = createRuneChestCard({
+    onAnswer: (answerIndex) => onRuneChestAnswer(answerIndex),
+    onOpenChange: (open) => {
+      if (open) { heroScreen.close(); villageBoard?.close(); }
+      touchStickElement.dataset.suspended = String(open);
+      attackButtonElement.dataset.suspended = String(open);
+      // Suppressed the instant the card closes (answered OR dismissed) so a hero still standing
+      // inside CHEST_COLLECT_RADIUS_METERS does not have the card instantly reopen under their own
+      // thumb -- see runeChestCardSuppressed's own declaration comment for the guard this drives.
+      if (!open) runeChestCardSuppressed = true;
     },
   });
   const player = {
@@ -1007,6 +1043,54 @@ async function bootstrap() {
   // cosmetic tally -- divergence from the server's own count is acceptable and offline-consistent,
   // the same posture this push's own brief states for exactly this meter.
   let streakState = createStreakState();
+
+  // THE HIDDEN LEARNING LAYER: rune chests. CLIENT-LOCAL AND OFFLINE-FIRST -- unlike dropsState just
+  // above, this is not mirrored from a server at all, online or off (progression/runeChests.js's own
+  // header explains why: a chest is a per-child learning beat, never shared/adjudicated world state).
+  // Driven identically in both netStatus branches off the SAME myKillEnemyIds gate the XP toast
+  // already uses, further down in this loop.
+  let runeChestState = createRuneChestState();
+  const runeChestPresenter = createRuneChestPresenter(scene);
+  // Set the instant registerRuneChestKill reports a threshold crossed with no chest already standing;
+  // cleared the instant a legal spot is actually found (see the placement attempt further down the
+  // frame loop). Staying `true` across a frame or two is expected and harmless -- it only means the
+  // hero happened to be standing somewhere pickChestSpawnPoint's own isAllowed refused every candidate
+  // it tried (inside the Beacon arena, say), and the next frame's fresh rng draws simply try again
+  // from wherever the hero has since walked to.
+  let runeChestSpawnDue = false;
+  // A fresh minter local to chests, the identical "never persisted, only never repeats this session"
+  // discipline mintDropLifeId just above takes for the identical reason: runeChests.js's own openRune
+  // Chest header is explicit that a chest's id is never checked for durable idempotency beyond naming
+  // the one xp-earned fact it eventually pays (runeChestXpEventId).
+  const mintChestId = createLifeIdMinter();
+  // Guards against an instant re-open the SAME session the card was closed on: set true the instant
+  // runeChestCard's own onOpenChange fires closed, cleared the instant the hero actually LEAVES
+  // CHEST_COLLECT_RADIUS_METERS -- see the proximity check further down. Without this a dismissed
+  // card (the brief's own "a kid can just walk away... dismissing leaves the chest for later") would
+  // reopen on the very next frame, because the hero is by definition still standing inside the radius
+  // that opened it the first time. Harmless no-op after an ANSWER too (the chest is null by then, so
+  // the proximity check that reads this never even finds a chest to gate).
+  let runeChestCardSuppressed = false;
+
+  // A metre of clearance past the arena's/sanctuary's own radius, so a chest never spawns hugging
+  // the boundary line either -- the brief's own "never spawn a chest inside the beacon arena or the
+  // sanctuary" read generously rather than to the exact metre. World-knowledge lives HERE, not in
+  // progression/runeChests.js (that module's own pickChestSpawnPoint header: "a pure progression/
+  // rule has no business duplicating" world/bounds.js or world/zones/village.js), which is what keeps
+  // this the one place the exclusion rule can ever disagree with itself.
+  const RUNE_CHEST_EXCLUSION_MARGIN_METERS = 1;
+  function runeChestSpotAllowed(x, z) {
+    if (clampToWorldX(x) !== x || clampToWorldZ(z) !== z) return false;
+    const [arenaX, arenaZ] = VILLAGE.BEACON_ARENA.at;
+    if (Math.hypot(x - arenaX, z - arenaZ) < VILLAGE.BEACON_ARENA.radiusMeters + RUNE_CHEST_EXCLUSION_MARGIN_METERS) {
+      return false;
+    }
+    if (Math.hypot(x - RECOVERY_SANCTUARY.at.x, z - RECOVERY_SANCTUARY.at.z)
+      < RECOVERY_SANCTUARY.radiusMeters + RUNE_CHEST_EXCLUSION_MARGIN_METERS) {
+      return false;
+    }
+    return true;
+  }
 
   function enemyById(enemyId) {
     if (typeof enemyId !== 'string') return null;
@@ -2423,6 +2507,7 @@ async function bootstrap() {
       if (open) {
         heroScreen.close();
         villageBoard?.close();
+        runeChestCard?.close();
       }
     },
   });
@@ -2451,6 +2536,7 @@ async function bootstrap() {
   // do exactly what the X does, for every overlay that has one.
   const profileGateElement = document.querySelector('#profile-gate');
   const profileGateCloseElement = document.querySelector('#profile-gate-close');
+  const runeChestCardElement = document.querySelector('#rune-chest-card');
 
   // BACKDROP TAP, Hero screen and Village Board. Both are deliberately click-through on their own
   // container (index.html's own comment on #hero-screen) so a drag on the empty middle still turns
@@ -2495,6 +2581,17 @@ async function bootstrap() {
     profileGate.close();
   });
 
+  // BACKDROP TAP, the rune chest card. Same OPAQUE/pointer-events-auto-while-shown shape the profile
+  // gate is (index.html's own CSS comment on #rune-chest-card), so it takes the identical plain-click
+  // pattern rather than #hero-screen/#village-board-screen's drag-distance one -- and unlike the
+  // gate, this ALWAYS has its own way out (the ✕ is never hidden the way the gate's first-run naming
+  // hides its own), so there is no "is dismiss even allowed right now" guard to repeat here. A tap on
+  // the backdrop dismisses WITHOUT judging an answer -- runeChestCard.close() never fires onAnswer.
+  runeChestCardElement?.addEventListener('click', (event) => {
+    if (event.target !== runeChestCardElement) return;
+    runeChestCard.close();
+  });
+
   // ESCAPE. Whichever one full-screen overlay is open -- they are mutually exclusive by construction,
   // each one's own onOpenChange above closes the others -- the same key that closes every other
   // dialog on the web closes it too. Every desktop and debugging session has this key; a real iPad's
@@ -2504,6 +2601,7 @@ async function bootstrap() {
     if (event.key !== 'Escape') return;
     if (heroScreen.isOpen()) { heroScreen.close(); return; }
     if (villageBoard.isOpen()) { villageBoard.close(); return; }
+    if (runeChestCard.isOpen()) { runeChestCard.close(); return; }
     if (profileGate.isOpen() && profileGateCloseElement?.dataset.shown === 'true') profileGate.close();
   });
 
@@ -2845,6 +2943,68 @@ async function bootstrap() {
       if (events.length > 0) pendingServerEvents.push(...events);
     },
   });
+
+  /**
+   * THE HIDDEN LEARNING LAYER's own reward path, and the ONE PLACE this file decided XP over coins.
+   *
+   * The brief's own instruction was to READ THE CODE and pick whichever reward the actual reward
+   * infrastructure honestly supports, rather than inventing a new one. Reading it: a coin has no
+   * client-initiated grant path AT ALL -- world/enemyDrops.js's own header is explicit that a kill
+   * drop's coin only ever exists because the SERVER rolled it (or, offline, because a local roll
+   * mirrors that same rule with no server to check it against); there is no
+   * `net.sendXCollectedThisCoinIEarnedMyself()` message anywhere in net/client.js, and H1 is exactly
+   * the rule that forbids inventing one -- a client-restorable coin-earned fact is REFUSED outright by
+   * progression/facts.js's own CLIENT_RESTORE_REFUSED_TYPES (coin-earned/shard-earned), because a coin
+   * funds the shared Village economy and a device asserting "I have coins now" with nothing behind it
+   * is exactly the shared-currency forgery H1 exists to prevent.
+   *
+   * XP, by contrast, already has TWO production sources that are durable, personal, and (P2's Lantern
+   * aside) MINTED CLIENT-SIDE with no server adjudication behind the roll itself: rewards/killXp.js's
+   * own offline fold journals a `kill-xp:offline-hero:...` fact with nothing checking whether that
+   * kill really happened, and progression/facts.js's own PROFILE_SCOPED_EVENT_ID_PREFIXES already
+   * documents `xp-earned` as a type a profile may restore for itself. So this fact rides the IDENTICAL
+   * door: minted locally (runeChestXpEventId), journalled locally (profiles.recordFacts, both online
+   * and offline -- see runeChests.js's own header for why there is only one code path here at all),
+   * and -- the one extra step a kill's XP does not need, because the SERVER minted that one itself --
+   * pushed to the server via the SAME restoreProfileFacts door a reconnect already uses (see
+   * ingestWelcome above), so an ALREADY-CONNECTED session sees it folded into the next tick's own
+   * rewards block rather than waiting for a future reconnect that might never come this session.
+   * sendRestoreProfile is a no-op offline (net/client.js's own online-only guard), which is exactly
+   * the fallback this needs: offline, the local journal alone is the whole of "durable" this game has.
+   *
+   * REWARD SIZED IN XP, NOT COINS, AND THAT TURNS OUT TO BE THE BETTER REWARD ANYWAY: XP feeds the
+   * level-up ceremony (progression/heroStats.js's own resolveHeroStats, diffed every frame below), so
+   * a rune chest's payoff is not merely "a number went up" but a real chance at the biggest ceremony
+   * this game has -- for free, because that ceremony already fires off whatever total XP this profile
+   * reports, from whichever source.
+   */
+  function onRuneChestAnswer(answerIndex) {
+    const chest = runeChestState.chest;
+    // Defensive only: the card can only be open while a chest stands (main.js's own proximity gate
+    // below never shows it otherwise), but this reads a tap event, not a trusted message -- the same
+    // "a confused caller gets the safe answer, never a crash" posture judgeRuneChestAnswer itself
+    // takes for an out-of-range index.
+    if (!chest) return;
+    const judged = judgeRuneChestAnswer(chest.question, answerIndex);
+    const amount = rewardXpForRuneChestAnswer(judged.correct);
+    const fact = { eventId: runeChestXpEventId(profileId, chest.id), type: 'xp-earned', value: String(amount) };
+    profiles.recordFacts(profileId, [fact]);
+    refreshProfileState();
+    // Push it to an already-connected server RIGHT NOW rather than waiting for the next welcome --
+    // see this function's own header for why this is safe and why it is necessary.
+    if (durableProfileId) net.sendRestoreProfile([fact]);
+    popXpToast(chest.x, WOLF_SPARK_HEIGHT_METERS, chest.z, amount);
+    if (judged.correct) {
+      audio.play(RUNE_CHEST_BRILLIANT_RECIPE_NAME);
+      banner('BRILLIANT!', 2200, 'Brilliant!');
+    } else {
+      // NEVER SHAMING -- the brief's own word. Warm, not a buzzer: the chest opened anyway, and the
+      // text says what the answer was rather than merely that this one was wrong.
+      audio.play(RUNE_CHEST_OPEN_RECIPE_NAME);
+      banner(`Nice try! The answer was ${judged.correctText}`, 2600, `Nice try. The answer was ${judged.correctText}.`);
+    }
+    runeChestState = closeRuneChest(runeChestState);
+  }
 
   const runtime = {
     scene,
@@ -3214,10 +3374,13 @@ async function bootstrap() {
     // GP3: the Village Board is the second (and, by construction, mutually exclusive -- see its own
     // onOpenChange) full-screen overlay that owns input the same way Hero screen does.
     const villageBoardOpen = villageBoard.isOpen();
+    // THE HIDDEN LEARNING LAYER's own card, the third (and, by the same mutual-exclusion the two
+    // above already keep, exclusive) full-screen overlay that owns input the same way.
+    const runeChestCardOpen = runeChestCard.isOpen();
     // Either overlay open suspends the same movement/attack input -- checked once here and reused
     // below, the same "checked once, not polled per-system" reasoning heroScreenOpen's own comment
-    // already gives, just widened to cover both screens now that there are two.
-    const anyOverlayOpen = heroScreenOpen || villageBoardOpen;
+    // already gives, just widened to cover all three screens now that there are three.
+    const anyOverlayOpen = heroScreenOpen || villageBoardOpen || runeChestCardOpen;
     // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
     // and the showcase pass needs the current equipped id the frame the screen OPENS, so it can pick
     // up mid-frame whatever the DOM render below just set rather than painting one frame stale.
@@ -3967,10 +4130,53 @@ async function bootstrap() {
             const enemy = enemyById(event.enemyId);
             const amount = killXpForKind(event.kind);
             if (enemy && amount !== null) popXpToast(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, amount);
+            // THE HIDDEN LEARNING LAYER's own counter -- the SAME "this hero personally landed the
+            // killing blow" gate the XP toast just above uses, both online and offline (myKillEnemyIds
+            // is populated identically in both branches further up this loop), because a rune chest is
+            // a per-child beat and crediting a sibling's own kill toward THIS hero's next chest would
+            // be exactly the wrong kind of shared state (progression/runeChests.js's own header).
+            const chestResult = registerRuneChestKill(runeChestState);
+            runeChestState = chestResult.state;
+            if (chestResult.chestDue) runeChestSpawnDue = true;
           }
         }
       }
       renderStreakMeter(streakMeterView(streakState));
+
+      // THE HIDDEN LEARNING LAYER: placing a due chest, presenting the standing one, and opening its
+      // card on proximity -- all CLIENT-LOCAL and IDENTICAL online and offline (progression/
+      // runeChests.js's own header), unlike everything else in this branch's own online/offline split,
+      // so none of it is gated on netStatus.
+      if (runeChestSpawnDue && runeChestState.chest === null) {
+        const spot = pickChestSpawnPoint({
+          playerX: player.position.x,
+          playerZ: player.position.z,
+          rng: Math.random,
+          isAllowed: runeChestSpotAllowed,
+        });
+        // A null spot (every candidate this frame's rng tried landed inside the arena/sanctuary) is
+        // not an error -- runeChestSpawnDue simply stays true and the next frame's fresh draws, off
+        // wherever the hero has since walked to, try again. See its own declaration comment.
+        if (spot) {
+          runeChestState = openRuneChest(runeChestState, {
+            id: mintChestId(), x: spot.x, z: spot.z, rng: Math.random,
+          });
+          runeChestSpawnDue = false;
+        }
+      }
+      runeChestPresenter.update(deltaSeconds, runeChestState.chest);
+      if (runeChestState.chest && !anyOverlayOpen) {
+        const chestDistance = Math.hypot(
+          player.position.x - runeChestState.chest.x, player.position.z - runeChestState.chest.z,
+        );
+        if (chestDistance <= CHEST_COLLECT_RADIUS_METERS) {
+          if (!runeChestCardSuppressed) runeChestCard.show(runeChestState.chest.question);
+        } else {
+          // Left the radius: the dismiss guard (if any) is spent -- walking back in re-opens it, the
+          // brief's own "dismissing leaves the chest for later" made literal.
+          runeChestCardSuppressed = false;
+        }
+      }
 
       const fight = !wolf
         ? `you ${Math.max(0, hero.hp)}hp`
