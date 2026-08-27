@@ -68,6 +68,12 @@ import {
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
   WOLF_MAX_HP,
+  // How close the hero has to be standing for a bite to be able to land, so the landscape knockdown
+  // pass can state its own precondition in the rules' units instead of a number typed here (GQ-007).
+  WOLF_BITE_RANGE,
+  // The distance a wolf will come for the hero from, so the same pass can require that the wolf is
+  // able to engage at all rather than that it is already touching him.
+  WOLF_AGGRO_RANGE,
   // The world's own respawn delay, so the landscape pass at the end waits exactly as long as the
   // rules say a new wolf takes -- not a guessed sleep that goes stale the day that number moves.
   WOLF_RESPAWN_SECONDS,
@@ -420,20 +426,55 @@ function travelOf(points) {
  * the peak is caught, not how big it is, and the two are an order of magnitude apart even at three
  * samples per swing.
  */
-function peakSpeedOf(samples) {
-  let peak = 0;
-  let pairs = 0;
+function handSpeedsOf(samples) {
+  const speeds = [];
   for (let i = 1; i < samples.length; i += 1) {
     const a = samples[i - 1];
     const b = samples[i];
     if (!Array.isArray(a?.hand) || !Array.isArray(b?.hand)) continue;
     const seconds = (b.t - a.t) / 1000;
     if (!(seconds > 0)) continue;
-    pairs += 1;
     const step = Math.hypot(b.hand[0] - a.hand[0], b.hand[1] - a.hand[1], b.hand[2] - a.hand[2]);
-    peak = Math.max(peak, step / seconds);
+    speeds.push(step / seconds);
   }
-  return pairs ? peak : null;
+  return speeds.sort((x, y) => x - y);
+}
+/**
+ * The speed the hand held for HALF the frames of a stretch, in metres per second.
+ *
+ * THE MEDIAN AND NOT THE MAXIMUM, which is the one thing about this measurement that changed after
+ * the recording below was finally captured and looked at rather than argued about. Every earlier
+ * version compared the fastest single frame-pair of a swing against the fastest single frame-pair
+ * at rest, and the file's own SAMPLES_PER_SWING_NEEDED comment already knew that was biased --
+ * more draws is more chances at an extreme, and hosted this compared about twenty swinging frames
+ * against fifty-six at rest.
+ *
+ * What the recording showed is worse than the bias, and simpler. Locally at 6x (267ms frames,
+ * .local/runtime-test/swing-arm-samples.json), the fifty-five rest frame-pairs read:
+ *
+ *     0.01 x37, 0.02 x15, then 0.23, 0.70, 0.78, 1.24
+ *
+ * The idle hand moves at 0.015 m/s. The 1.24 the check was using as "the hero standing still" is
+ * EIGHTY TIMES the rest median -- it is the boundary pair, the one straddling the moment the arm
+ * starts moving, and at a 267ms frame it carries a chunk of the arc into the baseline. This file's
+ * own header describes exactly that contamination for the extent formulation it replaced; taking
+ * the max of the rest set meant the baseline WAS the contamination. 3.18 against 1.24 is 2.6x and
+ * reads as "a swing barely outpaces breathing". 3.18 against 0.015 is what actually happened.
+ *
+ * A median is robust to that boundary pair on both sides and does not care how many draws each
+ * side got, so it removes both defects at once without excluding any sample by hand, without
+ * touching the metric (hand speed in the hero's own frame) and without touching the bar.
+ *
+ * NOT the equal-N subsampling that was tried and reverted: that one resampled rest onto an even
+ * spacing, stretched its derivative time base to ~2.4s per step, collapsed its peak from 1.73 to
+ * 0.02 m/s and "passed" at 173.8x. Every speed here is still computed across two ADJACENT recorded
+ * frames at the runner's own native spacing. Nothing is resampled; only the estimator over those
+ * speeds changed, from an order statistic that grows with N to one that does not.
+ */
+function medianHandSpeedOf(samples) {
+  const speeds = handSpeedsOf(samples);
+  if (!speeds.length) return null;
+  return speeds[Math.floor(speeds.length / 2)];
 }
 // By stable identity off the live scene, because the wolf presenter publishes its clip but not its
 // root, and the question here is about the body rather than about what the presenter believes. The
@@ -1617,11 +1658,20 @@ async function photographTheSwing() {
   // fight. That gap is the reason this check exists, and 33/33 is not the evidence for it -- 32/33
   // under sabotage is.
   const SWING_DWARFS_IDLE = 3;
-  /** Samples of a swing needed before its PEAK speed means anything. Comparing the maximum of one
-   *  set against the maximum of another is biased toward whichever set has more samples, because
-   *  more draws is more chances to catch an extreme -- and hosted this compares 4 swinging frames
-   *  against 56 at rest, fourteen to one. Four per swing is few, and it is the point at which the
-   *  bias stops swamping the signal rather than a tuned value. */
+  /** Samples of a swing needed before a speed drawn from it means anything.
+   *
+   *  This used to be justified by the max-of-N bias -- more draws is more chances at an extreme, and
+   *  hosted this compared 4 swinging frames against 56 at rest. The estimator is a median now and
+   *  that bias is gone, but the count still has to be here, for a different and simpler reason: a
+   *  median over one or two frames per swing is not a summary of the arc, it is a report on which
+   *  instant the frames happened to land. Measured -- a 6x local run caught 5 frames across 5
+   *  swings, at 1.0 per swing, and every one of them landed where the hand was barely moving: the
+   *  recorded arc spanned 0.05m and the ratio came out 0.6x on an arm that was swinging properly.
+   *  A 4x run of the same build caught 3.7 per swing, spanned 1.13m, and read 164x.
+   *
+   *  Four per swing is few. It is deliberately NOT raised to make a local run judge: at 4x this
+   *  file falls one frame short of its own gate (11 against 12) and reports the ratio without
+   *  standing behind it, which is the honest outcome and not one worth tuning away. */
   const SAMPLES_PER_SWING_NEEDED = 4;
   // FEED THE RECORDER UNTIL A SPAN EXISTS TO MEASURE. At a ~850ms frame each 1.5s swing yields one
   // or two recorded frames at a random phase of the arc, and three swings can cluster: hosted at
@@ -1672,6 +1722,22 @@ async function photographTheSwing() {
   } catch (error) { console.log(`  sample dump failed: ${error.message}`); }
   const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);
 
+  // HOW FAST THIS RUNNER ACTUALLY DREW, derived once here because BOTH swing checks below depend on
+  // it and, until now, only one of them admitted it. A frame period is a fact about the instrument;
+  // every claim made from these samples is bounded by it.
+  const swingsPhotographed = 3 + fedSwings;
+  const recordedIntervals = arm.samples
+    .slice(1)
+    .map((sample, index) => sample.t - arm.samples[index].t)
+    .filter((gap) => gap > 0)
+    .sort((a, b) => a - b);
+  const medianFramePeriodMs = recordedIntervals.length
+    ? recordedIntervals[Math.floor(recordedIntervals.length / 2)] : Infinity;
+  // A derivative needs at least SAMPLES_PER_SWING_NEEDED steps across the arc to mean anything.
+  const resolvableFramePeriodMs = (SWING_SECONDS * 1000) / SAMPLES_PER_SWING_NEEDED;
+  const sampledEnough = swinging.length >= SAMPLES_PER_SWING_NEEDED * swingsPhotographed
+    && medianFramePeriodMs <= resolvableFramePeriodMs;
+
   // ...and here it is: does the recorded evidence span the arc, or is it all one instant?
   //
   // Over the recorder's own frames, which is the whole point -- it advances with the page rather
@@ -1686,13 +1752,38 @@ async function photographTheSwing() {
   const spread = swinging.length >= 2
     ? Math.max(...swinging.map((f) => f.swingSeconds)) - Math.min(...swinging.map((f) => f.swingSeconds))
     : null;
-  check('the recorded swing evidence spans the arc rather than one instant of it',
+  // GATED ON THE SAME INSTRUMENT ITS SIBLING IS, which it was not when the gate was written, and
+  // that asymmetry showed up the first time a local run was throttled hard enough to reproduce the
+  // hosted runner. At 12x -- one frame every 564ms -- the feeder threw thirteen swings and the
+  // recorder caught NONE of them, and this check reported `only 0 recorded frame(s) caught a swing`
+  // as a FAIL while the sword-arm check below said NOT JUDGED about the identical starvation. One
+  // recording, one cause, two verdicts.
+  //
+  // WHY DECLINING IS SAFE HERE AND IS NOT FAILING OPEN. This check does not own the claim that a
+  // swing happened -- `tapping ATTACK starts a swing` does, it polls rather than samples, and it
+  // stays an ungated hard check (it passed on that same 12x run, which is how the zero above is
+  // known to be a sampling failure rather than a hero who never swung). What this check owns is
+  // narrower: that the RECORDING covers the arc. When the recorder caught nothing, there is no
+  // recording to make that claim about, and the honest verdict is that this runner could not show
+  // it -- not that the game failed to draw it.
+  diagnostic('the recorded swing evidence spans the arc rather than one instant of it',
     spread !== null && spread > SWING_SECONDS * 0.3,
     spread === null
       ? `only ${swinging.length} recorded frame(s) caught a swing, so there is no span to measure`
       : `swingSeconds spanned ${spread.toFixed(3)}s of ${SWING_SECONDS}s over ${swinging.length} `
         + `recorded frame(s); the three photographs landed at `
-        + `${caught.map((f) => f.swingSeconds.toFixed(3)).join('/')}s`);
+        + `${caught.map((f) => f.swingSeconds.toFixed(3)).join('/')}s`,
+    {
+      authoritative: swinging.length >= 2 && medianFramePeriodMs <= resolvableFramePeriodMs,
+      reason: swinging.length < 2
+        ? `the recorder caught ${swinging.length} frame(s) mid-swing across ${swingsPhotographed} `
+          + 'swings, so there is no recording here to have spanned anything -- whether a swing '
+          + 'HAPPENED is `tapping ATTACK starts a swing`, which polls rather than samples'
+        : `this runner records one frame every ${medianFramePeriodMs.toFixed(0)}ms against a `
+          + `${SWING_SECONDS}s swing, past the ${resolvableFramePeriodMs.toFixed(0)}ms it takes to `
+          + `describe the arc at all; the ${swinging.length} frame(s) it did catch across `
+          + `${swingsPhotographed} swings land wherever the frames happened to fall`,
+    });
   // REST IS THE FRAMES BEFORE THE FIRST SWING, not every frame that was not mid-swing. Those two
   // are the same thing only on a fast machine. Hosted at bc262f8 this check FAILED at 0.7x, because
   // "not swinging" swept up the frames where the arm was still returning to rest between the three
@@ -1703,8 +1794,8 @@ async function photographTheSwing() {
   // there, and that is the only stretch of this recording that means "at rest".
   const firstSwing = arm.samples.findIndex((sample) => sample.swingSeconds >= 0);
   const still = firstSwing > 0 ? arm.samples.slice(0, firstSwing) : [];
-  const handSwinging = peakSpeedOf(swinging);
-  const handStill = peakSpeedOf(still);
+  const handSwinging = medianHandSpeedOf(swinging);
+  const handStill = medianHandSpeedOf(still);
   // The hero is not supposed to go anywhere here -- the wolf is dead and nothing walks -- so if he
   // did, the arm travel above is partly his own stroll and this measurement is not usable. Said out
   // loud rather than absorbed, because a check that quietly measures the wrong thing is the defect
@@ -1747,18 +1838,6 @@ async function photographTheSwing() {
   // this machine resolve a swing at all -- and answers it from the recording itself. Nothing about
   // the metric or the bar moves; a fast machine still judges this strictly, and a starved one says
   // out loud that it cannot rather than reporting a number it cannot stand behind.
-  const swingsPhotographed = 3 + fedSwings;
-  const recordedIntervals = arm.samples
-    .slice(1)
-    .map((sample, index) => sample.t - arm.samples[index].t)
-    .filter((gap) => gap > 0)
-    .sort((a, b) => a - b);
-  const medianFramePeriodMs = recordedIntervals.length
-    ? recordedIntervals[Math.floor(recordedIntervals.length / 2)] : Infinity;
-  // A derivative needs at least SAMPLES_PER_SWING_NEEDED steps across the arc to mean anything.
-  const resolvableFramePeriodMs = (SWING_SECONDS * 1000) / SAMPLES_PER_SWING_NEEDED;
-  const sampledEnough = swinging.length >= SAMPLES_PER_SWING_NEEDED * swingsPhotographed
-    && medianFramePeriodMs <= resolvableFramePeriodMs;
   diagnostic('the sword arm actually moves when the hero swings, rather than the pose holding still',
     handSwinging !== null && handStill !== null
       && handSwinging > handStill * SWING_DWARFS_IDLE,
@@ -1767,19 +1846,19 @@ async function photographTheSwing() {
         + `${swinging.length} swinging and ${still.length} at rest carried a readable `
         + `${SWORD_HAND_BONE}. So this proved nothing rather than passing -- and it says WHICH `
         + 'half was missing, because "no bone" and "no rest frames" want different fixes'
-      : `hand peaked at ${handSwinging.toFixed(2)}m/s over ${swinging.length} swinging frame(s) `
-        + `against ${handStill.toFixed(2)}m/s over ${still.length} at rest `
+      : `hand held ${handSwinging.toFixed(2)}m/s across half of ${swinging.length} swinging `
+        + `frame(s) against ${handStill.toFixed(2)}m/s across half of ${still.length} at rest `
         + `(${(handSwinging / Math.max(handStill, 1e-6)).toFixed(1)}x, bar ${SWING_DWARFS_IDLE}x); `
         + `arc spanned ${(travelOf(swinging.map((sample) => sample.hand)) ?? 0).toFixed(2)}m, `
         + `hero himself moved ${rootTravel === null ? 'unreadably' : `${rootTravel.toFixed(3)}m`}`,
     {
       authoritative: sampledEnough,
-      reason: `this runner records one frame every ${medianFramePeriodMs}ms against a `
-        + `${SWING_SECONDS}s swing, so a peak speed needs a frame every `
-        + `${resolvableFramePeriodMs.toFixed(0)}ms or better to be catchable at all `
+      reason: `this runner records one frame every ${medianFramePeriodMs.toFixed(0)}ms against a `
+        + `${SWING_SECONDS}s swing, so the arc needs a frame every `
+        + `${resolvableFramePeriodMs.toFixed(0)}ms or better to be described at all `
         + `(${swinging.length} swinging frame(s) over ${swingsPhotographed} swings is `
-        + `${(swinging.length / swingsPhotographed).toFixed(1)} per swing, against a rest peak `
-        + `drawn from ${still.length} frames -- more draws, higher max)`,
+        + `${(swinging.length / swingsPhotographed).toFixed(1)} per swing, and a median over `
+        + 'that few says more about which instant was sampled than about the swing)',
     });
 }
 await photographTheSwing();
@@ -1897,8 +1976,42 @@ const biter = await pollUntil((s) => s.enemy.mode !== 'dead' && s.enemy.hp > 0,
 check('landscape: there is a live wolf to be knocked out by',
   biter.enemy.mode !== 'dead' && biter.enemy.hp > 0,
   `mode ${biter.enemy.mode}, hp ${biter.enemy.hp}`);
-await closeOnWolf(Infinity, 1.0);
+// CLOSED ON THE WALK DRIVER'S OWN ARRIVAL LATCH, not on a wall-clock budget, and then SAID OUT
+// LOUD. closeOnWolf gives its fine leg 900ms, and on a starved runner a single pulse of it -- a
+// state read, a movement pulse, an 80ms settle, another read -- outlasts that whole budget. Both
+// its legs then return wherever the hero happens to be standing, and neither says it did not
+// arrive.
+//
+// Hosted at 9129e30 that is what happened: the two checks below reported `hp 30 -> 30, 0 down
+// frame(s) of 100` and `0 down frame(s), 0 of them veiled` -- a hero who stood for thirty seconds
+// and was never bitten. Read as written, that accuses the rules of having stopped hurting people.
+// What had actually failed was the approach: the wolf was sampled `mode idle`, which is what a wolf
+// does when nobody is inside its aggro ring. The knockdown never had its precondition.
+//
+// So the approach now polls the in-page driver's `arrived` flag -- a fact about where the hero got
+// to rather than about how long the harness was willing to wait -- and stops half a bite inside the
+// range a bite needs, so the wolf is not being asked to reach the hero from exactly its own limit.
+// The precondition is then asserted rather than assumed. It is still a FAIL when it is not met,
+// because standing out of reach is a real failure of this pass; it is simply a failure that now
+// names itself instead of being billed to the game.
+await heldLegToWolf(WOLF_BITE_RANGE * 0.5, (WOLF_RESPAWN_SECONDS + 8) * 1000);
 const beforeDown = await state();
+const biteGap = Math.hypot(
+  beforeDown.enemy.x - (beforeDown.serverPos ?? beforeDown.heroPos)[0],
+  beforeDown.enemy.z - (beforeDown.serverPos ?? beforeDown.heroPos)[1]);
+// AGGRO RANGE AND NOT BITE RANGE, which the first version of this check got wrong and a throttled
+// local run caught within one run: it read the hero 2.32m out against a 1.6m bite and called that a
+// failed precondition, and then the knockdown it was guarding PASSED anyway, because the wolf was
+// already `walk`ing in and closed the last 0.7m itself. The hero does not have to be standing in
+// the wolf's teeth. He has to be somewhere the wolf will come for him, and the rules' name for that
+// distance is WOLF_AGGRO_RANGE. That is still exactly the hosted failure this check exists to
+// catch: there the wolf was sampled `mode idle`, which is what a wolf outside its aggro ring does,
+// and it never came at all.
+check('landscape: the hero is standing where the wolf will come for him before waiting to be bitten',
+  biteGap <= WOLF_AGGRO_RANGE && beforeDown.enemy.mode !== 'dead' && beforeDown.enemy.hp > 0,
+  `hero ${biteGap.toFixed(2)}m from the wolf against a ${WOLF_AGGRO_RANGE}m aggro ring `
+    + `(a ${WOLF_BITE_RANGE}m bite it closes itself), wolf ${beforeDown.enemy.mode} `
+    + `hp ${beforeDown.enemy.hp}`);
 await page.eval(startWatch('landscape-knockdown', `({
   t: performance.now(),
   downSeconds: window.__galaQuestRuntime.encounterState().hero.downSeconds,
