@@ -208,6 +208,22 @@ await page.send('Runtime.enable');
 await page.send('Page.enable');
 await page.send('Log.enable');
 
+// REPRODUCING THE HOSTED RUNNER LOCALLY. Every expensive defect this file has had was a
+// starvation defect -- a budget sized on a 17ms frame, met on the machine it was written on and
+// missed on a runner drawing one frame every 300-600ms -- and each one cost a hosted round trip to
+// see because there was no way to ask a local run to be slow. drive-ranger.mjs already throttles
+// deliberately for exactly this reason (its sanctuary phase does not reproduce unthrottled); this
+// is the same knob, off by default so an ordinary local run is unchanged.
+//
+// Sizing it is a measurement, not a guess: 12x here records one frame every ~564ms, which is
+// slower than the hosted runner and past the point where a swing is sampled at all. The hosted
+// judging regime this file's swing checks care about sits nearer 300ms.
+const CPU_THROTTLE = Number(process.env.GALAQUEST_CPU_THROTTLE ?? 1);
+if (CPU_THROTTLE > 1) {
+  await page.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE });
+  console.log(`  CPU throttled ${CPU_THROTTLE}x (GALAQUEST_CPU_THROTTLE)`);
+}
+
 // Fresh-guest discipline (GQ-001 class: an assumption that "the next run starts clean" is exactly
 // the kind of latency-shaped assumption that only breaks once authority crosses a process boundary
 // -- here, the boundary between harness runs sharing one persistent automation profile). The
@@ -1643,6 +1659,17 @@ async function photographTheSwing() {
   console.log(`  swing-arm: fed ${fedSwings} extra swing(s) beyond the three photographed`);
   const arm = JSON.parse(await page.eval(readWatchSource('swing-arm')));
   await page.eval(stopWatchSource('swing-arm'));
+  // THE RECORDING ITSELF IS EVIDENCE, kept beside the screenshots rather than reduced to one
+  // ratio in a log line. The sword-arm check below has been reformulated three times, and each
+  // argument about it was conducted on a number rather than on the frames behind it -- which is
+  // how a formulation that "passed" at 173.8x by stretching its own time base got as far as a
+  // commit. CI already uploads this directory as the run's artifact, so the frames a disputed
+  // ratio came from ride along with it and a candidate statistic can be judged offline, on the
+  // recording that produced the disagreement, instead of by re-running until the red goes away.
+  try {
+    writeFileSync(`${OUT}swing-arm-samples.json`, JSON.stringify(arm, null, 2));
+    console.log(`  wrote swing-arm-samples.json (${arm.samples.length} frames)`);
+  } catch (error) { console.log(`  sample dump failed: ${error.message}`); }
   const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);
 
   // ...and here it is: does the recorded evidence span the arc, or is it all one instant?
