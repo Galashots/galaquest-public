@@ -139,9 +139,10 @@ import {
 } from './world/rangerSpeech.js';
 import { questObjectiveFor } from './world/quest.js';
 import { destinationFor, nearestPlaceTo } from './world/destinations.js';
-import { edgeIndicatorFor } from './ui/offscreenPointer.js';
 import { createRescueWatch, targetKeyFor } from './ui/guidanceRescue.js';
 import { DEFAULT_RANGE_METERS, minimapPlacement, minimapPolyline } from './ui/minimap.js';
+import { formatGuideMeters, guideArrowFor } from './render/guideArrow.js';
+import { createGuidePath } from './render/guidePath.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
   bramblesCut,
@@ -287,6 +288,12 @@ async function bootstrap() {
   scene.add(world);
   const rimLight = createRimLight();
   scene.add(rimLight.light, rimLight.target);
+  // ALWAYS-ON WAYFINDING, part one of two. The playtest finding this exists for: "need much clearer
+  // arrows and dotted paths on where to go next... they should basically always be there." A pooled
+  // sprite trail in world space, driven every frame by the same destinationFor() answer that already
+  // aims the edge arrow below -- see render/guidePath.js's own header for why it is world space and
+  // not a HUD overlay, and why a straight line is the right amount of pathfinding for a flat plane.
+  const guidePath = createGuidePath(scene);
 
   // Phase V: the village zone, additive over the placeholder ground the same way the wolf is
   // additive over the hero -- loadZone() returns immediately with a live `counts` object (mutated
@@ -1344,22 +1351,50 @@ async function bootstrap() {
   };
   const objectivePointerElement = document.querySelector('#objective-pointer');
   const objectivePointerArrowElement = document.querySelector('#objective-pointer-arrow');
+  const objectivePointerDistanceElement = document.querySelector('#objective-pointer-distance');
+  const objectiveMarkerElement = document.querySelector('#objective-marker');
   const pointerTarget = new THREE.Vector3();
   const pointerForward = new THREE.Vector3();
-  function renderObjectivePointer(objective, context) {
+  /** Both HUD elements off, reported through the one exit every "say nothing" case funnels through --
+   *  so the edge arrow and the on-screen marker can never disagree about whether anything is
+   *  currently being pointed at (one shown, the other left stale from a previous frame). */
+  function hideObjectiveGuidance() {
+    objectivePointerElement.dataset.shown = 'false';
+    objectiveMarkerElement.dataset.shown = 'false';
+    return { pointing: false };
+  }
+  /**
+   * ALWAYS-ON WAYFINDING, part two of two (part one is the ground trail: render/guidePath.js). This
+   * used to hide itself the instant the target scrolled on screen, which was correct for an ARROW --
+   * a thing pointing at something already visible is noise -- but left the on-screen case with
+   * nothing at all, which is the gap the playtest finding names: a child looking straight at the
+   * right street lantern among four identical dark ones had no way to confirm it was the one. Now the
+   * arrow and a soft bouncing marker are two views of ONE decision (render/guideArrow.js's `mode`),
+   * so exactly one of them is ever showing.
+   *
+   * @param objective the current quest objective, or null.
+   * @param context   the caller-supplied dynamic-destination lookups destinationFor needs (the next
+   *                  dark light, the next cold seal).
+   * @param suspended true while a full-screen overlay owns the screen, or while an NPC speech beat
+   *                  already has the child standing at the right spot -- both moments an arrow or a
+   *                  marker would be either invisible under a modal or telling a child something
+   *                  their own speech bubble is already telling them.
+   */
+  function renderObjectivePointer(objective, context, suspended) {
     const place = destinationFor(objective, context);
-    if (!place) {
-      // No objective, no place for it, or a dynamic place the caller could not supply. All three are
-      // the same answer to "where do I point", which is: nowhere, so say nothing.
-      objectivePointerElement.dataset.shown = 'false';
-      return { pointing: false };
+    if (suspended || !place) {
+      // No objective, no place for it, a dynamic place the caller could not supply, or a moment this
+      // is deliberately quiet for. `place` still comes back so a caller that only needs the
+      // COORDINATE (the rescue watch, the minimap, the ground trail) does not have to ask
+      // destinationFor a second time -- ONE resolve of "where is it", read three ways.
+      return { ...hideObjectiveGuidance(), place };
     }
 
     // BEHIND THE CAMERA IS COMPUTED, NOT INFERRED, and this is the whole reason offscreenPointer.js
-    // takes it as an argument. project() performs the perspective divide without clipping, so a
-    // point behind the camera comes back mirrored through the origin -- a plausible on-screen
-    // coordinate pointing exactly the wrong way. The sign of the depth along the camera's forward
-    // axis is the only thing that distinguishes them.
+    // (which render/guideArrow.js wraps) takes it as an argument. project() performs the perspective
+    // divide without clipping, so a point behind the camera comes back mirrored through the origin --
+    // a plausible on-screen coordinate pointing exactly the wrong way. The sign of the depth along
+    // the camera's forward axis is the only thing that distinguishes them.
     pointerTarget.set(place.x, POINTER_TARGET_HEIGHT_METERS, place.z);
     pointerForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
     // The dot product written out rather than `pointerTarget.clone().sub(...).dot(...)`. The clone
@@ -1371,23 +1406,35 @@ async function bootstrap() {
       + (place.z - camera.position.z) * pointerForward.z < 0;
 
     pointerTarget.project(camera);
-    const indicator = edgeIndicatorFor({
+    const guide = guideArrowFor({
+      hasTarget: true,
       ndcX: pointerTarget.x,
       ndcY: pointerTarget.y,
       behindCamera,
       width: canvas.clientWidth,
       height: canvas.clientHeight,
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      targetX: place.x,
+      targetZ: place.z,
     });
 
-    // An arrow over a thing the child can already see is noise, and noise is how a child learns to
-    // stop looking at the screen.
-    objectivePointerElement.dataset.shown = String(!indicator.onScreen);
-    if (indicator.onScreen) return { pointing: false };
-    objectivePointerElement.style.transform = `translate(${indicator.x}px, ${indicator.y}px)`;
-    objectivePointerArrowElement.style.transform = `rotate(${indicator.angle}rad)`;
+    objectivePointerElement.dataset.shown = String(guide.mode === 'edge');
+    objectiveMarkerElement.dataset.shown = String(guide.mode === 'onscreen');
+    if (guide.mode === 'edge') {
+      objectivePointerElement.style.transform = `translate(${guide.x}px, ${guide.y}px)`;
+      objectivePointerArrowElement.style.transform = `rotate(${guide.angle}rad)`;
+      // "23m", not "23.4m" -- render/guideArrow.js's own formatter owns the rounding so the chip and
+      // this readout can never disagree about what counts as close.
+      objectivePointerDistanceElement.textContent = formatGuideMeters(guide.meters);
+    } else if (guide.mode === 'onscreen') {
+      // The marker floats a fixed pixel offset above the target's own projected point -- see
+      // #objective-marker-glyph's CSS for the lift and the bounce; this only has to place the anchor.
+      objectiveMarkerElement.style.transform = `translate(${guide.x}px, ${guide.y}px)`;
+    }
     // Reported so the rescue offer can stay quiet while the errand is already in frame: see the
     // call site. A caller that only wants the arrow drawn can ignore this.
-    return { pointing: true };
+    return { pointing: guide.mode === 'edge', place };
   }
   // THE DIAL. Hero at the centre, camera forward pointing up; ui/minimap.js owns the maths and the
   // reasoning, including why it is camera-up rather than north-up and why it is not enemy radar.
@@ -2524,6 +2571,9 @@ async function bootstrap() {
     // GP1-C5: how many impact rings are on screen this instant, so a harness can prove a blow
     // produced a visible event rather than only that the rules said it landed.
     impactBurstsLive: () => impactBursts.liveCount(),
+    // The always-on wayfinding trail: how many ground dots are lit right now, so a harness can prove
+    // the path actually drew rather than only that an objective with a place was active.
+    guidePathDotsLive: () => guidePath.liveCount(),
     guestId: () => net.guestId,
     // A copy, not the live array -- a harness must not be able to mutate this session's own record
     // of what it heard.
@@ -4227,15 +4277,34 @@ async function bootstrap() {
       },
     );
     renderQuestObjective(currentObjective?.text ?? null);
-    // The two dynamic destinations -- the next dark light, the next unbroken seal -- are not supplied
-    // yet, so those objectives draw no arrow rather than a wrong one. destinationFor returns null for
-    // a place the caller could not name, which is the same answer as "this one has nowhere", and the
-    // pointer treats both as nothing to say. Wiring them is its own slice.
-    const pointer = renderObjectivePointer(currentObjective, pointerContext);
-    // NaN when the errand has no place -- "cut the bramble" is the thing in front of you and has no
-    // coordinate to be far from. The watch treats that as nothing to measure rather than as a child
-    // standing still, so a placeless stretch cannot accumulate a stuck clock.
-    rescueTarget = destinationFor(currentObjective, pointerContext);
+    // ALWAYS ON, EXCEPT WHEN IT WOULD BE NOISE. The playtest brief this pass answers to says the
+    // guidance should "basically always be there" -- so the arrow/marker and the ground trail are
+    // suspended for exactly two reasons and no others: a full-screen overlay owns the screen (the
+    // same condition index.html's own CSS already hides #objective-pointer and #minimap for, applied
+    // here too because the ground trail is world-space three.js and no stylesheet can hide it), or an
+    // NPC speech beat already has the child standing at the right spot -- a bouncing marker over
+    // Keeper Aldric's own head while his speech bubble is open would be pointing at something the
+    // child is already looking at and is already being told about.
+    const suspendGuidance = anyOverlayOpen || npcSpeech.visible;
+    const pointer = renderObjectivePointer(currentObjective, pointerContext, suspendGuidance);
+    // ONE resolve of "where is the objective", read three ways -- the arrow/marker above, the ground
+    // trail below, and the rescue watch's distance further down. `pointer.place` is exactly what
+    // renderObjectivePointer itself got from destinationFor; reusing it here keeps this to one
+    // branch rather than two hand-kept copies of "where is it" (GQ-011), and it is resolved whether
+    // or not the visuals are suspended, so an overlay closing mid-objective has a place to draw at
+    // on the very next frame instead of one frame of nothing while it catches up.
+    rescueTarget = pointer.place;
+    // THE GROUND TRAIL. Hidden by the same `suspendGuidance` flag as the arrow/marker -- see the
+    // comment above -- and additionally by guidePath.js's own arrival radius the moment `rescueTarget`
+    // is close enough that render/guideArrow.js has already gone quiet about it too (the two files
+    // share that number by import, not by two people remembering the same tuning).
+    guidePath.update(deltaSeconds, {
+      hasTarget: !suspendGuidance && rescueTarget != null,
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      targetX: rescueTarget?.x,
+      targetZ: rescueTarget?.z,
+    });
     renderMinimap(frameStart, rescueTarget);
     renderRescueOffer(rescueWatch.update({
       distanceMeters: rescueTarget

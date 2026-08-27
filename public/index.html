@@ -90,6 +90,7 @@
          (so the button that opened it still closes it) and its own X. */
       #game[data-hero-screen-open="true"] #minimap,
       #game[data-hero-screen-open="true"] #objective-pointer,
+      #game[data-hero-screen-open="true"] #objective-marker,
       #game[data-hero-screen-open="true"] #guidance-rescue,
       #game[data-hero-screen-open="true"] #village-board-button {
         opacity: 0 !important; pointer-events: none !important;
@@ -119,6 +120,7 @@
          (so the button that opened it still closes it) and its own X. */
       #game[data-village-board-open="true"] #minimap,
       #game[data-village-board-open="true"] #objective-pointer,
+      #game[data-village-board-open="true"] #objective-marker,
       #game[data-village-board-open="true"] #guidance-rescue,
       #game[data-village-board-open="true"] #hero-button {
         opacity: 0 !important; pointer-events: none !important;
@@ -599,7 +601,7 @@
         .enemy-nameplate-level, .enemy-nameplate-danger { font-size: 0.53rem; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact, #objective-marker-glyph { transition: none; animation: none; }
         /* THE CEREMONY STILL HAPPENS UNDER REDUCED MOTION -- it just stops moving.
            The contract's requirement is that "essential Level/HP/POWER information must remain
            legible when motion is reduced; animation is enhancement, not the only communication
@@ -992,7 +994,12 @@
          at something the child can see is noise, and noise is how a child learns to stop looking. */
       #objective-pointer {
         position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px;
-        display: grid; place-items: center;
+        /* Flex column, not the grid this was before the distance readout: a grid with no explicit
+           template stacks both children in the same cell, and the arrow and the metres need to sit
+           one above the other rather than on top of each other. Height/width stay the anchor's own
+           44px hit-target size; the readout is free to overflow it a little, which is fine since
+           nothing here clips. */
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
         pointer-events: none; touch-action: none;
         transition: opacity 140ms ease-out;
       }
@@ -1048,6 +1055,43 @@
       #objective-pointer-arrow {
         display: block; font-size: 1.7rem; line-height: 1; color: #f2b33d;
         text-shadow: 0 0 0.35rem rgb(12 20 31 / 95%), 0 0 0.9rem rgb(12 20 31 / 75%);
+      }
+      /* THE DISTANCE READOUT. "23m", set by render/guideArrow.js's own formatter so the number here
+         can never disagree with the arrow's own idea of how far the objective is. Centred under the
+         arrow glyph rather than beside it -- #objective-pointer is a 44px box and there is no room to
+         the side of the arrow without widening the box past its own edge-clamp margin. */
+      #objective-pointer-distance {
+        display: block; margin-top: 0.1rem; text-align: center;
+        font: 800 0.68rem/1 system-ui, sans-serif; color: #fff;
+        text-shadow: 0 0 0.3rem rgb(12 20 31 / 95%), 0 0 0.7rem rgb(12 20 31 / 80%);
+      }
+      /* ── The on-screen marker ───────────────────────────────────────────────────────────────
+         The other half of render/guideArrow.js's switch: while the arrow above is hidden because the
+         objective is already in frame, this takes over -- a small bouncing glyph hovering over the
+         actual spot. Positioned by main.js exactly where #objective-pointer's arrow would have
+         pointed FROM, i.e. the target's own projected pixel, so the two never disagree about where
+         "there" is. The glyph is a CHILD element with its own bounce animation, kept separate from
+         the outer div's transform: main.js overwrites the outer translate() every frame the target
+         moves on screen, and a single element cannot hold both "jump to this frame's pixel" and "keep
+         bouncing" in one CSS transform without one clobbering the other every frame. */
+      #objective-marker {
+        position: absolute; left: 0; top: 0; width: 0; height: 0;
+        pointer-events: none; touch-action: none;
+      }
+      #objective-marker[data-shown="false"] { display: none; }
+      #objective-marker[data-shown="true"] { display: block; }
+      #objective-marker-glyph {
+        position: absolute; left: 0; bottom: 0.35rem; transform: translateX(-50%);
+        display: block; font-size: 1.55rem; line-height: 1; color: #f2b33d;
+        text-shadow: 0 0 0.35rem rgb(12 20 31 / 95%), 0 0 0.9rem rgb(12 20 31 / 75%);
+        animation: objective-marker-bounce 1.15s ease-in-out infinite;
+      }
+      /* Bounces IN PLACE, above the spot, never below it -- "above the target location" is the brief,
+         and a marker that dipped below would read as sitting on the ground next to the thing rather
+         than calling it out. */
+      @keyframes objective-marker-bounce {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-0.5rem); }
       }
       #game[data-pointer="mouse"] #desktop-keys { display: block; }
       /* Both live at bottom-centre, and on a desktop both can be on screen at once -- with ?debug=1,
@@ -1375,7 +1419,17 @@
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
       <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
-      <div id="objective-pointer" data-shown="false" aria-hidden="true"><span id="objective-pointer-arrow">➤</span></div>
+      <div id="objective-pointer" data-shown="false" aria-hidden="true">
+        <span id="objective-pointer-arrow">➤</span>
+        <span id="objective-pointer-distance"></span>
+      </div>
+      <!-- The on-screen half of render/guideArrow.js's three-way switch: the arrow above hides once
+           the objective is in frame, and THIS takes over -- a soft bouncing marker over the actual
+           spot, so a child looking straight at the right lantern among several dark ones still has
+           something confirming it is the one. main.js sets the transform every frame the mode is
+           'onscreen'; the bounce itself is CSS on the inner glyph so a fresh translate() each frame
+           does not fight the animation for the same property. -->
+      <div id="objective-marker" data-shown="false" aria-hidden="true"><span id="objective-marker-glyph">▾</span></div>
       <button id="guidance-rescue" type="button" data-shown="false">👀 Show me where</button>
       <canvas id="minimap" width="220" height="220" aria-hidden="true"></canvas>
       <div id="banner" role="status" aria-live="polite" data-shown="false"></div>
