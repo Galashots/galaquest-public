@@ -7,13 +7,16 @@ import {
   BELT_LANTERN_BONE_NAME,
   RIGID_BELT_LANTERN,
   RIGID_SILVERGUARD_HELMET,
+  RIGID_SILVERGUARD_SHOULDER_BY_SIDE,
   RIGID_TIER2_GEAR,
   SILVERGUARD_HELMET_BONE_NAME,
   SILVERGUARD_HELMET_HIDES_ANATOMY,
   attachBeltLantern,
   attachRigidTier2Gear,
   attachSilverguardHelmet,
+  attachSilverguardShoulder,
   rigidAnchorName,
+  silverguardShoulderAnchorId,
 } from '../public/src/character/gear.js';
 
 const EPSILON = 1e-6;
@@ -304,6 +307,104 @@ test('the Helmet occludes exactly the hair and ears while worn -- an open-face r
   assert.deepEqual([...SILVERGUARD_HELMET_HIDES_ANATOMY], ['hair', 'ears']);
   assert.equal(RIGID_SILVERGUARD_HELMET.boneName, 'Head');
   assert.equal(RIGID_SILVERGUARD_HELMET.id, 'helmet_silverguard');
+});
+
+// ── R1: the Silverguard Shoulders ───────────────────────────────────────────────────────────────
+
+function makeHeroWithArms() {
+  const hero = new THREE.Group();
+  hero.name = 'hero';
+  hero.position.set(-3, 1, 4);
+  hero.rotation.set(0.05, 0.4, -0.1);
+
+  const armature = new THREE.Group();
+  armature.name = 'Armature';
+  armature.scale.setScalar(0.01);
+  hero.add(armature);
+
+  const leftArm = new THREE.Bone();
+  leftArm.name = 'LeftArm';
+  leftArm.position.set(30, 120, 5);
+  leftArm.rotation.set(0.1, -0.05, 0.2);
+  leftArm.scale.setScalar(1.1);
+  armature.add(leftArm);
+
+  const rightArm = new THREE.Bone();
+  rightArm.name = 'RightArm';
+  rightArm.position.set(-30, 118, 4);
+  rightArm.rotation.set(-0.1, 0.05, -0.2);
+  rightArm.scale.setScalar(0.9);
+  armature.add(rightArm);
+
+  hero.updateMatrixWorld(true);
+  return {
+    hero, armature, leftArm, rightArm,
+  };
+}
+
+for (const side of ['left', 'right']) {
+  test(`the Silverguard Shoulder (${side}) mounts onto its own bind-frame arm bone`, () => {
+    const { hero, armature, leftArm, rightArm } = makeHeroWithArms();
+    const bone = side === 'left' ? leftArm : rightArm;
+    const shoulderRoot = new THREE.Group();
+    shoulderRoot.name = 'shoulder_silverguard';
+
+    const expectedWorld = new THREE.Matrix4().multiplyMatrices(
+      armature.matrixWorld, restMatrixFor(RIGID_SILVERGUARD_SHOULDER_BY_SIDE[side]),
+    );
+
+    const attachment = attachSilverguardShoulder(hero, shoulderRoot, side);
+    hero.updateMatrixWorld(true);
+
+    assert.equal(attachment.bone, bone);
+    assert.equal(attachment.id, silverguardShoulderAnchorId(side));
+    assert.equal(
+      attachment.anchor.name,
+      rigidAnchorName(silverguardShoulderAnchorId(side), RIGID_SILVERGUARD_SHOULDER_BY_SIDE[side].boneName),
+    );
+    assert.equal(shoulderRoot.parent, attachment.anchor);
+    assert.equal(attachment.anchor.parent, bone);
+    assertMatrixNear(shoulderRoot.matrixWorld, expectedWorld, `${side} shoulder world transform`);
+  });
+}
+
+test('the two shoulder anchors are independent -- mounting one never disturbs the other', () => {
+  const { hero } = makeHeroWithArms();
+  const left = attachSilverguardShoulder(hero, new THREE.Group(), 'left');
+  const right = attachSilverguardShoulder(hero, new THREE.Group(), 'right');
+  assert.notEqual(left.anchor, right.anchor);
+  assert.notEqual(left.bone, right.bone);
+  assert.notEqual(left.id, right.id);
+});
+
+test('attachSilverguardShoulder throws a clear error when the rig has no arm bone for that side', () => {
+  const hero = new THREE.Group();
+  hero.name = 'hero';
+  const armature = new THREE.Group();
+  armature.name = 'Armature';
+  hero.add(armature);
+
+  assert.throws(() => attachSilverguardShoulder(hero, new THREE.Group(), 'left'), /missing bone LeftArm/);
+  assert.throws(() => attachSilverguardShoulder(hero, new THREE.Group(), 'right'), /missing bone RightArm/);
+});
+
+test('attachSilverguardShoulder throws if the named node exists but is not actually a Bone', () => {
+  const hero = new THREE.Group();
+  hero.name = 'hero';
+  const armature = new THREE.Group();
+  armature.name = 'Armature';
+  hero.add(armature);
+  const notABone = new THREE.Group();
+  notABone.name = 'LeftArm';
+  armature.add(notABone);
+
+  assert.throws(() => attachSilverguardShoulder(hero, new THREE.Group(), 'left'), /LeftArm is not a Bone/);
+});
+
+test('attachSilverguardShoulder and silverguardShoulderAnchorId refuse an unknown side', () => {
+  const { hero } = makeHeroWithArms();
+  assert.throws(() => attachSilverguardShoulder(hero, new THREE.Group(), 'center'), TypeError);
+  assert.throws(() => silverguardShoulderAnchorId('center'), TypeError);
 });
 
 test('hero loading uses the passing one-image equipped GLB', () => {

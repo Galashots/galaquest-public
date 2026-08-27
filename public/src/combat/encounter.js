@@ -943,6 +943,23 @@ export function requestAttack(state, commandId = null) {
   };
 }
 
+/**
+ * R1: heal the solo hero by a flat amount -- the offline fallback's own entry point for a heart kill
+ * drop (world/enemyDrops.js's own HEART_DROP_KIND), the same requestHeroHeal seam the server's own
+ * applyHeroHeal rides online, wrapped the identical toPartyState/publishSolo way requestAttack is
+ * above. No commandId: a heal is not itself a replay-guarded command the way an attack tap is
+ * (requestHeroHeal is already idempotent on its own terms -- a hero already at max hp is a clean
+ * no-op, no event), so the previous command sequence is carried through unchanged rather than
+ * advanced or reset.
+ */
+export function requestSoloHeroHeal(state, amount) {
+  const result = requestHeroHeal(toPartyState(state), SOLO_HERO_ID, amount);
+  return {
+    state: publishSolo(state, state.lastCommandId, result.state),
+    events: result.events.map(stripHeroId),
+  };
+}
+
 export function stepEncounter(state, command = {}) {
   const {
     commandId = null,

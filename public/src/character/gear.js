@@ -569,6 +569,108 @@ const BELT_LANTERN_GLOW_COLOR = 0xffc477;
 const BELT_LANTERN_GLOW_LOCAL_SIZE = 0.024;
 const BELT_LANTERN_GLOW_STRENGTH = 0.85;
 
+// ---------------------------------------------------------------------------
+// R1: the Silverguard Shoulders (kill-drop gear, progression/items.js's SHOULDER_SILVERGUARD_ID)
+// ---------------------------------------------------------------------------
+//
+// Mounted the same independently-loaded-GLB, bind-pose-bone way attachSilverguardHelmet is: a
+// separate file, loaded only when this child equips the piece, never baked into the hero's own merged
+// atlas. TWO instances of the SAME file, one per arm -- test/glb-budget.test.mjs's own Tier 3 fixture
+// prices exactly this arrangement ("shoulder_silverguard.glb, worn twice, mirrored") at one atlas and
+// two primitives, which together with the helmet, sword and shield still lands the fully-equipped
+// hero at exactly six draw calls, the contract's own cap. Checked BEFORE writing this, not assumed --
+// see that test file.
+//
+// THE FIT NUMBERS are not derived here; they are read from docs/foundry/gear/tier3/fit_measured.json,
+// the Meshy/Blender pipeline's own output for this exact asset (docs/foundry/gear/tier3_fit.json is
+// the human-authored brief that JSON was measured against: LeftArm/RightArm bones, the right pauldron
+// the SAME mesh as the left mirrored by a negative X scale rather than a second generation). That file
+// already expresses `restRelativeToHeroRoot_gltfAxes` in the exact root-relative
+// {position, quaternion, scale} shape matrixFromRestTransform below expects -- the same convention
+// every other RIGID_* table in this file already uses -- so the numbers are copied rather than
+// re-derived, per AGENTS.md's "Look before you derive": a foundry tool that already measured this
+// mesh against this rig is a better source than a fresh guess.
+//
+// HONEST CAVEAT, because this game's own visual-acceptance rule (AGENTS.md, "running-game pixels are
+// final appearance authority") means a measurement is not the same thing as a verified fit: the
+// helmet's own equivalent foundry number (docs/foundry/gear/tier3_fit.json's own "helmet" entry, world
+// height 0.5) was superseded once already by tools/runtime-test/fit-helmet.mjs's LIVE, in-game
+// measurement (RIGID_SILVERGUARD_HELMET's own scale ended up 32.71, not the foundry pass's naive
+// figure) -- because the foundry tool assumes the source mesh's own natural bounding size is exactly
+// 1.0 unit, which does not always hold for a shipped export. No WebGL is available in this sandbox to
+// run the equivalent live check on the shoulders (see this repo's own hard rule on that), so these
+// numbers are the best available MEASURED source -- real geometry against the real rig, not a guess --
+// but are pending the same live confirmation the helmet's foundry pass eventually needed. If a running-
+// game capture ever shows the pauldrons floating, oversized, or clipping the head, re-solve with
+// tools/runtime-test/fit-helmet.mjs's own technique (a live bind-pose measurement) rather than
+// hand-tuning these numbers by eye.
+export const SILVERGUARD_SHOULDER_URL = 'assets/gear/shoulder_silverguard.glb';
+export const SILVERGUARD_SHOULDER_ID = 'shoulder_silverguard';
+
+export const RIGID_SILVERGUARD_SHOULDER_BY_SIDE = Object.freeze({
+  left: Object.freeze({
+    boneName: 'LeftArm',
+    restRelativeToHeroRoot: Object.freeze({
+      position: Object.freeze([18.48353385925293, 102.73785400390625, 1.5291625261306763]),
+      quaternion: Object.freeze([0, 0, 0, 1]),
+      scale: Object.freeze([21, 21, 52.499996185302734]),
+    }),
+  }),
+  // The SAME mesh as the left, mirrored by a negative scale rather than generated twice -- the
+  // foundry brief's own reasoning (tier3_fit.json's "shoulderR" entry), and the reason
+  // test/glb-budget.test.mjs prices this pair at one atlas.
+  right: Object.freeze({
+    boneName: 'RightArm',
+    restRelativeToHeroRoot: Object.freeze({
+      position: Object.freeze([-19.133033752441406, 103.05963897705078, 1.4613072872161865]),
+      quaternion: Object.freeze([1, -0, -0, 0]),
+      scale: Object.freeze([-21, -21, -52.499996185302734]),
+    }),
+  }),
+});
+
+/** The name the shoulders' own rigid anchors get, one per side -- distinct from the catalogue's own
+ *  `shoulder_silverguard` item id (progression/items.js), which names ONE owned/equipped thing while
+ *  this names TWO mounted meshes. character/weaponLoadout.js's own rigidAnchorName precedent is what
+ *  every other gear anchor in this file already keys by; this is the same idea for a two-anchor item. */
+export function silverguardShoulderAnchorId(side) {
+  if (side !== 'left' && side !== 'right') throw new TypeError(`unknown shoulder side: ${JSON.stringify(side)}`);
+  return `${SILVERGUARD_SHOULDER_ID}_${side}`;
+}
+
+/**
+ * Mount one already-loaded Silverguard Shoulder root onto the hero's LeftArm or RightArm bone -- the
+ * same independently-loaded-GLB, bind-pose pattern attachSilverguardHelmet uses (see its own comment
+ * for the bindPoseMatrixWorld reasoning: this mount is lazy, well after the AnimationMixer's first
+ * update, so reading the LIVE bone here would bake whatever pose happened to be playing into the
+ * anchor permanently).
+ */
+export function attachSilverguardShoulder(heroRoot, shoulderRoot, side) {
+  const spec = RIGID_SILVERGUARD_SHOULDER_BY_SIDE[side];
+  if (!spec) throw new TypeError(`unknown shoulder side: ${JSON.stringify(side)}`);
+  const rigRoot = requiredObject(heroRoot, RIG_ROOT_NAME, 'rig root');
+  const bone = heroRoot.getObjectByName(spec.boneName);
+  if (!bone) {
+    throw new Error(`Cannot attach the Silverguard Shoulder (${side}): missing bone ${spec.boneName}.`);
+  }
+  if (!bone.isBone) {
+    throw new Error(`Cannot attach the Silverguard Shoulder (${side}): ${spec.boneName} is not a Bone.`);
+  }
+
+  heroRoot.updateMatrixWorld(true);
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
+  const restRelativeToHeroRoot = matrixFromRestTransform(spec.restRelativeToHeroRoot);
+  const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
+  const local = new THREE.Matrix4().copy(bindMatrixWorld).invert().multiply(world);
+  const anchor = new THREE.Group();
+  anchor.name = rigidAnchorName(silverguardShoulderAnchorId(side), spec.boneName);
+  local.decompose(anchor.position, anchor.quaternion, anchor.scale);
+
+  bone.add(anchor);
+  anchor.add(shoulderRoot);
+  return { id: silverguardShoulderAnchorId(side), anchor, bone, gear: shoulderRoot };
+}
+
 function lightTheLantern(lanternRoot) {
   const box = new THREE.Box3().setFromObject(lanternRoot);
   if (box.isEmpty()) return;
