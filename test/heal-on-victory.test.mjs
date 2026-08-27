@@ -202,9 +202,17 @@ test('the solo API heals too, and its published hero carries exactly the agreed 
   // trip through the party engine (test/encounter-seam.test.mjs). Before that it was seeded, dropped
   // on the first tick, and re-granted on every tick after -- so the old list pinned an omission
   // rather than a shape.
+  //
+  // `regenIdleSeconds`/`regenRemainderHp` joined it with out-of-combat regen (R1's density package).
+  // This file's own header argues passive regen would be illegible on its own -- and it still is, on
+  // its own; that is why the two features stack rather than one replacing the other (see
+  // combat/encounter.js's own OUT_OF_COMBAT_REGEN_* comment). Both are private bookkeeping a
+  // presenter has no reason to read, but they are real fields the fight now owns, and this pin's job
+  // is to catch an ACCIDENTAL new field -- a deliberate one, added in the same commit as the feature,
+  // updates the pin rather than defeating it.
   assert.deepEqual(
     Object.keys(encounter.state.hero).sort(),
-    ['cooldown', 'downSeconds', 'hp', 'maxHp', 'swingLanded', 'swingSeconds'],
+    ['cooldown', 'downSeconds', 'hp', 'maxHp', 'regenIdleSeconds', 'regenRemainderHp', 'swingLanded', 'swingSeconds'],
   );
 });
 

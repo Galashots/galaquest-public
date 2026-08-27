@@ -51,6 +51,10 @@ const ENCOUNTER_FIXTURE = {
   // above -- a fresh cart, not yet searched. See "an encounter block with no loot key at all still
   // decodes" below for the pre-GP2 backward-compatibility case this fixture used to cover.
   loot: { spawned: false, collected: {} },
+  // R1: same "present and empty, matches what a real snapshot always carries" reasoning again --
+  // nothing on the ground until a kill spawns something. See "an encounter block with no drops key
+  // at all still decodes" below for the pre-R1 backward-compatibility case this fixture used to cover.
+  drops: [],
   // GP3: same "present and empty, matches what a real snapshot always carries" reasoning again --
   // nothing earned yet, Workshop I not bought. See "an encounter block with no village key at all
   // still decodes" below for the pre-GP3 backward-compatibility case this fixture used to cover.

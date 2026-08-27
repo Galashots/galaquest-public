@@ -32,6 +32,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.05,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -41,6 +43,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.05,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -80,6 +84,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.1,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -89,6 +95,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.1,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -128,6 +136,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.15000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -137,6 +147,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.15000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -176,6 +188,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -185,6 +199,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -224,6 +240,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -233,6 +251,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -272,6 +292,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -281,6 +303,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -320,6 +344,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.35,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -329,6 +355,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.35,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -368,6 +396,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.39999999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -377,6 +407,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.39999999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -416,6 +448,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.44999999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -425,6 +459,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.44999999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -464,6 +500,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.49999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -473,6 +511,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.49999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -512,6 +552,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.5499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -521,6 +563,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.5499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -560,6 +604,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.6,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -569,6 +615,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.6,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -608,6 +656,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.65,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -617,6 +667,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.65,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -656,6 +708,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -665,6 +719,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -704,6 +760,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7500000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -713,6 +771,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7500000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -752,6 +812,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -761,6 +823,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -800,6 +864,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8500000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -809,6 +875,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8500000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -848,6 +916,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -857,6 +927,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -896,6 +968,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -905,6 +979,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -944,6 +1020,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -953,6 +1031,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -992,6 +1072,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1001,6 +1083,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1040,6 +1124,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1000000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1049,6 +1135,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1000000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1088,6 +1176,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1097,6 +1187,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1136,6 +1228,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2000000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1145,6 +1239,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2000000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1184,6 +1280,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1193,6 +1291,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1232,6 +1332,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1241,6 +1343,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1280,6 +1384,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3500000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1289,6 +1395,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3500000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1328,6 +1436,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4000000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1337,6 +1447,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4000000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1376,6 +1488,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4500000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1385,6 +1499,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4500000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1424,6 +1540,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5000000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1433,6 +1551,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5000000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1472,6 +1592,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1481,6 +1603,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1520,6 +1644,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1529,6 +1655,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1568,6 +1696,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6500000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1577,6 +1707,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6500000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1616,6 +1748,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1625,6 +1759,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1664,6 +1800,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7500000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1673,6 +1811,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7500000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1712,6 +1852,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.800000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1721,6 +1863,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.800000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1760,6 +1904,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.850000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1769,6 +1915,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.850000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1808,6 +1956,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.900000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1817,6 +1967,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.900000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1856,6 +2008,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.950000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1865,6 +2019,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.950000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1904,6 +2060,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1913,6 +2071,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -1952,6 +2112,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.0500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -1961,6 +2123,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.0500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2000,6 +2164,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2009,6 +2175,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2048,6 +2216,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2057,6 +2227,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2096,6 +2268,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2105,6 +2279,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2144,6 +2320,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2153,6 +2331,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2196,6 +2376,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2205,6 +2387,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2244,6 +2428,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3499999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2253,6 +2439,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3499999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2292,6 +2480,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3999999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2301,6 +2491,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3999999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2340,6 +2532,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.4499999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2349,6 +2543,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.4499999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2388,6 +2584,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2397,6 +2595,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2436,6 +2636,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.549999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2445,6 +2647,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.549999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2484,6 +2688,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.5999999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2493,6 +2699,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.5999999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2532,6 +2740,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.6499999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2541,6 +2751,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.6499999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2580,6 +2792,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.6999999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2589,6 +2803,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.6999999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2628,6 +2844,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.7499999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2637,6 +2855,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.7499999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2676,6 +2896,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.799999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2685,6 +2907,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.799999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2724,6 +2948,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.849999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2733,6 +2959,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.849999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2772,6 +3000,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.8999999999999977,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2781,6 +3011,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.8999999999999977,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2820,6 +3052,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.9499999999999975,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2829,6 +3063,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.9499999999999975,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2868,6 +3104,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.9999999999999973,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2877,6 +3115,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.9999999999999973,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2916,6 +3156,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.049999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2925,6 +3167,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.049999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -2964,6 +3208,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.099999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -2973,6 +3219,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.099999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3012,6 +3260,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.149999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3021,6 +3271,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.149999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3060,6 +3312,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.1999999999999966,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3069,6 +3323,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.1999999999999966,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3108,6 +3364,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.2499999999999964,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3117,6 +3375,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.2499999999999964,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3156,6 +3416,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.2999999999999963,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3165,6 +3427,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.2999999999999963,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3204,6 +3468,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.349999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3213,6 +3479,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.349999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3252,6 +3520,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.399999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3261,6 +3531,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.399999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3300,6 +3572,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.4499999999999957,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3309,6 +3583,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.4499999999999957,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3348,6 +3624,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.4999999999999956,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3357,6 +3635,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.4999999999999956,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3396,6 +3676,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.5499999999999954,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3405,6 +3687,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.5499999999999954,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3444,6 +3728,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.599999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3453,6 +3739,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.599999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3492,6 +3780,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.649999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3501,6 +3791,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.649999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3540,6 +3832,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.699999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3549,6 +3843,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.699999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3588,6 +3884,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.7499999999999947,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3597,6 +3895,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.7499999999999947,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3636,6 +3936,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.7999999999999945,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3645,6 +3947,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.7999999999999945,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3684,6 +3988,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.8499999999999943,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3693,6 +3999,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.8499999999999943,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3732,6 +4040,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.899999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3741,6 +4051,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.899999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3780,6 +4092,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.949999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3789,6 +4103,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.949999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3828,6 +4144,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3837,6 +4155,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3876,6 +4196,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.049999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3885,6 +4207,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.049999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3924,6 +4248,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.099999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3933,6 +4259,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.099999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -3972,6 +4300,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.149999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -3981,6 +4311,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.149999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4020,6 +4352,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.199999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4029,6 +4363,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.199999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4068,6 +4404,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.249999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4077,6 +4415,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.249999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4116,6 +4456,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.299999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4125,6 +4467,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.299999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4164,6 +4508,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.3499999999999925,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4173,6 +4519,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.3499999999999925,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4212,6 +4560,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.399999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4221,6 +4571,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.399999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4260,6 +4612,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.449999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4269,6 +4623,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.449999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4308,6 +4664,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.499999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4317,6 +4675,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.499999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4356,6 +4716,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.549999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4365,6 +4727,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.549999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4404,6 +4768,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.599999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4413,6 +4779,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.599999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4452,6 +4820,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.6499999999999915,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4461,6 +4831,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.6499999999999915,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4500,6 +4872,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.699999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4509,6 +4883,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.699999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4548,6 +4924,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.749999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4557,6 +4935,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.749999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4596,6 +4976,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.799999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4605,6 +4987,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.799999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4644,6 +5028,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.849999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4653,6 +5039,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.849999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4692,6 +5080,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4701,6 +5091,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.899999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4746,6 +5138,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.05,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4755,6 +5149,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.94999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4794,6 +5190,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.1,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4803,6 +5201,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.99999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4842,6 +5242,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.15000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4851,6 +5253,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.04999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4890,6 +5294,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4899,6 +5305,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.09999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4938,6 +5346,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4947,6 +5357,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.14999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -4986,6 +5398,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -4995,6 +5409,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.1999999999999895,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5034,6 +5450,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.35,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5043,6 +5461,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.249999999999989,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5082,6 +5502,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.39999999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5091,6 +5513,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.299999999999989,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5130,6 +5554,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.44999999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5139,6 +5565,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.349999999999989,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5178,6 +5606,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.49999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5187,6 +5617,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.399999999999989,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5226,6 +5658,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.5499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5235,6 +5669,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.449999999999989,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5274,6 +5710,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.6,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5283,6 +5721,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.4999999999999885,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5322,6 +5762,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.65,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5331,6 +5773,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.549999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5370,6 +5814,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5379,6 +5825,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.599999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5418,6 +5866,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7500000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5427,6 +5877,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.649999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5466,6 +5918,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5475,6 +5929,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.699999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5514,6 +5970,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8500000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5523,6 +5981,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.749999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5562,6 +6022,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5571,6 +6033,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.799999999999987,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5610,6 +6074,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5619,6 +6085,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.849999999999987,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5658,6 +6126,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5667,6 +6137,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.899999999999987,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5706,6 +6178,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5715,6 +6189,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.949999999999987,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5754,6 +6230,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1000000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5763,6 +6241,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 5.999999999999987,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5802,6 +6282,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5811,6 +6293,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.0499999999999865,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5850,6 +6334,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2000000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5859,6 +6345,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.099999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5898,6 +6386,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5907,6 +6397,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.149999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5946,6 +6438,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -5955,6 +6449,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.199999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -5994,6 +6490,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3500000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6003,6 +6501,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.249999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6042,6 +6542,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4000000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6051,6 +6553,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.299999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6090,6 +6594,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4500000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6099,6 +6605,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.349999999999985,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6138,6 +6646,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5000000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6147,6 +6657,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.399999999999985,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6186,6 +6698,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6195,6 +6709,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.449999999999985,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6234,6 +6750,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6243,6 +6761,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.499999999999985,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6282,6 +6802,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6500000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6291,6 +6813,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.549999999999985,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6330,6 +6854,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6339,6 +6865,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.5999999999999845,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6378,6 +6906,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7500000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6387,6 +6917,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.649999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6426,6 +6958,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.800000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6435,6 +6969,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.699999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6474,6 +7010,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.850000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6483,6 +7021,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.749999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6522,6 +7062,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.900000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6531,6 +7073,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.799999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6570,6 +7114,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.950000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6579,6 +7125,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.849999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6618,6 +7166,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6627,6 +7177,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.8999999999999835,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6666,6 +7218,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.0500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6675,6 +7229,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.949999999999983,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6714,6 +7270,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6723,6 +7281,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 6.999999999999983,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6762,6 +7322,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6771,6 +7333,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.049999999999983,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6810,6 +7374,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6819,6 +7385,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.099999999999983,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6858,6 +7426,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6867,6 +7437,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.149999999999983,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6906,6 +7478,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6915,6 +7489,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.199999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -6954,6 +7530,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3499999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -6963,6 +7541,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.249999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7002,6 +7582,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3999999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7011,6 +7593,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.299999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7050,6 +7634,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.4499999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7059,6 +7645,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.349999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7098,6 +7686,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7107,6 +7697,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.399999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7146,6 +7738,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.549999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7155,6 +7749,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.4499999999999815,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7194,6 +7790,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.5999999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7203,6 +7801,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.499999999999981,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7242,6 +7842,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7251,6 +7853,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.549999999999981,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7296,6 +7900,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.05,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7305,6 +7911,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.599999999999981,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7344,6 +7952,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.1,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7353,6 +7963,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.649999999999981,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7392,6 +8004,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.15000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7401,6 +8015,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.699999999999981,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7440,6 +8056,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7449,6 +8067,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.7499999999999805,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7488,6 +8108,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7497,6 +8119,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.79999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7536,6 +8160,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7545,6 +8171,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.84999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7584,6 +8212,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.35,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7593,6 +8223,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.89999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7632,6 +8264,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.39999999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7641,6 +8275,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.94999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7680,6 +8316,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.44999999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7689,6 +8327,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 7.99999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7728,6 +8368,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.49999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7737,6 +8379,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.04999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7776,6 +8420,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.5499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7785,6 +8431,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.09999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7824,6 +8472,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.6,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7833,6 +8483,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.14999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7872,6 +8524,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.65,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7881,6 +8535,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.199999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7920,6 +8576,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7929,6 +8587,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.249999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -7968,6 +8628,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7500000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -7977,6 +8639,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.299999999999983,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8016,6 +8680,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8025,6 +8691,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.349999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8064,6 +8732,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8500000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8073,6 +8743,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.399999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8112,6 +8784,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8121,6 +8795,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.449999999999985,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8160,6 +8836,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8169,6 +8847,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.499999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8208,6 +8888,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8217,6 +8899,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.549999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8256,6 +8940,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8265,6 +8951,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.599999999999987,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8304,6 +8992,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1000000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8313,6 +9003,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.649999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8352,6 +9044,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8361,6 +9055,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.699999999999989,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8400,6 +9096,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2000000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8409,6 +9107,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.74999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8448,6 +9148,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8457,6 +9159,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.79999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8496,6 +9200,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8505,6 +9211,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.84999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8544,6 +9252,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3500000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8553,6 +9263,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.899999999999991,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8592,6 +9304,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4000000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8601,6 +9315,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.949999999999992,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8640,6 +9356,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4500000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8649,6 +9367,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 8.999999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8688,6 +9408,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5000000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8697,6 +9419,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.049999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8736,6 +9460,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8745,6 +9471,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.099999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8784,6 +9512,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8793,6 +9523,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.149999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8832,6 +9564,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6500000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8841,6 +9575,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.199999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8880,6 +9616,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8889,6 +9627,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.249999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8928,6 +9668,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7500000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8937,6 +9679,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.299999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -8976,6 +9720,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.800000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -8985,6 +9731,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.349999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9024,6 +9772,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.850000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9033,6 +9783,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.399999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9072,6 +9824,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.900000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9081,6 +9835,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.45,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9120,6 +9876,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.950000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9129,6 +9887,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.5,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9168,6 +9928,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9177,6 +9939,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.55,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9216,6 +9980,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.0500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9225,6 +9991,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.600000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9264,6 +10032,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9273,6 +10043,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.650000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9312,6 +10084,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9321,6 +10095,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.700000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9360,6 +10136,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9369,6 +10147,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.750000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9408,6 +10188,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9417,6 +10199,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.800000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9456,6 +10240,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9465,6 +10251,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.850000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9504,6 +10292,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3499999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9513,6 +10303,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.900000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9552,6 +10344,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3999999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9561,6 +10355,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 9.950000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9600,6 +10396,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.4499999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9609,6 +10407,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.000000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9648,6 +10448,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9657,6 +10459,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.050000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9696,6 +10500,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.549999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9705,6 +10511,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.100000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9744,6 +10552,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.5999999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9753,6 +10563,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.15000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9792,6 +10604,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9801,6 +10615,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.20000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9850,6 +10666,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.05,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9859,6 +10677,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.25000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9898,6 +10718,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.1,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9907,6 +10729,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.300000000000011,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9946,6 +10770,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.15000000000000002,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -9955,6 +10781,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.350000000000012,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -9994,6 +10822,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.2,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10003,6 +10833,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.400000000000013,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10042,6 +10874,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.25,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10051,6 +10885,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.450000000000014,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10090,6 +10926,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.3,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10099,6 +10937,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.500000000000014,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10138,6 +10978,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.35,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10147,6 +10989,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.550000000000015,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10186,6 +11030,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.39999999999999997,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10195,6 +11041,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.600000000000016,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10234,6 +11082,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.44999999999999996,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10243,6 +11093,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.650000000000016,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10282,6 +11134,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.49999999999999994,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10291,6 +11145,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.700000000000017,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10330,6 +11186,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.5499999999999999,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10339,6 +11197,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.750000000000018,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10378,6 +11238,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.6,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10387,6 +11249,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.800000000000018,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10426,6 +11290,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.65,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10435,6 +11301,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.85000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10474,6 +11342,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.7000000000000001,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10483,6 +11353,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.90000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10522,6 +11394,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.7500000000000001,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10531,6 +11405,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 10.95000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10570,6 +11446,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.8000000000000002,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10579,6 +11457,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.000000000000021,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10618,6 +11498,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.8500000000000002,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10627,6 +11509,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.050000000000022,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10666,6 +11550,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.9000000000000002,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10675,6 +11561,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.100000000000023,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10714,6 +11602,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 0.9500000000000003,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10723,6 +11613,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.150000000000023,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10762,6 +11654,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.0000000000000002,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10771,6 +11665,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.200000000000024,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10810,6 +11706,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.0500000000000003,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10819,6 +11717,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.250000000000025,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10858,6 +11758,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.1000000000000003,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10867,6 +11769,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.300000000000026,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10906,6 +11810,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.1500000000000004,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10915,6 +11821,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.350000000000026,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -10954,6 +11862,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.2000000000000004,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -10963,6 +11873,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.400000000000027,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11002,6 +11914,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.2500000000000004,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11011,6 +11925,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.450000000000028,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11050,6 +11966,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.3000000000000005,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11059,6 +11977,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.500000000000028,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11098,6 +12018,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.3500000000000005,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11107,6 +12029,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.55000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11146,6 +12070,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.4000000000000006,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11155,6 +12081,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.60000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11194,6 +12122,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.4500000000000006,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11203,6 +12133,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.65000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11242,6 +12174,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.5000000000000007,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11251,6 +12185,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.700000000000031,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11290,6 +12226,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.5500000000000007,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11299,6 +12237,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.750000000000032,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11338,6 +12278,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.6000000000000008,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11347,6 +12289,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.800000000000033,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11386,6 +12330,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.6500000000000008,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11395,6 +12341,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.850000000000033,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11434,6 +12382,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.7000000000000008,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11443,6 +12393,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.900000000000034,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11482,6 +12434,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.7500000000000009,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11491,6 +12445,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 11.950000000000035,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11530,6 +12486,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.800000000000001,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11539,6 +12497,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.000000000000036,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11578,6 +12538,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.850000000000001,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11587,6 +12549,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.050000000000036,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11626,6 +12590,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.900000000000001,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11635,6 +12601,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.100000000000037,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11674,6 +12642,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": 1.950000000000001,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11683,6 +12653,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.150000000000038,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11722,6 +12694,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.05,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11731,6 +12705,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.200000000000038,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11775,6 +12751,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.1,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11784,6 +12762,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.250000000000039,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11823,6 +12803,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.15000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11832,6 +12814,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.30000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11871,6 +12855,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11880,6 +12866,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.35000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11919,6 +12907,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.25,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11928,6 +12918,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.400000000000041,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -11967,6 +12959,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.3,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -11976,6 +12970,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.450000000000042,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12015,6 +13011,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.35,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12024,6 +13022,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.500000000000043,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12063,6 +13063,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.39999999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12072,6 +13074,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.550000000000043,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12111,6 +13115,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.44999999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12120,6 +13126,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.600000000000044,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12159,6 +13167,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.49999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12168,6 +13178,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.650000000000045,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12207,6 +13219,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.5499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12216,6 +13230,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.700000000000045,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12255,6 +13271,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.6,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12264,6 +13282,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.750000000000046,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12303,6 +13323,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.65,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12312,6 +13334,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.800000000000047,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12351,6 +13375,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12360,6 +13386,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.850000000000048,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12405,6 +13433,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.05,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12414,6 +13444,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.900000000000048,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12453,6 +13485,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.1,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12462,6 +13496,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 12.950000000000049,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12501,6 +13537,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.15000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12510,6 +13548,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.00000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12549,6 +13589,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.2,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         },
         "B": {
@@ -12558,6 +13600,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.05000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12597,6 +13641,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.25,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12606,6 +13652,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.100000000000051,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12650,6 +13698,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.3,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12659,6 +13709,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.150000000000052,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12698,6 +13750,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.35,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12707,6 +13761,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.200000000000053,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12746,6 +13802,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.39999999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12755,6 +13813,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.250000000000053,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12794,6 +13854,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.44999999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12803,6 +13865,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.300000000000054,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12842,6 +13906,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.49999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12851,6 +13917,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.350000000000055,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12890,6 +13958,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.5499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12899,6 +13969,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.400000000000055,
+          "regenRemainderHp": 0,
           "lastCommandId": null
         }
       }
@@ -12938,6 +14010,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.6,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -12947,6 +14021,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.450000000000056,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -12991,6 +14067,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.65,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13000,6 +14078,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.500000000000057,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13039,6 +14119,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13048,6 +14130,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.550000000000058,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13087,6 +14171,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.7500000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13096,6 +14182,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.600000000000058,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13142,6 +14230,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13151,6 +14241,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.650000000000059,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13190,6 +14282,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.8500000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13199,6 +14293,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.70000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13238,6 +14334,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13247,6 +14345,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.75000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13286,6 +14386,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 0.9500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13295,6 +14397,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.800000000000061,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13334,6 +14438,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0000000000000002,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13343,6 +14449,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.850000000000062,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13382,6 +14490,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.0500000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13391,6 +14501,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.900000000000063,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13430,6 +14542,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1000000000000003,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13439,6 +14553,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 13.950000000000063,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13485,6 +14601,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13494,6 +14612,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.000000000000064,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13533,6 +14653,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2000000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13542,6 +14664,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.050000000000065,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13581,6 +14705,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.2500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13590,6 +14716,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.100000000000065,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13629,6 +14757,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13638,6 +14768,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.150000000000066,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13677,6 +14809,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.3500000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13686,6 +14820,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.200000000000067,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13725,6 +14861,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4000000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13734,6 +14872,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.250000000000068,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13773,6 +14913,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.4500000000000006,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13782,6 +14924,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.300000000000068,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13821,6 +14965,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5000000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13830,6 +14976,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.350000000000069,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13869,6 +15017,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.5500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13878,6 +15028,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.40000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13917,6 +15069,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13926,6 +15080,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.45000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -13965,6 +15121,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.6500000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -13974,6 +15132,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.500000000000071,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14013,6 +15173,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7000000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -14022,6 +15184,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.550000000000072,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14061,6 +15225,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.7500000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -14070,6 +15236,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.600000000000072,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14109,6 +15277,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.800000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:0"
         },
         "B": {
@@ -14118,6 +15288,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.650000000000073,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14157,6 +15329,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.850000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14166,6 +15340,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.700000000000074,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14210,6 +15386,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.900000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14219,6 +15397,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.750000000000075,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14258,6 +15438,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 1.950000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14267,6 +15449,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.800000000000075,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14306,6 +15490,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.000000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14315,6 +15501,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.850000000000076,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14354,6 +15542,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.0500000000000007,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14363,6 +15553,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.900000000000077,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14402,6 +15594,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1000000000000005,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14411,6 +15605,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 14.950000000000077,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14450,6 +15646,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.1500000000000004,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14459,6 +15657,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.000000000000078,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:1"
         }
       }
@@ -14498,6 +15698,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.2,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14507,6 +15709,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.050000000000079,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14551,6 +15755,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.25,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14560,6 +15766,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.10000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14599,6 +15807,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14608,6 +15818,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.15000000000008,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14647,6 +15859,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3499999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14656,6 +15870,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.200000000000081,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14705,6 +15921,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.3999999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14714,6 +15932,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.250000000000082,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14753,6 +15973,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.4499999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14762,6 +15984,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.300000000000082,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14801,6 +16025,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.499999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14810,6 +16036,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.350000000000083,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14849,6 +16077,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.549999999999999,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14858,6 +16088,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.400000000000084,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14897,6 +16129,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.5999999999999988,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14906,6 +16140,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.450000000000085,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14945,6 +16181,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.6499999999999986,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -14954,6 +16192,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.500000000000085,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -14993,6 +16233,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.6999999999999984,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15002,6 +16244,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.550000000000086,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15046,6 +16290,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.7499999999999982,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15055,6 +16301,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.600000000000087,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15094,6 +16342,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.799999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15103,6 +16353,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.650000000000087,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15142,6 +16394,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.849999999999998,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15151,6 +16405,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.700000000000088,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15190,6 +16446,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.8999999999999977,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15199,6 +16457,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.750000000000089,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15238,6 +16498,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.9499999999999975,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15247,6 +16509,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.80000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15286,6 +16550,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 2.9999999999999973,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15295,6 +16561,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.85000000000009,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15334,6 +16602,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.049999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15343,6 +16613,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.900000000000091,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15382,6 +16654,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.099999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15391,6 +16665,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 15.950000000000092,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15430,6 +16706,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.149999999999997,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15439,6 +16717,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.000000000000092,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15478,6 +16758,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.1999999999999966,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15487,6 +16769,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.050000000000093,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15526,6 +16810,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.2499999999999964,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15535,6 +16821,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.100000000000094,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15574,6 +16862,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.2999999999999963,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15583,6 +16873,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.150000000000095,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15622,6 +16914,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.349999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15631,6 +16925,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.200000000000095,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15670,6 +16966,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.399999999999996,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:2"
         },
         "B": {
@@ -15679,6 +16977,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.250000000000096,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15718,6 +17018,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.4499999999999957,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -15727,6 +17029,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.300000000000097,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15771,6 +17075,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.4999999999999956,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -15780,6 +17086,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.350000000000097,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15819,6 +17127,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.5499999999999954,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -15828,6 +17138,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.400000000000098,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15867,6 +17179,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.599999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -15876,6 +17190,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.4500000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15915,6 +17231,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.649999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -15924,6 +17242,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.5000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -15963,6 +17283,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.699999999999995,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -15972,6 +17294,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.5500000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -16011,6 +17335,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.7499999999999947,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16020,6 +17346,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.6000000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:3"
         }
       }
@@ -16059,6 +17387,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.7999999999999945,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16068,6 +17398,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.6500000000001,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16112,6 +17444,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.8499999999999943,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16121,6 +17455,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.700000000000102,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16160,6 +17496,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.899999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16169,6 +17507,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.750000000000103,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16208,6 +17548,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.949999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16217,6 +17559,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.800000000000104,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16261,6 +17605,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 3.999999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16270,6 +17616,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.850000000000104,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16309,6 +17657,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.049999999999994,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16318,6 +17668,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.900000000000105,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16357,6 +17709,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.099999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16366,6 +17720,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 16.950000000000106,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16405,6 +17761,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.149999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16414,6 +17772,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 17.000000000000107,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16453,6 +17813,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.199999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16462,6 +17824,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 17.050000000000107,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16501,6 +17865,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.249999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16510,6 +17876,8 @@
           "cooldown": 0,
           "swingLanded": false,
           "downSeconds": -1,
+          "regenIdleSeconds": 17.100000000000108,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }
@@ -16549,6 +17917,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 4.299999999999993,
+          "regenRemainderHp": 0,
           "lastCommandId": "A:4"
         },
         "B": {
@@ -16558,6 +17928,8 @@
           "cooldown": 0,
           "swingLanded": true,
           "downSeconds": -1,
+          "regenIdleSeconds": 17.15000000000011,
+          "regenRemainderHp": 0,
           "lastCommandId": "B:5"
         }
       }

@@ -275,6 +275,11 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   'equip:',
   'xp:lantern:',
   'xp:lantern-unlocked:',
+  // R1: repeatable combat XP, minted `kill-xp:<guestId>:<enemyId>:<lifeId>` by
+  // net/gameServerCore.mjs's own applyKillXpAward (rewards/killXp.js's fold). Same treatment as
+  // every other personal xp-earned identity above: the profile it names may restore it, another
+  // profile may not reserve it out from under them.
+  'kill-xp:',
 ]);
 
 function reservedProfileEventOwner(eventId) {

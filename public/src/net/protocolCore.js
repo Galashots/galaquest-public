@@ -27,7 +27,7 @@
 // this module does. The alternative was a second copy of the durable fact vocabulary living here,
 // which is the drift docs/MISTAKES.md GQ-007 exists to stop.
 import { isDurableFactType, parseXpFactAmount } from '../progression/facts.js';
-import { isSupportedWolfLevel, wolfStatsForLevel } from '../combat/enemyStats.js';
+import { ENEMY_KINDS, enemyStatsForLevel, isSupportedEnemyLevel } from '../combat/enemyStats.js';
 
 export const PROTOCOL_VERSION = 4;
 
@@ -35,6 +35,11 @@ export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
   'restore-profile',
+  // R1: kill drops -- the same client->server, no-business-rule-here shape 'collect-loot' already
+  // is (see that message's own decode comment). Reusing PICKUP_ID_MAX_LENGTH's string cap below
+  // rather than a new constant, exactly as 'village-upgrade-purchase' already does for the same
+  // "a short, caller-built, colon-namespaced token" reason.
+  'collect-drop',
 ];
 
 // Mirrors requireString's own default cap. Item ids are short snake_case tokens
@@ -56,7 +61,9 @@ const PICKUP_ID_MAX_LENGTH = 48;
 const ENEMY_ID_MAX_LENGTH = 64;
 const ENEMY_KIND_MAX_LENGTH = 32;
 const ENEMY_COLLECTION_MAX_LENGTH = 128;
-const ENEMY_KINDS = ['wolf'];
+// The wire's own allowlist is combat/enemyStats.js's own kind table (GQ-007) rather than a second
+// hand-kept list -- the density package's variants (ember-wolf, frost-wolf, alpha-wolf) become
+// wire-legal the instant that table names them, with no second edit here to forget.
 const ENEMY_MODES = ['idle', 'walk', 'bite', 'hit', 'returning', 'dying', 'dead'];
 
 // Directional abuse bound only: welcome/profileFacts remains intentionally uncapped so a legitimate
@@ -283,6 +290,15 @@ export function decode(text) {
       return { v: PROTOCOL_VERSION, type: 'collect-loot', pickupId };
     }
 
+    // R1: the same shape and reasoning as 'collect-loot' just above, for the dynamic kill-drop
+    // pickups world/enemyDrops.js spawns -- whether dropId names a real, uncollected, in-reach drop
+    // is that module's own business rule, not this layer's.
+    case 'collect-drop': {
+      const dropId = requireString(raw.dropId, 'dropId', PICKUP_ID_MAX_LENGTH);
+      if (dropId.length === 0) fail('dropId must not be empty');
+      return { v: PROTOCOL_VERSION, type: 'collect-drop', dropId };
+    }
+
     // Client -> server only, same direction as 'collect-loot'. Shape validation only -- whether
     // upgradeId names a real, affordable, not-yet-owned upgrade is village/economy.js's business
     // rule (net/gameServer.mjs's applyVillageUpgradePurchase), the same boundary 'collect-loot'
@@ -381,15 +397,17 @@ function decodeEnemy(enemy, index) {
   // Level/maxHp are E2 additions inside protocol v4. Production always sends them; an older v4
   // fixture/client that omits them remains an honest Level-1 decode rather than failing before the
   // additive field was introduced. When present, both values are strict and must agree with the
-  // canonical table.
+  // canonical table for THIS enemy's own kind -- a Wolf and an Ember Wolf both claiming "level 1"
+  // must never be checked against one shared table (see enemyStats.js's own header on why the
+  // lookup is kind-aware).
   const level = enemy.level === undefined ? 1 : requireInteger(enemy.level, `${field}.level`);
-  if (!isSupportedWolfLevel(level)) {
-    fail(`${field}.level is not a supported Wolf level, got ${JSON.stringify(level)}`);
+  if (!isSupportedEnemyLevel(kind, level)) {
+    fail(`${field}.level is not a supported ${kind === 'wolf' ? 'Wolf' : kind} level, got ${JSON.stringify(level)}`);
   }
-  const maxHp = enemy.maxHp === undefined ? wolfStatsForLevel(level).maxHp
+  const maxHp = enemy.maxHp === undefined ? enemyStatsForLevel(kind, level).maxHp
     : requireInteger(enemy.maxHp, `${field}.maxHp`);
-  if (maxHp !== wolfStatsForLevel(level).maxHp) {
-    fail(`${field}.maxHp must match Level-${level} Wolf stats`);
+  if (maxHp !== enemyStatsForLevel(kind, level).maxHp) {
+    fail(`${field}.maxHp must match Level-${level} ${kind} stats`);
   }
 
   const targetId = enemy.targetId === null
@@ -645,6 +663,69 @@ function decodeLoot(loot) {
   return { spawned: Boolean(loot.spawned), collected };
 }
 
+// R1: kill drops -- coins, hearts, and gear scattered where an ordinary enemy fell. Optional/
+// additive, the same shape decodeLoot itself uses -- absent entirely for every pre-R1 fixture and
+// caller, decoding to "nothing on the ground" rather than failing.
+//
+// UNLIKE decodeLoot's cart pickups, a drop's own kind/position/itemId CANNOT be derived from a
+// shared table both sides already own: world/cartLoot.js's CART_LOOT_TABLE is fixed and authored,
+// while a kill drop's id is minted at the moment of a kill nobody could pre-author. So every field a
+// presenter needs rides here, kept to the minimum world/enemyDrops.js actually needs restated
+// (server-only bookkeeping -- ageSeconds past the point a presenter cares, per-life counters -- stays
+// server-side, the identical boundary decodeEnemy already draws against patrol/spawn cursors).
+const DROP_KINDS = ['coin', 'heart', 'gear'];
+const DROP_ID_MAX_LENGTH = 96;
+// A little above world/enemyDrops.js's own MAX_CONCURRENT_DROPS server-side cap, so the brief linger
+// window a just-collected drop stays on the wire for its attraction flight (see that module's own
+// COLLECTED_LINGER_SECONDS) can never itself trip this ceiling.
+const MAX_WIRE_DROPS = 32;
+
+function decodeDrop(drop, index) {
+  const field = `encounter.drops[${index}]`;
+  if (drop === null || typeof drop !== 'object' || Array.isArray(drop)) fail(`${field} must be an object`);
+  const id = requireString(drop.id, `${field}.id`, DROP_ID_MAX_LENGTH);
+  if (id.length === 0) fail(`${field}.id must not be empty`);
+  const kind = requireString(drop.kind, `${field}.kind`, 16);
+  if (!DROP_KINDS.includes(kind)) {
+    fail(`${field}.kind must be one of ${DROP_KINDS.join(', ')}, got ${JSON.stringify(kind)}`);
+  }
+  const decoded = {
+    id,
+    kind,
+    x: requireFiniteNumber(drop.x, `${field}.x`),
+    z: requireFiniteNumber(drop.z, `${field}.z`),
+  };
+  // Only a gear drop carries a payload beyond kind/position -- a coin is always worth one coin and a
+  // heart always heals the same amount (world/enemyDrops.js's own HEART_HEAL_HP), so restating either
+  // on the wire would be a number free to disagree with the rule that actually pays it out.
+  if (kind === 'gear') {
+    const itemId = requireString(drop.itemId, `${field}.itemId`, ITEM_ID_MAX_LENGTH);
+    if (itemId.length === 0) fail(`${field}.itemId must not be empty`);
+    decoded.itemId = itemId;
+  }
+  // Present only once a hero has started collecting it -- absent for every drop still sitting on the
+  // ground, the same "absent means nothing has happened yet" shape decodeLoot's own collected map
+  // uses, just carried per-drop instead of in a parallel object (a drop's id is already unique, so a
+  // second map keyed by the same id would be a second place for the two to disagree).
+  if (drop.collectedBy !== undefined && drop.collectedBy !== null) {
+    decoded.collectedBy = requireString(drop.collectedBy, `${field}.collectedBy`);
+  }
+  return decoded;
+}
+
+function decodeDrops(drops) {
+  if (drops === undefined) return [];
+  if (!Array.isArray(drops)) fail('encounter.drops must be an array');
+  if (drops.length > MAX_WIRE_DROPS) fail(`encounter.drops may contain at most ${MAX_WIRE_DROPS} entries`);
+  const ids = new Set();
+  return drops.map((drop, index) => {
+    const decoded = decodeDrop(drop, index);
+    if (ids.has(decoded.id)) fail(`encounter.drops contains duplicate id ${JSON.stringify(decoded.id)}`);
+    ids.add(decoded.id);
+    return decoded;
+  });
+}
+
 // GP3: Village Supplies, shared once for the whole simulation rather than per-hero -- unlike
 // `rewards` above (net/gameServer.mjs's own createRewardCoordinator draws this same shared-vs-per-
 // guest line: coinsFor/shardsFor stay personal provenance, this is the communal spendable total).
@@ -754,6 +835,7 @@ function decodeEncounter(encounter) {
     heroes: decodeHeroes(encounter.heroes),
     rewards: decodeRewards(encounter.rewards),
     loot: decodeLoot(encounter.loot),
+    drops: decodeDrops(encounter.drops),
     village: decodeVillage(encounter.village),
     siege: decodeSiege(encounter.siege),
   };
@@ -794,6 +876,7 @@ const EMPTY_ENCOUNTER = Object.freeze({
   heroes: Object.freeze({}),
   rewards: Object.freeze({}),
   loot: Object.freeze({ spawned: false, collected: Object.freeze({}) }),
+  drops: Object.freeze([]),
   village: Object.freeze({ coins: 0, shards: 0, workshopOwned: false }),
   siege: EMPTY_SIEGE,
 });
@@ -861,6 +944,10 @@ export function claimHollowMessage() {
 
 export function collectLootMessage(pickupId) {
   return { v: PROTOCOL_VERSION, type: 'collect-loot', pickupId };
+}
+
+export function collectDropMessage(dropId) {
+  return { v: PROTOCOL_VERSION, type: 'collect-drop', dropId };
 }
 
 export function villageUpgradePurchaseMessage(upgradeId) {

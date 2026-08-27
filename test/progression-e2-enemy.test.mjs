@@ -8,17 +8,34 @@ import {
   stepParty,
   WOLF_AGGRO_RANGE,
 } from '../public/src/combat/encounter.js';
-import { WOLF_LEVEL_STATS, wolfStatsForLevel } from '../public/src/combat/enemyStats.js';
+import { WOLF_LEVEL_STATS, enemyStatsForLevel, wolfStatsForLevel } from '../public/src/combat/enemyStats.js';
 import { ENEMY_POPULATION, RECOVERY_SANCTUARY, ROAD, ROWAN, WOLF_SPAWN } from '../public/src/world/zones/village.js';
 import { decode, encode, snapshotMessage } from '../public/src/net/protocol.js';
 import { createSimulation } from '../net/gameServerCore.mjs';
 
-test('E2 C1 authors exactly five Wolves with the locked level mix and separated homes', () => {
-  assert.equal(ENEMY_POPULATION.length, 5);
-  assert.deepEqual(ENEMY_POPULATION.map((enemy) => enemy.level).sort((a, b) => a - b), [1, 1, 2, 2, 4]);
-  assert.equal(new Set(ENEMY_POPULATION.map((enemy) => enemy.enemyId)).size, 5);
+// R1 (the density push) grew this from FIVE authored Wolves to TWELVE authored bodies across four
+// kinds -- the original five's own ids, levels and homes are unchanged (see ENEMY_POPULATION's own
+// header in village.js for why), so this test now pins the ENLARGED population's shape rather than
+// the original locked mix, while keeping every structural rule the original test enforced: unique
+// stable ids, a real positive leash, sanctuary clearance, and pairwise spacing so no two bodies can
+// chain-pull each other.
+test('R1 authors twelve ordinary enemies across four kinds, with separated homes and no sanctuary overlap', () => {
+  assert.equal(ENEMY_POPULATION.length, 12);
+  assert.equal(new Set(ENEMY_POPULATION.map((enemy) => enemy.enemyId)).size, 12,
+    'every enemyId must be unique');
+  assert.deepEqual(
+    ENEMY_POPULATION.map((enemy) => enemy.kind).sort(),
+    ['alpha-wolf', 'ember-wolf', 'ember-wolf', 'frost-wolf', 'frost-wolf',
+      'wolf', 'wolf', 'wolf', 'wolf', 'wolf', 'wolf', 'wolf'],
+  );
+  // The original five's own locked level mix, unmoved.
+  const wolves = ENEMY_POPULATION.filter((enemy) => enemy.kind === 'wolf');
+  assert.equal(wolves.length, 7);
+  assert.deepEqual(
+    wolves.map((enemy) => enemy.level).sort((a, b) => a - b),
+    [1, 1, 1, 1, 2, 2, 4],
+  );
   for (const enemy of ENEMY_POPULATION) {
-    assert.equal(enemy.kind, 'wolf');
     assert.ok(enemy.leashRadius > 0);
     assert.ok(
       Math.hypot(enemy.home.x - RECOVERY_SANCTUARY.at.x, enemy.home.z - RECOVERY_SANCTUARY.at.z)
@@ -125,21 +142,31 @@ test('E2 C1 carries enemy level/max health through the wire and rejects dishones
   const decoded = decode(encode(message));
   assert.deepEqual(decoded.encounter.enemies.map((enemy) => [enemy.enemyId, enemy.level, enemy.maxHp]),
     stepped.enemies.map((enemy) => [enemy.enemyId, enemy.level, enemy.maxHp]));
+  // Selected by stable id, not array index: stepParty canonicalises enemy order by enemyId
+  // (stable-sort, not authoring order), so R1's variants can sort ahead of wolf-1 alphabetically
+  // ("alpha-wolf-1" < "wolf-1"). Pinning to the Wolf specifically keeps this test's own "level 3 is
+  // not a supported WOLF level" claim honest -- a variant's own supported level set differs.
+  const wolfOne = message.encounter.enemies.find((enemy) => enemy.enemyId === 'wolf-1');
+  assert.ok(wolfOne, 'wolf-1 must still be present in the authored twelve');
   assert.throws(() => decode(encode(snapshotMessage(1, [], {
     ...message.encounter,
-    enemies: [{ ...message.encounter.enemies[0], level: 3 }],
+    enemies: [{ ...wolfOne, level: 3 }],
   }, []))), /supported Wolf level/);
   assert.throws(() => decode(encode(snapshotMessage(1, [], {
     ...message.encounter,
-    enemies: [{ ...message.encounter.enemies[0], maxHp: 999 }],
+    enemies: [{ ...wolfOne, maxHp: 999 }],
   }, []))), /maxHp/);
 });
 
-test('E2 C1 server default consumes the same five authored definitions as offline', () => {
+test('E2 C1 server default consumes the same twelve authored definitions as offline', () => {
   const simulation = createSimulation();
   const serverEnemies = simulation.encounterSnapshot().enemies;
   assert.deepEqual(serverEnemies.map((enemy) => [enemy.enemyId, enemy.level, enemy.maxHp]),
-    ENEMY_POPULATION.map((enemy) => [enemy.enemyId, enemy.level, wolfStatsForLevel(enemy.level).maxHp]));
+    // enemyStatsForLevel, not wolfStatsForLevel: R1's variants share the level NUMBER 1 with the
+    // opening Wolves but not their stat row (enemyStats.js's own header explains why the lookup is
+    // kind-aware) -- reading the wrong table here would silently re-pin every variant's hp to the
+    // Wolf's own 30, and this test would go on passing against the wrong number.
+    ENEMY_POPULATION.map((enemy) => [enemy.enemyId, enemy.level, enemyStatsForLevel(enemy.kind, enemy.level).maxHp]));
 });
 
 test('E2 production recovery preserves opening-Wolf damage across a solo party wipe', () => {
