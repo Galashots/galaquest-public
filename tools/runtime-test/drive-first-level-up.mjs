@@ -53,6 +53,7 @@ import {
 } from '../../public/src/progression/heroStats.js';
 import { formatPower, powerFor } from '../../public/src/progression/power.js';
 import { STARTER_SWORD_ID } from '../../public/src/progression/items.js';
+import { killXpForKind } from '../../public/src/combat/enemyStats.js';
 import { sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
@@ -91,6 +92,12 @@ const AFTER = {
   damage: resolvedHeroDamage(2, STARTER_SWORD_ID),
   power: powerFor({ maxHp: resolvedMaxHp(2), heroDamage: resolvedHeroDamage(2, STARTER_SWORD_ID) }),
 };
+// R1 changed what one Lantern fight is worth. The kill that lands the third mark is ALSO a kill,
+// and kills grant XP now (combat/enemyStats.js's own kill-XP table) -- so the fight this file
+// drives banks LANTERN_UNLOCK_XP + one wolf's kill XP, not the Lantern alone. Derived, never
+// retyped, so a kill-XP re-tune moves these pins with it (GQ-007).
+const WOLF_KILL_XP = killXpForKind('wolf');
+const XP_AFTER_THE_FIGHT = LANTERN_UNLOCK_XP + WOLF_KILL_XP;
 
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -580,9 +587,14 @@ try {
   check('the XP meter visibly COMPLETED rather than teleporting',
     drawnFull.length > 0,
     `the drawn meter read ${JSON.stringify([...new Set(samples.map((s) => s.drawnXp))].slice(-5))}`);
+  // The rollover lands on the Level-2 meter carrying the kill's own XP: the same wolf whose death
+  // finished the third mark also granted WOLF_KILL_XP, so the meter reads `20 / 150` rather than
+  // `0 / 150` when the two facts arrive in one snapshot -- and `0 / 150` for a beat when they do
+  // not. Both are the same honest rollover; only staying pinned at full would be the bug.
   check('...and then rolled over into the new level rather than staying full',
     drawnFull.length > 0 && samples.some((sample, index) =>
-      index > samples.indexOf(drawnFull[0]) && /^0 \//.test(sample.drawnXp ?? '')),
+      index > samples.indexOf(drawnFull[0])
+      && new RegExp(`^(0|${WOLF_KILL_XP}) /`).test(sample.drawnXp ?? '')),
     `held full for ${drawnFull.length} frame(s), then ${samples[samples.length - 1]?.drawnXp}`);
 
   // THE CEREMONY, and deliberately NOT read off a banner. It was a banner for one run of this file
@@ -615,11 +627,12 @@ try {
   check(`AFTER: POWER ${formatPower(AFTER.power)} -- +${AFTER.power - BEFORE.power} from ${formatPower(BEFORE.power)}, ON THE HUD`,
     powerFor(after.progress) === AFTER.power && after.drawn.power === formatPower(AFTER.power),
     `derived ${formatPower(powerFor(after.progress))}, drawn ${after.drawn.power}`);
-  check(`AFTER: the HUD says LV ${AFTER.level} with a fresh meter`,
-    after.drawn.level === String(AFTER.level) && /^0 \/ \d+$/.test(after.drawn.xp ?? ''),
+  check(`AFTER: the HUD says LV ${AFTER.level} with the kill's own XP already on the new meter`,
+    after.drawn.level === String(AFTER.level)
+      && new RegExp(`^${XP_AFTER_THE_FIGHT - LANTERN_UNLOCK_XP} / \\d+$`).test(after.drawn.xp ?? ''),
     `LV ${after.drawn.level}, ${after.drawn.xp}`);
-  check(`AFTER: exactly ${LANTERN_UNLOCK_XP} XP, from one Lantern and nothing else`,
-    after.progress.totalXp === LANTERN_UNLOCK_XP, `${after.progress.totalXp} XP`);
+  check(`AFTER: exactly ${XP_AFTER_THE_FIGHT} XP -- one Lantern plus the one kill that finished it`,
+    after.progress.totalXp === XP_AFTER_THE_FIGHT, `${after.progress.totalXp} XP`);
   await shot('03-after-level-2');
 
   // ── AND IT IS REAL IN THE FIGHT ───────────────────────────────────────────────────────────────
@@ -666,8 +679,14 @@ try {
   await waitForRuntime();
   const reloaded = await pollUntil((s) => s.ready && s.netStatus === 'online'
     && s.progress.level === AFTER.level, 45000);
+  // Not an exact pin any more: the Level-2-blow proof between AFTER and this reload swings at a
+  // live wolf, and whether those blows finish it is the fight's business, not this check's. What
+  // must survive the reload is the level, at least the fight's own XP, and a total that is exactly
+  // the Lantern plus a whole number of wolf kills -- any other number IS a durability bug.
   check('RELOAD: the level survived',
-    reloaded.progress.level === AFTER.level && reloaded.progress.totalXp === LANTERN_UNLOCK_XP,
+    reloaded.progress.level === AFTER.level
+      && reloaded.progress.totalXp >= XP_AFTER_THE_FIGHT
+      && (reloaded.progress.totalXp - LANTERN_UNLOCK_XP) % WOLF_KILL_XP === 0,
     `level ${reloaded.progress.level}, ${reloaded.progress.totalXp} XP`);
   check('RELOAD: and so did the body the fight uses',
     reloaded.hero.maxHp === AFTER.maxHp && reloaded.drawn.healthMax === String(AFTER.maxHp),
