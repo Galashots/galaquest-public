@@ -556,8 +556,16 @@ async function runSingleClientPhase(viewport, phaseLabel) {
     check(`${phaseLabel}: the SEARCH trigger fired (cartSearched latched)`, spawned.cartSearched === true,
       JSON.stringify({ campFound: spawned.campFound, rowanMet: spawned.rowanMet, heroPos: spawned.heroPos }));
     check(`${phaseLabel}: searching bursts the loot into the world`, spawned.loot.spawned === true);
+    // POLLED, not read off the spawn sample: `loot.spawned` is server state and flips the tick the
+    // trigger fires, but the jolt is scheduled by the CLIENT's own next frame when it notices
+    // cartSearched -- on a 3fps runner that frame is hundreds of milliseconds after the poll above
+    // returned. Measured at 7b3913d (landscape): the tally read {thud:1, keeper-greeting:1} at the
+    // spawn sample and cart-jolt:1 two log lines later. The bounded poll still fails a jolt that
+    // genuinely never schedules, with the real tally printed.
+    const jolted = await pollUntil(tab, (s) => (s.audio.triggered['cart-jolt'] ?? 0) >= 1,
+      { timeoutMs: 5000 });
     check(`${phaseLabel}: the cart's own jolt sound was scheduled`,
-      (spawned.audio.triggered['cart-jolt'] ?? 0) >= 1, JSON.stringify(spawned.audio.triggered));
+      (jolted.audio.triggered['cart-jolt'] ?? 0) >= 1, JSON.stringify(jolted.audio.triggered));
 
     // A short burst of frames right after the transition, while the toss/burst animation is still
     // playing -- the closest practical "video" evidence a screenshot-only harness can produce.

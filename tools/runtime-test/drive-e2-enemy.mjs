@@ -295,7 +295,7 @@ async function findNameplateView(tab) {
 // A child holding W does not let go of it to look at the screen. Shift is held with the movement
 // keys because that is input/keyboard.js's own run chord, and "run away is a real option" is the
 // double-aggro property the game itself guarantees (test/double-aggro-recovery.test.mjs).
-async function holdToward(tab, target, extraMillis = 1_500, observe = null) {
+async function holdToward(tab, target, extraMillis = 1_500, observe = null, { run = true } = {}) {
   await tab.page.send('Page.bringToFront');
   let live = await state(tab);
   const deadline = deadlineAfter(30_000 + extraMillis);
@@ -327,7 +327,7 @@ async function holdToward(tab, target, extraMillis = 1_500, observe = null) {
       const sin = Math.sin(live.heading);
       const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
       const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
-      const keys = new Set(['ShiftLeft']);
+      const keys = new Set(run ? ['ShiftLeft'] : []);
       if (screenX > 0.2) keys.add('KeyD'); else if (screenX < -0.2) keys.add('KeyA');
       if (screenY > 0.2) keys.add('KeyW'); else if (screenY < -0.2) keys.add('KeyS');
       // eslint-disable-next-line no-await-in-loop
@@ -461,11 +461,19 @@ try {
   await configure(tabA, PORTRAIT);
   await startLeashModeSampler(tabA);
   await holdToward(tabA, { x: leashWolf.home.x, z: leashWolf.home.z + 2 }, 0);
+  // THE RETREAT WALKS -- deliberately no Shift. 'returning' fires only when the wolf is dragged
+  // BEYOND its own leashRadius (encounter.js keys it on enemyDistanceFromHome), and a hero fleeing
+  // at RUN_SPEED outgrows the 6m aggro range while the wolf is still inside its 4.4m territory --
+  // measured at 7b3913d, where the recording read idle->walk->bite->walk->idle and no frame ever
+  // said 'returning': the wolf gave up by losing aggro, not by hitting its leash. Walking retreats
+  // at 1.7 m/s against the wolf's 1.15: slow enough that the chase crosses the leash boundary,
+  // fast enough that the gap still opens and the hero escapes with a nick at worst.
   const movedAway = await holdToward(
     tabA,
     { x: 0, z: 24.5 },
     0,
     (live) => live.enemies.some((enemy) => enemy.mode === 'returning'),
+    { run: false },
   );
   let returning = movedAway;
   if (!returning.enemies.some((enemy) => enemy.mode === 'returning')) {
