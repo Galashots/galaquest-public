@@ -1167,6 +1167,9 @@ const FIGHT_SAMPLE = `(() => {
     heroHp: published.hero.hp,
     downSeconds: published.hero.downSeconds,
     swingSeconds: published.hero.swingSeconds,
+    // The third and last field heroCanAttack (encounter.js) reads. Carried so the tap loops below
+    // can hand this sample straight to the imported canAttack() rather than re-deriving the rule.
+    cooldown: published.hero.cooldown,
     wolfMode: authoredWolf.mode,
     wolfHp: authoredWolf.hp,
     // The CLIP, not just the mode, because "stays dead" is a claim about what is being played.
@@ -1207,15 +1210,12 @@ const gaps = paced.samples.slice(1).map((sample, index) => sample.t - paced.samp
 // game can even notice: main.js samples input once per rendered frame, so tapping faster than the
 // frame period cannot help and tapping slower wastes eligibility. In practice the two CDP round
 // trips a tap costs put the real rate near 0.7s, which is what the original 600ms here had by
-// instinct. The recorder is read every few taps rather than every one, so noticing the kill stays
-// prompt without paying a round trip per press.
+// instinct. This is also the poll period the tap loops below read the recorder at, once per
+// iteration -- see their own READINESS-KEYED header for why every iteration replaced every fourth.
 const framePeriodMs = gaps.length ? gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 17;
 const tapEveryMs = framePeriodMs;
 console.log(`  fight cadence: frame ${framePeriodMs}ms, tapping every ${tapEveryMs}ms`);
 
-// Four taps per burst is one hero life's worth at this cadence, so a burst that starts while he is
-// down loses only itself and the next one re-syncs. Ten bursts is the same 40 attempts this loop
-// has always allowed.
 // RE-CLOSE BEFORE EVERY SWING, INSIDE THE CADENCE RATHER THAN INSTEAD OF IT.
 //
 // The loop this grew from dropped the re-close, and the comment it dropped said exactly why it was
@@ -1263,48 +1263,71 @@ async function closeOnWolf(gapMetres, stopWithin) {
     { faceTarget: true });
 }
 
-// ONE READ PER TAP, not per burst. Reading in bursts of four was cheaper and it broke the check
-// after this one: the kill went unnoticed for up to four cadences, and WOLF_RESPAWN_SECONDS is 10s,
-// so `a dead wolf stays dead` arrived at the corpse after it had already got back up. At this
-// cadence a read is about a sixth of the cycle even where a round trip costs a whole frame, which
-// is a price worth paying to notice the kill within one swing of it happening.
+// READINESS-KEYED, NOT BLIND-INTERVAL. Every iteration reads the recorder FIRST -- ONE READ PER
+// ITERATION, not per burst of four, for the same reason the every-fourth reach check below was
+// widened to every iteration: reading in bursts is cheaper and it is what let `a dead wolf stays
+// dead` arrive at a corpse that had already got back up in an earlier version of this file. A tap
+// is dispatched only when canAttack (imported from encounter.js, GQ-007 -- exactly heroCanAttack
+// applied to the hero's own three fields) says the rules will actually accept it AND the last known
+// gap is within ATTACK_REACH; otherwise the iteration spends nothing on a touch that would have been
+// refused, or re-closes when the gap says the hero cannot reach the wolf from here at all.
+//
+// WHY THIS REPLACED THE EVERY-FOURTH REACH CHECK. Reading the gap once per four taps left the
+// walk-back too coarse: hosted this measured `closest gap 0.58m against a 1.7m reach` and `no landed
+// hit in 167 frames` -- 0.58m is comfortably inside ATTACK_REACH, so the gap the loop actually acted
+// on when it finally checked was stale, drifted by up to three tap cycles' worth of movement (the
+// wolf backs off after a bite, the hero only turns while walking) since the last time anyone looked.
+// Reading every iteration keeps that staleness one frame wide instead of four.
+//
+// CADENCE MATH, same derivation as drive-marks (GQ-007: SWING_SECONDS and ATTACK_COOLDOWN_SECONDS
+// are both encounter.js's own, not restated here). ATTACK_COOLDOWN_SECONDS is 0, so canAttack
+// reopens the instant a swing's animation ends -- there is no separate cooldown tail. Polling once
+// every loop iteration, at this machine's own measured frame period (tapEveryMs), means the first
+// ready-and-in-reach read after that reopening moment lands at most one frame late. So a landed
+// swing should repeat roughly every SWING_SECONDS + one frame, not whatever multiple of it a blind
+// interval and a stale four-tap-old gap happened to land on.
 let killed = false;
 let sawHit = false;
 let shotSwing = false;
 let lastGap = 0;
-// WHAT THE LOOP SPENDS ITS FIGHT ON IS ROUND TRIPS, so the tap path has as few as it can. Walking
-// before every swing was measured at 4.4 SECONDS a tap in drive-marks -- against a hero who is
-// knocked down every nine or ten seconds, and a wolf that Design ruling 5 heals to full each time.
-// The gap log said the repositioning was not even needed: every swing went out from between 1.0m
-// and 1.6m, inside ATTACK_REACH, because the wolf brings itself to MIN_BODY_SEPARATION and stays
-// there. So the tap path is two touches and nothing else, and the walk happens only when the
-// recorder says the hero is actually out of reach -- which is what a knockdown does, since
-// respawning puts him back at spawn.
-const REACH_CHECK_EVERY = 4;
-for (let tap = 0; tap < 200 && !killed; tap += 1) {
+// The wall clock is the real budget, same length drive-marks gives the identical "the wolf can
+// actually be killed" check; the iteration cap under it is only a runaway guard, sized generously
+// above the fastest this loop could plausibly cycle so it never trips first on any machine.
+const fightDeadline = Date.now() + 120000;
+for (let tap = 0; tap < 20000 && !killed && Date.now() < fightDeadline; tap += 1) {
   const cycleStart = Date.now();
-  // eslint-disable-next-line no-await-in-loop
-  await touch('touchStart', [{ x: attackX, y: attackY }]);
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(60);
-  // eslint-disable-next-line no-await-in-loop
-  await touch('touchEnd', []);
-  if (!shotSwing) {
-    shotSwing = true;
-    // Mid-swing by construction: the clip runs SWING_SECONDS and this is the frame after the tap.
-    // eslint-disable-next-line no-await-in-loop
-    await shot('03-swing');
-  }
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-  if (tap % REACH_CHECK_EVERY !== 0) continue;
   // eslint-disable-next-line no-await-in-loop
   const log = await readFight();
   sawHit = log.samples.some((sample) => sample.wolfMode === 'hit');
   killed = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
-  lastGap = log.samples[log.samples.length - 1]?.gap ?? 0;
+  if (killed) break;
+  const latest = log.samples[log.samples.length - 1];
+  lastGap = latest?.gap ?? 0;
+  const ready = latest !== undefined && canAttack({
+    hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
+  });
+  if (lastGap > ATTACK_REACH) {
+    // eslint-disable-next-line no-await-in-loop
+    await closeOnWolf(lastGap, 1.0);
+  } else if (ready) {
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchStart', [{ x: attackX, y: attackY }]);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(60);
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchEnd', []);
+    if (!shotSwing) {
+      shotSwing = true;
+      // Mid-swing by construction: the clip runs SWING_SECONDS and this is the frame after a tap
+      // the loop already confirmed the rules were ready to accept.
+      // eslint-disable-next-line no-await-in-loop
+      await shot('03-swing');
+    }
+  }
+  // Mid-swing and in reach: neither branch above fires, and the iteration spends nothing beyond the
+  // read that decided so -- the tap that actually lands is the one after the swing ends.
   // eslint-disable-next-line no-await-in-loop
-  if (!killed && lastGap > ATTACK_REACH) await closeOnWolf(lastGap, 1.0);
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
 }
 const fight = await readFight();
 // The recorder is the evidence for both of these, so report what it actually saw. `dropped` is
@@ -1643,6 +1666,15 @@ check('landscape: the miss ring is thrown from the button in its new corner too'
 // TWO, a live poll for wolf.mode === 'hit'. WOLF_HIT_FLASH_SECONDS is 0.18s and a poll written
 // intervalMs 20 really samples every ~300ms here, so it was looking less often than the thing it
 // looks for lasts. The recorder holds every frame whether or not anyone is looking.
+//
+// THREE -- and this is the one raising the gap-reading rate to every tap did not reach, because it
+// still tapped BEFORE reading. Hosted this measured `closest gap 0.58m against a 1.7m reach` and
+// `no landed hit in 167 frames` in the same run: the hero was demonstrably in range the whole time,
+// and still nothing landed, because every tap fired without asking whether the rules were even
+// ready for it -- most of those 167 taps went out mid-swing, refused for that alone. READ THEN
+// DECIDE, same order the portrait loop now uses: canAttack (imported, GQ-007) applied to the latest
+// sample says whether a swing is actually acceptable, and a tap is spent only when it is, in reach,
+// at once. Same cadence math as the portrait loop's own header -- SWING_SECONDS plus one frame.
 await page.eval(startWatch('landscape-hit', FIGHT_SAMPLE));
 const readLandscapeHit = () => page.eval(readWatchSource('landscape-hit')).then(JSON.parse);
 await closeOnWolf(Infinity, 1.0);
@@ -1650,21 +1682,24 @@ let landscapeHit = false;
 for (let attempt = 0; attempt < 60 && !landscapeHit; attempt += 1) {
   const cycleStart = Date.now();
   // eslint-disable-next-line no-await-in-loop
-  await tapAttack();
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-  // EVERY TAP, not every fourth. The portrait loop reads in fours because it is trying to KILL and
-  // a read is pure cost there; this loop wants to stop at the FIRST hit, and four taps of overshoot
-  // is three more swings into a wolf with three hit points. It killed the thing outright, and the
-  // knockdown beat below then stood waiting to be bitten by a corpse -- 185 frames at full health.
-  // eslint-disable-next-line no-await-in-loop
   const log = await readLandscapeHit();
   landscapeHit = log.samples.some((sample) => sample.wolfMode === 'hit');
   const dead = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
-  const gap = log.samples[log.samples.length - 1]?.gap ?? 0;
-  if (dead) break;
+  if (dead || landscapeHit) break;
+  const latest = log.samples[log.samples.length - 1];
+  const gap = latest?.gap ?? 0;
+  const ready = latest !== undefined && canAttack({
+    hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
+  });
+  if (gap > ATTACK_REACH) {
+    // eslint-disable-next-line no-await-in-loop
+    await closeOnWolf(gap, 1.0);
+  } else if (ready) {
+    // eslint-disable-next-line no-await-in-loop
+    await tapAttack();
+  }
   // eslint-disable-next-line no-await-in-loop
-  if (!landscapeHit && gap > ATTACK_REACH) await closeOnWolf(gap, 1.0);
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
 }
 const landscapeHitLog = await readLandscapeHit();
 await page.eval(stopWatchSource('landscape-hit'));
@@ -1739,28 +1774,46 @@ await pollUntil((s) => s.hero.downSeconds < 0, { intervalMs: 40, timeoutMs: 8000
 // re-aggros after the shared reset), so no walking is needed at all; what was needed was to stop
 // asking.
 //
-// Read after every tap rather than in bursts, because unlike the portrait loop this one wants the
-// PICTURE at first detection. That costs one round trip per 1.75s tap, about 14% of the cadence.
-// Hosted the picture is best-effort regardless: a Page.captureScreenshot measured 2.7s there, and
-// the defeat flash is 0.5s. The CHECK reads the recorder, which cannot miss it.
+// Read BEFORE deciding, every iteration -- the same READINESS-KEYED reorder the portrait loop and
+// the landscape-hit beat above it both got, and for the identical reason: a tap fired before anyone
+// asked canAttack spends itself whether or not the rules were ready, which is what the portrait
+// loop's own header measured as most of a fight's taps going to waste. Here that also protects the
+// picture -- `landscape-defeated` is worth taking only once the recorder confirms the wolf actually
+// reached its dying state, not on whichever tap happened to be in flight when it did, so the shot
+// still comes from the same read that sets `landscapeKilled` rather than from the tap itself. Best-
+// effort regardless: a Page.captureScreenshot measured 2.7s hosted, and the defeat flash is 0.5s --
+// the CHECK below reads the recorder, which cannot miss it even when the picture does.
 await page.eval(startWatch('landscape-fight', FIGHT_SAMPLE));
 const readLandscape = () => page.eval(readWatchSource('landscape-fight')).then(JSON.parse);
 let landscapeKilled = false;
 let landscapeGap = 0;
 const landscapeDeadline = Date.now() + 180_000;
-for (let attempt = 0; attempt < 120 && !landscapeKilled && Date.now() < landscapeDeadline; attempt += 1) {
+// Same runaway-guard shape as the portrait loop: the wall clock above is the real budget, and this
+// cap only has to sit above the fastest this loop could plausibly cycle.
+for (let attempt = 0; attempt < 20000 && !landscapeKilled && Date.now() < landscapeDeadline; attempt += 1) {
   const cycleStart = Date.now();
   // eslint-disable-next-line no-await-in-loop
-  await tapAttack();
+  const log = await readLandscape();
+  landscapeKilled = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
+  if (landscapeKilled) {
+    // eslint-disable-next-line no-await-in-loop
+    await shot('landscape-defeated');
+    break;
+  }
+  const latest = log.samples[log.samples.length - 1];
+  landscapeGap = latest?.gap ?? 0;
+  const ready = latest !== undefined && canAttack({
+    hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
+  });
+  if (landscapeGap > ATTACK_REACH) {
+    // eslint-disable-next-line no-await-in-loop
+    await closeOnWolf(landscapeGap, 1.0);
+  } else if (ready) {
+    // eslint-disable-next-line no-await-in-loop
+    await tapAttack();
+  }
   // eslint-disable-next-line no-await-in-loop
   await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
-  // eslint-disable-next-line no-await-in-loop
-  const log = await readLandscape();
-  landscapeGap = log.samples[log.samples.length - 1]?.gap ?? 0;
-  landscapeKilled = log.samples.some((sample) => sample.wolfMode === 'dying' || sample.wolfMode === 'dead');
-  if (landscapeKilled) await shot('landscape-defeated');
-  // eslint-disable-next-line no-await-in-loop
-  if (!landscapeKilled && landscapeGap > ATTACK_REACH) await closeOnWolf(landscapeGap, 1.0);
 }
 await page.eval(stopWatchSource('landscape-fight'));
 check('landscape: the finishing blow was photographed too', landscapeKilled,
