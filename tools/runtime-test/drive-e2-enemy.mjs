@@ -286,33 +286,61 @@ async function findNameplateView(tab) {
   return best;
 }
 
+// KEYS STAY HELD ACROSS THE STATE READS, and the hero RUNS. The first version pressed the keys for
+// 250ms, released them, and only then read state over CDP -- so every iteration spent its round
+// trips standing still, and the effective ground speed came out UNDER a wolf's own 1.15 m/s on a
+// hosted runner. That was survivable when this route crossed one wolf's range; the density push
+// authored a second wolf onto it, and the flee leg was run down mid-journey (measured at afc9cd5:
+// downed at 0.96s, then camped at 8hp by a biting wolf while the passive leash wait timed out).
+// A child holding W does not let go of it to look at the screen. Shift is held with the movement
+// keys because that is input/keyboard.js's own run chord, and "run away is a real option" is the
+// double-aggro property the game itself guarantees (test/double-aggro-recovery.test.mjs).
 async function holdToward(tab, target, extraMillis = 1_500, observe = null) {
   await tab.page.send('Page.bringToFront');
   let live = await state(tab);
   const deadline = deadlineAfter(30_000 + extraMillis);
-  while (Date.now() < deadline) {
-    if (observe?.(live)) return live;
-    const dx = target.x - live.player.x;
-    const dz = target.z - live.player.z;
-    const distance = Math.hypot(dx, dz);
-    if (distance <= 1.2) break;
-    const cos = Math.cos(live.heading);
-    const sin = Math.sin(live.heading);
-    const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
-    const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
-    const keys = [];
-    if (screenX > 0.2) keys.push('KeyD'); else if (screenX < -0.2) keys.push('KeyA');
-    if (screenY > 0.2) keys.push('KeyW'); else if (screenY < -0.2) keys.push('KeyS');
-    for (const code of keys) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
-    try {
-      await sleep(250);
-    } finally {
-      for (const code of keys.reverse()) await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
+  const held = new Set();
+  const holdExactly = async (wanted) => {
+    for (const code of [...held]) {
+      if (!wanted.has(code)) {
+        // eslint-disable-next-line no-await-in-loop
+        await tab.page.send('Input.dispatchKeyEvent', { type: 'keyUp', code });
+        held.delete(code);
+      }
     }
-    live = await state(tab);
-    if (observe?.(live)) return live;
+    for (const code of wanted) {
+      if (!held.has(code)) {
+        // eslint-disable-next-line no-await-in-loop
+        await tab.page.send('Input.dispatchKeyEvent', { type: 'keyDown', code });
+        held.add(code);
+      }
+    }
+  };
+  try {
+    while (Date.now() < deadline) {
+      if (observe?.(live)) return live;
+      const dx = target.x - live.player.x;
+      const dz = target.z - live.player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance <= 1.2) break;
+      const cos = Math.cos(live.heading);
+      const sin = Math.sin(live.heading);
+      const screenX = (-cos * dx + sin * dz) / Math.max(distance, 1);
+      const screenY = (sin * dx + cos * dz) / Math.max(distance, 1);
+      const keys = new Set(['ShiftLeft']);
+      if (screenX > 0.2) keys.add('KeyD'); else if (screenX < -0.2) keys.add('KeyA');
+      if (screenY > 0.2) keys.add('KeyW'); else if (screenY < -0.2) keys.add('KeyS');
+      // eslint-disable-next-line no-await-in-loop
+      await holdExactly(keys);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(250);
+      // eslint-disable-next-line no-await-in-loop
+      live = await state(tab);
+    }
+    return live;
+  } finally {
+    await holdExactly(new Set());
   }
-  return live;
 }
 
 async function waitUntil(tab, predicate, { budgetMs = 25_000, intervalMs = 150, label = 'checkpoint' } = {}) {
