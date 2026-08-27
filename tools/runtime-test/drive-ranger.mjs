@@ -52,6 +52,7 @@ import {
   waitForSample,
 } from './in-page-driver.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
 import { KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
@@ -97,7 +98,11 @@ function assertBudget(where) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const deadlineAfter = (ms) => Date.now() + ms;
-const STICK_PX = 46;
+// DERIVED, not retyped (GQ-007): a hand-typed 46 here went stale against input/touch.js's own
+// STICK_RADIUS_PX when the 2026-08-27 speed-up grew the stick to 64px. A deflection metred against
+// the wrong radius is a different magnitude on the real stick, which is a different speed law --
+// exactly the class drive-village.mjs measured when its "fine" legs started running.
+const STICK_PX = STICK_RADIUS_PX;
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -411,7 +416,12 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // distance-over-speed instead of one pulse per round trip; the pulsed leg then places him exactly.
 async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
-  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin));
+  // `releaseOnArrival`, already proven in drive-village.mjs. Without it, the thumb stays down for a
+  // poll interval plus a CDP round trip after the in-page latch, and a stick at full deflection
+  // RUNS through that gap -- which on this file's throttled sanctuary phase is exactly the
+  // overshoot-then-snap slide that walked a latched-at-0.03m hero back out to 3.55m.
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin,
+    { releaseOnArrival: true }));
   await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
   await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
   let walk;
@@ -723,8 +733,37 @@ async function phaseSanctuary() {
   const { tab, server } = await boot('sanctuary', { withSatchel: false, cpuThrottle: SANCTUARY_THROTTLE });
   try {
     await pollUntil(tab, (state) => state.ranger?.rangerHere === true, 25000);
-    await startApproachRecorder(tab, 'wren-sanctuary');
+    // The walk-up gets its own recording, for DIAGNOSTICS: which of the four faults a bad approach
+    // was. It is not the verdict window -- see below.
+    await startApproachRecorder(tab, 'wren-approach');
     await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
+    // SETTLE-TOLERANT, before the stand begins rather than instead of judging it: verify the walk's
+    // own return position actually HELD, and re-approach (bounded, cheap against the budget) if
+    // prediction reconciliation slid the hero back out after the latch. This is the exact failure
+    // the hosted run measured -- "closest 0.03m ... ended 3.55m ... 6 snap(s)": latched essentially
+    // on top of Wren, then settled outside her radius before the conversation was recorded.
+    // releaseOnArrival above removes the mechanism; this loop is the belt for the suspenders, the
+    // same pair drive-old-beacon.mjs wears at Rowan. The assertions below are untouched.
+    let stood = await state(tab);
+    let away = Math.hypot(stood.heroPos[0] - RANGER.at[0], stood.heroPos[1] - RANGER.at[1]);
+    for (let retry = 0; retry < 2 && away > 1.6; retry += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 20000);
+      // eslint-disable-next-line no-await-in-loop
+      stood = await state(tab);
+      away = Math.hypot(stood.heroPos[0] - RANGER.at[0], stood.heroPos[1] - RANGER.at[1]);
+    }
+    const walkUp = await approachStory(tab, 'wren-approach');
+    console.log(`    walk-up: ${walkUp.summary}`);
+
+    // THE VERDICT WINDOW IS THE STAND, so the recorder for it starts once the child is actually
+    // standing there. The first version started one recorder before the walk and judged everything
+    // it caught, which asked a different question than this phase's own name: on a 12x-throttled
+    // runner the walk itself is most of the frames, so a clean stand could still "fail" on frames
+    // recorded mid-journey -- and a wolf nick taken OUT on the road (legitimate country, outside
+    // the sanctuary being ruled on) could fail "kept every hit point while she TALKED". The
+    // walk-up's own dangers are the arrival phase's assertions, made from its own recording above.
+    await startApproachRecorder(tab, 'wren-sanctuary');
 
     // Stand there. No input at all -- this is a child listening, which is exactly the posture the
     // defect punished.
