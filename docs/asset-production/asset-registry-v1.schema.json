@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galashots.github.io/galaquest-public/asset-registry-v1.schema.json",
+  "title": "GalaQuest Asset Registry v1",
+  "additionalProperties": false,
+  "type": "object",
+  "required": ["schema", "generated_utc", "authority", "base_sha", "historical_sources", "provider_reconciliation", "animation_lab_interface", "records"],
+  "properties": {
+    "schema": { "const": "galaquest.asset-registry/1" },
+    "generated_utc": { "type": "string", "minLength": 1 },
+    "authority": { "const": "current canonical asset inventory" },
+    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "historical_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role"],
+        "properties": { "path": { "type": "string" }, "role": { "type": "string" } }
+      }
+    },
+    "provider_reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_utc", "method", "historical_task_records", "task_not_found", "stale_signed_url_tasks", "status", "no_paid_operations", "records"],
+      "properties": {
+        "observed_utc": { "type": "string" },
+        "method": { "type": "string" },
+        "historical_task_records": { "type": "integer", "minimum": 0 },
+        "task_not_found": { "type": "integer", "minimum": 0 },
+        "stale_signed_url_tasks": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string" },
+        "no_paid_operations": { "type": "boolean" },
+        "records": { "type": "array", "items": { "$ref": "#/$defs/provider-record" } }
+      }
+    },
+    "animation_lab_interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consumer", "required_evidence", "exclusions"],
+      "properties": {
+        "consumer": { "type": "string" },
+        "required_evidence": { "type": "array", "items": { "type": "string" } },
+        "exclusions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "records": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/record" } }
+  },
+  "$defs": {
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence_refs"],
+      "properties": {
+        "status": { "enum": ["PASS", "FAIL", "UNKNOWN", "N/A"] },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "metric": {
+      "anyOf": [
+        { "type": "integer", "minimum": 0 },
+        { "enum": ["UNKNOWN", "N/A"] }
+      ]
+    },
+    "rights-fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value", "evidence_refs"],
+      "properties": {
+        "status": { "enum": ["KNOWN", "UNKNOWN", "N/A"] },
+        "value": { "type": ["string", "null"] },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "custody-location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "durable"],
+      "properties": {
+        "kind": { "enum": ["GIT", "DRIVE", "PROVIDER", "LOCAL"] },
+        "durable": { "type": "boolean" },
+        "git_ref": { "type": ["string", "null"] },
+        "git_commit_sha": { "type": ["string", "null"] },
+        "repo_path": { "type": ["string", "null"] },
+        "git_blob_oid": { "type": ["string", "null"] },
+        "drive_file_id": { "type": ["string", "null"] },
+        "drive_file_url": { "type": ["string", "null"] },
+        "archive_path": { "type": ["string", "null"] },
+        "drive_folder_url": { "type": ["string", "null"] },
+        "provider_context": { "type": ["string", "null"] },
+        "provider_task_ids": { "type": "array", "items": { "type": "string" } },
+        "local_evidence_label": { "type": ["string", "null"] }
+      }
+    },
+    "provider-record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "task_kind", "provider_status", "consumed_credits", "output_handles", "download_available", "download_attempt_result", "recoverable_without_spend", "notes"],
+      "properties": {
+        "asset_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "task_kind": { "type": "string" },
+        "provider_status": { "type": "string" },
+        "consumed_credits": { "type": ["number", "null"] },
+        "output_handles": { "type": "array", "items": { "type": "string" } },
+        "download_available": { "type": "boolean" },
+        "download_attempt_result": { "type": "string" },
+        "recoverable_without_spend": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "evidence_ref": { "type": "string" }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "display_name", "asset_kind", "lifecycle", "custody", "recoverability", "custody_locations", "source", "provider", "structural_metrics", "rights", "parent_asset_id", "derivative_of", "qualification_gates", "evidence_refs", "notes"],
+      "properties": {
+        "asset_id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$" },
+        "display_name": { "type": "string" },
+        "asset_kind": { "enum": ["model", "texture", "character", "gear"] },
+        "lifecycle": { "enum": ["PLANNED", "SOURCE_ONLY", "GENERATED", "QUALIFYING", "QUALIFIED", "PRODUCTION", "REJECTED", "SUPERSEDED", "HISTORICAL"] },
+        "custody": { "enum": ["IN_GIT", "IN_DRIVE", "PROVIDER_ONLY", "LOCAL_ONLY", "MULTIPLE", "MISSING", "UNKNOWN"] },
+        "recoverability": { "enum": ["VERIFIED", "VERIFIED_FROM_GIT", "VERIFIED_FROM_DRIVE", "VERIFIED_FROM_PROVIDER", "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT", "STALE_SIGNED_URL", "MISSING_BYTES", "UNKNOWN"] },
+        "custody_locations": { "type": "array", "items": { "$ref": "#/$defs/custody-location" } },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "size_bytes", "authority"],
+          "properties": {
+            "path": { "type": ["string", "null"] },
+            "sha256": { "type": ["string", "null"] },
+            "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
+            "authority": { "type": "string" }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["task_ids", "context_alias"],
+          "properties": {
+            "task_ids": { "type": "array", "items": { "$ref": "#/$defs/provider-record" } },
+            "context_alias": { "type": ["string", "null"] }
+          }
+        },
+        "structural_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file_size_bytes", "mesh_count", "primitive_count", "vertex_count", "triangle_count", "material_count", "skin_count", "joint_count", "animation_clip_count"],
+          "properties": {
+            "file_size_bytes": { "$ref": "#/$defs/metric" },
+            "mesh_count": { "$ref": "#/$defs/metric" },
+            "primitive_count": { "$ref": "#/$defs/metric" },
+            "vertex_count": { "$ref": "#/$defs/metric" },
+            "triangle_count": { "$ref": "#/$defs/metric" },
+            "material_count": { "$ref": "#/$defs/metric" },
+            "skin_count": { "$ref": "#/$defs/metric" },
+            "joint_count": { "$ref": "#/$defs/metric" },
+            "animation_clip_count": { "$ref": "#/$defs/metric" }
+          }
+        },
+        "rights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provenance", "license", "usage_rights"],
+          "properties": {
+            "provenance": { "$ref": "#/$defs/rights-fact" },
+            "license": { "$ref": "#/$defs/rights-fact" },
+            "usage_rights": { "$ref": "#/$defs/rights-fact" }
+          }
+        },
+        "parent_asset_id": { "type": ["string", "null"] },
+        "derivative_of": { "type": ["string", "null"] },
+        "qualification_gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provenance", "structural", "materials", "rig", "animation", "performance", "visual", "runtime", "owner"],
+          "properties": {
+            "provenance": { "$ref": "#/$defs/gate" },
+            "structural": { "$ref": "#/$defs/gate" },
+            "materials": { "$ref": "#/$defs/gate" },
+            "rig": { "$ref": "#/$defs/gate" },
+            "animation": { "$ref": "#/$defs/gate" },
+            "performance": { "$ref": "#/$defs/gate" },
+            "visual": { "$ref": "#/$defs/gate" },
+            "runtime": { "$ref": "#/$defs/gate" },
+            "owner": { "$ref": "#/$defs/gate" }
+          }
+        },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}
