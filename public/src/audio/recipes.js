@@ -299,6 +299,36 @@ export const RECIPES = Object.freeze({
     }),
   ]),
 
+  // ── R1: kill drops ────────────────────────────────────────────────────────────────────────────
+  //
+  // Coins reuse coin-chime outright (a coin off a kill is still a coin -- world/enemyDrops.js's own
+  // header is explicit that it is worth exactly the same 1 a cart's coin is). Hearts and gear are new:
+  // main.js plays these directly off world/enemyDropsPresenter.js's own arrival result, the same
+  // "diff the state, do not chase a wire event" discipline coin-chime/shard-resonance already follow
+  // (there is no encounter event behind a drop landing).
+
+  // A heart heals; the recipe has to feel like RECEIVING rather than FINDING. Two warm, SLOW tones a
+  // fourth apart with a soft attack -- deliberately the gentlest thing in this table (gainPeak tops
+  // out at 0.3), opposite in shape from both currency chimes' bright percussive snap.
+  'heart-mend': Object.freeze([
+    Object.freeze({
+      type: 'tone', startSeconds: 0, durationSeconds: 0.3, frequencyStart: 587.33, frequencyEnd: 587.33, gainPeak: 0.24,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.12, durationSeconds: 0.45, frequencyStart: 783.99, frequencyEnd: 783.99, gainPeak: 0.3,
+    }),
+  ]),
+
+  // Gear: a small metallic clink (a short upward tone sweep) plus a noise transient for the sparkle --
+  // distinct from workshop-build's own metal-and-noise pair by being much shorter and having no low
+  // tone underneath it at all (this is a small pickup, not a whole structure resettling).
+  'gear-find': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.05, gainPeak: 0.22 }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.02, durationSeconds: 0.2, frequencyStart: 698.46, frequencyEnd: 1046.5, gainPeak: 0.3,
+    }),
+  ]),
+
   ...SIEGE_RECIPES,
 });
 
@@ -325,6 +355,10 @@ export const BEACON_ARRIVAL_RECIPE_NAME = 'beacon-cold';
 // celebrateLevelUp. A sound hung off the announcement would replay on every reconnect where the
 // device teaches its own facts back and the server announces them straight to it.
 export const LEVEL_UP_RECIPE_NAME = 'level-up';
+// R1: a kill drop's own two new pickups -- same DIRECTLY_PLAYED group as the two GP2 currencies just
+// above, and for the identical reason (no wire event behind either one).
+export const HEART_PICKUP_RECIPE_NAME = 'heart-mend';
+export const GEAR_PICKUP_RECIPE_NAME = 'gear-find';
 export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   RELIGHT_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
@@ -334,6 +368,8 @@ export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   WORKSHOP_BUILD_RECIPE_NAME,
   BEACON_ARRIVAL_RECIPE_NAME,
   LEVEL_UP_RECIPE_NAME,
+  HEART_PICKUP_RECIPE_NAME,
+  GEAR_PICKUP_RECIPE_NAME,
 ]);
 
 /**
