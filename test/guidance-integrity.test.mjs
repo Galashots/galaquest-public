@@ -22,6 +22,7 @@ const REPO = fileURLToPath(new URL('..', import.meta.url));
 const GUIDANCE_FILES = [
   'AGENTS.md',
   'README.md',
+  'docs/CODEBASE.md',
   'docs/GUIDANCE.md',
   'docs/WORKFLOW.md',
   'docs/GALAQUEST_VISUAL_AUTHORITY.md',

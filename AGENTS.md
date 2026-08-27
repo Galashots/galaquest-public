@@ -70,6 +70,7 @@ Do not bulk-copy private branches or preserve duplicate active implementations. 
 Read these when relevant; do not invent missing private prerequisites:
 
 - `docs/GUIDANCE.md` — guidance hierarchy, maintenance, and linting policy
+- `docs/CODEBASE.md` — code map, quickstart, and elevated-acceptance surfaces
 - `docs/product/PRODUCT_VISION.md` — settled product direction
 - `docs/product/PROGRESSION_CONTRACT_V0.md` — shared Hero/gear/POWER/enemy/learning progression design contract for the current push
 - `docs/product/PRODUCT_SYSTEM.md` — product-memory, provenance, board, and issue lifecycle

@@ -6,7 +6,7 @@ This workflow applies to the public active repository. It is deliberately recove
 
 1. Orient from the current checkout using the orientation sequence below.
 2. Confirm the repository is `Galashots/galaquest-public`, refresh public `main`, and record the exact starting SHA.
-3. Read `AGENTS.md`, then only the public authorities relevant to the task (`docs/GUIDANCE.md`, `docs/MISTAKES.md`, visual/pipeline docs, tests, workflows, contracts).
+3. Read `AGENTS.md`, then only the public authorities relevant to the task (`docs/CODEBASE.md` for the code map, `docs/GUIDANCE.md`, visual/pipeline docs, tests, workflows, contracts). Route into `docs/MISTAKES.md` through its index — skim or search by tag for the surfaces the task touches; do not read the ledger end to end.
 4. Refresh live GitHub branch/PR/CI/deployment state before trusting a handoff or prior chat report.
 5. Run the relevant baseline tests from the checkout when execution is available. Record actual results, not remembered counts.
 

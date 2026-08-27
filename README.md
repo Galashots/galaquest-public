@@ -60,8 +60,9 @@ had actually tested.
 than one client connected** — every extra client draws its own hero, so one stale tab silently puts a
 second hero in the frame. Open the captures and look at them; that is the entire point of it.
 
-For the full public development and evidence flow, read `docs/WORKFLOW.md`. For how the Markdown
-guidance itself is maintained and linted, read `docs/GUIDANCE.md`.
+For a map of the code itself and how to run it, read `docs/CODEBASE.md`. For the full public
+development and evidence flow, read `docs/WORKFLOW.md`. For how the Markdown guidance itself is
+maintained and linted, read `docs/GUIDANCE.md`.
 
 ## Design notes
 
