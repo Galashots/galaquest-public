@@ -476,9 +476,21 @@ console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEv
 // moment lands at most one frame late. So a landed swing should repeat roughly every
 // SWING_SECONDS + one frame, e.g. at a 4fps (250ms) frame that is a landed swing about every 1.75s,
 // not whatever multiple of it a blind interval and a stale four-tap-old gap happened to land on.
+// TAP FIRST, READ EVERY SECOND ITERATION -- drive-first-level-up's own kill-loop shape, which is
+// the one that has actually finished this fight on a hosted runner. The read-first version of this
+// loop was measured at cf5905c: aim was finally right (`swing gaps: [1.2,1,1.04,1,1,1,1,1]`) but
+// only 8 swings went out in 91 seconds, the hero was knocked down 8 times, and the wolf bottomed at
+// 10hp -- because a CDP read on a 333ms-frame machine costs most of a frame, and paying it BEFORE
+// every tap stretched the swing cadence past what the bite race allows (a knockdown heals a solo
+// wolf to full, so a fight that trades slightly too slow cannot be won at all, only re-fought).
+// A refused tap costs nothing -- the rules ignore it -- so the tap goes out on the blind frame
+// cadence and the recorder is read every SECOND iteration for the kill, the gap and the down state:
+// wide enough to halve the read tax, tight enough that drift or a respawn is caught within two
+// frames. Readiness still gates nothing here ON PURPOSE; it is what the every-other read verifies
+// AFTER the fact via gapsAtRead, keeping the aim diagnostics the readiness rework introduced.
 let killed = false;
 let lastGap = 0;
-const gapsAtTap = [];
+const gapsAtRead = [];
 const killDeadline = Date.now() + 120000;
 // The wall clock stays the real budget (review-suite.test.mjs requires it); this iteration cap is
 // only a runaway guard, sized generously above the fastest this loop could plausibly cycle so it
@@ -486,38 +498,38 @@ const killDeadline = Date.now() + 120000;
 for (let tap = 0; tap < 20000 && !killed && Date.now() < killDeadline; tap += 1) {
   const cycleStart = Date.now();
   // eslint-disable-next-line no-await-in-loop
+  await touch('touchStart', [{ x: attackX, y: attackY }]);
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(60);
+  // eslint-disable-next-line no-await-in-loop
+  await touch('touchEnd', []);
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+  if (tap % 2 !== 0) continue;
+  // eslint-disable-next-line no-await-in-loop
   const log = await readFight();
   killed = log.samples.some((sample) => sample.hp <= 0 || sample.mode === 'dying' || sample.mode === 'dead');
   if (killed) break;
   const latest = log.samples[log.samples.length - 1];
   lastGap = latest?.gap ?? 0;
-  const ready = latest !== undefined && canAttack({
+  if (latest !== undefined && canAttack({
     hero: { downSeconds: latest.downSeconds, swingSeconds: latest.swingSeconds, cooldown: latest.cooldown },
-  });
-  if (lastGap > ATTACK_REACH) {
-    // Out of reach outranks readiness: a knocked-down hero is both not-ready and far away, and
-    // reengageAfterRecovery already waits out the down state before it walks, so this one call
-    // covers "still down" and "up but too far" alike.
-    // eslint-disable-next-line no-await-in-loop
-    const approach = await reengageAfterRecovery();
-    if (!approach?.arrived) continue;
-  } else if (ready) {
-    gapsAtTap.push(Number(lastGap.toFixed(2)));
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchStart', [{ x: attackX, y: attackY }]);
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(60);
-    // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', []);
+  })) {
+    gapsAtRead.push(Number(lastGap.toFixed(2)));
   }
-  // Mid-swing and in reach: neither branch above fires, and the iteration spends nothing beyond the
-  // read that decided so -- the tap that will actually land is the one after the swing ends.
-  // eslint-disable-next-line no-await-in-loop
-  await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
+  if (latest?.heroDown || lastGap > ATTACK_REACH - 0.3) {
+    // RE-CLOSE ON A MARGIN INSIDE REACH, not on its edge (drive-first-level-up's own lesson): a
+    // swing thrown while drifting outward from 1.5m misses by contact time. A knocked-down hero is
+    // both not-ready and about to respawn metres away, and reengageAfterRecovery waits out the
+    // down state before it walks, so this one call covers "down" and "drifting out" alike.
+    // eslint-disable-next-line no-await-in-loop
+    await reengageAfterRecovery();
+  }
 }
-// The gap the hero was actually standing at when each swing went out. ATTACK_REACH is 1.7m, so
-// this is the line that says whether a missed swing missed because of RANGE or something else.
-console.log(`  swing gaps: ${JSON.stringify(gapsAtTap)}`);
+// The gap at each every-other-frame read that found the hero standing, swing-free and in reach --
+// i.e. the moments a blind tap was actually eligible to land. ATTACK_REACH is 1.7m, so this is the
+// line that says whether a fight that stalls stalled on RANGE or on something else.
+console.log(`  ready-and-in-reach gaps at read: ${JSON.stringify(gapsAtRead)}`);
 const fightLog = await readFight();
 const knockdowns = fightLog.samples.filter((sample, index) =>
   sample.heroDown && !fightLog.samples[index - 1]?.heroDown).length;
