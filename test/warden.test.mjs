@@ -126,6 +126,53 @@ test('sabotage: the asymmetry check DOES fail against a centred brazier and a se
   assert.equal(brazierIsOneAsymmetricAccent(twoAccents), false);
 });
 
+// ── the playtest's "look like an enemy" pass ──────────────────────────────────────────────────────
+//
+// Real kids called the shipped body out directly: it needed to look "much cooler" and "actually
+// look like an enemy". The fix adds silhouette -- a jagged crown and two frost-spike shoulders --
+// entirely in BEACON_STONE_COLOR, the SAME colour world/coldSeals.js's own frost ring already reads
+// as rime rather than rock (that file's own header), so the brief's one-accent rule stays intact:
+// hostility comes from SHAPE here, the cold light stays the brazier's alone. (Glowing eyes and the
+// icy aura are presenter-level glow sprites in enemies/warden.js's buildWarden, not baked parts, for
+// the identical reason -- see that function's own comment.)
+test('the crown and shoulder-spikes exist, are frost-stone (not a second accent colour), and are symmetric', () => {
+  const crown = spec.torso.find((part) => part.name === 'crown');
+  assert.ok(crown, 'a crown/horn part must exist on the head');
+  assert.equal(crown.color, BEACON_STONE_COLOR, 'the crown reads as frost-rimed stone, not a new colour');
+  assert.ok(Math.abs(crown.at[0]) < 1e-9, 'the crown sits on the centreline -- the asymmetry lives on the brazier only');
+
+  const spikes = spec.torso.filter((part) => part.name === 'shoulder-spike');
+  assert.equal(spikes.length, 2, 'one spike per shoulder');
+  for (const spike of spikes) assert.equal(spike.color, BEACON_STONE_COLOR);
+  assert.ok(Math.abs(spikes[0].at[0] + spikes[1].at[0]) < 1e-9, 'the spikes mirror left/right exactly');
+  assert.notEqual(Math.sign(spikes[0].at[0]), Math.sign(spikes[1].at[0]), 'one spike per side, not both stacked on one');
+
+  // Still exactly one accent after the additions -- the whole point of using stone, not a new hue.
+  assert.equal(brazierIsOneAsymmetricAccent(spec.torso), true);
+});
+
+test('the crown rises clear above the head without breaking the silhouette\'s own height ceiling', () => {
+  const head = spec.torso.find((part) => part.name === 'head');
+  const crown = spec.torso.find((part) => part.name === 'crown');
+  const headTop = topOf(head);
+  const crownTop = topOf(crown);
+  assert.ok(crownTop > headTop, 'a crown that does not clear the head is not a crown');
+  // Re-proves the SAME "under the Beacon" ceiling test #2 above pins, now against the tallest part
+  // on the body rather than assuming it is still the head -- the crown addition must not have
+  // quietly become the part that breaks that promise.
+  const overallTop = spec.torsoPivotY + Math.max(...spec.torso.map(topOf));
+  assert.ok(overallTop <= 3.0, `${overallTop.toFixed(2)} m starts arguing with the 6.1 m Beacon`);
+});
+
+test('the shoulder-spikes sit outboard of the brazier -- a frost spike must never grow through the one accent', () => {
+  const spikes = spec.torso.filter((part) => part.name === 'shoulder-spike');
+  const brazierParts = spec.torso.filter((part) => part.name.startsWith('brazier'));
+  const accentX = brazierParts[0].at[0];
+  const sameSideSpike = spikes.find((s) => Math.sign(s.at[0]) === Math.sign(accentX));
+  assert.ok(Math.abs(sameSideSpike.at[0]) > Math.abs(accentX),
+    'the same-side spike must stand further out than the brazier it shares a shoulder with');
+});
+
 // ── the budget ────────────────────────────────────────────────────────────────────────────────────
 
 test('four sub-meshes, small part counts: the one animated structure stays cheap', () => {
