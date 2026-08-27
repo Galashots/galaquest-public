@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- maximum-scale=1, user-scalable=no: a child trapped inside iOS's double-tap zoom, especially
+         in Add-to-Home-Screen STANDALONE mode where there is no browser chrome (no address bar, no
+         pinch-to-reset affordance) to rescue them, is indistinguishable from the game being broken.
+         This alone stops the platform from ever entering a zoomed state at all; index.html's own
+         touch-action rules and main.js's dblclick/touchend guards are the belt-and-braces for the
+         gestures a browser can still try to interpret as zoom intent even with scaling disabled. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <title>GalaQuest Runtime Slice</title>
     <!-- Zero-network: a bare "no icon yet" declaration, not a real icon asset (Y/Task F1). Without
          this, a browser with no <link rel="icon"> still auto-requests /favicon.ico and logs a 404 --
@@ -704,15 +710,19 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
-      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
-         and these two were the only controls in the game under that floor -- flagged in the
-         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
-         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
-         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
+      /* 48 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
+         and these two were the only controls in the game under the original 44px floor -- flagged in
+         the Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
+         held every one of ITS targets at 44 while these stayed short. Raised past that floor to 48
+         after the real-iPad playtest (task 6): the close button is the one control a stranded child
+         MUST be able to hit, so it gets margin above the platform minimum rather than exactly meeting
+         it. The ✕ glyph is left at 1.1rem: what has to grow is the thing a thumb has to hit, not the
+         thing an adult reads. */
       #hero-screen-close {
-        width: 44px; height: 44px; display: grid; place-items: center;
+        width: 48px; height: 48px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
-        background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
       }
       /* One box per slot, gold-ringed and named when filled, dim and lock-glyphed when GP1 has no
          item to put there yet -- section 8's five slots, only Weapon interactive today. */
@@ -863,15 +873,12 @@
         font: 800 1.1rem/1.2 system-ui, sans-serif; letter-spacing: 0.06em;
         pointer-events: auto;
       }
-      /* 44 px, not 36. A five-year-old's tap lands within about a centimetre of where they aimed,
-         and these two were the only controls in the game under that floor -- flagged in the
-         Checkpoint 0 audit, and flagged again by the profile gate's own CSS comment below, which
-         held every one of ITS targets at 44 while these stayed short. The ✕ glyph is left at 1rem:
-         what has to grow is the thing a thumb has to hit, not the thing an adult reads. */
+      /* 48 px -- same reason and same history as #hero-screen-close's own comment above. */
       #village-board-close {
-        width: 44px; height: 44px; display: grid; place-items: center;
+        width: 48px; height: 48px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
-        background: transparent; color: #fff; font-size: 1rem; line-height: 1; padding: 0;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
       }
       /* One box per node, section 4's own five. Gold-ringed when actionable (Workshop today), dim
          when future ("not yet" communicated by treatment, not by a fabricated lock icon implying a
@@ -1055,7 +1062,11 @@
          the one that moves: the child-facing hint keeps the natural position. Harmless when the
          status line is hidden, which is almost always. */
       #game[data-pointer="mouse"] #runtime-status { bottom: 3.2rem; }
-      #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 112px; height: 112px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
+      /* 128px = 2 x input/touch.js's STICK_RADIUS_PX (64). moveRingTo() there positions this
+         element's top-left corner as (touch x/y) - STICK_RADIUS_PX, which only lands the touch at
+         the ring's visual centre if the ring's own box is exactly 2 x that radius -- so this stays
+         in lockstep with that constant rather than being sized independently. */
+      #touch-stick { position: absolute; left: 1rem; bottom: 1rem; width: 128px; height: 128px; border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(18 28 38 / 28%); touch-action: none; }
       #touch-stick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / 72%); transform: translate(-50%, -50%); pointer-events: none; }
       /* RUNNING. younger players told us at the first child playtest that their character moved too slowly,
          and the most likely reason is that nothing in this game ever said a harder push was faster
@@ -1112,10 +1123,13 @@
         margin: 0; color: #f2b33d;
         font: 800 1.5rem/1.15 system-ui, sans-serif; letter-spacing: 0.02em;
       }
+      /* 48px, matching #hero-screen-close/#village-board-close's own bump -- one consistent floor
+         across every overlay's own way out, task 6's "belt and braces" applied here too. */
       #profile-gate-close {
-        flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+        flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
         background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
       }
       /* Hidden outright while a first hero is being named: there is nowhere to go back to, and a
          dismissable question a child cannot answer any other way is a dead end. */
@@ -1207,6 +1221,27 @@
         font: 600 0.85rem/1.35 system-ui, sans-serif;
       }
       #profile-gate-notice[data-shown="false"] { display: none; }
+      /* TASK 3(b): explicit touch-action on every piece of overlay chrome, rather than relying on it
+         being inherited from #game's own `touch-action: none` (line 15). Every OTHER interactive
+         control in this file already states its own value instead of leaning on that ancestor --
+         #hero-button, #attack-button, #touch-stick, #profile-chip all do -- and these three overlays'
+         own chrome was the gap a real-device audit found: nothing here said so explicitly, so a
+         double-tap on, say, the owned-item strip or a village node was one more way into iOS's zoom.
+         `none`, not `manipulation`, for all of these: nothing here needs the browser's own panning
+         or pinch-to-zoom gesture, only clicks. */
+      #hero-screen-header, #hero-screen-close, #hero-slots, .hero-slot, #hero-item-list, .hero-item,
+      #hero-item-card, #hero-equip-button,
+      #village-board-header, #village-board-close, #village-board-nodes, .village-board-node,
+      #village-board-detail, #village-board-upgrade-button,
+      #profile-gate, #profile-gate-panel, #profile-gate-header, #profile-gate-close,
+      .profile-card-choose, .profile-card-remove, .profile-card-add, #profile-gate-confirm {
+        touch-action: none;
+      }
+      /* The one text field in the game is the exception: `manipulation`, not `none`, so iOS's normal
+         text-editing touches (placing the caret, double-tapping to select a word) keep working, and
+         only the double-tap-to-ZOOM gesture -- the thing this whole task is about -- is suppressed.
+         That is exactly what `manipulation` is defined to allow. */
+      #profile-gate-name { touch-action: manipulation; }
       /* The HUD's own "who is playing" chip, and the only way back into the gate once a hero is
          chosen. Named rather than an icon: the child's own hero name is the most recognisable
          thing that could sit there. */
@@ -1383,7 +1418,12 @@
            readers. Not gated behind data-thumb-surface: it is a normal button outside the movement/
            attack thumb zones, not a second stick or attack surface. -->
       <button id="hero-button" type="button" aria-label="Hero" aria-pressed="false">🗡</button>
-      <div id="hero-screen" role="dialog" aria-modal="true" aria-label="Hero" data-shown="false">
+      <!-- data-ui-surface: input/cameraGesture.js's isInteractiveUiTarget() refuses to adopt a
+           pointer whose event.target sits inside this attribute (matched via closest(), so any piece
+           of chrome below tags the whole panel) -- see that function's own header for why. Does NOT
+           cover the deliberately click-through middle: pointer-events: none there means a tap in the
+           empty centre never has a target inside this element at all. -->
+      <div id="hero-screen" role="dialog" aria-modal="true" aria-label="Hero" data-shown="false" data-ui-surface>
         <div id="hero-screen-header">
           <span id="hero-screen-title">HERO</span>
           <button id="hero-screen-close" type="button" aria-label="Close Hero screen">✕</button>
@@ -1432,7 +1472,8 @@
       <!-- Who is playing, and the way back to the gate. The hero's own NAME rather than an icon:
            it is the most recognisable thing that could sit here for the child it belongs to. -->
       <button id="profile-chip" type="button" aria-label="Change who is playing"></button>
-      <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false">
+      <!-- data-ui-surface: same reason and same mechanism as #hero-screen's own comment above. -->
+      <div id="village-board-screen" role="dialog" aria-modal="true" aria-label="Village Board" data-shown="false" data-ui-surface>
         <div id="village-board-header">
           <span id="village-board-title">VILLAGE</span>
           <button id="village-board-close" type="button" aria-label="Close Village Board">✕</button>
@@ -1485,7 +1526,12 @@
            which hero is theirs. Cards are BUILT by progression/profileGate.js rather than declared
            here, because the number of heroes genuinely varies from one to four and markup for four
            with three hidden is a shape that lies about what is on screen. -->
-      <div id="profile-gate" role="dialog" aria-modal="true" aria-label="Who is playing" data-shown="false">
+      <!-- data-ui-surface: same reason as #hero-screen's own comment above. This screen has no
+           click-through middle (it is opaque and pointer-events: auto across its whole area while
+           shown -- see its own CSS comment), so this is redundant with that today; kept for the same
+           reason the other two carry it, so the rule does not depend on which overlays currently
+           happen to be opaque. -->
+      <div id="profile-gate" role="dialog" aria-modal="true" aria-label="Who is playing" data-shown="false" data-ui-surface>
         <div id="profile-gate-panel">
           <!-- Only on the naming screen, where there are no cards and therefore nothing else a child
                who cannot read can look at. Above the question, because it is the part they can
