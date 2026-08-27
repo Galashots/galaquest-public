@@ -1,7 +1,7 @@
 // test/mistakes-ledger.test.mjs
 //
-// Makes the docs/MISTAKES.md ratchet mechanical rather than aspirational. Three checks, per the
-// ratchet table at the top of that file:
+// Makes the docs/MISTAKES.md ratchet mechanical rather than aspirational. The checks, per the
+// ratchet table and the index header at the top of that file:
 //   1. Every ENFORCED entry names a test file (backtick-quoted, after "Enforced by:") that actually
 //      exists in the repo. An ENFORCED claim pointing at a deleted or renamed test is a false claim
 //      of enforcement -- exactly the kind of drift docs/MISTAKES.md exists to stop happening to
@@ -9,6 +9,11 @@
 //   2. Every GQ-NNN id is unique -- never reused, so a citation always resolves to one entry.
 //   3. Every RULE entry with Hits >= 3 states a reason it isn't enforced (a "Not enforced because:"
 //      line). An unexplained RULE at 3+ hits is itself a finding, per the ratchet table.
+//   4. The index table and the detailed entries are a bijection -- every entry has exactly one
+//      index row, every row exactly one entry, so duplicates, missing rows, and stale rows all
+//      fail, not just missing ones.
+//   5. Every index tag comes from the fixed vocabulary the index itself declares, so tag greps
+//      stay reliable.
 //
 // This is a text scanner, the same shape as test/no-npm-imports.test.mjs and
 // test/combat-purity.test.mjs: walk the source, regex out the structure, fail naming the offending
@@ -116,14 +121,28 @@ function entryKey(header) {
 
 const indexRows = parseIndexRows(source);
 
-test('the docs/MISTAKES.md index matches the entries exactly, both directions', () => {
-  const fromIndex = indexRows.map((r) => `${r.ref} | ${r.title}`).sort();
-  const fromEntries = entries.map((e) => entryKey(e.header)).sort();
-  const missingRows = fromEntries.filter((k) => !fromIndex.includes(k));
-  const staleRows = fromIndex.filter((k) => !fromEntries.includes(k));
-  assert.deepEqual({ missingRows, staleRows }, { missingRows: [], staleRows: [] },
-    'index and entries disagree (add the row in the same commit as the entry):\n  missing rows: '
-    + missingRows.join('\n  missing rows: ') + '\n  stale rows: ' + staleRows.join('\n  stale rows: '));
+test('the docs/MISTAKES.md index and the entries are a bijection', () => {
+  // Multiset comparison, not membership: a duplicated index row must fail even though its key is
+  // still "present", and likewise a duplicated entry. Count each key on both sides and demand the
+  // counts match exactly, at exactly one each.
+  const counts = new Map();
+  const bump = (key, side) => {
+    const c = counts.get(key) ?? { index: 0, entries: 0 };
+    c[side] += 1;
+    counts.set(key, c);
+  };
+  for (const r of indexRows) bump(`${r.ref} | ${r.title}`, 'index');
+  for (const e of entries) bump(entryKey(e.header), 'entries');
+  const violations = [];
+  for (const [key, c] of counts) {
+    if (c.index === 1 && c.entries === 1) continue;
+    if (c.index === 0) violations.push(`missing index row for entry: ${key}`);
+    else if (c.entries === 0) violations.push(`stale index row with no entry: ${key}`);
+    else violations.push(`duplicated (${c.index} index row(s), ${c.entries} entr(y/ies)): ${key}`);
+  }
+  assert.deepEqual(violations, [],
+    'index and entries must match one-to-one (add/remove the row in the same commit as the entry):\n  '
+    + violations.join('\n  '));
 });
 
 test('every docs/MISTAKES.md index tag comes from the declared vocabulary', () => {

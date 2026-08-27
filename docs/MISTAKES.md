@@ -87,6 +87,7 @@ vocabulary. A new entry adds its row in the same commit.
 | — | Before adding a field to a protocol, read what the producer already publishes. | net |
 | — | A scripted edit that is not asserted is a change you have not made. | harness |
 | — | An instrument that covers a subset reports on the subset, and reads as covering the whole. | evidence, tests |
+| GQ-023 | One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire. | net, tests |
 
 ---
 

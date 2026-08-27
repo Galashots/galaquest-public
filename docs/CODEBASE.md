@@ -18,13 +18,21 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
 ## Server
 
 - `server.mjs` — static file server for `public/`, attaches the game server and forge API.
-- `net/gameServerCore.mjs` — the authoritative simulation. Server state is the truth the clients
-  reconcile toward.
-- `net/gameServer.mjs` — binds the core to the transport and the reward store.
+- `net/gameServerCore.mjs` — **the authoritative server**: simulation, transport attach, wire
+  snapshot, and reward-store wiring all live here. Clients send intent; this decides where
+  everyone actually is.
+- `net/gameServer.mjs` — a thin compatibility adapter over the core for older single-wolf
+  fixtures; it re-exports the core and holds no authority of its own. Change the core, not the
+  adapter.
 - `net/wsServer.mjs`, `net/wsFrame.mjs` — WebSocket transport and framing.
 - `net/rewardStore.mjs` — durable progression persistence (SQLite files are created at runtime
   under the gitignored data directory; `data/README.md` describes it).
 - `net/forgeApi.mjs` — HTTP API for the forge surface.
+- Wire message shapes and limits are shared, not duplicated: `public/src/net/protocol.js` /
+  `protocolCore.js` are imported by the server too, so a value crossing the wire has one
+  validation authority in both directions (GQ-023). The same pattern holds for the movement speed
+  law (`public/src/character/speed.js`) and the collision resolver
+  (`public/src/world/obstacles.js`), each imported by both the server and client prediction.
 
 ## Client
 
@@ -35,8 +43,11 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
 - `render/`, `world/`, `camera/` — three.js scene, terrain/props, camera;
 - `character/` — hero rig, gear, locomotion, swing; `public/src/character/gear.js` is the one
   home for gear transforms (see GQ-007 in `docs/MISTAKES.md`);
-- `combat/`, `enemies/`, `companions/` — encounters and creatures;
-- `progression/`, `rewards/`, `village/`, `forge/` — player progression and its presenters;
+- `combat/`, `enemies/`, `companions/` — encounters and creatures (multi-kind enemies with
+  per-kind presentation live in `enemies/`);
+- `progression/`, `rewards/`, `village/`, `forge/` — player progression and its presenters:
+  XP/levels, streaks, and rune chests under `progression/`, kill-XP and toasts under `rewards/`,
+  enemy drops and wayfinding trail under `world/`;
 - `input/`, `ui/`, `audio/` — touch/keyboard input, HUD, sound;
 - `studio/`, `review/`, `debug/` — inspection surfaces (`public/studio.html`,
   `public/forge.html`), not gameplay.
@@ -63,7 +74,9 @@ and gate accordingly under `docs/WORKFLOW.md` (package classes, escalation of ve
 surfaces) — a small diff here is not a small package:
 
 - `net/` and `public/src/net/` — netcode, prediction, reconciliation; wall-clock/frame-rate lessons
-  cluster here (`docs/MISTAKES.md` tags `net`, `harness`).
+  cluster here (`docs/MISTAKES.md` tags `net`, `harness`). Wire caps and decoders
+  (`public/src/net/protocolCore.js`) are one shared authority for both directions — a reused or
+  copied limit is GQ-023's defect, and tests must exercise the real decode seam.
 - `net/rewardStore.mjs` and progression persistence — durable player state; restart/hydration
   lessons apply (tags `persistence`).
 - Shared constants and contracts — `public/src/character/gear.js`,
