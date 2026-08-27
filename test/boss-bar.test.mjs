@@ -97,9 +97,29 @@ test('the CSS accent is derived from BEACON_GLOW_COLOR, not a second guess at th
   assert.ok(BOSS_BAR_CSS.includes(derived), `BOSS_BAR_CSS must carry ${derived}`);
 });
 
-test('the CSS is safe-area aware and reduced-motion safe', () => {
-  assert.ok(BOSS_BAR_CSS.includes('env(safe-area-inset-top'), 'top placement must respect the notch');
+test('the CSS is reduced-motion safe', () => {
   assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(BOSS_BAR_CSS), 'reduced motion must be handled in CSS');
+});
+
+// The bar moved from a fixed top-of-screen readout to an overhead, screen-projected card -- a real
+// playtest asked for it to be "consistent with other enemies", i.e. above the Warden's own head, the
+// same place enemies/nameplate.js already puts every ordinary enemy's name and health. Pinned here
+// as a CSS-text check (not exercised in a browser) so a future edit cannot quietly re-pin it to the
+// top of the screen without a test noticing: overhead means POSITIONED PER FRAME, not pinned to a
+// notch-relative constant.
+test('the bar is positioned overhead (per-frame left/top), not pinned to the top of the screen', () => {
+  assert.ok(!BOSS_BAR_CSS.includes('env(safe-area-inset-top'),
+    'the card must not be pinned under the device notch any more -- it now rides the Warden\'s own head');
+  assert.ok(/translate\(-50%,\s*-100%\)/.test(BOSS_BAR_CSS),
+    'the card must rise up from its anchor point (bottom-anchored, centred), the same convention a nameplate uses');
+});
+
+// "Segmented HP", per the brief -- a chunky boss bar reads in notches a child can count, not as one
+// smooth wolf-spark dim. Checked as a CSS-text fact rather than rendered pixels, the same level this
+// file's other CSS assertions already work at.
+test('the health track is segmented, not a single smooth fill', () => {
+  assert.ok(BOSS_BAR_CSS.includes('boss-bar-segments'), 'a segment overlay must exist on the track');
+  assert.ok(/repeating-linear-gradient/.test(BOSS_BAR_CSS), 'the segments must be drawn as discrete notches');
 });
 
 test('the DOM half exports the factory shape main.js will wire (not exercised here -- browser/harness territory)', () => {

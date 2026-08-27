@@ -156,6 +156,9 @@ import {
   wakeTrailLights,
 } from './world/trail.js';
 import { clampToWorldX, clampToWorldZ } from './world/bounds.js';
+// G3 follow-up: the Beacon's own collision -- see that module's header for why this has to be the
+// SAME pure function net/gameServerCore.mjs runs, not merely the same rule.
+import { resolveObstacleCollisions, worldObstacles } from './world/obstacles.js';
 import {
   CART_LOOT_TABLE,
   COIN_KIND,
@@ -178,6 +181,9 @@ import {
   requestSiegeAttack,
   stepSiege,
 } from './world/beaconSiege.js';
+// The overhead boss bar rides above the Warden's own actual height, imported rather than guessed --
+// the same "one number, one owner" rule WARDEN_MAX_HP above already keeps (GQ-007).
+import { WARDEN_HEIGHT_METERS } from './enemies/warden.js';
 import {
   BLACKTHORN_BLOWS_TO_TEAR,
   createHollowState,
@@ -186,12 +192,16 @@ import {
   openChest,
   strikeBarrier,
 } from './world/blackthornHollow.js';
-import { bossBarState, createBossBar } from './ui/bossBar.js';
+import { BOSS_BAR_SAFE_HEIGHT, BOSS_BAR_SAFE_WIDTH, bossBarState, createBossBar } from './ui/bossBar.js';
 import { HELMET_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
 import { SIEGE_EVENT_RECIPE_MAP, soundForSiegeEvent } from './audio/siegeRecipes.js';
 import { HELMET_SILVERGUARD_ID, HELMET_SLOT, WILDWOOD_BLADE_ID, damageFor, itemDef } from './progression/items.js';
 import { predictionStep } from './net/prediction.js';
 import * as VILLAGE from './world/zones/village.js';
+
+// Computed once: the Village's own blockers (world/obstacles.js) never move mid-session, so
+// re-deriving them from zone data every frame would be pure waste.
+const WORLD_OBSTACLES = worldObstacles();
 
 // Defensive fallbacks for the online mirror, for the one frame (if any) where netStatus has
 // already flipped to 'online' but onEncounter has not yet run -- see net/client.js: setStatus is
@@ -1121,6 +1131,57 @@ async function bootstrap() {
     )).find((candidate) => nameplateProjectionIsSafe({ x: candidate, y: clamped.y }, reservedRects));
     if (safeX === undefined) return null;
     return { visible: true, x: safeX, y: clamped.y };
+  }
+
+  // THE WARDEN'S OWN OVERHEAD BAR. Same pipeline projectEnemyNameplate uses one function up --
+  // world position through the live camera, ndcToOverlayPixels into the game surface's own pixel
+  // space, clamp inside the viewport, dodge the HUD -- because this IS that same overhead
+  // convention, not a second one invented for the one enemy that gets a name on a card. No distance
+  // cap the way an ordinary enemy's nameplate has one (ENEMY_NAMEPLATE_MAX_DISTANCE): there is only
+  // ever one Warden, the arena he stands in is small, and a bar that vanished a few metres out would
+  // make the fight's own readout flicker exactly when a child steps back to dodge.
+  function projectBossBar(warden) {
+    const projected = new THREE.Vector3(warden.x, WARDEN_HEIGHT_METERS + 0.32, warden.z).project(camera);
+    // Behind the camera (z > 1): never draw. Nothing here checks z < -1 the way the ordinary
+    // nameplate does -- that branch guards against a camera INSIDE the enemy's own body, which
+    // cannot happen at the Warden's 2.6 m height and the follow camera's own distance.
+    if (projected.z > 1) return null;
+    const rect = gameSurface.getBoundingClientRect();
+    const projectedPixels = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    if (projectedPixels.x < -160 || projectedPixels.x > rect.width + 160
+      || projectedPixels.y < -100 || projectedPixels.y > rect.height + 60) return null;
+    const reservedRects = [
+      '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#minimap', '#objective-pointer',
+    ].flatMap((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return [];
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return [];
+      const box = element.getBoundingClientRect();
+      return [{
+        left: box.left - rect.left,
+        top: box.top - rect.top,
+        right: box.right - rect.left,
+        bottom: box.bottom - rect.top,
+      }];
+    });
+    const clamped = clampNameplateProjection(
+      projectedPixels, rect, { width: BOSS_BAR_SAFE_WIDTH, height: BOSS_BAR_SAFE_HEIGHT },
+    );
+    // Unlike the ordinary nameplate's own search-outward-for-a-safe-x dance, the boss bar just lifts
+    // straight up out of whatever it would overlap: there is exactly one of these on screen at once,
+    // so there is no neighbour to dodge sideways INTO, and rising above the obstruction keeps it
+    // reading as "attached to the Warden's own head" rather than teleporting off to one side of him.
+    let y = clamped.y;
+    for (let lift = 0; lift < 6; lift += 1) {
+      if (nameplateProjectionIsSafe(
+        { x: clamped.x, y }, reservedRects, { width: BOSS_BAR_SAFE_WIDTH, height: BOSS_BAR_SAFE_HEIGHT },
+      )) break;
+      y -= BOSS_BAR_SAFE_HEIGHT * 0.6;
+    }
+    if (y < -100) return null;
+    return { x: clamped.x, y };
   }
 
   // Phase D (D4): three lantern-mark pips under the health readout, filling as marks arrive. Same read-only,
@@ -3060,6 +3121,15 @@ async function bootstrap() {
       // disagreement rubber-bands and then teleports the hero -- measured in the running game.
       player.position.x = clampToWorldX(player.position.x + worldDirection.x * player.groundSpeed * movement.deltaSeconds);
       player.position.z = clampToWorldZ(player.position.z + worldDirection.z * player.groundSpeed * movement.deltaSeconds);
+      // Same reasoning as the clamp two lines up, same shared pure function the server runs
+      // (world/obstacles.js) -- applied here, in the PREDICTION step itself, so a child's own thumb
+      // never watches the hero walk into the Beacon's stone for even one frame before a reconcile
+      // corrects it. Run unconditionally (online and offline both), because unlike an enemy's
+      // position -- which only the server truly knows -- the Village's own landmarks never move, so
+      // this client already has everything it needs to get the answer right the first time.
+      const unstuck = resolveObstacleCollisions(player.position, WORLD_OBSTACLES);
+      player.position.x = unstuck.x;
+      player.position.z = unstuck.z;
       player.heading = Math.atan2(worldDirection.x, worldDirection.z);
     }
     // Intent out. The client throttles to 15 Hz and sends a release immediately.
@@ -4203,19 +4273,36 @@ async function bootstrap() {
       else if (warden.mode === 'pulse') audio.play('cold-pulse');
       wardenModeSeen = warden.mode;
     }
-    bossBar.update(bossBarState({
+    const bossState = bossBarState({
       mode: warden.mode, hp: warden.hp, maxHp: WARDEN_MAX_HP, phase: warden.phase,
-    }));
+    });
+    // The projection is genuinely wasted work while the bar would be hidden anyway (dormant, dead,
+    // or no warden published yet) -- three.js Vector3.project() and a DOM rect read are not free,
+    // and bossBarState already knows the answer without a camera.
+    bossBar.update(bossState, bossState.visible ? projectBossBar(warden) : null);
 
     // ── G3 PAYOFF: THE BEACON LIGHTS ────────────────────────────────────────────────────────
     //
     // The world remembers. Gated on having SEEN it cold, the same rule the Lantern Tree's own
     // relight and the Workshop's build already follow -- a child who joins a world where the
     // Beacon is already burning gets a lit Beacon, not somebody else's ceremony.
+    //
+    // `beaconLitSeen` is set ONLY inside the `zoneOldBeacon` guard, and that placement is
+    // load-bearing rather than tidy -- the exact bug the Lantern Tree's own relight already
+    // measured and fixed (see rewardsForRelight/relightSpent's own comment above), now playing out
+    // a second time at the Beacon. A snapshot saying beaconLit:true routinely lands before
+    // zone.ready has resolved (a second device on a slower connection, a cold asset cache, or
+    // simply the two arriving in the wrong order) -- if this had one-shot-spent itself the moment
+    // it OBSERVED beaconLit:true, regardless of whether zoneOldBeacon existed yet to act on it, a
+    // guest unlucky enough to see that frame before their own Beacon geometry loaded would have the
+    // ignition permanently skipped: `beaconLitSeen` stays true forever, so the one call that would
+    // ever have lit their Beacon never fires again for the rest of the session. Gating the LATCH
+    // itself on `zoneOldBeacon` being present means a slow load simply keeps retrying next frame
+    // until the geometry exists to light -- the world was never wrong, only unable to draw it yet.
     if (!siegeState.beaconLit) sawBeaconCold = true;
-    if (siegeState.beaconLit && !beaconLitSeen) {
+    if (siegeState.beaconLit && !beaconLitSeen && zoneOldBeacon) {
       beaconLitSeen = true;
-      zoneOldBeacon?.ignite();
+      zoneOldBeacon.ignite();
       if (sawBeaconCold) {
         audio.play('beacon-ignite');
         banner('The Old Beacon is burning!', 3600);
