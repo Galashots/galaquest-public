@@ -37,6 +37,8 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { CAMP, CART_SEARCH, ROWAN } from '../../public/src/world/zones/village.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { CART_LOOT_TABLE, COIN_KIND, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
 import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import {
@@ -50,7 +52,16 @@ const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): a hand-typed 56 here went stale when the 2026-08-27 speed-up grew
+// input/touch.js's own STICK_RADIUS_PX to 64px -- see drive-village.mjs's identical constant for
+// the full autopsy of what a deflection metred against the wrong radius does to the speed law.
+const STICK_PX = STICK_RADIUS_PX;
+// THE FINE LEG WALKS (drive-village.mjs's own trick, same derivation): a push at exactly
+// RUN_DEFLECTION is the speed law's own boundary where groundSpeedForInput returns WALK_SPEED.
+// On a hosted runner painting ~3fps, per-pulse unobserved travel is one-or-two frames of held
+// stick -- 1.2-2.4m at RUN_SPEED but 0.6-1.1m at WALK_SPEED -- and the Rowan approach below has a
+// hard ceiling on how far it may overshoot before it walks INTO the cart's own search trigger.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 // favicon.ico: this harness's OWN blank-page trick for pinning localStorage before the real
 // navigation (see navigateFresh) always 404s, the same accepted exception drive-relight.mjs
 // documents. lantern_belt.glb: the pre-existing, disclosed gear-track gap every harness in this
@@ -312,7 +323,7 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
 /** Real touch-stick movement toward a fixed world point -- see drive-village.mjs's own walkToward
  *  for the screen<->world derivation this is copied from verbatim. Stick origin is a FRACTION of
  *  THIS tab's own viewport, not a shared constant (see navigateFresh's comment). */
-async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis, stickPx = STICK_PX) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   let last = await state(tab);
   const deadline = deadlineAfter(maxMillis);
@@ -337,7 +348,7 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
     try {
       // eslint-disable-next-line no-await-in-loop
-      await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+      await touch(tab, 'touchMove', [{ x: origin.x + sx * stickPx, y: origin.y - sy * stickPx }]);
       // eslint-disable-next-line no-await-in-loop
       await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
     } finally {
@@ -368,7 +379,25 @@ async function reachCampAndRowan(tab) {
   const afterCamp = await pollUntil(tab, (s) => s.campFound === true, { timeoutMs: 3000 });
   if (!afterCamp.campFound) throw new Error(`campFound never latched -- hero at ${JSON.stringify(afterCamp.heroPos)}`);
 
-  await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 20000);
+  // THE ROWAN LEG HAS A HARD OVERSHOOT CEILING, and the 2026-08-27 speed-up spent most of it: Rowan
+  // stands only ~3.8m from the cart whose search trigger (2.4m) the caller's own "SEARCH before
+  // interaction" check requires to be UNTOUCHED -- so a hero who blows more than ~1.4m past Rowan
+  // heading in from the camp has already searched the cart, and this run's "before" state arrives
+  // pre-spoiled (measured hosted at b096b0e: collected already held 2 coins + 1 shard before the
+  // check ran). Two defences, both derived rather than tuned:
+  //   - aim at a point nudged from Rowan TOWARD the camp, so the whole 1.2m arrival ring sits on
+  //     the far side from the cart while every stop inside it stays within Rowan's own 2m speech
+  //     radius (KEEPER_WAVE_RADIUS_METERS -- what actually latches rowanMet);
+  //   - close at FINE_STICK_PX, the speed law's own WALK_SPEED push, halving what one frame of
+  //     held-stick latency travels on a 3fps runner.
+  const towardCampX = CAMP.at[0] - ROWAN.at[0];
+  const towardCampZ = CAMP.at[1] - ROWAN.at[1];
+  const towardCampLength = Math.hypot(towardCampX, towardCampZ) || 1;
+  const standoff = 0.6;
+  await walkToward(tab,
+    ROWAN.at[0] + (towardCampX / towardCampLength) * standoff,
+    ROWAN.at[1] + (towardCampZ / towardCampLength) * standoff,
+    1.2, 20000, FINE_STICK_PX);
   const afterRowan = await pollUntil(tab, (s) => s.rowanMet === true, { timeoutMs: 3000 });
   if (!afterRowan.rowanMet) throw new Error(`rowanMet never latched -- hero at ${JSON.stringify(afterRowan.heroPos)}`);
 }
