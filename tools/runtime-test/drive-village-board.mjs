@@ -46,6 +46,8 @@ import { headingToward } from '../../public/src/world/zoneLoader.js';
 import { CART_LOOT_TABLE, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
 import { WORKSHOP_I_ID, remainingVillageSupplies } from '../../public/src/village/economy.js';
 import { WORKSHOP_BUILD_SECONDS } from '../../public/src/world/workshop.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
 // The held-walk primitive, shared with drive-relight and drive-village. See its module header for
 // the measurement behind it: a walk budgeted in milliseconds gets a fraction of its iterations on a
@@ -81,7 +83,24 @@ const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url)
 const CEREMONY_BUDGET_MS = Math.ceil(WORKSHOP_BUILD_SECONDS * 1000 * 10);
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): this used to be a bare `const STICK_PX = 56`, stale against
+// input/touch.js's own STICK_RADIUS_PX since the 2026-08-27 speed-up grew it to 64px. A held touch
+// dispatched at 56px against a real 64px-radius clampStick() pushes 56/64 = 0.875 of the stick, not
+// the full deflection this constant's every use assumes.
+const STICK_PX = STICK_RADIUS_PX;
+// THE FINE LEG WALKS; THE COARSE LEG RUNS -- the same split drive-village.mjs's own walkToward
+// uses, and for the same reason: a held leg aimed at a ring narrower than a run-speed step cannot
+// converge, it can only orbit past the ring every frame. This file's tightest ring is the 0.15m cart
+// pickups (searchAndCollectAll below); RUN_SPEED's per-frame step at this project's hosted ~4-6fps
+// (167-250ms/frame) is 0.60-0.90m -- many times that ring, so a fine leg held at full deflection
+// cannot land on a pickup at all, only bounce past it. Held at RUN_DEFLECTION instead, the fine leg
+// runs at exactly WALK_SPEED (character/speed.js's own named boundary: the push at which
+// groundSpeedForInput stops climbing past WALK_SPEED), which is still 0.28-0.43m a frame at
+// WALK_SPEED -- bigger than a 0.15m ring, so the fine HELD leg's job here is to close to within a
+// frame or so of it, not to land on it exactly; the exact placement is pulseWalkToward's job below,
+// which is release-before-every-read and so is not limited to one frame of precision the way a held
+// leg is. See heldWalkToward's own `deflectionPx` parameter and walkToward's use of it.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 const COSMETIC_404_PATTERNS = ['/favicon.ico', '/assets/gear/lantern_belt.glb'];
 
 mkdirSync(OUT, { recursive: true });
@@ -353,11 +372,19 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // and the hero only moves during the pulse. Hosted at 760188f the Workshop approach ran out of its
 // 120s budget with the late joiner standing 3.26m from a 2.4m interact radius, and the check that
 // the Workshop is "immediately interactable" went red about a hero who had simply not arrived.
-async function heldWalkToward(tab, targetX, targetZ, holdWithin, maxMillis) {
+// RELEASED IN THE PAGE, not by a CDP round trip after the fact -- in-page-driver.mjs's own
+// `releaseOnArrival`, already proven in drive-village.mjs. Without it, the thumb stays down for a
+// whole extra frame or two while a starved runner's Runtime.evaluate call for `touchEnd` waits on
+// the main thread, and the hero keeps moving in the last direction he was steered the entire time.
+// That is the mechanism behind this file's own "0.15m-ring latch, 2.86m settle" measurement: the
+// in-page latch saw arrival correctly, but the RELEASE was the harness's job and arrived two frames
+// late, so everything the latch bought was spent again coasting past the ring on the way out.
+async function heldWalkToward(tab, targetX, targetZ, holdWithin, maxMillis, deflectionPx = STICK_PX) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
-  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin,
+    { releaseOnArrival: true }));
   await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
-  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - deflectionPx }]);
   let walk;
   try {
     walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
@@ -401,8 +428,15 @@ async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     // eslint-disable-next-line no-await-in-loop
     await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
     try {
+      // FINE_STICK_PX, not STICK_PX -- this is now only ever reached as the exact-placement finisher
+      // after a fine held leg has already closed most of the distance (see walkToward above), never
+      // as the coarse cover-ground leg. A press is still bounded by movementPulseMillis's own 70ms
+      // floor, which at RUN_SPEED covers 3.6*0.07 = 0.25m -- bigger than this file's own 0.15m ring
+      // by itself. At WALK_SPEED the same floor covers 1.7*0.07 = 0.12m, smaller than that ring, so
+      // the smallest press this leg can throw no longer guarantees an overshoot on the very target it
+      // exists to land on.
       // eslint-disable-next-line no-await-in-loop
-      await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+      await touch(tab, 'touchMove', [{ x: origin.x + sx * FINE_STICK_PX, y: origin.y - sy * FINE_STICK_PX }]);
       // NOT frame-floored, and this is the second harness to reach that conclusion by measurement.
       //
       // The reasoning for flooring it is sound: movementPulseMillis caps at 300ms, one hosted frame
@@ -467,14 +501,28 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
       last = await heldWalkToward(tab, targetX, targetZ, stopWithin + HELD_APPROACH_SLACK_METRES,
         Math.max(2000, (deadline - Date.now()) / 2));
     }
+    // FINE_STICK_PX, not STICK_PX -- see this file's own constants for why: a fine leg held at full
+    // (run) deflection steps 0.60-0.90m a hosted frame, many times over this file's own 0.15m cart-
+    // pickup ring, and cannot land on it at any release discipline. Held at RUN_DEFLECTION it steps
+    // at WALK_SPEED instead (0.28-0.43m a frame), which still cannot land exactly on a 0.15m ring by
+    // itself -- what it buys is closing to within a frame or so of it, cheaply, before the exact
+    // placer below finishes the job.
     // eslint-disable-next-line no-await-in-loop
     last = await heldWalkToward(tab, targetX, targetZ, stopWithin,
-      Math.max(2000, (deadline - Date.now()) / 2));
-    // The pulse is the last resort now, not the placer: it runs only if the fine leg could not
-    // latch at all, which on a page still painting means the target is unreachable rather than
-    // merely far.
+      Math.max(2000, (deadline - Date.now()) / 2), FINE_STICK_PX);
+    // PULSE WHENEVER THE FINE LEG DID NOT LAND INSIDE THE RING ITSELF, not only when it is still
+    // wildly far off. The old `stopWithin + HELD_APPROACH_SLACK_METRES` (here, up to 3.15m for this
+    // file's own 0.15m ring) was sized for the COARSE leg, whose job is covering distance and handing
+    // off near the target -- as a gate on the FINE leg it meant a fine leg that consistently missed a
+    // small ring by, say, 0.3-0.6m (a real frame's travel, not a failure) never handed off to the one
+    // mechanism that can actually place him inside it, and spent the rest of its budget re-running a
+    // held leg against a floor of one frame's own travel it can never get under by holding. Pulsing
+    // is release-before-every-read (see pulseWalkToward's own header), so it is not limited to a
+    // frame of precision the way a held leg is; keying its use to the RING itself is what lets a
+    // 0.15m target actually converge instead of oscillating at whatever a held frame's step happens
+    // to be.
     const stillOut = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
-    if (stillOut > stopWithin + HELD_APPROACH_SLACK_METRES) {
+    if (stillOut > stopWithin) {
       // eslint-disable-next-line no-await-in-loop
       last = await pulseWalkToward(tab, targetX, targetZ, stopWithin,
         Math.max(1500, (deadline - Date.now()) / 2));

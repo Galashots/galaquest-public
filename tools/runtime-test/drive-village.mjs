@@ -24,6 +24,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_DISTANCE } from '../../public/src/camera/follow.js';
 import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import {
   headingToward, KEEPER_GREET_REARM_RADIUS_METERS, KEEPER_WAVE_RADIUS_METERS,
 } from '../../public/src/world/zoneLoader.js';
@@ -248,7 +249,13 @@ async function setCameraDistance(distance) {
 
 const stickX = VIEWPORT.width * 0.18;
 const stickY = VIEWPORT.height * 0.86;
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): this used to be a local `const STICK_PX = 56`, which was correct
+// only while input/touch.js's own STICK_RADIUS_PX was also 56. The 2026-08-27 speed-up grew that
+// radius to 64px alongside raising WALK_SPEED/RUN_SPEED, and the stale 56 silently changed what a
+// "full deflection" touchMove of STICK_PX pixels actually pushes the real, in-page clampStick() to
+// (56/64 = 0.875 of the radius, not 1.0) -- still past RUN_DEFLECTION so the coarse leg still ran,
+// but every ratio derived from the stale constant below was wrong by the same 56/64 factor.
+const STICK_PX = STICK_RADIUS_PX;
 // THE FINE LEG WALKS; THE COARSE LEG RUNS, which is what a person does and which is the difference
 // between converging and bouncing. Even with the release moved into the page there is a real coast
 // left -- the client samples the stick in its own frame loop, so zero intent reaches the server a
@@ -259,6 +266,25 @@ const STICK_PX = 56;
 //
 // RUN_DEFLECTION, not a fraction chosen to feel right: it is the speed law's own named boundary,
 // the exact push at which groundSpeedForInput returns WALK_SPEED. See character/speed.js.
+//
+// WHAT THE STALE VALUE ACTUALLY DID. With `STICK_PX = 56`, FINE_STICK_PX was 56 * 0.62 = 34.72px --
+// a push of 34.72/64 = 0.54 against the REAL 64px radius clampStick() actually applies, i.e. under
+// RUN_DEFLECTION (still the walk branch) but at 0.54/0.62 = 87% of WALK_SPEED rather than the exact
+// speed this constant's own name and comment claim to hand the fine leg. Whatever mix of that speed
+// error and the camera-heading-relative steering produced the measured 155-frame orbit (closest
+// 0.70m of a 0.6m ring, never inside it), the derivation was demonstrably wrong -- a "push at
+// RUN_DEFLECTION" that computes to something other than RUN_DEFLECTION once the real radius is
+// applied is a bug in this file regardless of which exact failure mode it produces on a given
+// runner. Deriving STICK_PX from the real STICK_RADIUS_PX makes FINE_STICK_PX land exactly on
+// RUN_DEFLECTION again, restoring the property this file's own header already claims for it.
+//
+// PER-FRAME TRAVEL, checked against this file's own smallest ring (0.6m, the lane walk below) now
+// that the fine leg is genuinely WALK_SPEED: at 1.7 m/s and the ~4-6fps this project's hosted
+// runners paint at (167-250ms/frame), a fine-leg step is 0.28-0.43m -- comfortably under the 0.6m
+// ring. Even at the harness's own worst locally-measured rate for this scene (~3fps / 333ms, see
+// the animation-stretch measurement below), a step is 0.57m: still under 0.6m, with the margin this
+// file's own post-mortem (15/15 checks, 0.29-1.06m readings, taken under 40x CPU throttle) was
+// measured against.
 const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 
 // Walks toward a fixed world point (unlike play-fight.mjs's walkToward, which re-aims at a live

@@ -24,6 +24,7 @@ import {
   ATTACK_REACH, SWING_CONTACT_SECONDS, WOLF_MAX_HP, canAttack,
 } from '../../public/src/combat/encounter.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -228,7 +229,12 @@ const attackX = VIEWPORT.width - 68;
 const attackY = VIEWPORT.height - 68;
 const stickX = VIEWPORT.width * 0.18;
 const stickY = VIEWPORT.height * 0.86;
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): stale against input/touch.js's own STICK_RADIUS_PX since the
+// 2026-08-27 speed-up grew it to 64px. Both uses below (the approach walk and the post-knockdown
+// held re-engage) want full deflection -- covering real ground fast -- so unlike the tighter-ring
+// harnesses this file needs no separate fine deflection: the re-close before every swing is a
+// pulsed, exact placement already (see walkToward below), never a held leg against a small ring.
+const STICK_PX = STICK_RADIUS_PX;
 
 // Cribbed near-verbatim from play-fight.mjs: `aim` is re-derived from the freshly-polled state on
 // every loop tick, not captured once outside the loop, because the wolf is server-authoritative and

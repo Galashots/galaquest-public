@@ -43,6 +43,7 @@ import { SNAPSHOT_HZ, WIRE_POSITION_QUANTUM } from '../../public/src/net/protoco
 // (GQ-007): the settle budget below is derived from it, and a copy here would be a second constant
 // free to drift from the one reconcile() actually uses.
 import { SNAP_DRIFT_UNITS } from '../../public/src/net/client.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -711,7 +712,12 @@ async function useViewport(viewport) {
   // anything is tapped or photographed against the new layout.
   await sleep(500);
 }
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): stale against input/touch.js's own STICK_RADIUS_PX since the
+// 2026-08-27 speed-up grew it to 64px. Both uses below (the approach walk and the post-knockdown
+// held re-engage in closeOnWolf) want full deflection -- covering real ground fast -- since the
+// re-close before every swing is always a pulsed, exact placement (walkToward below), never a held
+// leg aimed at a small ring.
+const STICK_PX = STICK_RADIUS_PX;
 
 // `aim` is called fresh on EVERY iteration, with the just-polled state, and steers at whatever it
 // returns THAT tick -- never a value captured once outside the loop. That distinction is the whole
