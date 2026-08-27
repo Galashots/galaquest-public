@@ -512,8 +512,11 @@ try {
   // and dropping/re-establishing the hold is exactly the choreography that died in drive-marks at
   // 98d83e9. The held deflection is the WALK push (RUN_DEFLECTION exactly), so the per-frame input
   // quantum orbits contact inside ATTACK_REACH instead of blowing past it. The attack taps ride on
-  // top as a SECOND touch point: every CDP dispatch carries the full active-point set, so the tap's
-  // touchStart lists the stick plus the attack point and its touchEnd lists the stick alone.
+  // top as a SECOND touch point, with the CDP semantics drive-marks.mjs measured live: touchStart's
+  // touchPoints are the full active set (Chrome diffs and presses only the new point), but
+  // touchEnd's touchPoints are the points BEING RELEASED -- so the tap's touchEnd lists the ATTACK
+  // point alone. Listing the held stick there lifts the stick on every tap, which is the
+  // dead-stick-at-spawn signature both hosted failures showed.
   const FIGHT_STICK_POINT = () => ({
     x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1,
   });
@@ -530,7 +533,7 @@ try {
       // eslint-disable-next-line no-await-in-loop
       await sleep(60);
       // eslint-disable-next-line no-await-in-loop
-      await touch('touchEnd', [FIGHT_STICK_POINT()]);
+      await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
       // eslint-disable-next-line no-await-in-loop
       await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
       if (tap % 2 !== 0) continue;
@@ -540,7 +543,8 @@ try {
     }
   } finally {
     await page.eval(STOP_WALK);
-    await touch('touchEnd', []);
+    // touchEnd's points are the points being released -- name the stick to lift it.
+    await touch('touchEnd', [FIGHT_STICK_POINT()]);
   }
 
   // ── TRANSITION ────────────────────────────────────────────────────────────────────────────────

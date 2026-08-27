@@ -459,9 +459,14 @@ console.log(`  fight cadence: ~${framePeriodMs}ms a frame, tapping every ${tapEv
 // of the orbit is inside ATTACK_REACH's 1.7m and the swing's forgiving 151-degree arc. canAttack
 // has no is-moving condition, so nothing about walking costs a swing.
 //
-// CDP multi-touch choreography: every dispatch describes the FULL set of active points, so the tap
-// sends touchStart carrying the held stick point plus the attack point, and its touchEnd carries
-// the stick point alone (still down). touchEnd with an empty list is the full release.
+// CDP multi-touch choreography, MEASURED rather than assumed (probed live against this game):
+// touchStart's touchPoints are the full active set -- Chrome diffs it and presses only the NEW
+// point, leaving the held stick untouched -- but touchEnd's touchPoints are the points BEING
+// RELEASED. The first version listed the still-held stick in the tap's touchEnd, believing it
+// described what remained, and Chrome dutifully lifted the stick on every tap: the probe read
+// groundSpeed 1.725 while held and 0 the instant the first tap's end went out, which is exactly
+// the dead-stick-at-spawn signature both hosted failures showed. The tap's touchEnd must list the
+// ATTACK point alone. touchEnd with an empty list remains the full release.
 const FIGHT_STICK_POINT = () => ({ x: stickX, y: stickY - Math.round(STICK_PX * RUN_DEFLECTION), id: 1 });
 async function holdFightStick() {
   await page.eval(startWalk(WOLF_TARGET, 0));
@@ -470,7 +475,9 @@ async function holdFightStick() {
 }
 async function releaseFightStick() {
   await page.eval(STOP_WALK);
-  await touch('touchEnd', []);
+  // Named explicitly rather than the empty-list "release everything": touchEnd's points are the
+  // points being released, and naming the stick is the unambiguous way to lift it.
+  await touch('touchEnd', [FIGHT_STICK_POINT()]);
 }
 let killed = false;
 let lastGap = 0;
@@ -488,7 +495,7 @@ try {
     // eslint-disable-next-line no-await-in-loop
     await sleep(60);
     // eslint-disable-next-line no-await-in-loop
-    await touch('touchEnd', [FIGHT_STICK_POINT()]);
+    await touch('touchEnd', [{ x: attackX, y: attackY, id: 2 }]);
     // eslint-disable-next-line no-await-in-loop
     await sleep(Math.max(0, tapEveryMs - (Date.now() - cycleStart)));
     if (tap % 2 !== 0) continue;
