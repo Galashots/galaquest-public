@@ -22,6 +22,72 @@ line. Entries with many hits and no help get rewritten or deleted, not promoted.
 names a test file that actually exists, every `GQ-NNN` ID is unique and never reused, and every
 `RULE` entry at 3+ hits carries a stated reason it isn't enforced.
 
+## Index — skim or search; do not read this ledger end to end
+
+This file is a ledger, not startup reading. Route in through this index: skim it, or search by tag
+or title fragment, then read only the entries the task touches. Tags come from a fixed vocabulary —
+`code`, `tests`, `harness`, `evidence`, `visual`, `gameplay`, `net`, `persistence`, `ci`, `docs`,
+`assets` — so a grep for a tag is reliable. `test/mistakes-ledger.test.mjs` keeps this index honest:
+every row matches a real entry heading below, every entry has a row, and every tag is from the
+vocabulary. A new entry adds its row in the same commit.
+
+| ref | lesson | tags |
+|---|---|---|
+| GQ-007 | Never restate a constant. Import it. | code |
+| GQ-008 | A harness that navigates to the game must start from a known guest. | harness |
+| GQ-009 | A diagnostic that partitions events by harness timestamp measures the harness, not the system. | harness, evidence |
+| GQ-001 | A harness tuned against a local fight embeds the absence of latency everywhere. | harness, net |
+| GQ-002 | A stale file header is a lie the file tells about itself. | code, docs |
+| GQ-003 | A test-count or CI-shape claim written in a document goes stale immediately. | docs, ci |
+| — | Watch for one constant doing two jobs. | code |
+| — | Assert the property, not the mechanism. | tests |
+| — | A name-fragment lookup needs a uniqueness test. | code, tests |
+| — | Green checks are not a look at the game. | evidence, visual |
+| — | Source, vendor, and review names are not runtime identifiers. | assets, harness |
+| — | A discovery endpoint must only advertise capabilities it can actually execute. | code, evidence |
+| — | A cross-check whose expected and actual values come from the same expression proves nothing. | tests |
+| — | A selftest must tear down every Chrome target/server/process it creates, unconditionally. | harness |
+| — | A reported per-pose measurement that never changes across genuinely different poses is measuring the wrong state. | evidence, visual |
+| — | A hand-rolled schema interpreter only enforces the keywords it has actually been exercised against. | code, tests |
+| — | A documented claim about a commit is not evidence until it's run. | evidence |
+| — | A proof that was not committed did not happen. | evidence |
+| — | A durable event id must outlive the process that minted it. | persistence, net |
+| — | Hydration restores state; it must not replay the ceremony that created it. | persistence, gameplay |
+| GQ-019 | Automation timeouts are wall-clock budgets, not sample counts — and the fix for that has its own floor. | harness |
+| GQ-022 | An instrument is not evidence until it has been shown to fail. | evidence, tests |
+| — | A NEW FAILURE against a base is not evidence that this commit caused it. | ci, evidence |
+| GQ-021 | A harness written in wall-clock time is driving something that advances in rendered frames. | harness, net |
+| GQ-020 | A presentational class is an identity. Reusing it for the look makes every reader that queries it wrong. | code |
+| — | The maximum of a set is biased toward the set with more samples in it. | evidence |
+| — | A measurement has to be taken in a frame where only the thing under test can move it. | evidence, harness |
+| — | Making one beat of a harness work can break the next one, because they share a world. | harness |
+| — | A sentinel that means "no value" will happily do arithmetic, and can carry a check over its own bar. | code, tests |
+| — | A clamp that protects one subsystem silently degrades every other one sharing the clock. | code, gameplay |
+| — | Evidence may name a commit only after executing from that exact clean commit. | evidence, ci |
+| GQ-010 | A capture is only evidence if the subject is actually in the frame. So is a measurement. | evidence, visual |
+| — | A wall-clock budget waiting on simulated time must account for the frame clamp. | harness |
+| — | A one-time ceremony fired off a server edge plays to whoever happens to be looking. | net, gameplay |
+| — | Two one-shot payoffs whose triggers overlap in space fire on the same frame, and cancel each other. | gameplay |
+| GQ-011 | Two simulations of the same thing are not one thing, however carefully you pick between them. | code, net |
+| GQ-012 | A presenter that ticks inside someone else's gate is invisible for reasons its own file cannot explain. | code, visual |
+| GQ-013 | A reward the rules never read is a lie with a ceremony attached. | gameplay |
+| GQ-014 | An identity derived from mutable state is not an identity. | code, persistence |
+| GQ-015 | A test that hand-feeds a pure function proves the function, not where its inputs come from. | tests |
+| — | A status a document holds on someone else's behalf goes stale with no commit to catch it. | docs |
+| — | Nothing under `test/` loads `main.js`, so a bootstrap-fatal edit passes the whole gate. | tests, ci |
+| — | A factory that ignores unknown options turns a typo into a silent redirection to production state. | code, tests |
+| GQ-016 | Booting the app mints an identity, so a harness that seeds one must do it before the first boot. | harness |
+| GQ-017 | Changing a type is not done when the tests pass. The readers are not all in one directory. | code |
+| — | A change detector must key on the thing it measures, not on the thing it is named after. | tests |
+| GQ-018 | A test that derives its probe input from the constant under test cannot fail on that constant. | tests |
+| — | Prove the instrument can see a known-good case before believing what it says about the product. | evidence, tests |
+| — | A trigger radius a child's approach ends AT is decided by drift, not by the child. | gameplay, net |
+| — | A render change whose whole purpose is how something LOOKS cannot be judged from a container with no GPU. | visual, ci |
+| — | A sabotage that does not go red is a finding about the test, not a pass. | tests |
+| — | Before adding a field to a protocol, read what the producer already publishes. | net |
+| — | A scripted edit that is not asserted is a change you have not made. | harness |
+| — | An instrument that covers a subset reports on the subset, and reads as covering the whole. | evidence, tests |
+
 ---
 
 ### GQ-007 — Never restate a constant. Import it.

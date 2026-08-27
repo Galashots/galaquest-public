@@ -79,6 +79,62 @@ test('every GQ-NNN id in docs/MISTAKES.md is unique', () => {
     + duplicates.join('\n  '));
 });
 
+// The index table near the top of the ledger exists so agents can route in by tag or title instead
+// of reading 1500+ lines end to end. It is only trustworthy if it cannot drift: every row must match
+// a real entry heading, every entry must have a row, and tags must come from the fixed vocabulary the
+// index itself declares.
+const INDEX_TAGS = new Set([
+  'code', 'tests', 'harness', 'evidence', 'visual', 'gameplay', 'net', 'persistence', 'ci', 'docs',
+  'assets',
+]);
+
+function parseIndexRows(src) {
+  const rows = [];
+  const pattern = /^\|\s*(GQ-\d+|—)\s*\|\s*(.+?)\s*\|\s*([a-z, ]+?)\s*\|\s*$/gm;
+  for (const match of src.matchAll(pattern)) {
+    rows.push({
+      ref: match[1],
+      title: match[2],
+      tags: match[3].split(',').map((t) => t.trim()).filter(Boolean),
+    });
+  }
+  return rows;
+}
+
+function entryKey(header) {
+  // "GQ-007 — title", "OBSERVED — title", "RULE (GQ-022) — title". Split on the FIRST em-dash
+  // separator only: titles may legitimately contain further " — " (GQ-019 does).
+  const sep = header.indexOf(' — ');
+  const prefix = sep === -1 ? header : header.slice(0, sep);
+  const title = sep === -1 ? '' : header.slice(sep + 3).trim();
+  const id = prefix.match(/GQ-\d+/)?.[0] ?? '—';
+  return `${id} | ${title}`;
+}
+
+const indexRows = parseIndexRows(source);
+
+test('the docs/MISTAKES.md index matches the entries exactly, both directions', () => {
+  const fromIndex = indexRows.map((r) => `${r.ref} | ${r.title}`).sort();
+  const fromEntries = entries.map((e) => entryKey(e.header)).sort();
+  const missingRows = fromEntries.filter((k) => !fromIndex.includes(k));
+  const staleRows = fromIndex.filter((k) => !fromEntries.includes(k));
+  assert.deepEqual({ missingRows, staleRows }, { missingRows: [], staleRows: [] },
+    'index and entries disagree (add the row in the same commit as the entry):\n  missing rows: '
+    + missingRows.join('\n  missing rows: ') + '\n  stale rows: ' + staleRows.join('\n  stale rows: '));
+});
+
+test('every docs/MISTAKES.md index tag comes from the declared vocabulary', () => {
+  const violations = [];
+  for (const row of indexRows) {
+    if (row.tags.length === 0) violations.push(`${row.title}: no tags`);
+    for (const tag of row.tags) {
+      if (!INDEX_TAGS.has(tag)) violations.push(`${row.title}: unknown tag '${tag}'`);
+    }
+  }
+  assert.deepEqual(violations, [],
+    'index tags must stay greppable against the fixed vocabulary:\n  ' + violations.join('\n  '));
+});
+
 test('every RULE entry at 3+ hits in docs/MISTAKES.md states why it is not enforced', () => {
   const violations = [];
   for (const entry of entries) {
