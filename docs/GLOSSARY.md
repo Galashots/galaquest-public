@@ -33,7 +33,8 @@ the same PR.
 - **Sabotage test** — deliberately breaking an instrument or input once to prove the check can go
   red (`docs/MISTAKES.md`, GQ-022).
 - **Ratchet** — the mechanical promotion ladder in `docs/MISTAKES.md`: OBSERVED (1st hit) → RULE
-  (2nd hit, stable GQ-NNN id) → ENFORCED (a named test exists). Also the guidance ratchet rule in
+  (2nd hit, stable GQ-NNN id) → ENFORCED (2nd hit + mechanically expressible as a check; the named
+  test exists). Also the guidance ratchet rule in
   `docs/GUIDANCE.md`: fix the misleading doc and add the smallest check that would have caught it.
 - **Foreknowledge helped** — the ledger field recording that an entry actually prevented a repeat;
   entries that never help get rewritten or deleted, not promoted.

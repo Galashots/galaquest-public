@@ -47,7 +47,7 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
   per-kind presentation live in `enemies/`);
 - `progression/`, `rewards/`, `village/`, `forge/` — player progression and its presenters:
   XP/levels, streaks, and rune chests under `progression/`, kill-XP and toasts under `rewards/`,
-  enemy drops and wayfinding trail under `world/`;
+  enemy drops under `world/`, wayfinding trail and directional arrow under `render/`;
 - `input/`, `ui/`, `audio/` — touch/keyboard input, HUD, sound;
 - `studio/`, `review/`, `debug/` — inspection surfaces (`public/studio.html`,
   `public/forge.html`), not gameplay.
