@@ -47,6 +47,7 @@ import {
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -369,6 +370,29 @@ async function shot(tab, name) {
   console.log(`  captured cart-loot-${name}.png`);
 }
 
+/** A held leg at a caller-chosen deflection, with the in-page driver doing the steering: startWalk
+ *  re-aims the camera toward the target every frame, latches arrival only once BOTH the rendered
+ *  and the authoritative hero are inside the ring, and (releaseOnArrival) lifts the thumb in the
+ *  page on the latch frame. That last part is the point: a pulsed leg's release costs a sleep plus
+ *  a CDP round trip during which the SERVER hero keeps walking in the held direction -- and on the
+ *  Rowan approach that tail is measured (2c77492, landscape) carrying the authoritative hero from
+ *  the arrival ring into the cart's own 2.4m search trigger, bursting the loot before the "SEARCH
+ *  before interaction" snapshot ran. In-page release leaves one frame of coast at most. */
+async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis, stickPx = STICK_PX) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin,
+    { releaseOnArrival: true }));
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - stickPx }]);
+  try {
+    return await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 150, timeoutMs: maxMillis });
+  } finally {
+    await touch(tab, 'touchEnd', []);
+    await tab.page.eval(STOP_WALK);
+  }
+}
+
 /** Walk to the camp, then to Rowan (latches campFound + rowanMet -- both read straight off
  *  zoneTrailState() rather than assumed from distance, since the cart's own trigger is gated on
  *  BOTH and a harness that merely walked close without confirming the flags latched would silently
@@ -394,10 +418,16 @@ async function reachCampAndRowan(tab) {
   const towardCampZ = CAMP.at[1] - ROWAN.at[1];
   const towardCampLength = Math.hypot(towardCampX, towardCampZ) || 1;
   const standoff = 0.6;
-  await walkToward(tab,
-    ROWAN.at[0] + (towardCampX / towardCampLength) * standoff,
-    ROWAN.at[1] + (towardCampZ / towardCampLength) * standoff,
-    1.2, 20000, FINE_STICK_PX);
+  const waypointX = ROWAN.at[0] + (towardCampX / towardCampLength) * standoff;
+  const waypointZ = ROWAN.at[1] + (towardCampZ / towardCampLength) * standoff;
+  // HELD, IN-PAGE, AT WALK SPEED -- not pulsed. The pulsed version of this leg still pre-searched
+  // the cart hosted (2c77492, landscape): each pulse's release tail let the server hero keep
+  // walking west, and 1.86m past the waypoint IS the trigger. The held leg latches and releases in
+  // the page instead; the pulsed walker below is only the fallback when it could not arrive at all.
+  const fineLeg = await heldLegToward(tab, waypointX, waypointZ, 1.2, 20000, FINE_STICK_PX);
+  if (!fineLeg?.arrived) {
+    await walkToward(tab, waypointX, waypointZ, 1.2, 8000, FINE_STICK_PX);
+  }
   const afterRowan = await pollUntil(tab, (s) => s.rowanMet === true, { timeoutMs: 3000 });
   if (!afterRowan.rowanMet) throw new Error(`rowanMet never latched -- hero at ${JSON.stringify(afterRowan.heroPos)}`);
 }
