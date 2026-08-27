@@ -41,6 +41,7 @@ import {
   WOLF_RESPAWN_SECONDS,
   canAttack,
 } from '../../public/src/combat/encounter.js';
+import { HERO_SPAWN } from '../../public/src/world/zones/village.js';
 import {
   deadlineAfter,
   movementPulseMillis,
@@ -500,6 +501,25 @@ try {
     if (!killed && lastGap > ATTACK_REACH) await closeOnWolf(lastGap, 1.0);
   }
   check('10. the wolf can actually be killed', killed);
+
+  // RETREAT TO THE SPAWN SANCTUARY BEFORE THE RESPAWN STOPWATCH RUNS. The density push authored
+  // eleven more enemies into this world, and a second wolf reaching the low-hp hero who is still
+  // standing over the corpse can knock him down mid-measurement -- and a solo knockdown is a party
+  // wipe, which resets EVERY enemy in place (encounter.js's own wipe rule), standing the dead wolf
+  // back up early. Measured hosted at d4e6041: "respawned after 5.57s against a 10s rule", from a
+  // wipe, not from the respawn clock. Inside RECOVERY_SANCTUARY's no-hostility bubble the hero
+  // cannot be targeted, so no wipe can contaminate the window -- and walking away from the corpse
+  // is what a child does anyway. The recorder stays on the wolf throughout.
+  await page.eval(startWalk(`({ x: ${HERO_SPAWN.x}, z: ${HERO_SPAWN.z} })`, 2.0));
+  await touch('touchStart', [{ x: stickX, y: stickY }]);
+  await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
+  try {
+    await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 100, timeoutMs: 12000 });
+  } finally {
+    await touch('touchEnd', []);
+    await page.eval(STOP_WALK);
+  }
 
   // ── 11. the wolf really respawns after the rules' own threshold ────────────────────────────────
   // Waits for the TRUE 'dead' mode (not 'dying', which lasts DEATH_SECONDS on its own) before
