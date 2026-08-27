@@ -30,7 +30,10 @@ function parseEntries(source) {
   const blocks = source.split(/\n(?=### )/).filter((b) => b.startsWith('### '));
   return blocks.map((block) => {
     const headerLine = block.slice(0, block.indexOf('\n')).replace(/^###\s*/, '').trim();
-    const idMatch = headerLine.match(/^(GQ-\d+)\s+—/);
+    // Match the id anywhere in the prefix before the first em-dash separator, so both "GQ-007 — ..."
+    // and "RULE (GQ-022) — ..." header shapes are covered by the uniqueness check below.
+    const sep = headerLine.indexOf(' — ');
+    const idMatch = (sep === -1 ? headerLine : headerLine.slice(0, sep)).match(/(GQ-\d+)/);
     const status = block.match(/\*\*Status:\*\*\s*(\w+)/)?.[1] ?? null;
     const hits = Number(block.match(/\*\*Hits:\*\*\s*(\d+)/)?.[1] ?? NaN);
     const enforcedBy = block.match(/\*\*Enforced by:\*\*\s*`([^`]+)`/)?.[1] ?? null;

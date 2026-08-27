@@ -27,7 +27,8 @@ Use the narrowest authority that actually governs the question:
    incremental review, PASS/FAIL/UNKNOWN semantics, task closeout.
 6. **Domain guidance — how to do a class of work.** `docs/pipeline/`,
    `docs/GALAQUEST_VISUAL_AUTHORITY.md`, `docs/public-playtest.md`, `docs/review-guides/`, and
-   `.agents/skills/`.
+   `.agents/skills/`. `docs/CODEBASE.md` sits alongside these as the descriptive code map: it
+   carries no process rules, and where it drifts from the code, the code is right.
 7. **Code, contracts, tests, and checked-in workflows — mechanical truth.** A runbook cannot make a
    nonexistent command exist or override a live contract/test/workflow.
 8. **`docs/MISTAKES.md` — historical lessons.** It preserves what went wrong and why. It is not a
