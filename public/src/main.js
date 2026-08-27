@@ -258,6 +258,52 @@ status.dataset.debug = perfHud.dataset.debug;
 const POINTER_MODE = pointerModeFor(navigator.maxTouchPoints);
 document.querySelector('#game').dataset.pointer = POINTER_MODE;
 
+// ── KILL iOS DOUBLE-TAP ZOOM ─────────────────────────────────────────────────────────────────────
+//
+// The playtest's report: kids get trapped by double-tap zoom, worse in STANDALONE (Add-to-Home-
+// Screen) mode, where there is no browser chrome -- no address bar, no pinch-to-reset affordance --
+// to rescue them. index.html's own viewport meta (maximum-scale=1, user-scalable=no) is the primary
+// fix and stops the platform from ever entering a zoomed state; these two are belt-and-braces for
+// gestures a browser can still try to read as zoom intent even with scaling disabled.
+//
+// dblclick fires for a fast double-tap the same way it does for a real mouse double-click, and
+// preventing its default suppresses whatever residual zoom/selection behaviour rides along with it
+// WITHOUT touching the two ordinary click events underneath -- a button double-tapped this way still
+// receives both clicks. Global and unconditional: there is no click-through case where the page
+// benefits from a double-tap doing anything special.
+document.addEventListener('dblclick', (event) => event.preventDefault());
+
+// STANDALONE ONLY, and stronger: a capture-phase touchend guard that swallows the SECOND of two taps
+// landing inside 300ms on a NON-interactive target -- which is the touch that actually triggers the
+// browser's native double-tap-zoom, ahead of dblclick ever firing. `navigator.standalone` is Safari's
+// own (non-standard, iOS-only) flag for exactly this mode; `display-mode: standalone` is the same
+// state everywhere else PWAs report it.
+//
+// Scoped to non-interactive targets ONLY, and this is not a style choice -- preventDefault on
+// touchend cancels the synthetic click that would otherwise follow it. This is precisely why the
+// touch stick's own double-tap guard was removed on 2026-08-11 (input/touch.js's own comment): it
+// dropped a real re-grab, measured 42ms apart, because it discarded input rather than only zoom.
+// A button, input, link, label, or anything inside [data-thumb-surface] (the stick/attack button) or
+// [data-ui-surface] (an overlay's own chrome) is left alone here -- those already carry their own
+// touch-action rule (index.html) and their click has to survive a fast double-tap, e.g. mashing
+// ATTACK or double-tapping a Hero screen item.
+const STANDALONE_DISPLAY_MODE = Boolean(
+  window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true,
+);
+if (STANDALONE_DISPLAY_MODE) {
+  const DOUBLE_TAP_GUARD_INTERACTIVE_SELECTOR = 'button, input, textarea, select, a, label, '
+    + '[data-thumb-surface], [data-ui-surface]';
+  const DOUBLE_TAP_GUARD_WINDOW_MS = 300;
+  let lastNonInteractiveTouchEndAt = 0;
+  document.addEventListener('touchend', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(DOUBLE_TAP_GUARD_INTERACTIVE_SELECTOR)) return;
+    const now = Date.now();
+    if (now - lastNonInteractiveTouchEndAt <= DOUBLE_TAP_GUARD_WINDOW_MS) event.preventDefault();
+    lastNonInteractiveTouchEndAt = now;
+  }, { capture: true, passive: false });
+}
+
 async function bootstrap() {
   const scene = new THREE.Scene();
   // Gradient sky + distance haze, both from render/sky.js. This was one flat colour and no fog,
@@ -2099,6 +2145,72 @@ async function bootstrap() {
     profileGate.render(gateView());
     profileGate.open();
   }
+
+  // ── TASK 6: A SECOND, UNMISSABLE WAY OUT OF EVERY FULL-SCREEN OVERLAY ───────────────────────────
+  //
+  // The playtest's real failure: a child stuck on the Hero screen or the Village Board with no way
+  // out but killing the app. cameraGesture.js's own veto (isInteractiveUiTarget) is the root-cause
+  // fix -- it stops a wobbly tap on the X from also dragging the camera/preview underneath it -- but
+  // a five-year-old does not reliably find a 48px X in the first place even when it works perfectly.
+  // These two are the belt: Escape, and a tap on the panel's own dimmed/click-through backdrop, both
+  // do exactly what the X does, for every overlay that has one.
+  const profileGateElement = document.querySelector('#profile-gate');
+  const profileGateCloseElement = document.querySelector('#profile-gate-close');
+
+  // BACKDROP TAP, Hero screen and Village Board. Both are deliberately click-through on their own
+  // container (index.html's own comment on #hero-screen) so a drag on the empty middle still turns
+  // the camera/Hero-preview turntable -- so "tap the backdrop closes it" cannot be a plain click
+  // listener on the panel the way an ordinary modal would do it; pointer-events: none means the panel
+  // never receives that event at all. It is measured the same way the companion-tap seam above tells
+  // a tap from a drag: a short (<12px), stationary pointer that started and ended on the game surface
+  // itself, while that overlay was open, and that never touched the overlay's own chrome (which
+  // already has its own buttons and must not also close the screen out from under a child using
+  // them).
+  const overlayBackdropTapPointers = new Map();
+  gameSurface.addEventListener('pointerdown', (event) => {
+    if (!heroScreen.isOpen() && !villageBoard.isOpen()) return;
+    const targetElement = event.target instanceof Element ? event.target : null;
+    if (targetElement?.closest('button, input, textarea, select, a, label, [data-ui-surface]')) return;
+    overlayBackdropTapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }, { passive: true });
+  gameSurface.addEventListener('pointerup', (event) => {
+    const start = overlayBackdropTapPointers.get(event.pointerId);
+    overlayBackdropTapPointers.delete(event.pointerId);
+    if (!start) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
+    if (heroScreen.isOpen()) heroScreen.close();
+    else if (villageBoard.isOpen()) villageBoard.close();
+  }, { passive: true });
+  gameSurface.addEventListener('pointercancel', (event) => {
+    overlayBackdropTapPointers.delete(event.pointerId);
+  }, { passive: true });
+
+  // BACKDROP TAP, the profile gate. Unlike the two above, the gate is opaque and pointer-events:
+  // auto across its WHOLE area while shown (profileGate.js's own header: "a question that has to be
+  // answered... a half-visible village behind it invites a child to try to tap the village"), so its
+  // backdrop DOES receive a real click -- the ordinary modal pattern, gated on event.target being the
+  // backdrop element itself so a click that bubbled up from the panel or a card does not also close
+  // it. Never fires during first-run naming: gated on the close button's own shown state, which is
+  // the SAME rule that already hides the X there -- see profileGate.js's own comment for why that
+  // one question has no dismiss ("a dismissable question a child cannot answer any other way is a
+  // dead end").
+  profileGateElement?.addEventListener('click', (event) => {
+    if (event.target !== profileGateElement) return;
+    if (profileGateCloseElement?.dataset.shown !== 'true') return;
+    profileGate.close();
+  });
+
+  // ESCAPE. Whichever one full-screen overlay is open -- they are mutually exclusive by construction,
+  // each one's own onOpenChange above closes the others -- the same key that closes every other
+  // dialog on the web closes it too. Every desktop and debugging session has this key; a real iPad's
+  // on-screen keyboard does not, which is exactly why this is belt-and-braces rather than the whole
+  // fix.
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (heroScreen.isOpen()) { heroScreen.close(); return; }
+    if (villageBoard.isOpen()) { villageBoard.close(); return; }
+    if (profileGate.isOpen() && profileGateCloseElement?.dataset.shown === 'true') profileGate.close();
+  });
 
   /**
    * Write a durable fact into this device's own journal as it is announced.
