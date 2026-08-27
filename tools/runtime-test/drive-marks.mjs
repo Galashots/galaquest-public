@@ -33,7 +33,7 @@ import {
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import {
-  authoredWolfSource, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK,
+  authoredWolfSource, readWatchSource, startWalk, startWatch, STOP_WALK,
   stopWatchSource, waitForSample,
 } from './in-page-driver.mjs';
 
@@ -393,41 +393,6 @@ const FIGHT_SAMPLE = `(() => {
   };
 })()`;
 
-// THE RE-CLOSE PULSES UNLESS THERE IS REAL GROUND TO COVER. A held walk cannot stop on a mark --
-// the release costs a poll and a round trip while authority keeps walking, which at a full-deflection
-// stick is a metre and a half. Ask it to stop at 1.0m from the wolf and it hands back a hero 2.5m
-// away, outside ATTACK_REACH, so the swing that follows hits nothing. Hosted at 3c43815 that read as
-// a hero knocked down sixteen times with the wolf never below 1hp, with the re-close present and
-// doing harm. The pulsed walker is slow per metre and exact, and exact is what matters here: the
-// wolf brings itself to about a metre, and what the walk is really for is turning the hero, since he
-// only turns while moving. The held leg is kept for the one case with actual distance in it --
-// coming back from a knockdown, which respawns him at spawn.
-const HELD_APPROACH_SLACK_METRES = 3;
-
-// The stick held straight up is pure camera-forward -- the same `sy = 1` case the pulsed steering
-// above computes -- so with the heading re-aimed in-page every frame, "hold forward" means "walk at
-// the wolf".
-async function heldWalkToward(targetExpression, stopWithin, maxMillis) {
-  await page.eval(startWalk(targetExpression, stopWithin));
-  await touch('touchStart', [{ x: stickX, y: stickY }]);
-  await touch('touchMove', [{ x: stickX, y: stickY - STICK_PX }]);
-  try {
-    return await pollUntilDeadline(() => page.eval(READ_WALK).then(JSON.parse),
-      (next) => next?.arrived, { intervalMs: 100, timeoutMs: maxMillis });
-  } finally {
-    await touch('touchEnd', []);
-    await page.eval(STOP_WALK);
-  }
-}
-
-// A slow runner can reach the fourth-tap read while the child is still down. Starting the in-page
-// walker then spends its whole budget holding an input the rules correctly ignore. Wait for the
-// authoritative recovery first; this is re-engagement after a real knockdown, not a free retry.
-async function reengageAfterRecovery() {
-  await pollUntil((live) => live.hero.downSeconds < 0, { intervalMs: 100, timeoutMs: 15000 });
-  return heldWalkToward(WOLF_TARGET, 1.0, 15000);
-}
-
 await page.eval(startWatch('fight', FIGHT_SAMPLE));
 const readFight = () => page.eval(readWatchSource('fight')).then(JSON.parse);
 // This machine's own pace, measured rather than assumed.
@@ -538,17 +503,15 @@ try {
     })) {
       gapsAtRead.push(Number(lastGap.toFixed(2)));
     }
-    if (latest?.heroDown) {
-      // A knockdown respawns the hero at spawn, metres away, and the rules ignore a held stick on
-      // a down body. Drop everything, wait out the down state, cross the real distance with the
-      // full-speed held leg, then re-establish the fight hold.
-      // eslint-disable-next-line no-await-in-loop
-      await releaseFightStick();
-      // eslint-disable-next-line no-await-in-loop
-      await reengageAfterRecovery();
-      // eslint-disable-next-line no-await-in-loop
-      await holdFightStick();
-    }
+    // NO knockdown branch, on purpose. The first version of this hold released the stick on a
+    // down read, reengaged with a separate held leg, and re-established the hold -- and the
+    // three-way touch choreography died on its first real knockdown (98d83e9: two downs, then
+    // fourteen straight reads at gap 8.25 with the hero standing READY at spawn and every input
+    // dead). None of it is needed: the in-page walk never latches and re-aims at the LIVE wolf
+    // from wherever the hero is, the rules simply ignore held input on a down body, and the
+    // respawned hero walks himself back into the fight on the same hold. The one cost is
+    // crossing the respawn gap at the walk push instead of the run push, ~4 extra seconds the
+    // wolf spends idling at full hp anyway.
   }
 } finally {
   await releaseFightStick();
