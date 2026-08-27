@@ -17,30 +17,39 @@ import {
   // worse than no bar, and this is precisely the "one number, one home" case GQ-007 names.
   RESPAWN_SECONDS,
   stepEncounter,
+  requestSoloHeroHeal,
 } from './combat/encounter.js';
-import { createEncounterFeedback, healthReadout } from './combat/feedback.js';
+import { createEncounterFeedback, healthReadout, isOutOfCombatRegenRise } from './combat/feedback.js';
+import { ENEMY_KINDS, killXpForKind } from './combat/enemyStats.js';
 import { createAudioEngine } from './audio/engine.js';
 import {
   CART_JOLT_RECIPE_NAME,
   COIN_PICKUP_RECIPE_NAME,
+  GEAR_PICKUP_RECIPE_NAME,
+  HEART_PICKUP_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
   LEVEL_UP_RECIPE_NAME,
   RELIGHT_RECIPE_NAME,
   SHARD_PICKUP_RECIPE_NAME,
   WORKSHOP_BUILD_RECIPE_NAME,
   BEACON_ARRIVAL_RECIPE_NAME,
+  RUNE_CHEST_BRILLIANT_RECIPE_NAME,
+  RUNE_CHEST_OPEN_RECIPE_NAME,
   soundForEvent,
 } from './audio/recipes.js';
 import {
   attachBeltLantern,
   attachSilverguardHelmet,
+  attachSilverguardShoulder,
   attachWildwoodBladeCandidate,
   BELT_LANTERN_URL,
   RIGID_BELT_LANTERN,
   RIGID_SILVERGUARD_HELMET,
   SILVERGUARD_HELMET_HIDES_ANATOMY,
   SILVERGUARD_HELMET_URL,
+  SILVERGUARD_SHOULDER_URL,
   WILDWOOD_BLADE_CANDIDATE_URL,
+  silverguardShoulderAnchorId,
 } from './character/gear.js';
 import { SHIPPING_SWORD_MESH_ID, weaponMeshIdFor, weaponVisibility, WILDWOOD_BLADE_CANDIDATE_ID }
   from './character/weaponLoadout.js';
@@ -50,10 +59,13 @@ import {
   createLifeIdMinter,
   createOfflineProgress,
 } from './rewards/offlineProgress.js';
+import { xpToastText } from './rewards/xpToastView.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS,
   DEFAULT_EQUIPPED_WEAPON_ID,
   DEFAULT_OWNED_ITEM_IDS,
+  SHOULDERS_SLOT,
+  SHOULDER_SILVERGUARD_ID,
   swingDamageFor,
 } from './progression/items.js';
 import {
@@ -77,8 +89,9 @@ import { REWARD_EVENT_TYPES, createRewardFeedback, soundForRewardEvent } from '.
 import { createMarkSparks } from './rewards/markSpark.js';
 import { createImpactBursts } from './render/impactBurst.js';
 import { loadGLB } from './world/assets.js';
-import { createWolfPresenter, loadWolfFactory, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
+import { createWolfPresenter, loadWolfFactory, WOLF_SCALE, WOLF_SPARK_HEIGHT_METERS } from './enemies/wolf.js';
 import { createEnemyPresenterRegistry } from './enemies/presenterRegistry.js';
+import { presentationForKind } from './enemies/enemyKindPresentation.js';
 import {
   createEnemyNameplateLayer,
   ENEMY_NAMEPLATE_MAX_DISTANCE,
@@ -86,6 +99,42 @@ import {
   clampNameplateProjection,
   nameplateProjectionIsSafe,
 } from './enemies/nameplate.js';
+import { createGlowSprite, setGlowStrength } from './render/glow.js';
+import {
+  COIN_DROP_KIND,
+  DROP_COLLECT_RADIUS_METERS,
+  GEAR_DROP_KIND,
+  HEART_DROP_KIND,
+  HEART_HEAL_HP,
+  createEnemyDropsState,
+  requestCollectEnemyDrop,
+  requestEnemyDrop,
+  stepEnemyDrops,
+} from './world/enemyDrops.js';
+import { createEnemyDropsPresenter } from './world/enemyDropsPresenter.js';
+import {
+  coinMultiplierForStreak, createStreakState, registerKill as registerStreakKill, stepStreak,
+  streakStillActive,
+} from './progression/streaks.js';
+import { streakMeterView } from './progression/streakView.js';
+// THE HIDDEN LEARNING LAYER: every 8th kill this hero personally lands spawns a rune chest. Pure
+// rules live in progression/runeChests.js (this module's own header explains why it is CLIENT-LOCAL
+// and offline-first rather than following R1's server-authoritative kill drops); the mesh is
+// world/runeChestPresenter.js and the question card is ui/runeChestCard.js.
+import {
+  CHEST_COLLECT_RADIUS_METERS,
+  closeRuneChest,
+  createRuneChestState,
+  heroInCombat,
+  judgeRuneChestAnswer,
+  openRuneChest,
+  pickChestSpawnPoint,
+  registerRuneChestKill,
+  rewardXpForRuneChestAnswer,
+  runeChestXpEventId,
+} from './progression/runeChests.js';
+import { createRuneChestPresenter } from './world/runeChestPresenter.js';
+import { createRuneChestCard } from './ui/runeChestCard.js';
 import { createPrototypeCompanionPresenter, loadPrototypeCompanion } from './companions/prototypeCompanion.js';
 import { createSwingAnimator } from './character/swing.js';
 import { createClipSwingAnimator } from './character/swingClip.js';
@@ -98,6 +147,8 @@ import {
   HERO_MAX_HP,
   SWING_CONTACT_SECONDS,
   SWING_SECONDS,
+  WOLF_AGGRO_RANGE,
+  WOLF_BITE_RANGE,
   isWithinStrike,
   separateFromEnemies,
 } from './combat/encounter.js';
@@ -113,7 +164,7 @@ import { createProfileStore } from './progression/profiles.js';
 import { createProfileGate, profileGateViewModel } from './progression/profileGate.js';
 import { foldFacts } from './progression/facts.js';
 import { createRemotePlayers } from './net/remotes.js';
-import { CHARACTER, WORLD } from './render/layers.js';
+import { CHARACTER, WORLD, setLayer } from './render/layers.js';
 import { createHeroPreview } from './render/heroPreview.js';
 import { createRimLight } from './render/rimLight.js';
 import { createRenderer } from './render/renderer.js';
@@ -139,9 +190,10 @@ import {
 } from './world/rangerSpeech.js';
 import { questObjectiveFor } from './world/quest.js';
 import { destinationFor, nearestPlaceTo } from './world/destinations.js';
-import { edgeIndicatorFor } from './ui/offscreenPointer.js';
 import { createRescueWatch, targetKeyFor } from './ui/guidanceRescue.js';
 import { DEFAULT_RANGE_METERS, minimapPlacement, minimapPolyline } from './ui/minimap.js';
+import { formatGuideMeters, guideArrowFor } from './render/guideArrow.js';
+import { createGuidePath } from './render/guidePath.js';
 import {
   BRAMBLE_EXTRA_REACH_METERS,
   bramblesCut,
@@ -155,6 +207,9 @@ import {
   wakeTrailLights,
 } from './world/trail.js';
 import { clampToWorldX, clampToWorldZ } from './world/bounds.js';
+// G3 follow-up: the Beacon's own collision -- see that module's header for why this has to be the
+// SAME pure function net/gameServerCore.mjs runs, not merely the same rule.
+import { resolveObstacleCollisions, worldObstacles } from './world/obstacles.js';
 import {
   CART_LOOT_TABLE,
   COIN_KIND,
@@ -177,6 +232,9 @@ import {
   requestSiegeAttack,
   stepSiege,
 } from './world/beaconSiege.js';
+// The overhead boss bar rides above the Warden's own actual height, imported rather than guessed --
+// the same "one number, one owner" rule WARDEN_MAX_HP above already keeps (GQ-007).
+import { WARDEN_HEIGHT_METERS } from './enemies/warden.js';
 import {
   BLACKTHORN_BLOWS_TO_TEAR,
   createHollowState,
@@ -185,12 +243,16 @@ import {
   openChest,
   strikeBarrier,
 } from './world/blackthornHollow.js';
-import { bossBarState, createBossBar } from './ui/bossBar.js';
-import { HELMET_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
+import { BOSS_BAR_SAFE_HEIGHT, BOSS_BAR_SAFE_WIDTH, bossBarState, createBossBar } from './ui/bossBar.js';
+import { HELMET_ICON_SVG, SHOULDER_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
 import { SIEGE_EVENT_RECIPE_MAP, soundForSiegeEvent } from './audio/siegeRecipes.js';
 import { HELMET_SILVERGUARD_ID, HELMET_SLOT, WILDWOOD_BLADE_ID, damageFor, itemDef } from './progression/items.js';
 import { predictionStep } from './net/prediction.js';
 import * as VILLAGE from './world/zones/village.js';
+
+// Computed once: the Village's own blockers (world/obstacles.js) never move mid-session, so
+// re-deriving them from zone data every frame would be pure waste.
+const WORLD_OBSTACLES = worldObstacles();
 
 // Defensive fallbacks for the online mirror, for the one frame (if any) where netStatus has
 // already flipped to 'online' but onEncounter has not yet run -- see net/client.js: setStatus is
@@ -236,6 +298,14 @@ const SESSION_ONLY_PROFILE_ID = 'p-session-only';
 // hero measures 1.479 m; a destination is a place on the map and has no height of its own.
 const POINTER_TARGET_HEIGHT_METERS = 1.0;
 
+// R1: the Alpha Wolf's own glowing eyes -- measured directly off wolf.glb's own bind-pose bone chain
+// (Armature -> Hips -> chest -> head -> headend), not guessed. See the enemy presenter's own comment
+// on these for the full method and the honest caveat about no live in-game confirmation being
+// possible in this sandbox.
+const ALPHA_EYE_LOCAL_LEFT = Object.freeze([0.03, 0.707, 0.697]);
+const ALPHA_EYE_LOCAL_RIGHT = Object.freeze([-0.03, 0.707, 0.697]);
+const ALPHA_EYE_SIZE_METERS = 0.05;
+
 const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
 const perfHud = document.querySelector('#perf-hud');
@@ -256,6 +326,52 @@ status.dataset.debug = perfHud.dataset.debug;
 // and records why it is deliberately biased towards keeping the stick.
 const POINTER_MODE = pointerModeFor(navigator.maxTouchPoints);
 document.querySelector('#game').dataset.pointer = POINTER_MODE;
+
+// ── KILL iOS DOUBLE-TAP ZOOM ─────────────────────────────────────────────────────────────────────
+//
+// The playtest's report: kids get trapped by double-tap zoom, worse in STANDALONE (Add-to-Home-
+// Screen) mode, where there is no browser chrome -- no address bar, no pinch-to-reset affordance --
+// to rescue them. index.html's own viewport meta (maximum-scale=1, user-scalable=no) is the primary
+// fix and stops the platform from ever entering a zoomed state; these two are belt-and-braces for
+// gestures a browser can still try to read as zoom intent even with scaling disabled.
+//
+// dblclick fires for a fast double-tap the same way it does for a real mouse double-click, and
+// preventing its default suppresses whatever residual zoom/selection behaviour rides along with it
+// WITHOUT touching the two ordinary click events underneath -- a button double-tapped this way still
+// receives both clicks. Global and unconditional: there is no click-through case where the page
+// benefits from a double-tap doing anything special.
+document.addEventListener('dblclick', (event) => event.preventDefault());
+
+// STANDALONE ONLY, and stronger: a capture-phase touchend guard that swallows the SECOND of two taps
+// landing inside 300ms on a NON-interactive target -- which is the touch that actually triggers the
+// browser's native double-tap-zoom, ahead of dblclick ever firing. `navigator.standalone` is Safari's
+// own (non-standard, iOS-only) flag for exactly this mode; `display-mode: standalone` is the same
+// state everywhere else PWAs report it.
+//
+// Scoped to non-interactive targets ONLY, and this is not a style choice -- preventDefault on
+// touchend cancels the synthetic click that would otherwise follow it. This is precisely why the
+// touch stick's own double-tap guard was removed on 2026-08-11 (input/touch.js's own comment): it
+// dropped a real re-grab, measured 42ms apart, because it discarded input rather than only zoom.
+// A button, input, link, label, or anything inside [data-thumb-surface] (the stick/attack button) or
+// [data-ui-surface] (an overlay's own chrome) is left alone here -- those already carry their own
+// touch-action rule (index.html) and their click has to survive a fast double-tap, e.g. mashing
+// ATTACK or double-tapping a Hero screen item.
+const STANDALONE_DISPLAY_MODE = Boolean(
+  window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true,
+);
+if (STANDALONE_DISPLAY_MODE) {
+  const DOUBLE_TAP_GUARD_INTERACTIVE_SELECTOR = 'button, input, textarea, select, a, label, '
+    + '[data-thumb-surface], [data-ui-surface]';
+  const DOUBLE_TAP_GUARD_WINDOW_MS = 300;
+  let lastNonInteractiveTouchEndAt = 0;
+  document.addEventListener('touchend', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(DOUBLE_TAP_GUARD_INTERACTIVE_SELECTOR)) return;
+    const now = Date.now();
+    if (now - lastNonInteractiveTouchEndAt <= DOUBLE_TAP_GUARD_WINDOW_MS) event.preventDefault();
+    lastNonInteractiveTouchEndAt = now;
+  }, { capture: true, passive: false });
+}
 
 async function bootstrap() {
   const scene = new THREE.Scene();
@@ -287,6 +403,12 @@ async function bootstrap() {
   scene.add(world);
   const rimLight = createRimLight();
   scene.add(rimLight.light, rimLight.target);
+  // ALWAYS-ON WAYFINDING, part one of two. The playtest finding this exists for: "need much clearer
+  // arrows and dotted paths on where to go next... they should basically always be there." A pooled
+  // sprite trail in world space, driven every frame by the same destinationFor() answer that already
+  // aims the edge arrow below -- see render/guidePath.js's own header for why it is world space and
+  // not a HUD overlay, and why a straight line is the right amount of pathfinding for a flat plane.
+  const guidePath = createGuidePath(scene);
 
   // Phase V: the village zone, additive over the placeholder ground the same way the wolf is
   // additive over the hero -- loadZone() returns immediately with a live `counts` object (mutated
@@ -465,6 +587,7 @@ async function bootstrap() {
   // genuine false->true within a live session fires the acquisition card. Ownership, not equipment:
   // the Helmet arrives owned-but-off, and putting it on is the card's Equip beat, never automatic.
   let helmetOwnedSeen = null;
+  let shoulderOwnedSeen = null;
   // ARC 2, and the same null-means-not-known-yet shape bladeOwnedSeen uses above and for the same
   // reason: a returning child who already brought Wren the satchel yesterday adopts that answer
   // silently on their first frame rather than being handed the moment again on every page load.
@@ -643,7 +766,7 @@ async function bootstrap() {
   const companionTapPointers = new Map();
   gameSurface.addEventListener('pointerdown', (event) => {
     const targetElement = event.target instanceof Element ? event.target : null;
-    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen');
+    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen, #rune-chest-card');
     const targetIsVisibleOverlay = targetLayer?.dataset.shown === 'true';
     if (targetElement?.closest('button, [data-thumb-surface]') || targetIsVisibleOverlay
       || touch.ownsPointer(event) || attack.ownsPointer(event)) return;
@@ -653,10 +776,10 @@ async function bootstrap() {
     const start = companionTapPointers.get(event.pointerId);
     companionTapPointers.delete(event.pointerId);
     const targetElement = event.target instanceof Element ? event.target : null;
-    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen');
+    const targetLayer = targetElement?.closest('#unlock-card-layer, #hero-screen, #village-board-screen, #rune-chest-card');
     const targetIsVisibleOverlay = targetLayer?.dataset.shown === 'true';
     if (!start || targetElement?.closest('button, [data-thumb-surface]') || targetIsVisibleOverlay
-      || heroScreen.isOpen() || villageBoard.isOpen()) return;
+      || heroScreen.isOpen() || villageBoard.isOpen() || runeChestCard.isOpen()) return;
     if (touch.ownsPointer(event) || attack.ownsPointer(event)) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
     if (companionPresenter?.hitTest(event.clientX, event.clientY, canvas, camera)) {
@@ -779,6 +902,23 @@ async function bootstrap() {
       gameSurface.dataset.villageBoardOpen = String(open);
     },
   });
+  // THE HIDDEN LEARNING LAYER: the rune chest's own question card. Same suspend-input shape Hero and
+  // the Village Board both take (touch/attack suspended, the other two closed first) -- the brief's
+  // own "suspend movement like other overlays" -- but no camera dolly and no HUD-hiding data attribute
+  // beyond the shared `anyOverlayOpen` gate below: this is a five-second modal beat over whatever the
+  // world already looks like, not a screen a child dwells inside.
+  const runeChestCard = createRuneChestCard({
+    onAnswer: (answerIndex) => onRuneChestAnswer(answerIndex),
+    onOpenChange: (open) => {
+      if (open) { heroScreen.close(); villageBoard?.close(); }
+      touchStickElement.dataset.suspended = String(open);
+      attackButtonElement.dataset.suspended = String(open);
+      // Suppressed the instant the card closes (answered OR dismissed) so a hero still standing
+      // inside CHEST_COLLECT_RADIUS_METERS does not have the card instantly reopen under their own
+      // thumb -- see runeChestCardSuppressed's own declaration comment for the guard this drives.
+      if (!open) runeChestCardSuppressed = true;
+    },
+  });
   const player = {
     groundSpeed: 0,
     heading: 0,
@@ -789,7 +929,10 @@ async function bootstrap() {
   let wolfVisualFactory = null;
   const enemyPresenters = createEnemyPresenterRegistry({
     createPresenter(enemy) {
-      if (enemy.kind !== 'wolf') return null;
+      // R1: every density-package kind (ember-wolf, frost-wolf, alpha-wolf) reuses the SAME shipped
+      // wolf.glb -- no new GLBs were authored for it -- so any kind the rules table recognises gets a
+      // presenter; an unrecognised kind still returns null rather than drawing a default body.
+      if (!ENEMY_KINDS.includes(enemy.kind)) return null;
       // bootstrap loads the shared Wolf source after the render loop is already live. `undefined`
       // means "supported, not ready yet" to the registry, so the same stable id is retried next
       // frame rather than being replaced with a placeholder authority.
@@ -798,6 +941,43 @@ async function bootstrap() {
 
       const visual = wolfVisualFactory.create();
       visual.root.name = `wolf:${enemy.enemyId}`;
+
+      // THE KIND'S OWN APPEARANCE, read from the one table wolf.js is deliberately blind to
+      // (enemies/enemyKindPresentation.js) -- scale and tint, applied here rather than inside wolf.js
+      // so the shared Wolf presenter never has to know a density push exists. wolf.js's own
+      // prepareWolfRoot already clones every material per instance for exactly this reason (so one
+      // Wolf's hit flash cannot bleed onto another's), which is what makes multiplying `.color` here
+      // safe: it never touches a material another enemy or the local hero shares.
+      const appearance = presentationForKind(enemy.kind);
+      visual.root.scale.multiplyScalar(appearance.scaleMultiplier);
+      if (appearance.tintColor !== 0xffffff) {
+        const tint = new THREE.Color(appearance.tintColor);
+        visual.root.traverse((object) => {
+          if (!object.isMesh) return;
+          for (const material of [].concat(object.material)) material?.color?.multiply(tint);
+        });
+      }
+
+      // THE ALPHA'S OWN EYES. Positions are measured, not guessed, off wolf.glb's own bind-pose bone
+      // chain (Armature -> Hips -> chest -> head -> headend), the same "look before you derive"
+      // discipline every hand-fit gear anchor in character/gear.js already follows -- interpolated
+      // 35% of the way from the head joint toward the nose tip, in the same pre-WOLF_SCALE,
+      // root-relative space WOLF_SPARK_HEIGHT_METERS/WOLF_SCALE already uses for the lantern spark on
+      // this same body. No WebGL in this sandbox to confirm the placement in the running game (this
+      // repo's own hard rule); a future capture showing the eyes adrift is the real acceptance test.
+      const eyeSprites = [];
+      if (appearance.glowEyes) {
+        for (const local of [ALPHA_EYE_LOCAL_LEFT, ALPHA_EYE_LOCAL_RIGHT]) {
+          const eye = createGlowSprite(appearance.eyeColor, ALPHA_EYE_SIZE_METERS / WOLF_SCALE);
+          eye.name = 'alpha-wolf-eye';
+          eye.position.set(local[0], local[1], local[2]);
+          setLayer(eye, CHARACTER);
+          setGlowStrength(eye, 1);
+          visual.root.add(eye);
+          eyeSprites.push(eye);
+        }
+      }
+
       scene.add(visual.root);
       const wolfPresenter = createWolfPresenter(visual.root, visual.animations);
       const materials = new Set();
@@ -816,6 +996,7 @@ async function bootstrap() {
           wolfPresenter.dispose();
           scene.remove(visual.root);
           for (const material of materials) material.dispose?.();
+          for (const eye of eyeSprites) eye.material.dispose?.();
         },
       };
     },
@@ -843,6 +1024,81 @@ async function bootstrap() {
     heroSpawn: HERO_SPAWN,
     recoverySanctuary: RECOVERY_SANCTUARY,
   });
+
+  // R1: kill drops and the streak meter. `dropsState` is the OFFLINE-ONLY authority -- online, drops
+  // live entirely on the server (serverEncounter.drops) and this client only ever renders/collects
+  // them, the same "the server owns physical truth" split the cart's own loot already keeps. The
+  // presenter itself is shared by both modes: it only ever reads whatever drops array it is handed.
+  let dropsState = createEnemyDropsState();
+  const dropsPresenter = createEnemyDropsPresenter(scene);
+  // Offline-only: world/enemyDrops.js's own lifeId is deliberately non-durable ("used only to keep
+  // this kill's drop ids distinct... never persisted or checked for durable idempotency"), so a
+  // fresh minter local to drops is correct -- it does not need to correlate with the mark/XP minter's
+  // own durable ids at all, only to never repeat within this session.
+  const mintDropLifeId = createLifeIdMinter();
+  // Same throttled-retry shape LOOT_REQUEST_RETRY_MS/lootRequestedAt already give cart pickups (see
+  // that pair's own comment for why a one-shot Set undercounts a hero merely passing near a drop).
+  const dropRequestedAt = new Map();
+  const DROP_REQUEST_RETRY_MS = 500;
+  // The kill-streak meter's own rolling state, mirrored CLIENT-SIDE off observed wolf-defeated events
+  // (progression/streaks.js's own header: pure, caller-clocked). The server keeps its own per-player
+  // streak to size coin drops and never puts it on the wire, so this is a mirror rather than a read
+  // of authority -- and it has to mirror the SAME kills the server counts, because the meter draws
+  // the very coin multiplier the server will pay (see the wolf-defeated dispatch below for the
+  // measured two-child divergence that made this explicit). It counts exactly the kills this hero
+  // personally finished; only the 30 s decay CLOCK is approximate, because this side steps it by
+  // frame delta and the server by tick delta, so a kill landing within a few hundred milliseconds of
+  // STREAK_WINDOW_SECONDS can still read one tier out for one kill. A page reload also starts the
+  // mirror at zero while the server holds its streak until the socket closes.
+  let streakState = createStreakState();
+
+  // THE HIDDEN LEARNING LAYER: rune chests. CLIENT-LOCAL AND OFFLINE-FIRST -- unlike dropsState just
+  // above, this is not mirrored from a server at all, online or off (progression/runeChests.js's own
+  // header explains why: a chest is a per-child learning beat, never shared/adjudicated world state).
+  // Driven identically in both netStatus branches off the SAME myKillEnemyIds gate the XP toast
+  // already uses, further down in this loop.
+  let runeChestState = createRuneChestState();
+  const runeChestPresenter = createRuneChestPresenter(scene);
+  // Set the instant registerRuneChestKill reports a threshold crossed with no chest already standing;
+  // cleared the instant a legal spot is actually found (see the placement attempt further down the
+  // frame loop). Staying `true` across a frame or two is expected and harmless -- it only means the
+  // hero happened to be standing somewhere pickChestSpawnPoint's own isAllowed refused every candidate
+  // it tried (inside the Beacon arena, say), and the next frame's fresh rng draws simply try again
+  // from wherever the hero has since walked to.
+  let runeChestSpawnDue = false;
+  // A fresh minter local to chests, the identical "never persisted, only never repeats this session"
+  // discipline mintDropLifeId just above takes for the identical reason: runeChests.js's own openRune
+  // Chest header is explicit that a chest's id is never checked for durable idempotency beyond naming
+  // the one xp-earned fact it eventually pays (runeChestXpEventId).
+  const mintChestId = createLifeIdMinter();
+  // Guards against an instant re-open the SAME session the card was closed on: set true the instant
+  // runeChestCard's own onOpenChange fires closed, cleared the instant the hero actually LEAVES
+  // CHEST_COLLECT_RADIUS_METERS -- see the proximity check further down. Without this a dismissed
+  // card (the brief's own "a kid can just walk away... dismissing leaves the chest for later") would
+  // reopen on the very next frame, because the hero is by definition still standing inside the radius
+  // that opened it the first time. Harmless no-op after an ANSWER too (the chest is null by then, so
+  // the proximity check that reads this never even finds a chest to gate).
+  let runeChestCardSuppressed = false;
+
+  // A metre of clearance past the arena's/sanctuary's own radius, so a chest never spawns hugging
+  // the boundary line either -- the brief's own "never spawn a chest inside the beacon arena or the
+  // sanctuary" read generously rather than to the exact metre. World-knowledge lives HERE, not in
+  // progression/runeChests.js (that module's own pickChestSpawnPoint header: "a pure progression/
+  // rule has no business duplicating" world/bounds.js or world/zones/village.js), which is what keeps
+  // this the one place the exclusion rule can ever disagree with itself.
+  const RUNE_CHEST_EXCLUSION_MARGIN_METERS = 1;
+  function runeChestSpotAllowed(x, z) {
+    if (clampToWorldX(x) !== x || clampToWorldZ(z) !== z) return false;
+    const [arenaX, arenaZ] = VILLAGE.BEACON_ARENA.at;
+    if (Math.hypot(x - arenaX, z - arenaZ) < VILLAGE.BEACON_ARENA.radiusMeters + RUNE_CHEST_EXCLUSION_MARGIN_METERS) {
+      return false;
+    }
+    if (Math.hypot(x - RECOVERY_SANCTUARY.at.x, z - RECOVERY_SANCTUARY.at.z)
+      < RECOVERY_SANCTUARY.radiusMeters + RUNE_CHEST_EXCLUSION_MARGIN_METERS) {
+      return false;
+    }
+    return true;
+  }
 
   function enemyById(enemyId) {
     if (typeof enemyId !== 'string') return null;
@@ -999,6 +1255,20 @@ async function bootstrap() {
     healthPopTimer = window.setTimeout(() => { delete healthElement.dataset.healing; }, 200);
   }
 
+  // R1: out-of-combat regen's own cue -- a slow LOOPING shimmer rather than a one-shot pop, so it
+  // never reads as the same event a real heal already announces. See combat/feedback.js's own
+  // isOutOfCombatRegenRise for how the frame loop tells the two apart, and index.html's own
+  // #hero-health[data-regen] rule for the animation itself. Held open for a beat past the last
+  // observed regen tick (rather than cleared the instant one frame shows no rise) so the shimmer
+  // does not flicker between individual ~0.25s regen ticks.
+  let healthRegenTimer = null;
+  const REGEN_SHIMMER_HOLD_MS = 700;
+  function pulseRegen() {
+    healthElement.dataset.regen = 'true';
+    window.clearTimeout(healthRegenTimer);
+    healthRegenTimer = window.setTimeout(() => { delete healthElement.dataset.regen; }, REGEN_SHIMMER_HOLD_MS);
+  }
+
   // Floating damage numbers. Until now a landed hit was only visible as the wolf's own spark
   // dimming one notch -- readable if you already know to look for it, invisible to a child watching
   // the swing land. Positioned by projecting the wolf's world position through the CURRENT camera
@@ -1028,6 +1298,58 @@ async function bootstrap() {
     window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
   }
 
+  // R1: the kill's own "+20 XP" toast. Same projection/rise/lifetime plumbing as popDamageNumber
+  // (riding the SAME #damage-numbers overlay -- both are floating combat text, and a second
+  // container would just be a second copy of this exact mechanism), but its own CSS class so the
+  // colour reads as a reward rather than a hit (see index.html's .xp-toast, deliberately cool where
+  // .damage-number is warm gold).
+  function popXpToast(worldX, worldY, worldZ, amount) {
+    const projected = new THREE.Vector3(worldX, worldY, worldZ).project(camera);
+    if (projected.z > 1) return;
+    const rect = gameSurface.getBoundingClientRect();
+    const { x, y } = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    const el = document.createElement('div');
+    el.className = 'xp-toast';
+    el.textContent = xpToastText(amount);
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    damageNumbersElement.appendChild(el);
+    window.requestAnimationFrame(() => { el.dataset.rise = 'true'; });
+    window.setTimeout(() => { el.remove(); }, DAMAGE_NUMBER_LIFETIME_MS);
+  }
+
+  // R1: THE STREAK METER. See index.html's own CSS comment for the ring/pulse mechanics; this is
+  // only the DOM wiring, painted from progression/streakView.js's pure view-model every frame.
+  const streakMeterElement = document.querySelector('#streak-meter');
+  const streakRingElement = streakMeterElement?.querySelector('.streak-ring') ?? null;
+  const streakCountElement = streakMeterElement?.querySelector('.streak-count') ?? null;
+  const streakLabelElement = streakMeterElement?.querySelector('.streak-label') ?? null;
+  let streakPulseTimer = null;
+  function renderStreakMeter(view) {
+    if (!streakMeterElement) return;
+    const shown = view !== null;
+    streakMeterElement.dataset.shown = String(shown);
+    if (!shown) return;
+    streakMeterElement.dataset.tier = view.multiplier >= 3 ? '3' : view.multiplier >= 2 ? '2' : '1';
+    streakRingElement?.style.setProperty('--streak-fraction', String(view.ringFraction));
+    if (streakCountElement) streakCountElement.textContent = view.countText;
+    if (streakLabelElement) streakLabelElement.textContent = view.tierLabel;
+  }
+  /** One pulse per kill, a bigger one on the frame a tier is actually crossed -- see index.html's
+   *  own streak-pulse/streak-pulse-tier keyframes. */
+  function pulseStreakMeter(view) {
+    if (!streakMeterElement) return;
+    delete streakMeterElement.dataset.pulse;
+    window.clearTimeout(streakPulseTimer);
+    // A frame between clearing and re-setting the attribute, the same reason popDamageNumber's own
+    // rise needs one -- re-triggering a CSS animation on the SAME attribute value needs a paint in
+    // between, or the browser coalesces both states and the pulse never plays a second time in a row.
+    window.requestAnimationFrame(() => {
+      streakMeterElement.dataset.pulse = (view.justReachedTier2 || view.justReachedTier3) ? 'tier' : 'true';
+      streakPulseTimer = window.setTimeout(() => { delete streakMeterElement.dataset.pulse; }, 500);
+    });
+  }
+
   const enemyNameplates = createEnemyNameplateLayer({
     container: document.querySelector('#enemy-nameplates'),
   });
@@ -1045,7 +1367,7 @@ async function bootstrap() {
     // second portrait/landscape layout table that could drift from CSS.
     const reservedRects = [
       '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
-      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#minimap', '#objective-pointer',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#streak-meter', '#minimap', '#objective-pointer',
     ].flatMap((selector) => {
       const element = document.querySelector(selector);
       if (!element) return [];
@@ -1068,6 +1390,57 @@ async function bootstrap() {
     )).find((candidate) => nameplateProjectionIsSafe({ x: candidate, y: clamped.y }, reservedRects));
     if (safeX === undefined) return null;
     return { visible: true, x: safeX, y: clamped.y };
+  }
+
+  // THE WARDEN'S OWN OVERHEAD BAR. Same pipeline projectEnemyNameplate uses one function up --
+  // world position through the live camera, ndcToOverlayPixels into the game surface's own pixel
+  // space, clamp inside the viewport, dodge the HUD -- because this IS that same overhead
+  // convention, not a second one invented for the one enemy that gets a name on a card. No distance
+  // cap the way an ordinary enemy's nameplate has one (ENEMY_NAMEPLATE_MAX_DISTANCE): there is only
+  // ever one Warden, the arena he stands in is small, and a bar that vanished a few metres out would
+  // make the fight's own readout flicker exactly when a child steps back to dodge.
+  function projectBossBar(warden) {
+    const projected = new THREE.Vector3(warden.x, WARDEN_HEIGHT_METERS + 0.32, warden.z).project(camera);
+    // Behind the camera (z > 1): never draw. Nothing here checks z < -1 the way the ordinary
+    // nameplate does -- that branch guards against a camera INSIDE the enemy's own body, which
+    // cannot happen at the Warden's 2.6 m height and the follow camera's own distance.
+    if (projected.z > 1) return null;
+    const rect = gameSurface.getBoundingClientRect();
+    const projectedPixels = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);
+    if (projectedPixels.x < -160 || projectedPixels.x > rect.width + 160
+      || projectedPixels.y < -100 || projectedPixels.y > rect.height + 60) return null;
+    const reservedRects = [
+      '#touch-stick', '#attack-button', '#hero-health', '#hero-progress', '#lantern-marks',
+      '#quest-objective', '#keeper-speech', '#banner', '#loot-hud', '#streak-meter', '#minimap', '#objective-pointer',
+    ].flatMap((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return [];
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return [];
+      const box = element.getBoundingClientRect();
+      return [{
+        left: box.left - rect.left,
+        top: box.top - rect.top,
+        right: box.right - rect.left,
+        bottom: box.bottom - rect.top,
+      }];
+    });
+    const clamped = clampNameplateProjection(
+      projectedPixels, rect, { width: BOSS_BAR_SAFE_WIDTH, height: BOSS_BAR_SAFE_HEIGHT },
+    );
+    // Unlike the ordinary nameplate's own search-outward-for-a-safe-x dance, the boss bar just lifts
+    // straight up out of whatever it would overlap: there is exactly one of these on screen at once,
+    // so there is no neighbour to dodge sideways INTO, and rising above the obstruction keeps it
+    // reading as "attached to the Warden's own head" rather than teleporting off to one side of him.
+    let y = clamped.y;
+    for (let lift = 0; lift < 6; lift += 1) {
+      if (nameplateProjectionIsSafe(
+        { x: clamped.x, y }, reservedRects, { width: BOSS_BAR_SAFE_WIDTH, height: BOSS_BAR_SAFE_HEIGHT },
+      )) break;
+      y -= BOSS_BAR_SAFE_HEIGHT * 0.6;
+    }
+    if (y < -100) return null;
+    return { x: clamped.x, y };
   }
 
   // Phase D (D4): three lantern-mark pips under the health readout, filling as marks arrive. Same read-only,
@@ -1344,22 +1717,50 @@ async function bootstrap() {
   };
   const objectivePointerElement = document.querySelector('#objective-pointer');
   const objectivePointerArrowElement = document.querySelector('#objective-pointer-arrow');
+  const objectivePointerDistanceElement = document.querySelector('#objective-pointer-distance');
+  const objectiveMarkerElement = document.querySelector('#objective-marker');
   const pointerTarget = new THREE.Vector3();
   const pointerForward = new THREE.Vector3();
-  function renderObjectivePointer(objective, context) {
+  /** Both HUD elements off, reported through the one exit every "say nothing" case funnels through --
+   *  so the edge arrow and the on-screen marker can never disagree about whether anything is
+   *  currently being pointed at (one shown, the other left stale from a previous frame). */
+  function hideObjectiveGuidance() {
+    objectivePointerElement.dataset.shown = 'false';
+    objectiveMarkerElement.dataset.shown = 'false';
+    return { pointing: false };
+  }
+  /**
+   * ALWAYS-ON WAYFINDING, part two of two (part one is the ground trail: render/guidePath.js). This
+   * used to hide itself the instant the target scrolled on screen, which was correct for an ARROW --
+   * a thing pointing at something already visible is noise -- but left the on-screen case with
+   * nothing at all, which is the gap the playtest finding names: a child looking straight at the
+   * right street lantern among four identical dark ones had no way to confirm it was the one. Now the
+   * arrow and a soft bouncing marker are two views of ONE decision (render/guideArrow.js's `mode`),
+   * so exactly one of them is ever showing.
+   *
+   * @param objective the current quest objective, or null.
+   * @param context   the caller-supplied dynamic-destination lookups destinationFor needs (the next
+   *                  dark light, the next cold seal).
+   * @param suspended true while a full-screen overlay owns the screen, or while an NPC speech beat
+   *                  already has the child standing at the right spot -- both moments an arrow or a
+   *                  marker would be either invisible under a modal or telling a child something
+   *                  their own speech bubble is already telling them.
+   */
+  function renderObjectivePointer(objective, context, suspended) {
     const place = destinationFor(objective, context);
-    if (!place) {
-      // No objective, no place for it, or a dynamic place the caller could not supply. All three are
-      // the same answer to "where do I point", which is: nowhere, so say nothing.
-      objectivePointerElement.dataset.shown = 'false';
-      return { pointing: false };
+    if (suspended || !place) {
+      // No objective, no place for it, a dynamic place the caller could not supply, or a moment this
+      // is deliberately quiet for. `place` still comes back so a caller that only needs the
+      // COORDINATE (the rescue watch, the minimap, the ground trail) does not have to ask
+      // destinationFor a second time -- ONE resolve of "where is it", read three ways.
+      return { ...hideObjectiveGuidance(), place };
     }
 
     // BEHIND THE CAMERA IS COMPUTED, NOT INFERRED, and this is the whole reason offscreenPointer.js
-    // takes it as an argument. project() performs the perspective divide without clipping, so a
-    // point behind the camera comes back mirrored through the origin -- a plausible on-screen
-    // coordinate pointing exactly the wrong way. The sign of the depth along the camera's forward
-    // axis is the only thing that distinguishes them.
+    // (which render/guideArrow.js wraps) takes it as an argument. project() performs the perspective
+    // divide without clipping, so a point behind the camera comes back mirrored through the origin --
+    // a plausible on-screen coordinate pointing exactly the wrong way. The sign of the depth along
+    // the camera's forward axis is the only thing that distinguishes them.
     pointerTarget.set(place.x, POINTER_TARGET_HEIGHT_METERS, place.z);
     pointerForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
     // The dot product written out rather than `pointerTarget.clone().sub(...).dot(...)`. The clone
@@ -1371,23 +1772,35 @@ async function bootstrap() {
       + (place.z - camera.position.z) * pointerForward.z < 0;
 
     pointerTarget.project(camera);
-    const indicator = edgeIndicatorFor({
+    const guide = guideArrowFor({
+      hasTarget: true,
       ndcX: pointerTarget.x,
       ndcY: pointerTarget.y,
       behindCamera,
       width: canvas.clientWidth,
       height: canvas.clientHeight,
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      targetX: place.x,
+      targetZ: place.z,
     });
 
-    // An arrow over a thing the child can already see is noise, and noise is how a child learns to
-    // stop looking at the screen.
-    objectivePointerElement.dataset.shown = String(!indicator.onScreen);
-    if (indicator.onScreen) return { pointing: false };
-    objectivePointerElement.style.transform = `translate(${indicator.x}px, ${indicator.y}px)`;
-    objectivePointerArrowElement.style.transform = `rotate(${indicator.angle}rad)`;
+    objectivePointerElement.dataset.shown = String(guide.mode === 'edge');
+    objectiveMarkerElement.dataset.shown = String(guide.mode === 'onscreen');
+    if (guide.mode === 'edge') {
+      objectivePointerElement.style.transform = `translate(${guide.x}px, ${guide.y}px)`;
+      objectivePointerArrowElement.style.transform = `rotate(${guide.angle}rad)`;
+      // "23m", not "23.4m" -- render/guideArrow.js's own formatter owns the rounding so the chip and
+      // this readout can never disagree about what counts as close.
+      objectivePointerDistanceElement.textContent = formatGuideMeters(guide.meters);
+    } else if (guide.mode === 'onscreen') {
+      // The marker floats a fixed pixel offset above the target's own projected point -- see
+      // #objective-marker-glyph's CSS for the lift and the bounce; this only has to place the anchor.
+      objectiveMarkerElement.style.transform = `translate(${guide.x}px, ${guide.y}px)`;
+    }
     // Reported so the rescue offer can stay quiet while the errand is already in frame: see the
     // call site. A caller that only wants the arrow drawn can ignore this.
-    return { pointing: true };
+    return { pointing: guide.mode === 'edge', place };
   }
   // THE DIAL. Hero at the centre, camera forward pointing up; ui/minimap.js owns the maths and the
   // reasoning, including why it is camera-up rather than north-up and why it is not enemy radar.
@@ -1573,6 +1986,13 @@ async function bootstrap() {
   let helmetMount = null;
   let helmetMountInFlight = false;
   let helmetAssetMissing = false;
+  // R1: the Silverguard Shoulders, mounted the same lazy way as the helmet but as TWO anchors --
+  // shoulder_silverguard.glb loaded once (loadGLB caches by URL) and attached twice, mirrored, the
+  // same "one glb, worn twice" arrangement test/glb-budget.test.mjs's own Tier 3 fixture prices.
+  let shoulderMountLeft = null;
+  let shoulderMountRight = null;
+  let shoulderMountInFlight = false;
+  let shoulderAssetMissing = false;
   // The loaded Hero's anatomy-coverage surface (character/hero.js's heroAnatomyApi), captured at hero
   // load so the helmet toggle can hide the hair and ears WHILE the helmet is on and show them again
   // when it comes off. runtime.hero is the Object3D root and cannot do this; the API object can, and
@@ -1696,6 +2116,28 @@ async function bootstrap() {
       }
       return attachSilverguardHelmet(clonedRoot, gltf.scene.clone(true)).anchor;
     }
+    // R1: the Silverguard Shoulders, one call per side -- net/remotes.js's own ensureRemoteShoulders
+    // asks for `shoulder_silverguard_left`/`shoulder_silverguard_right` (silverguardShoulderAnchorId),
+    // never the bare catalogue id, because ONE owned/equipped item mounts as TWO anchors here. Both
+    // ids load the SAME URL (loadGLB caches by it, so a dozen siblings and this hero cost one
+    // download between them) and share the one asset-missing flag, the identical "one fact about one
+    // file" reasoning every other branch in this function already follows.
+    if (gearId === silverguardShoulderAnchorId('left') || gearId === silverguardShoulderAnchorId('right')) {
+      if (shoulderAssetMissing) return null;
+      const gltf = await loadGLB(SILVERGUARD_SHOULDER_URL);
+      if (gltf.userData?.loadError) {
+        if (!shoulderAssetMissing) {
+          shoulderAssetMissing = true;
+          console.warn(
+            `[progression] ${SILVERGUARD_SHOULDER_URL} is missing -- a sibling wearing the Shoulders `
+            + 'is drawn bare-shouldered until the asset lands.',
+          );
+        }
+        return null;
+      }
+      const side = gearId === silverguardShoulderAnchorId('left') ? 'left' : 'right';
+      return attachSilverguardShoulder(clonedRoot, gltf.scene.clone(true), side).anchor;
+    }
     return null;
   }
 
@@ -1769,6 +2211,44 @@ async function bootstrap() {
     const worn = shouldBeEquipped && helmetMount !== null;
     if (helmetMount) helmetMount.anchor.visible = worn;
     setHelmetAnatomyCoverage(worn);
+  }
+
+  // R1: the Silverguard Shoulders, mounted and toggled the same lazy way as the Helmet -- one load
+  // request covers BOTH anchors (loadGLB's own URL cache means a single fetch, cloned per side), and
+  // both anchors land hidden so there is never a frame where a pauldron is drawn before the equipped
+  // check agrees. No anatomy occlusion: unlike the Helmet, the shoulders sit over the collar/upper
+  // arm, nowhere near the hair/ear regions the Helmet's own coverage exists to hide.
+  function ensureShouldersMounted(shouldBeEquipped) {
+    if (!runtime.hero) return;
+    if (shouldBeEquipped && shoulderMountLeft === null && !shoulderMountInFlight && !shoulderAssetMissing) {
+      shoulderMountInFlight = true;
+      loadGLB(SILVERGUARD_SHOULDER_URL).then((gltf) => {
+        shoulderMountInFlight = false;
+        if (gltf.userData?.loadError) {
+          if (!shoulderAssetMissing) {
+            shoulderAssetMissing = true;
+            console.warn(
+              `[progression] ${SILVERGUARD_SHOULDER_URL} is missing -- equipping the Shoulders still `
+              + 'works and still reads its defence; he goes bare-shouldered until the asset lands.',
+            );
+          }
+          return;
+        }
+        // Two independent clones of the one loaded scene -- an Object3D has one parent, so the same
+        // root cannot be attached to both arms at once (character/gear.js's own header on this exact
+        // point, for the belt lantern).
+        shoulderMountLeft = attachSilverguardShoulder(runtime.hero, gltf.scene.clone(true), 'left');
+        shoulderMountRight = attachSilverguardShoulder(runtime.hero, gltf.scene.clone(true), 'right');
+        shoulderMountLeft.anchor.visible = false;
+        shoulderMountRight.anchor.visible = false;
+      }).catch((error) => {
+        shoulderMountInFlight = false;
+        console.warn('[progression] failed to mount the Silverguard Shoulders:', error);
+      });
+    }
+    const worn = shouldBeEquipped && shoulderMountLeft !== null;
+    if (shoulderMountLeft) shoulderMountLeft.anchor.visible = worn;
+    if (shoulderMountRight) shoulderMountRight.anchor.visible = worn;
   }
 
   // Phase D (D6): "observable without hearing it" (see audioDebug's own comment on runtime, below)
@@ -2035,6 +2515,7 @@ async function bootstrap() {
       if (open) {
         heroScreen.close();
         villageBoard?.close();
+        runeChestCard?.close();
       }
     },
   });
@@ -2052,6 +2533,85 @@ async function bootstrap() {
     profileGate.render(gateView());
     profileGate.open();
   }
+
+  // ── TASK 6: A SECOND, UNMISSABLE WAY OUT OF EVERY FULL-SCREEN OVERLAY ───────────────────────────
+  //
+  // The playtest's real failure: a child stuck on the Hero screen or the Village Board with no way
+  // out but killing the app. cameraGesture.js's own veto (isInteractiveUiTarget) is the root-cause
+  // fix -- it stops a wobbly tap on the X from also dragging the camera/preview underneath it -- but
+  // a five-year-old does not reliably find a 48px X in the first place even when it works perfectly.
+  // These two are the belt: Escape, and a tap on the panel's own dimmed/click-through backdrop, both
+  // do exactly what the X does, for every overlay that has one.
+  const profileGateElement = document.querySelector('#profile-gate');
+  const profileGateCloseElement = document.querySelector('#profile-gate-close');
+  const runeChestCardElement = document.querySelector('#rune-chest-card');
+
+  // BACKDROP TAP, Hero screen and Village Board. Both are deliberately click-through on their own
+  // container (index.html's own comment on #hero-screen) so a drag on the empty middle still turns
+  // the camera/Hero-preview turntable -- so "tap the backdrop closes it" cannot be a plain click
+  // listener on the panel the way an ordinary modal would do it; pointer-events: none means the panel
+  // never receives that event at all. It is measured the same way the companion-tap seam above tells
+  // a tap from a drag: a short (<12px), stationary pointer that started and ended on the game surface
+  // itself, while that overlay was open, and that never touched the overlay's own chrome (which
+  // already has its own buttons and must not also close the screen out from under a child using
+  // them).
+  const overlayBackdropTapPointers = new Map();
+  gameSurface.addEventListener('pointerdown', (event) => {
+    if (!heroScreen.isOpen() && !villageBoard.isOpen()) return;
+    const targetElement = event.target instanceof Element ? event.target : null;
+    if (targetElement?.closest('button, input, textarea, select, a, label, [data-ui-surface]')) return;
+    overlayBackdropTapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }, { passive: true });
+  gameSurface.addEventListener('pointerup', (event) => {
+    const start = overlayBackdropTapPointers.get(event.pointerId);
+    overlayBackdropTapPointers.delete(event.pointerId);
+    if (!start) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
+    if (heroScreen.isOpen()) heroScreen.close();
+    else if (villageBoard.isOpen()) villageBoard.close();
+  }, { passive: true });
+  gameSurface.addEventListener('pointercancel', (event) => {
+    overlayBackdropTapPointers.delete(event.pointerId);
+  }, { passive: true });
+
+  // BACKDROP TAP, the profile gate. Unlike the two above, the gate is opaque and pointer-events:
+  // auto across its WHOLE area while shown (profileGate.js's own header: "a question that has to be
+  // answered... a half-visible village behind it invites a child to try to tap the village"), so its
+  // backdrop DOES receive a real click -- the ordinary modal pattern, gated on event.target being the
+  // backdrop element itself so a click that bubbled up from the panel or a card does not also close
+  // it. Never fires during first-run naming: gated on the close button's own shown state, which is
+  // the SAME rule that already hides the X there -- see profileGate.js's own comment for why that
+  // one question has no dismiss ("a dismissable question a child cannot answer any other way is a
+  // dead end").
+  profileGateElement?.addEventListener('click', (event) => {
+    if (event.target !== profileGateElement) return;
+    if (profileGateCloseElement?.dataset.shown !== 'true') return;
+    profileGate.close();
+  });
+
+  // BACKDROP TAP, the rune chest card. Same OPAQUE/pointer-events-auto-while-shown shape the profile
+  // gate is (index.html's own CSS comment on #rune-chest-card), so it takes the identical plain-click
+  // pattern rather than #hero-screen/#village-board-screen's drag-distance one -- and unlike the
+  // gate, this ALWAYS has its own way out (the ✕ is never hidden the way the gate's first-run naming
+  // hides its own), so there is no "is dismiss even allowed right now" guard to repeat here. A tap on
+  // the backdrop dismisses WITHOUT judging an answer -- runeChestCard.close() never fires onAnswer.
+  runeChestCardElement?.addEventListener('click', (event) => {
+    if (event.target !== runeChestCardElement) return;
+    runeChestCard.close();
+  });
+
+  // ESCAPE. Whichever one full-screen overlay is open -- they are mutually exclusive by construction,
+  // each one's own onOpenChange above closes the others -- the same key that closes every other
+  // dialog on the web closes it too. Every desktop and debugging session has this key; a real iPad's
+  // on-screen keyboard does not, which is exactly why this is belt-and-braces rather than the whole
+  // fix.
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (heroScreen.isOpen()) { heroScreen.close(); return; }
+    if (villageBoard.isOpen()) { villageBoard.close(); return; }
+    if (runeChestCard.isOpen()) { runeChestCard.close(); return; }
+    if (profileGate.isOpen() && profileGateCloseElement?.dataset.shown === 'true') profileGate.close();
+  });
 
   /**
    * Write a durable fact into this device's own journal as it is announced.
@@ -2392,6 +2952,68 @@ async function bootstrap() {
     },
   });
 
+  /**
+   * THE HIDDEN LEARNING LAYER's own reward path, and the ONE PLACE this file decided XP over coins.
+   *
+   * The brief's own instruction was to READ THE CODE and pick whichever reward the actual reward
+   * infrastructure honestly supports, rather than inventing a new one. Reading it: a coin has no
+   * client-initiated grant path AT ALL -- world/enemyDrops.js's own header is explicit that a kill
+   * drop's coin only ever exists because the SERVER rolled it (or, offline, because a local roll
+   * mirrors that same rule with no server to check it against); there is no
+   * `net.sendXCollectedThisCoinIEarnedMyself()` message anywhere in net/client.js, and H1 is exactly
+   * the rule that forbids inventing one -- a client-restorable coin-earned fact is REFUSED outright by
+   * progression/facts.js's own CLIENT_RESTORE_REFUSED_TYPES (coin-earned/shard-earned), because a coin
+   * funds the shared Village economy and a device asserting "I have coins now" with nothing behind it
+   * is exactly the shared-currency forgery H1 exists to prevent.
+   *
+   * XP, by contrast, already has TWO production sources that are durable, personal, and (P2's Lantern
+   * aside) MINTED CLIENT-SIDE with no server adjudication behind the roll itself: rewards/killXp.js's
+   * own offline fold journals a `kill-xp:offline-hero:...` fact with nothing checking whether that
+   * kill really happened, and progression/facts.js's own PROFILE_SCOPED_EVENT_ID_PREFIXES already
+   * documents `xp-earned` as a type a profile may restore for itself. So this fact rides the IDENTICAL
+   * door: minted locally (runeChestXpEventId), journalled locally (profiles.recordFacts, both online
+   * and offline -- see runeChests.js's own header for why there is only one code path here at all),
+   * and -- the one extra step a kill's XP does not need, because the SERVER minted that one itself --
+   * pushed to the server via the SAME restoreProfileFacts door a reconnect already uses (see
+   * ingestWelcome above), so an ALREADY-CONNECTED session sees it folded into the next tick's own
+   * rewards block rather than waiting for a future reconnect that might never come this session.
+   * sendRestoreProfile is a no-op offline (net/client.js's own online-only guard), which is exactly
+   * the fallback this needs: offline, the local journal alone is the whole of "durable" this game has.
+   *
+   * REWARD SIZED IN XP, NOT COINS, AND THAT TURNS OUT TO BE THE BETTER REWARD ANYWAY: XP feeds the
+   * level-up ceremony (progression/heroStats.js's own resolveHeroStats, diffed every frame below), so
+   * a rune chest's payoff is not merely "a number went up" but a real chance at the biggest ceremony
+   * this game has -- for free, because that ceremony already fires off whatever total XP this profile
+   * reports, from whichever source.
+   */
+  function onRuneChestAnswer(answerIndex) {
+    const chest = runeChestState.chest;
+    // Defensive only: the card can only be open while a chest stands (main.js's own proximity gate
+    // below never shows it otherwise), but this reads a tap event, not a trusted message -- the same
+    // "a confused caller gets the safe answer, never a crash" posture judgeRuneChestAnswer itself
+    // takes for an out-of-range index.
+    if (!chest) return;
+    const judged = judgeRuneChestAnswer(chest.question, answerIndex);
+    const amount = rewardXpForRuneChestAnswer(judged.correct);
+    const fact = { eventId: runeChestXpEventId(profileId, chest.id), type: 'xp-earned', value: String(amount) };
+    profiles.recordFacts(profileId, [fact]);
+    refreshProfileState();
+    // Push it to an already-connected server RIGHT NOW rather than waiting for the next welcome --
+    // see this function's own header for why this is safe and why it is necessary.
+    if (durableProfileId) net.sendRestoreProfile([fact]);
+    popXpToast(chest.x, WOLF_SPARK_HEIGHT_METERS, chest.z, amount);
+    if (judged.correct) {
+      audio.play(RUNE_CHEST_BRILLIANT_RECIPE_NAME);
+      banner('BRILLIANT!', 2200, 'Brilliant!');
+    } else {
+      // NEVER SHAMING -- the brief's own word. Warm, not a buzzer: the chest opened anyway, and the
+      // text says what the answer was rather than merely that this one was wrong.
+      audio.play(RUNE_CHEST_OPEN_RECIPE_NAME);
+      banner(`Nice try! The answer was ${judged.correctText}`, 2600, `Nice try. The answer was ${judged.correctText}.`);
+    }
+    runeChestState = closeRuneChest(runeChestState);
+  }
+
   const runtime = {
     scene,
     camera,
@@ -2416,6 +3038,14 @@ async function bootstrap() {
     companion: () => companionPresenter?.getState() ?? null,
     net,
     remotes: () => remotes,
+    // R1 runtime-test evidence: the drops the child can currently see, under the SAME
+    // online/offline selection rule the frame loop's own collect pass uses (the
+    // `netStatus === 'online'` branch over serverEncounter?.drops vs dropsState.drops). Read-only
+    // published state, the identical boundary encounterState() draws -- a harness that could spawn
+    // or collect a drop through this hook could walk a path no child can.
+    dropsOnGround: () => (netStatus === 'online'
+      ? (serverEncounter?.drops ?? [])
+      : dropsState.drops),
     netState: () => ({
       status: netStatus,
       selfId: net.selfId,
@@ -2524,6 +3154,9 @@ async function bootstrap() {
     // GP1-C5: how many impact rings are on screen this instant, so a harness can prove a blow
     // produced a visible event rather than only that the rules said it landed.
     impactBurstsLive: () => impactBursts.liveCount(),
+    // The always-on wayfinding trail: how many ground dots are lit right now, so a harness can prove
+    // the path actually drew rather than only that an objective with a place was active.
+    guidePathDotsLive: () => guidePath.liveCount(),
     guestId: () => net.guestId,
     // A copy, not the live array -- a harness must not be able to mutate this session's own record
     // of what it heard.
@@ -2757,10 +3390,13 @@ async function bootstrap() {
     // GP3: the Village Board is the second (and, by construction, mutually exclusive -- see its own
     // onOpenChange) full-screen overlay that owns input the same way Hero screen does.
     const villageBoardOpen = villageBoard.isOpen();
+    // THE HIDDEN LEARNING LAYER's own card, the third (and, by the same mutual-exclusion the two
+    // above already keep, exclusive) full-screen overlay that owns input the same way.
+    const runeChestCardOpen = runeChestCard.isOpen();
     // Either overlay open suspends the same movement/attack input -- checked once here and reused
     // below, the same "checked once, not polled per-system" reasoning heroScreenOpen's own comment
-    // already gives, just widened to cover both screens now that there are two.
-    const anyOverlayOpen = heroScreenOpen || villageBoardOpen;
+    // already gives, just widened to cover all three screens now that there are three.
+    const anyOverlayOpen = heroScreenOpen || villageBoardOpen || runeChestCardOpen;
     // Read every frame regardless of open/closed -- cheap (a property read, no DOM/three.js work),
     // and the showcase pass needs the current equipped id the frame the screen OPENS, so it can pick
     // up mid-frame whatever the DOM render below just set rather than painting one frame stale.
@@ -2850,6 +3486,9 @@ async function bootstrap() {
     // play, not only while a child is looking at the menu (heroPreview.update below re-reads the live
     // hero, so a helmet mounted here joins the showcase preview on its own).
     ensureHelmetMounted(currentEquippedItemIds[HELMET_SLOT] === HELMET_SILVERGUARD_ID);
+    // R1: the shoulders he is actually wearing, from the same equipped map -- the identical "the
+    // world, the DOM and the showcase can never disagree" reasoning the helmet's own call gives.
+    ensureShouldersMounted(currentEquippedItemIds[SHOULDERS_SLOT] === SHOULDER_SILVERGUARD_ID);
     heroPreview.update({
       heroRoot: runtime.hero,
       accentColorHex: swatchHexFor(currentEquippedWeaponId),
@@ -2898,6 +3537,15 @@ async function bootstrap() {
       // disagreement rubber-bands and then teleports the hero -- measured in the running game.
       player.position.x = clampToWorldX(player.position.x + worldDirection.x * player.groundSpeed * movement.deltaSeconds);
       player.position.z = clampToWorldZ(player.position.z + worldDirection.z * player.groundSpeed * movement.deltaSeconds);
+      // Same reasoning as the clamp two lines up, same shared pure function the server runs
+      // (world/obstacles.js) -- applied here, in the PREDICTION step itself, so a child's own thumb
+      // never watches the hero walk into the Beacon's stone for even one frame before a reconcile
+      // corrects it. Run unconditionally (online and offline both), because unlike an enemy's
+      // position -- which only the server truly knows -- the Village's own landmarks never move, so
+      // this client already has everything it needs to get the answer right the first time.
+      const unstuck = resolveObstacleCollisions(player.position, WORLD_OBSTACLES);
+      player.position.x = unstuck.x;
+      player.position.z = unstuck.z;
       player.heading = Math.atan2(worldDirection.x, worldDirection.z);
     }
     // Intent out. The client throttles to 15 Hz and sends a release immediately.
@@ -2952,6 +3600,10 @@ async function bootstrap() {
     const bodyNow = encounterState.hero;
     const bodyMax = bodyNow.maxHp ?? HERO_MAX_HP;
     if (bodyNow.hp !== healthShown.hp || bodyMax !== healthShown.maxHp) {
+      // R1: a rise shaped like out-of-combat regen (never a kill heal or a heart, which both jump by
+      // far more than isOutOfCombatRegenRise's own one-point ceiling) gets the shimmer. Read BEFORE
+      // healthShown moves, since the predicate compares the two hp values across this exact diff.
+      if (isOutOfCombatRegenRise(healthShown.hp, bodyNow.hp)) pulseRegen();
       healthShown = { hp: bodyNow.hp, maxHp: bodyMax };
       renderHealth(healthShown.hp, healthShown.maxHp);
     }
@@ -3063,6 +3715,13 @@ async function bootstrap() {
       // from both are collected and dispatched together below, which is the order this loop has
       // always used -- the presenters are updated to the newest state first, then told what changed.
       const events = [];
+      // R1: which of THIS frame's kills this hero personally landed the killing blow on -- the XP
+      // toast's own gate (see the dispatch loop below). Online, GLOBAL_ENCOUNTER_EVENT_TYPES lets a
+      // sibling's wolf-defeated through too (everyone's presenter should flash/celebrate together),
+      // and stripHeroId erases who it belonged to before `events` sees it -- so this has to be
+      // captured HERE, before the strip, or the toast could not tell "my kill" from "a kill I merely
+      // watched". Offline there is only one hero, so every defeat is unconditionally this one's own.
+      const myKillEnemyIds = new Set();
       if (netStatus === 'online') {
         // Combat commands are server-applied, presentation is client-predicted (Design ruling 3).
         // No local stepEncounter/requestAttack/separateFromEnemies here at all -- HP, enemy mode,
@@ -3098,6 +3757,9 @@ async function bootstrap() {
           if (SIEGE_EVENT_TYPES.has(event.type)) {
             if (isOwnSiegeEvent(event, ownHeroId)) pendingSiegeEvents.push(stripHeroId(event));
             continue;
+          }
+          if (event.type === 'wolf-defeated' && event.heroId === ownHeroId) {
+            myKillEnemyIds.add(event.enemyId);
           }
           if (GLOBAL_ENCOUNTER_EVENT_TYPES.has(event.type) || event.heroId === ownHeroId) {
             events.push(stripHeroId(event));
@@ -3163,6 +3825,37 @@ async function bootstrap() {
         if (earned.length > 0) {
           refreshProfileState();
           events.push(...earned);
+        }
+
+        // R1: kill drops, rolled locally with Math.random -- the SAME pure roll
+        // (world/enemyDrops.js's own requestEnemyDrop) net/gameServerCore.mjs runs online, so a
+        // child with no server gets the identical loop, just unseeded. One roll per wolf-defeated
+        // this frame, scattered at that enemy's own last published position.
+        for (const event of stepped.events) {
+          if (event.type !== 'wolf-defeated') continue;
+          // Solo offline: every defeat is this hero's own kill, unconditionally (see myKillEnemyIds'
+          // own header comment above).
+          myKillEnemyIds.add(event.enemyId);
+          const deadEnemy = enemyById(event.enemyId);
+          if (!deadEnemy) continue;
+          // Approximates the multiplier THIS kill is about to earn -- the streak meter's own
+          // registration runs a moment later, in the one dispatch loop every kill (online and off)
+          // passes through, so the count is not yet advanced when this roll needs it. A streak still
+          // alive continues, so this kill is one more than the count already showing. Offline there
+          // is no second authority to disagree with: this same local streak IS what sizes the drop,
+          // so a one-frame ordering approximation is the whole of the error (progression/streaks.js's
+          // own header).
+          const previewStreak = (streakStillActive(streakState) ? streakState.streak : 0) + 1;
+          const rolled = requestEnemyDrop(dropsState, {
+            enemyId: event.enemyId,
+            lifeId: mintDropLifeId(),
+            kind: event.kind,
+            x: deadEnemy.x,
+            z: deadEnemy.z,
+            streakMultiplier: coinMultiplierForStreak(previewStreak),
+            killerOwnedItemIds: ownedItemIdsFromRewards(profileState),
+          }, Math.random);
+          dropsState = rolled.state;
         }
       }
 
@@ -3245,6 +3938,37 @@ async function bootstrap() {
           onEquip: () => equipHeroItem(HELMET_SILVERGUARD_ID),
         });
         speakKeeperLineIfUnlocked(acquired.spoken);
+        audio.play('blade-unlock');
+      }
+
+      // ── R1: THE SHOULDERS, ACQUIRED ─────────────────────────────────────────────────────────
+      //
+      // Ownership arrives from a kill drop (world/enemyDrops.js's own gear pool), not a claim
+      // ceremony, but the CEREMONY is the identical diff-off-ownership beat the Blade and Helmet
+      // already run -- a durable item became owned that was not a frame ago, online or off (the
+      // offline fold below journals the same 'gear-owned' fact shape). No new machinery.
+      const ownsShouldersNow = ownedItemIdsFromRewards(ownRewards).includes(SHOULDER_SILVERGUARD_ID);
+      if (shoulderOwnedSeen === null) {
+        shoulderOwnedSeen = ownsShouldersNow;
+      } else if (ownsShouldersNow && !shoulderOwnedSeen) {
+        shoulderOwnedSeen = true;
+        const afterEquipped = { ...currentEquippedItemIds, [SHOULDERS_SLOT]: SHOULDER_SILVERGUARD_ID };
+        const withShouldersPower = powerFor({
+          maxHp: heroStatsThisFrame.maxHp,
+          heroDamage: heroStatsThisFrame.heroDamage,
+          damageReductionPercent: damageReductionPercentForEquipment(afterEquipped),
+        });
+        const acquiredShoulders = unlockCardState({
+          itemName: itemDef(SHOULDER_SILVERGUARD_ID)?.name ?? 'Silverguard Shoulders',
+          power: powerChange(powerFor(heroStatsThisFrame), withShouldersPower),
+          prompt: 'EQUIP NOW?',
+        });
+        unlockCard.show(acquiredShoulders, {
+          accent: swatchFor(SHOULDER_SILVERGUARD_ID),
+          icon: SHOULDER_ICON_SVG,
+          onEquip: () => equipHeroItem(SHOULDER_SILVERGUARD_ID),
+        });
+        speakKeeperLineIfUnlocked(acquiredShoulders.spoken);
         audio.play('blade-unlock');
       }
 
@@ -3383,6 +4107,12 @@ async function bootstrap() {
       // of encounter.js's own source) without either editing the guarded combat/ directory or
       // breaking that guard's own regression test. Same "every event accounted for, sound decided
       // explicitly" discipline, just addressed through its own two small tables.
+      //
+      // R1: the streak meter's own idle clock, advanced every frame regardless of whether anything
+      // died THIS frame -- progression/streaks.js's own header is explicit that stepStreak has to run
+      // every tick so the meter can read a live "about to expire" state rather than only learning
+      // about expiry in arrears, on the next kill.
+      streakState = stepStreak(streakState, deltaSeconds);
       for (const event of events) {
         // Journalled HERE rather than inside the two reward handlers that used to do it, so the
         // device keeps a copy of every durable fact it is told about rather than of the two types
@@ -3403,6 +4133,93 @@ async function bootstrap() {
         const recipeName = soundForEvent(event.type);
         if (recipeName) audio.play(recipeName);
         onEncounterEvent(event);
+        // R1: the streak meter, the kill's own XP toast, and the rune chest's own counter. All
+        // three are gated on THIS hero's own killing blow (myKillEnemyIds, captured before
+        // stripHeroId erased who the event belonged to), so a child never reads a reward -- or a
+        // multiplier -- for a fight they did not land the finishing hit on.
+        //
+        // THE METER USED TO BE PARTY-WIDE, and that was a lie the server would not honour. It draws
+        // `x${multiplier}` straight out of coinMultiplierForStreak, which is the very function
+        // net/gameServerCore.mjs passes into the drop roll as `streakMultiplier` to size the coins a
+        // kill pays -- and the server credits a streak only to `event.heroId`, the hero who actually
+        // finished the enemy. `wolf-defeated` is a world event (it is not one of the server's own
+        // WOLF_BODY_EVENTS), so both brothers receive both brothers' kills: four kills by one child
+        // and one by the other made the second child's HUD read "x2 / ON A ROLL", pulse the tier
+        // crossing, and then pay him x1. A meter showing a kill count and a draining ring would have
+        // been cosmetic; one showing a payout number is a promise. test/streak-view.test.mjs pins
+        // both the arithmetic and this seam.
+        //
+        // Offline this changes nothing by construction: the offline branch further up adds EVERY
+        // wolf-defeated to myKillEnemyIds before any bail-out, because solo every defeat IS this
+        // hero's own kill -- so the local streak stays the sole authority exactly as it was.
+        //
+        // The shared celebration is untouched: the defeat sound and the presenter's own death flash
+        // run for everyone present, above this gate, because seeing your brother drop a wolf should
+        // still feel like something happened.
+        if (event.type === 'wolf-defeated' && myKillEnemyIds.has(event.enemyId)) {
+          streakState = registerStreakKill(streakState);
+          const view = streakMeterView(streakState);
+          if (view) pulseStreakMeter(view);
+          const enemy = enemyById(event.enemyId);
+          const amount = killXpForKind(event.kind);
+          if (enemy && amount !== null) popXpToast(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, amount);
+          // THE HIDDEN LEARNING LAYER's own counter -- the same gate, for the same reason: a rune
+          // chest is a per-child beat and crediting a sibling's own kill toward THIS hero's next
+          // chest would be exactly the wrong kind of shared state (progression/runeChests.js's own
+          // header).
+          const chestResult = registerRuneChestKill(runeChestState);
+          runeChestState = chestResult.state;
+          if (chestResult.chestDue) runeChestSpawnDue = true;
+        }
+      }
+      renderStreakMeter(streakMeterView(streakState));
+
+      // THE HIDDEN LEARNING LAYER: placing a due chest, presenting the standing one, and opening its
+      // card on proximity -- all CLIENT-LOCAL and IDENTICAL online and offline (progression/
+      // runeChests.js's own header), unlike everything else in this branch's own online/offline split,
+      // so none of it is gated on netStatus.
+      if (runeChestSpawnDue && runeChestState.chest === null) {
+        const spot = pickChestSpawnPoint({
+          playerX: player.position.x,
+          playerZ: player.position.z,
+          rng: Math.random,
+          isAllowed: runeChestSpotAllowed,
+        });
+        // A null spot (every candidate this frame's rng tried landed inside the arena/sanctuary) is
+        // not an error -- runeChestSpawnDue simply stays true and the next frame's fresh draws, off
+        // wherever the hero has since walked to, try again. See its own declaration comment.
+        if (spot) {
+          runeChestState = openRuneChest(runeChestState, {
+            id: mintChestId(), x: spot.x, z: spot.z, rng: Math.random,
+          });
+          runeChestSpawnDue = false;
+        }
+      }
+      runeChestPresenter.update(deltaSeconds, runeChestState.chest);
+      if (runeChestState.chest && !anyOverlayOpen) {
+        const chestDistance = Math.hypot(
+          player.position.x - runeChestState.chest.x, player.position.z - runeChestState.chest.z,
+        );
+        if (chestDistance <= CHEST_COLLECT_RADIUS_METERS) {
+          // NEVER MID-FIGHT: the card is a modal that freezes movement and attack input (this
+          // frame's own anyOverlayOpen gate), so it waits until no hostile enemy is on the hero --
+          // heroInCombat's own comment carries the full trap this closes, including why the BITE
+          // range has to be handed over too: an enemy standing on the hero between bites reports
+          // mode 'idle', and without a reach clause the card opened straight over a live mauling.
+          // Both radii are the rules' own, imported, never restated (GQ-007).
+          const inCombat = heroInCombat({
+            heroX: player.position.x,
+            heroZ: player.position.z,
+            enemies: encounterState.enemies,
+            noticeRadiusMeters: WOLF_AGGRO_RANGE,
+            biteRangeMeters: WOLF_BITE_RANGE,
+          });
+          if (!runeChestCardSuppressed && !inCombat) runeChestCard.show(runeChestState.chest.question);
+        } else {
+          // Left the radius: the dismiss guard (if any) is spent -- walking back in re-opens it, the
+          // brief's own "dismissing leaves the chest for later" made literal.
+          runeChestCardSuppressed = false;
+        }
       }
 
       const fight = !wolf
@@ -3582,7 +4399,13 @@ async function bootstrap() {
       heroZ: player.position.z,
       rangerX: RANGER_X,
       rangerZ: RANGER_Z,
-      radiusMeters: KEEPER_WAVE_RADIUS_METERS,
+      // The CLAIM radius, not the Keeper's 2 m wave radius. Wren takes the satchel and gives the
+      // charm anywhere inside RANGER_CLAIM.radiusMeters (3 m, adjudicated server-side against the
+      // same zone-data number) -- so a child granted the charm at 2.4 m used to be handed a fourth
+      // heart by a woman who then said nothing, because her words needed 2 m. drive-ranger.mjs
+      // measured exactly that gap ("hero 2.43m from Wren, radius 2m"). One radius for the grant and
+      // the words means the thank-you can never be earned from outside its own earshot.
+      radiusMeters: VILLAGE.RANGER_CLAIM.radiusMeters,
       satchelCarried: satchelCarriedSeen === true,
       charmOwned: charmOwnedSeen === true,
     });
@@ -3926,6 +4749,104 @@ async function bootstrap() {
       }
     }
 
+    if (runtime.hero) {
+      // R1: kill drops -- coins, hearts and gear scattered where an ordinary enemy fell. Online, the
+      // server owns physical truth entirely (serverEncounter.drops) and this client only ages nothing
+      // itself; offline, the same pure rules (world/enemyDrops.js's stepEnemyDrops) age and expire
+      // this client's own local roll every frame -- the identical "server owns it online, the same
+      // pure rules run locally offline" split the siege block just below already uses.
+      if (netStatus !== 'online') dropsState = stepEnemyDrops(dropsState, deltaSeconds);
+      const drops = netStatus === 'online' && serverEncounter?.drops ? serverEncounter.drops : dropsState.drops;
+      // Presenter arrivals only -- still-resting/still-appearing/someone-else's-despawn stay silent,
+      // the identical contract world/lootPickups.js's own update() keeps for the cart's pickups.
+      //
+      // WHICH HERO IS "ME" DEPENDS ON WHICH LOOP IS RUNNING. Online it is the socket's own id;
+      // offline there is no socket -- net/client.js holds selfId null before it ever connects and
+      // clears it again on disconnect -- while the offline collect below stamps the drop with
+      // OFFLINE_HERO_ID. Passing net.selfId unconditionally made a solo child's own drop compare
+      // unequal to its collector, so the presenter took the "somebody else collected it" branch:
+      // the mesh blinked out with no flight and returned no arrival. Every offline reward below is
+      // driven by those arrivals, so the coin never counted, requestSoloHeroHeal never ran, and the
+      // gear fact was never journalled -- a child at 8 HP walked onto the heart a Frost Wolf dropped
+      // and stayed at 8 HP. Same id on both sides of the comparison, derived from the same constant.
+      const collectingHeroId = netStatus === 'online' ? net.selfId : OFFLINE_HERO_ID;
+      const dropArrivals = dropsPresenter.update(deltaSeconds, drops, collectingHeroId, player.position);
+      let dropsHudDirty = false;
+      for (const arrival of dropArrivals) {
+        if (arrival.kind === COIN_DROP_KIND) {
+          // No offline fallback for durable Village Supplies (see EMPTY_VILLAGE's own comment) -- a
+          // kill-drop coin routes through the SAME communal award a cart coin does online
+          // (net/gameServerCore.mjs's own applyLootAward), so offline this is a session-local bump
+          // only, the same honest "visible difference from the persisted loop" this fallback already
+          // carries elsewhere (rewards/offlineProgress.js's own header).
+          coinsDisplayed += 1;
+          dropsHudDirty = true;
+          audio.play(COIN_PICKUP_RECIPE_NAME);
+          popLootHud(COIN_KIND);
+        } else if (arrival.kind === HEART_DROP_KIND) {
+          // Online, the server's own applyHeroHeal already raised a real 'hero-healed' event that
+          // reaches THIS hero's dispatch loop the ordinary way (it carries heroId, filtered to
+          // ownHeroId) and already pops/renders the health row -- nothing left to do here but the
+          // pickup's own sound. Offline, there is no server to have raised it, so this client raises
+          // the identical heal itself through requestSoloHeroHeal (the seam encounter.js exports for
+          // exactly this), whose own 'hero-healed' event flows through the SAME dispatch loop this
+          // frame -- so the pop and the health-row update happen through the one real code path
+          // either way, never a second copy of "what a heal does" here.
+          if (netStatus !== 'online') {
+            // This frame's ONE dispatch loop (the identical single point every other event in this
+            // file funnels through) has already run by the time this drop's own attraction flight
+            // lands, so its 'hero-healed' event is dispatched directly here rather than pushed into
+            // an `events` array nobody will drain again this frame -- onEncounterEvent already does
+            // exactly the pop+render a heal needs; no second copy of that logic belongs here.
+            const healed = requestSoloHeroHeal(encounterState, HEART_HEAL_HP);
+            encounterState = healed.state;
+            for (const healEvent of healed.events) onEncounterEvent(healEvent);
+          }
+          audio.play(HEART_PICKUP_RECIPE_NAME);
+        } else if (arrival.kind === GEAR_DROP_KIND) {
+          // Online, the server's own grantOwnership already wrote the durable 'gear-owned' fact and
+          // announced it on the wire, which the G4/G1-C3-style ownership diff further up (the
+          // Blade/Helmet/Shoulders ceremonies) picks up on its own -- nothing extra here either.
+          // Offline, this client mints the identical fact shape itself: the same durable type
+          // net/gameServerCore.mjs's rewards.grantOwnership writes, journalled locally so the
+          // Shoulders ceremony's own ownedItemIdsFromRewards(profileState) diff fires for real.
+          if (netStatus !== 'online' && typeof arrival.itemId === 'string') {
+            profiles.recordFacts(profileId, [{
+              eventId: `gear-owned:offline:${arrival.itemId}:${mintDropLifeId()}`,
+              type: 'gear-owned',
+              value: arrival.itemId,
+            }]);
+            refreshProfileState();
+          }
+          audio.play(GEAR_PICKUP_RECIPE_NAME);
+        }
+      }
+      if (dropsHudDirty) renderLootHud();
+
+      // Ask the server to collect whatever is in reach and not yet gone -- throttled per drop, the
+      // identical shape the cart's own lootRequestedAt/LOOT_REQUEST_RETRY_MS give pickups above.
+      // Offline there is no server to ask: this client adjudicates its own reach directly against
+      // requestCollectEnemyDrop, the same pure function net/gameServerCore.mjs runs online, so the
+      // "first request wins, already-collected/out-of-reach is a clean no" rule is identical either
+      // way -- only WHO runs it differs.
+      for (const drop of drops) {
+        if (drop.collectedBy != null) continue;
+        const lastRequestedAt = dropRequestedAt.get(drop.id);
+        if (lastRequestedAt != null && frameStart - lastRequestedAt < DROP_REQUEST_RETRY_MS) continue;
+        const distance = Math.hypot(player.position.x - drop.x, player.position.z - drop.z);
+        if (distance > DROP_COLLECT_RADIUS_METERS) continue;
+        dropRequestedAt.set(drop.id, frameStart);
+        if (netStatus === 'online') {
+          net.sendCollectDrop(drop.id);
+        } else {
+          const collected = requestCollectEnemyDrop(
+            dropsState, OFFLINE_HERO_ID, drop.id, { x: player.position.x, z: player.position.z },
+          );
+          if (collected.accepted) dropsState = collected.state;
+        }
+      }
+    }
+
     // ── G2/G3: THE SIEGE ────────────────────────────────────────────────────────────────────
     //
     // Online the server owns it and this mirrors the published block; offline the same pure rules
@@ -4035,19 +4956,36 @@ async function bootstrap() {
       else if (warden.mode === 'pulse') audio.play('cold-pulse');
       wardenModeSeen = warden.mode;
     }
-    bossBar.update(bossBarState({
+    const bossState = bossBarState({
       mode: warden.mode, hp: warden.hp, maxHp: WARDEN_MAX_HP, phase: warden.phase,
-    }));
+    });
+    // The projection is genuinely wasted work while the bar would be hidden anyway (dormant, dead,
+    // or no warden published yet) -- three.js Vector3.project() and a DOM rect read are not free,
+    // and bossBarState already knows the answer without a camera.
+    bossBar.update(bossState, bossState.visible ? projectBossBar(warden) : null);
 
     // ── G3 PAYOFF: THE BEACON LIGHTS ────────────────────────────────────────────────────────
     //
     // The world remembers. Gated on having SEEN it cold, the same rule the Lantern Tree's own
     // relight and the Workshop's build already follow -- a child who joins a world where the
     // Beacon is already burning gets a lit Beacon, not somebody else's ceremony.
+    //
+    // `beaconLitSeen` is set ONLY inside the `zoneOldBeacon` guard, and that placement is
+    // load-bearing rather than tidy -- the exact bug the Lantern Tree's own relight already
+    // measured and fixed (see rewardsForRelight/relightSpent's own comment above), now playing out
+    // a second time at the Beacon. A snapshot saying beaconLit:true routinely lands before
+    // zone.ready has resolved (a second device on a slower connection, a cold asset cache, or
+    // simply the two arriving in the wrong order) -- if this had one-shot-spent itself the moment
+    // it OBSERVED beaconLit:true, regardless of whether zoneOldBeacon existed yet to act on it, a
+    // guest unlucky enough to see that frame before their own Beacon geometry loaded would have the
+    // ignition permanently skipped: `beaconLitSeen` stays true forever, so the one call that would
+    // ever have lit their Beacon never fires again for the rest of the session. Gating the LATCH
+    // itself on `zoneOldBeacon` being present means a slow load simply keeps retrying next frame
+    // until the geometry exists to light -- the world was never wrong, only unable to draw it yet.
     if (!siegeState.beaconLit) sawBeaconCold = true;
-    if (siegeState.beaconLit && !beaconLitSeen) {
+    if (siegeState.beaconLit && !beaconLitSeen && zoneOldBeacon) {
       beaconLitSeen = true;
-      zoneOldBeacon?.ignite();
+      zoneOldBeacon.ignite();
       if (sawBeaconCold) {
         audio.play('beacon-ignite');
         banner('The Old Beacon is burning!', 3600);
@@ -4227,15 +5165,34 @@ async function bootstrap() {
       },
     );
     renderQuestObjective(currentObjective?.text ?? null);
-    // The two dynamic destinations -- the next dark light, the next unbroken seal -- are not supplied
-    // yet, so those objectives draw no arrow rather than a wrong one. destinationFor returns null for
-    // a place the caller could not name, which is the same answer as "this one has nowhere", and the
-    // pointer treats both as nothing to say. Wiring them is its own slice.
-    const pointer = renderObjectivePointer(currentObjective, pointerContext);
-    // NaN when the errand has no place -- "cut the bramble" is the thing in front of you and has no
-    // coordinate to be far from. The watch treats that as nothing to measure rather than as a child
-    // standing still, so a placeless stretch cannot accumulate a stuck clock.
-    rescueTarget = destinationFor(currentObjective, pointerContext);
+    // ALWAYS ON, EXCEPT WHEN IT WOULD BE NOISE. The playtest brief this pass answers to says the
+    // guidance should "basically always be there" -- so the arrow/marker and the ground trail are
+    // suspended for exactly two reasons and no others: a full-screen overlay owns the screen (the
+    // same condition index.html's own CSS already hides #objective-pointer and #minimap for, applied
+    // here too because the ground trail is world-space three.js and no stylesheet can hide it), or an
+    // NPC speech beat already has the child standing at the right spot -- a bouncing marker over
+    // Keeper Aldric's own head while his speech bubble is open would be pointing at something the
+    // child is already looking at and is already being told about.
+    const suspendGuidance = anyOverlayOpen || npcSpeech.visible;
+    const pointer = renderObjectivePointer(currentObjective, pointerContext, suspendGuidance);
+    // ONE resolve of "where is the objective", read three ways -- the arrow/marker above, the ground
+    // trail below, and the rescue watch's distance further down. `pointer.place` is exactly what
+    // renderObjectivePointer itself got from destinationFor; reusing it here keeps this to one
+    // branch rather than two hand-kept copies of "where is it" (GQ-011), and it is resolved whether
+    // or not the visuals are suspended, so an overlay closing mid-objective has a place to draw at
+    // on the very next frame instead of one frame of nothing while it catches up.
+    rescueTarget = pointer.place;
+    // THE GROUND TRAIL. Hidden by the same `suspendGuidance` flag as the arrow/marker -- see the
+    // comment above -- and additionally by guidePath.js's own arrival radius the moment `rescueTarget`
+    // is close enough that render/guideArrow.js has already gone quiet about it too (the two files
+    // share that number by import, not by two people remembering the same tuning).
+    guidePath.update(deltaSeconds, {
+      hasTarget: !suspendGuidance && rescueTarget != null,
+      heroX: player.position.x,
+      heroZ: player.position.z,
+      targetX: rescueTarget?.x,
+      targetZ: rescueTarget?.z,
+    });
     renderMinimap(frameStart, rescueTarget);
     renderRescueOffer(rescueWatch.update({
       distanceMeters: rescueTarget

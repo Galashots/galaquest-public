@@ -16,6 +16,7 @@ import {
   addHero,
   createPartyEncounterState,
   removeHero,
+  requestHeroHeal,
   requestPartyAttack,
   separateFromEnemies,
   stepParty,
@@ -24,6 +25,9 @@ import { RUN_SPEED, groundSpeedForInput } from '../public/src/character/speed.js
 import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessage, welcomeMessage }
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
+// R1: repeatable combat XP's own fold -- the second real xp-earned source, riding P2's lantern-XP
+// path unchanged (see rewards/killXp.js's own header for why that is the whole design).
+import { createKillXpLedger, foldKillXpEvents } from '../public/src/rewards/killXp.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
   isKnownItem, itemDef,
@@ -39,6 +43,15 @@ import {
   COIN_KIND, createCartLootState, pickupDef, requestCollectLoot, requestSearchCart,
   restoreCartLootState,
 } from '../public/src/world/cartLoot.js';
+// R1: kill drops -- coins/hearts/gear scattered where an ordinary enemy fell, the dynamic-id sibling
+// of world/cartLoot.js's own fixed haul (see that module's own header for the split).
+import {
+  GEAR_DROP_KIND, HEART_DROP_KIND, HEART_HEAL_HP, createEnemyDropsState, requestCollectEnemyDrop,
+  requestEnemyDrop, stepEnemyDrops,
+} from '../public/src/world/enemyDrops.js';
+// R1: the coin multiplier a kill-drop roll reads off a per-player rolling streak.
+import { coinMultiplierForStreak, createStreakState, registerKill as registerKillStreak, stepStreak }
+  from '../public/src/progression/streaks.js';
 import { WORKSHOP_I_COST, WORKSHOP_I_ID } from '../public/src/village/economy.js';
 // G2/G3: the Beacon siege's rules, imported exactly the way the wolf's are -- the server owns the
 // fight because the fight is SHARED (one boss, one health bar, two children hitting it), and
@@ -63,6 +76,10 @@ import { HELMET_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progress
 import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
 } from '../public/src/world/bounds.js';
+// G3 follow-up: the Beacon's own collision, imported the identical "one law, two consumers" way
+// bounds.js's world edge already is -- see world/obstacles.js's own header for why this cannot be a
+// server-only rule.
+import { resolveObstacleCollisions, worldObstacles } from '../public/src/world/obstacles.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
 import { openRewardStore } from './rewardStore.mjs';
 import { attachWebSocketServer } from './wsServer.mjs';
@@ -81,6 +98,11 @@ export const HOLLOW_CACHE_SHARDS = 3;
 // cannot import this server-only module. So the number moved to the one place both sides can read
 // it -- progression/heroStats.js's WREN_CHARM_MAX_HP_BONUS -- with its meaning preserved exactly
 // (10 of a 30hp body is the same third) rather than re-tuned on the way past.
+
+// Computed once, not per tick per player: the Village's own blockers never move mid-session, so
+// re-deriving them from zones/village.js on every tick (TICK_HZ below) for every connected child
+// would be pure waste. The pure resolver itself stays a per-call function (it has to -- a hero moves).
+const WORLD_OBSTACLES = worldObstacles();
 
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
@@ -135,6 +157,11 @@ export function createRewardCoordinator(options = {}) {
   // persistence, marks still count in-memory for the session)".
   const ephemeral = new Map();
   let ledger = createRewardLedger();
+  // R1: the identical per-tick fold marks/lantern already use, kept as its own ledger rather than
+  // folded into `ledger` above -- the two answer different questions (a Lantern Mark is Wolf-only
+  // and Wren's own reward; kill XP is every kind) and a shared ledger would tangle their contributor
+  // bookkeeping for no reason either fold needs.
+  let killXpLedger = createKillXpLedger();
   // playerId -> itemId, for the ephemeral (guestId-less) equip fallback -- mirrors `ephemeral` above,
   // kept as its own map rather than folded into that one's shape because equip has nothing to do with
   // marks/lantern and every one of that map's three fields (marks, unlocked, seenEventIds) would sit
@@ -621,6 +648,28 @@ export function createRewardCoordinator(options = {}) {
   }
 
   /**
+   * R1: kill XP, applied durably per contributing guest -- the SAME "durable, guestId-scoped, once
+   * per enemy life" shape applyMarkAward already gives Lantern Marks, riding the identical xp-earned
+   * fact type P2 already established rather than inventing a second one. `award.lifeId` is minted by
+   * processTick below the same way applyMarkAward's own award.lifeId is (randomUUID per completed
+   * life, never the fold's own in-process counter -- see rewards/killXp.js's own header for why).
+   *
+   * An ephemeral (guestId-less) connection earns nothing durable, on purpose: this is the SAME
+   * posture the Lantern's own XP award has always taken (applyLanternUnlock above requires a
+   * guestId, and rewardsFor's ephemeral branch has always reported `xp: 0`), not a new restriction
+   * invented for kills specifically. XP is a durable-identity currency in this game, full stop.
+   */
+  function applyKillXpAward(award) {
+    const guestId = guestIdByPlayer.get(award.heroId);
+    if (!guestId) return [];
+    const eventId = `kill-xp:${guestId}:${award.enemyId}:${award.lifeId}`;
+    const result = store.apply({
+      guestId, heroId: award.heroId, type: 'xp-earned', eventId, value: String(award.value),
+    });
+    return announcementFor(result, { type: 'xp-earned', heroId: award.heroId, eventId, value: String(award.value) });
+  }
+
+  /**
    * Fold one drainEvents() batch into awards (D1) and apply each (D2/D3), returning the events to
    * append to the SAME outgoing snapshot the combat events ride, per the brief: clients hear
    * mark-earned/lantern-unlocked "the way they hear wolf-defeated" -- one array, one broadcast.
@@ -631,8 +680,14 @@ export function createRewardCoordinator(options = {}) {
     // lesson and for why the id is minted per LIFE rather than per contributor.
     const folded = foldEvents(ledger, events, { mintLifeId: () => randomUUID() });
     ledger = folded.ledger;
+    // R1: the identical fold, over the identical events batch, through its OWN ledger -- see
+    // killXpLedger's own declaration for why marks and kill XP do not share one. Both read the same
+    // wolf-defeated events independently; neither fold's WeakSet interferes with the other's.
+    const killXpFolded = foldKillXpEvents(killXpLedger, events, { mintLifeId: () => randomUUID() });
+    killXpLedger = killXpFolded.ledger;
     const rewardEvents = [];
     for (const award of folded.awards) rewardEvents.push(...applyMarkAward(award));
+    for (const award of killXpFolded.awards) rewardEvents.push(...applyKillXpAward(award));
     return rewardEvents;
   }
 
@@ -896,6 +951,13 @@ export function createSimulation(options = {}) {
   // Defaults to the Level-1 starter hero, which every test that drives createSimulation() directly
   // relies on: an unwired simulation fights exactly the fight it always fought.
   const heroStatsFor = options.heroStatsFor ?? (() => LEVEL_1_STARTER_STATS);
+  // R1: the SAME injection seam as heroStatsFor just above, for the identical reason -- deciding
+  // whether a rolled gear drop is already owned (world/enemyDrops.js's own owned-gear-to-coins
+  // conversion) needs a guest's durable ownership, which is reward-store truth this factory has no
+  // business knowing. Defaults to "owns nothing", the same "an unwired simulation behaves exactly as
+  // it always did" contract heroStatsFor's own default keeps -- every test that drives
+  // createSimulation() directly without wiring this gets an honest "always drop the gear" roll.
+  const ownedItemIdsFor = options.ownedItemIdsFor ?? (() => []);
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -937,6 +999,17 @@ export function createSimulation(options = {}) {
   let lootState = options.creditedLootIds?.length > 0
     ? restoreCartLootState(options.creditedLootIds)
     : createCartLootState();
+
+  // R1: kill drops, one live ground for the whole simulation -- the identical shared-physical-state
+  // shape lootState above already is, for a different piece of shared world truth. Deliberately NOT
+  // seeded from anything durable (world/enemyDrops.js's own header explains why a restart losing an
+  // un-collected coin is the honest answer here, unlike lootState's own GP3-0 restart-coherence need).
+  let dropsState = createEnemyDropsState();
+  // playerId -> streak state (public/src/progression/streaks.js). Lives here, not in the reward
+  // coordinator, for the same reason lastAttackSeq above does: a streak is live combat-adjacent
+  // bookkeeping the simulation's own tick already has the deltaSeconds/events to drive, not a durable
+  // reward-store fact -- nothing about a streak survives a disconnect or a restart, on purpose.
+  const streakByPlayer = new Map();
 
   // G2/G3: THE BEACON SIEGE, one for the whole simulation -- the same shared-authority shape
   // the ordinary encounter collection above already is, for the same reason: there is one Old Beacon and every joined
@@ -1074,6 +1147,10 @@ export function createSimulation(options = {}) {
     // Clears wolf.targetId's siege equivalent too (world/beaconSiege.js's removeSiegeHero), so a
     // Warden mid-swing at somebody who just closed their iPad does not resolve against a ghost.
     siegeState = removeSiegeHero(siegeState, id);
+    // R1: a streak is per-connection momentum, not a durable fact -- a child who closes the tab
+    // starts their next session at zero, the same way lastAttackSeq's own per-connection bookkeeping
+    // is dropped rather than carried forward.
+    streakByPlayer.delete(id);
     return removed;
   }
 
@@ -1143,6 +1220,36 @@ export function createSimulation(options = {}) {
     const result = requestCollectLoot(lootState, id, pickupId, { x: player.x, z: player.z });
     lootState = result.state;
     return { accepted: result.accepted, kind: pickup?.kind ?? null };
+  }
+
+  /**
+   * R1: a decoded `collect-drop` message -- the same "server owns physical truth, reads the
+   * player's OWN authoritative position" shape applyCollectLoot just above already takes, against
+   * world/enemyDrops.js's dynamic ground instead of cartLoot.js's fixed one. Returns the collected
+   * drop's own payload (never null on accept) so the caller can decide what to actually award --
+   * this function does not itself touch the reward store or heal anything, the same "adjudicate the
+   * physical collect here, award it one layer up" split applyCollectLoot's own handler in
+   * attachGameServer already follows.
+   */
+  function applyCollectDrop(id, dropId) {
+    const player = players.get(id);
+    if (!player) return { accepted: false, drop: null };
+    const result = requestCollectEnemyDrop(dropsState, id, dropId, { x: player.x, z: player.z });
+    dropsState = result.state;
+    return { accepted: result.accepted, drop: result.drop };
+  }
+
+  /**
+   * R1: a non-kill heal -- today, only a collected heart drop. Pushes combat/encounter.js's own
+   * `hero-healed` event onto the SAME pendingEvents queue attack/step already fill, so it rides the
+   * next snapshot exactly the way any other combat event does; announceRewardFacts is the wrong seam
+   * for this (that carries an already-written DURABLE fact, and a heal is neither durable nor a
+   * reward-store concern -- it is live combat state, adjudicated by combat/encounter.js itself).
+   */
+  function applyHeroHeal(id, amount) {
+    const result = requestHeroHeal(encounterState, id, amount);
+    encounterState = result.state;
+    if (result.events.length > 0) pendingEvents.push(...result.events);
   }
 
   function applyInput(id, message, nowMs) {
@@ -1225,8 +1332,36 @@ export function createSimulation(options = {}) {
 
     const partyResult = stepParty(encounterState, { deltaSeconds, heroes: commandHeroes });
     encounterState = partyResult.state;
+    // Put a respawned hero back at the village spawn -- gated by the SAME ownership rule the
+    // forwarding loop three lines below already applies, because moving a child's body is the
+    // loudest possible way of speaking for it.
+    //
+    // The Owner hit the ungated version in a live playtest on 2026-08-27 and corrected the first
+    // guess himself: nobody died, the hearts never moved, no veil and no banner -- the child was
+    // simply back at the start area, usually moments after killing a wolf up the Old Beacon road.
+    // A hero standing inside BEACON_ARENA is owned by the siege, but stepParty still steps the wolf
+    // engine's own copy of every hero every tick; an enemy whose teeth reached inside the rim
+    // (frost-wolf-2 shipped 0.047 m inside that envelope -- see village.js's own ENEMY_POPULATION
+    // header) mauled that copy, and keepEvent correctly kept every hero-hurt/hero-down/
+    // hero-respawned off the wire while encounterSnapshot correctly published the siege's untouched
+    // body. The child was shown nothing at all. This loop then obeyed the suppressed respawn and
+    // moved them 50 m, and position reconciliation dragged the client along with no event to
+    // explain it. Gating here removes THIS class -- the 50 m relocation -- for good: no second
+    // engine and no future placement mistake can send a body it does not own back to spawn.
+    //
+    // It deliberately does NOT claim to be the only thing in this function that writes a position.
+    // The separation/obstacle/world-clamp pass at the end of the tick still runs for every player
+    // regardless of which engine owns them, and that is correct: those are metre-scale pushes that
+    // keep any body out of an enemy, out of the Beacon's stone and inside the world, and a hero in
+    // the arena wants all three. The distinction that matters is scale and authorship -- a bounded
+    // push every body consents to, versus one engine teleporting a hero another engine is running.
+    //
+    // Nothing leaks by refusing: on leaving the arena settleArenas calls transferWolfHeroBody, which
+    // overwrites the wolf copy's private mauling with the siege's real body.
+    // test/beacon-arena-phantom-respawn.test.mjs pins both halves.
     for (const event of partyResult.events) {
       if (event.type !== 'hero-respawned') continue;
+      if (!keepEvent(event, WOLF_BODY_EVENTS, WOLF_ARENA)) continue;
       const player = players.get(event.heroId);
       if (!player) continue;
       player.x = encounterState.heroSpawn.x;
@@ -1237,6 +1372,42 @@ export function createSimulation(options = {}) {
     for (const event of partyResult.events) {
       if (keepEvent(event, WOLF_BODY_EVENTS, WOLF_ARENA)) pendingEvents.push(event);
     }
+
+    // R1: every joined player's streak clock decays this tick, whether or not anything died --
+    // stepStreak's own header explains why that has to run every tick rather than only on a kill
+    // (a live "about to expire" HUD reading needs it). Run BEFORE crediting this tick's own kills so
+    // registerKill below reads each player's idle time as it stood coming INTO this tick, the
+    // ordering streaks.js's own registerKill documents.
+    for (const player of players.values()) {
+      streakByPlayer.set(player.id, stepStreak(streakByPlayer.get(player.id) ?? createStreakState(), deltaSeconds));
+    }
+
+    // R1: kill drops. One roll per 'wolf-defeated' event this tick, scattered at the enemy's own
+    // (now post-step, but a dying body does not move) position. `event.heroId` is the hero who
+    // landed the KILLING blow -- streak credit and the owned-gear-to-coins conversion both key off
+    // that hero specifically, the same "credit the one who actually finished it" choice a streak
+    // (a PERSONAL momentum, not a shared party fact) has to make even where marks/kill-XP credit
+    // every contributor.
+    for (const event of partyResult.events) {
+      if (event.type !== 'wolf-defeated' || event.heroId == null) continue;
+      const enemy = encounterState.enemies.find((candidate) => candidate.enemyId === event.enemyId);
+      if (!enemy) continue;
+      const streak = registerKillStreak(streakByPlayer.get(event.heroId) ?? createStreakState());
+      streakByPlayer.set(event.heroId, streak);
+      const rolled = requestEnemyDrop(dropsState, {
+        enemyId: event.enemyId,
+        lifeId: randomUUID(),
+        kind: event.kind,
+        x: enemy.x,
+        z: enemy.z,
+        streakMultiplier: coinMultiplierForStreak(streak.streak),
+        killerOwnedItemIds: ownedItemIdsFor(event.heroId),
+      }, Math.random);
+      dropsState = rolled.state;
+    }
+    // Advance every drop's own clock -- expiry for the uncollected, a short linger for the just-
+    // collected (see world/enemyDrops.js's own COLLECTED_LINGER_SECONDS).
+    dropsState = stepEnemyDrops(dropsState, deltaSeconds);
 
     // The siege runs on the SAME tick and the same command shape, every tick, whether or not anybody
     // is standing in it -- a Warden mid-death-animation with nobody watching still has to finish
@@ -1250,8 +1421,15 @@ export function createSimulation(options = {}) {
 
     for (const player of players.values()) {
       const separated = separateFromEnemies({ x: player.x, z: player.z }, encounterState.enemies);
-      player.x = clampToWorldX(separated.x);
-      player.z = clampToWorldZ(separated.z);
+      // G3 follow-up: two children walked straight through the Old Beacon's own stone base in a
+      // real playtest. The SAME pure resolver the client's own prediction runs (world/obstacles.js's
+      // own header explains why it has to be the same function, not merely the same rule) pushes a
+      // hero's feet back out of the Beacon and the Lantern Tree here, on the server's own
+      // authoritative position -- the one both sides eventually agree on, same as the world edge
+      // clamp two lines down.
+      const unstuck = resolveObstacleCollisions(separated, WORLD_OBSTACLES);
+      player.x = clampToWorldX(unstuck.x);
+      player.z = clampToWorldZ(unstuck.z);
     }
 
     return tick;
@@ -1325,6 +1503,23 @@ export function createSimulation(options = {}) {
   // from world/cartLoot.js's own table, not restated on the wire).
   function lootSnapshot() {
     return { spawned: lootState.spawned, collected: { ...lootState.collected } };
+  }
+
+  // R1's wire block (net/protocol.js's decodeDrops): every drop currently on the ground, with
+  // position/kind/itemId restated per-drop -- UNLIKE lootSnapshot just above, a dynamic drop id has
+  // no shared authored table either side can already derive those from (world/enemyDrops.js's own
+  // header explains the split). Position is rounded like every other numeric field on this wire;
+  // `collectedBy` rides only while a drop is still lingering post-collect, the same "absent means
+  // nothing has happened yet" shape lootSnapshot's own collected map takes.
+  function dropsSnapshot() {
+    return dropsState.drops.map((drop) => ({
+      id: drop.id,
+      kind: drop.kind,
+      x: roundToWire(drop.x),
+      z: roundToWire(drop.z),
+      ...(drop.itemId ? { itemId: drop.itemId } : {}),
+      ...(drop.collectedBy != null ? { collectedBy: drop.collectedBy } : {}),
+    }));
   }
 
   /**
@@ -1445,10 +1640,13 @@ export function createSimulation(options = {}) {
     applyAttack,
     applySearchCart,
     applyCollectLoot,
+    applyCollectDrop,
+    applyHeroHeal,
     step,
     snapshot,
     encounterSnapshot,
     lootSnapshot,
+    dropsSnapshot,
     siegeSnapshot,
     beaconIsLit,
     rowanClaimState,
@@ -1488,6 +1686,10 @@ export function attachGameServer(httpServer, options = {}) {
     // would mean the stronger hero only started existing after a reconnect. That is the exact defect
     // docs/MISTAKES.md GQ-013 is about: a reward the rules never read.
     heroStatsFor: (playerId) => rewards.heroStatsFor(playerId),
+    // R1: the SAME injection reasoning as heroStatsFor immediately above -- a kill-drop gear roll
+    // needs to know what this guest already owns, which is durable reward-store truth the
+    // simulation itself has no business holding.
+    ownedItemIdsFor: (playerId) => rewards.ownedItemIdsFor(playerId),
   });
   // Whether the durable row has been written for the victory this process is currently watching.
   // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that
@@ -1507,6 +1709,7 @@ export function attachGameServer(httpServer, options = {}) {
       ...encounter,
       rewards: rewards.rewardsFor(Object.keys(encounter.heroes)),
       loot: simulation.lootSnapshot(),
+      drops: simulation.dropsSnapshot(),
       village: rewards.villageSnapshot(),
       siege: simulation.siegeSnapshot(),
     };
@@ -1680,6 +1883,38 @@ export function attachGameServer(httpServer, options = {}) {
           simulation.announceRewardFacts(
             rewards.applyLootAward(client.data.playerId, message.pickupId, kind),
           );
+        }
+        return;
+      }
+
+      // R1: a decoded `collect-drop` message -- the same "adjudicate the physical collect in the
+      // simulation, award it here" split 'collect-loot' just above already takes, against
+      // world/enemyDrops.js's dynamic ground instead of cartLoot.js's fixed one.
+      //
+      // UNLIKE collect-loot, this is NOT refused up front for a guestId-less connection: a kill
+      // drop is not a scarce, pre-authored, globally-unique object the way a cart pickup is (see
+      // that handler's own comment for why THAT refusal exists) -- a fresh one spawns on every kill
+      // regardless of who is connected, so an ephemeral collector "wastes" nothing durable. Each
+      // payout path already degrades correctly on its own for an ephemeral hero: applyLootAward's
+      // own ephemeral branch (in-memory only), grantOwnership's own early return (no durable
+      // identity to grant into, silently no-op), and a heart heal, which was never a durable concern
+      // at all.
+      if (message.type === 'collect-drop') {
+        if (!client.data.playerId) throw new ProtocolError('collect-drop before join');
+        const playerId = client.data.playerId;
+        const { accepted, drop } = simulation.applyCollectDrop(playerId, message.dropId);
+        if (!accepted) return;
+        if (drop.kind === COIN_KIND) {
+          // The award's own announcement rides the next snapshot, the identical treatment
+          // collect-loot's own coin already gets -- dropId is already globally unique (see
+          // world/enemyDrops.js's own id scheme), so it is applyLootAward's eventId verbatim.
+          simulation.announceRewardFacts(rewards.applyLootAward(playerId, drop.id, drop.kind));
+        } else if (drop.kind === HEART_DROP_KIND) {
+          // Never a reward-store concern: a heal is live combat state, adjudicated (and its own
+          // 'hero-healed' event raised) by combat/encounter.js itself via requestHeroHeal.
+          simulation.applyHeroHeal(playerId, HEART_HEAL_HP);
+        } else if (drop.kind === GEAR_DROP_KIND) {
+          simulation.announceRewardFacts(rewards.grantOwnership(playerId, drop.itemId));
         }
         return;
       }

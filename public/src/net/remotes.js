@@ -44,9 +44,12 @@ import {
   SILVERGUARD_HELMET_BONE_NAME,
   SILVERGUARD_HELMET_HIDES_ANATOMY,
   rigidAnchorName,
+  silverguardShoulderAnchorId,
 } from '../character/gear.js';
 import { geometryForAnatomyCoverage } from '../character/anatomyOcclusion.js';
-import { HELMET_SILVERGUARD_ID, HELMET_SLOT } from '../progression/items.js';
+import {
+  HELMET_SILVERGUARD_ID, HELMET_SLOT, SHOULDERS_SLOT, SHOULDER_SILVERGUARD_ID,
+} from '../progression/items.js';
 import { createLocomotionController } from '../character/locomotion.js';
 import { locomotionModeForSpeed } from '../character/speed.js';
 import { createReactionAnimator } from '../character/reactClips.js';
@@ -109,6 +112,11 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
       // decided every frame from their own equipped map. The body mesh is caught for the hair/ear
       // occlusion -- the first SkinnedMesh, the same one hero.js treats as the body.
       helmetAnchor: root.getObjectByName(rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, SILVERGUARD_HELMET_BONE_NAME)) ?? null,
+      // R1: the same inherited-or-null story as the helmet, times two -- a clone carries a shoulder
+      // anchor only because the LOCAL child had one mounted when it was taken; whether THIS sibling
+      // shows either is decided every frame from their own equipped map.
+      shoulderAnchorLeft: root.getObjectByName(rigidAnchorName(silverguardShoulderAnchorId('left'), 'LeftArm')) ?? null,
+      shoulderAnchorRight: root.getObjectByName(rigidAnchorName(silverguardShoulderAnchorId('right'), 'RightArm')) ?? null,
       bodyMesh: (() => { let m = null; root.traverse((o) => { if (!m && o.isSkinnedMesh) m = o; }); return m; })(),
       gearMountsInFlight: new Set(),
       // Both degrade per-clip and return null when the rig ships nothing to play, the same contract
@@ -246,6 +254,23 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
     setRemoteHelmetCoverage(remote, worn);
   }
 
+  // R1: the same per-frame, absence-is-not-permission rule as ensureRemoteHelmet, for the Shoulders --
+  // both anchors mount off ONE mountOnce request each (they are two distinct gear ids,
+  // silverguardShoulderAnchorId('left')/('right')), and both show or hide together since they are one
+  // owned/equipped item on the wire.
+  function ensureRemoteShoulders(remote, equippedItemIds) {
+    const equipped = equippedItemIds?.[SHOULDERS_SLOT] === SHOULDER_SILVERGUARD_ID;
+    if (equipped && remote.shoulderAnchorLeft === null) {
+      mountOnce(remote, silverguardShoulderAnchorId('left'), (anchor) => { remote.shoulderAnchorLeft = anchor; });
+    }
+    if (equipped && remote.shoulderAnchorRight === null) {
+      mountOnce(remote, silverguardShoulderAnchorId('right'), (anchor) => { remote.shoulderAnchorRight = anchor; });
+    }
+    remote.shouldersEquipped = equipped;
+    if (remote.shoulderAnchorLeft) remote.shoulderAnchorLeft.visible = equipped;
+    if (remote.shoulderAnchorRight) remote.shoulderAnchorRight.visible = equipped;
+  }
+
   /**
    * @param sampled  Map<id, {x, z, heading, speed}> from the interpolator
    * @param deltaSeconds  the CLAMPED frame delta, for locomotion and the swing
@@ -281,6 +306,7 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
       ensureRemoteWeapon(remote, reward?.equippedWeaponId ?? null);
       ensureRemoteLantern(remote, reward?.lanternUnlocked === true);
       ensureRemoteHelmet(remote, reward?.equippedItemIds ?? null);
+      ensureRemoteShoulders(remote, reward?.equippedItemIds ?? null);
 
       const hero = heroes[id] ?? null;
       const downSeconds = hero?.downSeconds ?? -1;
@@ -361,6 +387,9 @@ export function createRemotePlayers(scene, template, { mountGear = null } = {}) 
         // discipline the down/swing fields above use).
         helmetEquipped: remote.helmetEquipped === true,
         helmetOccluded: Boolean(remote.bodyMesh?.geometry?.userData?.gqAnatomyCoverage),
+        // R1: what this sibling's shoulders are doing, the same "answer from what is actually drawn"
+        // discipline every other describe() field here keeps.
+        shouldersEquipped: remote.shouldersEquipped === true,
         visible: remote.root.visible,
       }));
     },

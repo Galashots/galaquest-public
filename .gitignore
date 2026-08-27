@@ -45,3 +45,6 @@ foundry/candidates/*/renders/
 # The children's save (net/rewardStore.mjs). data/ itself is tracked -- see data/README.md -- but
 # the actual SQLite files and their -wal/-shm sidecars are not, same as any other local database.
 data/*.db*
+
+# Claude Code agent worktrees (ephemeral, session-local)
+.claude/worktrees/

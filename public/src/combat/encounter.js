@@ -1,7 +1,9 @@
 // Pure ordinary-enemy combat authority. No three.js, DOM, progression, or world imports.
 //
 import { resolveIncomingDamage } from './damage.js';
-import { isSupportedWolfLevel, wolfStatsForLevel } from './enemyStats.js';
+import {
+  ENEMY_KINDS, enemyStatsForLevel, isSupportedEnemyLevel, respawnSecondsForKind, wolfStatsForLevel,
+} from './enemyStats.js';
 
 // E1 replaces the old mutable `wolf` slot with one canonical `enemies` collection. Every ordinary
 // enemy carries a stable enemyId plus a kind discriminator, its own patrol cursor, and its own
@@ -13,6 +15,17 @@ export const HERO_MAX_HP = 30;
 export const BASE_HERO_DAMAGE = 10;
 export const WOLF_BITE_DAMAGE = wolfStatsForLevel(1).biteDamage;
 export const VICTORY_HEAL_HP = WOLF_BITE_DAMAGE;
+
+// ── OUT-OF-COMBAT REGEN ─────────────────────────────────────────────────────────────────────────
+//
+// "Maximum dopamine" combat still has to let a child WALK OFF a bad fight rather than nurse a body
+// back with nothing but the next kill's heal-on-victory -- a hero who limped away from three Wolves
+// and is now catching their breath in the open should not still be reading the same low number two
+// minutes later. Deliberately separate from VICTORY_HEAL_HP above: that is a KILL reward (one lump
+// sum, paid to every standing hero the instant a body drops); this is a passive recovery clock that
+// runs whether or not anything is fighting, and the two stack rather than compete.
+export const OUT_OF_COMBAT_REGEN_DELAY_SECONDS = 6;
+export const OUT_OF_COMBAT_REGEN_HP_PER_SECOND = 4;
 
 export const ATTACK_REACH = 1.7;
 export const ATTACK_HALF_ARC_RADIANS = Math.PI * 0.42;
@@ -30,7 +43,11 @@ export const WOLF_BITE_CONTACT_SECONDS = 0.45;
 export const STAGGER_SECONDS = 0.667;
 export const DEATH_SECONDS = 1.75;
 export const RESPAWN_SECONDS = 2;
-export const WOLF_RESPAWN_SECONDS = 10;
+// Derived from enemyStats.js's own per-kind table (GQ-007) rather than typed here a second time --
+// see that file's respawnSecondsForKind for why respawn timing became kind-aware. Every existing
+// reader of this name (this module's own advanceEnemy, and every test that times a Wolf's respawn)
+// keeps reading the exact same number under the exact same export.
+export const WOLF_RESPAWN_SECONDS = respawnSecondsForKind('wolf');
 export const MIN_BODY_SEPARATION = 1;
 export const RESPAWN_PROTECTION_SECONDS = 2;
 export const DEFAULT_WOLF_LEASH_RADIUS = 12;
@@ -136,7 +153,9 @@ function normalizeEnemyDefinition(definition, fallbackId = DEFAULT_ENEMY_ID) {
     patrol.length - 1,
   ));
   const level = definition?.level ?? 1;
-  if (!isSupportedWolfLevel(level)) throw new TypeError(`unsupported Wolf level: ${JSON.stringify(level)}`);
+  if (!isSupportedEnemyLevel(kind, level)) {
+    throw new TypeError(`unsupported level ${JSON.stringify(level)} for enemy kind ${JSON.stringify(kind)}`);
+  }
   const spawn = patrol[spawnIndex];
   const homeAuthored = definition?.home !== undefined;
   const home = clonePoint(definition?.home ?? spawn);
@@ -148,7 +167,7 @@ function normalizeEnemyDefinition(definition, fallbackId = DEFAULT_ENEMY_ID) {
 
 function freshEnemy(definition) {
   const normalized = normalizeEnemyDefinition(definition, definition?.enemyId);
-  const stats = wolfStatsForLevel(normalized.level);
+  const stats = enemyStatsForLevel(normalized.kind, normalized.level);
   const spawn = normalized.patrol[normalized.spawnIndex];
   return {
     enemyId: normalized.enemyId,
@@ -201,7 +220,7 @@ function enemiesFromLegacyState(state) {
       leashRadius: enemy.leashRadius,
       level: enemy.level,
     }, enemy.enemyId);
-    const stats = wolfStatsForLevel(normalized.level);
+    const stats = enemyStatsForLevel(normalized.kind, normalized.level);
     return {
       ...normalized,
       ...enemy,
@@ -312,6 +331,13 @@ function freshHero() {
     swingLanded: false,
     downSeconds: -1,
     protectionSeconds: 0,
+    // Regen bookkeeping, private to stepParty's own per-tick loop below. `regenIdleSeconds` counts
+    // up from the last moment this hero took damage (or from creation, having never been hit);
+    // `regenRemainderHp` banks the fractional hit points a fractional-per-second rate accrues
+    // between the whole points actually applied to `hp` -- see stepParty's own comment for why hp
+    // itself must never carry a fraction.
+    regenIdleSeconds: 0,
+    regenRemainderHp: 0,
     lastCommandId: null,
   };
 }
@@ -436,6 +462,8 @@ export function createEncounterState(options = {}) {
       swingLanded: false,
       downSeconds: -1,
       protectionSeconds: 0,
+      regenIdleSeconds: 0,
+      regenRemainderHp: 0,
     },
   });
 }
@@ -493,6 +521,37 @@ export function requestPartyAttack(state, heroId, commandId = null) {
   };
 }
 
+/**
+ * Heal one standing hero by a flat amount, capped at their own maxHp -- the seam a heart pickup (or
+ * any future non-kill heal) rides rather than reaching into party state directly. Never heals a
+ * downed hero (there is no body to heal until they respawn), and a no-op heal (already full, or a
+ * non-positive amount) changes nothing and raises no event, the same "an event means something
+ * happened" discipline requestPartyAttack's own accepted:false already keeps.
+ *
+ * Deliberately NOT routed through healTheStanding below: that function is a KILL reward paid to
+ * every standing hero at once, and this is one hero, one pickup, one moment -- reusing it would
+ * either heal heroes who never touched the pickup or require a second signature nobody else needs.
+ * Raises the same 'hero-healed' event healTheStanding already does, so a caller gets one feedback
+ * path for "this hero's hearts went up" regardless of which of the two reasons caused it.
+ *
+ * @param state   the current party encounter state.
+ * @param heroId  which hero is being healed.
+ * @param amount  hit points to restore; non-positive is a no-op rather than an error, so a caller
+ *                need not guard a zero-value heal before calling.
+ */
+export function requestHeroHeal(state, heroId, amount) {
+  const existing = state.heroes[heroId];
+  if (!existing || existing.downSeconds >= 0 || !(amount > 0)) return { state, events: [] };
+  const maxHp = existing.maxHp ?? HERO_MAX_HP;
+  if (existing.hp >= maxHp) return { state, events: [] };
+  const hero = { ...existing, hp: Math.min(maxHp, existing.hp + amount) };
+  const events = [withHeroId({ type: 'hero-healed', remaining: hero.hp }, heroId)];
+  return {
+    state: publishParty(state, enemiesFromLegacyState(state), { ...state.heroes, [heroId]: hero }),
+    events,
+  };
+}
+
 function healTheStanding(heroes, heroIds, events) {
   for (const heroId of heroIds) {
     const hero = heroes[heroId];
@@ -545,9 +604,14 @@ function nearestTargetableHero(enemy, heroes, heroIds, commandHeroes, recoverySa
   return { heroId: best, distance: bestDistance, dx, dz };
 }
 
+// Every ordinary-enemy kind this game defines is a wolf-family predator (E1/density package), so
+// there is exactly one hostility toggle -- `command.wolfHostile` -- shared by all of them, named for
+// the original single Wolf and never renamed since: renaming a command field a caller/test already
+// keys on is a bigger churn than the density package's own scope. ENEMY_KINDS is imported rather
+// than restated so an unrecognised kind can never quietly read as hostile (GQ-007).
 function enemyIsHostile(enemy, command) {
-  if (enemy.kind === 'wolf') return command.wolfHostile !== false;
-  return false;
+  if (!ENEMY_KINDS.includes(enemy.kind)) return false;
+  return command.wolfHostile !== false;
 }
 
 function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSeconds, command) {
@@ -563,7 +627,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
   }
 
   if (enemy.mode === 'dead') {
-    if (enemy.modeSeconds >= WOLF_RESPAWN_SECONDS) {
+    if (enemy.modeSeconds >= respawnSecondsForKind(enemy.kind)) {
       resetEnemy(enemy, { moveOn: true });
       events.push(enemyEvent({ type: 'wolf-respawned' }, enemy));
     }
@@ -617,6 +681,11 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
           enemy.biteDamage,
           commandHeroes[targetId]?.damageReductionPercent,
         );
+        // A landed bite is the ONLY thing that interrupts out-of-combat regen: the idle clock (and
+        // whatever fractional heal it had banked) starts over from a real hit, not from merely being
+        // near a fight.
+        target.regenIdleSeconds = 0;
+        target.regenRemainderHp = 0;
         events.push(enemyEvent({ type: 'hero-hurt', remaining: Math.max(0, target.hp) }, enemy, targetId));
         if (target.hp <= 0) {
           target.downSeconds = 0;
@@ -698,8 +767,37 @@ export function stepParty(state, command = {}) {
         hero.downSeconds = -1;
         hero.hp = hero.maxHp;
         hero.protectionSeconds = RESPAWN_PROTECTION_SECONDS;
+        hero.regenIdleSeconds = 0;
+        hero.regenRemainderHp = 0;
         events.push(withHeroId({ type: 'hero-respawned', protectionSeconds: RESPAWN_PROTECTION_SECONDS }, heroId));
         respawnedIds.push(heroId);
+      }
+    }
+
+    // OUT-OF-COMBAT REGEN. `regenIdleSeconds` counts up every tick this hero is standing (never
+    // while down, per the brief) and is reset to zero the instant a bite actually lands on them --
+    // see advanceEnemy's bite-contact branch below, the only place a hero takes damage in this
+    // engine. Once that clock has run OUT_OF_COMBAT_REGEN_DELAY_SECONDS clear of the last hit, hp
+    // creeps back at OUT_OF_COMBAT_REGEN_HP_PER_SECOND, capped at the hero's own maxHp.
+    //
+    // hp must stay an EXACT INTEGER: net/protocol.js's wire decoder requires it (a hero's hp rides
+    // the snapshot unrounded, unlike every other per-tick clock here, which is rounded to three
+    // decimals only for TRANSPORT) and a fractional heart would print as one. A per-second rate times
+    // a sub-second deltaSeconds is not an integer number of hit points most ticks, so the fraction is
+    // banked in `regenRemainderHp` rather than dropped -- "fractional accumulation" without ever
+    // handing the fight itself a body that is not a whole number of hit points.
+    if (hero.downSeconds < 0) {
+      hero.regenIdleSeconds = (hero.regenIdleSeconds ?? 0) + deltaSeconds;
+      const heroMaxHp = hero.maxHp ?? HERO_MAX_HP;
+      if (hero.regenIdleSeconds >= OUT_OF_COMBAT_REGEN_DELAY_SECONDS && hero.hp < heroMaxHp) {
+        hero.regenRemainderHp = (hero.regenRemainderHp ?? 0) + OUT_OF_COMBAT_REGEN_HP_PER_SECOND * deltaSeconds;
+        const wholeHp = Math.floor(hero.regenRemainderHp);
+        if (wholeHp > 0) {
+          hero.regenRemainderHp -= wholeHp;
+          hero.hp = Math.min(heroMaxHp, hero.hp + wholeHp);
+        }
+      } else if (hero.hp >= heroMaxHp) {
+        hero.regenRemainderHp = 0;
       }
     }
 
@@ -774,6 +872,9 @@ function toPartyState(state) {
     heroes: {
       [SOLO_HERO_ID]: {
         ...state.hero,
+        // protectionSeconds rides the published solo hero as non-enumerable (heroFromParty's own
+        // comment), so it has to be re-attached by name here -- the spread above cannot see it.
+        // regenIdleSeconds/regenRemainderHp are plain fields on state.hero and need no such repair.
         protectionSeconds: state.hero.protectionSeconds ?? 0,
         lastCommandId: null,
       },
@@ -798,6 +899,15 @@ function heroFromParty(hero) {
     cooldown: hero.cooldown,
     swingLanded: hero.swingLanded,
     downSeconds: hero.downSeconds,
+    // Plain, enumerable fields -- unlike protectionSeconds just below, regen bookkeeping has to
+    // survive the ordinary `{...state.hero}` spread this module uses everywhere a hero is threaded
+    // forward (toPartyState, requestPartyAttack, requestHeroHeal), or the idle clock would silently
+    // reset on every one of those calls rather than only on a landed bite. Both names DID join the
+    // pinned field list test/heal-on-victory.test.mjs checks against the solo published hero --
+    // that pin's job is to catch an ACCIDENTAL new field, and this is a deliberate one, updated in
+    // the same commit that added the regen feature.
+    regenIdleSeconds: hero.regenIdleSeconds ?? 0,
+    regenRemainderHp: hero.regenRemainderHp ?? 0,
   };
   Object.defineProperty(published, 'protectionSeconds', {
     enumerable: false,
@@ -830,6 +940,23 @@ export function requestAttack(state, commandId = null) {
     state: publishSolo(state, commandId, result.state),
     events: result.events.map(stripHeroId),
     accepted: result.accepted,
+  };
+}
+
+/**
+ * R1: heal the solo hero by a flat amount -- the offline fallback's own entry point for a heart kill
+ * drop (world/enemyDrops.js's own HEART_DROP_KIND), the same requestHeroHeal seam the server's own
+ * applyHeroHeal rides online, wrapped the identical toPartyState/publishSolo way requestAttack is
+ * above. No commandId: a heal is not itself a replay-guarded command the way an attack tap is
+ * (requestHeroHeal is already idempotent on its own terms -- a hero already at max hp is a clean
+ * no-op, no event), so the previous command sequence is carried through unchanged rather than
+ * advanced or reset.
+ */
+export function requestSoloHeroHeal(state, amount) {
+  const result = requestHeroHeal(toPartyState(state), SOLO_HERO_ID, amount);
+  return {
+    state: publishSolo(state, state.lastCommandId, result.state),
+    events: result.events.map(stripHeroId),
   };
 }
 

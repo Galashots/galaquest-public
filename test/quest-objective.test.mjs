@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  OBJECTIVE_BEACON_IS_COLD,
+  OBJECTIVE_CUT_THE_BRAMBLE,
+  OBJECTIVE_FIND_THE_BEACON,
   OBJECTIVE_FIND_THE_GATE,
   OBJECTIVE_KEEP_THE_VILLAGE_SAFE,
   OBJECTIVE_MEET_THE_KEEPER,
@@ -134,4 +137,32 @@ test('every objective reads at a glance and leads with a symbol', () => {
     assert.doesNotMatch(line.text[0], /[a-z0-9]/i, `"${line}" should lead with a symbol`);
   }
   assert.notEqual(OBJECTIVE_LIGHT_THE_TREE, objectiveFindMarks(1));
+});
+
+// ARRIVING BEATS THE GATE, the same rule the beaconFound hoist already states one level down.
+// gateFound latches on a radius around the arch, and the road does not force a child through it:
+// walking wide of the arch and straight up the trail reaches the camp, the cart, and the Beacon
+// itself with gateFound still false -- measured hosted at 9df59da, where drive-old-beacon's
+// portrait hero searched the cart AND latched the Beacon arrival while the chip read "Follow the
+// lit path north" the entire time, because the gate check early-returned above every deeper beat.
+// A child standing somewhere past the gate must never be sent back to it.
+test('a child at the camp with the gate never crossed is not sent back to the gate', () => {
+  const rewards = { marks: 3, lanternUnlocked: true };
+  assert.equal(
+    questObjectiveFor(rewards, true, false, true, { campFound: true, rowanMet: true, cartSearched: true }),
+    OBJECTIVE_FIND_THE_BEACON);
+});
+
+test('a child at the Old Beacon with the gate never crossed keeps the Beacon objective', () => {
+  const rewards = { marks: 3, lanternUnlocked: true };
+  assert.equal(
+    questObjectiveFor(rewards, true, false, true, { beaconFound: true }),
+    OBJECTIVE_BEACON_IS_COLD);
+});
+
+test('a child stuck at a bramble with the gate never crossed is told to cut it', () => {
+  const rewards = { marks: 3, lanternUnlocked: true };
+  assert.equal(
+    questObjectiveFor(rewards, true, false, true, { atBramble: true }),
+    OBJECTIVE_CUT_THE_BRAMBLE);
 });

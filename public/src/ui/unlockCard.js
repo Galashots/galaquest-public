@@ -146,6 +146,20 @@ export const HELMET_ICON_SVG = `
   </svg>
 `;
 
+// R1: a pair of pauldrons -- two domed shoulder caps, same crude/zero-asset/currentColor discipline
+// as the sword and helmet above, so a Shoulders card wears the item's own accent (heroScreen.js's
+// swatchFor) instead of borrowing the Helmet's silhouette for a different body slot.
+export const SHOULDER_ICON_SVG = `
+  <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g fill="currentColor">
+      <path d="M6 22 C6 13 12 7 18 7 s10 5 10 11 v6 H6 Z"/>
+      <path d="M42 22 C42 13 36 7 30 7 s-10 5 -10 11 v6 h22 Z"/>
+      <rect x="4" y="27" width="16" height="7" rx="2.5"/>
+      <rect x="28" y="27" width="16" height="7" rx="2.5"/>
+    </g>
+  </svg>
+`;
+
 // LAYOUT, stated per index.html's own ledger discipline. The layer is inset:0 and centres the card
 // with grid -- so the card sits mid-frame in both required shapes. Checked against the touch
 // controls before choosing it: #touch-stick and #attack-button are 112px circles at 1rem insets,

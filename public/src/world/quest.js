@@ -263,7 +263,6 @@ export function questObjectiveFor(
 ) {
   if (rewards == null) return null;
   if (treeLit === true) {
-    if (gateFound !== true) return OBJECTIVE_FIND_THE_GATE;
     // ARRIVING BEATS COLLECTING. A child who reaches the camp having missed a lamp on the way is
     // finished with this stretch of trail, and being sent back for one they walked past would be
     // the game arguing with them about something it never asked for.
@@ -294,6 +293,16 @@ export function questObjectiveFor(
       if (trail?.cartSearched !== true) return OBJECTIVE_SEARCH_THE_CART;
       return OBJECTIVE_FIND_THE_BEACON;
     }
+    // ...AND THE GATE IS SUBJECT TO THE SAME RULE, which is where the beaconFound hoist above was
+    // still incomplete: gateFound latches on a radius around the arch, and the road does not force
+    // a child through it. Walking wide of the arch and straight up the trail reaches the camp, the
+    // cart, and the Beacon itself with gateFound still false -- and with this check sitting above
+    // every deeper beat, the chip read "Follow the lit path north" through all of them (measured
+    // hosted at 9df59da: drive-old-beacon's portrait hero searched the cart and latched the Beacon
+    // arrival with the chip still pointing at the gate the whole run). A place a child is standing
+    // PAST is a place they can never be sent back to, so the gate claims the chip only from a
+    // child who has reached nothing beyond it.
+    if (gateFound !== true) return OBJECTIVE_FIND_THE_GATE;
     const lights = trail?.lights ?? 0;
     if (lights <= 0) return OBJECTIVE_KEEP_THE_VILLAGE_SAFE;
     const lit = Math.max(0, Math.min(lights, trail?.lit ?? 0));

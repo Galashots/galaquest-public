@@ -195,6 +195,10 @@ test('walking away and stopping again re-bases the breath instead of stacking on
 test('ground-speed thresholds select walk and run', () => {
   assert.equal(locomotionModeForSpeed(0), 'walk');
   assert.equal(locomotionModeForSpeed(WALK_SPEED), 'walk');
-  assert.equal(locomotionModeForSpeed(2.0), 'run');
+  // Imported, not retyped as a literal -- RUN_THRESHOLD is derived from WALK_SPEED/RUN_SPEED in
+  // speed.js precisely so this boundary moves with them instead of a hardcoded number here silently
+  // going stale the next time those are re-tuned (see speed.js's own 2026-08-27 comment).
+  assert.equal(locomotionModeForSpeed(RUN_THRESHOLD - 1e-6), 'walk');
+  assert.equal(locomotionModeForSpeed(RUN_THRESHOLD), 'run');
   assert.equal(locomotionModeForSpeed(RUN_SPEED), 'run');
 });

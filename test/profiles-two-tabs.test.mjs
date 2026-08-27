@@ -278,3 +278,71 @@ test('a hero minted after a delete is not handed the dead hero\'s id', () => {
   assert.deepEqual(stored.profiles.map((p) => p.displayName), ['Bo'],
     'and Bo must actually be on the device, not deleted at birth by their own id');
 });
+
+// ── the straddle, which the persist-time merge alone cannot fix ────────────────────────────────────
+//
+// The merges above all have the later persist() SEE the earlier write, because persist re-reads the
+// device. The hosted failure that remained (drive-two-clients on be9446c) is the order where it
+// cannot: tab B's device read happens BEFORE tab A's write lands, and B's setItem lands AFTER -- a
+// TOCTOU between two processes that no single-tab read-modify-write can close, however carefully it
+// merges. localStorage has no compare-and-swap; what it has is the `storage` event, which fires in
+// every OTHER tab after a write. reconcileWithDevice() is that event's handler, exposed on the store
+// so this file can deliver the event by hand -- the fake storage here raises none.
+test('a stale write that straddles ours is healed by the storage-event reconcile', () => {
+  const device = deviceStorage();
+  const tabA = tab(device, 'a');
+  const ada = tabA.createProfile('Ada');
+
+  // Tab B's half of the straddle, replayed exactly: its keyring was read while the device was still
+  // empty, so the snapshot it writes back holds only Bo. Built through a real store on a blank
+  // device so the clobbering bytes are schema-perfect, then landed as the second write.
+  const staleDevice = deviceStorage();
+  const tabB = tab(staleDevice, 'b');
+  const bo = tabB.createProfile('Bo');
+  device.setItem(PROFILES_STORAGE_KEY, staleDevice.getItem(PROFILES_STORAGE_KEY));
+  assert.deepEqual(idsFrom(device), ['Bo'], 'the straddle really did lose Ada, or this test proves nothing');
+
+  // What the storage event does in a browser, delivered by hand here.
+  const wrote = tabA.reconcileWithDevice();
+
+  assert.equal(wrote, true, 'the reconcile saw Ada missing and wrote her back');
+  assert.deepEqual(new Set(idsFrom(device)), new Set(['Ada', 'Bo']),
+    'both children are on the device again -- the heal restores, it does not counter-clobber');
+  const stored = JSON.parse(device.getItem(PROFILES_STORAGE_KEY));
+  assert.ok(stored.profiles.some((profile) => profile.id === ada.id),
+    `Ada's rewards identity ${ada.id} survives, not just her name`);
+  assert.ok(stored.profiles.some((profile) => profile.id === bo.id),
+    'and Bo, the child whose write clobbered, is untouched');
+  assert.equal(tabA.activeProfileId(), ada.id, 'tab A is still playing as Ada');
+});
+
+test('the reconcile reaches a fixed point -- an add-only heal cannot ping-pong', () => {
+  const device = deviceStorage();
+  const tabA = tab(device, 'a');
+  tabA.createProfile('Ada');
+
+  const staleDevice = deviceStorage();
+  tab(staleDevice, 'b').createProfile('Bo');
+  device.setItem(PROFILES_STORAGE_KEY, staleDevice.getItem(PROFILES_STORAGE_KEY));
+
+  assert.equal(tabA.reconcileWithDevice(), true, 'the first pass heals');
+  const healed = device.getItem(PROFILES_STORAGE_KEY);
+  assert.equal(tabA.reconcileWithDevice(), false,
+    'the second pass finds nothing missing and must not write -- a write here is the ping-pong');
+  assert.equal(device.getItem(PROFILES_STORAGE_KEY), healed, 'and the device bytes are untouched');
+});
+
+test('the reconcile does not resurrect a child another tab tombstoned', () => {
+  const device = deviceStorage();
+  const tabA = tab(device, 'a');
+  const tabB = tab(device, 'b');
+  tabA.createProfile('Ada');
+  const bo = tabB.createProfile('Bo');
+
+  // B deletes its own child; the tombstone lands on the device. A's reconcile (the storage event
+  // B's delete raised) must adopt the delete, not read Bo's absence as a lost update to heal.
+  tabB.deleteProfile(bo.id);
+  tabA.reconcileWithDevice();
+
+  assert.deepEqual(idsFrom(device), ['Ada'], 'the tombstoned child stays deleted through a reconcile');
+});

@@ -49,6 +49,8 @@ import {
   OBJECTIVE_BEACON_IS_COLD, OBJECTIVE_FIND_THE_BEACON, objectiveBreakSeals,
 } from '../../public/src/world/quest.js';
 import { ROWAN_LINE_BEACON_FOUND, ROWAN_LINE_CART_SEARCHED } from '../../public/src/world/rowanSpeech.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { deadlineAfter, movementPulseMillis, pollUntilDeadline } from './automation-timing.mjs';
 // The held-walk primitive, shared with drive-relight, drive-village and drive-village-board. Its
 // module header records the measurement: a walk budgeted in milliseconds gets a fraction of its
@@ -61,7 +63,18 @@ const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): this used to be a bare `const STICK_PX = 56`, stale against
+// input/touch.js's own STICK_RADIUS_PX since the 2026-08-27 speed-up grew it to 64px.
+const STICK_PX = STICK_RADIUS_PX;
+// THE COARSE LEG RUNS; THE PRECISE LEG WALKS. Unlike drive-village.mjs/drive-village-board.mjs,
+// this file's own walkToward (below) only ever HOLDS the stick for the coarse cover-the-distance leg
+// -- full deflection there is right, since its job is closing 30m of beacon road fast, and it always
+// hands off to pulseWalkToward afterward regardless of how close the hold got. So the fine deflection
+// belongs to the PULSED leg instead: held at RUN_DEFLECTION rather than full deflection, one 70ms
+// (movementPulseMillis's own floor) pulse covers WALK_SPEED*0.07 = 0.12m rather than
+// RUN_SPEED*0.07 = 0.25m, which matters against this file's own tightest rings -- the 0.4m world-edge
+// stop and the 1.2m Rowan approaches the post-arrival checks below depend on actually settling inside.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 // favicon.ico: this harness's own blank-page trick for pinning localStorage before the real
 // navigation always 404s -- the accepted exception every harness in this directory documents.
 // lantern_belt.glb: the pre-existing, disclosed gear-track gap.
@@ -321,7 +334,15 @@ const HELD_APPROACH_SLACK_METRES = 3;
 async function heldWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   const holdWithin = stopWithin + HELD_APPROACH_SLACK_METRES;
-  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin));
+  // RELEASED IN THE PAGE, not by a CDP round trip after the fact -- in-page-driver.mjs's own
+  // `releaseOnArrival`, already proven in drive-village.mjs. Without it, the thumb stays down for a
+  // whole extra frame or two while a starved runner's Runtime.evaluate call for `touchEnd` waits on
+  // the main thread, and authority keeps integrating the held-forward input the entire time. That is
+  // the mechanism behind this file's own measured "latched 0.90m from Rowan, settled 2.86m out": the
+  // in-page latch saw arrival correctly, but the release was the harness's job and landed two frames
+  // late, so everything the latch bought was spent again coasting past the ring on the way out.
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, holdWithin,
+    { releaseOnArrival: true }));
   await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
   await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
   let walk;
@@ -364,7 +385,11 @@ async function pulseWalkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     const sy = sin * nx + cos * nz;
     await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
     try {
-      await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+      // FINE_STICK_PX, not STICK_PX: this is the leg that actually settles the ring (walkToward
+      // below always finishes with it, whether or not a coarse held leg ran first), and its own
+      // 70ms minimum press is smaller and safer at WALK_SPEED than at RUN_SPEED against this file's
+      // tightest rings. See this file's own FINE_STICK_PX comment.
+      await touch(tab, 'touchMove', [{ x: origin.x + sx * FINE_STICK_PX, y: origin.y - sy * FINE_STICK_PX }]);
       await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
     } finally {
       await touch(tab, 'touchEnd', []);
@@ -695,6 +720,22 @@ async function runPhase({ label, viewport, reducedMotion = false, full = false }
       // BACK PAST THE BEACON AND ON TO ROWAN. Re-entering the radius must not re-serve the arrival,
       // and Rowan is the one thing in this slice that answers the arrival with a person.
       await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 240000);
+      // SETTLE-TOLERANT, before the speech-radius assertion runs rather than instead of it: verify
+      // the walk's own return position actually held, and re-approach (bounded, cheap against the
+      // 240s budget already spent above) if it did not. This is the exact failure this file's own
+      // header measured against Rowan's line -- "latched 0.90m, settled 2.86m out, the 2m
+      // speech-radius line never showed within the 6s poll" -- from heldWalkToward's stick staying
+      // down for a CDP round trip after in-page arrival. releaseOnArrival above removes that
+      // mechanism; this loop is the belt for the suspenders, not a substitute for the fix.
+      let backNow = await state(tab);
+      let backAway = Math.hypot(backNow.heroPos[0] - ROWAN.at[0], backNow.heroPos[1] - ROWAN.at[1]);
+      for (let retry = 0; retry < 2 && backAway > 1.2; retry += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 20000);
+        // eslint-disable-next-line no-await-in-loop
+        backNow = await state(tab);
+        backAway = Math.hypot(backNow.heroPos[0] - ROWAN.at[0], backNow.heroPos[1] - ROWAN.at[1]);
+      }
       const again = await state(tab);
       check(`${label}: walking back through does not fire the arrival a second time`,
         again.beaconStirring === false && again.beaconFound === true,

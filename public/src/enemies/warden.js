@@ -21,12 +21,29 @@
 // Beacon's own iron and stone and the Wildwood Gate's own timber, because it is a thing the same
 // world made -- a guardian assembled from the materials of the places it guards.
 //
+// PLAYTEST UPDATE (real children, two on one server): the verdict on this stand-in body was blunt --
+// "needs to look much cooler and actually look like an enemy". The brief above literally says "no
+// antlers", and what follows adds a crown anyway -- read that as the deeper rule (menace over
+// filigree, low-poly readability, the one accent staying the one accent) outranking its own literal
+// word once a real child said the shipped body did not read as a threat at all. So: a jagged crown
+// and two frost-spike shoulders (BEACON_STONE_COLOR -- the SAME "rime, not rock" reading
+// world/coldSeals.js's own frost ring already established, never a new hue), glowing eyes and an
+// icy aura (glow sprites in the brazier's OWN accent colour, in buildWarden below, never a second
+// baked colour on the mesh). The brief's hard invariants -- one accent, one shoulder, the height
+// band, shoulders over hips -- are unchanged and still test/warden.test.mjs's to enforce; only "no
+// horns at all" gave way to "the kid has to be able to tell this is a boss".
+//
 // FOUR DRAW CALLS PLUS THE GLOW, and the four are justified: everything static in this game merges
 // to one call (oldBeacon.js's whole tower is one mesh), but this is the one built structure in the
 // game that ANIMATES, and limbs that move independently cannot share a geometry with the trunk they
 // move against. So: legs+pelvis merged to one mesh, torso+head+shoulder-housing to one, each arm to
-// one -- the minimum split that still lets the poses below read. The pulse ring is a fifth mesh that
-// is visible only for the fraction of a second the pulse attack needs it.
+// one -- the minimum split that still lets the poses below read. The crown and both shoulder-spikes
+// bake INTO the torso mesh (one more merge, zero more draw calls) for the identical reason the
+// housing does. The pulse ring is a fifth mesh, visible only for the fraction of a second the pulse
+// attack needs it; the brazier glow, the two eyes and the aura are four more additive sprites --
+// one quad each, camera-facing, no shader compile, the same "a sprite costs nothing next to a real
+// light" trade render/glow.js's own header makes -- so the playtest's ask for real menace bought
+// four cheap quads, not a heavier mesh.
 //
 // Modes are driven PROCEDURALLY off (mode, modeSeconds) -- no clips, because there is no rig. The
 // same contract enemies/wolf.js keeps with encounter.js: the rules own the timing and publish mode
@@ -90,11 +107,38 @@ export function wardenParts() {
     // BUILT this thing, and timber lashed to iron says so the way the Beacon's brace does.
     { name: 'yoke', kind: 'box', size: [1.3, 0.18, 0.12], at: [0, 0.74, -0.36], color: wood },
     { name: 'belt', kind: 'box', size: [0.96, 0.16, 0.1], at: [0, -0.04, 0.3], color: wood },
-    { name: 'pauldron', kind: 'box', size: [0.42, 0.28, 0.52], at: [BRAZIER_X, 0.86, 0], color: iron },
-    { name: 'pauldron', kind: 'box', size: [0.42, 0.28, 0.52], at: [-BRAZIER_X, 0.86, 0], color: iron },
+    { name: 'pauldron', kind: 'box', size: [0.5, 0.28, 0.52], at: [BRAZIER_X, 0.86, 0], color: iron },
+    { name: 'pauldron', kind: 'box', size: [0.5, 0.28, 0.52], at: [-BRAZIER_X, 0.86, 0], color: iron },
+    // FROST-SPIKE SHOULDERS: real playtest verdict, "needs to look much cooler and actually look
+    // like an enemy" -- a low-poly humanoid with rounded pauldrons reads as a statue, not a threat.
+    // Symmetric (both shoulders), so the asymmetry the brief protects stays exactly where it always
+    // was -- on the accent, not on the silhouette -- and BEACON_STONE_COLOR rather than a new hue:
+    // world/coldSeals.js's own frost ring already established stone-grey as this game's "rime,
+    // not rock" reading (its own header, "frost-dulled"), so a spike in the same colour reads as ice
+    // crusted over the shoulder iron without inventing a fifth colour GQ-007 would flag. Placed
+    // OUTBOARD of the pauldron (x = 0.98, past BRAZIER_X's 0.7) so a spike never grows out of the
+    // one shoulder's own brazier geometry.
+    {
+      name: 'shoulder-spike', kind: 'cylinder', radiusBottom: 0.13, radiusTop: 0.01, height: 0.46,
+      at: [0.98, 1.04, -0.02], roll: 0.5, radialSegments: 5, color: stone,
+    },
+    {
+      name: 'shoulder-spike', kind: 'cylinder', radiusBottom: 0.13, radiusTop: 0.01, height: 0.46,
+      at: [-0.98, 1.04, -0.02], roll: -0.5, radialSegments: 5, color: stone,
+    },
     // SHORT neck: the head sits 0.06 m INTO the chest top, no neck part at all. Head top is the
     // 2.6 m the constant states.
     { name: 'head', kind: 'box', size: [0.34, 0.34, 0.38], at: [0, 1.01, 0.06], color: stone },
+    // THE CROWN: a single broken, backswept horn of the same rimed stone, rising past the head --
+    // "jagged crown" from the brief, kept to ONE part (the part-count budget below is tight) rather
+    // than a cluster, because one clean spike reads as a shape at gameplay distance where three
+    // thin ones would blur into a smear (the same low-poly-silhouette lesson world/bramble.js's own
+    // header states). Low radialSegments (5, the shoulder spikes' own count) is what makes it read
+    // as HEWN rather than turned on a lathe -- a faceted spike, not a smooth horn.
+    {
+      name: 'crown', kind: 'cylinder', radiusBottom: 0.15, radiusTop: 0.015, height: 0.38,
+      at: [0, 1.37, -0.08], roll: 0.16, radialSegments: 5, color: stone,
+    },
     // The brazier: thick iron box, then a small OPEN cresset flaring upward -- openEnded and wider
     // at the top, the Old Beacon's basket in miniature (oldBeacon.js reference rule 1: a beacon is
     // identified by its cresset). One shoulder only. Asymmetry is the brief's word, not a whim.
@@ -448,6 +492,40 @@ export function buildWarden(scene, at) {
   brazier.position.set(ember.at[0], ember.at[1] + 0.06, ember.at[2]);
   torsoGroup.add(brazier);
 
+  // THE EYES. Real playtest verdict: "needs to... actually look like an enemy" -- a stone block for
+  // a head, however jagged its crown, reads as a statue until something in it looks BACK at the
+  // child. Two glow sprites, not geometry: adding eye-coloured PARTS to the merged torso mesh would
+  // put a second BEACON_GLOW_COLOR entry in spec.torso and break the brief's own "exactly one
+  // accent" rule (test/warden.test.mjs's brazierIsOneAsymmetricAccent) -- sprites sit ON TOP of the
+  // stone-grey head instead, in the SAME accent colour the brazier already carries, so the Warden
+  // still reads as one wrongness with two places it shows rather than a second material. Small and
+  // 'lamp' profile (a hot core) rather than 'mote': eyes have to read as points of light at gameplay
+  // distance, not a soft wash the way the aura below deliberately is.
+  const head = spec.torso.find((part) => part.name === 'head');
+  const EYE_SIZE_METERS = 0.09;
+  const eyeY = head.at[1] + head.size[1] * 0.12;
+  const eyeZ = head.at[2] + head.size[2] / 2 - 0.02;
+  const eyeL = createGlowSprite(BEACON_GLOW_COLOR, EYE_SIZE_METERS);
+  eyeL.name = 'warden-eye-left';
+  eyeL.position.set(0.09, eyeY, eyeZ);
+  const eyeR = createGlowSprite(BEACON_GLOW_COLOR, EYE_SIZE_METERS);
+  eyeR.name = 'warden-eye-right';
+  eyeR.position.set(-0.09, eyeY, eyeZ);
+  torsoGroup.add(eyeL, eyeR);
+
+  // THE ICY AURA. A single big, soft, 'mote'-profile sprite (no hot core -- render/glow.js's own
+  // header explains why a wash of colour rather than a point needs that profile) hanging around the
+  // whole body, ankle to chest, reading as cold radiating off the guardian the way heat shimmers off
+  // a fire -- the "icy aura/particle shimmer" the brief asks for, bought as ONE more additive quad
+  // rather than a real particle system an iPad would rather not sort every frame. Parented to
+  // `group`, not `torsoGroup`: a bow or a sweep must not drag the whole-body aura sideways with the
+  // torso, the same reason the pulse ring below is parented to `group` too.
+  const AURA_SIZE_METERS = WARDEN_HEIGHT_METERS * 1.05;
+  const aura = createGlowSprite(BEACON_GLOW_COLOR, AURA_SIZE_METERS, 'mote');
+  aura.name = 'warden-aura';
+  aura.position.y = WARDEN_HEIGHT_METERS * 0.42;
+  group.add(aura);
+
   // The pulse ring: unit outer radius, scaled out to WARDEN_PULSE_RING_RADIUS_METERS while it
   // plays. Additive and depthWrite-off like every light in this game (render/glow.js's reasoning),
   // basic rather than standard because an expanding shockwave must not pick up scene lighting.
@@ -475,6 +553,10 @@ export function buildWarden(scene, at) {
   let modeClock = 0;
   let phase = 1;
   let brazierBase = WARDEN_BRAZIER_REST;
+  // A clock of its own, NEVER reset on a mode transition -- unlike modeClock, which every pose
+  // measures itself from zero, the aura's shimmer is ambient life that must not visibly jump the
+  // instant a swing lands and the mode changes underneath it.
+  let auraClock = 0;
 
   function applyPhaseSeams() {
     // Phase 3: the accent catches in the torso's seams. Written to the material rather than baked,
@@ -515,6 +597,9 @@ export function buildWarden(scene, at) {
       group.visible = pose.visible;
       if (!pose.visible) {
         setGlowStrength(brazier, 0);
+        setGlowStrength(eyeL, 0);
+        setGlowStrength(eyeR, 0);
+        setGlowStrength(aura, 0);
         ring.visible = false;
         return;
       }
@@ -531,6 +616,25 @@ export function buildWarden(scene, at) {
 
       const gain = WARDEN_BRAZIER_BY_PHASE[Math.min(WARDEN_BRAZIER_BY_PHASE.length, Math.max(1, phase)) - 1];
       setGlowStrength(brazier, clamp01(brazierBase * gain * pose.brazier));
+
+      // THE EYES track the SAME surge the brazier does (pose.brazier), not a separate number --
+      // whatever tells the brazier "this is the tell" tells the eyes too, so a windup reads as the
+      // whole Warden waking up to hit, not one shoulder lamp flickering. A floor of 0.32 keeps them
+      // dimly lit even at dormantPose()'s low 0.3 brazier -- the kneeling statue's eyes are barely
+      // open, not switched off, which is the whole point of a child walking past and wondering.
+      const eyeStrength = clamp01(0.32 + 0.62 * gain * pose.brazier);
+      setGlowStrength(eyeL, eyeStrength);
+      setGlowStrength(eyeR, eyeStrength);
+
+      // THE AURA: a slow, ambient shimmer (independent of any single pose, on its own never-reset
+      // clock) plus the same phase escalation everything else in this fight uses -- so the cold
+      // radiating off the guardian visibly THICKENS as the fight goes on, echoing the brazier's own
+      // WARDEN_BRAZIER_BY_PHASE ramp ("this is getting more dangerous") without restating that array
+      // -- `phase` alone (1..3) is enough to step it.
+      auraClock += deltaSeconds;
+      const shimmer = prefersReducedMotion() ? 0 : Math.sin(auraClock * Math.PI * 2 * 0.18) * 0.05;
+      const auraBase = 0.08 + 0.05 * (phase - 1);
+      setGlowStrength(aura, clamp01(auraBase + shimmer));
 
       if (pose.ring) {
         ring.visible = true;

@@ -75,6 +75,34 @@ test('H1 recovery authority refuses shared-world and cross-profile event namespa
   );
   assert.equal(isClientRestorableProfileFact(xpFact(`xp:lantern-unlocked:${SIBLING}`, '100'), ATTACKER), false);
 
+  // R1: repeatable combat XP rides the same `xp-earned` type and the same personal-identity rule
+  // every other XP source already follows -- durable and personal (never shared-world currency like
+  // coin-earned/shard-earned above), restorable only by the profile the eventId's own guestId names.
+  assert.equal(
+    isClientRestorableProfileFact(xpFact(`kill-xp:${ATTACKER}:wolf-1:life-one`, '20'), ATTACKER),
+    true,
+    'a kill-xp fact is personal progression, restorable by its own owner',
+  );
+  assert.equal(
+    isClientRestorableProfileFact(xpFact(`kill-xp:${SIBLING}:wolf-1:life-one`, '20'), ATTACKER),
+    false,
+    'one profile may not restore a kill-xp fact reserved for another',
+  );
+
+  // Rune chests: minted `rune-chest:<profileId>:<chestId>`, client-side only, never server-adjudicated
+  // -- the identical personal/durable posture kill-xp above takes, scoped to the profile id rather
+  // than a guestId because there is no server-side copy of this fact to ever collide or defer to.
+  assert.equal(
+    isClientRestorableProfileFact(xpFact(`rune-chest:${ATTACKER}:chest-one`, '30'), ATTACKER),
+    true,
+    'a rune-chest fact is personal progression, restorable by its own owner',
+  );
+  assert.equal(
+    isClientRestorableProfileFact(xpFact(`rune-chest:${SIBLING}:chest-one`, '30'), ATTACKER),
+    false,
+    'one profile may not restore a rune-chest fact reserved for another',
+  );
+
   for (const eventId of [
     'cart-loot:coin:0',
     'hollow-cache:p-h1-attacker:1',
@@ -208,6 +236,45 @@ test('H1 refused currency restore cannot alter shared Village state or spent-loo
     const personal = rewards.rewardsFor(['hero-a'])['hero-a'];
     assert.equal(personal.coins, 0);
     assert.equal(personal.shards, 0);
+  } finally {
+    rewards.close();
+    fixture.cleanup();
+  }
+});
+
+// THE HIDDEN LEARNING LAYER end-to-end: a rune chest is minted, journalled and answered entirely
+// client-side (progression/runeChests.js's own header), with NO server-side counterpart ever writing
+// this fact -- so restoreProfileFacts is the ONLY door it has into the server's own rewards block
+// while a session is online. This proves that door actually opens: the fact restores, reaches
+// rewardsFor's own xp total (the same number heroStats.js resolves level/POWER from), survives a
+// replay as a no-op, and stays refused for a sibling it does not name.
+test('H1 a rune chest\'s xp-earned fact restores through the same door kill-xp already uses, isolated per sibling', () => {
+  const fixture = tempStorePath();
+  const rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
+  try {
+    rewards.join('hero-a', ATTACKER);
+    rewards.join('hero-b', SIBLING);
+
+    assert.deepEqual(
+      rewards.restoreProfileFacts('hero-a', [xpFact(`rune-chest:${ATTACKER}:chest-one`, '30')]),
+      { restored: 1, refused: 0 },
+    );
+    assert.equal(rewards.rewardsFor(['hero-a'])['hero-a'].xp, 30);
+
+    assert.deepEqual(
+      rewards.restoreProfileFacts('hero-a', [xpFact(`rune-chest:${ATTACKER}:chest-one`, '30')]),
+      { restored: 0, refused: 0 },
+      'replaying the identical chest fact is a no-op, not a second thirty XP',
+    );
+    assert.equal(rewards.rewardsFor(['hero-a'])['hero-a'].xp, 30);
+
+    assert.deepEqual(
+      rewards.restoreProfileFacts('hero-a', [xpFact(`rune-chest:${SIBLING}:chest-one`, '30')]),
+      { restored: 0, refused: 1 },
+      'a chest fact reserved for the sibling cannot be restored by this hero',
+    );
+    assert.equal(rewards.rewardsFor(['hero-a'])['hero-a'].xp, 30, 'the refused attempt left this hero\'s own XP untouched');
+    assert.equal(rewards.rewardsFor(['hero-b'])['hero-b'].xp, 0, 'and never credited the sibling either');
   } finally {
     rewards.close();
     fixture.cleanup();
