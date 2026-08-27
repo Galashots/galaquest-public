@@ -295,6 +295,14 @@ async function findNameplateView(tab) {
 // A child holding W does not let go of it to look at the screen. Shift is held with the movement
 // keys because that is input/keyboard.js's own run chord, and "run away is a real option" is the
 // double-aggro property the game itself guarantees (test/double-aggro-recovery.test.mjs).
+// `target` may be a fixed { x, z } OR a resolver (live) => ({ x, z }), re-read every iteration.
+// GQ-001's stale-position steering, applied to the one caller that needed it: an authored home is
+// only where a body STARTS. A wolf dragged around by an earlier phase and released inside its own
+// leash radius stays where it was left -- it is idle, not 'returning' -- so walking to its authored
+// home can walk to empty grass while the wolf stands eight metres away. Measured hosted at e658eea:
+// the recovery phase walked at wolf-1's home while wolf-1 sat at (7.63, 15.71), and the hero waited
+// out a 30 s knockdown budget at full health with every enemy idle and the nearest 7.5 m off,
+// outside WOLF_AGGRO_RANGE. Aiming at the body rather than at its address removes the whole class.
 async function holdToward(tab, target, extraMillis = 1_500, observe = null, { run = true } = {}) {
   await tab.page.send('Page.bringToFront');
   let live = await state(tab);
@@ -319,8 +327,9 @@ async function holdToward(tab, target, extraMillis = 1_500, observe = null, { ru
   try {
     while (Date.now() < deadline) {
       if (observe?.(live)) return live;
-      const dx = target.x - live.player.x;
-      const dz = target.z - live.player.z;
+      const aim = typeof target === 'function' ? target(live) : target;
+      const dx = aim.x - live.player.x;
+      const dz = aim.z - live.player.z;
       const distance = Math.hypot(dx, dz);
       if (distance <= 1.2) break;
       const cos = Math.cos(live.heading);
@@ -506,7 +515,10 @@ try {
   await startProtectionSampler(tabA);
   await holdToward(
     tabA,
-    { x: recoveryWolf.home.x, z: recoveryWolf.home.z },
+    (live) => {
+      const wolf = live.enemies.find((enemy) => enemy.enemyId === recoveryWolf.enemyId);
+      return wolf ? { x: wolf.x, z: wolf.z } : { x: recoveryWolf.home.x, z: recoveryWolf.home.z };
+    },
     15_000,
     (live) => live.downObserved || live.protectionObserved,
   );
