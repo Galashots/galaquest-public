@@ -776,13 +776,27 @@ async function phaseSanctuary() {
     };
     let stood = await state(tab);
     for (let retry = 0; retry < 4 && wrenAway(stood) > 1.6; retry += 1) {
-      // WAIT OUT A KNOCKDOWN FIRST: a down hero cannot move, so a retry that pushes the stick at
-      // one spends its whole budget standing over a corpse -- and the respawn hands back FULL hp
-      // plus a short protection beat, which is exactly the window to sprint the band in. The
-      // health readout is the up/down signal this probe already reads: 0 while down, maxHp again
-      // the frame the hero stands back up.
+      // WAIT OUT A KNOCKDOWN, THEN HEAL TO FULL, THEN SPRINT. Both waits matter and the second was
+      // the missing one (measured at 7c533cf: five sprints, every one of them latching 0.23-1.31m
+      // from Wren, and the child still ended the phase standing at spawn). A wolf bite is 10 of the
+      // hero's 30hp and a 2fps crossing of the band eats one or two of them, so a retry launched at
+      // the hp the LAST crossing left over is a retry that gets knocked down mid-band -- and the
+      // respawn puts the hero back at spawn, farther away than the sprint started. Spawn sits
+      // inside RECOVERY_SANCTUARY's own no-hostility bubble, so waiting there for out-of-combat
+      // regen to hand back the full bar is safe by the game's own rules, and a full-hp hero
+      // survives the crossing's worst case with a bite to spare.
       // eslint-disable-next-line no-await-in-loop
       await pollUntil(tab, (s) => Number(s.healthCurrentDrawn) > 0, 25000);
+      // ...but ONLY where the heal can actually happen. A hero parked mid-band (the settle fling
+      // leaves him ~3.5m out) regenerates nothing while a wolf chews on him -- there the right
+      // move is the 2m hop into the sanctuary NOW, at whatever hp is left. Near spawn (>4.5m from
+      // Wren) he is inside the recovery bubble and the wait is safe.
+      // eslint-disable-next-line no-await-in-loop
+      stood = await state(tab);
+      if (wrenAway(stood) > 4.5) {
+        // eslint-disable-next-line no-await-in-loop
+        await pollUntil(tab, (s) => Number(s.healthCurrentDrawn) >= HERO_MAX_HP, 30000);
+      }
       // eslint-disable-next-line no-await-in-loop
       await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 15000);
       // eslint-disable-next-line no-await-in-loop
