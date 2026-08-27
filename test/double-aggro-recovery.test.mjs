@@ -113,7 +113,10 @@ test('a hero pulled by two wolves at once can run clear of both leashes', () => 
     now += 50;
     sim.step(0.05, now);
   }
-  assert.equal(sim.encounterSnapshot().heroes[player.id].hp, hpAfterFleeing,
+  // AT LEAST, not exactly: standing clear of both leashes in open country is precisely where
+  // out-of-combat regen runs, so hp legitimately RISES over this hold. What this check forbids is
+  // only the scenario's failure mode -- any further damage landing out here.
+  assert.ok(sim.encounterSnapshot().heroes[player.id].hp >= hpAfterFleeing,
     'a hero standing clear of both leashes must take no further damage');
 });
 
