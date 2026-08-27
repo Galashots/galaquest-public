@@ -280,6 +280,14 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   // every other personal xp-earned identity above: the profile it names may restore it, another
   // profile may not reserve it out from under them.
   'kill-xp:',
+  // Rune chests: minted `rune-chest:<profileId>:<chestId>` by progression/runeChests.js's own
+  // runeChestXpEventId, CLIENT-SIDE ONLY, the same way an offline Lantern unlock is (`lantern-
+  // unlocked:<profileId>` above) -- unlike kill-xp, there is no server-side counterpart that ever
+  // mints a guestId-scoped copy of this fact (runeChests.js's own header: chests are never
+  // server-adjudicated, online or off), so the profile id IS the whole of this fact's durable
+  // identity. Same rule as every profile-scoped prefix here: the named profile may restore it,
+  // nobody else may reserve it out from under them.
+  'rune-chest:',
 ]);
 
 function reservedProfileEventOwner(eventId) {
