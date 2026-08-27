@@ -1613,14 +1613,24 @@ async function photographTheSwing() {
   // are free evidence -- the claim below is that the RECORDING covers the arc, not that the three
   // photographs do -- so throw a few more (bounded) until the recorded span clears the bar or the
   // budget says this machine genuinely cannot show it.
-  for (let extra = 0; extra < 6; extra += 1) {
+  //
+  // A NOT-READY POLL SPENDS AN ITERATION, IT DOES NOT ABANDON THE FEEDING. The first version broke
+  // out of the loop on a single canAttack poll that came back false -- and under this section's own
+  // eval load a 3s poll is about three samples, so one slow recovery aborted every remaining feeder
+  // swing. Hosted at 9b7bff6 that read as 10 recorded frames clustered inside 0.106s, all of them
+  // from the three shutter-frozen photographed swings (whose paints land wherever the 2s capture
+  // lets them, ~1.1s each), with the feeder contributing nothing. The count of swings actually fed
+  // is printed so the next failure of the span check says which half fell short.
+  let fedSwings = 0;
+  for (let extra = 0; extra < 10; extra += 1) {
     // eslint-disable-next-line no-await-in-loop
     const soFar = JSON.parse(await page.eval(readWatchSource('swing-arm')))
       .samples.filter((sample) => sample.swingSeconds >= 0).map((sample) => sample.swingSeconds);
     if (soFar.length >= 2 && Math.max(...soFar) - Math.min(...soFar) > SWING_SECONDS * 0.3) break;
     // eslint-disable-next-line no-await-in-loop
-    const armedAgain = await pollUntil((s) => s.canAttack, { timeoutMs: 3000 });
-    if (!armedAgain.canAttack) break;
+    const armedAgain = await pollUntil((s) => s.canAttack, { timeoutMs: 5000 });
+    if (!armedAgain.canAttack) continue;
+    fedSwings += 1;
     // eslint-disable-next-line no-await-in-loop
     await touch('touchStart', [{ x: attackX, y: attackY, id: 9 }]);
     // eslint-disable-next-line no-await-in-loop
@@ -1630,6 +1640,7 @@ async function photographTheSwing() {
     // eslint-disable-next-line no-await-in-loop
     await sleep(SWING_SECONDS * 1000 + 200);
   }
+  console.log(`  swing-arm: fed ${fedSwings} extra swing(s) beyond the three photographed`);
   const arm = JSON.parse(await page.eval(readWatchSource('swing-arm')));
   await page.eval(stopWatchSource('swing-arm'));
   const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);
