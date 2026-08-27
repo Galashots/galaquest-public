@@ -176,11 +176,11 @@ export const HERO_SPAWN = Object.freeze({ x: SPAWNS.heroes[0], z: SPAWNS.heroes[
 // force an ordinary fight/reset loop. Level 2 sits farther north in separate bowls; the one Level-4
 // danger Wolf is visible/reachable in the existing northward slice but its territory cannot touch
 // the recovery sanctuary.
-function authoredWolf(enemyId, level, x, z, leashRadius = 4.4) {
+function authoredEnemy(enemyId, kind, level, x, z, leashRadius = 4.4) {
   const home = Object.freeze({ x, z });
   return Object.freeze({
     enemyId,
-    kind: 'wolf',
+    kind,
     level,
     home,
     leashRadius,
@@ -188,6 +188,34 @@ function authoredWolf(enemyId, level, x, z, leashRadius = 4.4) {
   });
 }
 
+function authoredWolf(enemyId, level, x, z, leashRadius = 4.4) {
+  return authoredEnemy(enemyId, 'wolf', level, x, z, leashRadius);
+}
+
+// R1 (the density push, "maximum dopamine" combat): FIVE became TWELVE. The original five stay
+// exactly where they were -- wolf-1..5's own ids, levels and homes are read by name elsewhere
+// (test/wolf-patrol.test.mjs's opening-Wolf lane check, the Rowan-approach clearance test, the
+// production recovery fixture) and none of that behaviour was in scope to move.
+//
+// The seven new bodies are DENSITY plus VARIETY rather than a second copy of the first five: two
+// more common Wolves ring the same wilderness the original five already hold (wolf-6/7), then a
+// pair of Ember Wolves and a pair of Frost Wolves push further out along the Dark Trail and the Old
+// Beacon road -- the same ground a post-Lantern child is already walking through the game's own
+// later chapters, so density grows where a child is already headed rather than in an unrelated
+// corner. The one Alpha Wolf sits furthest from spawn of all twelve, its own longer leash (5.5m vs
+// the common 4.4m) giving it a bigger, rarer-feeling territory to match its bite.
+//
+// EVERY home below was checked, not eyeballed, against the same three rules E2's own authored five
+// were checked against (see WOLF_PATROL's own comment for the method) PLUS a fourth this push adds:
+// clear of every arrival/claim trigger's own radius plus its own leash, so a body at full aggro
+// range can never wander into the plaza, a story NPC's speech bubble, or the Beacon arena handoff
+// zone (see net/gameServerCore.mjs's own inBeaconArena for how that handoff works -- crossing its
+// boundary is a HANDOFF, not a place an ordinary enemy may ever stand watch over).
+// test/progression-e2-enemy.test.mjs pins the pairwise-spacing and sanctuary-clearance rules over
+// the full twelve; the trigger-clearance rule above was checked by hand against every named trigger
+// this module defines below (CART_SEARCH, WORKSHOP_INTERACT, WILDWOOD_GATE, CAMP, ROWAN_CLAIM,
+// OLD_BEACON, BEACON_ARENA, HOLLOW, RANGER_CLAIM, LODGE, BLACKTHORN) before these coordinates were
+// committed.
 export const ENEMY_POPULATION = Object.freeze(
   [
     // The opening fight needs enough territory to keep a partially damaged Wolf present while a
@@ -199,6 +227,22 @@ export const ENEMY_POPULATION = Object.freeze(
     // Keep the high-level recovery test in the clearing, but leave Rowan's approach outside its
     // ordinary aggro envelope so a post-Lantern child is not body-blocked before the camp handoff.
     authoredWolf('wolf-5', 4, 11, 30),
+
+    // ── R1 density: two more common Wolves, south/east of the original opening ground ──────────
+    authoredWolf('wolf-6', 1, 6, -8, 4),
+    authoredWolf('wolf-7', 1, 12, -2),
+
+    // ── R1 variety: Ember Wolves along the Dark Trail's own wilderness (z 14..33) ────────────────
+    authoredEnemy('ember-wolf-1', 'ember-wolf', 1, -8, 30),
+    authoredEnemy('ember-wolf-2', 'ember-wolf', 1, -0.5, 22.5),
+
+    // ── R1 variety: Frost Wolves further out, along the Old Beacon road's own flanks (z 33..49) ──
+    authoredEnemy('frost-wolf-1', 'frost-wolf', 1, -8, 45),
+    authoredEnemy('frost-wolf-2', 'frost-wolf', 1, 11, 40.5),
+
+    // ── R1: the one Alpha Wolf -- rarest, furthest from spawn, and the biggest territory of the
+    // twelve, matching its own slower respawn (enemyStats.js's respawnSecondsForKind).
+    authoredEnemy('alpha-wolf-1', 'alpha-wolf', 1, -7.5, 37.5, 5.5),
   ],
 );
 
