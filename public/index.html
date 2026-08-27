@@ -648,6 +648,76 @@
         opacity: 1; transition: transform 900ms ease-out, opacity 900ms ease-out;
       }
       .xp-toast[data-rise="true"] { transform: translate(-50%, -320%); opacity: 0; }
+      /* THE HIDDEN LEARNING LAYER: the rune chest's own question card. Same OPAQUE-backdrop family
+         #profile-gate is (that file's own CSS comment: "it is a question that has to be answered,
+         not an overlay on play, and a half-visible village behind it invites a child to try to tap
+         the village") rather than #hero-screen's click-through vignette -- this is a five-second
+         modal beat, not a persistent panel a child dips in and out of, so it gets the same full
+         attention a profile question does. Gold-purple, matching world/runeChestPresenter.js's own
+         chest mesh, so the card a child is dropped into visually continues the object they just
+         walked up to. */
+      #rune-chest-card {
+        position: absolute; inset: 0; pointer-events: none;
+        display: grid; place-items: center;
+        background: rgb(9 15 24 / 94%);
+        z-index: 20;
+        opacity: 0; transition: opacity 160ms ease-out;
+      }
+      #rune-chest-card[data-shown="true"] { opacity: 1; pointer-events: auto; }
+      /* Same closed-overlay trap #hero-screen/#profile-gate both had to fix: chrome inside sets
+         pointer-events auto, so without this a closed card keeps eating taps meant for the thumbs. */
+      #rune-chest-card[data-shown="false"] { pointer-events: none; }
+      #rune-chest-card[data-shown="false"] * { pointer-events: none; }
+      #rune-chest-card-panel {
+        width: min(92vw, 30rem); max-height: 88vh; overflow-y: auto;
+        padding: 1.2rem 1.3rem 1.4rem; border-radius: 1rem;
+        background: linear-gradient(180deg, #2a1f42 0%, #1a1330 100%);
+        border: 2px solid #c9a8ff;
+        box-shadow: 0 0.7rem 2.2rem rgb(0 0 0 / 55%), 0 0 1.8rem rgb(201 168 255 / 30%);
+        color: #fff; text-align: center;
+      }
+      #rune-chest-card-header {
+        display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+        margin-bottom: 0.6rem;
+      }
+      #rune-chest-card-title {
+        color: #f2b33d; font: 800 1.15rem/1.2 system-ui, sans-serif; letter-spacing: 0.1em;
+      }
+      /* 48px, the same floor every overlay's own way out holds (task 6's belt-and-braces). */
+      #rune-chest-card-close {
+        flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center;
+        border: 2px solid rgb(242 179 61 / 55%); border-radius: 50%;
+        background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
+        touch-action: none;
+      }
+      /* Big friendly type for an early reader: this is the one sentence the whole card asks, so it
+         gets the largest text on the panel next to the answers themselves. */
+      #rune-chest-card-prompt {
+        margin: 0.4rem 0 0.2rem;
+        font: 800 1.6rem/1.3 system-ui, sans-serif;
+      }
+      /* Counting's own emoji row -- rendered large and set apart from the prompt line, per the brief:
+         a pre-reader answers this one by looking, not by reading. Empty/hidden for every other type. */
+      #rune-chest-card-visual {
+        margin: 0.3rem 0 0.5rem; font-size: 2.6rem; line-height: 1.3; letter-spacing: 0.1rem;
+      }
+      #rune-chest-card-visual[hidden] { display: none; }
+      #rune-chest-card-answers { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+      /* Three BIG tappable answers, comfortably past the 48px floor in both dimensions -- this is the
+         one decision the whole card exists for, so it gets the largest touch targets in the game. */
+      .rune-chest-answer {
+        min-height: 3.4rem; padding: 0.6rem 1rem; border-radius: 0.8rem;
+        border: 2px solid rgb(255 255 255 / 35%);
+        background: rgb(255 255 255 / 10%); color: #fff;
+        font: 800 1.35rem/1.2 system-ui, sans-serif; letter-spacing: 0.02em;
+        touch-action: none;
+        transition: background-color 90ms ease-out, transform 90ms ease-out;
+      }
+      .rune-chest-answer:active { background: rgb(242 179 61 / 30%); transform: scale(0.97); }
+      .rune-chest-answer[hidden] { display: none; }
+      @media (prefers-reduced-motion: reduce) {
+        #rune-chest-card, .rune-chest-answer { transition: none; }
+      }
       /* E2: compact projected identity for nearby ordinary enemies. This is deliberately one small
          label per stable enemy id, not a dashboard: the layer is bounded by main.js's useful-world
          distance and hides off-screen/dead enemies. DANGER is text as well as red treatment so a
@@ -1682,6 +1752,26 @@
             <button id="profile-gate-confirm" type="button" data-intent="create">START</button>
           </div>
           <p id="profile-gate-notice" data-shown="false"></p>
+        </div>
+      </div>
+      <!-- THE HIDDEN LEARNING LAYER: one quick question, three big answers, never a wrong door.
+           progression/runeChests.js owns the rules; ui/runeChestCard.js populates this from its own
+           question object every time it opens. data-ui-surface: same reason and same mechanism as
+           #hero-screen's own comment above -- input/cameraGesture.js's isInteractiveUiTarget() refuses
+           to adopt a pointer inside it. -->
+      <div id="rune-chest-card" role="dialog" aria-modal="true" aria-label="Rune Chest Question" data-shown="false" data-ui-surface>
+        <div id="rune-chest-card-panel">
+          <div id="rune-chest-card-header">
+            <span id="rune-chest-card-title">RUNE CHEST</span>
+            <button id="rune-chest-card-close" type="button" aria-label="Close">✕</button>
+          </div>
+          <div id="rune-chest-card-prompt"></div>
+          <div id="rune-chest-card-visual" aria-hidden="true" hidden></div>
+          <div id="rune-chest-card-answers">
+            <button class="rune-chest-answer" type="button" data-answer="0"></button>
+            <button class="rune-chest-answer" type="button" data-answer="1"></button>
+            <button class="rune-chest-answer" type="button" data-answer="2"></button>
+          </div>
         </div>
       </div>
     </main>
