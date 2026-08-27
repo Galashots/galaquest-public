@@ -54,6 +54,7 @@ import {
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
 // The charm's worth, imported rather than typed as `+ 1`: it is a Hero stat since P2, and a harness
@@ -103,6 +104,14 @@ const deadlineAfter = (ms) => Date.now() + ms;
 // the wrong radius is a different magnitude on the real stick, which is a different speed law --
 // exactly the class drive-village.mjs measured when its "fine" legs started running.
 const STICK_PX = STICK_RADIUS_PX;
+// THE SANCTUARY LEGS WALK (drive-village.mjs's own derivation: a push at exactly RUN_DEFLECTION is
+// the speed law's WALK_SPEED). This is about INPUT QUANTIZATION, not caution: at the ~2fps the
+// throttled sanctuary phase renders, each input packet integrates a whole half-second frame, so one
+// packet at RUN_SPEED is a 1.8m server-side step -- BIGGER than the 1.6m arrival ring. Measured at
+// 09836d3: five run-speed sprints latched 0.04-0.82m from Wren and every one was thrown 2-5m past
+// her by the next packet, 19 snaps, settled 5.54m. At WALK_SPEED the quantum is ~0.85m, which
+// lands and STAYS inside the ring.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -424,7 +433,7 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // at spawn and starts the walk again. Hosted, that is what "and the banner names the place" was
 // reading when it reported "You went down…". Holding the stick makes the crossing cost
 // distance-over-speed instead of one pulse per round trip; the pulsed leg then places him exactly.
-async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis, stickPx = STICK_PX) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   // `releaseOnArrival`, already proven in drive-village.mjs. Without it, the thumb stays down for a
   // poll interval plus a CDP round trip after the in-page latch, and a stick at full deflection
@@ -433,7 +442,7 @@ async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin,
     { releaseOnArrival: true }));
   await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
-  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - stickPx }]);
   let walk;
   try {
     walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
@@ -753,13 +762,14 @@ async function phaseSanctuary() {
     // The walk-up gets its own recording, for DIAGNOSTICS: which of the four faults a bad approach
     // was. It is not the verdict window -- see below.
     await startApproachRecorder(tab, 'wren-approach');
-    // HELD THE WHOLE WAY IN, at full deflection. The wolf's 6m aggro band around Wren has to be
-    // CROSSED, and a pulsed walk crosses it at an effective ~1.2 m/s on a 2fps runner -- four to
-    // six seconds under fire, which is how the 7b3913d run arrived at hp 6 and then died parked at
-    // 3.66m: just outside the 3m sanctuary, squarely inside the band, where waiting only feeds the
-    // wolf. The held leg is a continuous full-deflection RUN with in-page steering and in-page
-    // release: the band costs about two seconds, and the latch point is inside the sanctuary.
-    await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
+    // HELD THE WHOLE WAY IN, at the WALK deflection. Held, because a pulsed walk crosses the
+    // wolf's band at an effective ~1.2 m/s with dead gaps on a 2fps runner -- how the 7b3913d run
+    // arrived at hp 6 and died parked at 3.66m, outside the sanctuary and inside the band. Walk
+    // deflection, because of the input-quantization ejection FINE_STICK_PX's own comment measures:
+    // a run-speed packet at this frame rate is a 1.8m step that cannot STAY inside the 1.6m ring.
+    // A continuous 1.7 m/s still outruns the wolf's 1.15 and crosses the band in about three
+    // seconds -- one bite window at worst, against a full bar.
+    await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS, FINE_STICK_PX);
     // SETTLE-TOLERANT, before the stand begins rather than instead of judging it: verify the walk's
     // own return position actually HELD, and re-approach (bounded, cheap against the budget) if
     // prediction reconciliation slid the hero back out after the latch. This is the exact failure
@@ -798,7 +808,7 @@ async function phaseSanctuary() {
         await pollUntil(tab, (s) => Number(s.healthCurrentDrawn) >= HERO_MAX_HP, 30000);
       }
       // eslint-disable-next-line no-await-in-loop
-      await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 15000);
+      await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 15000, FINE_STICK_PX);
       // eslint-disable-next-line no-await-in-loop
       stood = await state(tab);
     }
