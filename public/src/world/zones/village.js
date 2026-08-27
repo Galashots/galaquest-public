@@ -1280,11 +1280,12 @@ export const RANGER = Object.freeze({
   facing: HOLLOW.at,
 });
 
-// How close a child has to be standing for Wren to take the satchel and give the charm. The same
-// number and the same reasoning as ROWAN_CLAIM: wider than the 2 m speech radius so the grant has
-// already happened by the time they are close enough to read her line, and living HERE in the pure
-// zone data because net/gameServer.mjs re-checks this exact distance server-side and can never
-// import world/zoneLoader.js.
+// How close a child has to be standing for Wren to take the satchel and give the charm -- AND for
+// her to speak at all: main.js passes this same number to rangerSpeechState, so the grant and the
+// words share one radius. They used to be split (3 m claim, 2 m speech), and drive-ranger.mjs
+// caught the seam that split opens: a child granted the charm at 2.4 m was handed a fourth heart
+// by a woman who then said nothing. Lives HERE in the pure zone data because net/gameServer.mjs
+// re-checks this exact distance server-side and can never import world/zoneLoader.js.
 export const RANGER_CLAIM = Object.freeze({
   at: RANGER.at,
   radiusMeters: 3.0,

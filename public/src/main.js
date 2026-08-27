@@ -3582,7 +3582,13 @@ async function bootstrap() {
       heroZ: player.position.z,
       rangerX: RANGER_X,
       rangerZ: RANGER_Z,
-      radiusMeters: KEEPER_WAVE_RADIUS_METERS,
+      // The CLAIM radius, not the Keeper's 2 m wave radius. Wren takes the satchel and gives the
+      // charm anywhere inside RANGER_CLAIM.radiusMeters (3 m, adjudicated server-side against the
+      // same zone-data number) -- so a child granted the charm at 2.4 m used to be handed a fourth
+      // heart by a woman who then said nothing, because her words needed 2 m. drive-ranger.mjs
+      // measured exactly that gap ("hero 2.43m from Wren, radius 2m"). One radius for the grant and
+      // the words means the thank-you can never be earned from outside its own earshot.
+      radiusMeters: VILLAGE.RANGER_CLAIM.radiusMeters,
       satchelCarried: satchelCarriedSeen === true,
       charmOwned: charmOwnedSeen === true,
     });
