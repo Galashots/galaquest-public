@@ -90,7 +90,13 @@ function freshStorePath(label) {
  * landed, even though the in-memory collect (a fresh server every phase) would still look fine.
  */
 function seedUnlockedGuest(storePath, label) {
-  const guestId = `gp2-cart-loot-${label}-${randomUUID()}`;
+  return seedUnlockedGuestId(storePath, `gp2-cart-loot-${label}-${randomUUID()}`);
+}
+
+/** The same seed against an id the CALLER already knows -- the two-client phase grants to the id
+ *  the app actually minted (drive-two-clients' own "let the app mint its own child, then grant to
+ *  that child" doctrine) rather than pinning one, so it needs the id-taking half on its own. */
+function seedUnlockedGuestId(storePath, guestId) {
   const store = openRewardStore(storePath);
   for (let i = 1; i <= 3; i += 1) {
     store.apply({ guestId, type: 'mark-earned', eventId: `gp2-fixture:mark:${guestId}:${i}` });
@@ -214,7 +220,7 @@ async function openTab(expectedPlayers = 1) {
   };
 }
 
-async function navigateFresh(tab, origin, url, viewport, guestId) {
+async function navigateFresh(tab, origin, url, viewport, guestId, { clearOrigin = true } = {}) {
   // The on-screen stick sits at a FIXED FRACTION of the viewport (index.html's own CSS), not a fixed
   // pixel -- a stick origin computed from one orientation's dimensions lands off-screen in the other.
   // Measured: landscape's first run touched down at (138, 881) on a 1024x768 page and the hero never
@@ -228,10 +234,18 @@ async function navigateFresh(tab, origin, url, viewport, guestId) {
   // is still needed before pinning the guestId -- navigate once to establish it, THEN set, THEN
   // navigate for real. Same sequence drive-relight.mjs uses to pin a pre-seeded guestId before
   // main.js's first read of it.
-  await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
+  // The clear is skippable because it is only safe while this tab is ALONE on the origin. The
+  // two-client phase clears once for the run instead -- a per-tab clear there wipes whatever the
+  // other, already-running tab has written, and the profile keyring's own storage-event heal then
+  // races the second boot's read (drive-two-clients' "the clear belongs to the RUN" lesson).
+  if (clearOrigin) {
+    await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
+  }
   await tab.page.send('Page.navigate', { url: `${origin}/favicon.ico` });
   await sleep(300);
-  await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+  if (guestId !== null) {
+    await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+  }
   await tab.page.send('Page.navigate', { url });
   let ready = false;
   for (let i = 0; i < 60 && !ready; i += 1) {
@@ -543,12 +557,34 @@ console.log('\n=== two-client double-collect proof ===');
   try {
     // Seeded inside the try -- see runSingleClientPhase's own comment on why a throw here must still
     // reach the finally below.
+    //
+    // TWO TABS, ONE DEVICE, TWO CHILDREN -- BY NAME, NOT BY RACE. Both tabs used to load the same
+    // `?hero=Harness` with different pinned guest ids, and that only produced two heroes while the
+    // profile keyring's two-tab lost-update bug was still open: tab B's boot read an empty keyring,
+    // missed A's `Harness` profile, and minted its own. Once the keyring healed itself (the
+    // storage-event reconcile in progression/profiles.js), B's boot correctly FOUND the profile
+    // named Harness and adopted it -- same name on one device IS the same child, which is
+    // adoptNamedHero's documented contract -- and this phase's first check failed against working
+    // code. So: distinct names, the same way drive-two-clients.mjs opens its sibling tab, and B's
+    // rewards are granted to the id the app actually minted, then reloaded in (that file's own
+    // "let the app mint its own child, then grant to that child" doctrine). The run-level clear
+    // below replaces navigateFresh's per-tab clear, which is only safe for a tab alone on the
+    // origin -- B's clear used to wipe the keyring A was standing on.
+    await a.page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
+    const siblingUrl = server.url.replace('hero=Harness', 'hero=Sibling');
+    if (siblingUrl === server.url) throw new Error(`expected ?hero=Harness in ${server.url}`);
     const guestIdA = seedUnlockedGuest(storePath, 'two-client-a');
-    const guestIdB = seedUnlockedGuest(storePath, 'two-client-b');
-    await navigateFresh(a, server.origin, server.url, PORTRAIT, guestIdA);
-    await navigateFresh(b, server.origin, server.url, PORTRAIT, guestIdB);
+    await navigateFresh(a, server.origin, server.url, PORTRAIT, guestIdA, { clearOrigin: false });
+    // A has booted and folded the pinned legacy id into its profile; drop the pin so a stale copy
+    // can never be folded a second time into whichever tab boots next on an unlucky keyring read.
+    await a.page.eval("localStorage.removeItem('gq-guest-id')");
+    await navigateFresh(b, server.origin, siblingUrl, PORTRAIT, null, { clearOrigin: false });
+    const guestIdB = (await state(b)).guestId;
     check('two-client: A and B are two DIFFERENT heroes, not one tab double-counted',
-      (await state(a)).guestId !== (await state(b)).guestId);
+      (await state(a)).guestId !== guestIdB);
+    // B's unlock seed, against the id B actually turned out to be, made durable by a reload.
+    seedUnlockedGuestId(storePath, guestIdB);
+    await navigateFresh(b, server.origin, siblingUrl, PORTRAIT, null, { clearOrigin: false });
     await front(a);
     await reachCampAndRowan(a);
     await front(b);
