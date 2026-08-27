@@ -1101,15 +1101,20 @@ await page.eval(startWatch('swing-start', '({ swingSeconds: window.__galaQuestRu
 // stays down. That run's own fight loop swung and killed seconds later, so the control works; the
 // single edge is what is fragile. The assertion is unchanged -- a tap started a swing -- and on a
 // healthy machine the first tap satisfies it before any retry happens.
+// ...and with the tap shape the fight loops VALIDATED on these runners: an explicit touch id and
+// an explicit-point release. The retapped version of this beat still failed hosted at 06090a0
+// (best swingSeconds -1 across sixteen frames and four press edges) while the two-point fight
+// taps right after it swung and killed -- the difference being exactly the id-0-and-empty-list
+// shape this beat shared with every earlier tap in the file. Explicit ids alias with nothing.
 const swingDeadline = Date.now() + Math.max(SWING_SECONDS * 2 * 1000, 10_000);
 let swingStart = { frames: 0, samples: [] };
 while (Date.now() < swingDeadline) {
   // eslint-disable-next-line no-await-in-loop
-  await touch('touchStart', [{ x: attackX, y: attackY }]);
+  await touch('touchStart', [{ x: attackX, y: attackY, id: 9 }]);
   // eslint-disable-next-line no-await-in-loop
   await sleep(60);
   // eslint-disable-next-line no-await-in-loop
-  await touch('touchEnd', []);
+  await touch('touchEnd', [{ x: attackX, y: attackY, id: 9 }]);
   // eslint-disable-next-line no-await-in-loop
   swingStart = await waitForSample(page, 'swing-start', (sample) => sample.swingSeconds >= 0,
     { timeoutMs: 2500 });
@@ -1573,6 +1578,29 @@ async function photographTheSwing() {
    *  against 56 at rest, fourteen to one. Four per swing is few, and it is the point at which the
    *  bias stops swamping the signal rather than a tuned value. */
   const SAMPLES_PER_SWING_NEEDED = 4;
+  // FEED THE RECORDER UNTIL A SPAN EXISTS TO MEASURE. At a ~850ms frame each 1.5s swing yields one
+  // or two recorded frames at a random phase of the arc, and three swings can cluster: hosted at
+  // 06090a0 all three landed near 1.0s and the span read 0.102s against a 0.45s bar. Extra swings
+  // are free evidence -- the claim below is that the RECORDING covers the arc, not that the three
+  // photographs do -- so throw a few more (bounded) until the recorded span clears the bar or the
+  // budget says this machine genuinely cannot show it.
+  for (let extra = 0; extra < 6; extra += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const soFar = JSON.parse(await page.eval(readWatchSource('swing-arm')))
+      .samples.filter((sample) => sample.swingSeconds >= 0).map((sample) => sample.swingSeconds);
+    if (soFar.length >= 2 && Math.max(...soFar) - Math.min(...soFar) > SWING_SECONDS * 0.3) break;
+    // eslint-disable-next-line no-await-in-loop
+    const armedAgain = await pollUntil((s) => s.canAttack, { timeoutMs: 3000 });
+    if (!armedAgain.canAttack) break;
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchStart', [{ x: attackX, y: attackY, id: 9 }]);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(40);
+    // eslint-disable-next-line no-await-in-loop
+    await touch('touchEnd', [{ x: attackX, y: attackY, id: 9 }]);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(SWING_SECONDS * 1000 + 200);
+  }
   const arm = JSON.parse(await page.eval(readWatchSource('swing-arm')));
   await page.eval(stopWatchSource('swing-arm'));
   const swinging = arm.samples.filter((sample) => sample.swingSeconds >= 0);

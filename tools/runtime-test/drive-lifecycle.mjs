@@ -558,12 +558,29 @@ try {
   const respawnElapsedMs = deadIndex >= 0 && backIndex > deadIndex
     ? cycle.samples[backIndex].t - cycle.samples[deadIndex].t
     : -1;
-  const respawnedInWindow = respawnElapsedMs >= (WOLF_RESPAWN_SECONDS * 1000) - RESPAWN_TOLERANCE_MS
+  // BRACKET-AWARE, because the stopwatch's start anchor is only as good as the frame rate around
+  // the kill. The wolf enters 'dead' somewhere between the last non-dead frame and the first frame
+  // recorded AS dead, and a starved page skipping frames right at the kill (measured hosted at
+  // 06090a0: "respawned after 7.18s against a 10s rule" with the hero already safe at spawn) makes
+  // that gap SECONDS wide -- the tight measurement then silently loses the dead time the recorder
+  // never saw. The lower bound therefore measures from the last non-dead frame, the earliest the
+  // wolf could possibly have died: a page that skipped nothing gives the same answer, and a wolf
+  // that GENUINELY came back early still fails, because no bracket can manufacture missing seconds.
+  // The upper bound keeps the tight measurement -- lateness there only ever lengthens it, and the
+  // poll-timeout slack already absorbs that.
+  const enteredNoEarlierThanMs = deadIndex > 0 ? cycle.samples[deadIndex - 1].t : NaN;
+  const respawnAtLeastMs = deadIndex > 0 && backIndex > deadIndex
+    ? cycle.samples[backIndex].t - enteredNoEarlierThanMs
+    : respawnElapsedMs;
+  const respawnedInWindow = respawnAtLeastMs >= (WOLF_RESPAWN_SECONDS * 1000) - RESPAWN_TOLERANCE_MS
     && respawnElapsedMs <= (WOLF_RESPAWN_SECONDS * 1000) + RESPAWN_POLL_TIMEOUT_MS;
   check('11. the wolf really respawns after WOLF_RESPAWN_SECONDS (imported from encounter.js, not hand-copied)',
     respawnedInWindow,
-    `respawned after ${(respawnElapsedMs / 1000).toFixed(2)}s against a ${WOLF_RESPAWN_SECONDS}s rule, `
-    + `dead at frame ${deadIndex}, back at frame ${backIndex} of ${cycle.samples.length}`);
+    `respawned after ${(respawnElapsedMs / 1000).toFixed(2)}s seen-dead / `
+    + `${(respawnAtLeastMs / 1000).toFixed(2)}s from the last frame alive, against a `
+    + `${WOLF_RESPAWN_SECONDS}s rule; dead at frame ${deadIndex} (${((cycle.samples[deadIndex]?.t
+      - (enteredNoEarlierThanMs || 0)) / 1000).toFixed(2)}s after the prior frame), `
+    + `back at frame ${backIndex} of ${cycle.samples.length}`);
 
   // ── 12. the harness terminates ONLY its own server child ────────────────────────────────────────
   // This is also the trigger for the online->offline handover checks 13-16: the socket has nowhere
