@@ -753,7 +753,13 @@ async function phaseSanctuary() {
     // The walk-up gets its own recording, for DIAGNOSTICS: which of the four faults a bad approach
     // was. It is not the verdict window -- see below.
     await startApproachRecorder(tab, 'wren-approach');
-    await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
+    // HELD THE WHOLE WAY IN, at full deflection. The wolf's 6m aggro band around Wren has to be
+    // CROSSED, and a pulsed walk crosses it at an effective ~1.2 m/s on a 2fps runner -- four to
+    // six seconds under fire, which is how the 7b3913d run arrived at hp 6 and then died parked at
+    // 3.66m: just outside the 3m sanctuary, squarely inside the band, where waiting only feeds the
+    // wolf. The held leg is a continuous full-deflection RUN with in-page steering and in-page
+    // release: the band costs about two seconds, and the latch point is inside the sanctuary.
+    await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
     // SETTLE-TOLERANT, before the stand begins rather than instead of judging it: verify the walk's
     // own return position actually HELD, and re-approach (bounded, cheap against the budget) if
     // prediction reconciliation slid the hero back out after the latch. This is the exact failure
@@ -769,9 +775,16 @@ async function phaseSanctuary() {
       return Math.hypot(body[0] - RANGER.at[0], body[1] - RANGER.at[1]);
     };
     let stood = await state(tab);
-    for (let retry = 0; retry < 3 && wrenAway(stood) > 1.6; retry += 1) {
+    for (let retry = 0; retry < 4 && wrenAway(stood) > 1.6; retry += 1) {
+      // WAIT OUT A KNOCKDOWN FIRST: a down hero cannot move, so a retry that pushes the stick at
+      // one spends its whole budget standing over a corpse -- and the respawn hands back FULL hp
+      // plus a short protection beat, which is exactly the window to sprint the band in. The
+      // health readout is the up/down signal this probe already reads: 0 while down, maxHp again
+      // the frame the hero stands back up.
       // eslint-disable-next-line no-await-in-loop
-      await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 20000);
+      await pollUntil(tab, (s) => Number(s.healthCurrentDrawn) > 0, 25000);
+      // eslint-disable-next-line no-await-in-loop
+      await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 15000);
       // eslint-disable-next-line no-await-in-loop
       stood = await state(tab);
     }
