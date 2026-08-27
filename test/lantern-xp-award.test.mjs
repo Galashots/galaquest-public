@@ -37,6 +37,11 @@ import {
   pendingLanternXpFact,
 } from '../public/src/progression/facts.js';
 import { MARKS_TO_UNLOCK } from '../public/src/rewards/marks.js';
+// R1: repeatable combat XP now rides every ordinary kill this file's own killAWolf/killToTheLantern
+// helpers drive, alongside the Lantern's one-time award -- so several assertions below have to ask
+// about the LANTERN's own identity specifically rather than "any xp-earned event/row". See each
+// comment marked R1 for exactly which assertion that is and why.
+import { combatXpFor } from '../public/src/rewards/combatRewards.js';
 import { cumulativeXpForLevel, levelForXp } from '../public/src/progression/levels.js';
 import {
   LEVEL_1_STARTER_STATS,
@@ -106,16 +111,38 @@ test('the third kill unlocks the Lantern AND earns exactly one 100-XP fact', () 
 
     const events = killToTheLantern(bound.rewards);
 
-    const xpEvents = events.filter((event) => event.type === 'xp-earned');
-    assert.equal(xpEvents.length, 1, `expected exactly one XP award, saw ${JSON.stringify(events)}`);
+    // R1: three ordinary kills now ALSO earn their own combat XP alongside the Lantern, so "exactly
+    // one XP award" has to be asked about the LANTERN's own identity specifically -- a bare
+    // `type === 'xp-earned'` filter would now also catch those. The assertions below keep their full
+    // original strength, scoped to the one fact this test is actually about.
+    const lanternEventId = lanternXpEventId(`lantern:${GUEST}`);
+    const xpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId === lanternEventId);
+    assert.equal(xpEvents.length, 1, `expected exactly one Lantern XP award, saw ${JSON.stringify(events)}`);
     assert.equal(xpEvents[0].value, String(LANTERN_UNLOCK_XP));
     assert.equal(xpEvents[0].heroId, HERO, 'addressed to the child who earned it');
-    assert.equal(xpEvents[0].eventId, lanternXpEventId(`lantern:${GUEST}`),
+    assert.equal(xpEvents[0].eventId, lanternEventId,
       'named from the Lantern that earned it, which is what makes it unrepeatable');
 
-    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP);
-    assert.equal(bound.facts().filter((fact) => fact.type === 'xp-earned').length, 1,
-      'one row on disk, not two');
+    // R1: positive coverage that combat XP DID also arrive, priced through the one law rather than a
+    // second number restated here -- test/progression-r1-c1.test.mjs pins the law itself.
+    //
+    // FIX 3 (Sonnet B adversarial pass, re-tightened): the total below used to be checked against
+    // `combatXpEvents`' OWN reduced sum -- self-referential, and toothless against a pricing
+    // regression that moved every event's own `.value` together. Computed explicitly instead: three
+    // legacy-fixture (level-defaulted, i.e. Level 1) wolves, each killed in its OWN processTick, each
+    // priced at Level 1 under Fix 1's batch-start snapshot -- the third tick's own snapshot is taken
+    // BEFORE that tick's mark loop lands the Lantern, so all three price identically even though the
+    // Lantern's own hundred lands inside the very same tick as the third kill's combat XP.
+    const expectedCombatXpTotal = MARKS_TO_UNLOCK * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+    const combatXpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId !== lanternEventId);
+    assert.equal(combatXpEvents.length, MARKS_TO_UNLOCK, 'R1: three ordinary kills must each earn their own combat XP');
+    assert.equal(combatXpEvents.reduce((sum, e) => sum + Number(e.value), 0), expectedCombatXpTotal,
+      'each of the three L1 kills must be worth exactly combatXpFor({heroLevel:1, enemyLevel:1})');
+    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP + expectedCombatXpTotal,
+      'the total is the Lantern plus exactly three L1 kills\' worth of combat XP, computed explicitly '
+      + '-- never a mutable counter, and never merely self-consistent with the events above');
+    assert.equal(bound.facts().filter((fact) => fact.eventId === lanternEventId).length, 1,
+      'one Lantern XP row on disk, not two');
   } finally {
     bound.close();
   }
@@ -130,17 +157,25 @@ test('one hundred XP IS Level 2 -- the award is derived from the curve, not a nu
   assert.equal(levelForXp(LANTERN_UNLOCK_XP - 1), 1, 'and one point short is still Level 1');
 });
 
-test('marks alone are not XP -- P2 adds exactly one source and no more', () => {
-  // The scope boundary, enforced rather than trusted. Repeatable combat XP is R1's package and the
-  // brief is explicit that it may not arrive early through this door: two kills must be worth
-  // nothing at all.
+test('marks alone are not LANTERN XP -- P2 adds exactly one LANTERN source and no more', () => {
+  // The scope boundary, enforced rather than trusted: two marks is one short of the Lantern, so the
+  // LANTERN specifically must not have paid anything yet.
+  //
+  // R1 UPDATE: this used to read "a wolf is not worth XP" -- that premise is now false by design.
+  // Repeatable combat XP is exactly what R1 adds, through this SAME door (killAWolf), and the
+  // positive half of that is asserted below rather than the old premise being quietly dropped.
   const path = tempStorePath();
   const bound = coordinatorOn(path);
   try {
     killAWolf(bound.rewards);
     killAWolf(bound.rewards);
     assert.equal(bound.store.marksFor(GUEST), 2, 'setup: two marks, one short of the Lantern');
-    assert.equal(bound.store.xpFor(GUEST), 0, 'a wolf is not worth XP -- R1 owns that, not P2');
+    assert.equal(bound.store.unlockedFor(GUEST), false, 'one short of the Lantern -- P2 owns that latch, not R1');
+    // R1: but two ordinary kills DO earn their own combat XP now, at the law's own price for a
+    // Level-1 hero against these two (legacy-fixture, level-defaulted) Level-1 wolves.
+    const expectedCombatXp = 2 * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+    assert.equal(bound.store.xpFor(GUEST), expectedCombatXp,
+      'R1: two ordinary kills earn their own combat XP even with no Lantern in sight');
   } finally {
     bound.close();
   }
@@ -148,30 +183,41 @@ test('marks alone are not XP -- P2 adds exactly one source and no more', () => {
 
 // ── it cannot be earned twice ───────────────────────────────────────────────────────────────────
 
-test('killing on past the Lantern never earns a second hundred', () => {
+test('killing on past the Lantern never earns a second hundred, though R1 combat XP keeps accruing', () => {
   const path = tempStorePath();
   const bound = coordinatorOn(path);
   try {
-    killToTheLantern(bound.rewards);
+    const lanternEventId = lanternXpEventId(`lantern:${GUEST}`);
+    const lanternKillEvents = killToTheLantern(bound.rewards);
+    // R1: track every kill's own combat XP so the final total can be checked exactly, through the
+    // law rather than a hand-typed number -- see combatXpFor's own pins in test/progression-r1-c1.test.mjs.
+    let combatXpTotal = lanternKillEvents
+      .filter((event) => event.type === 'xp-earned' && event.eventId !== lanternEventId)
+      .reduce((sum, event) => sum + Number(event.value), 0);
+
     for (let kill = 0; kill < 8; kill += 1) {
       const events = killAWolf(bound.rewards);
-      assert.equal(events.filter((event) => event.type === 'xp-earned').length, 0,
-        `kill ${kill + 4} re-announced an award the child already had`);
+      assert.equal(events.filter((event) => event.eventId === lanternEventId).length, 0,
+        `kill ${kill + 4} re-announced the Lantern XP the child already had`);
       assert.equal(events.filter((event) => event.type === 'lantern-unlocked').length, 0,
         `kill ${kill + 4} re-announced an unlock the child already had`);
+      // R1: a genuinely new kill still earns its own combat XP -- only the LANTERN never repeats.
+      const combatEvents = events.filter((event) => event.type === 'xp-earned');
+      assert.equal(combatEvents.length, 1, `kill ${kill + 4} must earn exactly its own combat XP`);
+      combatXpTotal += Number(combatEvents[0].value);
     }
-    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP, 'the total did not move');
-    assert.equal(levelForXp(bound.store.xpFor(GUEST)), 2, 'still Level 2, not Level 3');
+    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP + combatXpTotal,
+      'the Lantern never repeats; the total is the Lantern plus every kill\'s own combat XP');
   } finally {
     bound.close();
   }
 });
 
-test('two tabs on one iPad share one guest, one Lantern and one hundred XP', () => {
+test('two tabs on one iPad share one guest, one Lantern, and one combat-XP award per kill', () => {
   // The failure this exact shape caused once already (docs/MISTAKES.md GQ-014's first incident): two
   // heroIds map to ONE guestId, the fold credits each contributor separately, and a count read
   // between the two awards computed a different key each time -- one kill, two marks, the Lantern in
-  // two kills instead of three. The XP rides that same path.
+  // two kills instead of three. The XP rides that same path -- and so, since R1, does combat XP.
   const path = tempStorePath();
   const rewards = createRewardCoordinator({ rewardStorePath: path });
   const store = openRewardStore(path);
@@ -189,9 +235,19 @@ test('two tabs on one iPad share one guest, one Lantern and one hundred XP', () 
       ]));
     }
 
-    assert.equal(events.filter((event) => event.type === 'xp-earned').length, 1,
+    const lanternEventId = lanternXpEventId(`lantern:${GUEST}`);
+    const lanternXpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId === lanternEventId);
+    assert.equal(lanternXpEvents.length, 1,
       'one child, one lantern, one award -- however many of their own tabs were swinging');
-    assert.equal(store.xpFor(GUEST), LANTERN_UNLOCK_XP);
+
+    // R1: the SAME two-tab dedupe (D4) has to hold for combat XP too -- one distinct profile, one
+    // award PER KILL, never one per tab.
+    const combatXpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId !== lanternEventId);
+    assert.equal(combatXpEvents.length, MARKS_TO_UNLOCK,
+      'exactly one combat-XP award per kill, not one per tab per kill');
+
+    assert.equal(store.xpFor(GUEST),
+      LANTERN_UNLOCK_XP + combatXpEvents.reduce((sum, event) => sum + Number(event.value), 0));
   } finally {
     rewards.close();
     store.close();
@@ -199,22 +255,33 @@ test('two tabs on one iPad share one guest, one Lantern and one hundred XP', () 
   }
 });
 
-test('the award survives a server restart, and the restarted server does not pay it again', () => {
+test('the award survives a server restart, and the restarted server does not pay the Lantern again', () => {
   // "Durable" has to mean across a process that did not write the row. This is the case a
   // hand-rolled "have I seen this id" guard gets wrong and the PRIMARY KEY does not.
   const path = tempStorePath();
   const first = coordinatorOn(path);
   killToTheLantern(first.rewards);
-  assert.equal(first.store.xpFor(GUEST), LANTERN_UNLOCK_XP);
+  const xpAfterLantern = first.store.xpFor(GUEST);
+  // FIX 3 (Sonnet B adversarial pass, re-tightened): was `>= LANTERN_UNLOCK_XP`, which passes even if
+  // combat XP silently stopped accruing. Computed explicitly instead, the same way and for the same
+  // reason as "the third kill unlocks the Lantern..." above: three legacy-fixture (Level 1) kills,
+  // each its own processTick, each priced at Level 1 under Fix 1's batch-start snapshot.
+  const expectedCombatXpTotal = MARKS_TO_UNLOCK * combatXpFor({ heroLevel: 1, enemyLevel: 1 });
+  assert.equal(xpAfterLantern, LANTERN_UNLOCK_XP + expectedCombatXpTotal,
+    'exact total: the Lantern plus three L1 kills\' own combat XP -- not merely "at least the Lantern"');
   first.rewards.close();
 
   const second = coordinatorOn(path);
   try {
-    assert.equal(second.store.xpFor(GUEST), LANTERN_UNLOCK_XP, 'the hundred is still on disk');
+    assert.equal(second.store.xpFor(GUEST), xpAfterLantern, 'still on disk, unmoved by the restart itself');
     const events = killAWolf(second.rewards);
-    assert.equal(events.filter((event) => event.type === 'xp-earned').length, 0,
-      'a restarted server must not re-award what it is reading off its own disk');
-    assert.equal(second.store.xpFor(GUEST), LANTERN_UNLOCK_XP);
+    const lanternEventId = lanternXpEventId(`lantern:${GUEST}`);
+    assert.equal(events.filter((event) => event.eventId === lanternEventId).length, 0,
+      'a restarted server must not re-award the Lantern it is reading off its own disk');
+    // R1: this fourth kill is a genuinely NEW kill and must still earn its own combat XP.
+    const combatXpEvents = events.filter((event) => event.type === 'xp-earned');
+    assert.equal(combatXpEvents.length, 1, 'a real new kill after restart still earns combat XP');
+    assert.equal(second.store.xpFor(GUEST), xpAfterLantern + Number(combatXpEvents[0].value));
   } finally {
     second.close();
   }
@@ -278,7 +345,9 @@ test('after the pair lands, both facts are present -- never one alone', () => {
     killToTheLantern(bound.rewards);
     const facts = bound.facts();
     assert.equal(facts.filter((fact) => fact.type === 'lantern-unlocked').length, 1);
-    assert.equal(facts.filter((fact) => fact.type === 'xp-earned').length, 1);
+    // R1: scoped to the Lantern's own xp-earned row -- three ordinary kills now durably record their
+    // own combat-xp rows too (see the "third kill" test above), so a bare type filter would over-count.
+    assert.equal(facts.filter((fact) => fact.eventId === lanternXpEventId(`lantern:${GUEST}`)).length, 1);
   } finally {
     bound.close();
   }
@@ -302,14 +371,22 @@ test('a Lantern that predates the XP law is repaired rather than left worthless'
   try {
     rewards.join(HERO, GUEST);
     const events = killAWolf(rewards);
-    assert.equal(events.filter((event) => event.type === 'xp-earned').length, 1,
-      'the child is owed the level their Lantern was always worth');
+    const lanternEventId = lanternXpEventId(`lantern:${GUEST}`);
+    const lanternXpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId === lanternEventId);
+    assert.equal(lanternXpEvents.length, 1, 'the child is owed the level their Lantern was always worth');
     assert.equal(events.filter((event) => event.type === 'lantern-unlocked').length, 0,
       'but NOT re-told about an unlock they watched happen a week ago');
-    assert.equal(store.xpFor(GUEST), LANTERN_UNLOCK_XP);
+    // R1: the SAME kill that triggers the repair also earns its own combat XP, priced at whatever
+    // level the repair itself just bought -- through the law, never restated as a number here.
+    const combatXpEvents = events.filter((event) => event.type === 'xp-earned' && event.eventId !== lanternEventId);
+    assert.equal(combatXpEvents.length, 1, 'the kill that triggered the repair still earns combat XP');
+    assert.equal(store.xpFor(GUEST), LANTERN_UNLOCK_XP + Number(combatXpEvents[0].value));
 
-    // ...and then never again.
-    assert.equal(killAWolf(rewards).filter((event) => event.type === 'xp-earned').length, 0);
+    // ...and the LANTERN never again -- though a further kill legitimately earns further combat XP.
+    const again = killAWolf(rewards);
+    assert.equal(again.filter((event) => event.eventId === lanternEventId).length, 0);
+    assert.equal(again.filter((event) => event.type === 'xp-earned').length, 1,
+      'a genuinely new kill still earns its own combat XP');
   } finally {
     rewards.close();
     store.close();
@@ -342,10 +419,17 @@ test('a device restore that brings its own Lantern does not buy a second hundred
 
     // Now they play online. The mark threshold is already met, so the server writes its OWN lantern.
     const events = killAWolf(rewards);
-    assert.equal(events.filter((event) => event.type === 'xp-earned').length, 0,
+    const lanternReannounced = events.some((event) => event.eventId === lanternXpEventId(deviceLanternId)
+      || event.eventId === lanternXpEventId(`lantern:${GUEST}`) || event.type === 'lantern-unlocked');
+    assert.equal(lanternReannounced, false,
       'the server must not pay again for a lantern the device already paid for');
-    assert.equal(store.xpFor(GUEST), LANTERN_UNLOCK_XP, 'one lantern, one hundred, two names');
-    assert.equal(levelForXp(store.xpFor(GUEST)), 2, 'Level 2, not Level 3');
+    // R1: this online kill is genuinely new and still earns its own combat XP even though the Lantern
+    // is already fully spent.
+    const combatXpEvents = events.filter((event) => event.type === 'xp-earned');
+    assert.equal(combatXpEvents.length, 1, 'a real online kill still earns combat XP');
+    assert.equal(store.xpFor(GUEST), LANTERN_UNLOCK_XP + Number(combatXpEvents[0].value),
+      'one lantern, one hundred, two names, plus this kill\'s own combat XP');
+    assert.equal(levelForXp(store.xpFor(GUEST)), 2, 'still Level 2');
   } finally {
     rewards.close();
     store.close();
@@ -370,7 +454,8 @@ test('a device restore arriving AFTER the server already paid does not buy a sec
   const bound = coordinatorOn(path);
   try {
     killToTheLantern(bound.rewards);
-    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP, 'setup: the server paid first');
+    const xpAfterLantern = bound.store.xpFor(GUEST);
+    assert.ok(xpAfterLantern >= LANTERN_UNLOCK_XP, 'setup: the server paid the Lantern first');
 
     // Now the same child's device teaches back the lantern IT earned offline, under its own name.
     bound.rewards.restoreProfileFacts(HERO, [
@@ -378,10 +463,15 @@ test('a device restore arriving AFTER the server already paid does not buy a sec
     ]);
     const events = killAWolf(bound.rewards);
 
-    assert.equal(events.filter((event) => event.type === 'xp-earned').length, 0,
+    const lanternReannounced = events.some((event) => event.type === 'lantern-unlocked'
+      || event.eventId === lanternXpEventId(`lantern:${GUEST}`)
+      || event.eventId === lanternXpEventId(`lantern-unlocked:${GUEST}`));
+    assert.equal(lanternReannounced, false,
       'a second lantern NAME is not a second lantern -- the Lantern is a latch, one child, one award');
-    assert.equal(bound.store.xpFor(GUEST), LANTERN_UNLOCK_XP);
-    assert.equal(levelForXp(bound.store.xpFor(GUEST)), 2, 'Level 2, not Level 3');
+    // R1: this fourth kill is genuinely new and still earns its own combat XP.
+    const combatXpEvents = events.filter((event) => event.type === 'xp-earned');
+    assert.equal(combatXpEvents.length, 1, 'a real new kill still earns combat XP');
+    assert.equal(bound.store.xpFor(GUEST), xpAfterLantern + Number(combatXpEvents[0].value));
   } finally {
     bound.close();
   }
@@ -431,10 +521,13 @@ test('no mutable XP total exists anywhere -- the number is always folded from fa
   try {
     killToTheLantern(bound.rewards);
     const facts = bound.facts();
-    assert.equal(foldFacts(facts).xp, bound.store.xpFor(GUEST),
+    const total = bound.store.xpFor(GUEST);
+    assert.equal(foldFacts(facts).xp, total,
       'the device fold and the store disagree about a total neither of them stores');
     // Fold the same facts twice over: a count that moves when you look at it twice is a counter.
-    assert.equal(foldFacts([...facts, ...facts]).xp, LANTERN_UNLOCK_XP,
+    // R1: the total is the Lantern plus every kill's own combat XP now, so this compares against the
+    // ACTUAL total (asserted precisely elsewhere) rather than the Lantern's amount alone.
+    assert.equal(foldFacts([...facts, ...facts]).xp, total,
       'folding a duplicated fact set must not double the total -- the union collapses it');
   } finally {
     bound.close();
@@ -526,7 +619,10 @@ test('the wire carries the TOTAL, so the level on it can never disagree with the
   try {
     killToTheLantern(bound.rewards);
     const block = bound.rewards.rewardsFor([HERO])[HERO];
-    assert.equal(block.xp, LANTERN_UNLOCK_XP);
+    // R1: the total on the wire is the Lantern plus the same three kills' own combat XP -- compared
+    // against the store's own total (asserted precisely elsewhere) rather than the Lantern alone.
+    assert.equal(block.xp, bound.store.xpFor(GUEST), 'the wire carries the SAME total the store holds');
+    assert.ok(block.xp >= LANTERN_UNLOCK_XP, 'at least the Lantern\'s own hundred is in it');
     assert.equal(block.lanternUnlocked, true);
     // A level is deliberately NOT on the wire: whichever side is asking derives it from this total
     // through the one authority, so there is no second number to contradict (GQ-007).

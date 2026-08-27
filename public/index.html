@@ -266,6 +266,37 @@
         16%  { filter: brightness(2.4); }
         100% { filter: brightness(1); }
       }
+      /* R1-C2, D7: the compact "+N XP" float. Absolutely positioned against #hero-progress (already
+         a positioning context -- it is `position: absolute` itself, which is enough to anchor an
+         absolutely-positioned child), centred above the pill so it never competes with the Level/XP/
+         POWER text it sits on top of, and IGNORED for layout (own line, no width reserved) so it
+         cannot be the thing that finally makes a two-digit Level or five-digit POWER shove the row
+         beneath sideways -- the exact promise this pill's own comment already makes for its other
+         three fields.
+         One element, one data-shown attribute, one timeout -- main.js's showXpFloat sets it true and
+         clears it after the animation's own duration, the identical shape #hero-hurt-flash's
+         flashHeroHurt and the attack button's pulseMiss already use. */
+      #hero-xp-float {
+        position: absolute; left: 50%; bottom: 100%; margin-bottom: 0.15rem;
+        transform: translate(-50%, 0.15rem);
+        font: 800 0.75rem/1 system-ui, sans-serif; color: #ffe08a;
+        text-shadow: 0 0.05rem 0.2rem rgb(0 0 0 / 55%);
+        opacity: 0; pointer-events: none; white-space: nowrap;
+      }
+      /* opacity: 1 as its OWN static rule, not only inside the keyframe below -- so reduced motion
+         (which strips the animation entirely, per the media query further down) still shows the
+         number, just without the rise/fade: it appears solid at data-shown="true" and disappears when
+         main.js's timeout flips the attribute back, an instant flash rather than a float. The same
+         "less motion, not less game" shape #level-up's own reduced-motion carve-out states in words. */
+      #hero-xp-float[data-shown="true"] {
+        opacity: 1;
+        animation: hero-xp-float-rise 900ms ease-out 1;
+      }
+      @keyframes hero-xp-float-rise {
+        0%   { opacity: 0; transform: translate(-50%, 0.2rem); }
+        18%  { opacity: 1; transform: translate(-50%, 0); }
+        100% { opacity: 0; transform: translate(-50%, -0.7rem); }
+      }
       /* Lantern Marks, D4: three pips directly under the health readout, same dark-pill / same fill
          convention (see combat/feedback.js's health research for why filled-icon-not-a-bar suits a
          small FIXED integer, which MARKS_TO_UNLOCK still is and HERO_MAX_HP no longer is). Read-only
@@ -599,7 +630,7 @@
         .enemy-nameplate-level, .enemy-nameplate-danger { font-size: 0.53rem; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-progress, #hero-progress .xp-fill, #hero-xp-float, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, #loot-hud .loot-count, #workshop-interact { transition: none; animation: none; }
         /* THE CEREMONY STILL HAPPENS UNDER REDUCED MOTION -- it just stops moving.
            The contract's requirement is that "essential Level/HP/POWER information must remain
            legible when motion is reduced; animation is enhancement, not the only communication
@@ -1294,6 +1325,13 @@
         <span id="hero-xp" class="hero-progress-meter" aria-hidden="true"><span class="xp-fill"></span></span>
         <span id="hero-xp-text" class="hero-progress-xp">0 / 100</span>
         <span class="hero-progress-power"><span class="hero-progress-power-icon" aria-hidden="true"></span><span id="hero-power-value">1,000</span></span>
+        <!-- R1-C2, D7: the compact "+N XP" float. One element, one data-shown attribute, one timeout
+             (main.js's showXpFloat, the same pattern #hero-hurt-flash's flashHeroHurt uses) --
+             aria-hidden because #hero-progress itself is already a polite live region an assistive
+             reader announces from its own text content; a second, transient node inside it would be
+             read as noise on top of that. Fired ONLY on a genuinely NEW xp-earned fact
+             (firstTimeSeen) -- hydration/reconnect re-announcing an old fact must stay silent. -->
+        <span id="hero-xp-float" aria-hidden="true" data-shown="false">+0 XP</span>
       </div>
       <!-- Three spans: matches MARKS_TO_UNLOCK in rewards/marks.js. test/rewards-hud.test.mjs
            asserts that, the same guard feedback.test.mjs already runs for the health readout above. -->

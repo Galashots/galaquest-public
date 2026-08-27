@@ -24,9 +24,16 @@ import { RUN_SPEED, groundSpeedForInput } from '../public/src/character/speed.js
 import { ProtocolError, decode, encode, leaveMessage, roundToWire, snapshotMessage, welcomeMessage }
   from '../public/src/net/protocol.js';
 import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/rewards/marks.js';
+// R1-C1: the one combat-XP law, imported rather than restated -- see combatRewards.js's own header
+// for why the offline fallback (public/src/rewards/offlineProgress.js) asks the SAME two functions.
+// R1-C2 adds decideCombatReward: the SAME law, extended to also decide gear ownership -- see its own
+// header for the eligibility-before-chance-before-selection contract this file never re-implements.
+import {
+  MAX_COMBAT_XP_PER_KILL, combatXpEventId, combatXpFor, decideCombatReward, gearOwnedEventId,
+} from '../public/src/rewards/combatRewards.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
-  isKnownItem, itemDef,
+  ORDINARY_DROP_ITEM_IDS, isKnownItem, itemDef,
 } from '../public/src/progression/items.js';
 // One authority for "is this a fact a profile can durably own" (GQ-007). rewardStore.mjs already
 // imports latestEquippedWeaponId from this module for the same reason -- the rule lives in one file
@@ -124,9 +131,21 @@ export const DEFAULT_REWARD_STORE_PATH = fileURLToPath(new URL('../data/rewards.
  *
  * @param options.rewardStorePath  defaults to DEFAULT_REWARD_STORE_PATH (the real, tracked data/
  *   directory). Tests always override this to a path under the OS temp dir.
+ * @param options.random  R1-C2: the RNG source applyCombatRewards' gear-drop decision rolls against.
+ *   Defaults to Math.random -- production's real answer -- and is injected here (rather than called
+ *   directly anywhere in this file) purely so a test can hand in a scripted sequence. It is passed
+ *   straight through to rewards/combatRewards.js's decideCombatReward, which is the only place it is
+ *   ever actually called, and never inside public/src/combat/ (test/combat-purity.test.mjs's own ban).
+ * @param options.dropCatalogue  R1-C2: the ordinary-drop eligible-id list applyCombatRewards checks
+ *   against. Defaults to progression/items.js's ORDINARY_DROP_ITEM_IDS -- production's real answer,
+ *   currently EMPTY -- and exists ONLY so a test can prove the full server round trip (a real store,
+ *   a real transactional batch, a real reward event) with a fixture id, without R1 shipping actual
+ *   drop content. Never read from anywhere else in this file; this is the one seam.
  */
 export function createRewardCoordinator(options = {}) {
   const store = openRewardStore(options.rewardStorePath ?? DEFAULT_REWARD_STORE_PATH);
+  const random = options.random ?? Math.random;
+  const dropCatalogue = options.dropCatalogue ?? ORDINARY_DROP_ITEM_IDS;
   // playerId -> guestId, for connections that supplied one at join. A playerId with no entry here
   // is ephemeral: still rewarded for the session (`ephemeral` below), never persisted.
   const guestIdByPlayer = new Map();
@@ -621,6 +640,171 @@ export function createRewardCoordinator(options = {}) {
   }
 
   /**
+   * P2: HOW STRONG THIS HERO ACTUALLY IS -- `{ maxHp, heroDamage }`, resolved numbers.
+   *
+   * Hoisted here as a plain function declaration -- see the shorthand `heroStatsFor,` reference and
+   * full doc comment further down, at this function's original method-literal home in the object this
+   * closure returns -- so that R1-C1's applyCombatRewards, defined right below, can call the SAME
+   * authority for a combat award's hero level rather than a second lookup. Function declarations
+   * hoist within this closure, so nothing about calling this before its "real" doc comment appears
+   * further down changes what it does.
+   */
+  function heroStatsFor(heroId) {
+    const guestId = guestIdByPlayer.get(heroId);
+    if (guestId) {
+      return resolveHeroStats({
+        totalXp: store.xpFor(guestId),
+        equippedItemIds: store.equippedItemsFor(guestId),
+        charmOwned: store.charmEarnedFor(guestId),
+      });
+    }
+    return resolveHeroStats({
+      equippedItemIds: ephemeralEquipment.get(heroId) ?? DEFAULT_EQUIPPED_ITEM_IDS,
+    });
+  }
+
+  /**
+   * R1-C1 FIX 1 (Opus ruling on Sonnet B's adversarial pass, corrects the original C1 shipment): the
+   * hero level EVERY kill in one batch (one processTick's folded.awards) is priced at, captured ONCE
+   * at the top of processTick -- BEFORE any of that batch's own rewards (an earlier mark, an earlier
+   * kill's combat XP, a lantern unlock landing mid-batch) are applied.
+   *
+   * Sonnet B reproduced why sequential repricing -- reading heroStatsFor fresh for each award as this
+   * function walked them, in whatever order the grouping Map happened to iterate -- is still
+   * order-dependent: which award is "first" is an artifact of event order and Map iteration, not of
+   * the kills themselves, so two guests each contributing to two enemies in one tick would price
+   * differently depending on which the loop reached first. That is the exact fragility class
+   * docs/MISTAKES.md keeps recording fixes for.
+   *
+   * A server tick is 50ms; every kill in a batch died within that window. Treating the hero as having
+   * levelled BETWEEN two kills 50ms apart is a fiction -- "the level they fought it at" is the honest
+   * input, and it is what rewards/offlineProgress.js's recordKills now also snapshots once, at the top
+   * of its own batch (one call), for the identical reason. Snapshotting makes the two paths agree BY
+   * CONSTRUCTION rather than by keeping two orderings in step (GQ-007), which is the whole reason the
+   * pricing law lives in one shared module in the first place.
+   *
+   * One entry per DISTINCT guestId represented in the batch: heroStatsFor's result for a guestId does
+   * not depend on WHICH of that guest's heroIds resolved it, only on the store's xp for that guestId,
+   * which has not moved yet -- so this only needs to be computed once per guest, not once per award.
+   */
+  function snapshotHeroLevelsForBatch(awards) {
+    const heroLevelByGuest = new Map();
+    for (const award of awards) {
+      if (award.type !== 'mark-earned') continue;
+      const guestId = guestIdByPlayer.get(award.heroId);
+      if (!guestId || heroLevelByGuest.has(guestId)) continue;
+      heroLevelByGuest.set(guestId, heroStatsFor(award.heroId).level);
+    }
+    return heroLevelByGuest;
+  }
+
+  /**
+   * R1-C1: COMBAT XP, priced off the SAME awards applyMarkAward already walks -- not a second kill
+   * ledger. rewards/marks.js's D1 generalization stamps `enemyId`/`enemyLevel` and the shared `lifeId`
+   * onto every mark-earned award, which is everything this needs to price and name an XP fact; this
+   * function only groups, dedupes and prices, never re-folds a single combat event.
+   *
+   * TWO DEDUPES, in a specific order and for different reasons:
+   *   1. by guestId, computed while grouping and therefore BEFORE combatXpFor -- and, since R1-C2,
+   *      the gear-drop roll -- is ever run for a guest: two heroIds/tabs sharing one guestId are ONE
+   *      distinct profile and must get ONE price and AT MOST ONE loot roll, never two. Doing this
+   *      before pricing/rolling (rather than after, and trusting the store's own INSERT OR IGNORE to
+   *      absorb the second row) is what keeps a second tab from ever consuming a second random draw
+   *      -- rolling and then discarding the second roll would still have consumed one nobody asked for.
+   *   2. the store's own idempotent write, per guest per lifeId -- a reprocessed tick or a redelivered
+   *      wolf-defeated must mint nothing a second time and must not re-announce an already-durable fact.
+   *
+   * An ephemeral (guestId-less) contributor earns no combat XP and rolls no loot, on the same posture
+   * every other durable fact in this file already takes: there is no durable identity to write either
+   * one under, so zero/none is the truth for it rather than a fallback (see rewardsFor's own comment
+   * on the same question).
+   *
+   * @param awards           folded.awards straight off foldEvents -- the SAME array applyMarkAward walks.
+   * @param heroLevelByGuest snapshotHeroLevelsForBatch's own return, taken before applyMarkAward ran
+   *                         for this batch. THE pricing input -- heroStatsFor is deliberately not
+   *                         called again in here; see snapshotHeroLevelsForBatch's header for why.
+   */
+  function applyCombatRewards(awards, heroLevelByGuest) {
+    const groupsByLife = new Map();
+    for (const award of awards) {
+      // R1 rides the existing mark-earned contributor fold; a future award TYPE here would need its
+      // own pricing law rather than silently folding into this one.
+      if (award.type !== 'mark-earned') continue;
+      const guestId = guestIdByPlayer.get(award.heroId);
+      if (!guestId) continue;
+
+      let group = groupsByLife.get(award.lifeId);
+      if (!group) {
+        group = { enemyLevel: award.enemyLevel, heroIdsByGuest: new Map() };
+        groupsByLife.set(award.lifeId, group);
+      }
+      const heroIds = group.heroIdsByGuest.get(guestId) ?? [];
+      heroIds.push(award.heroId);
+      group.heroIdsByGuest.set(guestId, heroIds);
+    }
+
+    const rewardEvents = [];
+    for (const [lifeId, group] of groupsByLife) {
+      for (const [guestId, heroIds] of group.heroIdsByGuest) {
+        // Lowest heroId by stable string compare: deterministic, so the event this profile hears
+        // about is always addressed to the same representative hero, whichever tab's hit the fold
+        // happened to see first, and reproducible across a reprocessed tick.
+        const heroId = [...heroIds].sort()[0];
+        // FIX 1: the batch-start snapshot, not a fresh heroStatsFor call -- see this function's own
+        // header and snapshotHeroLevelsForBatch's for the ruling. Every guestId reaching this line
+        // passed the identical filter snapshotHeroLevelsForBatch used, so this is always present.
+        const heroLevel = heroLevelByGuest.get(guestId);
+
+        // R1-C2: ONE reward decision for this guest/life -- XP (C1's law, unchanged) and whether
+        // this kill also grants gear ownership (D6), decided TOGETHER so the drop roll -- if the
+        // eligible set is non-empty at all -- happens exactly once per guest per enemy life, per
+        // dedupe #1 above. ownedItemIdsFor is read fresh here (current true ownership, including
+        // any grant this SAME tick's earlier lifeId group already committed), never cached across
+        // the tick: eligibility is a real-time "what does this guest currently own" question, not a
+        // price that needs batch-start stabilizing the way heroLevel does.
+        const { xp, gearItemId } = decideCombatReward({
+          heroLevel,
+          enemyLevel: group.enemyLevel,
+          ownedItemIds: ownedItemIdsFor(heroId),
+          random,
+          catalogue: dropCatalogue,
+        });
+
+        const xpEventId = combatXpEventId(guestId, lifeId);
+        // grantOwnership's OWN identity shape, through the shared helper rather than a second inline
+        // copy of it (GQ-007): a duplicate can never be minted, and eligibility already excluded
+        // owned items above, so this can never re-promise something already owned. The offline path
+        // calls the identical function, which is what makes a later journal/server union collapse
+        // one item to one fact instead of two.
+        const gearEventId = gearItemId ? gearOwnedEventId(guestId, gearItemId) : null;
+
+        // A one-or-two-row batch: C2 appends the gear-owned row (D6) to the SAME array the XP row
+        // lands in, so the pair cannot half-land -- see applyLanternUnlock's own header for the
+        // permanently half-landed state two sequential apply() calls would create, which applies
+        // here identically to a combat-XP-plus-gear pair.
+        const batch = [];
+        if (xp > 0) batch.push({ guestId, heroId, type: 'xp-earned', eventId: xpEventId, value: String(xp) });
+        if (gearEventId) batch.push({ guestId, heroId, type: 'gear-owned', eventId: gearEventId, value: gearItemId });
+        if (batch.length === 0) continue;
+
+        const result = store.applyAll(batch);
+        // Only a row the store actually inserted is announced -- checked by eventId, off applyAll's
+        // own appliedEventIds, rather than the aggregate `applied` count: a replayed lifeId (a
+        // reprocessed tick, a redelivered wolf-defeated) must not raise a second event for a fact
+        // that is already on disk, and with two possible rows in one batch, the count alone cannot
+        // say WHICH row was new.
+        if (xp > 0 && result.appliedEventIds.includes(xpEventId)) {
+          rewardEvents.push({ type: 'xp-earned', heroId, eventId: xpEventId, value: String(xp) });
+        }
+        if (gearEventId && result.appliedEventIds.includes(gearEventId)) {
+          rewardEvents.push({ type: 'gear-owned', heroId, eventId: gearEventId, value: gearItemId });
+        }
+      }
+    }
+    return rewardEvents;
+  }
+
+  /**
    * Fold one drainEvents() batch into awards (D1) and apply each (D2/D3), returning the events to
    * append to the SAME outgoing snapshot the combat events ride, per the brief: clients hear
    * mark-earned/lantern-unlocked "the way they hear wolf-defeated" -- one array, one broadcast.
@@ -629,10 +813,30 @@ export function createRewardCoordinator(options = {}) {
     // randomUUID, not the fold's own life index: the index restarts at 0 with the process and would
     // recompute an eventId already on disk. See rewards/marks.js's header for both halves of that
     // lesson and for why the id is minted per LIFE rather than per contributor.
+    //
+    // PROPERTY, STATED HONESTLY (Sonnet B adversarial pass -- documented, not changed; Opus routed the
+    // fix itself to the Production Director as a side quest, since it needs a durable mark-identity
+    // migration the brief names as an explicit stop condition): `randomUUID()` mints an id that is
+    // unique PER MINT, not one DERIVED from the enemy life it names. A genuinely re-delivered
+    // `wolf-defeated` for the same life -- as opposed to a replayed/redrained batch, which this file's
+    // own tests do cover -- would mint a second, different lifeId and therefore a second mark/combat-XP
+    // award; nothing here can tell the two apart by id alone. What actually prevents that in production
+    // today is upstream of this line: drainEvents() splices its queue rather than re-delivering, and a
+    // server restart does not replay historical encounter events (combat/encounter.js generates them
+    // live), so the redelivery this identity can't detect is not a reachable path, not a proven-safe
+    // one. Idempotency in the reachable cases rests on foldEvents's own object-identity/ledger guard
+    // and on drainEvents's splice, never on this id being derived rather than minted.
     const folded = foldEvents(ledger, events, { mintLifeId: () => randomUUID() });
     ledger = folded.ledger;
+    // FIX 1: captured BEFORE applyMarkAward runs for this batch -- see snapshotHeroLevelsForBatch's
+    // header. Every kill in this tick prices off the level the hero fought it at, not a level an
+    // earlier kill/mark/lantern in the SAME tick raised a moment before.
+    const heroLevelByGuest = snapshotHeroLevelsForBatch(folded.awards);
     const rewardEvents = [];
     for (const award of folded.awards) rewardEvents.push(...applyMarkAward(award));
+    // R1-C1: one grouping pass over the SAME awards marks already folded -- see applyCombatRewards'
+    // own header for why this is not a second kill ledger.
+    rewardEvents.push(...applyCombatRewards(folded.awards, heroLevelByGuest));
     return rewardEvents;
   }
 
@@ -769,6 +973,36 @@ export function createRewardCoordinator(options = {}) {
         // handing back a journal with one bad row is confused, not hostile, and losing the other
         // fifty facts over it would be the worse answer.
         && !(fact.type === 'xp-earned' && parseXpFactAmount(fact.value) === null)
+        // R1-C1: a combat-XP identity is profile-scoped (progression/facts.js's
+        // PROFILE_SCOPED_EVENT_ID_PREFIXES), which means the SUBMITTING profile can name any lifeId it
+        // invents -- unlike the Lantern's one enumerable latch, there is no fixed identity to check
+        // this fact against. What there IS to check is the amount: no real kill against the currently
+        // authored enemy field can ever be worth more than MAX_COMBAT_XP_PER_KILL, so an amount past
+        // that ceiling is refused the same shape-not-value-blind way the line above refuses a
+        // malformed amount, rather than clamped into a smaller fact nobody actually earned.
+        //
+        // FIX 4 (Sonnet B adversarial pass -- documenting scope, not expanding it; Opus ruling): read
+        // this guard for exactly what it is and is not.
+        //   - It bounds the VALUE of ONE fact, checked one row at a time as `candidates` is filtered.
+        //     It is NOT an aggregate bound: Sonnet B restored five separate `xp:combat:` facts, each
+        //     individually at or under the ceiling, in one restore batch and had all five land --
+        //     24,320 XP from five restore messages is exactly what "per-fact, not per-batch" means,
+        //     and it is accepted under the V0 local-first trust posture this same function's own
+        //     header already records ("a device can assert marks it did not earn"). Rate-limiting
+        //     restore batches or capping a profile's aggregate restored XP is a real hardening a
+        //     future package could add; it is explicitly NOT this fix's job (see the brief's stop
+        //     conditions), so it is not added here.
+        //   - It is FAMILY-SPECIFIC to the literal `xp:combat:` eventId prefix. An `xp-earned` fact
+        //     under any OTHER eventId -- an unreserved custom name a hacked device invents (e.g.
+        //     `my-custom-xp-fact-1`), or even a differently-cased `Xp:Combat:...` that fails the exact
+        //     `startsWith('xp:combat:')` compare -- skips this line entirely and restores at whatever
+        //     amount `parseXpFactAmount` accepts, unbounded. Sonnet B confirmed this identical gap
+        //     already exists on the pre-R1 baseline for every other `xp-earned` identity family (the
+        //     Lantern's own `lantern:<guestId>`-derived xp id included) -- it is pre-existing, not
+        //     introduced by R1, and not this fix's job to close for every family; only to be honest,
+        //     here, about the one family this line actually bounds.
+        && !(fact.type === 'xp-earned' && fact.eventId.startsWith('xp:combat:')
+          && parseXpFactAmount(fact.value) > MAX_COMBAT_XP_PER_KILL)
       ));
 
       // What this profile owns once the restore lands: what the store already knows, plus whatever
@@ -846,20 +1080,13 @@ export function createRewardCoordinator(options = {}) {
      *
      * An ephemeral connection has no durable identity, so it has no XP and no charm -- Level 1 with
      * whatever it has equipped in memory, which is the truth for it rather than a fallback.
+     *
+     * DEFINED ABOVE as `function heroStatsFor` (see this file's earlier declaration, just before
+     * applyCombatRewards) rather than as a method literal here, since R1-C1: applyCombatRewards needs
+     * this SAME authority for a combat award's hero level, never a second lookup. This is a shorthand
+     * reference to that one function, not a second implementation.
      */
-    heroStatsFor(heroId) {
-      const guestId = guestIdByPlayer.get(heroId);
-      if (guestId) {
-        return resolveHeroStats({
-          totalXp: store.xpFor(guestId),
-          equippedItemIds: store.equippedItemsFor(guestId),
-          charmOwned: store.charmEarnedFor(guestId),
-        });
-      }
-      return resolveHeroStats({
-        equippedItemIds: ephemeralEquipment.get(heroId) ?? DEFAULT_EQUIPPED_ITEM_IDS,
-      });
-    },
+    heroStatsFor,
     applyLootAward,
     creditedLootIds,
     villageSnapshot,

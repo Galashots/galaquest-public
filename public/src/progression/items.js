@@ -34,6 +34,9 @@ export const WILDWOOD_BLADE_ID = 'wildwood_blade';
 export const SHIELD_IRONWOOD_ID = 'shield_ironwood';
 export const HELMET_SILVERGUARD_ID = 'helmet_silverguard';
 
+// Each def below may optionally carry `ordinaryDrop: true` (see ORDINARY_DROP_ITEM_IDS further down
+// this file) -- absent, on every item currently defined, means false. None does yet; that is R1's
+// deliberately honest starting state, not an oversight.
 export const ITEM_DEFS = Object.freeze({
   [STARTER_SWORD_ID]: Object.freeze({
     id: STARTER_SWORD_ID,
@@ -67,6 +70,35 @@ export const ITEM_DEFS = Object.freeze({
     damageReductionPercent: 10,
   }),
 });
+
+// ── R1-C2: THE ORDINARY-DROP SEAM, AS A GENERIC METADATA FLAG ──────────────────────────────────────
+//
+// A MECHANISM, not content: `ordinaryDrop: true` on an item def marks it eligible to be granted
+// through rewards/combatRewards.js's low-probability ordinary-combat drop roll (absent, the default
+// on every item above, means false -- opt-IN, never opt-out). R1 adds the seam and deliberately
+// leaves it empty; G2 is the package that populates it with actual qualified content. See
+// docs/briefs/PROGRESSION_R1_COMBAT_XP_LOOT_REWARD_SEAM.md's "production content boundary": it is
+// acceptable, and correct, for the live R1 eligible set to be empty until then.
+export const ORDINARY_DROP_ITEM_IDS = Object.freeze(
+  Object.values(ITEM_DEFS)
+    .filter((def) => def.ordinaryDrop === true)
+    .map((def) => def.id),
+);
+
+// HARD GUARD, at module load rather than trusted as a convention: Rowan's Wildwood Blade and
+// Blackthorn Hollow's Silverguard Helmet are AUTHORED, guaranteed rewards (G1/G4/ARC2's own reward
+// ceremonies), never an ordinary-combat coin flip. A future edit that adds `ordinaryDrop: true` to
+// either item def is a bug the moment the module loads, not a bug somebody notices the first time a
+// child gets the wrong drop -- the same "throw at the boundary, not downstream" posture
+// test/combat-purity.test.mjs and this file's own isKnownItem/isKnownWeapon guards already keep.
+for (const signatureItemId of [WILDWOOD_BLADE_ID, HELMET_SILVERGUARD_ID]) {
+  if (ORDINARY_DROP_ITEM_IDS.includes(signatureItemId)) {
+    throw new Error(
+      `${signatureItemId} must never carry ordinaryDrop: true -- it is an authored signature reward, `
+      + 'not an ordinary-combat drop (docs/briefs/PROGRESSION_R1_COMBAT_XP_LOOT_REWARD_SEAM.md)',
+    );
+  }
+}
 
 export const DEFAULT_EQUIPPED_WEAPON_ID = STARTER_SWORD_ID;
 export const DEFAULT_EQUIPPED_ITEM_IDS = Object.freeze({

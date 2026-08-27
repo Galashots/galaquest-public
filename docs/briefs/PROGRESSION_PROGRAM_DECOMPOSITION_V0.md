@@ -1,9 +1,9 @@
 # Progression Program Decomposition v0
 
-**Program fixed point:** `main@b7abb7113386f1ce37d65d460f2475007d7fcb02`  
+**Program fixed point:** `main@cb1f40bc03ffd0beacf1f5b7740980bffa3961e7`  
 **Governing design:** `docs/product/PROGRESSION_CONTRACT_V0.md`  
 **Owning product records:** #43 Hero XP/levels, #44 meaningful gear, #47 enemy variety, #41 kid-readable POWER, #35 Pet Companions v1  
-**Status:** Owner-approved decomposition plan. P1, P2, E1, A1, A2, G1, and engineering interlock H1 are complete. **E2 is the next core implementation package; H2 / Issue #63 follows E2 before R1.** A3-S1 is parked pending its bounded locomotion follow-up. Package scope/order may be reforecast only through the repository workflow.
+**Status:** Owner-approved decomposition plan. P1, P2, E1, A1, A2, G1, H1, E2, and H2 are complete. **R1 — Combat XP + Loot Reward Seam is the next core implementation package.** A3-S1 is parked pending its bounded locomotion follow-up. Package scope/order may be reforecast only through the repository workflow.
 
 ## Purpose
 
@@ -22,14 +22,16 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 - **A2 — Mob Bank Inventory:** COMPLETE. Recoverable Wave-1 candidate bank exists; working leads are Spriggan Scrapper, Magmahorn Juggernaut, and conditional Graveflame Reaper. Durable corrected result is recorded on #47.
 - **G1 — First Visible Armor Vertical:** COMPLETE. PR #70 merged; Ironwood Shield and Silverguard Helmet now form the first truthful non-weapon armor vertical with real mitigation/POWER/equipment recovery.
 - **H1 — Shared-World Restore Integrity:** COMPLETE. PR #72 merged as `b7abb7113386f1ce37d65d460f2475007d7fcb02`; client restore can no longer author shared economy or reserve another profile's server-authored durable identity while legitimate local-first personal recovery remains exactly once.
-- **E2 — Enemy Population, Levels & Safety:** NEXT core write package. Prepared on `feat/progression-e2-enemy-population-levels-safety` under `docs/briefs/PROGRESSION_E2_ENEMY_POPULATION_LEVELS_SAFETY.md`.
-- **H2 — Issue #63 inbound WebSocket backpressure:** sequenced immediately after E2 and before R1 so two invisible engineering packages do not run back-to-back.
+- **E2 — Enemy Population, Levels & Safety:** COMPLETE. PR #73 merged as `90b4747b64314faf776ea1b435d619bd2780a14e`; the existing slice now has five stable fixed-level Wolves, readable danger/nameplate state, explicit leash/home behavior, and safe recovery/co-op isolation.
+- **H2 — Inbound WebSocket Rate Limit + Restore Fact Cap:** COMPLETE. PR #75 merged as `cb1f40bc03ffd0beacf1f5b7740980bffa3961e7`; inbound application traffic is bounded per connection and inbound restore-profile batches are capped without narrowing outbound profile history.
+- **R1 — Combat XP + Loot Reward Seam:** NEXT core write package. Prepared on `feat/progression-r1-combat-xp-loot-reward-seam` under `docs/briefs/PROGRESSION_R1_COMBAT_XP_LOOT_REWARD_SEAM.md`.
 - **A3-S1 — Spriggan Qualification:** PARKED on draft PR #57 at `e6eb12b2895d34bb4255180f270083edc3f85202`, disposition **ADVANCE AFTER BOUNDED FOLLOW-UP**. Static/source/material evidence supports Spriggan as the current skirmisher lead, but the already-generated Meshy walk/run outputs still need recovery and inspection. Current provider retrieval fails before reaching Meshy; do not regenerate substitute locomotion or spend provider credits.
 
 ## Operating model
 
 - **Production Director / ChatGPT:** owns live-state refresh, package framing, committed briefs, scope reforecast, GitHub lifecycle coordination, independent exact-SHA audit, bounded Director-direct corrections after worker handoff when appropriate, gate recommendation, and Owner merge handoff.
 - **Current progression-push worker routing:** fresh non-project **GPT-5.6 Sol XHigh** is the default semantic implementation worker. The Owner may explicitly switch a package to Luna/Codex when local execution/tooling or session circumstances make that useful; one semantic writer still owns the package at a time. Older Claude/Terra default-worker labels in this document are superseded by this routing rule.
+- **R1 explicit Owner routing exception:** use a **Claude Code Team with an Opus manager, one Sonnet implementation specialist, and one Sonnet verification/adversarial specialist** under the committed R1 brief. Sonnet A is the primary source writer; Sonnet B is primarily read/test/evidence. This package-specific Owner decision supersedes the default Sol route for R1 only.
 - **Read-only investigations may fan out in parallel.** Core runtime writes stay mostly serial because progression, combat, protocol, and `gameServer` surfaces overlap heavily.
 - **Asset work stays a separate lane.** A3 qualification/follow-up must not become a concurrent writer on a core runtime branch, and provider work remains separately authorized.
 - **Owner:** owns product-direction changes, material scope resize choices, merge/close authorization where reserved, paid provider spend, and final human product/visual acceptance when required.
@@ -44,8 +46,8 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 | **P2 — First Hero Level-Up Vertical** | L | Make gaining a Hero level visible, satisfying, and mechanically stronger | P1 | **COMPLETE — PR #56 merged** | no armor economy, random loot, learning system, enemy expansion, pet work, or Level-5 special |
 | **E1 — Enemy Collection Foundation** | L | Convert singular ordinary-enemy state into scalable identified enemy collection architecture end-to-end | P2 recommended; P1 minimum | **COMPLETE — PR #59 merged** | preserve existing fight semantics; no new archetype, density tuning, drops, or geography |
 | **G1 — First Visible Armor Vertical** | L | Earn/equip first real non-weapon armor and visibly/statistically improve | P2 + A1 + E1 | **COMPLETE — PR #70 merged** | first content centered on qualified Silverguard Helmet / Ironwood Shield; no broad armor library or loot economy |
-| **E2 — Enemy Population, Levels & Safety** | L | Build a real fixed-world mob field with levels/nameplates and safe recovery | E1 + P2 + G1 + H1 | **NEXT — Codex / GPT-5.6 Luna worktree/browser lane** | use the production Wolf population first; no new archetype integration yet |
-| **R1 — Combat XP + Loot Reward Seam** | M | Award level-gap-adjusted combat XP and low-probability ownership-aware loot | P1 + E2 + G1 | worker selected under current routing from the actual runtime/tooling surface | no large loot table, salvage economy, random affixes, crafting, elaborate physical drops |
+| **E2 — Enemy Population, Levels & Safety** | L | Build a real fixed-world mob field with levels/nameplates and safe recovery | E1 + P2 + G1 + H1 | **COMPLETE — PR #73 merged** | use the production Wolf population first; no new archetype integration yet |
+| **R1 — Combat XP + Loot Reward Seam** | M | Award level-gap-adjusted combat XP and establish the low-probability ownership-aware equipment-drop seam | P1 + E2 + G1 | **NEXT — Claude Code Team: Opus manager + Sonnet implementation + Sonnet verification** | no large loot table, salvage economy, random affixes, crafting, elaborate physical drops |
 | **G2 — Gear Content Batch + Aspiration** | M | Add qualified gear variety and establish first “how do I get THAT?” aspiration | G1 + A1 | worker selected under current routing after G1 evidence | bounded content batch; no fresh provider generation unless separately authorized |
 | **L1 — Learning Interaction v0** | L | One fun-first nonfarmable learning interaction with material progression reward | P1 + G2 | current progression-push routing applies | one interaction, not a curriculum platform/framework |
 | **A3 — Selected Enemy Qualification** | M | Turn only selected recoverable enemy candidates into technically/visually qualified inputs for E3 | A2 | **IN PROGRESS / PARKED — S1 PR #57 needs bounded locomotion follow-up** | no enemy AI/gameplay integration, no broad Wave-1 cleanup, no fresh paid generation, no promotion without its gate |
@@ -55,13 +57,13 @@ Live lifecycle remains in GitHub Issues/Project. Individual package scope lives 
 
 ## Preferred order
 
-Completed core sequence:
+Completed core sequence through H2:
 
-`P1 -> P2 -> E1 -> G1 -> H1`
+`P1 -> P2 -> E1 -> G1 -> H1 -> E2 -> H2 (#63)`
 
-Next core sequence:
+Next core sequence from current main:
 
-`E2 -> H2 (#63) -> R1 -> G2 -> L1 -> E3 -> M1 -> V1`
+`R1 -> G2 -> L1 -> E3 -> M1 -> V1`
 
 Completed supporting predecessors:
 
