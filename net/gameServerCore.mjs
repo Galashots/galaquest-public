@@ -29,7 +29,7 @@ import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/r
 // R1-C2 adds decideCombatReward: the SAME law, extended to also decide gear ownership -- see its own
 // header for the eligibility-before-chance-before-selection contract this file never re-implements.
 import {
-  MAX_COMBAT_XP_PER_KILL, combatXpEventId, combatXpFor, decideCombatReward,
+  MAX_COMBAT_XP_PER_KILL, combatXpEventId, combatXpFor, decideCombatReward, gearOwnedEventId,
 } from '../public/src/rewards/combatRewards.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
@@ -771,10 +771,12 @@ export function createRewardCoordinator(options = {}) {
         });
 
         const xpEventId = combatXpEventId(guestId, lifeId);
-        // grantOwnership's OWN identity shape, reused verbatim (never a second name for the same
-        // ownership fact): a duplicate can never be minted, and eligibility already excluded owned
-        // items above, so this can never re-promise something already owned.
-        const gearEventId = gearItemId ? `own:${guestId}:${gearItemId}` : null;
+        // grantOwnership's OWN identity shape, through the shared helper rather than a second inline
+        // copy of it (GQ-007): a duplicate can never be minted, and eligibility already excluded
+        // owned items above, so this can never re-promise something already owned. The offline path
+        // calls the identical function, which is what makes a later journal/server union collapse
+        // one item to one fact instead of two.
+        const gearEventId = gearItemId ? gearOwnedEventId(guestId, gearItemId) : null;
 
         // A one-or-two-row batch: C2 appends the gear-owned row (D6) to the SAME array the XP row
         // lands in, so the pair cannot half-land -- see applyLanternUnlock's own header for the

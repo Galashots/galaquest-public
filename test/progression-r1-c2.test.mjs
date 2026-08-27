@@ -22,6 +22,7 @@ import {
   combatXpFor,
   decideCombatReward,
   eligibleOrdinaryDropItemIds,
+  gearOwnedEventId,
 } from '../public/src/rewards/combatRewards.js';
 import {
   DEFAULT_OWNED_ITEM_IDS,
@@ -155,6 +156,21 @@ test('decideCombatReward: a DETERMINISTIC fixture proves the successful selectio
   });
   assert.equal(result.gearItemId, FIXTURE_ITEM_B);
   assert.equal(result.xp, combatXpFor({ heroLevel: 1, enemyLevel: 1 }), 'XP still prices through the one law');
+});
+
+test('decideCombatReward: a selection draw of exactly 1 still grants the LAST eligible item, never '
+  + 'undefined', () => {
+  // `random` is an INJECTED seam. Math.random is spec-bound to [0, 1) so production can never reach
+  // the last index + 1, but an injected stream that returns exactly 1 would have indexed off the end
+  // and returned undefined -- which every caller treats as falsy and silently drops, AFTER the
+  // chance roll already said this kill was owed a drop. A promised grant that evaporates with no
+  // durable fact written is the worst failure a reward seam has, so the index is clamped.
+  const random = scriptedRandom([0, 1]); // hit the chance roll, then the degenerate selection draw
+  const result = decideCombatReward({
+    heroLevel: 1, enemyLevel: 1, ownedItemIds: [], random, catalogue: FIXTURE_CATALOGUE,
+  });
+  assert.equal(result.gearItemId, FIXTURE_ITEM_B, 'the last slot of the sorted eligible set [A, B]');
+  assert.notEqual(result.gearItemId, undefined, 'a promised grant is never silently dropped');
 });
 
 test('decideCombatReward: an owned item is never re-promised, even at a guaranteed-success roll', () => {
@@ -517,16 +533,18 @@ test('offline: grant is ownership only -- no equip fact is ever raised alongside
 
 test('offline and server derive the IDENTICAL own:<profile>:<item> grant identity for the same '
   + 'profile+item, and the store collapses two writes under it to ONE row -- what makes union safe', () => {
-  // The property that makes union safe: offlineProgress.js's own grant identity and
-  // net/gameServerCore.mjs's grantOwnership/applyCombatRewards identity are the SAME STRING SHAPE for
-  // the same guest/profile and item -- not two functions that happen to agree today. Recomputed
-  // directly here (the same technique test/progression-r1-c1.test.mjs uses for combatXpEventId)
-  // rather than trusted from a comment that could drift out of step on either side.
+  // The property that makes union safe: offlineProgress.js's grant identity and
+  // net/gameServerCore.mjs's applyCombatRewards identity are the SAME NAME for the same
+  // guest/profile and item.
+  //
+  // This test used to hand-construct BOTH sides as its own template literals and assert they
+  // matched, which proved only that one string equals a copy of itself -- a tautology that would
+  // have gone on passing if either production file's own inline template drifted. Both call sites
+  // now call gearOwnedEventId, so the real assertion is against THE function they actually use.
   const guestId = 'guest-union-1234';
   const itemId = FIXTURE_ITEM_A;
-  const offlineEventId = `own:${guestId}:${itemId}`; // offlineProgress.js's own construction (see its recordKills)
-  const serverEventId = `own:${guestId}:${itemId}`; // gameServerCore.mjs's grantOwnership/applyCombatRewards construction
-  assert.equal(offlineEventId, serverEventId);
+  assert.equal(gearOwnedEventId(guestId, itemId), `own:${guestId}:${itemId}`,
+    'the shape both reward paths mint, pinned once against a literal so a silent reshaping is caught');
 
   // The generic store guarantee that identity equality actually relies on: two applies of the SAME
   // eventId collapse to one durable row regardless of which side minted it first -- a store-mechanics
@@ -535,7 +553,7 @@ test('offline and server derive the IDENTICAL own:<profile>:<item> grant identit
   const path = tempDbPath('galaquest-r1c2-union-');
   const store = openRewardStore(path);
   try {
-    const eventId = `own:${guestId}:${STARTER_SWORD_ID}`;
+    const eventId = gearOwnedEventId(guestId, STARTER_SWORD_ID);
     assert.equal(
       store.apply({
         guestId, heroId: 'hero-1', type: 'gear-owned', eventId, value: STARTER_SWORD_ID,
@@ -600,6 +618,22 @@ test('ceremony gate: a level-up that starts and ends with nothing queued is a no
   let shown = 0;
   gate.requestGearCeremony(() => { shown += 1; });
   assert.equal(shown, 1, 'the gate is unblocked again -- a later request plays immediately');
+});
+
+test('ceremony gate: a DUPLICATE levelUpEnded cannot free the screen out from under a gear ceremony '
+  + 'that has since taken it', () => {
+  const gate = createCeremonyGate();
+  const shownOrder = [];
+  gate.levelUpStarted();
+  gate.requestGearCeremony(() => shownOrder.push('first'));
+  gate.requestGearCeremony(() => shownOrder.push('second'));
+
+  gate.levelUpEnded();
+  assert.deepEqual(shownOrder, ['first'], 'the level-up ended and released exactly one gear ceremony');
+
+  gate.levelUpEnded();
+  assert.deepEqual(shownOrder, ['first'],
+    'a repeated level-up-ended is not a gear-ceremony-ended: the first card still owns the screen');
 });
 
 test('ceremony gate: requestGearCeremony requires a function', () => {

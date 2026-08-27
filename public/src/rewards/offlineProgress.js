@@ -73,7 +73,7 @@ import { pendingLanternXpFact } from '../progression/facts.js';
 // R1-C1: the same repeatable combat-XP law net/gameServerCore.mjs's createRewardCoordinator prices
 // awards through -- see combatRewards.js's own header for why this file imports it rather than
 // restating it. R1-C2's decideCombatReward is the SAME law, extended to also decide gear ownership.
-import { combatXpEventId, decideCombatReward } from './combatRewards.js';
+import { combatXpEventId, decideCombatReward, gearOwnedEventId } from './combatRewards.js';
 // The ONE authority for "what level is this total XP", so a level read here always agrees with the
 // level progression/heroStats.js resolves for the same profile a frame later.
 import { levelForXp } from '../progression/levels.js';
@@ -211,11 +211,12 @@ export function createOfflineProgress({
       });
 
       const xpEventId = combatXpEventId(profileId, award.lifeId);
-      // offlineProgress.js's OWN grant identity, but the SAME `own:<profile>:<item>` SHAPE
-      // net/gameServerCore.mjs's grantOwnership/applyCombatRewards already use -- one ownership
-      // identity law, online or offline, so a device that later reconnects and unions its journal
-      // with the server's cannot mint two different names for owning the identical item.
-      const gearEventId = gearItemId ? `own:${profileId}:${gearItemId}` : null;
+      // The SAME ownership identity net/gameServerCore.mjs's applyCombatRewards mints, through the
+      // SAME function rather than a matching inline template (GQ-007) -- one ownership identity law,
+      // online or offline, so a device that later reconnects and unions its journal with the
+      // server's cannot mint two different names for owning the identical item. Two files spelling
+      // a template the same way today is an agreement nobody is checking; one call is structural.
+      const gearEventId = gearItemId ? gearOwnedEventId(profileId, gearItemId) : null;
 
       // ONE recordFacts call for the pair, the same "cannot half-land" discipline the lantern+xp
       // pair already keeps (this file's own header, point 3) -- now covering combat-xp+gear too.

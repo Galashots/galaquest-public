@@ -25,40 +25,62 @@
 // rare, independent state changes, so the two beginning in the same frame -- the case this gate
 // exists for -- is the reachable one). Solving that harder interruption case is not this package's
 // job; see the brief's own stop conditions on rewriting presentation frameworks.
+const LEVEL_UP_CEREMONY = 'level-up';
+const GEAR_CEREMONY = 'gear';
+
 export function createCeremonyGate() {
-  // True while EITHER a level-up or a gear ceremony currently owns the screen. One flag, not two
-  // booleans that could disagree with each other about whether anything is showing at all.
-  let blocked = false;
+  // WHICH ceremony currently owns the screen, or null. This was a bare `blocked` boolean, and a
+  // boolean could not answer the question the two "ended" callbacks actually have to ask: ended
+  // WHICH one? Both cleared the flag unconditionally, so a levelUpEnded() arriving after a gear
+  // ceremony had already taken the screen freed it out from under that card and released the next
+  // queued one straight over the top of it -- the exact stacking this module exists to prevent.
+  // Naming the occupant makes that case a no-op by construction: an "ended" for something that is
+  // not what is showing is not a state change.
+  //
+  // WHAT THIS STILL DOES NOT CATCH, stated plainly rather than left to be discovered: two successive
+  // gearCeremonyEnded() calls are indistinguishable to this gate, because `showing` names the KIND of
+  // ceremony and not WHICH gear card. A caller that reports one card finished twice therefore still
+  // releases the next one early. Closing that needs a per-ceremony handle rather than a shared
+  // callback, which changes this module's API and main.js's wiring with it -- disproportionate while
+  // the real caller cannot do it: ui/unlockCard.js's hide() nulls its `done` before invoking it, so
+  // one card reports done exactly once. If a future ceremony type does not carry that guarantee,
+  // give this gate a handle instead of assuming the caller is careful.
+  let showing = null;
   const queue = [];
 
   /** Call the moment the level-up ceremony starts showing. */
   function levelUpStarted() {
-    blocked = true;
+    showing = LEVEL_UP_CEREMONY;
   }
 
   /** Call the moment the level-up ceremony ends (hides/dismisses). Releases the next queued gear
-   *  ceremony, if any -- see release() below for what "releases" means. */
+   *  ceremony, if any -- see release() below for what "releases" means. Ignored unless the level-up
+   *  is what is actually showing, so a duplicate call cannot free the screen out from under a gear
+   *  ceremony that has since taken it. */
   function levelUpEnded() {
-    blocked = false;
+    if (showing !== LEVEL_UP_CEREMONY) return;
+    showing = null;
     release();
   }
 
   /** Call once a released gear ceremony has ACTUALLY finished (its own onDone) -- not when it is
    *  merely requested. Only this unblocks the gate for a SECOND queued gear ceremony to play; without
    *  it, two back-to-back grants would show their cards on top of each other the instant the first is
-   *  requested. */
+   *  requested. Ignored unless a gear ceremony is what is actually showing -- see `showing` above for
+   *  the one duplicate case this deliberately still does not catch, and why. */
   function gearCeremonyEnded() {
-    blocked = false;
+    if (showing !== GEAR_CEREMONY) return;
+    showing = null;
     release();
   }
 
   function release() {
-    if (blocked || queue.length === 0) return;
+    if (showing !== null || queue.length === 0) return;
     const next = queue.shift();
     // Own showing IS a ceremony blocking the screen -- set before calling out, so a level-up that
     // starts synchronously inside the caller's own show() (it never does in main.js's real wiring,
     // but this gate does not get to assume that) still sees the gate as occupied.
-    blocked = true;
+    showing = GEAR_CEREMONY;
     next();
   }
 

@@ -127,6 +127,30 @@ export function combatXpEventId(profileId, lifeId) {
   return `xp:combat:${profileId}:${lifeId}`;
 }
 
+/**
+ * THE DURABLE NAME for owning one item -- the SAME `own:<profileId>:<itemId>` shape
+ * net/gameServerCore.mjs's grantOwnership has always minted, exported here so the two R1 reward
+ * paths cannot drift apart from each other.
+ *
+ * It was an inline template literal in BOTH the server's applyCombatRewards and the offline
+ * recordKills, which is a constant with two copies wearing a template's hat (docs/MISTAKES.md
+ * GQ-007). The two agreeing is not a detail: a device that earns a drop offline and later unions its
+ * journal with the server must produce the byte-identical eventId, or one item becomes two ownership
+ * facts and the union stops collapsing them. A shared function makes that agreement structural
+ * rather than a thing two files happen to spell the same way today.
+ *
+ * Idempotent by construction, which is the whole reason ownership is named this way rather than per
+ * kill: the same profile owning the same item is the same fact however many times it is granted, so
+ * a re-promised drop collapses at the store's INSERT OR IGNORE even if eligibility somehow missed it.
+ *
+ * The pre-existing grantOwnership and claimWildwoodBlade call sites in net/gameServerCore.mjs still
+ * spell this inline. They are provably the same string and are outside R1's write surface; folding
+ * them onto this helper is a good, separate follow-up rather than this package's business.
+ */
+export function gearOwnedEventId(profileId, itemId) {
+  return `own:${profileId}:${itemId}`;
+}
+
 // ── THE CEILING: what any single supported kill can ever be worth ─────────────────────────────────
 //
 // Adding `xp:combat:` to progression/facts.js's PROFILE_SCOPED_EVENT_ID_PREFIXES lets a profile's own
@@ -207,7 +231,14 @@ export function decideCombatReward({
   if (eligible.length === 0) return { xp, gearItemId: null };
 
   if (random() < chance) {
-    return { xp, gearItemId: eligible[Math.floor(random() * eligible.length)] };
+    // Clamped to the last slot rather than trusting the draw to be < 1. `Math.random` is spec-bound
+    // to [0, 1), so the production path can never reach the last index + 1 -- but `random` is an
+    // INJECTED seam here, and an injected stream that returns exactly 1 would index off the end and
+    // hand back `undefined`, which every caller treats as falsy and silently drops. A promised grant
+    // that evaporates after the roll already said "hit" is the worst possible failure for a reward
+    // seam: the child is owed something and no fact is ever written. One clamp costs nothing.
+    const index = Math.min(Math.floor(random() * eligible.length), eligible.length - 1);
+    return { xp, gearItemId: eligible[index] };
   }
   return { xp, gearItemId: null };
 }
