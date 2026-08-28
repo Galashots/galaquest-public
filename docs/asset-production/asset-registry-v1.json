@@ -1669,13 +1669,6 @@
           "git_blob_oid": "e845209e2b391fd0ff294cca76f5b1376174d3b5"
         },
         {
-          "kind": "GIT",
-          "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
-          "repo_path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
-          "git_blob_oid": null
-        },
-        {
           "kind": "DRIVE",
           "durable": true,
           "drive_file_id": null,
@@ -1786,13 +1779,6 @@
           "git_commit_sha": "d8adec775bc8a94f64d967a5adf842d31f751d7b",
           "repo_path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
           "git_blob_oid": "49a1f806bfd58d4e02147e0520ffa6e1d0a6dc99"
-        },
-        {
-          "kind": "GIT",
-          "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
-          "repo_path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
-          "git_blob_oid": null
         },
         {
           "kind": "DRIVE",
@@ -1988,7 +1974,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/enemies/wolf.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "fox-meshy-download-v1",
@@ -7184,15 +7170,15 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
-          "repo_path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
+          "repo_path": "tools/assets/studio-candidates/dawnwarden-helmet-v1.glb",
           "git_blob_oid": "e845209e2b391fd0ff294cca76f5b1376174d3b5"
         }
       ],
       "source": {
-        "path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
+        "path": "tools/assets/studio-candidates/dawnwarden-helmet-v1.glb",
         "sha256": "dc5df0d9e6c453fa8f74256bc607f61f63d7d3f6125b9d96af1d7672adf29e19",
         "size_bytes": 11394188,
-        "authority": "runtime-asset-identity-snapshot"
+        "authority": "tool-only-asset-identity-snapshot"
       },
       "provider": {
         "task_ids": [],
@@ -7267,10 +7253,10 @@
         }
       },
       "evidence_refs": [
-        "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/candidates/dawnwarden-helmet-v1.glb"
+        "registry-evidence:tool-only-assets",
+        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:tools/assets/studio-candidates/dawnwarden-helmet-v1.glb"
       ],
-      "notes": "Candidate identity is registered without runtime promotion."
+      "notes": "Current tool-only custody is recorded; it is not part of public/assets. Candidate identity is registered without runtime promotion."
     },
     {
       "asset_id": "gear.candidate.dawnwarden-sword-v1",
@@ -7284,15 +7270,15 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
-          "repo_path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
+          "repo_path": "tools/assets/studio-candidates/dawnwarden-sword-v1.glb",
           "git_blob_oid": "49a1f806bfd58d4e02147e0520ffa6e1d0a6dc99"
         }
       ],
       "source": {
-        "path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
+        "path": "tools/assets/studio-candidates/dawnwarden-sword-v1.glb",
         "sha256": "5a3c14ffef4d3d1929fbbb66dcc96b1a19eb2440ee45dbcfa54c571bbee39f83",
         "size_bytes": 4796592,
-        "authority": "runtime-asset-identity-snapshot"
+        "authority": "tool-only-asset-identity-snapshot"
       },
       "provider": {
         "task_ids": [],
@@ -7367,10 +7353,10 @@
         }
       },
       "evidence_refs": [
-        "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/candidates/dawnwarden-sword-v1.glb"
+        "registry-evidence:tool-only-assets",
+        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:tools/assets/studio-candidates/dawnwarden-sword-v1.glb"
       ],
-      "notes": "Candidate identity is registered without runtime promotion."
+      "notes": "Current tool-only custody is recorded; it is not part of public/assets. Candidate identity is registered without runtime promotion."
     },
     {
       "asset_id": "gear.candidate.wildwood-sword-w1a",
@@ -7470,7 +7456,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/candidates/sword_wildwood_w1a.glb"
       ],
-      "notes": "Candidate identity is registered without runtime promotion."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN. Candidate identity is registered without runtime promotion."
     },
     {
       "asset_id": "gear.helmet.silverguard",
@@ -7570,7 +7556,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/helmet_silverguard.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "gear.lantern.belt",
@@ -7670,7 +7656,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/lantern_belt.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "gear.shield.ironwood",
@@ -7770,7 +7756,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/shield_ironwood.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "gear.shoulder.silverguard",
@@ -7870,7 +7856,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/shoulder_silverguard.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "gear.sword.ironwood",
@@ -7970,7 +7956,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/sword_ironwood.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "gear.sword.silverguard",
@@ -8070,7 +8056,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/sword_silverguard.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "graveflame-reaper-v1",
@@ -8319,7 +8305,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "hero.lod1-6800",
@@ -8419,7 +8405,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero_lod1_6800.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "hero.lod1-ironwood-atlas",
@@ -8519,7 +8505,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero_lod1_ironwood_atlas.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "hero.texture.tier3-atlas",
@@ -8619,7 +8605,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero_tier3_atlas.jpg"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "iceback-ogre-v1",
@@ -9017,7 +9003,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/cart.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.fence",
@@ -9117,7 +9103,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/fence.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.fence-broken",
@@ -9217,7 +9203,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/fence-broken.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.fence-gate",
@@ -9317,7 +9303,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/fence-gate.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.house-cottage",
@@ -9417,7 +9403,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/house-cottage.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.house-longhouse",
@@ -9517,7 +9503,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/house-longhouse.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.lantern",
@@ -9617,7 +9603,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/lantern.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.rock-large",
@@ -9717,7 +9703,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/rock-large.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.rock-small",
@@ -9817,7 +9803,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/rock-small.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.rock-wide",
@@ -9917,7 +9903,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/rock-wide.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.stall-bench",
@@ -10017,7 +10003,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/stall-bench.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.stall-green",
@@ -10117,7 +10103,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/stall-green.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.tree",
@@ -10217,7 +10203,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/tree.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "prop.village.tree-crooked",
@@ -10317,7 +10303,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/tree-crooked.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "snowfang-marauder-v1",
@@ -11547,7 +11533,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/world/keeper.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "world.lantern-tree",
@@ -11647,7 +11633,7 @@
         "registry-evidence:runtime-assets",
         "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/world/lantern_tree.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
     },
     {
       "asset_id": "wren-ranger-v1",

@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
-import { scoreEquipped } from '../tools/budget/glb_budget.mjs';
+import { report, scoreEquipped } from '../tools/budget/glb_budget.mjs';
 
 // The per-file report answers "is this asset legal on its own", which is not what the budget is
 // for. Sol's Q10 ruling of 2026-08-12 is that we budget against the WORST LEGAL RUNTIME STATE at
@@ -10,20 +10,16 @@ import { scoreEquipped } from '../tools/budget/glb_budget.mjs';
 //
 // The configuration below is the one Sol's Q3 ruling asks for -- the plain decimated hero with
 // gear attached at runtime, rather than the Tier 2 arrangement where gear is baked into the hero
-// GLB. Figures are the measured ones, so this test fails if the assets change underneath it:
-//   hero_lod1_6800.glb        6,800 tri   1 primitive    671,176 bytes
-//   helmet_silverguard.glb      330 tri   1 primitive     72,824 bytes
-//   shoulder_silverguard.glb    183 tri   1 primitive     46,472 bytes   worn twice, mirrored
-//   sword_silverguard.glb       318 tri   1 primitive     62,324 bytes
-//   shield_ironwood.glb         311 tri   1 primitive    194,120 bytes
-const TIER3_EQUIPPED = [
-  { path: 'public/assets/hero/hero_lod1_6800.glb', triangles: 6800, primitives: 1, bytes: 671_176, images: 1 },
-  { path: 'public/assets/gear/helmet_silverguard.glb', triangles: 330, primitives: 1, bytes: 72_824, images: 1 },
-  { path: 'public/assets/gear/shoulder_silverguard.glb', triangles: 183, primitives: 1, bytes: 46_472, images: 1 },
-  { path: 'public/assets/gear/shoulder_silverguard.glb', triangles: 183, primitives: 1, bytes: 46_472, images: 1 },
-  { path: 'public/assets/gear/sword_silverguard.glb', triangles: 318, primitives: 1, bytes: 62_324, images: 1 },
-  { path: 'public/assets/gear/shield_ironwood.glb', triangles: 311, primitives: 1, bytes: 194_120, images: 1 },
+// GLB. These are parsed from the served files, so a payload, geometry, or atlas change goes red.
+const TIER3_EQUIPPED_PATHS = [
+  'public/assets/hero/hero_lod1_6800.glb',
+  'public/assets/gear/helmet_silverguard.glb',
+  'public/assets/gear/shoulder_silverguard.glb',
+  'public/assets/gear/shoulder_silverguard.glb',
+  'public/assets/gear/sword_silverguard.glb',
+  'public/assets/gear/shield_ironwood.glb',
 ];
+const TIER3_EQUIPPED = TIER3_EQUIPPED_PATHS.map((path) => report(path, { log: false }));
 
 test('a full Tier 3 kit sums to six draw calls and fits the six-draw budget', () => {
   const { totals, verdicts } = scoreEquipped(TIER3_EQUIPPED);

@@ -105,11 +105,22 @@ test('a write to a read-only server is refused rather than ignored', async () =>
   });
 });
 
-test('nothing is cached, which is why an edit shows up on the tablet without a hard reload', async () => {
+test('documents stay fresh while immutable assets are cached', async () => {
   await serving(async (origin) => {
     assert.equal((await fetch(`${origin}/index.html`)).headers.get('cache-control'), 'no-store');
-    // Not the favicon: that path is a 404 by design (see above), and a 404 carries the error
-    // handler's headers rather than the static handler's. A missing file is not a cached file.
-    assert.equal((await fetch(`${origin}/vendor/three.module.min.js`)).headers.get('cache-control'), 'no-store');
+    assert.equal((await fetch(`${origin}/vendor/three.module.min.js`)).headers.get('cache-control'),
+      'public, max-age=31536000, immutable');
+    assert.equal((await fetch(`${origin}/assets/gear/sword_silverguard.glb`)).headers.get('cache-control'),
+      'public, max-age=31536000, immutable');
+  });
+});
+
+test('Studio candidates remain available only through the fixed review route', async () => {
+  await serving(async (origin) => {
+    const candidate = await fetch(`${origin}/studio-candidates/dawnwarden-helmet-v1.glb`);
+    assert.equal(candidate.status, 200);
+    assert.match(candidate.headers.get('content-type') ?? '', /model\/gltf-binary/);
+    assert.equal(candidate.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    assert.equal((await fetch(`${origin}/tools/assets/studio-candidates/dawnwarden-helmet-v1.glb`)).status, 404);
   });
 });

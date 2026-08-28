@@ -8,8 +8,6 @@
   },
   "runtime_assets": [
     { "asset_id": "enemy.wolf", "display_name": "Wolf", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/enemies/wolf.glb" },
-    { "asset_id": "gear.candidate.dawnwarden-helmet-v1", "display_name": "Dawnwarden Helmet v1 Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb" },
-    { "asset_id": "gear.candidate.dawnwarden-sword-v1", "display_name": "Dawnwarden Sword v1 Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb" },
     { "asset_id": "gear.candidate.wildwood-sword-w1a", "display_name": "Wildwood Sword W1A Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "public/assets/gear/candidates/sword_wildwood_w1a.glb" },
     { "asset_id": "gear.helmet.silverguard", "display_name": "Silverguard Helmet", "asset_kind": "gear", "lifecycle": "PRODUCTION", "path": "public/assets/gear/helmet_silverguard.glb" },
     { "asset_id": "gear.lantern.belt", "display_name": "Belt Lantern", "asset_kind": "gear", "lifecycle": "PRODUCTION", "path": "public/assets/gear/lantern_belt.glb" },
@@ -37,6 +35,10 @@
     { "asset_id": "prop.village.tree", "display_name": "Village Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/tree.glb" },
     { "asset_id": "world.keeper", "display_name": "Keeper", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/world/keeper.glb" },
     { "asset_id": "world.lantern-tree", "display_name": "Lantern Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/world/lantern_tree.glb" }
+  ],
+  "tool_only_assets": [
+    { "asset_id": "gear.candidate.dawnwarden-helmet-v1", "display_name": "Dawnwarden Helmet v1 Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "tools/assets/studio-candidates/dawnwarden-helmet-v1.glb" },
+    { "asset_id": "gear.candidate.dawnwarden-sword-v1", "display_name": "Dawnwarden Sword v1 Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "tools/assets/studio-candidates/dawnwarden-sword-v1.glb" }
   ],
   "provider_reconciliation": {
     "observed_utc": "2026-08-25",

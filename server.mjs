@@ -10,6 +10,9 @@ import { handleForgeApiRequest } from './net/forgeApi.mjs';
 export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
 export const PUBLIC_DIR = join(HERE, 'public');
+const STUDIO_CANDIDATE_DIR = join(HERE, 'tools', 'assets', 'studio-candidates');
+const STUDIO_CANDIDATE_PREFIX = '/studio-candidates/';
+const STUDIO_CANDIDATE_FILES = new Set(['dawnwarden-helmet-v1.glb', 'dawnwarden-sword-v1.glb']);
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -33,6 +36,22 @@ function safePath(requestUrl) {
   return full;
 }
 
+function studioCandidatePath(requestUrl) {
+  const pathname = new URL(requestUrl, 'http://runtime.local').pathname;
+  if (!pathname.startsWith(STUDIO_CANDIDATE_PREFIX)) return null;
+  const name = decodeURIComponent(pathname.slice(STUDIO_CANDIDATE_PREFIX.length));
+  return STUDIO_CANDIDATE_FILES.has(name) ? join(STUDIO_CANDIDATE_DIR, name) : null;
+}
+
+function cacheControl(fullPath) {
+  if (fullPath.startsWith(join(PUBLIC_DIR, 'assets') + sep)
+    || fullPath.startsWith(join(PUBLIC_DIR, 'vendor') + sep)
+    || fullPath.startsWith(STUDIO_CANDIDATE_DIR + sep)) {
+    return 'public, max-age=31536000, immutable';
+  }
+  return 'no-store';
+}
+
 export function createRuntimeServer() {
   return createServer(async (request, response) => {
     try {
@@ -47,7 +66,7 @@ export function createRuntimeServer() {
         return;
       }
 
-      const fullPath = safePath(request.url ?? '/');
+      const fullPath = studioCandidatePath(request.url ?? '/') ?? safePath(request.url ?? '/');
       if (!fullPath) {
         response.writeHead(403);
         response.end('forbidden');
@@ -56,7 +75,7 @@ export function createRuntimeServer() {
 
       const body = await readFile(fullPath);
       response.writeHead(200, {
-        'cache-control': 'no-store',
+        'cache-control': cacheControl(fullPath),
         'content-length': body.byteLength,
         'content-type': CONTENT_TYPES[extname(fullPath).toLowerCase()] ?? 'application/octet-stream',
       });
