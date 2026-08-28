@@ -651,6 +651,86 @@ check('GP1-C4: equipping the Wildwood Blade puts the ACTUAL Wildwood mesh in his
 check('GP1-C4: and the Ironwood sword is gone -- exactly one sword, not two in one fist',
   bladeMesh.shipping.visible === false && bladeMesh.visibleSwords === 1, JSON.stringify(bladeMesh));
 
+// GP1-C4 / Issue #82: the Blade must actually READ AS HELD, not merely be mounted+visible.
+// `candidate.mounted && candidate.visible` stayed green for twelve days while the baked rest
+// transform laid the blade nearly HORIZONTAL through the torso, edge-on to the gameplay camera --
+// an EMPTY HAND at gameplay framing (the Owner's #82 playtest report). Flags are not pixels
+// (GQ-010, docs/MISTAKES.md); this measures the mount itself. The grip point and tip are found the
+// same way fit-wildwood-blade.mjs solves them (crossguard = widest cross-section bucket along the
+// longest local axis, grip 45% of the way from the guard toward the pommel extreme), so the checks
+// assert the fit tool's own contract. Two properties, measured red-capable against the exact #82
+// value before the bars were chosen:
+//   - grip seat: the grip sits 0.055m past the RightHand bone (the shipping sword's documented
+//     seat, gear.js). Bar 0.12m. NOT red against #82 on its own -- the broken value ALSO seated
+//     its grip at 0.055m (measured 2026-08-28) and was wrong purely in orientation. Kept because
+//     it is the cheap half of the contract and catches the other failure mode (a mount solved off
+//     the hand entirely, the 2026-08-16 near-the-head placeholder class).
+//   - blade pitch: grip-to-tip must drop at least 45 degrees below horizontal, the presentation
+//     convention the shipping sword carries at idle (gear.js: 68.8 degrees; this mount measures
+//     63.9). The #82 defect measured 26.9 degrees -- near-horizontal, buried in the chest -- so a
+//     45-degree bar sits ~18 degrees from both sides. Measured at the same idle the shipping
+//     convention was solved against (IDLE_ARM_SETTLE); a swing mid-measurement would move it, but
+//     this phase measures before any attack input.
+const gripSeat = await page.eval(`(() => {
+  const hero = window.__galaQuestRuntime.hero;
+  hero.updateMatrixWorld(true);
+  const anchor = hero.getObjectByName('InterimAdapter_${WILDWOOD_BLADE_CANDIDATE_ID}_RightHand');
+  if (!anchor) return { error: 'no candidate anchor' };
+  const V = anchor.position.constructor;
+  let mesh = null; anchor.traverse((o) => { if (!mesh && o.isMesh) mesh = o; });
+  if (!mesh) return { error: 'no candidate mesh' };
+  const gearInv = anchor.children[0].matrixWorld.clone().invert();
+  const rel = gearInv.multiply(mesh.matrixWorld);
+  const pos = mesh.geometry.attributes.position;
+  const verts = [];
+  for (let i = 0; i < pos.count; i += 1) verts.push(new V(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(rel));
+  const lmin = new V(Infinity, Infinity, Infinity); const lmax = new V(-Infinity, -Infinity, -Infinity);
+  for (const v of verts) { lmin.min(v); lmax.max(v); }
+  const size = lmax.clone().sub(lmin); const dims = [size.x, size.y, size.z];
+  const axis = dims.indexOf(Math.max(...dims));
+  const perp = [0, 1, 2].filter((i) => i !== axis);
+  const BUCKETS = 24;
+  const a0 = lmin.getComponent(axis); const span = (lmax.getComponent(axis) - a0) || 1;
+  const buckets = Array.from({ length: BUCKETS }, () => ({ p: [Infinity, Infinity, -Infinity, -Infinity], n: 0, sum: 0 }));
+  for (const v of verts) {
+    const b = buckets[Math.max(0, Math.min(BUCKETS - 1, Math.floor((v.getComponent(axis) - a0) / span * BUCKETS)))];
+    const p0 = v.getComponent(perp[0]); const p1 = v.getComponent(perp[1]);
+    b.p[0] = Math.min(b.p[0], p0); b.p[1] = Math.min(b.p[1], p1);
+    b.p[2] = Math.max(b.p[2], p0); b.p[3] = Math.max(b.p[3], p1);
+    b.n += 1; b.sum += v.getComponent(axis);
+  }
+  const areas = buckets.map((b) => (b.n ? (b.p[2] - b.p[0]) * (b.p[3] - b.p[1]) : 0));
+  const peak = areas.indexOf(Math.max(...areas));
+  const peakVal = buckets[peak].n ? buckets[peak].sum / buckets[peak].n : a0 + (peak + 0.5) / BUCKETS * span;
+  const hiltIsMin = Math.abs(peakVal - a0) <= Math.abs(peakVal - (a0 + span));
+  const gripVal = peakVal + ((hiltIsMin ? a0 : a0 + span) - peakVal) * 0.45;
+  const tipVal = hiltIsMin ? a0 + span : a0;
+  let s0 = 0, s1 = 0, n = 0;
+  for (const v of verts) {
+    if (Math.abs(v.getComponent(axis) - gripVal) <= span / BUCKETS * 2) { s0 += v.getComponent(perp[0]); s1 += v.getComponent(perp[1]); n += 1; }
+  }
+  const grip = new V();
+  grip.setComponent(axis, gripVal);
+  grip.setComponent(perp[0], n ? s0 / n : (lmin.getComponent(perp[0]) + lmax.getComponent(perp[0])) / 2);
+  grip.setComponent(perp[1], n ? s1 / n : (lmin.getComponent(perp[1]) + lmax.getComponent(perp[1])) / 2);
+  const tip = new V();
+  tip.setComponent(axis, tipVal);
+  tip.setComponent(perp[0], grip.getComponent(perp[0]));
+  tip.setComponent(perp[1], grip.getComponent(perp[1]));
+  grip.applyMatrix4(anchor.children[0].matrixWorld);
+  tip.applyMatrix4(anchor.children[0].matrixWorld);
+  const bone = new V().setFromMatrixPosition(anchor.parent.matrixWorld);
+  const len = grip.distanceTo(tip) || 1;
+  const pitchDeg = Math.asin(Math.max(-1, Math.min(1, (grip.y - tip.y) / len))) * 180 / Math.PI;
+  return { gripToBoneMeters: +grip.distanceTo(bone).toFixed(4), pitchDeg: +pitchDeg.toFixed(1) };
+})()`);
+check('GP1-C4/#82: the Blade\'s measured grip sits AT the hand bone, not floating off the body',
+  typeof gripSeat.gripToBoneMeters === 'number' && gripSeat.gripToBoneMeters < 0.12,
+  JSON.stringify(gripSeat));
+check('GP1-C4/#82: the Blade hangs tip-DOWN from the fist like the shipping sword, not lying through the torso',
+  typeof gripSeat.pitchDeg === 'number' && gripSeat.pitchDeg > 45,
+  JSON.stringify(gripSeat));
+
 await sleep(400);
 await shot('weapon-wildwood-portrait');
 await page.send('Emulation.setDeviceMetricsOverride', LANDSCAPE);
