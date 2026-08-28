@@ -1356,7 +1356,12 @@ async function bootstrap() {
   function projectEnemyNameplate(enemy) {
     const distance = Math.hypot(player.position.x - enemy.x, player.position.z - enemy.z);
     if (distance > ENEMY_NAMEPLATE_MAX_DISTANCE) return null;
-    const projected = new THREE.Vector3(enemy.x, 1.65, enemy.z).project(camera);
+    // Anchor the bar to the body as DRAWN, not to the authoritative point the drawn body is easing
+    // toward (enemies/wolf.js's drawn-state easing) -- otherwise the nameplate leads its own wolf by
+    // up to a snapshot. The distance cap above deliberately stays on authority: whether a bar shows
+    // at all is a range rule, and range rules read the same state combat does.
+    const drawnAnchor = enemyPresenters.get(enemy.enemyId)?.drawnPosition?.() ?? enemy;
+    const projected = new THREE.Vector3(drawnAnchor.x, 1.65, drawnAnchor.z).project(camera);
     if (projected.z < -1 || projected.z > 1) return null;
     const rect = gameSurface.getBoundingClientRect();
     const projectedPixels = ndcToOverlayPixels(projected.x, projected.y, rect.width, rect.height);

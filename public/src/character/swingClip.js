@@ -1,4 +1,5 @@
 import * as THREE from '../../vendor/three.module.min.js';
+import { CROSSFADE_SECONDS } from './locomotion.js';
 
 // The sword swing, played from a real clip.
 //
@@ -58,6 +59,56 @@ export function findSwingClip(animations = []) {
  * Null rather than a silent no-op object: a hero with no swing at all is a broken-looking game, and
  * the caller having to handle the absence is what keeps the fallback reachable instead of decorative.
  */
+// THE RELEASE BLEND (issue backlog: "hero flashes back to idle after an attack").
+//
+// When a swing ended, this animator called action.stop() and let the very next frame show whatever
+// locomotion had written -- a one-frame cut from the clamped follow-through of a clip driving all 24
+// joints to the current idle/walk frame. Correct, as the old comment said, but not continuous, and
+// at gameplay framing it read as the hero teleporting between poses.
+//
+// A mixer crossfade cannot fix it: the two clips live on DIFFERENT mixers (see the mixer comment
+// below for why), and the vendored PropertyMixer.apply blends a sub-1 cumulative weight toward the
+// binding's SAVED ORIGINAL state -- the buffer at `_origIndex`, captured at bind time -- not toward
+// whatever the other mixer wrote this frame. Fading this action's weight out would therefore blend
+// the swing toward a stale bind pose, not toward the walk.
+//
+// So the blend is manual, and it follows the discipline swing.js and the idle breath both paid to
+// learn: set from a captured base, never accumulate, never trust a mixer to rewrite anything. While
+// the swing runs, the pose it wrote this frame is snapshotted (quaternion + position of every bone
+// the clip drives). When it ends, the action stops as before -- and for SWING_RELEASE_SECONDS the
+// update slerps each of those bones FROM the locomotion pose (already written this frame, since this
+// runs last) TOWARD the snapshot, at a weight that decays to zero. The last swing frame therefore
+// dissolves into the stride over one crossfade instead of vanishing between two frames. Presentation
+// only: combat authority, isSwinging(), and the rules' clock are untouched, and a hero who dies
+// mid-swing simply has the first beat of the fall carry a trace of the swing, which is what dying
+// mid-motion looks like.
+export const SWING_RELEASE_SECONDS = CROSSFADE_SECONDS;
+
+// The bones sword_slash actually drives, read off the clip's own track names rather than assumed.
+// A track name is `NodeName.property`; nodes the rig does not contain are skipped the same way the
+// settle and the swing skip missing bones.
+function trackedNodes(root, clip) {
+  const byNode = new Map();
+  for (const track of clip.tracks) {
+    const dot = track.name.lastIndexOf('.');
+    if (dot <= 0) continue;
+    const nodeName = track.name.slice(0, dot);
+    const property = track.name.slice(dot + 1);
+    if (property !== 'quaternion' && property !== 'position') continue;
+    const node = root.getObjectByName(nodeName);
+    if (!node) continue;
+    const entry = byNode.get(node) ?? { node, quaternion: false, position: false };
+    entry[property] = true;
+    byNode.set(node, entry);
+  }
+  return [...byNode.values()].map((entry) => ({
+    ...entry,
+    // Snapshot storage, allocated once here rather than per frame.
+    snapshotQuaternion: entry.quaternion ? new THREE.Quaternion() : null,
+    snapshotPosition: entry.position ? new THREE.Vector3() : null,
+  }));
+}
+
 export function createClipSwingAnimator(root, animations = []) {
   const clip = findSwingClip(animations);
   if (!clip) return null;
@@ -76,6 +127,28 @@ export function createClipSwingAnimator(root, animations = []) {
   // 0 the moment a swing ends so the next one starts clean rather than off some stale leftover value.
   let visualSeconds = 0;
 
+  // The release blend's state -- see SWING_RELEASE_SECONDS above. `tracked` is resolved once from
+  // the clip's own tracks; `releaseRemaining` counts down from SWING_RELEASE_SECONDS after a swing
+  // ends; the per-node snapshots hold the last pose the swing actually wrote.
+  const tracked = trackedNodes(root, clip);
+  let releaseRemaining = 0;
+  let snapshotValid = false;
+
+  function snapshotSwingPose() {
+    for (const entry of tracked) {
+      if (entry.snapshotQuaternion) entry.snapshotQuaternion.copy(entry.node.quaternion);
+      if (entry.snapshotPosition) entry.snapshotPosition.copy(entry.node.position);
+    }
+    snapshotValid = tracked.length > 0;
+  }
+
+  function applyReleaseBlend(weight) {
+    for (const entry of tracked) {
+      if (entry.snapshotQuaternion) entry.node.quaternion.slerp(entry.snapshotQuaternion, weight);
+      if (entry.snapshotPosition) entry.node.position.lerp(entry.snapshotPosition, weight);
+    }
+  }
+
   return {
     /**
      * @param swingSeconds encounter.hero.swingSeconds -- negative when no swing is running.
@@ -93,11 +166,22 @@ export function createClipSwingAnimator(root, animations = []) {
           visualSeconds = 0;
           // Nothing is restored here on purpose. locomotion.update() runs before this every frame
           // and rewrites the whole pose from its own clip, so the frame after a swing ends is
-          // already correct. The procedural animator had to restore because it wrote OFFSETS onto
-          // whatever it found; this writes absolute poses from a clip and cannot accumulate.
+          // already correct in VALUE -- the release blend below exists because it is not continuous,
+          // and carries the last swing pose out over one crossfade instead of one frame.
+          releaseRemaining = snapshotValid ? SWING_RELEASE_SECONDS : 0;
+        }
+        if (releaseRemaining > 0) {
+          releaseRemaining = Math.max(0, releaseRemaining - Math.max(0, deltaSeconds));
+          const weight = SWING_RELEASE_SECONDS > 0 ? releaseRemaining / SWING_RELEASE_SECONDS : 0;
+          // The bones currently hold the locomotion pose (it ran first); pull them part-way back
+          // toward the snapshot, by less each frame, until the blend has nothing left to say.
+          if (weight > 0) applyReleaseBlend(weight);
+          else snapshotValid = false;
         }
         return false;
       }
+      // A fresh swing pre-empts any release still fading -- the new clip owns the pose outright.
+      releaseRemaining = 0;
       if (!running) {
         action.reset().play();
         running = true;
@@ -111,6 +195,11 @@ export function createClipSwingAnimator(root, animations = []) {
       // advancing a clock of its own. See the header for why action.time itself must still change on
       // every call even when swingSeconds does not.
       mixer.update(0);
+      // The pose just written is what the release blend will dissolve from if this turns out to be
+      // the swing's last frame -- refreshed every frame because the END of a swing is only ever
+      // known one frame late, when swingSeconds has already gone negative and locomotion has
+      // already overwritten the rig.
+      snapshotSwingPose();
       return true;
     },
     isSwinging() {
