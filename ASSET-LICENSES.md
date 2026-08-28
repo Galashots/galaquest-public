@@ -62,6 +62,31 @@ with no arm sleeve), and it is consistently generic fantasy-armour language. A t
 full engineering tree for named franchises, characters and recognisable properties returned **no
 matches** in any gear-generation record. On that evidence these assets are treated as original work.
 
+## Beacon Warden candidate — qualified, identity unconfirmed, not shipped
+
+`tools/assets/studio-candidates/thornbound-warlock-v1.glb`
+
+Optimized production derivative of an owner-directed paid-plan Meshy generation. The provider source
+is `Meshy_AI_Thornbound_Warlock_biped.zip` (SHA-256
+`56448250399a3078a4ed4ef79a66fdd6c2cfedabbee0ee46f674e087abca8c1c`, 19,938,516 bytes, dated
+2026-08-27), three per-motion rigged GLBs held in the owner's external Drive archive; the large source
+is deliberately not committed. The derivative — 618,224 bytes, SHA-256
+`17177d6bb6b2556cefa0f8c7747613492bcd14b8068a8ed7438d5ed996ce8a7d` — merges those three clips onto one
+body and recompresses the atlas, using `tools/foundry/merge_clips.mjs` and
+`tools/budget/recompress_glb.py`. **No new generation was performed and no credits were spent**
+producing it; the provider balance was 662 before and after.
+
+Basis is the same as the character and gear sections above: owner-directed generation on a paid Meshy
+plan, redistribution resting on the owner's rights in that generated output together with the
+paid-plan terms in force at generation time. **Not CC0.**
+
+Two honest limits. It is a **candidate, not shipped**: it has passed structural and budget
+qualification only, and appearing here is not a promotion. And it is proposed as the Beacon Warden
+without that identity being confirmed by the owner — the file is therefore named for what the provider
+actually produced rather than for the role, and it is kept in the tool-only Studio candidate store so
+it does not enter the game payload. See
+[`docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md`](docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md).
+
 ## Candidate bank held outside this repository
 
 Some owner-directed paid-plan Meshy output is deliberately **not** stored in Git. It is still project
