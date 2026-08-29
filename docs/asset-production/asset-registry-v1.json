@@ -1934,9 +1934,7 @@
         "historical-inventory:dawnwarden-helmet-v1"
       ],
       "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "aliases": []
     },
     {
@@ -2061,9 +2059,7 @@
         "historical-inventory:dawnwarden-sword-v1"
       ],
       "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "aliases": []
     },
     {
@@ -7793,9 +7789,7 @@
         "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/candidates/dawnwarden-helmet-v1.glb"
       ],
       "notes": "Candidate identity is registered without runtime promotion.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "next_action": "QUALIFY_NEXT",
       "aliases": [],
       "related_asset_ids": []
@@ -7899,9 +7893,7 @@
         "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/candidates/dawnwarden-sword-v1.glb"
       ],
       "notes": "Candidate identity is registered without runtime promotion.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "next_action": "QUALIFY_NEXT",
       "aliases": [],
       "related_asset_ids": []
@@ -10066,7 +10058,6 @@
       "asset_kind": "model",
       "lifecycle": "GENERATED",
       "facets": [
-        "forest",
         "landmark",
         "meshy"
       ],
@@ -10580,7 +10571,6 @@
       "lifecycle": "GENERATED",
       "facets": [
         "campfire",
-        "forest",
         "meshy",
         "world-prop"
       ],
@@ -10699,7 +10689,6 @@
       "facets": [
         "lantern",
         "meshy",
-        "village",
         "world-prop"
       ],
       "next_action": "QUALIFY_NEXT",
@@ -10816,7 +10805,6 @@
       "lifecycle": "GENERATED",
       "facets": [
         "barrier",
-        "beacon",
         "forest",
         "meshy",
         "world-prop"

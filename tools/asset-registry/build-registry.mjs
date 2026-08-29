@@ -56,7 +56,7 @@ const inferredFacets = (record) => {
   if (id.startsWith('frog-') || id.startsWith('fox-')) values.push('pet', 'starter-pet');
   if (id.startsWith('hero.')) values.push('hero');
   if (id === 'enemy.beacon_warden') values.push('beacon', 'boss', 'boss-setpiece', 'enemy');
-  else if (id === 'enemy.wolf' || /raider|kobold|ogre|reaper|juggernaut|marauder|scrapper|warden|colossus|orc|knight|stalker|overlord/.test(id)) values.push('enemy');
+  else if (record.asset_kind === 'character' && (id === 'enemy.wolf' || /raider|kobold|ogre|reaper|juggernaut|marauder|scrapper|warden|colossus|orc|knight|stalker|overlord/.test(id))) values.push('enemy');
   return values;
 };
 const defaultNextAction = (record) => ({

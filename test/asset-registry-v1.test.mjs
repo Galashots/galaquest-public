@@ -42,11 +42,19 @@ test('semantic facets and next actions are deterministic facts, not duplicate st
     assert.deepEqual(record.facets, [...record.facets].sort(), `${record.asset_id} facets sorted`);
     assert.equal(new Set(record.facets).size, record.facets.length, `${record.asset_id} facets unique`);
     assert.equal(record.facets.includes(record.asset_kind), false, `${record.asset_id} does not duplicate asset_kind`);
+    if (record.asset_kind !== 'character') {
+      assert.equal(record.facets.includes('enemy'), false, `${record.asset_id} non-character is not inferred as enemy`);
+    }
   }
   const mystery = registry.records.find((record) => record.asset_id === 'intake.20260829.0829150207');
   assert.equal(mystery.next_action, 'OWNER_REVIEW');
   assert.equal(mystery.qualification_gates.visual.status, 'UNKNOWN');
   assert.deepEqual(mystery.facets, ['meshy']);
+  assert.ok(registry.records.find((record) => record.asset_id === 'frostbound-warden-v1').facets.includes('enemy'));
+  assert.equal(registry.records.find((record) => record.asset_id === 'prop.thornwood-tangle-intake-v1').facets.includes('beacon'), false);
+  assert.equal(registry.records.find((record) => record.asset_id === 'prop.maplewood-lantern-intake-v1').facets.includes('village'), false);
+  assert.equal(registry.records.find((record) => record.asset_id === 'prop.campfire-essentials-intake-v1').facets.includes('forest'), false);
+  assert.equal(registry.records.find((record) => record.asset_id === 'landmark.crystal-sanctum-intake-v1').facets.includes('forest'), false);
 });
 
 test('the complete Drive intake is represented once and the unresolved animation source stays unknown', () => {
