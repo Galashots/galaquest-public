@@ -32,14 +32,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 // The game URL a harness must land on. Imported rather than hand-built: this file spawns its
 // own server on a fixed port and so never saw startOwnedServer's `?hero=`, which is exactly how
 // it went red when the profile gate landed -- straight onto the naming question, world behind a
 // modal, input suspended. See owned-server.mjs's gameUrlFor.
-import { gameUrlFor } from './owned-server.mjs';
+import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
 import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
@@ -435,17 +433,18 @@ async function run() {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-siege-'));
   const storePath = join(dir, 'rewards.db');
   const guestId = seedUnlockedGuest(storePath, 'portrait');
-  const port = 5203;
-  const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
-  const server = spawn(process.execPath, [serverPath, String(port)], {
-    env: { ...process.env, GALAQUEST_REWARD_STORE_PATH: storePath },
-    stdio: 'ignore', detached: true,
-  });
-  console.log(`  harness-owned server on http://127.0.0.1:${port}/ (pid ${server.pid})`);
-  await sleep(2500);
+  // OWNED BY THE SHARED MODULE, not hand-rolled here. This file used to spawn its own server on a
+  // FIXED 5203 and tear it down with `process.kill(-server.pid)` -- a POSIX process-GROUP kill that
+  // does not exist on Windows, where it throws and the empty catch swallowed it. The server then
+  // outlived the run, and because the port was fixed, the NEXT run attached to the stale server and
+  // its stale reward store and died reporting "the seeded guest did not take": a setup defect
+  // wearing a product defect's clothes. owned-server.mjs already solves every part of that -- a port
+  // pool instead of a squatted fixed port, a kill() that verifies the port is actually free again,
+  // and a process-level 'exit' net underneath it that process.exit() cannot skip.
+  const server = await startOwnedServer({ rewardStorePath: storePath });
 
   const tab = await openTab(768, 1024);
-  const origin = `http://127.0.0.1:${port}`;
+  const { origin } = server;
   try {
     // GQ-008: CLEAR STORAGE BEFORE THE FIRST NAVIGATION. The automation profile is persistent, so a
     // harness that simply navigates inherits whatever gq-guest-id the last run left behind and
@@ -744,7 +743,7 @@ async function run() {
     const errors = await tab.page.eval(`JSON.stringify(window.__galaQuestConsoleErrors ?? [])`).then(JSON.parse);
     check(errors.length === 0, 'no console errors across the whole siege', errors.slice(0, 2).join(' | '));
   } finally {
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
