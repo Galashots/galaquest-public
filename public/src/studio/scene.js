@@ -127,6 +127,21 @@ export async function createStudioScene(canvas) {
   }
 
   /**
+   * Like clearGenericAsset(), but for a REFUSED (never-staged) Library selection rather than an
+   * explicit "go back to the hero" request. Falling back to `hero.root.visible = true` here would
+   * make the canvas silently show the fully-dressed shipping hero while getState().libraryAsset
+   * still names a refused, unrelated asset_id -- a screenshot taken at that moment reads as "the
+   * refused asset rendered as the hero" rather than "nothing is staged". Leaves the stage visibly
+   * empty instead, so canvas-only evidence (e.g. a Review packet capture) cannot be misread.
+   */
+  function clearGenericAssetStage() {
+    for (const child of [...genericAssetGroup.children]) genericAssetGroup.remove(child);
+    genericAssetGroup.visible = false;
+    genericAssetState = null;
+    hero.root.visible = false;
+  }
+
+  /**
    * Loads real bytes from `runtimeUrl` (already proven servable by the caller -- api.js only calls
    * this after the registry's own `runtime_availability.loadable` said so) and measures the loaded
    * scene graph directly, rather than trusting any declared number. A load failure throws; it must
@@ -455,6 +470,7 @@ export async function createStudioScene(canvas) {
     TUNING_BOUNDS,
     loadGenericAsset,
     clearGenericAsset,
+    clearGenericAssetStage,
     frameGenericAsset,
     get activeAsset() { return genericAssetState; },
     get lightingMode() { return lightingMode; },

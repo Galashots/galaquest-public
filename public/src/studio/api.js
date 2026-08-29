@@ -172,13 +172,26 @@ export function installStudioApi(studioScene) {
       if (!record) throw new Error(`loadAsset: unknown asset_id "${assetId}"`);
 
       const availability = record.runtime_availability;
-      if (!availability?.loadable) {
-        studioScene.clearGenericAsset();
+      // registry-api.mjs's `loadable` answers "can this checkout serve these bytes" (a texture like
+      // hero.texture.tier3-atlas legitimately says yes) -- it is NOT "can the 3D stage load these
+      // bytes as geometry". loadGenericAsset() only ever runs a glTF parser, so a servable non-GLB
+      // record must be refused HERE, truthfully, rather than reaching scene.js and surfacing as a
+      // generic "asset bytes unavailable at runtime" throw that falsely implies the bytes are missing
+      // when they are present and fetchable.
+      const isStageableFormat = /\.(glb|gltf)$/i.test(availability?.runtimeUrl ?? '');
+      if (!availability?.loadable || !isStageableFormat) {
+        // Deliberately NOT clearGenericAsset(): that falls back to the fully-dressed shipping hero,
+        // which a screenshot taken while a refused asset is "selected" would misread as the refused
+        // asset having rendered (or as an unrelated approval-quality hero shot). Leave the stage
+        // visibly empty instead -- see scene.js's clearGenericAssetStage() header.
+        studioScene.clearGenericAssetStage();
         activeLibraryAssetId = assetId;
         lastLoadResult = Object.freeze({
           assetId,
           loaded: false,
-          reason: availability?.reason ?? 'runtime availability unknown',
+          reason: !availability?.loadable
+            ? (availability?.reason ?? 'runtime availability unknown')
+            : `asset_kind "${record.asset_kind}" at ${availability.runtimeUrl} is present and fetchable but is not a glTF/GLB the Studio 3D stage can load as geometry`,
           custody: record.custody,
           recoverability: record.recoverability,
         });
@@ -186,12 +199,25 @@ export function installStudioApi(studioScene) {
         return lastLoadResult;
       }
 
-      const loaded = await studioScene.loadGenericAsset(assetId, availability.runtimeUrl);
-      studioScene.frameGenericAsset('three-quarter');
-      activeLibraryAssetId = assetId;
-      lastLoadResult = Object.freeze({ assetId, loaded: true, measured: loaded.measured });
-      notifyStateChange();
-      return lastLoadResult;
+      try {
+        const loaded = await studioScene.loadGenericAsset(assetId, availability.runtimeUrl);
+        studioScene.frameGenericAsset('three-quarter');
+        activeLibraryAssetId = assetId;
+        lastLoadResult = Object.freeze({ assetId, loaded: true, measured: loaded.measured });
+        notifyStateChange();
+        return lastLoadResult;
+      } catch (error) {
+        // scene.js's loadGenericAsset() already ran clearGenericAsset() before throwing (hero
+        // restored, generic stage empty) -- this module's own state must land on the same truth
+        // rather than keep advertising the PREVIOUS Library asset as still on stage. Without this,
+        // a caller that catches the throw (as libraryPanel.js does) and then reads getState() was
+        // told the old asset was loaded with its old measured facts while the hero was what
+        // actually rendered.
+        activeLibraryAssetId = assetId;
+        lastLoadResult = Object.freeze({ assetId, loaded: false, reason: error.message });
+        notifyStateChange();
+        throw error;
+      }
     },
 
     /** Returns the Library stage to the fixed hero character view. */
