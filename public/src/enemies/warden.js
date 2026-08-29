@@ -2,194 +2,117 @@
 //
 // THE BEACON WARDEN: the corrupted guardian standing over the cold Beacon, as a body.
 //
-// THIS BODY IS A STAND-IN. The Warden's logical identity is 'beacon_warden' and it is stable; the
-// geometry below is a procedural placeholder built from the owner's canonical brief, and a generated
-// GLB (Meshy, owner-authorised spend only -- AGENTS.md) may replace it later WITHOUT the presenter
-// API in this file changing. Everything the game wires against -- buildWarden's returned surface,
-// the mode names, the exported constants -- is the contract; the boxes are not.
+// THE BODY IS NOW THE OWNER'S REAL RIGGED GLB. It replaced a procedural box stand-in in BW1, and it
+// arrived through exactly the seam this file's old header promised it would: `buildWarden`'s returned
+// surface, the mode names and the exported constants are the contract, and NONE of them changed. The
+// boxes were never the contract, so they are simply gone -- with them went `wardenParts()` and the
+// palette/silhouette assertions that described them, because a test that pins the dimensions of
+// deleted geometry is not a test, it is a fossil.
 //
-// The brief, binding (owner's canonical art direction):
-//   stylized low-poly humanoid corrupted guardian. Broad chest and shoulders, SHORT neck, LONG
-//   arms, narrower legs, planted heavy stance. Weathered dark iron, ash-grey stone, aged timber.
-//   EXACTLY ONE cold pale-cyan accent: the asymmetrical shoulder-mounted beacon housing on its
-//   LEFT shoulder -- a thick iron box and a small open cresset echoing the Old Beacon's own basket,
-//   so a child reads the kinship before anyone explains it. No antlers, no cape, no chains, no
-//   floating parts, no thin filigree, no weapon (the maul is a later separate asset; the arms end
-//   in heavy stone-gauntlet fists). ~2.6 m against the 1.48 m hero.
+// WHAT THE ASSET ACTUALLY OWNS, measured from the file rather than hoped for (docs/pipeline's
+// "measure the body/clip you will actually ship"): ONE attack clip, one walk and one run, on the
+// standard 24-joint Meshy biped. That is three clips against the ten modes world/beaconSiege.js can
+// publish, and it is the single fact that shapes everything below.
 //
-// Every colour is imported, none restated (docs/MISTAKES.md GQ-007): the Warden is built from the
-// Beacon's own iron and stone and the Wildwood Gate's own timber, because it is a thing the same
-// world made -- a guardian assembled from the materials of the places it guards.
+// So the drive is deliberately split in two:
 //
-// PLAYTEST UPDATE (real children, two on one server): the verdict on this stand-in body was blunt --
-// "needs to look much cooler and actually look like an enemy". The brief above literally says "no
-// antlers", and what follows adds a crown anyway -- read that as the deeper rule (menace over
-// filigree, low-poly readability, the one accent staying the one accent) outranking its own literal
-// word once a real child said the shipped body did not read as a threat at all. So: a jagged crown
-// and two frost-spike shoulders (BEACON_STONE_COLOR -- the SAME "rime, not rock" reading
-// world/coldSeals.js's own frost ring already established, never a new hue), glowing eyes and an
-// icy aura (glow sprites in the brazier's OWN accent colour, in buildWarden below, never a second
-// baked colour on the mesh). The brief's hard invariants -- one accent, one shoulder, the height
-// band, shoulders over hips -- are unchanged and still test/warden.test.mjs's to enforce; only "no
-// horns at all" gave way to "the kid has to be able to tell this is a boss".
+//   * modes the asset HAS a clip for play that clip on its OWN rig (WARDEN_MODE_CLIPS);
+//   * every other mode is posed at the GROUP level from wardenPose(), which already existed, is
+//     already pure, and is already tested browserlessly.
 //
-// FOUR DRAW CALLS PLUS THE GLOW, and the four are justified: everything static in this game merges
-// to one call (oldBeacon.js's whole tower is one mesh), but this is the one built structure in the
-// game that ANIMATES, and limbs that move independently cannot share a geometry with the trunk they
-// move against. So: legs+pelvis merged to one mesh, torso+head+shoulder-housing to one, each arm to
-// one -- the minimum split that still lets the poses below read. The crown and both shoulder-spikes
-// bake INTO the torso mesh (one more merge, zero more draw calls) for the identical reason the
-// housing does. The pulse ring is a fifth mesh, visible only for the fraction of a second the pulse
-// attack needs it; the brazier glow, the two eyes and the aura are four more additive sprites --
-// one quad each, camera-facing, no shader compile, the same "a sprite costs nothing next to a real
-// light" trade render/glow.js's own header makes -- so the playtest's ask for real menace bought
-// four cheap quads, not a heavier mesh.
+// No Hero or Keeper clip is grafted on. The joint names happen to match those characters exactly --
+// this is the same 24-joint Meshy biped -- and that is precisely the trap docs/pipeline/characters-npcs.md
+// warns about: matching names are necessary but never sufficient, and borrowing a hero's walk to fill
+// a boss's empty idle would be a lie about what this creature is. An empty mode holds its own rest
+// pose instead.
 //
-// Modes are driven PROCEDURALLY off (mode, modeSeconds) -- no clips, because there is no rig. The
-// same contract enemies/wolf.js keeps with encounter.js: the rules own the timing and publish mode
-// plus how long it has held; this file only reads it, so online (mirrored state) and offline (local
-// rules) draw the same monster with no second source of truth. wardenPose() is pure and exported so
-// every pose the rules can ask for is assertable under plain `node --test`.
+// The group-level adapter is also a deliberate axis-safety choice. Meshy exports this rig with a
+// rotated Armature (its Hips carry a large authored quaternion), so a bone's local X is NOT the
+// character's pitch axis and "rotate the spine forward" cannot be typed from intuition -- it has to be
+// measured. Leaning/sinking the whole body needs no such measurement, costs one Euler, and reads at
+// gameplay distance, which is where this fight is actually judged. The cost is recorded honestly: the
+// overhead's raised arms are the one silhouette that did not survive the swap, and the follow-up that
+// wants it back owes a measured per-bone axis calibration first.
+//
+// WHAT THE PLAYTEST ASKED FOR, and what finally answered it. Real children, two on one server, were
+// blunt about the box body: it "needs to look much cooler and actually look like an enemy" (#79).
+// The stand-in answered that with a jagged crown, frost-spike shoulders, glowing eyes and an icy
+// aura -- geometry and sprites bolted on to make a stack of boxes read as a threat. The real body
+// makes all of that unnecessary, so it is gone: the eyes and the shoulder brazier were anchored to
+// box coordinates that no longer exist, and re-siting a pale-cyan sprite onto a bronze-and-moss
+// creature would make it read WORSE, not better. What survives is what is not decoration:
+//
+//   * THE PULSE RING, because the area it claims is gameplay information, not flourish;
+//   * ONE whole-body aura, scaled off the body rather than off a deleted box, still carrying the
+//     phase escalation so "this is getting more dangerous" is still said with light;
+//   * the phase-3 seam emissive, now written onto the asset's own materials.
+//
+// Modes are still driven off (mode, modeSeconds, phase) and nothing else. The same contract
+// enemies/wolf.js keeps with encounter.js: the rules own the timing and publish mode plus how long
+// it has held; this file only reads it, so online (mirrored state) and offline (local rules) draw the
+// same monster with no second source of truth. wardenPose() is pure and exported so every pose the
+// rules can ask for is still assertable under plain `node --test`, with no browser and no GLB.
 
 import * as THREE from '../../vendor/three.module.min.js';
-import { mergeGeometries } from '../../vendor/utils/BufferGeometryUtils.js';
+import { clone as cloneSkinned } from '../../vendor/utils/SkeletonUtils.js';
 import { CHARACTER, setLayer } from '../render/layers.js';
 import { createGlowSprite, setGlowStrength } from '../render/glow.js';
 import { prefersReducedMotion } from '../render/motionPreference.js';
-import {
-  BEACON_GLOW_COLOR,
-  BEACON_IRON_COLOR,
-  BEACON_STONE_COLOR,
-} from '../world/oldBeacon.js';
-import { GATE_WOOD_COLOR } from '../world/wildwoodGate.js';
-import { bakePart } from '../world/coldSeals.js';
+import { normaliseCharacterMaterial } from '../character/hero.js';
+import { loadGLB } from '../world/assets.js';
+import { BEACON_GLOW_COLOR } from '../world/oldBeacon.js';
+
+/** The shipped Warden body. Named for the ROLE, not for the provider's own asset name -- a source or
+ *  vendor name is not a runtime identifier (docs/MISTAKES.md). Provenance lives in ASSET-LICENSES.md. */
+export const WARDEN_URL = 'assets/enemies/beacon_warden.glb';
+
+/**
+ * The clips this asset actually contains, by their EXACT names in the file. Read out of the GLB with
+ * `node tools/foundry/clip_inventory.mjs`, never guessed from what a boss "should" have -- the walk
+ * really is called `Armature|walking_man|baselayer`, and a prettier name here would simply fail to
+ * bind at runtime while looking correct in review.
+ */
+export const WARDEN_CLIPS = Object.freeze({
+  walk: 'Armature|walking_man|baselayer',
+  attack: 'attack_spin',
+  run: 'run',
+});
+
+/**
+ * Which fight mode plays which of the Warden's OWN clips.
+ *
+ * Both melee attacks map to the one attack clip the asset owns, because it owns exactly one and
+ * inventing a second would mean grafting another character's motion onto this rig. The two attacks
+ * stay mechanically distinct where it matters -- different reach arc, different contact timing,
+ * different damage spread -- and the pulse keeps its ring as its own tell.
+ *
+ * Every mode ABSENT here has no native clip and is posed from wardenPose() at the group level. That
+ * absence is the asset's, not an oversight: there is no idle, kneel, hit or death clip to play.
+ */
+export const WARDEN_MODE_CLIPS = Object.freeze({
+  walk: WARDEN_CLIPS.walk,
+  overhead: WARDEN_CLIPS.attack,
+  sweep: WARDEN_CLIPS.attack,
+});
 
 // ── the body's numbers ────────────────────────────────────────────────────────────────────────────
 
 // Head-top height. 2.6 m against the 1.48 m hero: 1.76x, unmistakably bigger without breaking the
 // 6.1 m Beacon's own scale hierarchy -- the Warden must loom over the child and still stand UNDER
-// the tower it failed to keep lit. The brazier cresset rides a little above this, the way the
-// Beacon's own widest point is its top.
+// the tower it failed to keep lit.
+//
+// This survived the body swap UNCHANGED, and that is load-bearing rather than lucky: main.js anchors
+// the boss bar at WARDEN_HEIGHT_METERS + 0.32 by importing this very constant, so holding the height
+// fixed and scaling the asset to it is what keeps the health/name plate on the Warden's head with no
+// HUD change at all. The asset is authored at its own height; buildWarden measures that and divides.
 export const WARDEN_HEIGHT_METERS = 2.6;
-// Where the torso rotates from -- inside the hip mass, so bows and sweeps hinge where a body does.
-const TORSO_PIVOT_Y = 1.42;
-// The left shoulder, where the brazier lives. Character faces local +Z, so its own left is +X.
-const BRAZIER_X = 0.7;
-const SHOULDER_LOCAL_Y = 0.78; // torso-local; world 2.2 when standing
-const ARM_LENGTH_METERS = 1.4; // shoulder to fist bottom -- LONG: fists hang by the knees
 
-/**
- * Every part of the Warden, split by the sub-mesh it merges into. Coordinates:
- *   legs      group-local, y = 0 the ground
- *   torso     local to the torso pivot (TORSO_PIVOT_Y up when standing)
- *   armLeft / armRight   local to their shoulder pivot, hanging down -Y
- * Exported so the silhouette the brief demands -- height band, shoulders over hips, one accent, one
- * shoulder -- is assertable without a browser. Same split oldBeacon.js's beaconParts() makes.
- */
-export function wardenParts() {
-  const iron = BEACON_IRON_COLOR;
-  const stone = BEACON_STONE_COLOR;
-  const wood = GATE_WOOD_COLOR;
-
-  const legs = [{ name: 'pelvis', kind: 'box', size: [0.88, 0.34, 0.48], at: [0, 1.36, 0], color: iron }];
-  for (const side of [1, -1]) {
-    // Narrower than the chest, heavier than a man's: the planted stance is FEET, wide and flat.
-    legs.push({ name: 'thigh', kind: 'box', size: [0.36, 0.55, 0.4], at: [side * 0.3, 0.98, 0], color: stone });
-    legs.push({ name: 'shin', kind: 'box', size: [0.3, 0.55, 0.34], at: [side * 0.31, 0.45, 0], color: iron });
-    legs.push({ name: 'foot', kind: 'box', size: [0.46, 0.18, 0.62], at: [side * 0.31, 0.09, 0.08], color: stone });
-  }
-
-  const torso = [
-    { name: 'belly', kind: 'box', size: [0.92, 0.5, 0.56], at: [0, 0.18, 0], color: stone },
-    // The broad chest -- the widest soft-part of the silhouette, iron over stone.
-    { name: 'chest', kind: 'box', size: [1.16, 0.56, 0.68], at: [0, 0.62, 0.02], color: iron },
-    // Aged timber: a carrying yoke across the back and a belt beam, the gate's own wood. Somebody
-    // BUILT this thing, and timber lashed to iron says so the way the Beacon's brace does.
-    { name: 'yoke', kind: 'box', size: [1.3, 0.18, 0.12], at: [0, 0.74, -0.36], color: wood },
-    { name: 'belt', kind: 'box', size: [0.96, 0.16, 0.1], at: [0, -0.04, 0.3], color: wood },
-    { name: 'pauldron', kind: 'box', size: [0.5, 0.28, 0.52], at: [BRAZIER_X, 0.86, 0], color: iron },
-    { name: 'pauldron', kind: 'box', size: [0.5, 0.28, 0.52], at: [-BRAZIER_X, 0.86, 0], color: iron },
-    // FROST-SPIKE SHOULDERS: real playtest verdict, "needs to look much cooler and actually look
-    // like an enemy" -- a low-poly humanoid with rounded pauldrons reads as a statue, not a threat.
-    // Symmetric (both shoulders), so the asymmetry the brief protects stays exactly where it always
-    // was -- on the accent, not on the silhouette -- and BEACON_STONE_COLOR rather than a new hue:
-    // world/coldSeals.js's own frost ring already established stone-grey as this game's "rime,
-    // not rock" reading (its own header, "frost-dulled"), so a spike in the same colour reads as ice
-    // crusted over the shoulder iron without inventing a fifth colour GQ-007 would flag. Placed
-    // OUTBOARD of the pauldron (x = 0.98, past BRAZIER_X's 0.7) so a spike never grows out of the
-    // one shoulder's own brazier geometry.
-    {
-      name: 'shoulder-spike', kind: 'cylinder', radiusBottom: 0.13, radiusTop: 0.01, height: 0.46,
-      at: [0.98, 1.04, -0.02], roll: 0.5, radialSegments: 5, color: stone,
-    },
-    {
-      name: 'shoulder-spike', kind: 'cylinder', radiusBottom: 0.13, radiusTop: 0.01, height: 0.46,
-      at: [-0.98, 1.04, -0.02], roll: -0.5, radialSegments: 5, color: stone,
-    },
-    // SHORT neck: the head sits 0.06 m INTO the chest top, no neck part at all. Head top is the
-    // 2.6 m the constant states.
-    { name: 'head', kind: 'box', size: [0.34, 0.34, 0.38], at: [0, 1.01, 0.06], color: stone },
-    // THE CROWN: a single broken, backswept horn of the same rimed stone, rising past the head --
-    // "jagged crown" from the brief, kept to ONE part (the part-count budget below is tight) rather
-    // than a cluster, because one clean spike reads as a shape at gameplay distance where three
-    // thin ones would blur into a smear (the same low-poly-silhouette lesson world/bramble.js's own
-    // header states). Low radialSegments (5, the shoulder spikes' own count) is what makes it read
-    // as HEWN rather than turned on a lathe -- a faceted spike, not a smooth horn.
-    {
-      name: 'crown', kind: 'cylinder', radiusBottom: 0.15, radiusTop: 0.015, height: 0.38,
-      at: [0, 1.37, -0.08], roll: 0.16, radialSegments: 5, color: stone,
-    },
-    // The brazier: thick iron box, then a small OPEN cresset flaring upward -- openEnded and wider
-    // at the top, the Old Beacon's basket in miniature (oldBeacon.js reference rule 1: a beacon is
-    // identified by its cresset). One shoulder only. Asymmetry is the brief's word, not a whim.
-    { name: 'brazier-housing', kind: 'box', size: [0.36, 0.26, 0.36], at: [BRAZIER_X, 1.13, 0], color: iron },
-    {
-      name: 'brazier-cresset',
-      kind: 'cylinder',
-      radiusBottom: 0.12,
-      radiusTop: 0.18,
-      height: 0.18,
-      openEnded: true,
-      at: [BRAZIER_X, 1.33, 0],
-      color: iron,
-      radialSegments: 8,
-    },
-    // THE ONE ACCENT. The cold coal in the cresset, in the Beacon halo's own colour -- the only
-    // pale-cyan part on the whole body, and the glow sprite sits right on it.
-    {
-      name: 'brazier-ember',
-      kind: 'cylinder',
-      radiusBottom: 0.11,
-      radiusTop: 0.11,
-      height: 0.07,
-      at: [BRAZIER_X, 1.31, 0],
-      color: BEACON_GLOW_COLOR,
-      radialSegments: 8,
-    },
-  ];
-
-  // LONG arms, iron over timber-splinted forearms, ending in stone-gauntlet fists (no weapon --
-  // the maul is a later separate asset). Both arms are the same build; the asymmetry lives on the
-  // shoulder, not in the limbs.
-  const arm = [
-    { name: 'upper-arm', kind: 'box', size: [0.3, 0.62, 0.32], at: [0, -0.33, 0], color: BEACON_IRON_COLOR },
-    { name: 'forearm', kind: 'box', size: [0.26, 0.55, 0.28], at: [0, -0.86, 0.02], color: wood },
-    { name: 'fist', kind: 'box', size: [0.4, 0.36, 0.42], at: [0, -1.22, 0.05], color: stone },
-  ];
-
-  return {
-    legs,
-    torso,
-    armLeft: arm.map((part) => ({ ...part })),
-    armRight: arm.map((part) => ({ ...part })),
-    torsoPivotY: TORSO_PIVOT_Y,
-    shoulderPivots: {
-      left: [BRAZIER_X, SHOULDER_LOCAL_Y, 0],
-      right: [-BRAZIER_X, SHOULDER_LOCAL_Y, 0],
-    },
-    armLengthMeters: ARM_LENGTH_METERS,
-  };
-}
+// How far the body sinks when wardenPose() fully compresses the legs (legs01 -> 0.6 at the kneel).
+// The merged box body bent its knees by scaling one mesh; a skinned mesh cannot be squashed that way
+// without deforming the whole creature, so the kneel is bought by DROPPING and FOLDING the body
+// instead. At gameplay distance a huge shape hunched low over the seals reads as kneeling, which is
+// the same trade the box version's own comment recorded making -- and the wake still visibly rises.
+const CROUCH_SINK_METERS = 0.55;
 
 // ── the timings the rules will mirror ─────────────────────────────────────────────────────────────
 
@@ -427,15 +350,53 @@ export function wardenPose(mode, modeSeconds, reducedMotion = false) {
 
 // ── the presenter ─────────────────────────────────────────────────────────────────────────────────
 
-function wardenMaterial() {
-  return new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.9,
-    metalness: 0,
-    flatShading: true,
-    // DoubleSide for the same one part oldBeacon.js needs it for: the open cresset's far wall.
-    side: THREE.DoubleSide,
+/**
+ * Prepare an independent, correctly-scaled, correctly-lit copy of the Warden body.
+ *
+ * Cloned with SkeletonUtils for the reason wolf.js states: `loadGLB` caches one GLTF scene, and a
+ * presenter needs its OWN bones and its OWN materials or a phase-3 seam glow would tint every other
+ * copy sharing the cached material. Geometry and textures stay shared, which is the cheap path.
+ *
+ * The scale is MEASURED, not typed. The asset is authored at its own height; dividing
+ * WARDEN_HEIGHT_METERS by the measured bounding box means a re-export at a different size still lands
+ * at exactly the height the boss bar and the fight already agree on, instead of silently drifting
+ * behind a hard-coded factor that was only true on the day it was typed (GQ-007's "a literal that
+ * only happens to satisfy a relationship is a snapshot of that relationship").
+ */
+function prepareWardenRoot(source) {
+  const root = cloneSkinned(source);
+  root.name = 'warden-body';
+  // UPDATE THE MATRICES BEFORE MEASURING, and this line is the whole reason the first attempt at
+  // this function shipped an invisible boss. A freshly cloned, not-yet-parented hierarchy still
+  // carries stale world matrices, so Box3 measured this body as 0.023 m rather than its authored
+  // 2.3 -- a clean factor of 100 out of the Armature's own 0.01 scale. The scale factor came back as
+  // 113x instead of 1.13x, three.js happily submitted all 3,898 triangles every frame, and the
+  // creature was skinned to a height of about 150 metres somewhere off camera. Nothing threw and no
+  // console error was logged.
+  root.updateMatrixWorld(true);
+  const authored = new THREE.Box3().setFromObject(root);
+  const authoredHeight = authored.max.y - authored.min.y;
+  const scale = authoredHeight > 0 ? WARDEN_HEIGHT_METERS / authoredHeight : 1;
+  root.scale.setScalar(scale);
+  // The asset grounds at its own origin (feet at y = 0, measured), so no pivot correction is needed
+  // -- but a body whose origin sat at its centre would bury half of itself, so this subtracts the
+  // measured floor rather than assuming it is zero.
+  root.position.y = -authored.min.y * scale;
+  root.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = false;
+    object.receiveShadow = false;
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => material?.clone?.() ?? material);
+    } else if (object.material?.clone) {
+      object.material = object.material.clone();
+    }
+    // The same Meshy export defects the hero and the wolf both carried: an emissiveFactor of
+    // [1,1,1] pointing at the base-colour atlas, and metallic/roughness omitted so glTF defaults
+    // both to 1.0. Left alone the Warden renders as a white silhouette.
+    for (const material of [].concat(object.material)) normaliseCharacterMaterial(material);
   });
+  return { root, scale };
 }
 
 /**
@@ -446,89 +407,58 @@ function wardenMaterial() {
  * @returns `{ group, setMode(mode, modeSeconds, phase), setHeading(heading), setPosition(x, z),
  *            update(deltaSeconds), setBrazier(strength) }`
  *
+ * STILL SYNCHRONOUS, even though the body is now a fetched asset, and that is a correctness
+ * requirement rather than a convenience.
+ *
+ * The first version of this awaited the GLB and made world/zoneLoader.js await `buildWarden` in turn.
+ * That put a 618 KB fetch in front of `zone.ready`, and `zone.ready` is what hands main.js EVERY
+ * presenter in the zone -- so the Old Beacon, the seals and the blackthorn all arrived late because
+ * the Warden's texture was still downloading. `drive-old-beacon.mjs` caught it on the reload phase:
+ * `built false, stirring false, glow null` for a Beacon that has nothing to do with this file. One
+ * asset must not gate every other body in the world.
+ *
+ * So the presenter is returned IMMEDIATELY with its group, aura and pulse ring in the scene, and the
+ * body attaches itself when it arrives. Every method below works before that happens: the group is
+ * already positioned and headed, the ring still draws, and `update()` simply has no skeleton to pose
+ * yet. That is the same degrade-to-nothing shape the keeper, villagers and Rowan already use -- a
+ * missing body costs the beat it draws and nothing else. A failed fetch is also non-fatal, because
+ * `loadGLB` resolves to a magenta placeholder rather than rejecting.
+ *
  * The presenter owns LOOKS only: the siege rules own which mode holds and for how long, and publish
  * (mode, modeSeconds, phase) the way encounter.js publishes the wolf's. setMode may be called every
  * frame with authoritative seconds or once per transition -- update() keeps its own clock between
  * calls, so either wiring draws the same monster.
  */
 export function buildWarden(scene, at) {
-  const spec = wardenParts();
   const group = new THREE.Group();
   group.name = 'beacon-warden';
   group.position.set(at[0], 0, at[1]);
 
-  const merge = (parts) => mergeGeometries(parts.map(bakePart), false);
+  // Heading lives on `group`, body lean/sink on `body`. Split deliberately: folding a dying Warden
+  // forward and turning it to face a child are different rotations about different axes, and putting
+  // both on one object makes the result depend on Euler order rather than on either intent.
+  const body = new THREE.Group();
+  body.name = 'warden-body-pivot';
+  group.add(body);
 
-  const legs = new THREE.Mesh(merge(spec.legs), wardenMaterial());
-  legs.name = 'warden-legs';
-  group.add(legs);
+  // The body, the mixer and the clips all arrive together, later. Null until then, and every reader
+  // below is written to tolerate that rather than to assume it.
+  let root = null;
+  let mixer = null;
+  const actions = new Map();
+  const seamTargets = [];
 
-  const torsoGroup = new THREE.Group();
-  torsoGroup.name = 'warden-torso-pivot';
-  torsoGroup.position.y = spec.torsoPivotY;
-  group.add(torsoGroup);
-
-  const torsoMaterial = wardenMaterial();
-  const torso = new THREE.Mesh(merge(spec.torso), torsoMaterial);
-  torso.name = 'warden-torso';
-  torsoGroup.add(torso);
-
-  // Arms pivot at the shoulders and are CHILDREN of the torso pivot, so a sweep carries them and a
-  // bow lowers them -- the cheapest possible forward kinematics, and enough.
-  const armL = new THREE.Group();
-  armL.position.set(...spec.shoulderPivots.left);
-  armL.add(new THREE.Mesh(merge(spec.armLeft), wardenMaterial()));
-  armL.name = 'warden-arm-left';
-  const armR = new THREE.Group();
-  armR.position.set(...spec.shoulderPivots.right);
-  armR.add(new THREE.Mesh(merge(spec.armRight), wardenMaterial()));
-  armR.name = 'warden-arm-right';
-  torsoGroup.add(armL, armR);
-
-  // The brazier's light, sitting on the ember part itself so every bow and sweep carries it.
-  const ember = spec.torso.find((part) => part.name === 'brazier-ember');
-  const brazier = createGlowSprite(BEACON_GLOW_COLOR, WARDEN_BRAZIER_SIZE_METERS);
-  brazier.name = 'warden-brazier-glow';
-  brazier.position.set(ember.at[0], ember.at[1] + 0.06, ember.at[2]);
-  torsoGroup.add(brazier);
-
-  // THE EYES. Real playtest verdict: "needs to... actually look like an enemy" -- a stone block for
-  // a head, however jagged its crown, reads as a statue until something in it looks BACK at the
-  // child. Two glow sprites, not geometry: adding eye-coloured PARTS to the merged torso mesh would
-  // put a second BEACON_GLOW_COLOR entry in spec.torso and break the brief's own "exactly one
-  // accent" rule (test/warden.test.mjs's brazierIsOneAsymmetricAccent) -- sprites sit ON TOP of the
-  // stone-grey head instead, in the SAME accent colour the brazier already carries, so the Warden
-  // still reads as one wrongness with two places it shows rather than a second material. Small and
-  // 'lamp' profile (a hot core) rather than 'mote': eyes have to read as points of light at gameplay
-  // distance, not a soft wash the way the aura below deliberately is.
-  const head = spec.torso.find((part) => part.name === 'head');
-  const EYE_SIZE_METERS = 0.09;
-  const eyeY = head.at[1] + head.size[1] * 0.12;
-  const eyeZ = head.at[2] + head.size[2] / 2 - 0.02;
-  const eyeL = createGlowSprite(BEACON_GLOW_COLOR, EYE_SIZE_METERS);
-  eyeL.name = 'warden-eye-left';
-  eyeL.position.set(0.09, eyeY, eyeZ);
-  const eyeR = createGlowSprite(BEACON_GLOW_COLOR, EYE_SIZE_METERS);
-  eyeR.name = 'warden-eye-right';
-  eyeR.position.set(-0.09, eyeY, eyeZ);
-  torsoGroup.add(eyeL, eyeR);
-
-  // THE ICY AURA. A single big, soft, 'mote'-profile sprite (no hot core -- render/glow.js's own
-  // header explains why a wash of colour rather than a point needs that profile) hanging around the
-  // whole body, ankle to chest, reading as cold radiating off the guardian the way heat shimmers off
-  // a fire -- the "icy aura/particle shimmer" the brief asks for, bought as ONE more additive quad
-  // rather than a real particle system an iPad would rather not sort every frame. Parented to
-  // `group`, not `torsoGroup`: a bow or a sweep must not drag the whole-body aura sideways with the
-  // torso, the same reason the pulse ring below is parented to `group` too.
-  const AURA_SIZE_METERS = WARDEN_HEIGHT_METERS * 1.05;
-  const aura = createGlowSprite(BEACON_GLOW_COLOR, AURA_SIZE_METERS, 'mote');
+  // THE ICY AURA. One big soft additive quad hanging around the whole body, sized off the body rather
+  // than off any deleted box. Parented to `group`, not `body`: a fold or a lean must not drag the
+  // whole-body aura sideways, the same reason the pulse ring below is parented to `group` too.
+  const aura = createGlowSprite(BEACON_GLOW_COLOR, WARDEN_HEIGHT_METERS * 1.05, 'mote');
   aura.name = 'warden-aura';
   aura.position.y = WARDEN_HEIGHT_METERS * 0.42;
   group.add(aura);
 
-  // The pulse ring: unit outer radius, scaled out to WARDEN_PULSE_RING_RADIUS_METERS while it
-  // plays. Additive and depthWrite-off like every light in this game (render/glow.js's reasoning),
-  // basic rather than standard because an expanding shockwave must not pick up scene lighting.
+  // The pulse ring: unit outer radius, scaled out to WARDEN_PULSE_RING_RADIUS_METERS while it plays.
+  // Additive and depthWrite-off like every light in this game, basic rather than standard because an
+  // expanding shockwave must not pick up scene lighting.
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.86, 1, 32),
     new THREE.MeshBasicMaterial({
@@ -553,26 +483,84 @@ export function buildWarden(scene, at) {
   let modeClock = 0;
   let phase = 1;
   let brazierBase = WARDEN_BRAZIER_REST;
-  // A clock of its own, NEVER reset on a mode transition -- unlike modeClock, which every pose
-  // measures itself from zero, the aura's shimmer is ambient life that must not visibly jump the
-  // instant a swing lands and the mode changes underneath it.
   let auraClock = 0;
+  let playing = null;
 
   function applyPhaseSeams() {
-    // Phase 3: the accent catches in the torso's seams. Written to the material rather than baked,
-    // so it can come on mid-fight without a geometry swap.
-    if (phase >= 3) {
-      torsoMaterial.emissive.set(BEACON_GLOW_COLOR).multiplyScalar(WARDEN_PHASE3_SEAM_GLOW);
-    } else {
-      torsoMaterial.emissive.set(0x000000);
+    for (const { base, material } of seamTargets) {
+      if (phase >= 3) {
+        material.emissive.set(BEACON_GLOW_COLOR).multiplyScalar(WARDEN_PHASE3_SEAM_GLOW);
+      } else {
+        material.emissive.copy(base);
+      }
     }
   }
+
+  /**
+   * Play the clip this mode owns, or stop clips entirely when it owns none.
+   *
+   * Restarted only on a CHANGE of clip, never every frame: `setMode` is documented as safe to call
+   * per-frame with authoritative seconds, and resetting an action every frame would freeze it on its
+   * first frame forever -- an attack that never advances while every state check still reads correct.
+   */
+  function selectClip(nextMode) {
+    const wanted = WARDEN_MODE_CLIPS[nextMode] ?? null;
+    if (wanted === playing) return;
+    if (playing && actions.has(playing)) actions.get(playing).stop();
+    playing = wanted;
+    if (wanted && actions.has(wanted)) actions.get(wanted).reset().play();
+  }
+
+  // THE BODY, WHEN IT ARRIVES. Deliberately not awaited by the caller -- see this function's own
+  // docstring for the Beacon that went dark because it was. `loadGLB` never rejects, so there is no
+  // catch: a failed fetch resolves to a magenta placeholder, which is a body-shaped complaint the
+  // reviewer can see rather than an exception nobody handles.
+  loadGLB(WARDEN_URL).then((gltf) => {
+    root = prepareWardenRoot(gltf.scene).root;
+    body.add(root);
+    // Layers again, because this subtree joined AFTER the setLayer above walked the group.
+    setLayer(group, CHARACTER);
+
+    mixer = new THREE.AnimationMixer(root);
+    for (const clip of gltf.animations ?? []) {
+      const action = mixer.clipAction(clip);
+      if (clip.name === WARDEN_CLIPS.walk || clip.name === WARDEN_CLIPS.run) {
+        action.setLoop(THREE.LoopRepeat, Infinity);
+      } else {
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+      }
+      actions.set(clip.name, action);
+    }
+
+    // Each material's OWN emissive, captured once so the phase-3 seam glow can be applied and removed
+    // against whatever the asset actually authored rather than assuming black -- the same capture-then-
+    // restore rule wolf.js's hit flash follows, and for the same reason: an authored glow must not be
+    // silently erased the first time the boss changes phase.
+    root.traverse((object) => {
+      if (!object.isMesh) return;
+      for (const material of [].concat(object.material)) {
+        if (material?.emissive) seamTargets.push({ base: material.emissive.clone(), material });
+      }
+    });
+
+    // Catch up on everything that happened while the body was still downloading. A fight can be well
+    // past dormant by now, so clear the remembered selection (nothing was ever really playing -- there
+    // were no actions to play) and re-select for the mode the rules are actually in, or a Warden that
+    // arrived mid-sweep would stand in its rest pose until the next transition happened to fire.
+    playing = null;
+    selectClip(mode);
+    applyPhaseSeams();
+  });
 
   return {
     group,
     /** The rules publish (mode, how long it has held, phase). Safe to call every frame. */
     setMode(nextMode, modeSeconds = 0, nextPhase = phase) {
-      mode = nextMode;
+      if (nextMode !== mode) {
+        mode = nextMode;
+        selectClip(nextMode);
+      }
       modeClock = Number.isFinite(modeSeconds) ? modeSeconds : 0;
       if (nextPhase !== phase) {
         phase = nextPhase;
@@ -586,7 +574,7 @@ export function buildWarden(scene, at) {
       group.position.x = x;
       group.position.z = z;
     },
-    /** Direct brazier override for the integrator (e.g. dim it while a seal still holds). The
+    /** Direct cold-light override for the integrator (e.g. dim it while a seal still holds). The
      *  phase gain and the mode's own surge multiply on top of this base. */
     setBrazier(strength) {
       brazierBase = clamp01(strength);
@@ -596,45 +584,34 @@ export function buildWarden(scene, at) {
       const pose = wardenPose(mode, modeClock, prefersReducedMotion());
       group.visible = pose.visible;
       if (!pose.visible) {
-        setGlowStrength(brazier, 0);
-        setGlowStrength(eyeL, 0);
-        setGlowStrength(eyeR, 0);
         setGlowStrength(aura, 0);
         ring.visible = false;
         return;
       }
+
+      // Null until the body lands; the group-level pose below still runs, so a Warden that is
+      // still downloading is an empty space that moves and turns correctly rather than a crash.
+      mixer?.update(deltaSeconds);
+
+      // Group-level pose. Applied for every mode, including the ones a clip is driving: `rootY` and
+      // the sink are world placement rather than animation, and wardenPose leaves both at rest for
+      // walk and the attacks, so a clip is never fought for control of the same value.
       group.position.y = pose.rootY;
-      // Compressing the legs mesh about its ground-level origin bends the knees without a knee:
-      // feet stay planted, the pelvis comes down, and the torso pivot rides it.
-      legs.scale.y = pose.legs01;
-      torsoGroup.position.y = spec.torsoPivotY * pose.legs01 + pose.bobY;
-      torsoGroup.rotation.set(pose.torsoPitch, pose.torsoYaw, pose.torsoRoll);
-      torsoGroup.scale.setScalar(pose.breath);
-      // rotation.x is negated because the arms hang -Y: see the pitch convention on armPitchL.
-      armL.rotation.x = -pose.armPitchL;
-      armR.rotation.x = -pose.armPitchR;
+      body.position.y = -(1 - pose.legs01) * CROUCH_SINK_METERS;
+      if (playing) {
+        // A clip owns the body's own motion; leaning the whole creature on top of it would double
+        // every lean the animator already authored.
+        body.rotation.set(0, 0, 0);
+      } else {
+        body.rotation.set(pose.torsoPitch, pose.torsoYaw, pose.torsoRoll);
+      }
 
       const gain = WARDEN_BRAZIER_BY_PHASE[Math.min(WARDEN_BRAZIER_BY_PHASE.length, Math.max(1, phase)) - 1];
-      setGlowStrength(brazier, clamp01(brazierBase * gain * pose.brazier));
-
-      // THE EYES track the SAME surge the brazier does (pose.brazier), not a separate number --
-      // whatever tells the brazier "this is the tell" tells the eyes too, so a windup reads as the
-      // whole Warden waking up to hit, not one shoulder lamp flickering. A floor of 0.32 keeps them
-      // dimly lit even at dormantPose()'s low 0.3 brazier -- the kneeling statue's eyes are barely
-      // open, not switched off, which is the whole point of a child walking past and wondering.
-      const eyeStrength = clamp01(0.32 + 0.62 * gain * pose.brazier);
-      setGlowStrength(eyeL, eyeStrength);
-      setGlowStrength(eyeR, eyeStrength);
-
-      // THE AURA: a slow, ambient shimmer (independent of any single pose, on its own never-reset
-      // clock) plus the same phase escalation everything else in this fight uses -- so the cold
-      // radiating off the guardian visibly THICKENS as the fight goes on, echoing the brazier's own
-      // WARDEN_BRAZIER_BY_PHASE ramp ("this is getting more dangerous") without restating that array
-      // -- `phase` alone (1..3) is enough to step it.
       auraClock += deltaSeconds;
       const shimmer = prefersReducedMotion() ? 0 : Math.sin(auraClock * Math.PI * 2 * 0.18) * 0.05;
-      const auraBase = 0.08 + 0.05 * (phase - 1);
-      setGlowStrength(aura, clamp01(auraBase + shimmer));
+      // The aura carries what the shoulder brazier used to: the mode's own surge (pose.brazier is the
+      // pulse's tell), the phase escalation, and the integrator's base.
+      setGlowStrength(aura, clamp01(brazierBase * gain * pose.brazier * 0.3 + shimmer));
 
       if (pose.ring) {
         ring.visible = true;
@@ -645,7 +622,26 @@ export function buildWarden(scene, at) {
         ring.visible = false;
       }
     },
-    /** For a harness. */
-    getState: () => ({ mode, modeSeconds: modeClock, phase }),
+    /**
+     * For a harness.
+     *
+     * `headMeters` is the world height of the rig's own `Head` BONE, and it exists because the first
+     * version of this presenter scaled the body 113x and put it 150 m in the air, where every state
+     * check still read perfectly and the whole siege harness passed against a boss nobody could see.
+     * A bone is the right authority for that question: Box3 over a skinned mesh reports the geometry
+     * box under the mesh's matrix, which stayed reassuringly ~2.6 m while the bones that actually
+     * place the vertices were two orders of magnitude away. Derived from the live scene graph rather
+     * than from the scale factor, so it cannot agree with the bug that produced it.
+     */
+    getState() {
+      const head = root?.getObjectByName('Head') ?? null;
+      return {
+        mode,
+        modeSeconds: modeClock,
+        phase,
+        clip: playing,
+        headMeters: head ? head.getWorldPosition(new THREE.Vector3()).y : null,
+      };
+    },
   };
 }

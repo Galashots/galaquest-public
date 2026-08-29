@@ -1,0 +1,24 @@
+{
+  "schema": "galaquest.animation-source-recovery/1",
+  "asset_id": "animation-source.hero.meshy.hdus9c",
+  "share_url": "https://www.meshy.ai/s/hdUs9c",
+  "observed_utc": "2026-08-29",
+  "exact_source_identity": "UNKNOWN",
+  "recovery_status": "NOT_CURRENTLY_RECOVERABLE",
+  "repo_search": "No share slug, source model ID, rig task ID, animation task ID, exported clip manifest or archived complete library found in public Git.",
+  "drive_search": "Connected broader archive and targeted Drive metadata searches found existing Hero walk/run exports and no exact hdUs9c source or complete animation library.",
+  "provider_access": {
+    "connector_result": "CONTROL_PLANE_HTTP_429_BEFORE_PROVIDER",
+    "local_read_only_probe": "PASS_IMAGE_TO_3D_ONLY",
+    "balance_observed": 662,
+    "listed_image_to_3d_tasks": 2,
+    "rigging_list_endpoint": "NOT_AVAILABLE",
+    "animation_list_endpoint": "NOT_AVAILABLE",
+    "paid_or_write_operations": 0
+  },
+  "recovered_clips": [],
+  "source_hash": null,
+  "archive_drive_file_id": null,
+  "required_owner_action": "Open the hdUs9c share while signed in and provide the source model ID plus any rig/animation task IDs or export the animation-bearing source/ZIP into the 2026-08 Asset Platform Consolidation Drive folder.",
+  "retargeting": "OUT_OF_SCOPE"
+}

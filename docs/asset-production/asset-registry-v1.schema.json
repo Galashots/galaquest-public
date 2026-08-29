@@ -113,12 +113,16 @@
     "record": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["asset_id", "display_name", "asset_kind", "lifecycle", "custody", "recoverability", "custody_locations", "source", "provider", "structural_metrics", "rights", "parent_asset_id", "derivative_of", "qualification_gates", "evidence_refs", "notes"],
+      "required": ["asset_id", "display_name", "asset_kind", "lifecycle", "facets", "next_action", "aliases", "related_asset_ids", "custody", "recoverability", "custody_locations", "source", "provider", "structural_metrics", "rights", "parent_asset_id", "derivative_of", "qualification_gates", "evidence_refs", "notes"],
       "properties": {
         "asset_id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$" },
         "display_name": { "type": "string" },
-        "asset_kind": { "enum": ["model", "texture", "character", "gear"] },
+        "asset_kind": { "enum": ["model", "texture", "character", "gear", "animation-source"] },
         "lifecycle": { "enum": ["PLANNED", "SOURCE_ONLY", "GENERATED", "QUALIFYING", "QUALIFIED", "PRODUCTION", "REJECTED", "SUPERSEDED", "HISTORICAL"] },
+        "facets": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" } },
+        "next_action": { "enum": ["INTEGRATE_NEXT", "QUALIFY_NEXT", "OWNER_REVIEW", "HOLD", "ARCHIVE_ONLY", "NONE"] },
+        "aliases": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "related_asset_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
         "custody": { "enum": ["IN_GIT", "IN_DRIVE", "PROVIDER_ONLY", "LOCAL_ONLY", "MULTIPLE", "MISSING", "UNKNOWN"] },
         "recoverability": { "enum": ["VERIFIED", "VERIFIED_FROM_GIT", "VERIFIED_FROM_DRIVE", "VERIFIED_FROM_PROVIDER", "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT", "STALE_SIGNED_URL", "MISSING_BYTES", "UNKNOWN"] },
         "custody_locations": { "type": "array", "items": { "$ref": "#/$defs/custody-location" } },
