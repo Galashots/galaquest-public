@@ -382,26 +382,36 @@ if (booted) {
       + ` return Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}); })()`,
     );
     let walkReport = null;
-    const approachDeadline = deadlineAfter(90_000);
-    for (let pass = 0; pass < 8; pass += 1) {
-      if (await renderedGapNow() <= 1.2) break;
-      if (Date.now() >= approachDeadline) break;
-      await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.0, { releaseOnArrival: true }));
-      await touch(page, 'touchStart', [stickDown]);
-      await touch(page, 'touchMove', [stickPush]);
-      try {
-        const passDeadline = deadlineAfter(20_000);
-        for (;;) {
-          walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
-          if (walkReport?.arrived || Date.now() >= passDeadline) break;
-          await sleep(120);
+    // Reusable, because the hero does not necessarily STAY put. wolf-1 respawns on its own
+    // ENEMY_KIND_RESPAWN_SECONDS clock at the home it died at -- i.e. next to its own corpse -- so on
+    // a slow runner, where the whole loot sequence takes tens of seconds instead of two, the fight
+    // starts again underneath the open panel and can shove or knock the hero out of the ring
+    // mid-loot. The server then refuses the collect on reach and says nothing about it
+    // (gameServerCore's own `if (!accepted) return;`), which presents as a tap that did nothing.
+    const approachCorpse = async (withinMetres) => {
+      const approachDeadline = deadlineAfter(60_000);
+      for (let pass = 0; pass < 8; pass += 1) {
+        if (await renderedGapNow() <= withinMetres) return true;
+        if (Date.now() >= approachDeadline) return false;
+        await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.0, { releaseOnArrival: true }));
+        await touch(page, 'touchStart', [stickDown]);
+        await touch(page, 'touchMove', [stickPush]);
+        try {
+          const passDeadline = deadlineAfter(20_000);
+          for (;;) {
+            walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
+            if (walkReport?.arrived || Date.now() >= passDeadline) break;
+            await sleep(120);
+          }
+        } finally {
+          await page.eval(STOP_WALK);
+          await touch(page, 'touchEnd', []);
         }
-      } finally {
-        await page.eval(STOP_WALK);
-        await touch(page, 'touchEnd', []);
+        await sleep(300); // let the release land and the body settle before re-measuring
       }
-      await sleep(300); // let the release land and the body settle before re-measuring
-    }
+      return (await renderedGapNow()) <= withinMetres;
+    };
+    await approachCorpse(1.2);
     await sleep(400); // let one more snapshot land so the presenter's own frame loop has caught up
 
     // MEASURE THE APPROACH, and assert it against the rule's OWN constant rather than a number typed
@@ -556,6 +566,17 @@ if (booted) {
                 hitIsTarget: hit === el || Boolean(el.contains(hit)),
                 hit: hit ? (hit.tagName + (hit.id ? '#' + hit.id : '') + (hit.className ? '.' + String(hit.className).split(' ')[0] : '')) : 'nothing',
                 clicksBefore: window.__corpseClicks ?? 0,
+                heroState: (() => {
+                  const rt = window.__galaQuestRuntime;
+                  const net = rt.netState();
+                  const enc = rt.authoritativeEncounterState();
+                  const me = net.selfId != null ? (enc?.heroes ?? {})[net.selfId] : null;
+                  return {
+                    server: net.serverSelf ? [+net.serverSelf.x.toFixed(2), +net.serverSelf.z.toFixed(2)] : null,
+                    hp: me?.hp ?? null,
+                    down: me?.downSeconds ?? null,
+                  };
+                })(),
               });
             })()`,
           ).then(JSON.parse);
@@ -581,10 +602,40 @@ if (booted) {
           return { sawToast, sawPulse };
         };
 
+        // How many items this hero's own claim still has untaken, read off the SERVER's snapshot --
+        // the only authority on whether a collect actually happened.
+        const untakenOnWire = () => page.eval(`(() => {
+          const r = window.__galaQuestRuntime;
+          const net = r.netState();
+          const enc = r.authoritativeEncounterState();
+          const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
+          const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
+          return claim ? claim.items.filter((i) => !i.taken).length : (mine ? 0 : -1);
+        })()`);
+
+        // Tap, then confirm against the wire; if nothing moved, re-approach and tap again. A child
+        // whose tap did nothing taps again, so this is not leniency -- the assertions below still
+        // require a real collect to have actually happened. It exists because the collect can be
+        // legitimately refused for a transient reason (the respawned wolf shoving the hero out of
+        // reach) that says nothing about the presenter this file is here to test.
+        const collectWithRetry = async (selector, expectUntakenBelow) => {
+          let last = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            await approachCorpse(1.2);
+            last = await tapById(selector);
+            if (!last.found) return last;
+            for (let i = 0; i < 25; i += 1) {
+              if ((await untakenOnWire()) < expectUntakenBelow) return { ...last, collected: true, attempts: attempt + 1 };
+              await sleep(200);
+            }
+          }
+          return { ...last, collected: false, attempts: 3 };
+        };
+
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
-        const tookOne = await tapById('.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take');
-        check('an individual TAKE button was tapped, and a real click landed on it',
-          tookOne.tapped && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
+        const tookOne = await collectWithRetry('.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2);
+        check('an individual TAKE really collected one item through the real wire',
+          tookOne.collected === true && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
           JSON.stringify(tookOne));
         const single = await awaitReceipt(0, 0);
         check('individual TAKE produced a short acquired-item toast', single.sawToast);
@@ -620,9 +671,9 @@ if (booted) {
         // takes one item individually FIRST rather than opening with Take All.
         const toastsBefore = await page.eval('window.__corpseToasts.length');
         const pulsesBefore = await page.eval('window.__corpsePulses');
-        const tookAll = await tapById('#corpse-loot-panel-take-all');
-        check('the prominent Take All button was tapped, and a real click landed on it',
-          tookAll.tapped && tookAll.clickLanded && !tookAll.disabled && tookAll.hitIsTarget,
+        const tookAll = await collectWithRetry('#corpse-loot-panel-take-all', 1);
+        check('Take All really collected the remaining item through the real wire',
+          tookAll.collected === true && tookAll.clickLanded && !tookAll.disabled && tookAll.hitIsTarget,
           JSON.stringify(tookAll));
         const takeAll = await awaitReceipt(toastsBefore, pulsesBefore);
         check('Take All on the corpse\'s LAST item still produced an acquired-item toast '
