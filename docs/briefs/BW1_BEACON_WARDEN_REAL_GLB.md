@@ -282,8 +282,15 @@ shape the keeper, villagers and Rowan already use. `drive-old-beacon` is back to
 | Unit gate `node --test test/*.test.mjs` | **PASS** — 2,069 passing; the two local reds are Windows-only artifacts (CRLF `CLAUDE.md`, `EPERM` temp-dir teardown) and hosted CI is the authority |
 | Runtime — real Warden in the running fight | **PASS** — `drive-beacon-siege.mjs` ALL CHECKS PASSED, including the new body-in-the-world check at `head bone 1.34 m`, and "no console errors across the whole siege" |
 | Visual worker self-check | **PASS** — captures opened; the Warden is visible, correctly scaled against the hero, grounded, boss bar on its head, attacking from its own clip. Not an acceptance gate. |
-| Owner visual acceptance | **UNKNOWN** — outstanding, and required |
+| Owner visual acceptance | **PASS** — 2026-08-29, Owner inspected the hosted preview (`galaquest-playtest-pr-99`) bound to `/source-sha.json` = `ae5f92d`, and approved: "Looks good!!" |
 | Independent Director audit | **UNKNOWN** — needs a fresh context |
+
+### What that acceptance does and does not cover
+
+It is appearance approval of the running game at the exact PR head, which is the gate `AGENTS.md`
+reserves for a human and which no machine evidence can substitute for. It is **not** a child/iPad
+playtest, and it is not a judgement on the same-clip attack limitation below — that was flagged before
+the Owner looked, and left open deliberately.
 
 ## Known limitations, recorded rather than hidden
 
