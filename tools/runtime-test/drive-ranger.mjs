@@ -38,14 +38,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 // The game URL a harness must land on. Imported rather than hand-built: this file spawns its
 // own server on a fixed port and so never saw startOwnedServer's `?hero=`, which is exactly how
 // it went red when the profile gate landed -- straight onto the naming question, world behind a
 // modal, input suspended. See owned-server.mjs's gameUrlFor.
-import { gameUrlFor } from './owned-server.mjs';
+import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 import { pollUntilDeadline } from './automation-timing.mjs';
 import {
   metresOrUnknown, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource,
@@ -510,18 +508,14 @@ async function boot(label, { withSatchel, cpuThrottle = 1 }) {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-ranger-'));
   const storePath = join(dir, 'rewards.db');
   const guestId = seedGuest(storePath, label, { withSatchel });
-  const port = 5204;
-  const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
-  const server = spawn(process.execPath, [serverPath, String(port)], {
-    env: { ...process.env, GALAQUEST_REWARD_STORE_PATH: storePath },
-    stdio: 'ignore',
-    detached: true,
-  });
-  console.log(`  harness-owned server on http://127.0.0.1:${port}/ (pid ${server.pid})`);
-  await sleep(2500);
+  // OWNED BY THE SHARED MODULE -- see the same note in drive-beacon-siege.mjs. This file spawned its
+  // own server on a fixed 5204 and tore it down four separate times with `process.kill(-server.pid)`,
+  // a POSIX process-group kill that throws on Windows into an empty catch. Four phases each leaked a
+  // server, and the fixed port meant the next phase attached to the previous phase's world.
+  const server = await startOwnedServer({ rewardStorePath: storePath });
 
   const tab = await openTab(768, 1024, { cpuThrottle });
-  const origin = `http://127.0.0.1:${port}`;
+  const { origin } = server;
   // GQ-008: CLEAR STORAGE BEFORE THE FIRST NAVIGATION. The automation profile is persistent, so a
   // harness that simply navigates inherits whatever gq-guest-id the last run left behind and quietly
   // plays as somebody else's save. Clearing needs the origin to exist, so: navigate once to
@@ -607,7 +601,7 @@ async function phaseArrival() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
@@ -682,7 +676,7 @@ async function phaseCharm() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
@@ -731,7 +725,7 @@ async function phaseLodge() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
@@ -874,7 +868,7 @@ async function phaseSanctuary() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
