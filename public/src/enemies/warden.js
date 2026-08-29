@@ -407,19 +407,29 @@ function prepareWardenRoot(source) {
  * @returns `{ group, setMode(mode, modeSeconds, phase), setHeading(heading), setPosition(x, z),
  *            update(deltaSeconds), setBrazier(strength) }`
  *
- * ASYNC now, because the body is a fetched asset rather than boxes -- that is the one shape change
- * the swap forced on any caller, and world/zoneLoader.js already builds inside an async block. A
- * failed fetch still returns a working presenter: `loadGLB` resolves to a magenta placeholder rather
- * than rejecting, so the fight stays winnable and the missing body is loudly visible instead of
- * throwing during zone load.
+ * STILL SYNCHRONOUS, even though the body is now a fetched asset, and that is a correctness
+ * requirement rather than a convenience.
+ *
+ * The first version of this awaited the GLB and made world/zoneLoader.js await `buildWarden` in turn.
+ * That put a 618 KB fetch in front of `zone.ready`, and `zone.ready` is what hands main.js EVERY
+ * presenter in the zone -- so the Old Beacon, the seals and the blackthorn all arrived late because
+ * the Warden's texture was still downloading. `drive-old-beacon.mjs` caught it on the reload phase:
+ * `built false, stirring false, glow null` for a Beacon that has nothing to do with this file. One
+ * asset must not gate every other body in the world.
+ *
+ * So the presenter is returned IMMEDIATELY with its group, aura and pulse ring in the scene, and the
+ * body attaches itself when it arrives. Every method below works before that happens: the group is
+ * already positioned and headed, the ring still draws, and `update()` simply has no skeleton to pose
+ * yet. That is the same degrade-to-nothing shape the keeper, villagers and Rowan already use -- a
+ * missing body costs the beat it draws and nothing else. A failed fetch is also non-fatal, because
+ * `loadGLB` resolves to a magenta placeholder rather than rejecting.
  *
  * The presenter owns LOOKS only: the siege rules own which mode holds and for how long, and publish
  * (mode, modeSeconds, phase) the way encounter.js publishes the wolf's. setMode may be called every
  * frame with authoritative seconds or once per transition -- update() keeps its own clock between
  * calls, so either wiring draws the same monster.
  */
-export async function buildWarden(scene, at) {
-  const gltf = await loadGLB(WARDEN_URL);
+export function buildWarden(scene, at) {
   const group = new THREE.Group();
   group.name = 'beacon-warden';
   group.position.set(at[0], 0, at[1]);
@@ -431,35 +441,12 @@ export async function buildWarden(scene, at) {
   body.name = 'warden-body-pivot';
   group.add(body);
 
-  const { root } = prepareWardenRoot(gltf.scene);
-  body.add(root);
-
-  // Every clip the asset actually shipped, bound by name. Attacks are one-shot and clamp on their
-  // last frame so a slam holds instead of snapping back; the walk loops.
-  const mixer = new THREE.AnimationMixer(root);
+  // The body, the mixer and the clips all arrive together, later. Null until then, and every reader
+  // below is written to tolerate that rather than to assume it.
+  let root = null;
+  let mixer = null;
   const actions = new Map();
-  for (const clip of gltf.animations ?? []) {
-    const action = mixer.clipAction(clip);
-    if (clip.name === WARDEN_CLIPS.walk || clip.name === WARDEN_CLIPS.run) {
-      action.setLoop(THREE.LoopRepeat, Infinity);
-    } else {
-      action.setLoop(THREE.LoopOnce, 1);
-      action.clampWhenFinished = true;
-    }
-    actions.set(clip.name, action);
-  }
-
-  // Each material's OWN emissive, captured once so the phase-3 seam glow can be applied and removed
-  // against whatever the asset actually authored rather than assuming black -- the same capture-then-
-  // restore rule wolf.js's hit flash follows, and for the same reason: an authored glow must not be
-  // silently erased the first time the boss changes phase.
   const seamTargets = [];
-  root.traverse((object) => {
-    if (!object.isMesh) return;
-    for (const material of [].concat(object.material)) {
-      if (material?.emissive) seamTargets.push({ base: material.emissive.clone(), material });
-    }
-  });
 
   // THE ICY AURA. One big soft additive quad hanging around the whole body, sized off the body rather
   // than off any deleted box. Parented to `group`, not `body`: a fold or a lean must not drag the
@@ -524,6 +511,48 @@ export async function buildWarden(scene, at) {
     if (wanted && actions.has(wanted)) actions.get(wanted).reset().play();
   }
 
+  // THE BODY, WHEN IT ARRIVES. Deliberately not awaited by the caller -- see this function's own
+  // docstring for the Beacon that went dark because it was. `loadGLB` never rejects, so there is no
+  // catch: a failed fetch resolves to a magenta placeholder, which is a body-shaped complaint the
+  // reviewer can see rather than an exception nobody handles.
+  loadGLB(WARDEN_URL).then((gltf) => {
+    root = prepareWardenRoot(gltf.scene).root;
+    body.add(root);
+    // Layers again, because this subtree joined AFTER the setLayer above walked the group.
+    setLayer(group, CHARACTER);
+
+    mixer = new THREE.AnimationMixer(root);
+    for (const clip of gltf.animations ?? []) {
+      const action = mixer.clipAction(clip);
+      if (clip.name === WARDEN_CLIPS.walk || clip.name === WARDEN_CLIPS.run) {
+        action.setLoop(THREE.LoopRepeat, Infinity);
+      } else {
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+      }
+      actions.set(clip.name, action);
+    }
+
+    // Each material's OWN emissive, captured once so the phase-3 seam glow can be applied and removed
+    // against whatever the asset actually authored rather than assuming black -- the same capture-then-
+    // restore rule wolf.js's hit flash follows, and for the same reason: an authored glow must not be
+    // silently erased the first time the boss changes phase.
+    root.traverse((object) => {
+      if (!object.isMesh) return;
+      for (const material of [].concat(object.material)) {
+        if (material?.emissive) seamTargets.push({ base: material.emissive.clone(), material });
+      }
+    });
+
+    // Catch up on everything that happened while the body was still downloading. A fight can be well
+    // past dormant by now, so clear the remembered selection (nothing was ever really playing -- there
+    // were no actions to play) and re-select for the mode the rules are actually in, or a Warden that
+    // arrived mid-sweep would stand in its rest pose until the next transition happened to fire.
+    playing = null;
+    selectClip(mode);
+    applyPhaseSeams();
+  });
+
   return {
     group,
     /** The rules publish (mode, how long it has held, phase). Safe to call every frame. */
@@ -560,7 +589,9 @@ export async function buildWarden(scene, at) {
         return;
       }
 
-      mixer.update(deltaSeconds);
+      // Null until the body lands; the group-level pose below still runs, so a Warden that is
+      // still downloading is an empty space that moves and turns correctly rather than a crash.
+      mixer?.update(deltaSeconds);
 
       // Group-level pose. Applied for every mode, including the ones a clip is driving: `rootY` and
       // the sink are world placement rather than animation, and wardenPose leaves both at rest for
@@ -603,7 +634,7 @@ export async function buildWarden(scene, at) {
      * than from the scale factor, so it cannot agree with the bug that produced it.
      */
     getState() {
-      const head = root.getObjectByName('Head');
+      const head = root?.getObjectByName('Head') ?? null;
       return {
         mode,
         modeSeconds: modeClock,
