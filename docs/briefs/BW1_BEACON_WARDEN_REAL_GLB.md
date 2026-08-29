@@ -7,8 +7,9 @@ Replace the procedural stand-in Beacon Warden body with the Owner's already-gene
 Warden GLB, using that asset's **own** existing clips, and get it into the running encounter without
 turning the change into the whole #90 encounter redesign.
 
-This brief is also the BW1-C1 checkpoint record. **The package is stopped at C1** on an asset-identity
-question that only the Owner can answer; see "C1 result" and "Stop condition reached" below.
+This brief is also the checkpoint record. **C1 (asset qualification) and C2 (running-game
+integration) are complete.** The identity question that stopped C1 was answered by the Owner on
+2026-08-28: the `Meshy_AI_Thornbound_Warlock_biped` asset **is** the Beacon Warden.
 
 ## Objective
 
@@ -73,7 +74,14 @@ its already-generated animations may be used.
 The large provider source stays in the external Drive archive under current custody rules. Only the
 optimized production derivative is committed.
 
-### Why identity is not settled
+### Identity — asked, and answered
+
+**Resolved 2026-08-28: the Owner confirmed this asset is the Beacon Warden.** The reasoning that made
+it a stop condition is kept below, because the shape of the doubt is the useful part: the asset
+matched every stated attribute and was still not *identified*, and the difference between those two
+things is what a worker must not paper over.
+
+### Why identity was not settled by evidence alone
 
 The Owner's authority (#90, and the BW1 dispatch) states that a real Beacon Warden already exists,
 already rigged, already carrying attack animations. The recovered asset matches **every** stated
@@ -98,9 +106,11 @@ One point does agree, and it is worth recording because it is easy to miss: the 
 the arms end in heavy stone-gauntlet fists" holds. The concept image shows a staff; **the generated
 model has empty gauntleted fists** and no staff geometry.
 
-Reconciling those differences means retiring committed, test-enforced art direction for this boss. That
-is an Owner product decision, not a worker inference, so the package stops here rather than promoting a
-file named "Warlock" into `beacon_warden.glb` and rewriting the canonical brief on a guess.
+Reconciling those differences meant retiring committed, test-enforced art direction for this boss —
+an Owner product decision, not a worker inference. With the Owner's confirmation, the palette and
+antler assertions in `test/warden.test.mjs` retired **with the box geometry they described**, which is
+the intended consequence of the redesign rather than a weakened test. The shipped file is named
+`beacon_warden.glb` for its role, since a vendor name is not a runtime identifier.
 
 ## C1 result — asset recovery and qualification
 
@@ -118,12 +128,13 @@ Every number below is measured from the real bytes at this branch head.
 | Texture | 2048² PNG, 6,471,988 B | 1024² JPEG, 239,082 B |
 | Animations | 1 | 3 |
 
-Derivative path: `tools/assets/studio-candidates/thornbound-warlock-v1.glb`
+Shipped path: `public/assets/enemies/beacon_warden.glb`
 SHA-256 `17177d6bb6b2556cefa0f8c7747613492bcd14b8068a8ed7438d5ed996ce8a7d`.
 
-It is named for what the provider actually produced rather than for the role it is proposed for, so the
-filename cannot become a lie about identity. It lives in the tool-only Studio candidate store — served
-by the existing `/studio-candidates/` route — so it is inspectable **without** entering the game payload.
+During C1, while identity was open, this lived in the tool-only Studio candidate store under the
+provider's own name so the filename could not become a lie about identity. Once the Owner confirmed it
+IS the Warden, it moved to the production enemy family under its ROLE name — a vendor name is not a
+runtime identifier. The bytes are unchanged across that move; the SHA-256 above is the same file.
 
 Built with the repository's own pipeline, no new tooling:
 
@@ -178,20 +189,43 @@ The provider account holds **no** retrievable Warden task: the rigging and anima
 empty and only two unrelated image-to-3D tasks exist (`wolf-enemy`, `human-base-body`). The Drive
 archive is the only custody route for this asset, which is why it is recorded above by hash.
 
-## Stop condition reached
+## C2 result — running-game integration
 
-The BW1 dispatch names "exact Warden source identity is ambiguous" as a stop condition and forbids
-solving a stop condition by silently expanding the PR. That condition is met.
+The procedural body is gone and the real Warden fights in the actual encounter. What shipped:
 
-**The one question that unblocks C2:** is `Meshy_AI_Thornbound_Warlock_biped` the Beacon Warden?
+- **`enemies/warden.js`** loads the GLB through the production asset path, clones it with
+  SkeletonUtils, cures the Meshy material defects with `normaliseCharacterMaterial`, and drives it
+  from an `AnimationMixer`. `buildWarden`'s returned surface, the mode names and every exported
+  constant are unchanged — the file's own long-standing promise about how a GLB would arrive.
+- **Clips** are mapped only to what the asset owns. `walk` plays `walking_man`; `overhead` and
+  `sweep` both play `attack_spin`, because the asset owns exactly one attack and inventing a second
+  would mean grafting another character's motion onto this rig. No Hero or Keeper clip is used.
+- **The seven clipless modes** (dormant, waking, idle, pulse, hit, dying, dead) are posed at the group
+  level from the existing pure `wardenPose`, so the kneel, the wake, the flinch and the death fold all
+  survive without a bone-axis calibration this package did not measure.
+- **Collision** imports the existing `separateFromEnemies` law and points it at the Warden on both the
+  server and offline client prediction. A dead Warden stops blocking; the dormant kneel does not.
+- **The boss bar is untouched.** Holding `WARDEN_HEIGHT_METERS` at 2.6 and scaling the asset to it
+  keeps the anchor correct with no HUD change.
 
-- **Yes** → C2 proceeds on the plan below, and the committed art-direction assertions in
-  `test/warden.test.mjs` covering palette/antlers are retired with the boxes they describe. That
-  retirement is an intended consequence of the Owner's redesign, not a weakened test.
-- **No** → the real Warden binary is not in reachable custody. Nothing in the repo, GitHub, Meshy, or
-  Drive holds another candidate, so the Owner would need to supply the file or name its task.
+### The invisible boss, and the check that now catches it
 
-## C2 plan, ready to execute once identity is confirmed
+The first integration **scaled the body 113x and skinned it to a head height of 155.95 m**, off camera.
+Nothing threw, no console error appeared, all 3,898 triangles were submitted every frame, and
+`drive-beacon-siege.mjs` reported **ALL CHECKS PASSED** — against a boss nobody could see. Every
+assertion in that harness asked about state; none asked whether there was a body in the world.
+
+Cause: `Box3.setFromObject` on a freshly cloned, not-yet-parented hierarchy measured stale world
+matrices and returned 0.023 m instead of the authored 2.3, so `WARDEN_HEIGHT_METERS / measured` came
+back as 113 rather than 1.13. The self-correcting measurement converged confidently on the wrong
+answer because it agreed with itself.
+
+Fixed by `root.updateMatrixWorld(true)` before measuring. The prevention is the part that matters: the
+presenter now publishes the `Head` **bone's** world height, and the harness asserts a sane band.
+Verified red-capable by restoring the bug — it produced `head bone at 155.95 m against a 2.6 m Warden`
+while `wardenBuilt` stayed true. Recorded in `docs/MISTAKES.md`.
+
+## How C2 was executed
 
 1. **Scale.** Author the derivative or its loader to `WARDEN_HEIGHT_METERS`. Measured 2.3000 m against
    the committed 2.6 m is a uniform ×1.1304. Keeping the constant intact keeps the boss-bar anchor and
@@ -222,18 +256,30 @@ solving a stop condition by silently expanding the PR. That condition is met.
 
 ## Acceptance gates
 
-| Gate | State at this head |
+| Gate | State |
 | --- | --- |
-| Source identity / provenance | **FAIL — blocked.** Custody, bytes and hashes are established; the Owner link to `beacon_warden` is not. |
-| Production GLB validation | PASS |
-| Current asset-budget checks | PASS (all seven gates) |
-| No unexpected external texture/resource dependency | PASS — one embedded 1024² JPEG, one material, no external URI |
-| No provider spend | PASS — 662 → 662, zero task creations |
-| Unit gate `node --test test/*.test.mjs` | see PR body for the run at this head |
-| Runtime (real Warden in the running fight) | UNKNOWN — C2 not started |
-| Visual worker self-check | PASS at inspection scale only; not an acceptance gate |
-| Owner visual acceptance | UNKNOWN |
-| Independent Director audit | UNKNOWN |
+| Source identity / provenance | **PASS** — custody by SHA-256; Owner confirmed identity 2026-08-28 |
+| Production GLB validation | **PASS** |
+| Current asset-budget checks | **PASS** (all seven gates) |
+| No unexpected external texture/resource dependency | **PASS** — one embedded 1024² JPEG, one material, no external URI |
+| No provider spend | **PASS** — Meshy balance 662 → 662, zero task creations |
+| Unit gate `node --test test/*.test.mjs` | **PASS** — 2,069 passing; the two local reds are Windows-only artifacts (CRLF `CLAUDE.md`, `EPERM` temp-dir teardown) and hosted CI is the authority |
+| Runtime — real Warden in the running fight | **PASS** — `drive-beacon-siege.mjs` ALL CHECKS PASSED, including the new body-in-the-world check at `head bone 1.34 m`, and "no console errors across the whole siege" |
+| Visual worker self-check | **PASS** — captures opened; the Warden is visible, correctly scaled against the hero, grounded, boss bar on its head, attacking from its own clip. Not an acceptance gate. |
+| Owner visual acceptance | **UNKNOWN** — outstanding, and required |
+| Independent Director audit | **UNKNOWN** — needs a fresh context |
+
+## Known limitations, recorded rather than hidden
+
+- **The overhead and the sweep play the same clip.** The asset owns one attack. The two attacks stay
+  mechanically distinct (arc, contact timing, who they hit) but no longer differ in silhouette. The
+  fight's "which dodge is being asked for" read is weaker than it was with the procedural body.
+- **The overhead's raised arms are gone.** Restoring a distinct overhead means driving arm bones
+  procedurally, which needs a measured per-bone axis calibration this package deliberately did not do
+  — Meshy exports this rig with a rotated Armature, so the pitch axis cannot be typed from intuition.
+- **There is no idle, kneel, hit or death clip.** Those modes hold the rest pose with group-level
+  lean/sink from `wardenPose`. The kneel and the death fold read at gameplay distance; they are not
+  animation.
 
 ## Side quests found, not fixed here
 

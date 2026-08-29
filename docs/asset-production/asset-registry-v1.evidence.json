@@ -7,6 +7,7 @@
     "notes": "Package A observation input. Mutable observations belong here, not in executable builder source."
   },
   "runtime_assets": [
+    { "asset_id": "enemy.beacon_warden", "display_name": "Beacon Warden", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/enemies/beacon_warden.glb" },
     { "asset_id": "enemy.wolf", "display_name": "Wolf", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/enemies/wolf.glb" },
     { "asset_id": "gear.candidate.dawnwarden-helmet-v1", "display_name": "Dawnwarden Helmet v1 Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb" },
     { "asset_id": "gear.candidate.dawnwarden-sword-v1", "display_name": "Dawnwarden Sword v1 Candidate", "asset_kind": "gear", "lifecycle": "QUALIFYING", "path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb" },

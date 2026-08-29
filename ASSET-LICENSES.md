@@ -62,9 +62,9 @@ with no arm sleeve), and it is consistently generic fantasy-armour language. A t
 full engineering tree for named franchises, characters and recognisable properties returned **no
 matches** in any gear-generation record. On that evidence these assets are treated as original work.
 
-## Beacon Warden candidate — qualified, identity unconfirmed, not shipped
+## Beacon Warden — owner-created, generated on a paid plan
 
-`tools/assets/studio-candidates/thornbound-warlock-v1.glb`
+`public/assets/enemies/beacon_warden.glb`
 
 Optimized production derivative of an owner-directed paid-plan Meshy generation. The provider source
 is `Meshy_AI_Thornbound_Warlock_biped.zip` (SHA-256
@@ -80,12 +80,12 @@ Basis is the same as the character and gear sections above: owner-directed gener
 plan, redistribution resting on the owner's rights in that generated output together with the
 paid-plan terms in force at generation time. **Not CC0.**
 
-Two honest limits. It is a **candidate, not shipped**: it has passed structural and budget
-qualification only, and appearing here is not a promotion. And it is proposed as the Beacon Warden
-without that identity being confirmed by the owner — the file is therefore named for what the provider
-actually produced rather than for the role, and it is kept in the tool-only Studio candidate store so
-it does not enter the game payload. See
-[`docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md`](docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md).
+The shipped file is named for its ROLE while the provider source is named "Thornbound Warlock"; the
+owner confirmed on 2026-08-28 that this asset is the Beacon Warden, and a source or vendor name is not
+a runtime identifier. It is loaded by `public/src/enemies/warden.js` and now replaces the procedural
+stand-in body in the running encounter. Structural, budget and running-game evidence are recorded in
+[`docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md`](docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md); **owner
+visual acceptance in the running game remains a separate, outstanding gate.**
 
 ## Candidate bank held outside this repository
 

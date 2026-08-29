@@ -62,6 +62,7 @@ import {
   removeSiegeHero,
   requestSiegeAttack,
   restoreLitSiege,
+  separateFromWarden,
   siegeHeroBody,
   stepSiege,
   transferSiegeHeroBody,
@@ -1426,13 +1427,17 @@ export function createSimulation(options = {}) {
 
     for (const player of players.values()) {
       const separated = separateFromEnemies({ x: player.x, z: player.z }, encounterState.enemies);
+      // #79: children walked through the Warden's body. Its own engine owns the rule (it is not in
+      // encounterState.enemies -- different fight, different collection), and it runs HERE on the
+      // authoritative position for the same reason the obstacle push below does.
+      const clearOfWarden = separateFromWarden(separated, siegeState.warden);
       // G3 follow-up: two children walked straight through the Old Beacon's own stone base in a
       // real playtest. The SAME pure resolver the client's own prediction runs (world/obstacles.js's
       // own header explains why it has to be the same function, not merely the same rule) pushes a
       // hero's feet back out of the Beacon and the Lantern Tree here, on the server's own
       // authoritative position -- the one both sides eventually agree on, same as the world edge
       // clamp two lines down.
-      const unstuck = resolveObstacleCollisions(separated, WORLD_OBSTACLES);
+      const unstuck = resolveObstacleCollisions(clearOfWarden, WORLD_OBSTACLES);
       player.x = clampToWorldX(unstuck.x);
       player.z = clampToWorldZ(unstuck.z);
     }
