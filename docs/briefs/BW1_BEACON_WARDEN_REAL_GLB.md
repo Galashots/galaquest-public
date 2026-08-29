@@ -225,6 +225,22 @@ presenter now publishes the `Head` **bone's** world height, and the harness asse
 Verified red-capable by restoring the bug — it produced `head bone at 155.95 m against a 2.6 m Warden`
 while `wardenBuilt` stayed true. Recorded in `docs/MISTAKES.md`.
 
+### The second bug: one asset gating the whole zone
+
+C2's first attempt made `buildWarden` async and had `zoneLoader` await it. `zone.ready` is what hands
+`main.js` **every** presenter in the zone, so a 618 KB fetch ended up in front of all of them. The Old
+Beacon went dark on reload — `built false, stirring false, glow null` — for a landmark that has nothing
+to do with the Warden.
+
+It was caught by the hosted browser matrix, not by the unit gate and not by the siege harness, and it
+was confirmed causal rather than assumed: `drive-old-beacon` passes **65/65 on the package base**
+(`main@6d77110`) and failed on `a5ad74e`; an A/B with the new collision disabled **still** failed, which
+ruled the separation out and left the await. The matrix agreed, adding `drive-old-beacon`,
+`drive-relight` and `drive-cart-loot` to the base's four pre-existing reds.
+
+`buildWarden` is synchronous again and attaches its body when it lands, which is the degrade-to-nothing
+shape the keeper, villagers and Rowan already use. `drive-old-beacon` is back to 65/65, identical to base.
+
 ## How C2 was executed
 
 1. **Scale.** Author the derivative or its loader to `WARDEN_HEIGHT_METERS`. Measured 2.3000 m against
