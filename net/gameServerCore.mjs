@@ -54,7 +54,7 @@ import {
 // why coins/hearts above are unaffected).
 import {
   createCorpseLootState, reassignClaimHero, requestClaimAllCorpseLoot, requestClaimCorpseItem,
-  requestCorpseLoot, stepCorpseLoot,
+  requestCorpseLoot, resolveGroundCollectedClaimItems, stepCorpseLoot,
 } from '../public/src/world/corpseLoot.js';
 // R1: the coin multiplier a kill-drop roll reads off a per-player rolling streak.
 import { coinMultiplierForStreak, createStreakState, registerKill as registerKillStreak, stepStreak }
@@ -1264,6 +1264,18 @@ export function createSimulation(options = {}) {
     if (!player) return { accepted: false, drop: null };
     const result = requestCollectEnemyDrop(dropsState, id, dropId, { x: player.x, z: player.z });
     dropsState = result.state;
+    // MAJOR correction (shadow-mode-retirement): the ground-gear path stays live alongside the corpse
+    // claim (see this tick's own kill-drop comment above for why), and the killer's own corpse claim
+    // always names the SAME itemId as their own ground roll -- so the instant that ground copy is
+    // actually collected, sync any of THIS hero's own still-untaken corpse claim items naming the
+    // identical itemId to taken too. Without this a killer who auto-collects the ground copy on the
+    // walk to the corpse (world/enemyDrops.js's own DROP_COLLECT_RADIUS_METERS is smaller than this
+    // module's own CORPSE_LOOT_INTERACT_RADIUS_METERS) still found the corpse glowing, offering that
+    // same item behind a live, enabled TAKE that granted nothing -- world/corpseLoot.js's own
+    // resolveGroundCollectedClaimItems header has the full argument.
+    if (result.accepted && result.drop?.kind === GEAR_DROP_KIND) {
+      corpseLootState = resolveGroundCollectedClaimItems(corpseLootState, id, result.drop.itemId);
+    }
     return { accepted: result.accepted, drop: result.drop };
   }
 

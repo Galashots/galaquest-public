@@ -10,6 +10,7 @@ import {
   CORPSE_GEAR_KIND,
   CORPSE_LOOT_EXPIRE_SECONDS,
   CORPSE_LOOT_INTERACT_RADIUS_METERS,
+  CORPSE_LOOT_RESOLVED_LINGER_SECONDS,
   MAX_CLAIMS_PER_CORPSE,
   MAX_CONCURRENT_CORPSES,
   createCorpseLootState,
@@ -17,6 +18,7 @@ import {
   requestClaimAllCorpseLoot,
   requestClaimCorpseItem,
   requestCorpseLoot,
+  resolveGroundCollectedClaimItems,
   stepCorpseLoot,
 } from '../public/src/world/corpseLoot.js';
 import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../public/src/progression/items.js';
@@ -205,15 +207,38 @@ test('reach: the server checks distance to the corpse, not a client claim', () =
   assert.equal(justInside.accepted, true);
 });
 
-test('corpse retirement: fully resolved retires immediately, no lingering needed', () => {
+// BLOCKER correction (was: "fully resolved retires immediately, no lingering needed"). Immediate
+// retirement was the actual defect: net/gameServerCore.mjs adjudicates a collect message BETWEEN
+// step() calls, flipping `taken` out of band, then this module's own retirement ran on the very NEXT
+// step -- before net/gameServerCore.mjs's own corpsesSnapshot() for that tick was ever built. The
+// client's next snapshot therefore never contained the false -> true transition at all: taking the
+// LAST item on a corpse (always true in solo play) produced a real, accepted collect with ZERO
+// player-visible confirmation -- no toast, no Hero-button pulse, no pickup sound. This test now proves
+// the corrected contract: a fully-resolved corpse lingers on the wire (see
+// CORPSE_LOOT_RESOLVED_LINGER_SECONDS's own header) so at least one more real snapshot can carry that
+// transition before this module drops the corpse for good.
+test('corpse retirement: fully resolved lingers on the wire before retiring, so the client can still see the taken transition', () => {
   const rng = scripted(0.1, 0.0);
   const { state: spawnedState, spawned } = requestCorpseLoot(createCorpseLootState(), kill({
     eligibleHeroIds: ['a'],
   }), rng);
   const claimItemId = spawned.claims[0].items[0].id;
   const { state: looted } = requestClaimCorpseItem(spawnedState, 'a', spawned.id, claimItemId, { x: 10, z: 20 });
-  const stepped = stepCorpseLoot(looted, 0.05);
-  assert.equal(stepped.corpses.length, 0, 'a corpse every eligible hero has fully looted must retire at once');
+
+  // The very next tick after the collect: the corpse must still be on the wire, and -- this is the
+  // actual bug -- its own item must already read taken:true, the exact transition a real
+  // corpsesSnapshot() diff needs to fire the acquired-item toast.
+  const nextTick = stepCorpseLoot(looted, 0.05);
+  assert.equal(nextTick.corpses.length, 1,
+    'a just-resolved corpse must survive at least one more real tick, or the client never sees the transition');
+  const lingering = nextTick.corpses.find((c) => c.id === spawned.id);
+  assert.ok(lingering, 'the exact corpse just resolved must be the one lingering');
+  assert.equal(lingering.claims[0].items[0].taken, true, 'the item must read taken on the lingering corpse');
+
+  // Once the linger window has actually elapsed, it retires for real -- an inert, fully-resolved
+  // corpse must not litter the wire forever.
+  const afterLinger = stepCorpseLoot(nextTick, CORPSE_LOOT_RESOLVED_LINGER_SECONDS + 0.1);
+  assert.equal(afterLinger.corpses.length, 0, 'a fully-resolved corpse must retire once its own linger elapses');
 });
 
 test('corpse retirement: an unresolved corpse expires after CORPSE_LOOT_EXPIRE_SECONDS', () => {
@@ -348,4 +373,51 @@ test('reassignClaimHero fails safe rather than merging when the new heroId alrea
   }), rng);
   const result = reassignClaimHero(spawnedState, 'a', 'b');
   assert.equal(result, spawnedState, 'must not merge two live claims on the same corpse');
+});
+
+// MAJOR correction (shadow-mode-retirement): world/enemyDrops.js's ground-gear path stays live
+// alongside the corpse claim, and the killer's own claim always reuses that SAME roll's own itemId
+// (this file's own "the killer's own claim reuses the exact item..." test above). Before this
+// correction, a killer who auto-collected the ground copy on the walk to the corpse still found it
+// glowing with a live, enabled TAKE for the identical item -- accepted by the server, granting
+// nothing, and (until the corpse-retirement correction elsewhere in this file) showing nothing either.
+test('resolveGroundCollectedClaimItems: collecting the ground copy marks the matching claim item taken, without granting anything itself', () => {
+  const rng = scripted(0.99); // the killer's own reused item is the only source -- no independent roll
+  const { state: spawnedState, spawned } = requestCorpseLoot(createCorpseLootState(), kill({
+    eligibleHeroIds: ['a'],
+    killerHeroId: 'a',
+    killerGearItemId: SHOULDER_SILVERGUARD_ID,
+  }), rng);
+  const claimItem = spawned.claims[0].items[0];
+  assert.equal(claimItem.taken, false, 'sanity: the claim starts untaken');
+
+  const synced = resolveGroundCollectedClaimItems(spawnedState, 'a', SHOULDER_SILVERGUARD_ID);
+  const corpseAfter = synced.corpses.find((c) => c.id === spawned.id);
+  assert.equal(corpseAfter.claims[0].items[0].taken, true,
+    'the matching claim item must already read taken once the ground copy is collected');
+
+  // The corpse claim is now resolved -- a subsequent tap on the panel's own TAKE must be refused
+  // rather than silently accepted-but-empty, exactly like any other already-taken item.
+  const staleTake = requestClaimCorpseItem(synced, 'a', spawned.id, claimItem.id, { x: 10, z: 20 });
+  assert.equal(staleTake.accepted, false, 'a claim item the ground path already resolved must not be takeable again');
+});
+
+test('resolveGroundCollectedClaimItems never reaches a sibling\'s own claim on the same corpse', () => {
+  const rng = scripted(0.1, 0.0, 0.1, 0.0);
+  const { state: spawnedState, spawned } = requestCorpseLoot(createCorpseLootState(), kill({
+    eligibleHeroIds: ['a', 'b'],
+  }), rng);
+  const itemIdForA = spawned.claims.find((c) => c.heroId === 'a').items[0].itemId;
+
+  const synced = resolveGroundCollectedClaimItems(spawnedState, 'a', itemIdForA);
+  const corpseAfter = synced.corpses.find((c) => c.id === spawned.id);
+  assert.equal(corpseAfter.claims.find((c) => c.heroId === 'a').items[0].taken, true);
+  assert.equal(corpseAfter.claims.find((c) => c.heroId === 'b').items[0].taken, false,
+    'a\'s own ground pickup must never resolve b\'s own claim, even for the identical itemId');
+});
+
+test('resolveGroundCollectedClaimItems is a no-op when this hero holds no untaken claim naming that itemId', () => {
+  const state = createCorpseLootState();
+  const result = resolveGroundCollectedClaimItems(state, 'a', SHOULDER_SILVERGUARD_ID);
+  assert.equal(result, state, 'no live corpse at all -- must return the identical state, not a new empty one');
 });

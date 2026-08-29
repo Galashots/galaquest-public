@@ -1051,7 +1051,12 @@ async function bootstrap() {
   // ever reads serverEncounter.corpses. `previousCorpses` starts null rather than [] on purpose:
   // world/corpseLootPresenter.js's own newlyTakenItems treats null/undefined as "no baseline yet" and
   // suppresses arrivals, so a hero who reconnects onto an already-resolved claim never gets a
-  // retroactive toast for gear they took last session.
+  // retroactive toast for gear they took last session. That guard has to be re-armed every time this
+  // hero goes offline, not only at bootstrap: an IN-PAGE reconnect (net/client.js's own
+  // reconnectTimer) never reloads this module, so a snapshot taken right before the blip would
+  // otherwise sit here as a stale baseline keyed to the old, now-dead heroId. The corpse-loot loop
+  // below resets it back to null the instant this hero is not online, so the first snapshot after any
+  // reconnect is always treated as a fresh "no baseline yet" welcome, exactly like bootstrap.
   const corpseGlowPresenter = createCorpseLootGlowPresenter(scene);
   let previousCorpses = null;
   let heroButtonLootPulseTimer = null;
@@ -4982,6 +4987,16 @@ async function bootstrap() {
         promptCorpseId = null;
         corpseLootInteract.show(false);
       }
+      // Correction: this hero is not online (offline, still connecting, or mid in-page-reconnect
+      // between a dropped socket and a fresh 'welcome') -- null out the diff baseline here too, not
+      // only at bootstrap. A reconnect mints a NEW heroId (net/gameServerCore.mjs's own addPlayer)
+      // and net/gameServerCore.mjs's own reassignCorpseClaims moves any live claim onto it, so a
+      // baseline snapshot captured under the OLD heroId can never find that claim again --
+      // newlyTakenItems would then see the reassigned claim's already-taken items as a brand new
+      // arrival and replay a false "+ Item" toast for gear this hero collected before the blip. Going
+      // through this same "no baseline yet" state every time re-arms the exact bootstrap guard the
+      // comment above documents, rather than only ever priming it once per page load.
+      previousCorpses = null;
     }
 
     // ── G2/G3: THE SIEGE ────────────────────────────────────────────────────────────────────

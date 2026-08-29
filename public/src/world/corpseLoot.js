@@ -62,6 +62,24 @@ export const CORPSE_LOOT_EXPIRE_SECONDS = 180;
 // wire's own MAX_WIRE_CORPSES headroom (net/protocolCore.js).
 export const MAX_CONCURRENT_CORPSES = 12;
 
+// BLOCKER correction: how long a corpse every eligible hero has fully resolved still lingers on the
+// wire before it actually retires, mirroring world/enemyDrops.js's own COLLECTED_LINGER_SECONDS (1s)
+// for the identical reason -- net/gameServerCore.mjs adjudicates a collect message (applyClaimCorpseItem
+// /applyClaimAllCorpseLoot) OUT OF BAND from its own tick loop, flipping `taken` the instant it accepts
+// the request. Retiring a fully-resolved corpse on the VERY NEXT step() (the old, un-lingered
+// behaviour) removed it from corpseLootState BEFORE that tick's own corpsesSnapshot() was ever built,
+// so the client's next snapshot never contained the item's own false -> true transition at all --
+// world/corpseLootPresenter.js's own newlyTakenItems (a pure snapshot diff, the only signal driving
+// the acquired-item toast/Hero-button pulse/pickup sound) saw nothing to report, and the panel found
+// its own corpseId gone and silently closed. Taking the LAST item on a corpse -- always true in solo
+// play, and always true for whichever eligible hero loots last in co-op -- produced a real accepted
+// collect with ZERO player-visible confirmation. Lingering here costs nothing new: the corpse's own
+// glow/prompt already stop offering it the instant every one of THIS hero's own items reads taken
+// (world/corpseLootPresenter.js's own hasUnclaimedLoot), so a lingering, fully-resolved corpse is
+// inert on every client's screen -- it exists on the wire for exactly long enough that one more real
+// snapshot carries the transition before this module drops it for good.
+export const CORPSE_LOOT_RESOLVED_LINGER_SECONDS = 1;
+
 // Correction: mirrors net/protocolCore.js's own MAX_CORPSE_CLAIMS (8) exactly. Not imported --
 // world/ stays a leaf the net/ layer imports FROM, never the reverse -- but this module must never
 // mint a corpse the wire's own decoder would refuse. Nine or more eligible heroes contributing to a
@@ -225,17 +243,28 @@ export function requestCorpseLoot(state, kill, rng) {
 /**
  * Advance every corpse's own clock by `deltaSeconds`, and retire whichever no longer belongs on the
  * ground: fully resolved (every claim's every item taken -- the actual "corpse stops glowing once
- * everybody eligible has looted" rule) retires immediately, no lingering needed; anything else
- * retires once it has sat unresolved for CORPSE_LOOT_EXPIRE_SECONDS (the disconnect/abandonment
- * safety net, not the normal path).
+ * everybody eligible has looted" rule) lingers CORPSE_LOOT_RESOLVED_LINGER_SECONDS past the tick it
+ * first read fully-resolved, then retires -- see that constant's own comment for why the linger is
+ * load-bearing, not cosmetic. Anything still unresolved retires once it has sat that way for
+ * CORPSE_LOOT_EXPIRE_SECONDS (the disconnect/abandonment safety net, not the normal path).
  */
 export function stepCorpseLoot(state, deltaSeconds) {
   const step = Math.max(0, deltaSeconds ?? 0);
   const corpses = [];
   for (const corpse of state.corpses) {
     const allTaken = corpse.claims.every((claim) => claim.items.every((item) => item.taken));
-    if (allTaken) continue;
     const ageSeconds = corpse.ageSeconds + step;
+    if (allTaken) {
+      // First tick this corpse reads fully-resolved: anchor the linger clock to its age as of the
+      // START of this step (before `step` is added), the same "age as of the last real tick, not a
+      // guessed moment" discipline this whole module already keeps -- the actual resolving action
+      // (a collect message) always lands strictly between two step() calls, out of band, never inside
+      // one, so the corpse's own pre-step age is the honest anchor.
+      const resolvedAtSeconds = corpse.resolvedAtSeconds ?? corpse.ageSeconds;
+      if (ageSeconds - resolvedAtSeconds >= CORPSE_LOOT_RESOLVED_LINGER_SECONDS) continue;
+      corpses.push({ ...corpse, ageSeconds, resolvedAtSeconds });
+      continue;
+    }
     if (ageSeconds >= CORPSE_LOOT_EXPIRE_SECONDS) continue;
     corpses.push({ ...corpse, ageSeconds });
   }
@@ -305,6 +334,53 @@ export function requestClaimAllCorpseLoot(state, heroId, corpseId, heroPosition)
   );
   if (!result) return { state, accepted: false, items: [] };
   return { state: result.state, accepted: true, items: result.items };
+}
+
+/**
+ * MAJOR correction: mark every still-untaken item THIS hero's own claim(s) hold that name `itemId` as
+ * taken -- WITHOUT granting anything itself (the caller's own idempotent grantOwnership already owns
+ * the actual award). net/gameServerCore.mjs calls this the moment the identical item is collected
+ * through world/enemyDrops.js's own ground-gear path, which the ground-gear shadow mode this codebase
+ * still runs makes possible: the killer's own corpse claim always reuses that SAME roll's own itemId
+ * verbatim rather than re-rolling (requestCorpseLoot's own killer branch above), and ground gear
+ * auto-collects on proximity with no tap at all (world/enemyDrops.js's own DROP_COLLECT_RADIUS_METERS,
+ * smaller than this file's own CORPSE_LOOT_INTERACT_RADIUS_METERS) -- so a killer routinely picks the
+ * ground copy up on the walk TO the corpse, before ever opening it. Left unsynced, the corpse claim
+ * kept offering that already-owned item as a live, enabled TAKE: accepted by the server, but a grant
+ * of an itemId already owned announces nothing (idempotent by design, proven safe by
+ * test/enemy-drops-server.test.mjs's own "shadow mode safety" test) and taking it was, until this
+ * correction, the last untaken item on a solo killer's own claim -- exactly the corpse-retirement race
+ * this file's own CORPSE_LOOT_RESOLVED_LINGER_SECONDS exists to survive, just triggered from the
+ * ground side instead of a corpse-panel tap. Syncing `taken` here the instant the ground copy is
+ * actually collected means the corpse never offers that dead button at all: this hero's own
+ * hasUnclaimedLoot (world/corpseLootPresenter.js) and stepCorpseLoot's own retirement rule both fall
+ * out for free from state that is simply already true, with no second "already owned" branch needed
+ * anywhere in the presenter.
+ *
+ * Scoped by itemId rather than a specific corpseId on purpose: a ground drop and a corpse claim are
+ * never correlated by any shared id (their own lifeIds are independently minted randomUUIDs, see
+ * net/gameServerCore.mjs's own kill-drop tick) -- the identical itemId IS the only correlation this
+ * codebase has ever drawn between the two paths, the same one the shadow-mode-safety test already
+ * relies on. A no-op (returns `state` unchanged) when this hero holds no untaken claim naming
+ * `itemId` on any live corpse -- the ordinary case for every kind that never scatters gear at all.
+ */
+export function resolveGroundCollectedClaimItems(state, heroId, itemId) {
+  let changed = false;
+  const corpses = state.corpses.map((corpse) => {
+    const claimIndex = corpse.claims.findIndex((claim) => claim.heroId === heroId);
+    if (claimIndex === -1) return corpse;
+    const claim = corpse.claims[claimIndex];
+    if (!claim.items.some((item) => item.itemId === itemId && !item.taken)) return corpse;
+    changed = true;
+    const nextItems = claim.items.map(
+      (item) => (item.itemId === itemId && !item.taken ? { ...item, taken: true } : item),
+    );
+    const nextClaims = [...corpse.claims];
+    nextClaims[claimIndex] = { ...claim, items: nextItems };
+    return { ...corpse, claims: nextClaims };
+  });
+  if (!changed) return state;
+  return freezeState({ corpses });
 }
 
 /**

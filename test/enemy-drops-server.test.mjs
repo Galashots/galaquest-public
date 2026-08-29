@@ -244,6 +244,44 @@ test('a corpse claim for an unowned item grants it durably through the real rewa
   }
 });
 
+// BLOCKER correction: net/gameServerCore.mjs's own applyClaimCorpseItem adjudicates a collect message
+// OUT OF BAND from simulation.step() -- a real client only ever learns anything through a real
+// corpsesSnapshot(), built inside step(). Before this correction, retiring a fully-resolved corpse on
+// the very next step() removed it from the simulation BEFORE that step's own snapshot was built, so a
+// real client's next real snapshot never carried the taken:false -> true transition at all. This test
+// drives the REAL seam end to end (a real simulation, a real accepted collect, a real step(), a real
+// corpsesSnapshot()) rather than a hand-built array, exactly the seam-level proof the corpse-retirement
+// bug slipped through without.
+test('#87 seam: taking a corpse\'s last item is still visible on a REAL corpsesSnapshot() one real tick later', () => {
+  let corpse = null;
+  let sim = null;
+  let player = null;
+  for (let attemptNumber = 0; attemptNumber < 80 && !corpse; attemptNumber += 1) {
+    sim = singleEnemySimulation('frost-wolf', 'target');
+    player = sim.addPlayer('a', { x: 0, z: 7 });
+    fightToDeath(sim, [player], 'target');
+    corpse = sim.corpsesSnapshot().find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null;
+  }
+  assert.ok(corpse, 'no corpse spawned across 80 frost-wolf kills -- the roll table has likely regressed');
+  walkOntoDeathSpot(sim, player.id, 'target', 5000);
+
+  const claim = corpse.claims.find((c) => c.heroId === player.id);
+  const item = claim.items[0];
+  const { accepted } = sim.applyClaimCorpseItem(player.id, corpse.id, item.id);
+  assert.equal(accepted, true);
+
+  // One real tick, the same shape a real running server takes between two snapshots.
+  stepTicks(sim, 1);
+
+  const nextSnapshot = sim.corpsesSnapshot();
+  const stillThere = nextSnapshot.find((c) => c.id === corpse.id);
+  assert.ok(stillThere,
+    'the just-resolved corpse must still be on a REAL corpsesSnapshot() one real tick later, or a '
+    + 'real client can never diff the taken transition at all');
+  assert.equal(stillThere.claims.find((c) => c.heroId === player.id)?.items.find((i) => i.id === item.id)?.taken,
+    true, 'the real snapshot must actually carry taken:true, not merely still contain the corpse');
+});
+
 test('ownership-aware suppression is wired: a killer who already owns the whole pool gets no corpse claim', () => {
   // Not statistical: this proves the SEAM (ownedItemIdsFor is actually threaded from the reward
   // coordinator into world/corpseLoot.js's own roll), not the roll's own suppression logic (already
@@ -316,11 +354,22 @@ test('#87 seam: two real, independently-attacking players both receive their own
 // killerGearItemId verbatim rather than re-rolling (see that file's own comment on the killer's
 // branch), so both paths name the IDENTICAL itemId, and net/gameServerCore.mjs's own grantOwnership
 // keys its durable 'gear-owned' fact on `own:<guestId>:<itemId>` -- a fact that already exists announces
-// nothing a second time (announcementFor's own `result.applied` check). So a child who grabs the
-// ground copy first and then opens the corpse loses nothing and gains nothing extra: the corpse claim
-// still visibly resolves (taken flips true, so the panel and glow correctly stop offering it), but the
-// SECOND grantOwnership call for the same itemId is a silent no-op, never a duplicate benefit.
-test('shadow mode safety: the killer\'s ground drop and corpse claim share one itemId, so taking both grants ownership exactly once', () => {
+// nothing a second time (announcementFor's own `result.applied` check).
+//
+// MAJOR correction (shadow-mode-retirement): this test used to end here and separately tap the corpse
+// claim's own TAKE for the identical item, asserting `accepted: true` with a silent zero-fact grant --
+// proving no DOUBLE AWARD, but not proving the child ever saw anything sensible. In the killer's own
+// real flow (walking from the kill spot to the corpse) the ground copy auto-collects first, well
+// inside CORPSE_LOOT_INTERACT_RADIUS_METERS, so that "second tap" was not a hypothetical: it was the
+// literal next thing that happens, and it used to hand back a live, enabled TAKE button that granted
+// nothing and (before the corpse-retirement correction elsewhere in this file) showed nothing either --
+// a dead button teaching "this is broken". net/gameServerCore.mjs's own applyCollectDrop now calls
+// world/corpseLoot.js's own resolveGroundCollectedClaimItems the instant the ground copy is collected,
+// syncing this hero's own matching claim item to taken WITHOUT granting anything a second time -- so by
+// the time this child would even reach the corpse, that claim item already reads taken and the corpse
+// presenter (world/corpseLootPresenter.js's own hasUnclaimedLoot) never offers it as a live TAKE at
+// all. This test now proves THAT sync, not merely idempotent ownership.
+test('shadow mode safety: collecting the ground copy resolves the matching corpse claim, so the corpse never offers a dead TAKE for the same item', () => {
   const { dir, path } = tempDb();
   try {
     const rewards = createRewardCoordinator({ rewardStorePath: path });
@@ -349,24 +398,32 @@ test('shadow mode safety: the killer\'s ground drop and corpse claim share one i
       'the corpse claim\'s own item must name the SAME itemId as the ground drop -- if this ever '
       + 'fails, the two paths have started rolling independently and the "safe because idempotent" '
       + 'argument this test exists to prove no longer holds');
+    assert.equal(corpseItem.taken, false, 'sanity: the corpse claim starts untaken, before any collect at all');
 
     walkOntoDeathSpot(sim, player.id, 'target', 5000);
 
-    // Path 1: the ground pickup, exactly as an un-migrated child playing today would experience it.
+    // Path 1: the ground pickup, exactly as an un-migrated child playing today would experience it --
+    // and, in the killer's real flow, the thing that happens automatically on the walk to the corpse.
     const groundResult = sim.applyCollectDrop(player.id, groundGearDrop.id);
     assert.equal(groundResult.accepted, true);
     const firstGrantFacts = rewards.grantOwnership(player.id, groundResult.drop.itemId);
     assert.equal(firstGrantFacts.length, 1, 'the FIRST grant of a real item must be a real, announced fact');
     assert.equal(firstGrantFacts[0].type, 'gear-owned');
 
-    // Path 2: the SAME child then opens the corpse too (the new presenter never hides an already-
-    // ground-collected item -- taken tracks the CLAIM, not reward ownership) and taps TAKE.
+    // The corpse claim's own matching item must already be resolved -- synced by the ground collect
+    // itself, before this child ever taps anything on the corpse.
+    const corpseAfterGroundCollect = sim.corpsesSnapshot().find((c) => c.id === corpse.id);
+    const claimAfterGroundCollect = corpseAfterGroundCollect?.claims.find((c) => c.heroId === player.id);
+    assert.equal(claimAfterGroundCollect?.items.find((item) => item.id === corpseItem.id)?.taken, true,
+      'the ground collect must resolve the matching corpse claim item, not merely grant ownership silently');
+
+    // So the corpse itself can no longer offer a live TAKE for it: the exact same physical request
+    // that used to succeed-but-grant-nothing is now cleanly refused, the identical shape every other
+    // already-taken/replayed collect in this codebase already takes -- not a special "already owned"
+    // branch, just the ordinary taken:true rejection.
     const corpseResult = sim.applyClaimCorpseItem(player.id, corpse.id, corpseItem.id);
-    assert.equal(corpseResult.accepted, true, 'the corpse claim itself is independent physical state -- taking it must still succeed');
-    const secondGrantFacts = rewards.grantOwnership(player.id, corpseResult.item.itemId);
-    assert.equal(secondGrantFacts.length, 0,
-      'the SECOND grant of the identical itemId must be a silent no-op -- this is the actual safety '
-      + 'property: no duplicate durable fact, no double benefit, from either collection order');
+    assert.equal(corpseResult.accepted, false,
+      'a claim item the ground path already resolved must be refused, not accepted-but-empty');
 
     assert.ok(rewards.ownedItemIdsFor(player.id).includes(groundGearDrop.itemId),
       'the item is owned exactly once, regardless of which path told the truth first');
