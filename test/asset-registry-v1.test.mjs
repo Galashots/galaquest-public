@@ -100,6 +100,23 @@ test('custody preserves multiple durable recovery coordinates', () => {
   assert.equal(frog.custody_locations[0].durable, false);
 });
 
+test('Drive custody requires file-specific evidence, not folder context alone', () => {
+  const providerOnly = registry.records.find((record) => record.asset_id === 'gear_behemoth_lower_kit');
+  assert.ok(providerOnly, 'historical provider-only gear exists');
+  assert.equal(providerOnly.custody, 'PROVIDER_ONLY');
+  assert.equal(providerOnly.recoverability, 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT');
+  const folderContext = providerOnly.custody_locations.find((location) => location.kind === 'DRIVE');
+  assert.ok(folderContext?.archive_path, 'Drive folder context remains recorded');
+  assert.equal(folderContext.durable, false);
+  assert.equal(folderContext.drive_file_id, null);
+  assert.equal(folderContext.drive_file_url, null);
+
+  for (const record of registry.records.filter((candidate) => candidate.custody === 'IN_DRIVE' || candidate.recoverability === 'VERIFIED_FROM_DRIVE')) {
+    const drive = record.custody_locations.find((location) => location.kind === 'DRIVE' && location.durable);
+    assert.ok(drive?.drive_file_id && drive?.drive_file_url, `${record.asset_id} Drive custody has file-specific evidence`);
+  }
+});
+
 test('structural metrics and rights are explicit without inferred facts', () => {
   for (const record of registry.records) {
     for (const field of ['file_size_bytes', 'mesh_count', 'primitive_count', 'vertex_count', 'triangle_count', 'material_count', 'skin_count', 'joint_count', 'animation_clip_count']) {

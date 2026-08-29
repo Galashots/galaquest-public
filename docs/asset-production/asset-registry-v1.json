@@ -1255,9 +1255,7 @@
         "historical-inventory:bramble-stalker-v1"
       ],
       "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "aliases": []
     },
     {
@@ -1375,9 +1373,7 @@
         "historical-inventory:bramble-stalker-v1-run"
       ],
       "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "aliases": []
     },
     {
@@ -1495,9 +1491,7 @@
         "historical-inventory:bramble-stalker-v1-walk"
       ],
       "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
-      "facets": [
-        "enemy"
-      ],
+      "facets": [],
       "aliases": []
     },
     {
@@ -1841,7 +1835,7 @@
         },
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/dawnwarden",
@@ -1966,7 +1960,7 @@
         },
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/dawnwarden",
@@ -2657,12 +2651,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/behemoth",
@@ -2801,12 +2795,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/behemoth",
@@ -2945,12 +2939,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/behemoth",
@@ -3089,12 +3083,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/behemoth",
@@ -3233,12 +3227,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/behemoth",
@@ -3377,12 +3371,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/embermaw",
@@ -3521,12 +3515,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/embermaw",
@@ -3665,12 +3659,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/embermaw",
@@ -3809,12 +3803,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/embermaw",
@@ -3953,12 +3947,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/embermaw",
@@ -4097,12 +4091,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/frostfang",
@@ -4241,12 +4235,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/frostfang",
@@ -4385,12 +4379,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/frostfang",
@@ -4529,12 +4523,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/frostfang",
@@ -4673,12 +4667,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/frostfang",
@@ -4817,12 +4811,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/stormwing",
@@ -4961,12 +4955,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/stormwing",
@@ -5105,12 +5099,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/stormwing",
@@ -5249,12 +5243,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/stormwing",
@@ -5393,12 +5387,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/stormwing",
@@ -5537,12 +5531,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/sunlion",
@@ -5681,12 +5675,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/sunlion",
@@ -5825,12 +5819,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/sunlion",
@@ -5969,12 +5963,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/sunlion",
@@ -6113,12 +6107,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/sunlion",
@@ -6257,12 +6251,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/voidstar",
@@ -6401,12 +6395,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/voidstar",
@@ -6545,12 +6539,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/voidstar",
@@ -6689,12 +6683,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/voidstar",
@@ -6833,12 +6827,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/voidstar",
@@ -6977,12 +6971,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/wildthorn",
@@ -7121,12 +7115,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/wildthorn",
@@ -7265,12 +7259,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/wildthorn",
@@ -7409,12 +7403,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/wildthorn",
@@ -7553,12 +7547,12 @@
       "lifecycle": "GENERATED",
       "next_action": "QUALIFY_NEXT",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/wildthorn",
@@ -13474,12 +13468,12 @@
       "lifecycle": "SOURCE_ONLY",
       "next_action": "HOLD",
       "related_asset_ids": [],
-      "custody": "IN_DRIVE",
-      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody": "PROVIDER_ONLY",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
       "custody_locations": [
         {
           "kind": "DRIVE",
-          "durable": true,
+          "durable": false,
           "drive_file_id": null,
           "drive_file_url": null,
           "archive_path": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/enemies/wave-1",

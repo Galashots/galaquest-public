@@ -178,10 +178,11 @@ for (const item of history.items) {
       git_blob_oid: null,
     });
   }
-  if (item.archive_file_id || item.archive_file_url || item.archive_folder) {
+  const hasDriveFileEvidence = Boolean(item.archive_file_id && item.archive_file_url);
+  if (hasDriveFileEvidence || item.archive_folder || item.archive_url) {
     custodyLocations.push({
       kind: 'DRIVE',
-      durable: true,
+      durable: hasDriveFileEvidence,
       drive_file_id: item.archive_file_id ?? null,
       drive_file_url: item.archive_file_url ?? null,
       archive_path: item.archive_folder ?? null,
@@ -199,14 +200,15 @@ for (const item of history.items) {
 
   const durableLocations = custodyLocations.filter((location) => location.durable);
   const custodyKinds = new Set(custodyLocations.map((location) => location.kind));
+  const durableKinds = new Set(durableLocations.map((location) => location.kind));
   const custody = durableLocations.length > 1 ? 'MULTIPLE'
-    : custodyKinds.has('GIT') ? 'IN_GIT'
-      : custodyKinds.has('DRIVE') ? 'IN_DRIVE'
+    : durableKinds.has('GIT') ? 'IN_GIT'
+      : durableKinds.has('DRIVE') ? 'IN_DRIVE'
         : custodyKinds.has('PROVIDER') ? 'PROVIDER_ONLY'
           : 'UNKNOWN';
   const recoverability = durableLocations.length > 1 ? 'VERIFIED'
-    : custodyKinds.has('GIT') ? 'VERIFIED_FROM_GIT'
-      : custodyKinds.has('DRIVE') ? 'VERIFIED_FROM_DRIVE'
+    : durableKinds.has('GIT') ? 'VERIFIED_FROM_GIT'
+      : durableKinds.has('DRIVE') ? 'VERIFIED_FROM_DRIVE'
         : custodyKinds.has('PROVIDER') ? 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT'
           : 'UNKNOWN';
 
