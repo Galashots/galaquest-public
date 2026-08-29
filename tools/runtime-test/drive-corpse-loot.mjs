@@ -525,17 +525,47 @@ if (booted) {
           new MutationObserver(() => {
             if (heroButton.dataset.lootPulse === 'true') window.__corpsePulses += 1;
           }).observe(heroButton, { attributes: true, attributeFilter: ['data-loot-pulse'] });
+          // Did a real click ever reach a loot control? Capture phase on the layer, so it counts the
+          // click whatever the button then does with it.
+          window.__corpseClicks = 0;
+          document.querySelector('#corpse-loot-panel-layer').addEventListener('click', (event) => {
+            if (event.target.closest('.corpse-loot-item-take, #corpse-loot-panel-take-all')) {
+              window.__corpseClicks += 1;
+            }
+          }, true);
         })()`);
+        // Tapping reports WHAT IT HIT, not merely that it dispatched. Hosted at 141f648 both taps
+        // "succeeded" by the old definition (the element existed, the events went out) and yet
+        // nothing was ever collected -- taken flags [false,false], zero toasts -- which left no way
+        // to tell a missed/intercepted tap from a disabled button from a click that fired and was
+        // refused. So this returns the element actually under the tap point, whether the button was
+        // disabled, and whether a real click landed on it.
         const tapById = async (selector) => {
-          const rect = await page.eval(
-            `(() => { const el = document.querySelector('${selector}'); if (!el) return 'null'; const r = el.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()`,
-          );
-          if (rect === 'null') return false;
-          const point = JSON.parse(rect);
-          await touch(page, 'touchStart', [point]);
-          await sleep(60);
+          const probe = await page.eval(
+            `(() => {
+              const el = document.querySelector('${selector}');
+              if (!el) return JSON.stringify({ found: false });
+              const r = el.getBoundingClientRect();
+              const x = r.left + r.width / 2;
+              const y = r.top + r.height / 2;
+              const hit = document.elementFromPoint(x, y);
+              return JSON.stringify({
+                found: true, x, y,
+                w: +r.width.toFixed(1), h: +r.height.toFixed(1),
+                disabled: Boolean(el.disabled),
+                hitIsTarget: hit === el || Boolean(el.contains(hit)),
+                hit: hit ? (hit.tagName + (hit.id ? '#' + hit.id : '') + (hit.className ? '.' + String(hit.className).split(' ')[0] : '')) : 'nothing',
+                clicksBefore: window.__corpseClicks ?? 0,
+              });
+            })()`,
+          ).then(JSON.parse);
+          if (!probe.found) return { ...probe, tapped: false };
+          await touch(page, 'touchStart', [{ x: probe.x, y: probe.y }]);
+          await sleep(80);
           await touch(page, 'touchEnd', []);
-          return true;
+          await sleep(250);
+          const clicksAfter = await page.eval('window.__corpseClicks ?? 0');
+          return { ...probe, tapped: true, clicksAfter, clickLanded: clicksAfter > probe.clicksBefore };
         };
         // Poll for a real acquisition receipt: a toast ARRIVAL plus the Hero-button pulse. This is a
         // genuine network round trip (collect -> server grants -> next snapshot -> presenter diffs
@@ -553,18 +583,35 @@ if (booted) {
 
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
         const tookOne = await tapById('.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take');
-        check('an individual TAKE button exists and was tapped by real touch', tookOne);
+        check('an individual TAKE button was tapped, and a real click landed on it',
+          tookOne.tapped && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
+          JSON.stringify(tookOne));
         const single = await awaitReceipt(0, 0);
         check('individual TAKE produced a short acquired-item toast', single.sawToast);
         check('individual TAKE pulsed the Hero button -- "it went to your inventory"', single.sawPulse);
         await shot(page, 'corpse-loot-individual-take.png');
 
-        const afterOne = await page.eval(
-          "JSON.stringify([...document.querySelectorAll('.corpse-loot-item')].map((el) => el.dataset.taken === 'true'))",
-        ).then(JSON.parse);
+        // Read the DOM rows AND the server's own wire view together. On their own, "the rows still
+        // say untaken" cannot distinguish a click that never reached the server from a collect the
+        // server refused (reach, ownership, a stale claim id) from a server that accepted it while
+        // the panel failed to re-render -- three different defects with one symptom.
+        const afterOne = await page.eval(`(() => {
+          const r = window.__galaQuestRuntime;
+          const net = r.netState();
+          const enc = r.authoritativeEncounterState();
+          const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
+          const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
+          return JSON.stringify({
+            rows: [...document.querySelectorAll('.corpse-loot-item')].map((el) => el.dataset.taken === 'true'),
+            wireTaken: claim ? claim.items.map((i) => Boolean(i.taken)) : null,
+            corpseOnWire: Boolean(mine),
+            netStatus: net.status,
+          });
+        })()`).then(JSON.parse);
         check('exactly the collected item stops being offered; the other is still live',
-          afterOne.filter(Boolean).length === 1 && afterOne.length === FIXTURE_ITEM_IDS.length,
-          `taken flags=${JSON.stringify(afterOne)}`);
+          afterOne.rows.filter(Boolean).length === 1 && afterOne.rows.length === FIXTURE_ITEM_IDS.length
+          && afterOne.wireTaken?.filter(Boolean).length === 1,
+          JSON.stringify(afterOne));
 
         // ── H + the dd7ce2e blocker: Take All now collects the LAST item on the corpse ─────────────
         // This is the case that used to produce NO receipt at all, because a fully-resolved corpse
@@ -574,7 +621,9 @@ if (booted) {
         const toastsBefore = await page.eval('window.__corpseToasts.length');
         const pulsesBefore = await page.eval('window.__corpsePulses');
         const tookAll = await tapById('#corpse-loot-panel-take-all');
-        check('the prominent Take All button exists and was tapped by real touch', tookAll);
+        check('the prominent Take All button was tapped, and a real click landed on it',
+          tookAll.tapped && tookAll.clickLanded && !tookAll.disabled && tookAll.hitIsTarget,
+          JSON.stringify(tookAll));
         const takeAll = await awaitReceipt(toastsBefore, pulsesBefore);
         check('Take All on the corpse\'s LAST item still produced an acquired-item toast '
           + '(the dd7ce2e corpse-retirement receipt blocker, live)', takeAll.sawToast);
