@@ -37,6 +37,29 @@ test('registry has unique stable logical identities and only declared runtime as
   }
 });
 
+test('semantic facets and next actions are deterministic facts, not duplicate status labels', () => {
+  for (const record of registry.records) {
+    assert.deepEqual(record.facets, [...record.facets].sort(), `${record.asset_id} facets sorted`);
+    assert.equal(new Set(record.facets).size, record.facets.length, `${record.asset_id} facets unique`);
+    assert.equal(record.facets.includes(record.asset_kind), false, `${record.asset_id} does not duplicate asset_kind`);
+  }
+  const mystery = registry.records.find((record) => record.asset_id === 'intake.20260829.0829150207');
+  assert.equal(mystery.next_action, 'OWNER_REVIEW');
+  assert.equal(mystery.qualification_gates.visual.status, 'UNKNOWN');
+  assert.deepEqual(mystery.facets, ['meshy']);
+});
+
+test('the complete Drive intake is represented once and the unresolved animation source stays unknown', () => {
+  const intake = registry.records.filter((record) => record.source.authority === 'drive-intake-2026-08-29');
+  assert.equal(intake.length, 12);
+  assert.equal(new Set(intake.map((record) => record.source.sha256)).size, 12);
+  assert.ok(intake.every((record) => record.custody === 'IN_DRIVE' && record.recoverability === 'VERIFIED_FROM_DRIVE'));
+  const source = registry.records.find((record) => record.asset_id === 'animation-source.hero.meshy.hdus9c');
+  assert.equal(source.source.sha256, null);
+  assert.equal(source.recoverability, 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT');
+  assert.equal(source.qualification_gates.animation.status, 'UNKNOWN');
+});
+
 test('qualification gates are independent and evidence-bound when proven', () => {
   for (const record of registry.records) {
     for (const name of gateNames) {

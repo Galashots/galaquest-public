@@ -1,10 +1,10 @@
 {
   "schema": "galaquest.asset-registry-evidence/1",
   "snapshot": {
-    "observed_utc": "2026-08-25",
-    "package_base_sha": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
-    "runtime_git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
-    "notes": "Package A observation input. Mutable observations belong here, not in executable builder source."
+    "observed_utc": "2026-08-29",
+    "package_base_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+    "runtime_git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+    "notes": "AINV1 observation input. Runtime identity paths were refreshed against the restored live main tree; dated provider observations remain independently dated below."
   },
   "runtime_assets": [
     { "asset_id": "enemy.beacon_warden", "display_name": "Beacon Warden", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/enemies/beacon_warden.glb" },

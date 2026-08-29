@@ -1,8 +1,8 @@
 {
   "schema": "galaquest.asset-registry/1",
-  "generated_utc": "2026-08-25",
+  "generated_utc": "2026-08-29",
   "authority": "current canonical asset inventory",
-  "base_sha": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+  "base_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
   "historical_sources": [
     {
       "path": "docs/asset-production/asset-platform-inventory.json",
@@ -19,6 +19,14 @@
     {
       "path": "docs/asset-production/asset-registry-v1.evidence.json",
       "role": "Package A dated observations and stable runtime identity map"
+    },
+    {
+      "path": "docs/asset-production/ASSET_INTAKE_2026-08-29.json",
+      "role": "Drive-backed 2026-08-29 intake hashes, identities and structural evidence"
+    },
+    {
+      "path": "docs/asset-production/HDUS9C_ANIMATION_SOURCE_RECOVERY.json",
+      "role": "read-only animation-source recovery conclusion"
     }
   ],
   "provider_reconciliation": {
@@ -870,10 +878,121 @@
   },
   "records": [
     {
+      "asset_id": "animation-source.hero.meshy.hdus9c",
+      "display_name": "Meshy hdUs9c Hero animation source",
+      "asset_kind": "animation-source",
+      "lifecycle": "SOURCE_ONLY",
+      "facets": [
+        "hero",
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "https://www.meshy.ai/s/hdUs9c"
+      ],
+      "related_asset_ids": [
+        "hero.base"
+      ],
+      "custody": "UNKNOWN",
+      "recoverability": "UNAVAILABLE_CURRENT_PROVIDER_CONTEXT",
+      "custody_locations": [
+        {
+          "kind": "PROVIDER",
+          "durable": false,
+          "provider_context": "Meshy share hdUs9c; exact source task unresolved",
+          "provider_task_ids": []
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": null,
+        "size_bytes": null,
+        "authority": "hdus9c-recovery-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": "share-hdUs9c"
+      },
+      "structural_metrics": {
+        "file_size_bytes": "UNKNOWN",
+        "mesh_count": "UNKNOWN",
+        "primitive_count": "UNKNOWN",
+        "vertex_count": "UNKNOWN",
+        "triangle_count": "UNKNOWN",
+        "material_count": "UNKNOWN",
+        "skin_count": "UNKNOWN",
+        "joint_count": "UNKNOWN",
+        "animation_clip_count": "UNKNOWN"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "animation-recovery:HDUS9C_ANIMATION_SOURCE_RECOVERY.json"
+      ],
+      "notes": "NOT_CURRENTLY_RECOVERABLE. Open the hdUs9c share while signed in and provide the source model ID plus any rig/animation task IDs or export the animation-bearing source/ZIP into the 2026-08 Asset Platform Consolidation Drive folder."
+    },
+    {
       "asset_id": "boneguard-raider-v1",
       "display_name": "boneguard-raider-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1016,13 +1135,20 @@
         "historical-inventory:boneguard-raider-v1",
         "structural-audit:boneguard-raider-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "bramble-stalker-v1",
       "display_name": "bramble-stalker-v1",
       "asset_kind": "model",
       "lifecycle": "QUALIFYING",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1128,13 +1254,21 @@
       "evidence_refs": [
         "historical-inventory:bramble-stalker-v1"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "bramble-stalker-v1-run",
       "display_name": "bramble-stalker-v1-run",
       "asset_kind": "model",
       "lifecycle": "QUALIFYING",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [
+        "bramble-stalker-v1"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1195,8 +1329,8 @@
           "evidence_refs": []
         }
       },
-      "parent_asset_id": null,
-      "derivative_of": null,
+      "parent_asset_id": "bramble-stalker-v1",
+      "derivative_of": "bramble-stalker-v1",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -1240,13 +1374,21 @@
       "evidence_refs": [
         "historical-inventory:bramble-stalker-v1-run"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "bramble-stalker-v1-walk",
       "display_name": "bramble-stalker-v1-walk",
       "asset_kind": "model",
       "lifecycle": "QUALIFYING",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [
+        "bramble-stalker-v1"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1307,8 +1449,8 @@
           "evidence_refs": []
         }
       },
-      "parent_asset_id": null,
-      "derivative_of": null,
+      "parent_asset_id": "bramble-stalker-v1",
+      "derivative_of": "bramble-stalker-v1",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -1352,13 +1494,19 @@
       "evidence_refs": [
         "historical-inventory:bramble-stalker-v1-walk"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "cinderfang-raider-v1",
       "display_name": "cinderfang-raider-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1501,13 +1649,20 @@
         "historical-inventory:cinderfang-raider-v1",
         "structural-audit:cinderfang-raider-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "coalclaw-kobold-v1",
       "display_name": "coalclaw-kobold-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1650,13 +1805,22 @@
         "historical-inventory:coalclaw-kobold-v1",
         "structural-audit:coalclaw-kobold-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "dawnwarden-helmet-v1",
       "display_name": "dawnwarden-helmet-v1",
       "asset_kind": "model",
-      "lifecycle": "QUALIFYING",
+      "lifecycle": "SUPERSEDED",
+      "next_action": "ARCHIVE_ONLY",
+      "related_asset_ids": [
+        "gear.candidate.dawnwarden-helmet-v1"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1671,7 +1835,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
           "git_blob_oid": null
         },
@@ -1725,7 +1889,7 @@
         }
       },
       "parent_asset_id": null,
-      "derivative_of": null,
+      "derivative_of": "gear.candidate.dawnwarden-helmet-v1",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -1769,13 +1933,21 @@
       "evidence_refs": [
         "historical-inventory:dawnwarden-helmet-v1"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "dawnwarden-sword-v1",
       "display_name": "dawnwarden-sword-v1",
       "asset_kind": "model",
-      "lifecycle": "QUALIFYING",
+      "lifecycle": "SUPERSEDED",
+      "next_action": "ARCHIVE_ONLY",
+      "related_asset_ids": [
+        "gear.candidate.dawnwarden-sword-v1"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -1790,7 +1962,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
           "git_blob_oid": null
         },
@@ -1844,7 +2016,7 @@
         }
       },
       "parent_asset_id": null,
-      "derivative_of": null,
+      "derivative_of": "gear.candidate.dawnwarden-sword-v1",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -1888,7 +2060,120 @@
       "evidence_refs": [
         "historical-inventory:dawnwarden-sword-v1"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy"
+      ],
+      "aliases": []
+    },
+    {
+      "asset_id": "enemy.beacon_warden",
+      "display_name": "Beacon Warden",
+      "asset_kind": "character",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/enemies/beacon_warden.glb",
+          "git_blob_oid": "e685e72de7f9fe015f60ab1cd581a1a7a56351df"
+        }
+      ],
+      "source": {
+        "path": "public/assets/enemies/beacon_warden.glb",
+        "sha256": "17177d6bb6b2556cefa0f8c7747613492bcd14b8068a8ed7438d5ed996ce8a7d",
+        "size_bytes": 618224,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 618224,
+        "mesh_count": "UNKNOWN",
+        "primitive_count": "UNKNOWN",
+        "vertex_count": "UNKNOWN",
+        "triangle_count": "UNKNOWN",
+        "material_count": "UNKNOWN",
+        "skin_count": "UNKNOWN",
+        "joint_count": "UNKNOWN",
+        "animation_clip_count": "UNKNOWN"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/enemies/beacon_warden.glb"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "beacon",
+        "boss",
+        "boss-setpiece",
+        "enemy"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "enemy.wolf",
@@ -1901,7 +2186,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/enemies/wolf.glb",
           "git_blob_oid": "09a03f2a08bfb00bb7b82e9692f31df536b3b62c"
         }
@@ -1986,9 +2271,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/enemies/wolf.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/enemies/wolf.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "enemy"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "fox-meshy-download-v1",
@@ -2087,7 +2378,14 @@
       "evidence_refs": [
         "local-evidence:fox-scale-bind-diagnosis"
       ],
-      "notes": "Local-only scale/bind diagnosis; repair remains deferred and no production promotion is implied."
+      "notes": "Local-only scale/bind diagnosis; repair remains deferred and no production promotion is implied.",
+      "facets": [
+        "pet",
+        "starter-pet"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "frog-meshy-download-v1",
@@ -2191,13 +2489,22 @@
         "local-evidence:frog-24-joint-rig",
         "local-evidence:frog-local-idle-hop-export"
       ],
-      "notes": "Local-only evidence is not durable custody and does not imply production promotion."
+      "notes": "Local-only evidence is not durable custody and does not imply production promotion.",
+      "facets": [
+        "pet",
+        "starter-pet"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "frostbound-warden-v1",
       "display_name": "frostbound-warden-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -2340,13 +2647,20 @@
         "historical-inventory:frostbound-warden-v1",
         "structural-audit:frostbound-warden-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_behemoth_helmet",
       "display_name": "gear_behemoth_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -2478,13 +2792,19 @@
       "evidence_refs": [
         "historical-inventory:gear_behemoth_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_behemoth_lower_kit",
       "display_name": "gear_behemoth_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -2616,13 +2936,19 @@
       "evidence_refs": [
         "historical-inventory:gear_behemoth_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_behemoth_shield",
       "display_name": "gear_behemoth_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -2754,13 +3080,19 @@
       "evidence_refs": [
         "historical-inventory:gear_behemoth_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_behemoth_upper_armor",
       "display_name": "gear_behemoth_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -2892,13 +3224,19 @@
       "evidence_refs": [
         "historical-inventory:gear_behemoth_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_behemoth_weapon",
       "display_name": "gear_behemoth_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3030,13 +3368,19 @@
       "evidence_refs": [
         "historical-inventory:gear_behemoth_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_embermaw_helmet",
       "display_name": "gear_embermaw_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3168,13 +3512,19 @@
       "evidence_refs": [
         "historical-inventory:gear_embermaw_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_embermaw_lower_kit",
       "display_name": "gear_embermaw_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3306,13 +3656,19 @@
       "evidence_refs": [
         "historical-inventory:gear_embermaw_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_embermaw_shield",
       "display_name": "gear_embermaw_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3444,13 +3800,19 @@
       "evidence_refs": [
         "historical-inventory:gear_embermaw_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_embermaw_upper_armor",
       "display_name": "gear_embermaw_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3582,13 +3944,19 @@
       "evidence_refs": [
         "historical-inventory:gear_embermaw_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_embermaw_weapon",
       "display_name": "gear_embermaw_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3720,13 +4088,19 @@
       "evidence_refs": [
         "historical-inventory:gear_embermaw_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_frostfang_helmet",
       "display_name": "gear_frostfang_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3858,13 +4232,19 @@
       "evidence_refs": [
         "historical-inventory:gear_frostfang_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_frostfang_lower_kit",
       "display_name": "gear_frostfang_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -3996,13 +4376,19 @@
       "evidence_refs": [
         "historical-inventory:gear_frostfang_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_frostfang_shield",
       "display_name": "gear_frostfang_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4134,13 +4520,19 @@
       "evidence_refs": [
         "historical-inventory:gear_frostfang_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_frostfang_upper_armor",
       "display_name": "gear_frostfang_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4272,13 +4664,19 @@
       "evidence_refs": [
         "historical-inventory:gear_frostfang_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_frostfang_weapon",
       "display_name": "gear_frostfang_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4410,13 +4808,19 @@
       "evidence_refs": [
         "historical-inventory:gear_frostfang_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_stormwing_helmet",
       "display_name": "gear_stormwing_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4548,13 +4952,19 @@
       "evidence_refs": [
         "historical-inventory:gear_stormwing_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_stormwing_lower_kit",
       "display_name": "gear_stormwing_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4686,13 +5096,19 @@
       "evidence_refs": [
         "historical-inventory:gear_stormwing_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_stormwing_shield",
       "display_name": "gear_stormwing_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4824,13 +5240,19 @@
       "evidence_refs": [
         "historical-inventory:gear_stormwing_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_stormwing_upper_armor",
       "display_name": "gear_stormwing_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -4962,13 +5384,19 @@
       "evidence_refs": [
         "historical-inventory:gear_stormwing_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_stormwing_weapon",
       "display_name": "gear_stormwing_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5100,13 +5528,19 @@
       "evidence_refs": [
         "historical-inventory:gear_stormwing_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_sunlion_helmet",
       "display_name": "gear_sunlion_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5238,13 +5672,19 @@
       "evidence_refs": [
         "historical-inventory:gear_sunlion_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_sunlion_lower_kit",
       "display_name": "gear_sunlion_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5376,13 +5816,19 @@
       "evidence_refs": [
         "historical-inventory:gear_sunlion_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_sunlion_shield",
       "display_name": "gear_sunlion_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5514,13 +5960,19 @@
       "evidence_refs": [
         "historical-inventory:gear_sunlion_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_sunlion_upper_armor",
       "display_name": "gear_sunlion_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5652,13 +6104,19 @@
       "evidence_refs": [
         "historical-inventory:gear_sunlion_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_sunlion_weapon",
       "display_name": "gear_sunlion_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5790,13 +6248,19 @@
       "evidence_refs": [
         "historical-inventory:gear_sunlion_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_voidstar_helmet",
       "display_name": "gear_voidstar_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -5928,13 +6392,19 @@
       "evidence_refs": [
         "historical-inventory:gear_voidstar_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_voidstar_lower_kit",
       "display_name": "gear_voidstar_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6066,13 +6536,19 @@
       "evidence_refs": [
         "historical-inventory:gear_voidstar_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_voidstar_shield",
       "display_name": "gear_voidstar_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6204,13 +6680,19 @@
       "evidence_refs": [
         "historical-inventory:gear_voidstar_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_voidstar_upper_armor",
       "display_name": "gear_voidstar_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6342,13 +6824,19 @@
       "evidence_refs": [
         "historical-inventory:gear_voidstar_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_voidstar_weapon",
       "display_name": "gear_voidstar_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6480,13 +6968,19 @@
       "evidence_refs": [
         "historical-inventory:gear_voidstar_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_wildthorn_helmet",
       "display_name": "gear_wildthorn_helmet",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6618,13 +7112,19 @@
       "evidence_refs": [
         "historical-inventory:gear_wildthorn_helmet"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_wildthorn_lower_kit",
       "display_name": "gear_wildthorn_lower_kit",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6756,13 +7256,19 @@
       "evidence_refs": [
         "historical-inventory:gear_wildthorn_lower_kit"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_wildthorn_shield",
       "display_name": "gear_wildthorn_shield",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -6894,13 +7400,19 @@
       "evidence_refs": [
         "historical-inventory:gear_wildthorn_shield"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_wildthorn_upper_armor",
       "display_name": "gear_wildthorn_upper_armor",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -7032,13 +7544,19 @@
       "evidence_refs": [
         "historical-inventory:gear_wildthorn_upper_armor"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear_wildthorn_weapon",
       "display_name": "gear_wildthorn_weapon",
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -7170,7 +7688,11 @@
       "evidence_refs": [
         "historical-inventory:gear_wildthorn_weapon"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "gear.candidate.dawnwarden-helmet-v1",
@@ -7183,7 +7705,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
           "git_blob_oid": "e845209e2b391fd0ff294cca76f5b1376174d3b5"
         }
@@ -7268,9 +7790,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/candidates/dawnwarden-helmet-v1.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/candidates/dawnwarden-helmet-v1.glb"
       ],
-      "notes": "Candidate identity is registered without runtime promotion."
+      "notes": "Candidate identity is registered without runtime promotion.",
+      "facets": [
+        "enemy"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.candidate.dawnwarden-sword-v1",
@@ -7283,7 +7811,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
           "git_blob_oid": "49a1f806bfd58d4e02147e0520ffa6e1d0a6dc99"
         }
@@ -7368,9 +7896,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/candidates/dawnwarden-sword-v1.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/candidates/dawnwarden-sword-v1.glb"
       ],
-      "notes": "Candidate identity is registered without runtime promotion."
+      "notes": "Candidate identity is registered without runtime promotion.",
+      "facets": [
+        "enemy"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.candidate.wildwood-sword-w1a",
@@ -7383,7 +7917,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/sword_wildwood_w1a.glb",
           "git_blob_oid": "b044a77cc1fbc4425b313dc19f3385dd2a0f8969"
         }
@@ -7468,9 +8002,13 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/candidates/sword_wildwood_w1a.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/candidates/sword_wildwood_w1a.glb"
       ],
-      "notes": "Candidate identity is registered without runtime promotion."
+      "notes": "Candidate identity is registered without runtime promotion.",
+      "facets": [],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.helmet.silverguard",
@@ -7483,7 +8021,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/helmet_silverguard.glb",
           "git_blob_oid": "8dd321598045826e3fe883047d0777afd3628c80"
         }
@@ -7568,9 +8106,13 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/helmet_silverguard.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/helmet_silverguard.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.lantern.belt",
@@ -7583,7 +8125,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/lantern_belt.glb",
           "git_blob_oid": "f92bd9c273eaabce2bfc2a3ff773bda78e8f6fb2"
         }
@@ -7668,9 +8210,13 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/lantern_belt.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/lantern_belt.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.shield.ironwood",
@@ -7683,7 +8229,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/shield_ironwood.glb",
           "git_blob_oid": "e80050172bcca7c67191551bf3ef769f0ead899f"
         }
@@ -7768,9 +8314,13 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/shield_ironwood.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/shield_ironwood.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.shoulder.silverguard",
@@ -7783,7 +8333,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/shoulder_silverguard.glb",
           "git_blob_oid": "a4250090b758b5cb584ad915822d175a6fce2edc"
         }
@@ -7868,9 +8418,13 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/shoulder_silverguard.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/shoulder_silverguard.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.sword.ironwood",
@@ -7883,7 +8437,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/sword_ironwood.glb",
           "git_blob_oid": "796cd5a185fdea25ec2f696832759dd5651c2222"
         }
@@ -7968,9 +8522,13 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/sword_ironwood.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/sword_ironwood.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "gear.sword.silverguard",
@@ -7983,7 +8541,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/sword_silverguard.glb",
           "git_blob_oid": "5ec366d26cdb22ecda45444c1df1254b0908720b"
         }
@@ -8068,15 +8626,21 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/gear/sword_silverguard.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/gear/sword_silverguard.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "graveflame-reaper-v1",
       "display_name": "graveflame-reaper-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -8219,7 +8783,12 @@
         "historical-inventory:graveflame-reaper-v1",
         "structural-audit:graveflame-reaper-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "hero.base",
@@ -8232,7 +8801,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero.glb",
           "git_blob_oid": "64b52431168670592cc87617a6a3113955a6b5b4"
         }
@@ -8317,9 +8886,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/hero/hero.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "hero"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "hero.lod1-6800",
@@ -8332,7 +8907,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero_lod1_6800.glb",
           "git_blob_oid": "506268dfd7401e8fb3bfe0238b1b212d42795798"
         }
@@ -8417,9 +8992,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero_lod1_6800.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/hero/hero_lod1_6800.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "hero"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "hero.lod1-ironwood-atlas",
@@ -8432,7 +9013,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero_lod1_ironwood_atlas.glb",
           "git_blob_oid": "18c7a689f3bcbefdb7148c815d709f10eec14158"
         }
@@ -8517,9 +9098,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero_lod1_ironwood_atlas.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/hero/hero_lod1_ironwood_atlas.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "hero"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "hero.texture.tier3-atlas",
@@ -8532,7 +9119,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero_tier3_atlas.jpg",
           "git_blob_oid": "c7191451e670840f797e1f4eed36d1bea9be84c7"
         }
@@ -8617,15 +9204,23 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/hero/hero_tier3_atlas.jpg"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/hero/hero_tier3_atlas.jpg"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "hero"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "iceback-ogre-v1",
       "display_name": "iceback-ogre-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -8768,13 +9363,827 @@
         "historical-inventory:iceback-ogre-v1",
         "structural-audit:iceback-ogre-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
+    },
+    {
+      "asset_id": "intake.20260829.0829150207",
+      "display_name": "Unresolved dragon kite shield intake",
+      "asset_kind": "gear",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI__0829150207_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1eSzKYhsB4TRA4yRT48dH7RYo-UR9NAK8",
+          "drive_file_url": "https://drive.google.com/file/d/1eSzKYhsB4TRA4yRT48dH7RYo-UR9NAK8/view",
+          "archive_path": "Meshy_AI__0829150207_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "6223a2ae6724f2e19f2b793bc326976bf9cfaab1a27abd20bc673fb33d1b1eed",
+        "size_bytes": 26749684,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 26749684,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 1382,
+        "triangle_count": 972,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1eSzKYhsB4TRA4yRT48dH7RYo-UR9NAK8"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1eSzKYhsB4TRA4yRT48dH7RYo-UR9NAK8"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:intake.20260829.0829150207"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1eSzKYhsB4TRA4yRT48dH7RYo-UR9NAK8",
+        "asset-intake:2026-08-29:intake.20260829.0829150207"
+      ],
+      "notes": "PROVISIONAL_VISUAL_CLASS_ONLY. Rendered as a green-grey kite shield with a projecting silver dragon head; no canonical family inferred."
+    },
+    {
+      "asset_id": "intake.20260829.0829150224",
+      "display_name": "Unresolved bronze face round shield intake",
+      "asset_kind": "gear",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI__0829150224_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1MqEgOl4UHmX8DoHXA4d_B0g9XS6LovhA",
+          "drive_file_url": "https://drive.google.com/file/d/1MqEgOl4UHmX8DoHXA4d_B0g9XS6LovhA/view",
+          "archive_path": "Meshy_AI__0829150224_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "257b79de2e13695691b6414cc6d86a7109c44434f8d0a29b888b3063861203fb",
+        "size_bytes": 28297868,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 28297868,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 1313,
+        "triangle_count": 930,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1MqEgOl4UHmX8DoHXA4d_B0g9XS6LovhA"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1MqEgOl4UHmX8DoHXA4d_B0g9XS6LovhA"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:intake.20260829.0829150224"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1MqEgOl4UHmX8DoHXA4d_B0g9XS6LovhA",
+        "asset-intake:2026-08-29:intake.20260829.0829150224"
+      ],
+      "notes": "PROVISIONAL_VISUAL_CLASS_ONLY. Rendered as a bronze round shield with a distressed face relief; no canonical family inferred."
+    },
+    {
+      "asset_id": "intake.20260829.0829150236",
+      "display_name": "Unresolved red raven round shield intake",
+      "asset_kind": "gear",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI__0829150236_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "129GWoQ3umHuDS5xv1r3n78ORyiAxlo4H",
+          "drive_file_url": "https://drive.google.com/file/d/129GWoQ3umHuDS5xv1r3n78ORyiAxlo4H/view",
+          "archive_path": "Meshy_AI__0829150236_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "458f727c064a2195619a800f8c8566cbd80d5bc7242caa809407dcfd4dbdf998",
+        "size_bytes": 26718360,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 26718360,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 1538,
+        "triangle_count": 1008,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:129GWoQ3umHuDS5xv1r3n78ORyiAxlo4H"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:129GWoQ3umHuDS5xv1r3n78ORyiAxlo4H"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:intake.20260829.0829150236"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:129GWoQ3umHuDS5xv1r3n78ORyiAxlo4H",
+        "asset-intake:2026-08-29:intake.20260829.0829150236"
+      ],
+      "notes": "PROVISIONAL_VISUAL_CLASS_ONLY. Rendered as a red round shield with a black raven motif; no canonical family inferred."
+    },
+    {
+      "asset_id": "intake.20260829.0829150259",
+      "display_name": "Unresolved red-grip curved sword intake",
+      "asset_kind": "gear",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI__0829150259_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1UVNwfUTLkOy6FydkT9GBiUFeNzrVzD_r",
+          "drive_file_url": "https://drive.google.com/file/d/1UVNwfUTLkOy6FydkT9GBiUFeNzrVzD_r/view",
+          "archive_path": "Meshy_AI__0829150259_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "138b1a12e1c963c7e5c9f677ab8e1f84d6b69c79acde8ca25878ac74999a63ed",
+        "size_bytes": 19742624,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 19742624,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 1611,
+        "triangle_count": 988,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1UVNwfUTLkOy6FydkT9GBiUFeNzrVzD_r"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1UVNwfUTLkOy6FydkT9GBiUFeNzrVzD_r"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:intake.20260829.0829150259"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1UVNwfUTLkOy6FydkT9GBiUFeNzrVzD_r",
+        "asset-intake:2026-08-29:intake.20260829.0829150259"
+      ],
+      "notes": "PROVISIONAL_VISUAL_CLASS_ONLY. Rendered as a single-edged curved sword with a red-and-black grip; no canonical family inferred."
+    },
+    {
+      "asset_id": "intake.20260829.0829150311",
+      "display_name": "Unresolved black ornate sword intake",
+      "asset_kind": "gear",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI__0829150311_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1BpTUyxY9Awv4PzqbhRg2slDc6Ll7y0VY",
+          "drive_file_url": "https://drive.google.com/file/d/1BpTUyxY9Awv4PzqbhRg2slDc6Ll7y0VY/view",
+          "archive_path": "Meshy_AI__0829150311_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "80d97fb1a61a8494b7898aebd265e0afbf1bd5a6c89c09c8d4b46a76546a17ef",
+        "size_bytes": 23312268,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 23312268,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 1443,
+        "triangle_count": 1072,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1BpTUyxY9Awv4PzqbhRg2slDc6Ll7y0VY"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1BpTUyxY9Awv4PzqbhRg2slDc6Ll7y0VY"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:intake.20260829.0829150311"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1BpTUyxY9Awv4PzqbhRg2slDc6Ll7y0VY",
+        "asset-intake:2026-08-29:intake.20260829.0829150311"
+      ],
+      "notes": "PROVISIONAL_VISUAL_CLASS_ONLY. Rendered as a black straight sword with a wide ornate silver guard; no canonical family inferred."
+    },
+    {
+      "asset_id": "intake.20260829.0829150336",
+      "display_name": "Unresolved broad stone sword intake",
+      "asset_kind": "gear",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI__0829150336_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1EwbabTA-sTPT0njzvqImIDPcbYMKPhF6",
+          "drive_file_url": "https://drive.google.com/file/d/1EwbabTA-sTPT0njzvqImIDPcbYMKPhF6/view",
+          "archive_path": "Meshy_AI__0829150336_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "918030e1ad92e030bdb1e43f8e1959d767ca089c182e378f19b304556b9505d1",
+        "size_bytes": 23465856,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 23465856,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 1438,
+        "triangle_count": 1078,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1EwbabTA-sTPT0njzvqImIDPcbYMKPhF6"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1EwbabTA-sTPT0njzvqImIDPcbYMKPhF6"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:intake.20260829.0829150336"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1EwbabTA-sTPT0njzvqImIDPcbYMKPhF6",
+        "asset-intake:2026-08-29:intake.20260829.0829150336"
+      ],
+      "notes": "PROVISIONAL_VISUAL_CLASS_ONLY. Rendered as a straight broad sword with a rough stone-grey blade and brown grip; no canonical family inferred."
+    },
+    {
+      "asset_id": "landmark.crystal-sanctum-intake-v1",
+      "display_name": "Crystal Sanctum",
+      "asset_kind": "model",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "forest",
+        "landmark",
+        "meshy"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI_Crystal_Sanctum_0829150359_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1H4uinPk9cxvyUNYMxTJhC-euMp9T5RmA",
+          "drive_file_url": "https://drive.google.com/file/d/1H4uinPk9cxvyUNYMxTJhC-euMp9T5RmA/view",
+          "archive_path": "Meshy_AI_Crystal_Sanctum_0829150359_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "48338d52b19e344dc9af80f5611f485d2a57fe494646640c16d589962f8a9d5c",
+        "size_bytes": 6499924,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 6499924,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 3444,
+        "triangle_count": 3261,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1H4uinPk9cxvyUNYMxTJhC-euMp9T5RmA"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1H4uinPk9cxvyUNYMxTJhC-euMp9T5RmA"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:landmark.crystal-sanctum-intake-v1"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1H4uinPk9cxvyUNYMxTJhC-euMp9T5RmA",
+        "asset-intake:2026-08-29:landmark.crystal-sanctum-intake-v1"
+      ],
+      "notes": "RESOLVED_FROM_PROVIDER_FILENAME. Static PBR model; gameplay role remains unselected."
     },
     {
       "asset_id": "magmahorn-juggernaut-v1",
       "display_name": "magmahorn-juggernaut-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -8917,7 +10326,607 @@
         "historical-inventory:magmahorn-juggernaut-v1",
         "structural-audit:magmahorn-juggernaut-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
+    },
+    {
+      "asset_id": "npc.forest-lantern-keeper-intake-v1",
+      "display_name": "Forest Lantern Keeper intake",
+      "asset_kind": "character",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "forest",
+        "lantern",
+        "meshy",
+        "npc"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [
+        "Meshy_AI_Forest_Lantern_Keeper_biped (1).zip"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1MVrt9i1eXUbpYxS3H8kAt-dqwdBuTsj3",
+          "drive_file_url": "https://drive.google.com/file/d/1MVrt9i1eXUbpYxS3H8kAt-dqwdBuTsj3/view",
+          "archive_path": "Meshy_AI_Forest_Lantern_Keeper_biped (1).zip",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "c15a97fce4bfef2966592ffd5f1c05abcc5c2f04a912282103ae09ddbce3f3f5",
+        "size_bytes": 23916128,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 23916128,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 4945,
+        "triangle_count": 5412,
+        "material_count": 1,
+        "skin_count": 1,
+        "joint_count": 24,
+        "animation_clip_count": 4
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1MVrt9i1eXUbpYxS3H8kAt-dqwdBuTsj3"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1MVrt9i1eXUbpYxS3H8kAt-dqwdBuTsj3"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:npc.forest-lantern-keeper-intake-v1"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:npc.forest-lantern-keeper-intake-v1"
+          ]
+        },
+        "animation": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:npc.forest-lantern-keeper-intake-v1"
+          ]
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1MVrt9i1eXUbpYxS3H8kAt-dqwdBuTsj3",
+        "asset-intake:2026-08-29:npc.forest-lantern-keeper-intake-v1"
+      ],
+      "notes": "RESOLVED_FROM_PROVIDER_FILENAME. ZIP membership proves four animation-bearing files on one 24-joint rig; it does not prove production qualification."
+    },
+    {
+      "asset_id": "prop.broken-woodland-cart-intake-v1",
+      "display_name": "Broken Woodland Cart",
+      "asset_kind": "model",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "cart",
+        "forest",
+        "meshy",
+        "world-prop"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [
+        "Meshy_AI_Broken_Woodland_Cart_0829150420_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1K3WlqWXNncZRrXDQ9tLnHHzZ_3tCFVGc",
+          "drive_file_url": "https://drive.google.com/file/d/1K3WlqWXNncZRrXDQ9tLnHHzZ_3tCFVGc/view",
+          "archive_path": "Meshy_AI_Broken_Woodland_Cart_0829150420_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "ad54adc3bed382bbbf8c1f9960a18d2ce9767281e4ab572cf053b42f89c15110",
+        "size_bytes": 6282464,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 6282464,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 4819,
+        "triangle_count": 3634,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1K3WlqWXNncZRrXDQ9tLnHHzZ_3tCFVGc"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1K3WlqWXNncZRrXDQ9tLnHHzZ_3tCFVGc"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:prop.broken-woodland-cart-intake-v1"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1K3WlqWXNncZRrXDQ9tLnHHzZ_3tCFVGc",
+        "asset-intake:2026-08-29:prop.broken-woodland-cart-intake-v1"
+      ],
+      "notes": "RESOLVED_FROM_PROVIDER_FILENAME. Distinct source hash from the production village cart; logical duplicate status is not asserted."
+    },
+    {
+      "asset_id": "prop.campfire-essentials-intake-v1",
+      "display_name": "Campfire Essentials",
+      "asset_kind": "model",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "campfire",
+        "forest",
+        "meshy",
+        "world-prop"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [
+        "Meshy_AI_Campfire_Essentials_0829150407_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1kuPNYtjcXBSZ8FnsC0lpxmtig6nwPqfj",
+          "drive_file_url": "https://drive.google.com/file/d/1kuPNYtjcXBSZ8FnsC0lpxmtig6nwPqfj/view",
+          "archive_path": "Meshy_AI_Campfire_Essentials_0829150407_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "ea5b2d6916931ca7046bd9adc002b3286c5cd5c8fe293279e009ba962012ec09",
+        "size_bytes": 6670160,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 6670160,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 3922,
+        "triangle_count": 3550,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1kuPNYtjcXBSZ8FnsC0lpxmtig6nwPqfj"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1kuPNYtjcXBSZ8FnsC0lpxmtig6nwPqfj"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:prop.campfire-essentials-intake-v1"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1kuPNYtjcXBSZ8FnsC0lpxmtig6nwPqfj",
+        "asset-intake:2026-08-29:prop.campfire-essentials-intake-v1"
+      ],
+      "notes": "RESOLVED_FROM_PROVIDER_FILENAME. Static PBR model with three embedded JPEG images."
+    },
+    {
+      "asset_id": "prop.maplewood-lantern-intake-v1",
+      "display_name": "Maplewood Lantern",
+      "asset_kind": "model",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "lantern",
+        "meshy",
+        "village",
+        "world-prop"
+      ],
+      "next_action": "QUALIFY_NEXT",
+      "aliases": [
+        "Meshy_AI_Maplewood_Lantern_Pos_0829150445_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1Z_KMYX09FeC8Y77dLOhdZxPCfhq6I4b2",
+          "drive_file_url": "https://drive.google.com/file/d/1Z_KMYX09FeC8Y77dLOhdZxPCfhq6I4b2/view",
+          "archive_path": "Meshy_AI_Maplewood_Lantern_Pos_0829150445_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "23c89ab25b990b55fded4c78ba25650ec7c3564349a0cb412d9d344b835177c0",
+        "size_bytes": 6643420,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 6643420,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 3445,
+        "triangle_count": 3481,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1Z_KMYX09FeC8Y77dLOhdZxPCfhq6I4b2"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1Z_KMYX09FeC8Y77dLOhdZxPCfhq6I4b2"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:prop.maplewood-lantern-intake-v1"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1Z_KMYX09FeC8Y77dLOhdZxPCfhq6I4b2",
+        "asset-intake:2026-08-29:prop.maplewood-lantern-intake-v1"
+      ],
+      "notes": "RESOLVED_FROM_PROVIDER_FILENAME. Static PBR model with three embedded JPEG images."
+    },
+    {
+      "asset_id": "prop.thornwood-tangle-intake-v1",
+      "display_name": "Thornwood Tangle",
+      "asset_kind": "model",
+      "lifecycle": "GENERATED",
+      "facets": [
+        "barrier",
+        "beacon",
+        "forest",
+        "meshy",
+        "world-prop"
+      ],
+      "next_action": "OWNER_REVIEW",
+      "aliases": [
+        "Meshy_AI_Thornwood_Tangle_0829150428_texture.glb"
+      ],
+      "related_asset_ids": [],
+      "custody": "IN_DRIVE",
+      "recoverability": "VERIFIED_FROM_DRIVE",
+      "custody_locations": [
+        {
+          "kind": "DRIVE",
+          "durable": true,
+          "drive_file_id": "1CZ4c7q4GfequSBbKmv7v7-Cw7JgoOC_6",
+          "drive_file_url": "https://drive.google.com/file/d/1CZ4c7q4GfequSBbKmv7v7-Cw7JgoOC_6/view",
+          "archive_path": "Meshy_AI_Thornwood_Tangle_0829150428_texture.glb",
+          "drive_folder_url": "https://drive.google.com/drive/folders/10tdeQ_RiW6s6AslLXmVnafAQD-V_izxn"
+        }
+      ],
+      "source": {
+        "path": null,
+        "sha256": "f95924365c07cdea9c0c2303b22b58a079c4f8b8bc4425dec96f00b1f954fe53",
+        "size_bytes": 6359616,
+        "authority": "drive-intake-2026-08-29"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 6359616,
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count": 4134,
+        "triangle_count": 3649,
+        "material_count": 1,
+        "skin_count": 0,
+        "joint_count": 0,
+        "animation_clip_count": 0
+      },
+      "rights": {
+        "provenance": {
+          "status": "KNOWN",
+          "value": null,
+          "evidence_refs": [
+            "drive:1CZ4c7q4GfequSBbKmv7v7-Cw7JgoOC_6"
+          ]
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "PASS",
+          "evidence_refs": [
+            "drive:1CZ4c7q4GfequSBbKmv7v7-Cw7JgoOC_6"
+          ]
+        },
+        "structural": {
+          "status": "PASS",
+          "evidence_refs": [
+            "asset-intake:2026-08-29:prop.thornwood-tangle-intake-v1"
+          ]
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "drive:1CZ4c7q4GfequSBbKmv7v7-Cw7JgoOC_6",
+        "asset-intake:2026-08-29:prop.thornwood-tangle-intake-v1"
+      ],
+      "notes": "ROLE_RELATION_UNRESOLVED. Provider name is known; whether this is the intended Beacon thorn or a variant requires Owner review."
     },
     {
       "asset_id": "prop.village.cart",
@@ -8930,7 +10939,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/cart.glb",
           "git_blob_oid": "bdb4a5b154ce8911ba6af3dd66cfda115e9ac855"
         }
@@ -9015,9 +11024,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/cart.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/cart.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.fence",
@@ -9030,7 +11046,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/fence.glb",
           "git_blob_oid": "40f991b9c5eb9164cf360841828a490c029b799e"
         }
@@ -9115,9 +11131,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/fence.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/fence.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.fence-broken",
@@ -9130,7 +11153,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/fence-broken.glb",
           "git_blob_oid": "916ade1316100772e8dfca52de6c1fb8ff90f889"
         }
@@ -9215,9 +11238,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/fence-broken.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/fence-broken.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.fence-gate",
@@ -9230,7 +11260,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/fence-gate.glb",
           "git_blob_oid": "47fdd93033e19176ffb472aa321a30975a31d47d"
         }
@@ -9315,9 +11345,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/fence-gate.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/fence-gate.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.house-cottage",
@@ -9330,7 +11367,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/house-cottage.glb",
           "git_blob_oid": "2b77f78ef78d404fd6d67af63a2bfd7da5f6d498"
         }
@@ -9415,9 +11452,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/house-cottage.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/house-cottage.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.house-longhouse",
@@ -9430,7 +11474,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/house-longhouse.glb",
           "git_blob_oid": "c34181e4ecb0d4261a209a9c87fb4b1521a2f181"
         }
@@ -9515,9 +11559,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/house-longhouse.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/house-longhouse.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.lantern",
@@ -9530,7 +11581,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/lantern.glb",
           "git_blob_oid": "ce7a11ad335e3cf189d7e44a0fb62456091184c5"
         }
@@ -9615,9 +11666,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/lantern.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/lantern.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.rock-large",
@@ -9630,7 +11688,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/rock-large.glb",
           "git_blob_oid": "618f6611c8ef0261a3d72c7b4cfeed4094f9c488"
         }
@@ -9715,9 +11773,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/rock-large.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/rock-large.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.rock-small",
@@ -9730,7 +11795,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/rock-small.glb",
           "git_blob_oid": "9f3b0bb5436ecba22f92d14827d7f6e4bcea1ff6"
         }
@@ -9815,9 +11880,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/rock-small.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/rock-small.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.rock-wide",
@@ -9830,7 +11902,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/rock-wide.glb",
           "git_blob_oid": "52ee142927c071484b78cffdf8678df91ccf8f38"
         }
@@ -9915,9 +11987,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/rock-wide.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/rock-wide.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.stall-bench",
@@ -9930,7 +12009,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/stall-bench.glb",
           "git_blob_oid": "eff3d1d578e3a11516f3b117c9c3477fd76c9a87"
         }
@@ -10015,9 +12094,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/stall-bench.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/stall-bench.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.stall-green",
@@ -10030,7 +12116,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/stall-green.glb",
           "git_blob_oid": "9bd44b9a8e9bd3000647acaa1a8ac1ecf904d88a"
         }
@@ -10115,9 +12201,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/stall-green.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/stall-green.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.tree",
@@ -10130,7 +12223,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/tree.glb",
           "git_blob_oid": "4eacaf3ca92626373feedc85a8a86a52de6a248e"
         }
@@ -10215,9 +12308,16 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/tree.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/tree.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "prop.village.tree-crooked",
@@ -10230,7 +12330,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/tree-crooked.glb",
           "git_blob_oid": "9f203b0dc7ba0bb35f65a038cb14953d7c8eeb7e"
         }
@@ -10315,15 +12415,24 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/props/village/tree-crooked.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/props/village/tree-crooked.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "village",
+        "world-prop"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "snowfang-marauder-v1",
       "display_name": "snowfang-marauder-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -10466,13 +12575,20 @@
         "historical-inventory:snowfang-marauder-v1",
         "structural-audit:snowfang-marauder-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "spriggan-scrapper-v1",
       "display_name": "spriggan-scrapper-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -10615,13 +12731,20 @@
         "historical-inventory:spriggan-scrapper-v1",
         "structural-audit:spriggan-scrapper-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "stagroot-warden-v1",
       "display_name": "stagroot-warden-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -10764,13 +12887,20 @@
         "historical-inventory:stagroot-warden-v1",
         "structural-audit:stagroot-warden-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "stormbreaker-colossus-v1",
       "display_name": "stormbreaker-colossus-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -10913,13 +13043,22 @@
         "historical-inventory:stormbreaker-colossus-v1",
         "structural-audit:stormbreaker-colossus-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "sword_wildwood_w1a",
       "display_name": "sword_wildwood_w1a",
       "asset_kind": "model",
-      "lifecycle": "QUALIFYING",
+      "lifecycle": "SUPERSEDED",
+      "next_action": "ARCHIVE_ONLY",
+      "related_asset_ids": [
+        "gear.candidate.wildwood-sword-w1a"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -10934,7 +13073,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/sword_wildwood_w1a.glb",
           "git_blob_oid": null
         }
@@ -10980,7 +13119,7 @@
         }
       },
       "parent_asset_id": null,
-      "derivative_of": null,
+      "derivative_of": "gear.candidate.wildwood-sword-w1a",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -11024,13 +13163,17 @@
       "evidence_refs": [
         "historical-inventory:sword_wildwood_w1a"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [],
+      "aliases": []
     },
     {
       "asset_id": "thornback-orc-v1",
       "display_name": "thornback-orc-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -11173,13 +13316,20 @@
         "historical-inventory:thornback-orc-v1",
         "structural-audit:thornback-orc-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "tombmaul-knight-v1",
       "display_name": "tombmaul-knight-v1",
       "asset_kind": "character",
       "lifecycle": "GENERATED",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -11322,13 +13472,20 @@
         "historical-inventory:tombmaul-knight-v1",
         "structural-audit:tombmaul-knight-v1.glb"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "voidfang-overlord",
       "display_name": "voidfang-overlord",
       "asset_kind": "character",
       "lifecycle": "SOURCE_ONLY",
+      "next_action": "HOLD",
+      "related_asset_ids": [],
       "custody": "IN_DRIVE",
       "recoverability": "VERIFIED_FROM_DRIVE",
       "custody_locations": [
@@ -11447,7 +13604,12 @@
       "evidence_refs": [
         "historical-inventory:voidfang-overlord"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "enemy",
+        "meshy"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "world.keeper",
@@ -11460,7 +13622,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/world/keeper.glb",
           "git_blob_oid": "5b9a9bfa409951ecacecec53e49e7c41e827cc46"
         }
@@ -11545,9 +13707,15 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/world/keeper.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/world/keeper.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "npc"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "world.lantern-tree",
@@ -11560,7 +13728,7 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "b7abb7113386f1ce37d65d460f2475007d7fcb02",
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/world/lantern_tree.glb",
           "git_blob_oid": "28f5b16df4d7795e18e29aba7c2fdf31022026df"
         }
@@ -11645,15 +13813,21 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:b7abb7113386f1ce37d65d460f2475007d7fcb02:public/assets/world/lantern_tree.glb"
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/world/lantern_tree.glb"
       ],
-      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN."
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
     },
     {
       "asset_id": "wren-ranger-v1",
       "display_name": "wren-ranger-v1",
       "asset_kind": "model",
       "lifecycle": "QUALIFYING",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -11759,13 +13933,21 @@
       "evidence_refs": [
         "historical-inventory:wren-ranger-v1"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "npc"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "wren-ranger-v1-run",
       "display_name": "wren-ranger-v1-run",
       "asset_kind": "model",
       "lifecycle": "QUALIFYING",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [
+        "wren-ranger-v1"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -11826,8 +14008,8 @@
           "evidence_refs": []
         }
       },
-      "parent_asset_id": null,
-      "derivative_of": null,
+      "parent_asset_id": "wren-ranger-v1",
+      "derivative_of": "wren-ranger-v1",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -11871,13 +14053,21 @@
       "evidence_refs": [
         "historical-inventory:wren-ranger-v1-run"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "npc"
+      ],
+      "aliases": []
     },
     {
       "asset_id": "wren-ranger-v1-walk",
       "display_name": "wren-ranger-v1-walk",
       "asset_kind": "model",
       "lifecycle": "QUALIFYING",
+      "next_action": "QUALIFY_NEXT",
+      "related_asset_ids": [
+        "wren-ranger-v1"
+      ],
       "custody": "MULTIPLE",
       "recoverability": "VERIFIED",
       "custody_locations": [
@@ -11938,8 +14128,8 @@
           "evidence_refs": []
         }
       },
-      "parent_asset_id": null,
-      "derivative_of": null,
+      "parent_asset_id": "wren-ranger-v1",
+      "derivative_of": "wren-ranger-v1",
       "qualification_gates": {
         "provenance": {
           "status": "PASS",
@@ -11983,7 +14173,11 @@
       "evidence_refs": [
         "historical-inventory:wren-ranger-v1-walk"
       ],
-      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied."
+      "notes": "Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.",
+      "facets": [
+        "npc"
+      ],
+      "aliases": []
     }
   ]
 }

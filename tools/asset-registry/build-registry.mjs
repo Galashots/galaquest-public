@@ -7,6 +7,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const historyPath = join(root, 'docs/asset-production/asset-platform-inventory.json');
 const evidencePath = join(root, 'docs/asset-production/asset-registry-v1.evidence.json');
 const structuralAuditPath = join(root, 'docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json');
+const intakePath = join(root, 'docs/asset-production/ASSET_INTAKE_2026-08-29.json');
+const animationRecoveryPath = join(root, 'docs/asset-production/HDUS9C_ANIMATION_SOURCE_RECOVERY.json');
 const outPath = join(root, 'docs/asset-production/asset-registry-v1.json');
 const supportedExtensions = new Set(['.glb', '.jpg', '.jpeg', '.png', '.webp']);
 const gateNames = ['provenance', 'structural', 'materials', 'rig', 'animation', 'performance', 'visual', 'runtime', 'owner'];
@@ -14,6 +16,8 @@ const gateNames = ['provenance', 'structural', 'materials', 'rig', 'animation', 
 const history = JSON.parse(readFileSync(historyPath, 'utf8'));
 const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
 const structuralAudit = JSON.parse(readFileSync(structuralAuditPath, 'utf8'));
+const intake = JSON.parse(readFileSync(intakePath, 'utf8'));
+const animationRecovery = JSON.parse(readFileSync(animationRecoveryPath, 'utf8'));
 const records = [];
 const seen = new Set();
 
@@ -43,10 +47,32 @@ const rights = (provenanceStatus = 'UNKNOWN', provenanceEvidence = []) => ({
   license: { status: 'UNKNOWN', value: null, evidence_refs: [] },
   usage_rights: { status: 'UNKNOWN', value: null, evidence_refs: [] },
 });
+const inferredFacets = (record) => {
+  const id = record.asset_id;
+  const values = [];
+  if (record.provider?.task_ids?.length || record.source?.authority?.includes('meshy')) values.push('meshy');
+  if (id.startsWith('prop.village.')) values.push('village', 'world-prop');
+  if (id === 'world.keeper' || id.startsWith('wren-ranger')) values.push('npc');
+  if (id.startsWith('frog-') || id.startsWith('fox-')) values.push('pet', 'starter-pet');
+  if (id.startsWith('hero.')) values.push('hero');
+  if (id === 'enemy.beacon_warden') values.push('beacon', 'boss', 'boss-setpiece', 'enemy');
+  else if (id === 'enemy.wolf' || /raider|kobold|ogre|reaper|juggernaut|marauder|scrapper|warden|colossus|orc|knight|stalker|overlord/.test(id)) values.push('enemy');
+  return values;
+};
+const defaultNextAction = (record) => ({
+  PRODUCTION: 'NONE', QUALIFIED: 'INTEGRATE_NEXT', QUALIFYING: 'QUALIFY_NEXT', GENERATED: 'QUALIFY_NEXT',
+  SOURCE_ONLY: 'HOLD', PLANNED: 'HOLD', REJECTED: 'ARCHIVE_ONLY', SUPERSEDED: 'ARCHIVE_ONLY', HISTORICAL: 'ARCHIVE_ONLY',
+}[record.lifecycle] ?? 'NONE');
 const add = (record) => {
   if (seen.has(record.asset_id)) throw new Error(`duplicate asset_id: ${record.asset_id}`);
   seen.add(record.asset_id);
-  records.push(record);
+  records.push({
+    ...record,
+    facets: [...new Set([...(record.facets ?? []), ...inferredFacets(record)])].sort(),
+    next_action: record.next_action ?? defaultNextAction(record),
+    aliases: [...new Set(record.aliases ?? [])].sort(),
+    related_asset_ids: [...new Set(record.related_asset_ids ?? [])].sort(),
+  });
 };
 const taskInput = (task) => typeof task === 'string' ? { id: task, kind: 'unknown' } : task;
 const taskObservation = evidence.provider_reconciliation.historical_inventory_task_observation;
@@ -64,6 +90,15 @@ const observedTask = (task) => ({
 });
 const currentRuntimePaths = new Set(evidence.runtime_assets.map((asset) => asset.path));
 const structuralByFilename = new Map(structuralAudit.entries.map((entry) => [entry.filename, entry]));
+const supersededAliasOf = new Map([
+  ['dawnwarden-helmet-v1', 'gear.candidate.dawnwarden-helmet-v1'],
+  ['dawnwarden-sword-v1', 'gear.candidate.dawnwarden-sword-v1'],
+  ['sword_wildwood_w1a', 'gear.candidate.wildwood-sword-w1a'],
+]);
+const clipParentOf = new Map([
+  ['bramble-stalker-v1-run', 'bramble-stalker-v1'], ['bramble-stalker-v1-walk', 'bramble-stalker-v1'],
+  ['wren-ranger-v1-run', 'wren-ranger-v1'], ['wren-ranger-v1-walk', 'wren-ranger-v1'],
+]);
 
 const scannedRuntimePaths = supportedFiles().map((abs) => relative(root, abs).replaceAll('\\', '/')).sort();
 const declaredRuntimePaths = [...currentRuntimePaths].sort();
@@ -195,7 +230,9 @@ for (const item of history.items) {
     asset_id: item.item_id,
     display_name: item.item_id,
     asset_kind: assetKind,
-    lifecycle: isProvider ? (hasGenerationTask ? 'GENERATED' : 'SOURCE_ONLY') : 'QUALIFYING',
+    lifecycle: supersededAliasOf.has(item.item_id) ? 'SUPERSEDED' : isProvider ? (hasGenerationTask ? 'GENERATED' : 'SOURCE_ONLY') : 'QUALIFYING',
+    next_action: supersededAliasOf.has(item.item_id) ? 'ARCHIVE_ONLY' : undefined,
+    related_asset_ids: [supersededAliasOf.get(item.item_id), clipParentOf.get(item.item_id)].filter(Boolean),
     custody,
     recoverability,
     custody_locations: custodyLocations,
@@ -211,8 +248,8 @@ for (const item of history.items) {
     },
     structural_metrics: recordMetrics,
     rights: rights('KNOWN', [provenanceRef]),
-    parent_asset_id: null,
-    derivative_of: null,
+    parent_asset_id: clipParentOf.get(item.item_id) ?? null,
+    derivative_of: supersededAliasOf.get(item.item_id) ?? clipParentOf.get(item.item_id) ?? null,
     qualification_gates: recordGates,
     evidence_refs: [provenanceRef, ...recordGates.structural.evidence_refs],
     notes: 'Historical logical asset identity preserved from the dated inventory. Current recovery coordinates are represented explicitly in custody_locations; no promotion is implied.',
@@ -242,6 +279,43 @@ for (const item of evidence.local_evidence) {
   });
 }
 
+for (const item of intake.items) {
+  const recordGates = gates();
+  recordGates.provenance = gate('PASS', [`drive:${item.drive_file_id}`]);
+  recordGates.structural = gate('PASS', [`asset-intake:${intake.observed_utc}:${item.asset_id}`]);
+  if (item.asset_kind === 'character') {
+    recordGates.rig = gate('PASS', [`asset-intake:${intake.observed_utc}:${item.asset_id}`]);
+    recordGates.animation = gate('PASS', [`asset-intake:${intake.observed_utc}:${item.asset_id}`]);
+  } else {
+    recordGates.rig = gate('N/A');
+    recordGates.animation = gate('N/A');
+  }
+  add({
+    asset_id: item.asset_id, display_name: item.display_name, asset_kind: item.asset_kind,
+    lifecycle: item.lifecycle, facets: item.tags, next_action: item.next_action,
+    aliases: [item.filename], related_asset_ids: [], custody: 'IN_DRIVE', recoverability: 'VERIFIED_FROM_DRIVE',
+    custody_locations: [{ kind: 'DRIVE', durable: true, drive_file_id: item.drive_file_id, drive_file_url: `https://drive.google.com/file/d/${item.drive_file_id}/view`, archive_path: item.filename, drive_folder_url: intake.drive_folder_url }],
+    source: { path: null, sha256: item.sha256, size_bytes: item.size_bytes, authority: 'drive-intake-2026-08-29' },
+    provider: { task_ids: [], context_alias: null }, structural_metrics: { file_size_bytes: item.size_bytes, ...item.metrics },
+    rights: rights('KNOWN', [`drive:${item.drive_file_id}`]), parent_asset_id: null, derivative_of: null,
+    qualification_gates: recordGates,
+    evidence_refs: [`drive:${item.drive_file_id}`, `asset-intake:${intake.observed_utc}:${item.asset_id}`],
+    notes: `${item.identity_state}. ${item.notes}`,
+  });
+}
+
+add({
+  asset_id: animationRecovery.asset_id, display_name: 'Meshy hdUs9c Hero animation source', asset_kind: 'animation-source', lifecycle: 'SOURCE_ONLY',
+  facets: ['hero', 'meshy'], next_action: 'OWNER_REVIEW', aliases: [animationRecovery.share_url], related_asset_ids: ['hero.base'],
+  custody: 'UNKNOWN', recoverability: 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT',
+  custody_locations: [{ kind: 'PROVIDER', durable: false, provider_context: 'Meshy share hdUs9c; exact source task unresolved', provider_task_ids: [] }],
+  source: { path: null, sha256: null, size_bytes: null, authority: 'hdus9c-recovery-2026-08-29' },
+  provider: { task_ids: [], context_alias: 'share-hdUs9c' }, structural_metrics: metrics(null, 'model'), rights: rights(),
+  parent_asset_id: null, derivative_of: null, qualification_gates: gates(),
+  evidence_refs: ['animation-recovery:HDUS9C_ANIMATION_SOURCE_RECOVERY.json'],
+  notes: `${animationRecovery.recovery_status}. ${animationRecovery.required_owner_action}`,
+});
+
 const reconciliationRecords = records
   .flatMap((record) => record.provider.task_ids.filter((task) => ['image-to-3d', 'rigging'].includes(task.task_kind)).map((task) => ({ asset_id: record.asset_id, ...task })))
   .concat(evidence.provider_reconciliation.additional_records);
@@ -258,6 +332,8 @@ const registry = {
     { path: 'docs/asset-production/ENEMY_WAVE_1_PROVENANCE.json', role: 'historical enemy provider provenance' },
     { path: 'docs/asset-production/ENEMY_WAVE_1_STRUCTURAL_AUDIT.json', role: 'dated structural qualification evidence' },
     { path: 'docs/asset-production/asset-registry-v1.evidence.json', role: 'Package A dated observations and stable runtime identity map' },
+    { path: 'docs/asset-production/ASSET_INTAKE_2026-08-29.json', role: 'Drive-backed 2026-08-29 intake hashes, identities and structural evidence' },
+    { path: 'docs/asset-production/HDUS9C_ANIMATION_SOURCE_RECOVERY.json', role: 'read-only animation-source recovery conclusion' },
   ],
   provider_reconciliation: {
     observed_utc: evidence.provider_reconciliation.observed_utc,
