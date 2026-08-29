@@ -7,12 +7,13 @@ evidence.
 
 Every logical asset has a stable semantic `asset_id` that is independent of its
 physical path. `asset-registry-v1.evidence.json` is the checked-in Package A
-snapshot input for mutable observations and the runtime path-to-identity map;
+snapshot input for mutable observations and the served-runtime and tool-only
+path-to-identity maps;
 a rename or move changes the path mapping, not the logical identity.
 
 Custody is explicit and multi-location: records can retain historical Git refs,
-repo paths, Git blob OIDs, Drive file IDs/URLs/archive paths, current runtime
-Git paths, provider context, and local-only evidence without treating a local
+repo paths, Git blob OIDs, Drive file IDs/URLs/archive paths, current served
+and tool-only Git paths, provider context, and local-only evidence without treating a local
 copy as durable. Qualification gates are independent `{status,evidence_refs}`
 objects. A GLB extension or presence under `public/assets` proves neither
 structural nor runtime qualification. Unproven gates remain `UNKNOWN`.

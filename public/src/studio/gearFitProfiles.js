@@ -12,7 +12,7 @@ import { normalizeHiddenRegions } from '../character/anatomyOcclusion.js';
 export const OPEN_FACE_HELMET_PROFILE_V1 = Object.freeze({
   id: 'headgear-open-face-v1',
   referenceAssetId: 'helmet_dawnwarden_v1',
-  referenceAssetUrl: 'assets/gear/candidates/dawnwarden-helmet-v1.glb',
+  referenceAssetUrl: 'studio-candidates/dawnwarden-helmet-v1.glb',
   referenceSourceSha: '687f903f33def5dddc7662e9093de4d80f55fc12',
   boneName: 'Head',
   targetWorldLongest: 0.38,

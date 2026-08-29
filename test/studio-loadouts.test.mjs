@@ -101,7 +101,7 @@ test('the provenance vocabulary never uses a bare "shipping" that could read as 
   }
 });
 
-test('candidate/shipped labels match where the assets actually live on disk', () => {
+test('candidate/shipped labels match their declared custody surfaces', () => {
   const candidates = ALL_STUDIO_GEAR.filter((item) => item.provenance === 'candidate');
   const expectedIds = [WILDWOOD_BLADE_CANDIDATE_ID, ...STUDIO_CANDIDATE_GEAR.map((item) => item.id)].sort();
   assert.deepEqual(candidates.map((item) => item.id).sort(), expectedIds);
@@ -109,8 +109,8 @@ test('candidate/shipped labels match where the assets actually live on disk', ()
   assert.match(WILDWOOD_BLADE_CANDIDATE_URL, /^assets\/gear\/candidates\//);
   assert.ok(existsSync(`public/${WILDWOOD_BLADE_CANDIDATE_URL}`), 'Wildwood candidate GLB missing');
   for (const candidate of STUDIO_CANDIDATE_GEAR) {
-    assert.match(candidate.url, /^assets\/gear\/candidates\//);
-    assert.ok(existsSync(`public/${candidate.url}`), `${candidate.id} candidate GLB missing`);
+    assert.match(candidate.url, /^studio-candidates\//);
+    assert.ok(existsSync(`tools/assets/${candidate.url}`), `${candidate.id} tool-only candidate GLB missing`);
   }
 
   assert.doesNotMatch(BELT_LANTERN_URL, /candidates/);

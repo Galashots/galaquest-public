@@ -38,7 +38,7 @@ function imageSize(bytes) {
   return { kind: 'unknown', w: 0, h: 0 };
 }
 
-function report(path) {
+export function report(path, { log = true } = {}) {
   const glb = readFileSync(path);
   if (glb.readUInt32LE(0) !== 0x46546c67) throw new Error(`${path} is not a GLB`);
   const jsonLen = glb.readUInt32LE(12);
@@ -65,18 +65,6 @@ function report(path) {
     return { ...imageSize(bytes), bytes: bv.byteLength };
   });
 
-  const pad = (s, n) => String(s).padEnd(n);
-  console.log(`\n${basename(path)}  ${glb.length.toLocaleString()} bytes`);
-  console.log(`  ${pad('triangles', 22)} ${triangles.toLocaleString()}`);
-  console.log(`  ${pad('primitives (draw floor)', 22)} ${primitives}`);
-  console.log(`  ${pad('materials', 22)} ${(g.materials ?? []).length}`);
-  console.log(`  ${pad('meshes / nodes', 22)} ${(g.meshes ?? []).length} / ${(g.nodes ?? []).length}`);
-  console.log(`  ${pad('skins / joints', 22)} ${(g.skins ?? []).length} / ${(g.skins ?? []).reduce((n, s) => n + s.joints.length, 0)}`);
-  console.log(`  ${pad('animations', 22)} ${(g.animations ?? []).length}${(g.animations ?? []).length ? ` (${g.animations.map((a) => a.name).join(', ')})` : ''}`);
-  for (const [i, im] of images.entries()) {
-    console.log(`  ${pad(`image[${i}]`, 22)} ${im.w}x${im.h} ${im.kind}, ${im.bytes.toLocaleString()} bytes`);
-  }
-
   const verdicts = [
     ['LOD0 target', triangles <= TRI.lod0.target, `${triangles} vs ${TRI.lod0.target}`],
     ['LOD0 hard cap', triangles <= TRI.lod0.hardCap, `${triangles} vs ${TRI.lod0.hardCap}`],
@@ -87,9 +75,22 @@ function report(path) {
       images.map((im) => `${im.w}x${im.h}`).join(', ') || 'no images'],
     ['one atlas', images.length <= CONTRACT.surface.uniqueFullBodyTextures, `${images.length} images`],
   ];
-  console.log('  --- against hero_contract.json ---');
-  for (const [name, ok, detail] of verdicts) {
-    console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${pad(name, 16)} ${detail}`);
+  if (log) {
+    const pad = (s, n) => String(s).padEnd(n);
+    console.log(`\n${basename(path)}  ${glb.length.toLocaleString()} bytes`);
+    console.log(`  ${pad('triangles', 22)} ${triangles.toLocaleString()}`);
+    console.log(`  ${pad('primitives (draw floor)', 22)} ${primitives}`);
+    console.log(`  ${pad('materials', 22)} ${(g.materials ?? []).length}`);
+    console.log(`  ${pad('meshes / nodes', 22)} ${(g.meshes ?? []).length} / ${(g.nodes ?? []).length}`);
+    console.log(`  ${pad('skins / joints', 22)} ${(g.skins ?? []).length} / ${(g.skins ?? []).reduce((n, s) => n + s.joints.length, 0)}`);
+    console.log(`  ${pad('animations', 22)} ${(g.animations ?? []).length}${(g.animations ?? []).length ? ` (${g.animations.map((a) => a.name).join(', ')})` : ''}`);
+    for (const [i, im] of images.entries()) {
+      console.log(`  ${pad(`image[${i}]`, 22)} ${im.w}x${im.h} ${im.kind}, ${im.bytes.toLocaleString()} bytes`);
+    }
+    console.log('  --- against hero_contract.json ---');
+    for (const [name, ok, detail] of verdicts) {
+      console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${pad(name, 16)} ${detail}`);
+    }
   }
   return { path, triangles, primitives, bytes: glb.length, images: images.length };
 }

@@ -30,7 +30,7 @@ test('registry has unique stable logical identities and only declared runtime as
   assert.ok(ids.length >= 80, `expected current plus historical asset identities, got ${ids.length}`);
   assert.equal(ids.some((id) => id.startsWith('runtime_public_assets_')), false);
   assert.equal(registry.records.some((record) => record.source.path?.endsWith('README.md')), false);
-  for (const declared of evidence.runtime_assets) {
+  for (const declared of [...evidence.runtime_assets, ...(evidence.tool_only_assets ?? [])]) {
     const record = registry.records.find((candidate) => candidate.asset_id === declared.asset_id);
     assert.ok(record, `missing stable runtime identity ${declared.asset_id}`);
     assert.equal(record.source.path, declared.path);
@@ -108,7 +108,8 @@ test('provider reconciliation is dated machine-readable evidence and spend-safe'
 });
 
 test('current Git custody paths exist and recorded hashes match', () => {
-  for (const record of registry.records.filter((candidate) => candidate.source.authority === 'runtime-asset-identity-snapshot')) {
+  const snapshotAuthorities = new Set(['runtime-asset-identity-snapshot', 'tool-only-asset-identity-snapshot']);
+  for (const record of registry.records.filter((candidate) => snapshotAuthorities.has(candidate.source.authority))) {
     const path = record.source.path;
     assert.ok(path && !path.startsWith('/') && !path.includes('\\'), `${record.asset_id} has a repo-relative path`);
     const file = resolve(root, path);

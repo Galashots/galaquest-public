@@ -2,12 +2,12 @@ import * as THREE from '../../vendor/three.module.min.js';
 import { rigidAnchorName } from '../character/gear.js';
 import { OPEN_FACE_HELMET_PROFILE_V1 } from './gearFitProfiles.js';
 
-// PR #26 asset-forge candidates. These paths deliberately stay under candidates/ until visual fit,
-// animation sweeps, runtime pixels, and final owner acceptance say otherwise.
+// PR #26 asset-forge candidates. Their source bytes live outside public/assets so the game payload
+// stays shipping-only; the server exposes this fixed Studio-review route on demand.
 export const DAWNWARDEN_SWORD_CANDIDATE = Object.freeze({
   id: 'sword_dawnwarden_v1',
   boneName: 'RightHand',
-  url: 'assets/gear/candidates/dawnwarden-sword-v1.glb',
+  url: 'studio-candidates/dawnwarden-sword-v1.glb',
   kind: 'sword',
   // Tier 4 is intentionally a larger silhouette than Ironwood/Silverguard. This is only an initial
   // Studio normalization target; the accepted fit is judged from pixels, not from this number.
@@ -37,7 +37,7 @@ export const DAWNWARDEN_SWORD_CANDIDATE = Object.freeze({
 export const DAWNWARDEN_HELMET_CANDIDATE = Object.freeze({
   id: 'helmet_dawnwarden_v1',
   boneName: 'Head',
-  url: 'assets/gear/candidates/dawnwarden-helmet-v1.glb',
+  url: 'studio-candidates/dawnwarden-helmet-v1.glb',
   kind: 'helmet',
   // Dawnwarden is the owner-locked reference for this open-face fit family. The profile captures the
   // approved seat/orientation and becomes the starting frame for later open-face helmet candidates.

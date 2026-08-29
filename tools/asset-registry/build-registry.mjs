@@ -62,7 +62,9 @@ const observedTask = (task) => ({
   notes: taskObservation.notes,
   evidence_ref: `registry-evidence:${evidence.provider_reconciliation.observed_utc}`,
 });
-const currentRuntimePaths = new Set(evidence.runtime_assets.map((asset) => asset.path));
+const runtimeAssets = evidence.runtime_assets;
+const toolOnlyAssets = evidence.tool_only_assets ?? [];
+const currentRuntimePaths = new Set(runtimeAssets.map((asset) => asset.path));
 const structuralByFilename = new Map(structuralAudit.entries.map((entry) => [entry.filename, entry]));
 
 const scannedRuntimePaths = supportedFiles().map((abs) => relative(root, abs).replaceAll('\\', '/')).sort();
@@ -73,9 +75,9 @@ if (JSON.stringify(scannedRuntimePaths) !== JSON.stringify(declaredRuntimePaths)
   throw new Error(`runtime asset identity map mismatch; undeclared=${undeclared.join(',') || 'none'} missing=${missing.join(',') || 'none'}`);
 }
 
-for (const asset of evidence.runtime_assets) {
+function addSnapshotAsset(asset, authority, notes, evidenceRef) {
   const abs = join(root, asset.path);
-  if (!existsSync(abs)) throw new Error(`declared runtime asset missing: ${asset.path}`);
+  if (!existsSync(abs)) throw new Error(`declared asset snapshot missing: ${asset.path}`);
   const bytes = readBytes(abs);
   const isCandidate = asset.lifecycle === 'QUALIFYING';
   const recordGates = gates();
@@ -98,7 +100,7 @@ for (const asset of evidence.runtime_assets) {
       path: asset.path,
       sha256: sha256(bytes),
       size_bytes: statSync(abs).size,
-      authority: 'runtime-asset-identity-snapshot',
+      authority,
     },
     provider: { task_ids: [], context_alias: null },
     structural_metrics: metrics(bytes.length, asset.asset_kind),
@@ -106,9 +108,20 @@ for (const asset of evidence.runtime_assets) {
     parent_asset_id: null,
     derivative_of: null,
     qualification_gates: recordGates,
-    evidence_refs: [`registry-evidence:runtime-assets`, `git:${evidence.snapshot.runtime_git_ref}:${asset.path}`],
-    notes: isCandidate ? 'Candidate identity is registered without runtime promotion.' : 'Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.',
+    evidence_refs: [`registry-evidence:${evidenceRef}`, `git:${evidence.snapshot.runtime_git_ref}:${asset.path}`],
+    notes: isCandidate ? `${notes} Candidate identity is registered without runtime promotion.` : notes,
   });
+}
+
+for (const asset of runtimeAssets) {
+  addSnapshotAsset(asset, 'runtime-asset-identity-snapshot', 'Current served-runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.', 'runtime-assets');
+}
+
+for (const asset of toolOnlyAssets) {
+  if (!asset.path.startsWith('tools/assets/studio-candidates/') || !isAssetSourcePath(asset.path)) {
+    throw new Error(`tool-only asset must stay under tools/assets/studio-candidates: ${asset.path}`);
+  }
+  addSnapshotAsset(asset, 'tool-only-asset-identity-snapshot', 'Current tool-only custody is recorded; it is not part of public/assets.', 'tool-only-assets');
 }
 
 for (const item of history.items) {

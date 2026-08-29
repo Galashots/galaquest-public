@@ -52,7 +52,7 @@ source licence in `NOTICE`.
 | `sword_silverguard.glb` | Meshy paid-plan generation from an owner-drawn concept, Blender finishing |
 | `helmet_silverguard.glb`, `shoulder_silverguard.glb` | Meshy paid-plan generation, owner-directed, Blender finishing. The right shoulder is the left mirrored by a negative X scale, not a second generation. |
 | `candidates/sword_wildwood_w1a.glb` | Meshy paid-plan generation, owner-directed. Candidate, not yet promoted to gameplay. |
-| `candidates/dawnwarden-helmet-v1.glb`, `candidates/dawnwarden-sword-v1.glb` | Meshy paid-plan generation, owner-directed, then re-exported clean (measured generator `pygltflib@v1.16.5`). **Candidate, not shipped.** Kept in-tree only because they are the reference the owner-accepted Asset Forge fit was authored against. |
+| `tools/assets/studio-candidates/dawnwarden-helmet-v1.glb`, `tools/assets/studio-candidates/dawnwarden-sword-v1.glb` | Meshy paid-plan generation, owner-directed, then re-exported clean (measured generator `pygltflib@v1.16.5`). **Candidate, not shipped.** Kept in-tree only because they are the reference the owner-accepted Asset Forge fit was authored against. |
 
 **Input-provenance check.** These were reviewed for deliberate third-party or franchise input before
 publication. The generation prompts themselves are not recoverable from this repository — they lived

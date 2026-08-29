@@ -337,12 +337,12 @@
       "status": "candidate",
       "visual_acceptance": "OWNER_ACCEPTED_FIT — Dawnwarden placement locked upstream; re-confirm visually at the consolidation head before any promotion.",
       "runtime_acceptance": "NOT_PROMOTED",
-      "proposed_destination": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
+      "proposed_destination": "tools/assets/studio-candidates/dawnwarden-helmet-v1.glb",
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/dawnwarden",
       "archive_url": "https://drive.google.com/drive/folders/1EKH70nvLsKK9qbDLSLdNJy_UU_wHaxbV",
       "archive_status": "IN_GIT_ALSO_ARCHIVE_PENDING",
       "disposition": "PRESERVE_NOW",
-      "reason": "Owner-locked Dawnwarden regression reference. public/src/studio/candidateGear.js loads this exact path and test/forge-owner-fit.test.mjs pins its fit packet, so Forge/Studio automated acceptance cannot run without these bytes in the tree."
+      "reason": "Owner-locked Dawnwarden regression reference. It stays in the tool-only Studio candidate store, and test/forge-owner-fit.test.mjs pins its fit packet, so Forge/Studio automated acceptance cannot run without these bytes in the tree."
     },
     {
       "item_id": "dawnwarden-sword-v1",
@@ -360,12 +360,12 @@
       "status": "candidate",
       "visual_acceptance": "OWNER_ACCEPTED_FIT — Dawnwarden placement locked upstream; re-confirm visually at the consolidation head before any promotion.",
       "runtime_acceptance": "NOT_PROMOTED",
-      "proposed_destination": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
+      "proposed_destination": "tools/assets/studio-candidates/dawnwarden-sword-v1.glb",
       "archive_folder": "GalaQuest Asset Source Archive/2026-08 Asset Platform Consolidation/gear/dawnwarden",
       "archive_url": "https://drive.google.com/drive/folders/1EKH70nvLsKK9qbDLSLdNJy_UU_wHaxbV",
       "archive_status": "IN_GIT_ALSO_ARCHIVE_PENDING",
       "disposition": "PRESERVE_NOW",
-      "reason": "Owner-locked Dawnwarden regression reference. public/src/studio/candidateGear.js loads this exact path and test/forge-owner-fit.test.mjs pins its fit packet, so Forge/Studio automated acceptance cannot run without these bytes in the tree."
+      "reason": "Owner-locked Dawnwarden regression reference. It stays in the tool-only Studio candidate store, and test/forge-owner-fit.test.mjs pins its fit packet, so Forge/Studio automated acceptance cannot run without these bytes in the tree."
     },
     {
       "item_id": "gear_embermaw_helmet",
