@@ -112,6 +112,20 @@ import {
   stepEnemyDrops,
 } from './world/enemyDrops.js';
 import { createEnemyDropsPresenter } from './world/enemyDropsPresenter.js';
+// #87: the CLIENT half of personal corpse loot. world/corpseLoot.js's own law and
+// net/gameServerCore.mjs's own corpsesSnapshot are unchanged by this file -- this only reads what the
+// server already put on the wire (see corpseLootPresenter.js's own header for why that reading is
+// still where per-player isolation is provable client-side, twice over).
+import {
+  corpseLootPanelViewModel,
+  corpsesToGlowFor,
+  nearestLootableCorpse,
+  newlyTakenItems,
+} from './world/corpseLootPresenter.js';
+import { createCorpseLootGlowPresenter } from './world/corpseLootGlowPresenter.js';
+import {
+  createCorpseLootInteract, createCorpseLootPanel, createCorpseLootToastLayer,
+} from './ui/corpseLootPanel.js';
 import {
   coinMultiplierForStreak, createStreakState, registerKill as registerStreakKill, stepStreak,
   streakStillActive,
@@ -1032,6 +1046,15 @@ async function bootstrap() {
   // presenter itself is shared by both modes: it only ever reads whatever drops array it is handed.
   let dropsState = createEnemyDropsState();
   const dropsPresenter = createEnemyDropsPresenter(scene);
+  // #87: personal corpse loot's own physical presenter -- server-authoritative only (there is no
+  // offline corpse-loot state, see net client's own sendCollectCorpseItem/All comment), so this only
+  // ever reads serverEncounter.corpses. `previousCorpses` starts null rather than [] on purpose:
+  // world/corpseLootPresenter.js's own newlyTakenItems treats null/undefined as "no baseline yet" and
+  // suppresses arrivals, so a hero who reconnects onto an already-resolved claim never gets a
+  // retroactive toast for gear they took last session.
+  const corpseGlowPresenter = createCorpseLootGlowPresenter(scene);
+  let previousCorpses = null;
+  let heroButtonLootPulseTimer = null;
   // Offline-only: world/enemyDrops.js's own lifeId is deliberately non-durable ("used only to keep
   // this kill's drop ids distinct... never persisted or checked for durable idempotency"), so a
   // fresh minter local to drops is correct -- it does not need to correlate with the mark/XP minter's
@@ -1174,6 +1197,36 @@ async function bootstrap() {
   const unlockCard = createUnlockCard(document);
   gameSurface.appendChild(bossBar.element);
   gameSurface.appendChild(unlockCard.element);
+
+  // #87: the corpse loot prompt/panel/toast. Same "appended after everything else so it paints over
+  // the HUD" placement as bossBar/unlockCard just above.
+  const corpseLootPanel = createCorpseLootPanel(document, {
+    onCollectItem: (claimItemId) => {
+      const corpseId = corpseLootPanel.currentCorpseId();
+      if (corpseId) net.sendCollectCorpseItem(corpseId, claimItemId);
+    },
+    onCollectAll: () => {
+      const corpseId = corpseLootPanel.currentCorpseId();
+      if (corpseId) net.sendCollectCorpseAll(corpseId);
+    },
+  });
+  // The corpse this hero is currently close enough to open -- set every frame by the loot loop below,
+  // read back only when the prompt is actually tapped (main.js's own onOpen callback), the same
+  // "compute every frame, act only on the click" split #workshop-interact's own renderWorkshopInteract
+  // keeps against heroScreen.open().
+  let promptCorpseId = null;
+  const corpseLootInteract = createCorpseLootInteract(document, {
+    onOpen: () => {
+      if (!promptCorpseId || !serverEncounter?.corpses) return;
+      const corpse = serverEncounter.corpses.find((c) => c.id === promptCorpseId);
+      if (!corpse || net.selfId == null) return;
+      corpseLootPanel.show(corpse.id, corpseLootPanelViewModel(corpse, net.selfId));
+    },
+  });
+  const corpseLootToastLayer = createCorpseLootToastLayer(document);
+  gameSurface.appendChild(corpseLootInteract.element);
+  gameSurface.appendChild(corpseLootPanel.element);
+  gameSurface.appendChild(corpseLootToastLayer.element);
 
   const bannerElement = document.querySelector('#banner');
   let bannerTimer = null;
@@ -4859,6 +4912,75 @@ async function bootstrap() {
           );
           if (collected.accepted) dropsState = collected.state;
         }
+      }
+    }
+
+    // ── #87: PERSONAL CORPSE LOOT ───────────────────────────────────────────────────────────
+    //
+    // Server-authoritative only, deliberately: world/corpseLoot.js is a server-side module with no
+    // offline mirror (see net client's own sendCollectCorpseItem/All comment for why -- there is no
+    // shared world to keep a personal claim in while offline). Everything below reads
+    // serverEncounter.corpses and nothing else; this is a presenter, never an awarder -- the actual
+    // grant happens on the server the moment it accepts collect-corpse-item/-all
+    // (net/gameServerCore.mjs's own applyClaimCorpseItem/applyClaimAllCorpseLoot), and this loop only
+    // ever finds out about it on the NEXT snapshot, the same one-way "server owns physical truth,
+    // client presents it" split every other reward here already keeps.
+    if (runtime.hero && netStatus === 'online' && net.selfId != null) {
+      const corpses = serverEncounter?.corpses ?? [];
+      const heroId = net.selfId;
+
+      corpseGlowPresenter.update(deltaSeconds, corpsesToGlowFor(heroId, corpses));
+
+      // The single nearest corpse this hero can actually still loot -- offered by the prompt, opened
+      // by a tap. Hidden while the panel is already open: a second "LOOT" prompt behind an open panel
+      // would be a control a thumb cannot see to avoid.
+      const nearest = corpseLootPanel.isOpen()
+        ? null : nearestLootableCorpse(heroId, corpses, player.position);
+      promptCorpseId = nearest?.id ?? null;
+      corpseLootInteract.show(nearest != null);
+
+      // Keep an open panel live against the actual snapshot -- a sibling's simultaneous claim, this
+      // hero's own click landing, or the corpse itself finally retiring (every eligible hero resolved)
+      // all show up here without the panel needing its own copy of the rule. A corpse that vanished
+      // out from under an open panel (fully resolved, or CORPSE_LOOT_EXPIRE_SECONDS ran out while a
+      // child was mid-read) closes the panel rather than showing a frozen, wrong list.
+      if (corpseLootPanel.isOpen()) {
+        const openCorpseId = corpseLootPanel.currentCorpseId();
+        const openCorpse = corpses.find((corpse) => corpse.id === openCorpseId);
+        if (openCorpse) corpseLootPanel.render(openCorpse.id, corpseLootPanelViewModel(openCorpse, heroId));
+        else corpseLootPanel.close();
+      }
+
+      // The short acquired-item confirmation, plus "visible movement toward the inventory/Hero
+      // destination" (#87's own required outcome list) -- fires off a SNAPSHOT DIFF, so it fires
+      // identically whether this hero tapped TAKE, tapped Take All, or a resend from a flaky
+      // connection landed a beat late; never for an item this hero's client already knew was taken.
+      const arrivals = newlyTakenItems(previousCorpses, corpses, heroId);
+      if (arrivals.length > 0) {
+        const heroButtonRect = document.querySelector('#hero-button')?.getBoundingClientRect();
+        const destination = heroButtonRect
+          ? { x: heroButtonRect.left + heroButtonRect.width / 2, y: heroButtonRect.top + heroButtonRect.height / 2 }
+          : null;
+        for (const arrival of arrivals) {
+          const name = itemDef(arrival.itemId)?.name ?? 'Gear';
+          corpseLootToastLayer.announce(`+ ${name}`, destination);
+          audio.play(GEAR_PICKUP_RECIPE_NAME);
+        }
+        const heroButtonElement = document.querySelector('#hero-button');
+        if (heroButtonElement) {
+          heroButtonElement.dataset.lootPulse = 'true';
+          window.clearTimeout(heroButtonLootPulseTimer);
+          heroButtonLootPulseTimer = window.setTimeout(() => {
+            heroButtonElement.dataset.lootPulse = 'false';
+          }, 260);
+        }
+      }
+      previousCorpses = corpses;
+    } else {
+      corpseGlowPresenter.update(deltaSeconds, []);
+      if (promptCorpseId !== null) {
+        promptCorpseId = null;
+        corpseLootInteract.show(false);
       }
     }
 

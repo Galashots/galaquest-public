@@ -8,6 +8,8 @@ import {
   INPUT_SEND_HZ,
   ProtocolError,
   attackMessage,
+  collectCorpseAllMessage,
+  collectCorpseItemMessage,
   collectDropMessage,
   collectLootMessage,
   decode,
@@ -281,6 +283,23 @@ export function createNetClient(options = {}) {
     return send(collectDropMessage(dropId));
   }
 
+  /** #87: ask the server to take ONE named item off this hero's own corpse claim. Same online-only
+   *  guard and no-sequence-number reasoning as sendCollectDrop -- there is no offline corpse-loot
+   *  state to collect from at all (world/corpseLoot.js is server-side-only, see its own header), and
+   *  a resend of the same (corpseId, claimItemId) is naturally idempotent server-side
+   *  (world/corpseLoot.js's own requestClaimCorpseItem rejects an already-taken item outright). */
+  function sendCollectCorpseItem(corpseId, claimItemId) {
+    if (status !== 'online') return false;
+    return send(collectCorpseItemMessage(corpseId, claimItemId));
+  }
+
+  /** #87: `Take All` -- the same shape and reasoning as sendCollectCorpseItem, for every item this
+   *  hero's own claim on one corpse still has untaken. */
+  function sendCollectCorpseAll(corpseId) {
+    if (status !== 'online') return false;
+    return send(collectCorpseAllMessage(corpseId));
+  }
+
   /** G4: ask Rowan for the Wildwood Blade. NO PAYLOAD AT ALL -- every fact that decides whether the
    *  promise is owed (where this hero is standing, whether the Beacon is burning, whether this guest
    *  already owns it) is server-side world state, so there is nothing here for a client to assert or
@@ -379,6 +398,8 @@ export function createNetClient(options = {}) {
     sendClaimHollow,
     sendCollectLoot,
     sendCollectDrop,
+    sendCollectCorpseItem,
+    sendCollectCorpseAll,
     sendVillageUpgradePurchase,
     reconcile,
     // Remote players only: self is drawn from the local prediction, which is always more current.

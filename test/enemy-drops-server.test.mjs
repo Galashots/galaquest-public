@@ -189,15 +189,27 @@ test('a collected heart drop heals through combat/encounter.js\'s own requestHer
   assert.ok(hpAfterCollect <= HERO_MAX_HP, 'a heart must never carry a hero past their own maxHp');
 });
 
-// #87: gear no longer becomes a ground pickup at all -- net/gameServerCore.mjs's own tick now lifts
-// any gear entry world/enemyDrops.js's own roll produces out of the ground state and hands it to the
-// killing hero as a world/corpseLoot.js personal claim instead (see that module's own header, and
-// gameServerCore.mjs's own integration comment, for the full scope). These two tests used to prove
-// the ground pickup's grant/conversion wiring; they now prove the identical wiring one hop later, at
-// the corpse. The "already-owned converts to coins instead" half retired with the ground path itself
-// -- corpseLoot.js's own ownership-aware suppression (proven in test/corpse-loot.test.mjs) simply
-// omits the claim rather than converting it, which the second test below proves is actually wired
-// end to end through the real reward coordinator.
+// #87: CORRECTION -- this comment used to claim "gear no longer becomes a ground pickup at all". That
+// was true only briefly: net/gameServerCore.mjs's own tick comment ("Correction (was: gear no longer
+// becomes a ground pickup)") records that the ground merge was put BACK, deliberately, because no
+// client presenter existed yet to collect a corpse claim at all -- stripping gear from the ground with
+// nothing able to read it off a corpse would have made ordinary gear unobtainable online. The client
+// presenter now exists (world/corpseLootPresenter.js, ui/corpseLootPanel.js, wired in main.js), but the
+// ground path was deliberately KEPT rather than retired on the same PR that added the presenter -- see
+// this repo's PR #105 body for the causal argument: the killer's own ground drop and their own corpse
+// claim always carry the IDENTICAL itemId (requestCorpseLoot reuses killerGearItemId rather than
+// re-rolling), and net/gameServerCore.mjs's own grantOwnership keys its durable event on
+// `own:<guestId>:<itemId>` -- so collecting the same item through both paths grants it exactly ONCE,
+// never twice, proven below in "shadow mode safety". This comment was stale relative to the shipped
+// code for a while (GQ-002); a passing "gear kind allowed" assertion at this file's own top
+// (spawn-on-defeat) never contradicted the drift, which is why it went unnoticed until this pass.
+//
+// These two tests prove the CORPSE half of gear's grant/conversion wiring (the ground half is proven
+// by the coin/heart tests above it, which share the same collect-and-grant shape). The "already-owned
+// converts to coins instead" half retired with the OLD single-roll-per-kill shape -- corpseLoot.js's
+// own ownership-aware suppression (proven in test/corpse-loot.test.mjs) simply omits the claim rather
+// than converting it, which the second test below proves is actually wired end to end through the real
+// reward coordinator.
 test('a corpse claim for an unowned item grants it durably through the real reward store', () => {
   let corpse = null;
   let sim = null;
@@ -295,6 +307,73 @@ test('#87 seam: two real, independently-attacking players both receive their own
   assert.ok(stillClaimB, 'B\'s own claim must still exist on the corpse after A collects');
   assert.ok(stillClaimB.items.every((item) => !item.taken),
     'A collecting their own claim must never resolve B\'s own claim');
+});
+
+// #87 shadow-mode safety: the PRODUCT DIRECTOR asked whether the ground-gear shadow path could be
+// retired now that the corpse presenter exists. This is the causal evidence for the answer "not
+// retired, and here is why that is still safe": the killer's ground drop and their own corpse claim
+// are never two independent rolls -- world/corpseLoot.js's own requestCorpseLoot reuses
+// killerGearItemId verbatim rather than re-rolling (see that file's own comment on the killer's
+// branch), so both paths name the IDENTICAL itemId, and net/gameServerCore.mjs's own grantOwnership
+// keys its durable 'gear-owned' fact on `own:<guestId>:<itemId>` -- a fact that already exists announces
+// nothing a second time (announcementFor's own `result.applied` check). So a child who grabs the
+// ground copy first and then opens the corpse loses nothing and gains nothing extra: the corpse claim
+// still visibly resolves (taken flips true, so the panel and glow correctly stop offering it), but the
+// SECOND grantOwnership call for the same itemId is a silent no-op, never a duplicate benefit.
+test('shadow mode safety: the killer\'s ground drop and corpse claim share one itemId, so taking both grants ownership exactly once', () => {
+  const { dir, path } = tempDb();
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath: path });
+    let sim = null;
+    let player = null;
+    let groundGearDrop = null;
+    let corpse = null;
+    for (let attemptNumber = 0; attemptNumber < 80 && !groundGearDrop; attemptNumber += 1) {
+      sim = singleEnemySimulation('frost-wolf', 'target', rewards);
+      player = sim.addPlayer(`p${attemptNumber}`, { x: 0, z: 7 });
+      rewards.join(player.id, `guest-shadow-${attemptNumber}`);
+      fightToDeath(sim, [player], 'target');
+      groundGearDrop = sim.dropsSnapshot().find((d) => d.kind === GEAR_DROP_KIND) ?? null;
+      corpse = groundGearDrop
+        ? sim.corpsesSnapshot().find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null
+        : null;
+      if (!groundGearDrop || !corpse) { groundGearDrop = null; corpse = null; }
+    }
+    assert.ok(groundGearDrop && corpse,
+      'no kill produced BOTH a ground gear drop and a corpse claim for the killer across 80 tries -- '
+      + 'the shadow-mode duplication this test is proving safe may have already been retired for real');
+
+    const claim = corpse.claims.find((c) => c.heroId === player.id);
+    const corpseItem = claim.items.find((item) => item.itemId === groundGearDrop.itemId);
+    assert.ok(corpseItem,
+      'the corpse claim\'s own item must name the SAME itemId as the ground drop -- if this ever '
+      + 'fails, the two paths have started rolling independently and the "safe because idempotent" '
+      + 'argument this test exists to prove no longer holds');
+
+    walkOntoDeathSpot(sim, player.id, 'target', 5000);
+
+    // Path 1: the ground pickup, exactly as an un-migrated child playing today would experience it.
+    const groundResult = sim.applyCollectDrop(player.id, groundGearDrop.id);
+    assert.equal(groundResult.accepted, true);
+    const firstGrantFacts = rewards.grantOwnership(player.id, groundResult.drop.itemId);
+    assert.equal(firstGrantFacts.length, 1, 'the FIRST grant of a real item must be a real, announced fact');
+    assert.equal(firstGrantFacts[0].type, 'gear-owned');
+
+    // Path 2: the SAME child then opens the corpse too (the new presenter never hides an already-
+    // ground-collected item -- taken tracks the CLAIM, not reward ownership) and taps TAKE.
+    const corpseResult = sim.applyClaimCorpseItem(player.id, corpse.id, corpseItem.id);
+    assert.equal(corpseResult.accepted, true, 'the corpse claim itself is independent physical state -- taking it must still succeed');
+    const secondGrantFacts = rewards.grantOwnership(player.id, corpseResult.item.itemId);
+    assert.equal(secondGrantFacts.length, 0,
+      'the SECOND grant of the identical itemId must be a silent no-op -- this is the actual safety '
+      + 'property: no duplicate durable fact, no double benefit, from either collection order');
+
+    assert.ok(rewards.ownedItemIdsFor(player.id).includes(groundGearDrop.itemId),
+      'the item is owned exactly once, regardless of which path told the truth first');
+    rewards.close();
+  } finally {
+    cleanupTempDb(dir);
+  }
 });
 
 test('expiry: an uncollected drop is gone from the wire after DROP_EXPIRE_SECONDS of real ticks', () => {
