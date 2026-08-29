@@ -347,6 +347,58 @@ test('#87 seam: two real, independently-attacking players both receive their own
     'A collecting their own claim must never resolve B\'s own claim');
 });
 
+// #87 HARNESS SEAM, both halves. tools/runtime-test/drive-corpse-loot.mjs cannot prove anything about
+// the loot panel until a real personal claim exists, and whether one exists was decided by an unseeded
+// 20% dice roll -- which is why the hosted matrix job burned its whole budget re-killing an enemy and
+// went red having never opened the panel once. net/gameServerCore.mjs's own guaranteedCorpseItemIds
+// option (routed from server.mjs's GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS, set by nothing else in the
+// tree) hands the server a fixed item list instead.
+//
+// The FIRST test is the one that matters for safety, and it is deliberately written to go red if this
+// seam ever stops being opt-in: a common `wolf` has gearChance 0 (world/enemyDrops.js's own
+// dropTableForKind), and world/corpseLoot.js refuses to create an empty corpse at all, so an unwired
+// simulation must produce NO corpse whatsoever from a real, fully-fought wolf kill. If a future change
+// ever defaults this option on, or leaks a production caller into it, this assertion fails immediately
+// rather than quietly handing every child free gear.
+test('#87 harness seam is opt-in: an unwired simulation still spawns NO corpse from a kill that rolled no gear', () => {
+  const sim = createSimulation({ enemies: [{ enemyId: 'target', kind: 'wolf', spawn: { x: 0, z: 8 } }] });
+  const player = sim.addPlayer('a', { x: 0, z: 7 });
+  fightToDeath(sim, [player], 'target');
+
+  assert.equal(sim.encounterSnapshot().enemies.find((e) => e.enemyId === 'target').hp, 0,
+    'the wolf must actually be dead, or this proves nothing about what its death did or did not spawn');
+  assert.deepEqual(sim.corpsesSnapshot(), [],
+    'a common wolf drops no gear (gearChance 0) and corpseLoot.js never creates an empty corpse -- so an '
+    + 'unwired simulation must show no corpse at all. A corpse here means guaranteedCorpseItemIds stopped '
+    + 'being opt-in.');
+});
+
+test('#87 harness seam: guaranteedCorpseItemIds puts a real, takeable personal claim on the corpse', () => {
+  const sim = createSimulation({
+    enemies: [{ enemyId: 'target', kind: 'wolf', spawn: { x: 0, z: 8 } }],
+    guaranteedCorpseItemIds: [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID],
+  });
+  const player = sim.addPlayer('a', { x: 0, z: 7 });
+  fightToDeath(sim, [player], 'target');
+
+  const corpse = sim.corpsesSnapshot()[0];
+  assert.ok(corpse, 'the same kill that spawns nothing unwired must spawn a real corpse once the seam is set');
+  const claim = corpse.claims.find((c) => c.heroId === player.id);
+  assert.ok(claim, 'the real contributing hero must hold the claim -- not some synthesized fixture hero');
+  assert.deepEqual(claim.items.map((item) => item.itemId), [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID],
+    'the claim carries exactly the requested items, in order, so the harness knows what to assert on screen');
+  assert.ok(claim.items.every((item) => item.guaranteed === true && item.taken === false),
+    'they ride the already-tested guaranteed path and start untaken');
+
+  // The harness's own flow: take one individually, then the LAST one -- the exact shape of the
+  // corpse-retirement blocker corrected at dd7ce2e, driven here through the real server entry points.
+  assert.equal(sim.applyClaimCorpseItem(player.id, corpse.id, claim.items[0].id).accepted, true);
+  const midway = sim.corpsesSnapshot().find((c) => c.id === corpse.id);
+  assert.deepEqual(midway.claims[0].items.map((item) => item.taken), [true, false],
+    'taking one item must resolve exactly that item and leave the other still offered');
+  assert.equal(sim.applyClaimCorpseItem(player.id, corpse.id, claim.items[1].id).accepted, true);
+});
+
 // #87 shadow-mode safety: the PRODUCT DIRECTOR asked whether the ground-gear shadow path could be
 // retired now that the corpse presenter exists. This is the causal evidence for the answer "not
 // retired, and here is why that is still safe": the killer's ground drop and their own corpse claim

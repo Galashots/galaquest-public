@@ -98,7 +98,7 @@ export const HARNESSES = {
   // than on a regression. A gate, not an instrument: the wiring half is a genuine regression signal,
   // and the file's own header records the exact real-kill/gear-roll counts this session's runs
   // produced, for a reader deciding whether a red run is bad luck or a real defect.
-  'drive-corpse-loot': { gate: true, why: 'personal corpse loot client presenter: real-browser boot/DOM-wiring sanity (always gates) plus a best-effort real-roll open/collect/Take-All/toast proof over real touch dispatch (RNG-dependent -- interpret a red run against its own PASS/FAIL breakdown)' },
+  'drive-corpse-loot': { gate: true, why: 'personal corpse loot client presenter, end to end and fully gating: a real fought kill spawns a real personal claim (contents fixtured through net/gameServerCore.mjs\'s opt-in guaranteedCorpseItemIds, so no unseeded gear roll decides whether this gate can run), then real touch dispatch drives glow/prompt -> panel -> individual TAKE -> Take All on the last item -> acquired-item toast and Hero-button pulse. No best-effort tier: a red run is a real regression' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test

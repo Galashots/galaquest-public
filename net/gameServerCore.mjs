@@ -971,6 +971,23 @@ export function createSimulation(options = {}) {
   // it always did" contract heroStatsFor's own default keeps -- every test that drives
   // createSimulation() directly without wiring this gets an honest "always drop the gear" roll.
   const ownedItemIdsFor = options.ownedItemIdsFor ?? (() => []);
+  // #87 HARNESS SEAM, OFF BY DEFAULT AND UNSET IN EVERY REAL INVOCATION. world/corpseLoot.js's own
+  // `guaranteedItemIds` is a real, already-tested rule ("every eligible hero receives these
+  // unconditionally, independent of the ordinary roll"); this is the ONE caller of it, and it exists
+  // so tools/runtime-test/drive-corpse-loot.mjs can reach a real personal corpse claim without
+  // depending on an unseeded dice roll. It is emphatically NOT #90: no production code path passes
+  // this, no enemy authors it, and the shipped drop tables in world/enemyDrops.js are untouched --
+  // the hosted matrix job was red purely because a 20% gear roll is not a thing a CI gate can wait
+  // for, not because anything about the reward rules needed to change.
+  //
+  // Same opt-in discipline as GALAQUEST_REWARD_STORE_PATH (see server.mjs's own comment): the
+  // default is the empty list, so an unwired simulation -- which is every production server, every
+  // offline client, and every test that does not deliberately ask -- behaves exactly as it did
+  // before this option existed. test/enemy-drops-server.test.mjs's own "#87 harness seam is opt-in"
+  // test pins that default against a real, fully-fought kill.
+  const guaranteedCorpseItemIds = Array.isArray(options.guaranteedCorpseItemIds)
+    ? options.guaranteedCorpseItemIds.filter((itemId) => typeof itemId === 'string' && itemId.length > 0)
+    : [];
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -1518,6 +1535,7 @@ export function createSimulation(options = {}) {
         eligibleHeroIds,
         killerHeroId: event.heroId,
         killerGearItemId: killerGearDrop?.itemId ?? null,
+        guaranteedItemIds: guaranteedCorpseItemIds,
         ownedItemIdsFor,
       }, Math.random);
       corpseLootState = corpseRolled.state;

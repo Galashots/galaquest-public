@@ -126,6 +126,11 @@ export async function startOwnedServer({
   candidates = PORT_CANDIDATES,
   quiet = false,
   rewardStorePath,
+  // #87: item ids every eligible hero's corpse claim carries unconditionally, so a harness can reach
+  // a real personal claim without waiting on an unseeded gear roll. Passed straight through to
+  // server.mjs's own GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS (see its comment for the full argument);
+  // omitted by every other harness, and omitted means the production dice, unchanged.
+  guaranteedCorpseItemIds,
   repoRoot = REPO_ROOT,
 } = {}) {
   let port = null;
@@ -148,9 +153,13 @@ export async function startOwnedServer({
     // Unset (inherited real data/rewards.db) unless a caller passes rewardStorePath -- e.g. a harness
     // proving something durable and never-reversed, like Workshop I ownership, that must not land in
     // the children's real save. See server.mjs's own comment on GALAQUEST_REWARD_STORE_PATH.
-    env: rewardStorePath
-      ? { ...process.env, GALAQUEST_REWARD_STORE_PATH: rewardStorePath }
-      : process.env,
+    env: {
+      ...process.env,
+      ...(rewardStorePath ? { GALAQUEST_REWARD_STORE_PATH: rewardStorePath } : {}),
+      ...(guaranteedCorpseItemIds?.length
+        ? { GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS: guaranteedCorpseItemIds.join(',') }
+        : {}),
+    },
   });
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });

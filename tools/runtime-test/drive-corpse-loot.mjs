@@ -17,36 +17,29 @@
  * where BOTH independently roll gear was judged not worth the wall-clock cost of the retries that
  * would need, for a property already proven three ways.
  *
- * WHY A RETRY LOOP AT ALL. world/corpseLoot.js's gear roll is real Math.random on the real server --
- * there is no seed hook (by design: the server must not special-case a harness's own dice). This
- * fights TARGET_ENEMY_ID (below) to death repeatedly, waiting out its real respawn between attempts,
- * until a real corpse with a real claim appears or a generous overall deadline expires. See
- * TARGET_ENEMY_ID's own comment for the frost-wolf/alpha-wolf tradeoff and why frost-wolf-1 is the
- * one actually driven.
+ * NO DICE, AND NO RETRY LOOP. Two earlier versions of this file tried to reach a real corpse by
+ * killing an enemy over and over until an unseeded 20% gear roll finally landed. That produced a gate
+ * nobody could read: it was red about half the time for luck alone, and after the luck was de-gated it
+ * was still red on the hosted matrix for a completely different reason -- see the target comment
+ * further down for the measured cause (it never got in range to land a hit at all, 45 swings, 0 kills,
+ * against 7 kills on the same code locally).
  *
- * A FAST, RNG-INDEPENDENT WIRING CHECK RUNS FIRST AND ALWAYS, regardless of whether a corpse is ever
- * rolled: every new DOM node main.js is supposed to append (the Loot prompt, the panel, the toast
- * layer) is checked for real existence and correct hidden/closed boot state, and boot is checked for
- * zero uncaught exceptions. That check is deterministic and does not depend on Math.random -- it is
- * real evidence the client half loads and wires cleanly even on a run where the roll never cooperates.
+ * What replaced it is a narrow, opt-in server fixture rather than a better gambler:
+ * net/gameServerCore.mjs's own `guaranteedCorpseItemIds` option, routed from server.mjs's
+ * GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS and set by nothing in this tree except owned-server.mjs on
+ * this file's behalf. It hands the corpse a FIXED item list, so one ordinary kill of the ordinary
+ * near-spawn wolf always yields a real personal claim.
  *
- * MAJOR correction (evidence-overclaim): "whether a corpse is ever rolled" used to also decide this
- * SCRIPT'S OWN EXIT CODE, not merely which checks could run. frost-wolf-1's own gear chance is 0.2
- * (world/enemyDrops.js's dropTableForKind), independent per kill; the overall 5-minute deadline below
- * realistically buys 2-4 real kills, so the single `check('a real corpse ... appeared', corpse != null)`
- * below read false purely on bad luck roughly 40-64% of the time (`0.8^n` for n in [2,4]) -- on a
- * SUITE this file's own registration in tools/runtime-test/review-suites.mjs marks `gate: true` and
- * .github/workflows/full-playtest-matrix.yml runs as a required matrix job. A CI signal that is red
- * about half the time for luck alone, with no regression behind it, corrodes exactly the evidence
- * discipline AGENTS.md's own policy depends on ("every acceptance claim names the exact SHA it
- * proves") -- a reviewer or Owner who has seen this job cry wolf learns to ignore it, which is worse
- * than not running it at all. checkBestEffort() below is the fix: it still PRINTS a PASS/FAIL line
- * (so a red run is still visible and still interpretable against its own breakdown, exactly as this
- * suite's own registered `why` text already promises) but never adds to `failures`, so only a real,
- * deterministic wiring or presenter regression can fail this script's own exit code. Everything gated
- * on the corpse roll ever actually landing (the open/collect/Take-All/toast proof from line ~344
- * downward) is a legitimate, non-RNG regression signal in its own right ONCE a corpse exists --only the
- * "did the dice cooperate at all" check itself is inherently luck, so only that one call converts.
+ * WHAT THAT DOES AND DOES NOT MAKE FAKE, stated plainly because it is the whole basis of this file's
+ * evidence. The fixture decides ONE thing: which item ids sit on the claim. Everything this file
+ * actually asserts stays real and server-authoritative -- a real fought kill, the real contributor
+ * eligibility derivation, the real corpse spawn, the real claim keyed to this hero's own real heroId,
+ * the real encounter.corpses[] wire, the real client presenter, the real collect-corpse-item /
+ * collect-corpse-all round trip, and the real snapshot diff that produces the acquired-item toast. The
+ * shipped drop tables in world/enemyDrops.js are untouched, and the option defaults off, which
+ * test/enemy-drops-server.test.mjs's own "#87 harness seam is opt-in" test pins against a real kill.
+ *
+ * Because nothing here is luck any more, EVERY check in this file gates. There is no best-effort tier.
  */
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,12 +47,22 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { deadlineAfter, movementPulseMillis } from './automation-timing.mjs';
+import { authoredWolfSource } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
-import { ATTACK_REACH } from '../../public/src/combat/encounter.js';
+import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../../public/src/progression/items.js';
 
 const CHROME_PORT = 9224;
 const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-corpse-loot-')), 'rewards.db');
-const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
+// TWO items, deliberately, and in this order: the first proves an INDIVIDUAL take, the second is then
+// the LAST item on the corpse -- which is the exact shape of the receipt blocker corrected at dd7ce2e
+// (a fully-resolved corpse used to retire before the snapshot carrying its own taken-transition was
+// built, so the last thing a child collected was the one thing that never confirmed). Driving both
+// through one real corpse is what makes this file able to catch that defect coming back.
+const FIXTURE_ITEM_IDS = [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID];
+const server = await startOwnedServer({
+  rewardStorePath: REWARD_STORE_PATH,
+  guaranteedCorpseItemIds: FIXTURE_ITEM_IDS,
+});
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
@@ -69,23 +72,11 @@ mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
 let failures = 0;
-let rngLuckMisses = 0;
 function check(name, passed, detail) {
   results.push({ name, passed, detail });
   if (!passed) failures += 1;
   console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
-// MAJOR correction (evidence-overclaim): a best-effort check for the one condition genuinely gated on
-// real, unseeded Math.random (the frost-wolf gear roll) rather than on anything this script or main.js
-// actually controls. Still printed, still recorded in the PASS/FAIL breakdown below -- just never
-// added to `failures`, so bad luck alone can never turn this suite's own gate:true registration red.
-// See this file's own header for the full argument.
-function checkBestEffort(name, passed, detail) {
-  results.push({ name, passed, detail, bestEffort: true });
-  if (!passed) rngLuckMisses += 1;
-  console.log(`${passed ? 'PASS' : 'FAIL'}  ${name} [best-effort, RNG]${detail ? ` — ${detail}` : ''}`);
-}
-
 class CDP {
   constructor(wsUrl) {
     this.ws = new WebSocket(wsUrl);
@@ -212,28 +203,32 @@ if (booted) {
     wiring.toastLayerExists, JSON.stringify(wiring));
 }
 
-// alpha-wolf-1 (public/src/world/zones/village.js): guaranteedGearOrHeart -- a flat 50% shot at gear
-// per kill (world/enemyDrops.js's dropTableForKind), roughly 2.5x frost-wolf's independent 20% chance.
-// Costs more HP to fell (100 vs 40) and a longer respawn (20s vs 12s), but the higher per-kill odds
-// win on EXPECTED wall-clock time to real evidence, which is what this harness is actually budgeted
-// on -- switched to this target after two real runs against frost-wolf-1 (9 real kills combined)
-// still had not rolled gear even once, which is unlucky but not implausible at 20% (`0.8^9 ≈ 13%`).
-// CORRECTION, recorded rather than silently reverted: alpha-wolf-1 was tried here first for its
-// better 50% per-kill gear odds, and FAILED to die at all across two real 60-swing attempts (this
-// harness's own simple "close the gap, tap ATTACK" loop cannot reliably land hits on it -- a real
-// gap in THIS FILE's combat AI, not in the game). frost-wolf-1 killed cleanly in the clear majority
-// of real attempts across two prior runs (6 of 8), so it is the honest choice for a harness this
-// simple, even at its lower 20% independent gear chance.
-const TARGET_ENEMY_ID = 'frost-wolf-1';
-const TARGET_SPAWN = { x: -8, z: 42.5 };
-const TARGET_MAX_SWINGS = 45;
+// TARGET: the authored starter Wolf, read through in-page-driver.js's own shared authoredWolfSource()
+// helper -- the SAME enemy, resolved the same way, that drive-drop-collect / drive-lifecycle /
+// drive-first-level-up all kill green on the hosted matrix today.
+//
+// WHY THIS CHANGED, causally. This file used to hunt frost-wolf-1 purely for its 20% gear chance (a
+// common wolf's own gearChance is 0), which cost it two things at once. It had to walk to (-8, 42.5)
+// and then hold station inside ATTACK_REACH * 0.6 = 1.02m against a MOVING wolf before every single
+// swing. On a hosted runner -- 26 headless browser jobs sharing one ubuntu-latest box -- it could not:
+// the hosted log for dd7ce2e shows attempt 1 spending the file's ENTIRE five-minute budget to land 45
+// swings, i.e. ~6.7s per swing, nearly all of it inside the 2.5s re-approach that kept failing to
+// close the gap. Zero kills hosted; 7 kills locally. The swings were not whiffing on the dice, they
+// were whiffing on DISTANCE, and no amount of extra swing budget or luck fixes that.
+//
+// So both halves of that are gone. The gear roll no longer decides whether this file can test
+// anything (see FIXTURE_ITEM_IDS above -- the server hands over a fixed claim), which frees the target
+// to be the near-spawn wolf every other harness already kills reliably, using drop-collect's own
+// proven approach tolerances (close to 1.2m, only re-walk past 1.4m) rather than a 1.02m one that only
+// ever held on a fast local machine.
 
 if (booted) {
   // ── fight the target enemy to death, real combat, real timing ─────────────────────────────────
   const fightState = () => page.eval(`(() => {
     const r = window.__galaQuestRuntime;
     const enc = r.authoritativeEncounterState();
-    const wolf = (enc?.enemies ?? []).find((e) => e.enemyId === ${JSON.stringify(TARGET_ENEMY_ID)}) ?? null;
+    const authored = ${authoredWolfSource()};
+    const wolf = (enc?.enemies ?? []).find((e) => e.enemyId === authored.enemyId) ?? null;
     const selfId = r.netState().selfId;
     const ownHero = selfId != null ? (enc?.heroes ?? {})[selfId] : null;
     return JSON.stringify({
@@ -284,60 +279,55 @@ if (booted) {
     await touch(page, 'touchEnd', []);
   }
 
-  console.log(`  walking to ${TARGET_ENEMY_ID} (${TARGET_SPAWN.x}, ${TARGET_SPAWN.z})...`);
-  await walkToward(TARGET_SPAWN, 3, 45_000);
-
-  let corpse = null;
-  const overallDeadline = deadlineAfter(5 * 60_000); // generous: real Math.random, real respawns
-  let attempts = 0;
-  while (!corpse && Date.now() < overallDeadline) {
-    attempts += 1;
-    // Wait out any remaining respawn window BEFORE spending an "attempt" on a wolf that is already
-    // dead from the last kill -- frost-wolf's own 12s respawn (combat/enemyStats.js) can still be
-    // running the instant this loop comes back around.
-    let state = await fightState();
-    for (let waited = 0; (!state.wolf || state.wolf.hp <= 0) && waited < 15_000; waited += 500) {
-      await sleep(500);
-      state = await fightState();
-    }
-    // Fight until this attempt's target is dead (hp<=0 or gone) or a bounded number of swings.
-    let swings = 0;
-    // ATTACK_REACH (1.7m) is combat/encounter.js's own isWithinStrike radius, imported rather than
-    // guessed -- a harness that closes to some OTHER distance whiffs every swing against a real,
-    // arc-checked server rather than proving anything about the presenter this file exists to test.
-    // Re-approach the wolf's LIVE position before every single swing (not only once out of range):
-    // the wolf moves during the fight, and re-walking a short pulse each time also refreshes the
-    // hero's own facing, which isWithinStrike's own half-arc requires alongside distance.
-    const STRIKE_DISTANCE = ATTACK_REACH * 0.6;
-    while (state.wolf && state.wolf.hp > 0 && swings < TARGET_MAX_SWINGS) {
-      // A downed hero cannot land a swing at all (combat/encounter.js's own canHeroAttack) -- tapping
-      // ATTACK while down just burns the swing budget for nothing. Wait out RESPAWN_SECONDS-scale
-      // recovery instead of whiffing.
-      if (state.heroDownSeconds > 0 || state.heroHp <= 0) {
-        await sleep(600);
-        state = await fightState();
-        continue;
-      }
-      const wolfPos = { x: state.wolf.x, z: state.wolf.z };
-      const dx = wolfPos.x - (state.serverPos?.[0] ?? state.heroPos[0]);
-      const dz = wolfPos.z - (state.serverPos?.[1] ?? state.heroPos[1]);
-      if (Math.hypot(dx, dz) > STRIKE_DISTANCE) {
-        state = await walkToward(wolfPos, STRIKE_DISTANCE, 2_500);
-      }
-      await tapAttack();
-      swings += 1;
-      await sleep(550);
-      state = await fightState();
-    }
-    const diedThisAttempt = !state.wolf || state.wolf.hp <= 0;
-    check(`attempt ${attempts}: ${TARGET_ENEMY_ID} died`, diedThisAttempt, `swings=${swings}`);
-    corpse = state.corpses.find((c) => c.claims.some((claim) => claim.heroId === state.selfId)) ?? null;
-    // No corpse means no gear rolled this kill -- the NEXT loop iteration's own respawn wait (above)
-    // covers the real wait, so nothing extra belongs here.
+  // drive-drop-collect.mjs's own kill loop, which is green on the hosted matrix: steer at the wolf's
+  // LIVE position, stop at 1.2m, swing on a clock, and only re-walk once the wolf has actually pulled
+  // past 1.4m. Bounded by TIME rather than by a swing count, because a swing budget is the wrong unit
+  // -- a starved run burns 45 "swings" without ever getting in range, which is precisely how the
+  // hosted dd7ce2e run reported 45 swings and zero kills.
+  {
+    const first = await fightState();
+    console.log(`  walking to ${first.wolf?.enemyId ?? 'the authored wolf'}...`);
   }
+  await walkToward({ x: (await fightState()).wolf.x, z: (await fightState()).wolf.z }, 1.2, 45_000);
 
-  checkBestEffort('a real corpse with a real personal claim appeared within the overall deadline',
-    corpse != null, corpse ? `corpse ${corpse.id}` : `no corpse across ${attempts} kill attempts`);
+  const killDeadline = deadlineAfter(90_000);
+  let state = await fightState();
+  let swings = 0;
+  while (Date.now() < killDeadline && state.wolf && state.wolf.hp > 0) {
+    // A downed hero cannot land a swing at all (combat/encounter.js's own canHeroAttack) -- tapping
+    // ATTACK while down achieves nothing. Wait out recovery instead of whiffing.
+    if (state.heroDownSeconds > 0 || state.heroHp <= 0) {
+      await sleep(600);
+      state = await fightState();
+      continue;
+    }
+    await tapAttack();
+    swings += 1;
+    await sleep(600);
+    state = await fightState();
+    if (!state.wolf || state.wolf.hp <= 0) break;
+    const authority = state.serverPos ?? state.heroPos;
+    if (Math.hypot(authority[0] - state.wolf.x, authority[1] - state.wolf.z) > 1.4) {
+      state = await walkToward({ x: state.wolf.x, z: state.wolf.z }, 1.2, 6_000);
+    }
+  }
+  check('the authored wolf is dead by real taps over the real socket',
+    !state.wolf || state.wolf.hp <= 0,
+    `hp=${state.wolf?.hp ?? 'gone'}, swings=${swings}`);
+
+  // GATING, not best-effort, and that is the whole point of this pass. The corpse's own CONTENTS are
+  // a fixture (FIXTURE_ITEM_IDS), so "did a corpse with my personal claim appear" is now a
+  // deterministic consequence of the kill rather than a 20% coin flip -- which means a red here is a
+  // real regression in eligibility/claim/wire, exactly the signal a gate:true suite is supposed to
+  // carry. Polled rather than read once: the corpse rides the next server snapshot, not the kill tick.
+  let corpse = null;
+  for (let i = 0; i < 40 && !corpse; i += 1) {
+    const look = await fightState();
+    corpse = look.corpses.find((c) => c.claims.some((claim) => claim.heroId === look.selfId)) ?? null;
+    if (!corpse) await sleep(250);
+  }
+  check('a real corpse carrying THIS hero\'s own personal claim appeared after the kill',
+    corpse != null, corpse ? `corpse ${corpse.id}` : 'no corpse on the wire within 10s of the kill');
 
   if (corpse) {
     const selfId = (await fightState()).selfId;
@@ -348,10 +338,32 @@ if (booted) {
     await walkToward({ x: corpse.x, z: corpse.z }, 1.5, 30_000);
     await sleep(400); // let one more snapshot land so the presenter's own frame loop has caught up
 
+    // A: the PHYSICAL "this loot is yours" signal, asserted against the real rendered scene object
+    // rather than a DOM proxy for it -- world/corpseLootGlowPresenter.js names its sprite
+    // `corpse-loot-glow-<corpseId>` and parents it into the live three.js scene. Existence alone is
+    // deliberately not enough (docs/MISTAKES.md: a state check can pass against a subject that is
+    // scaled to nothing or parked off camera), so this also measures where the glow actually SITS and
+    // requires it to be standing over this corpse.
+    const glow = await page.eval(`(() => {
+      const sprite = window.__galaQuestRuntime.scene.getObjectByName(${JSON.stringify(`corpse-loot-glow-${corpse.id}`)});
+      if (!sprite) return JSON.stringify({ present: false });
+      const world = new (sprite.position.constructor)();
+      sprite.getWorldPosition(world);
+      return JSON.stringify({ present: true, visible: sprite.visible, x: +world.x.toFixed(2), z: +world.z.toFixed(2) });
+    })()`).then(JSON.parse);
+    const glowOffset = glow.present ? Math.hypot(glow.x - corpse.x, glow.z - corpse.z) : Infinity;
+    check('a personal loot glow is really in the scene, standing over THIS corpse',
+      glow.present && glow.visible !== false && glowOffset < 1.0,
+      `${JSON.stringify(glow)} corpse=(${corpse.x.toFixed(2)}, ${corpse.z.toFixed(2)}) offset=${glowOffset.toFixed(2)}m`);
+
     const promptShown = await waitFor(
       page, "document.querySelector('#corpse-loot-interact')?.dataset.shown === 'true'",
       'the "Loot" prompt appears once standing near a personal corpse claim', 10_000,
     );
+    // waitFor only records a FAILURE, so a silent success left requirements A/B unevidenced in the
+    // log even though they gated. Record the positive observation too -- this file's output is the
+    // artifact a reviewer reads.
+    check('B: the "Loot" affordance became available standing near this hero\'s own claim', promptShown);
     await shot(page, 'corpse-loot-prompt.png');
 
     if (promptShown) {
@@ -368,35 +380,95 @@ if (booted) {
         page, "document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
         'tapping the Loot prompt (touch dispatch) opens the loot panel', 5_000,
       );
+      check('C: tapping Loot by real touch (no hover anywhere) opened the corpse loot panel', panelOpen);
       await shot(page, 'corpse-loot-panel-open.png');
 
       if (panelOpen) {
         const rowCount = await page.eval("document.querySelectorAll('.corpse-loot-item').length");
-        check('the panel lists at least one item row', rowCount >= 1, `rows=${rowCount}`);
+        check('the panel lists one row per item on this hero\'s own claim',
+          rowCount === FIXTURE_ITEM_IDS.length, `rows=${rowCount}, expected ${FIXTURE_ITEM_IDS.length}`);
 
-        // ── Take All, via touch, and watch the short acquired-item confirmation ────────────────────
-        const heroButtonPulseBefore = await page.eval("document.querySelector('#hero-button')?.dataset.lootPulse ?? 'false'");
-        const takeAllRect = await page.eval(
-          "(() => { const r = document.querySelector('#corpse-loot-panel-take-all').getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()",
+        // C: a child reads a NAME, not an id. Assert the row renders a real, non-empty, human item
+        // name off progression/items.js rather than an id, a blank, or "undefined" -- a panel that
+        // opens but says nothing recognizable is not a loot panel a 5-year-old can use.
+        const firstRowName = await page.eval(
+          "(document.querySelector('.corpse-loot-item-name')?.textContent ?? '').trim()",
+        );
+        check('the first row presents a recognizable item NAME, not a raw id',
+          firstRowName.length > 2 && !firstRowName.includes('_') && firstRowName !== 'undefined',
+          `name=${JSON.stringify(firstRowName)}`);
+
+        // Watch the toast layer from INSIDE the page across the whole collect sequence. The toast is
+        // deliberately short-lived, and a CDP poll that happens to land between two reads would miss
+        // it and report a defect that is not there -- so record arrivals as they happen instead.
+        await page.eval(`(() => {
+          window.__corpseToasts = [];
+          const layer = document.querySelector('#corpse-loot-toast-layer');
+          new MutationObserver((records) => {
+            for (const record of records) {
+              for (const node of record.addedNodes) {
+                if (node.classList?.contains('corpse-loot-toast')) {
+                  window.__corpseToasts.push((node.textContent ?? '').trim());
+                }
+              }
+            }
+          }).observe(layer, { childList: true });
+        })()`);
+        const tapById = async (selector) => {
+          const rect = await page.eval(
+            `(() => { const el = document.querySelector('${selector}'); if (!el) return 'null'; const r = el.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()`,
+          );
+          if (rect === 'null') return false;
+          const point = JSON.parse(rect);
+          await touch(page, 'touchStart', [point]);
+          await sleep(60);
+          await touch(page, 'touchEnd', []);
+          return true;
+        };
+        // Poll for a real acquisition receipt: a toast ARRIVAL plus the Hero-button pulse. This is a
+        // genuine network round trip (collect -> server grants -> next snapshot -> presenter diffs
+        // it), never an optimistic local flip, so it legitimately takes a couple of 100ms ticks.
+        const awaitReceipt = async (toastsBefore) => {
+          let sawToast = false;
+          let sawPulse = false;
+          for (let i = 0; i < 40 && !(sawToast && sawPulse); i += 1) {
+            if (!sawToast) sawToast = await page.eval(`window.__corpseToasts.length > ${toastsBefore}`);
+            if (!sawPulse) sawPulse = (await page.eval("document.querySelector('#hero-button')?.dataset.lootPulse")) === 'true';
+            await sleep(100);
+          }
+          return { sawToast, sawPulse };
+        };
+
+        // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
+        const tookOne = await tapById('.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take');
+        check('an individual TAKE button exists and was tapped by real touch', tookOne);
+        const single = await awaitReceipt(0);
+        check('individual TAKE produced a short acquired-item toast', single.sawToast);
+        check('individual TAKE pulsed the Hero button -- "it went to your inventory"', single.sawPulse);
+        await shot(page, 'corpse-loot-individual-take.png');
+
+        const afterOne = await page.eval(
+          "JSON.stringify([...document.querySelectorAll('.corpse-loot-item')].map((el) => el.dataset.taken === 'true'))",
         ).then(JSON.parse);
-        await touch(page, 'touchStart', [takeAllRect]);
-        await sleep(60);
-        await touch(page, 'touchEnd', []);
+        check('exactly the collected item stops being offered; the other is still live',
+          afterOne.filter(Boolean).length === 1 && afterOne.length === FIXTURE_ITEM_IDS.length,
+          `taken flags=${JSON.stringify(afterOne)}`);
 
-        // Poll fast (the toast is transient) for BOTH the toast and the hero-button pulse landing on
-        // the frame the server's own snapshot confirms the collect -- this is a real network round
-        // trip (collect-corpse-all -> server grants -> next snapshot -> presenter diffs it), not an
-        // optimistic local flip, so it can legitimately take a couple of snapshot ticks (100ms each).
-        let sawToast = false;
-        let sawPulse = false;
-        for (let i = 0; i < 30 && !(sawToast && sawPulse); i += 1) {
-          if (!sawToast) sawToast = await page.eval("document.querySelectorAll('.corpse-loot-toast').length > 0");
-          if (!sawPulse) sawPulse = (await page.eval("document.querySelector('#hero-button')?.dataset.lootPulse")) === 'true';
-          await sleep(100);
-        }
-        check('Take All (touch dispatch) produced a short acquired-item toast', sawToast);
-        check('the Hero button visibly pulsed -- "went to your inventory" feedback', sawPulse,
-          `before=${heroButtonPulseBefore}`);
+        // ── H + the dd7ce2e blocker: Take All now collects the LAST item on the corpse ─────────────
+        // This is the case that used to produce NO receipt at all, because a fully-resolved corpse
+        // retired before the snapshot carrying its own taken-transition was ever built. If that
+        // regression returns, the toast assertion below goes red -- which is exactly why this file
+        // takes one item individually FIRST rather than opening with Take All.
+        const toastsBefore = await page.eval('window.__corpseToasts.length');
+        await page.eval("document.querySelector('#hero-button').dataset.lootPulse = 'false'");
+        const tookAll = await tapById('#corpse-loot-panel-take-all');
+        check('the prominent Take All button exists and was tapped by real touch', tookAll);
+        const takeAll = await awaitReceipt(toastsBefore);
+        check('Take All on the corpse\'s LAST item still produced an acquired-item toast '
+          + '(the dd7ce2e corpse-retirement receipt blocker, live)', takeAll.sawToast);
+        check('Take All on the LAST item still pulsed the Hero button', takeAll.sawPulse);
+        const toastText = await page.eval('JSON.stringify(window.__corpseToasts)');
+        console.log(`  toast arrivals: ${toastText}`);
         await shot(page, 'corpse-loot-take-all-toast.png');
 
         await waitFor(
@@ -412,7 +484,17 @@ if (booted) {
           page, "document.querySelector('#corpse-loot-interact')?.dataset.shown !== 'true' || document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
           'the corpse stops advertising loot to THIS hero once they have collected their own claim', 5_000,
         );
-        check('#87 required outcome: looted claim stops glowing/prompting for the collector', promptGoneForThisHero);
+        check('#87 required outcome: looted claim stops prompting for the collector', promptGoneForThisHero);
+
+        // ...and the PHYSICAL glow really leaves the scene for this hero too, not merely the prompt.
+        // Same object, same name, measured the same way as when it appeared above -- so this pair is
+        // a real before/after on the rendered signal rather than two unrelated assertions.
+        const glowGone = await waitFor(
+          page,
+          `!window.__galaQuestRuntime.scene.getObjectByName(${JSON.stringify(`corpse-loot-glow-${corpse.id}`)})`,
+          'the personal loot glow leaves the scene once this hero has collected their own claim', 8_000,
+        );
+        check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
       }
     }
   }
@@ -420,8 +502,10 @@ if (booted) {
   await shot(page, 'corpse-loot-final.png');
 }
 
-console.log(`\n${results.length - failures - rngLuckMisses}/${results.length} checks passed`
-  + (rngLuckMisses > 0 ? ` (${rngLuckMisses} best-effort RNG check(s) missed on luck, not gating)` : ''));
+// EVERY check in this file is gating now. There is no best-effort tier left, because there is no
+// unseeded roll left to be unlucky about: the corpse's contents are a fixture, so every remaining
+// assertion is about the game's own behaviour and a red one is a real regression.
+console.log(`\n${results.length - failures}/${results.length} checks passed`);
 await browser.send('Target.closeTarget', { targetId }).catch(() => {});
 const killed = await server.kill();
 if (!killed) console.log('  WARNING: owned server teardown could not be confirmed');
