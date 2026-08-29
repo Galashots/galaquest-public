@@ -50,6 +50,7 @@ import { deadlineAfter } from './automation-timing.mjs';
 import { authoredWolfSource, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../../public/src/progression/items.js';
+import { CORPSE_LOOT_INTERACT_RADIUS_METERS } from '../../public/src/world/corpseLoot.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 
@@ -347,6 +348,16 @@ if (booted) {
     // that has to land inside CORPSE_LOOT_INTERACT_RADIUS_METERS is exactly the kind of precision
     // that holds locally and starves hosted. startWalk recomputes the heading every rendered frame
     // inside the page; the harness only holds the stick and waits for its own arrival report.
+    // WAIT FOR THE BODY TO BE BACK UP FIRST. A 27-swing hosted fight is long enough to be knocked
+    // down at the end of it, and a downed hero is reseated at HERO_SPAWN -- so walking "to the
+    // corpse" while down either steers a body that ignores input or starts the walk from across the
+    // map. This is setup, not leniency: the prompt assertion below is unchanged and still gates.
+    for (let i = 0; i < 60; i += 1) {
+      const live = await fightState();
+      if (live.heroDownSeconds <= 0 && (live.heroHp ?? 1) > 0) break;
+      await sleep(500);
+    }
+
     await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.5));
     await touch(page, 'touchStart', [{ x: VIEWPORT.width * 0.18, y: VIEWPORT.height * 0.86, id: 1 }]);
     await touch(page, 'touchMove', [{
@@ -354,11 +365,21 @@ if (booted) {
       y: VIEWPORT.height * 0.86 - Math.round(STICK_RADIUS_PX * RUN_DEFLECTION),
       id: 1,
     }]);
+    // Hold the stick until the RENDERED hero is genuinely close, not merely until startWalk's own
+    // arrival flag flips. Its flag is the right stop condition for a walk, but the prompt reads the
+    // rendered position, and on a loaded runner the rendered body lags the server body -- so the walk
+    // can honestly report "arrived" while the presenter still, correctly, sees the hero as too far
+    // away. Polling the same number the rule reads closes that gap.
+    let walkReport = null;
     try {
       const arriveDeadline = deadlineAfter(60_000);
       for (;;) {
-        const walk = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
-        if (walk?.arrived || Date.now() >= arriveDeadline) break;
+        walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
+        const renderedNow = await page.eval(
+          `(() => { const p = window.__galaQuestRuntime.player.position;`
+          + ` return Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}); })()`,
+        );
+        if (renderedNow <= 1.5 || Date.now() >= arriveDeadline) break;
         await sleep(150);
       }
     } finally {
@@ -366,6 +387,41 @@ if (booted) {
       await touch(page, 'touchEnd', []);
     }
     await sleep(400); // let one more snapshot land so the presenter's own frame loop has caught up
+
+    // MEASURE THE APPROACH, and assert it against the rule's OWN constant rather than a number typed
+    // here. This is its own gating check for a reason beyond tidiness: when the prompt failed hosted
+    // at 469dc46 the log could not say whether the hero was out of range, downed, or standing right
+    // on the corpse with a broken presenter -- three very different defects that all look identical
+    // as "prompt did not appear". Now the run reports which one it was.
+    // Measured against the position the RULE ITSELF READS, not the one that is convenient to read
+    // here. main.js calls nearestLootableCorpse(heroId, corpses, player.position) -- the RENDERED
+    // hero, not the server's. Those two diverge exactly when a runner is loaded, which is exactly
+    // when this suite has historically failed, so asserting the server distance would be asserting
+    // the wrong axis and could pass while the prompt legitimately stays hidden.
+    const approach = await page.eval(`(() => {
+      const r = window.__galaQuestRuntime;
+      const net = r.netState();
+      const enc = r.authoritativeEncounterState();
+      const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
+      const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
+      return JSON.stringify({
+        netStatus: net.status,
+        selfIdPresent: net.selfId != null,
+        corpseOnWire: Boolean(mine),
+        untakenItems: claim ? claim.items.filter((i) => !i.taken).length : null,
+        rendered: [+r.player.position.x.toFixed(2), +r.player.position.z.toFixed(2)],
+        server: net.serverSelf ? [+net.serverSelf.x.toFixed(2), +net.serverSelf.z.toFixed(2)] : null,
+      });
+    })()`).then(JSON.parse);
+    const renderedGap = Math.hypot(approach.rendered[0] - corpse.x, approach.rendered[1] - corpse.z);
+    const serverGap = approach.server
+      ? Math.hypot(approach.server[0] - corpse.x, approach.server[1] - corpse.z) : Infinity;
+    const approachDetail = `renderedGap=${renderedGap.toFixed(2)}m serverGap=${serverGap.toFixed(2)}m `
+      + `of ${CORPSE_LOOT_INTERACT_RADIUS_METERS}m, corpse=(${corpse.x.toFixed(2)}, ${corpse.z.toFixed(2)}), `
+      + `${JSON.stringify(approach)} walk=${JSON.stringify(walkReport)}`;
+    check('the hero really walked inside the corpse\'s own interact radius, measured on the '
+      + 'RENDERED position the prompt rule itself reads',
+      renderedGap <= CORPSE_LOOT_INTERACT_RADIUS_METERS, approachDetail);
 
     // A: the PHYSICAL "this loot is yours" signal, asserted against the real rendered scene object
     // rather than a DOM proxy for it -- world/corpseLootGlowPresenter.js names its sprite
@@ -392,7 +448,8 @@ if (booted) {
     // waitFor only records a FAILURE, so a silent success left requirements A/B unevidenced in the
     // log even though they gated. Record the positive observation too -- this file's output is the
     // artifact a reviewer reads.
-    check('B: the "Loot" affordance became available standing near this hero\'s own claim', promptShown);
+    check('B: the "Loot" affordance became available standing near this hero\'s own claim',
+      promptShown, approachDetail);
     await shot(page, 'corpse-loot-prompt.png');
 
     if (promptShown) {
