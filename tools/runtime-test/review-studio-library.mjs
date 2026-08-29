@@ -230,6 +230,20 @@ check('getState after the failed load names the ATTEMPTED asset, not the stale p
   afterCorruptLoad.libraryAsset === 'gear.lantern.belt', afterCorruptLoad.libraryAsset);
 check('getState after the failed load truthfully reports loaded:false, not the previous measured facts',
   afterCorruptLoad.libraryLoadResult?.loaded === false, JSON.stringify(afterCorruptLoad.libraryLoadResult));
+const throwFailurePixels = await sampleCanvasPixels();
+const normalRefusal = await page.eval('window.__galaQuestStudio.loadAsset("animation-source.hero.meshy.hdus9c")');
+check('sanity: the comparison refusal remains a failed Library selection',
+  normalRefusal.loaded === false, JSON.stringify(normalRefusal));
+await sleep(200);
+const normalRefusalPixels = await sampleCanvasPixels();
+let throwFailureStageDelta = 0;
+for (let i = 0; i < throwFailurePixels.length; i += 4) {
+  throwFailureStageDelta += Math.abs(throwFailurePixels[i] - normalRefusalPixels[i])
+    + Math.abs(throwFailurePixels[i + 1] - normalRefusalPixels[i + 1])
+    + Math.abs(throwFailurePixels[i + 2] - normalRefusalPixels[i + 2]);
+}
+check('a thrown Library load leaves the generic stage visually empty like a normal refusal',
+  throwFailureStageDelta < 2000, `pixelDelta=${throwFailureStageDelta}`);
 
 // ── review-B finding 4: a refused (never-staged) selection must not silently fall back to the
 // fully-dressed shipping hero -- the stage must stay visibly empty ──────────────────────────────

@@ -207,12 +207,12 @@ export function installStudioApi(studioScene) {
         notifyStateChange();
         return lastLoadResult;
       } catch (error) {
-        // scene.js's loadGenericAsset() already ran clearGenericAsset() before throwing (hero
-        // restored, generic stage empty) -- this module's own state must land on the same truth
-        // rather than keep advertising the PREVIOUS Library asset as still on stage. Without this,
-        // a caller that catches the throw (as libraryPanel.js does) and then reads getState() was
-        // told the old asset was loaded with its old measured facts while the hero was what
-        // actually rendered.
+        // scene.js's loadGenericAsset() clears through clearGenericAsset() before throwing, which
+        // restores the shipping hero. This is a failed Library selection, not a request to return
+        // to the hero, so hide that fallback before publishing the failed state. Without this, a
+        // caller that catches the throw (as libraryPanel.js does) and then reads getState() sees the
+        // attempted asset while the fully dressed hero is what actually rendered.
+        studioScene.clearGenericAssetStage();
         activeLibraryAssetId = assetId;
         lastLoadResult = Object.freeze({ assetId, loaded: false, reason: error.message });
         notifyStateChange();
