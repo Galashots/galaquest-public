@@ -1,35 +1,46 @@
-// The Beacon Warden: the arc's boss, as a procedural stand-in body behind the stable identity
-// 'beacon_warden'.
+// The Beacon Warden: the arc's boss, behind the stable identity 'beacon_warden'.
 //
-// What is pinned here is the BRIEF, not the boxes -- the owner's canonical silhouette and palette
-// rules, each of which a future GLB replacing this geometry must also satisfy, and each of which is
-// easy to lose by nudging one number:
+// The body used to be a procedural stack of boxes, and most of this file used to pin that stack's
+// palette and silhouette. BW1 replaced it with the owner's real rigged GLB, so those assertions went
+// with the geometry they described -- a test that pins the dimensions of deleted boxes is a fossil,
+// not a safety net, and keeping it would have meant either lying about what ships or blocking the
+// asset the owner actually made.
 //
-//   1. Height in the stated band: unmistakably bigger than the 1.48 m hero, under the Beacon.
-//   2. Shoulders wider than hips, arms LONG -- the brief's silhouette in two inequalities.
-//   3. Exactly one pale-cyan accent, and the brazier on ONE shoulder (the asymmetry is binding).
-//   4. Four animated sub-meshes and a small part count -- this is an iPad's one animated structure.
-//   5. Every pose the rules can ask for, as a pure function a browserless test can drive.
+// What is pinned NOW is what can still be got wrong:
+//
+//   1. Every pose the rules can ask for, as a pure function a browserless test can drive. This
+//      survived the swap intact and matters MORE than before: it is what poses the seven modes the
+//      asset owns no clip for.
+//   2. The mode -> clip map names only clips the shipped GLB actually contains, checked against the
+//      file's own bytes. A renamed clip or a swapped asset goes red here rather than in a child's
+//      hands, and a hero/keeper clip cannot be quietly grafted on.
+//   3. The body separation stays under the Warden's own melee reach -- the one relationship that,
+//      if broken, silently makes the boss unable to ever hit anybody.
+//   4. The arc's constants stay coherent across the seal/lamp/brazier scale.
 
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import {
-  BEACON_GLOW_COLOR,
-  BEACON_IRON_COLOR,
-  BEACON_STONE_COLOR,
-} from '../public/src/world/oldBeacon.js';
-import { GATE_WOOD_COLOR } from '../public/src/world/wildwoodGate.js';
 import {
   SEAL_GLOW_CRACKED,
   SEAL_HEIGHTS_METERS,
 } from '../public/src/world/coldSeals.js';
 import {
+  WARDEN_BODY_SEPARATION_METERS,
+  WARDEN_MELEE_RANGE,
+  separateFromWarden,
+} from '../public/src/world/beaconSiege.js';
+import {
   WARDEN_BRAZIER_BY_PHASE,
   WARDEN_BRAZIER_REST,
+  WARDEN_CLIPS,
   WARDEN_DYING_SECONDS,
   WARDEN_GAIT_HZ,
   WARDEN_HEIGHT_METERS,
+  WARDEN_MODE_CLIPS,
   WARDEN_OVERHEAD_SLAM_SECONDS,
   WARDEN_OVERHEAD_WINDUP_SECONDS,
   WARDEN_PULSE_CROUCH_SECONDS,
@@ -37,8 +48,8 @@ import {
   WARDEN_PULSE_RING_SECONDS,
   WARDEN_SWEEP_SWING_SECONDS,
   WARDEN_SWEEP_WIND_SECONDS,
+  WARDEN_URL,
   WARDEN_WAKE_SECONDS,
-  wardenParts,
   wardenPose,
 } from '../public/src/enemies/warden.js';
 
@@ -46,145 +57,88 @@ const HERO_HEIGHT_METERS = 1.48; // the shipped hero (see enemies/wolf.js's own 
 const GATE_LAMP_LIT_STRENGTH = 0.9; // wildwoodGate.js's private LAMP_GLOW_STRENGTH, restated as in
 // test/old-beacon.test.mjs
 
-const spec = wardenParts();
-const allParts = [...spec.legs, ...spec.torso, ...spec.armLeft, ...spec.armRight];
-const topOf = (part) => part.at[1] + (part.kind === 'box' ? part.size[1] : part.height) / 2;
-const halfWidthOf = (part) => Math.abs(part.at[0])
-  + (part.kind === 'box' ? part.size[0] : Math.max(part.radiusTop, part.radiusBottom) * 2) / 2;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// ── the silhouette the brief locked ───────────────────────────────────────────────────────────────
-
-test('the head tops out at the stated height, cross-checked through the parts\' own extents', () => {
-  const head = spec.torso.find((part) => part.name === 'head');
-  const headTop = spec.torsoPivotY + topOf(head);
-  assert.ok(Math.abs(headTop - WARDEN_HEIGHT_METERS) < 1e-9,
-    `head reaches ${headTop}, constant says ${WARDEN_HEIGHT_METERS}`);
-});
-
-test('the whole build sits in a sane band: over the hero by a clear margin, under the Beacon', () => {
-  const overallTop = spec.torsoPivotY + Math.max(...spec.torso.map(topOf));
-  assert.ok(WARDEN_HEIGHT_METERS >= HERO_HEIGHT_METERS * 1.6,
-    'a boss a child can look level at is a villager with a shoulder ornament');
-  assert.ok(overallTop <= 3.0, `${overallTop.toFixed(2)} m starts arguing with the 6.1 m Beacon`);
-  assert.ok(overallTop >= WARDEN_HEIGHT_METERS, 'the brazier may ride above the head, never below it');
-});
-
-test('shoulders read wider than hips -- the brief\'s silhouette as an inequality', () => {
-  const shoulderSpan = Math.max(...spec.torso
-    .filter((part) => part.name === 'pauldron')
-    .map(halfWidthOf)) * 2;
-  const hipSpan = Math.max(...spec.legs.filter((part) => part.name !== 'foot').map(halfWidthOf)) * 2;
-  assert.ok(shoulderSpan > hipSpan * 1.4,
-    `shoulders ${shoulderSpan.toFixed(2)} m over hips ${hipSpan.toFixed(2)} m is not BROAD`);
-});
-
-test('the arms are LONG and end in stone fists, not weapons', () => {
-  const armBottom = Math.min(...spec.armLeft.map((part) => part.at[1] - part.size[1] / 2));
-  const fistBottomWorld = spec.torsoPivotY + spec.shoulderPivots.left[1] + armBottom;
-  const kneeWorld = spec.legs.find((part) => part.name === 'shin').at[1];
-  assert.ok(fistBottomWorld < kneeWorld + 0.45,
-    `fists hang to ${fistBottomWorld.toFixed(2)} m -- too short to read as the brief's long arms`);
-  const fist = spec.armLeft.find((part) => part.name === 'fist');
-  assert.equal(fist.color, BEACON_STONE_COLOR, 'heavy stone-gauntlet fists; the maul is a later asset');
-});
-
-// ── the palette and the one asymmetry ─────────────────────────────────────────────────────────────
-
-test('the body is iron, stone and timber only, every colour imported (GQ-007)', () => {
-  const allowed = [BEACON_IRON_COLOR, BEACON_STONE_COLOR, GATE_WOOD_COLOR, BEACON_GLOW_COLOR];
-  for (const part of allParts) {
-    assert.ok(allowed.includes(part.color), `'${part.name}' invents a colour: ${part.color.toString(16)}`);
-  }
-  // All three structural materials actually appear -- a Warden that quietly became all-iron would
-  // still pass the allowlist.
-  const used = new Set(allParts.map((part) => part.color));
-  for (const color of [BEACON_IRON_COLOR, BEACON_STONE_COLOR, GATE_WOOD_COLOR]) assert.ok(used.has(color));
-});
-
-/** The asymmetry predicate the sabotage case below proves can fail: every brazier part on the SAME
- *  non-zero side, and the accent count exactly one. */
-function brazierIsOneAsymmetricAccent(parts) {
-  const accents = parts.filter((part) => part.color === BEACON_GLOW_COLOR);
-  if (accents.length !== 1) return false;
-  const brazierParts = parts.filter((part) => part.name.startsWith('brazier'));
-  if (brazierParts.length < 2) return false;
-  return brazierParts.every((part) => part.at[0] !== 0 && Math.sign(part.at[0]) === Math.sign(accents[0].at[0]));
+/**
+ * The animation names the shipped GLB actually carries, read out of the file's own JSON chunk.
+ *
+ * Parsed rather than imported through a loader on purpose: GLTFLoader needs a browser to decode the
+ * atlas, and the atlas has nothing to do with what a clip is called. Twenty lines of parsing is
+ * authoritative where an importer is an interpretation.
+ */
+function shippedClipNames(url) {
+  const data = readFileSync(join(repoRoot, 'public', url));
+  const jsonLength = data.readUInt32LE(12);
+  const gltf = JSON.parse(data.subarray(20, 20 + jsonLength).toString('utf8'));
+  return (gltf.animations ?? []).map((animation) => animation.name);
 }
 
-test('exactly one cold accent, and the whole brazier sits on ONE shoulder', () => {
-  assert.equal(brazierIsOneAsymmetricAccent(spec.torso), true);
-  // And the cresset echoes the Old Beacon's own basket: open, flared upward.
-  const cresset = spec.torso.find((part) => part.name === 'brazier-cresset');
-  assert.equal(cresset.openEnded, true, 'a capped cresset is a cup, not a fire basket');
-  assert.ok(cresset.radiusTop > cresset.radiusBottom, 'the flare is the kinship a child reads');
-});
+// ── the real asset, and the clips it actually owns ────────────────────────────────────────────────
 
-test('sabotage: the asymmetry check DOES fail against a centred brazier and a second accent', () => {
-  const centred = spec.torso.map((part) => (part.name.startsWith('brazier') ? { ...part, at: [0, part.at[1], part.at[2]] } : part));
-  assert.equal(brazierIsOneAsymmetricAccent(centred), false);
-  const twoAccents = [...spec.torso, { name: 'extra', kind: 'box', size: [0.1, 0.1, 0.1], at: [-0.7, 1.3, 0], color: BEACON_GLOW_COLOR }];
-  assert.equal(brazierIsOneAsymmetricAccent(twoAccents), false);
-});
-
-// ── the playtest's "look like an enemy" pass ──────────────────────────────────────────────────────
-//
-// Real kids called the shipped body out directly: it needed to look "much cooler" and "actually
-// look like an enemy". The fix adds silhouette -- a jagged crown and two frost-spike shoulders --
-// entirely in BEACON_STONE_COLOR, the SAME colour world/coldSeals.js's own frost ring already reads
-// as rime rather than rock (that file's own header), so the brief's one-accent rule stays intact:
-// hostility comes from SHAPE here, the cold light stays the brazier's alone. (Glowing eyes and the
-// icy aura are presenter-level glow sprites in enemies/warden.js's buildWarden, not baked parts, for
-// the identical reason -- see that function's own comment.)
-test('the crown and shoulder-spikes exist, are frost-stone (not a second accent colour), and are symmetric', () => {
-  const crown = spec.torso.find((part) => part.name === 'crown');
-  assert.ok(crown, 'a crown/horn part must exist on the head');
-  assert.equal(crown.color, BEACON_STONE_COLOR, 'the crown reads as frost-rimed stone, not a new colour');
-  assert.ok(Math.abs(crown.at[0]) < 1e-9, 'the crown sits on the centreline -- the asymmetry lives on the brazier only');
-
-  const spikes = spec.torso.filter((part) => part.name === 'shoulder-spike');
-  assert.equal(spikes.length, 2, 'one spike per shoulder');
-  for (const spike of spikes) assert.equal(spike.color, BEACON_STONE_COLOR);
-  assert.ok(Math.abs(spikes[0].at[0] + spikes[1].at[0]) < 1e-9, 'the spikes mirror left/right exactly');
-  assert.notEqual(Math.sign(spikes[0].at[0]), Math.sign(spikes[1].at[0]), 'one spike per side, not both stacked on one');
-
-  // Still exactly one accent after the additions -- the whole point of using stone, not a new hue.
-  assert.equal(brazierIsOneAsymmetricAccent(spec.torso), true);
-});
-
-test('the crown rises clear above the head without breaking the silhouette\'s own height ceiling', () => {
-  const head = spec.torso.find((part) => part.name === 'head');
-  const crown = spec.torso.find((part) => part.name === 'crown');
-  const headTop = topOf(head);
-  const crownTop = topOf(crown);
-  assert.ok(crownTop > headTop, 'a crown that does not clear the head is not a crown');
-  // Re-proves the SAME "under the Beacon" ceiling test #2 above pins, now against the tallest part
-  // on the body rather than assuming it is still the head -- the crown addition must not have
-  // quietly become the part that breaks that promise.
-  const overallTop = spec.torsoPivotY + Math.max(...spec.torso.map(topOf));
-  assert.ok(overallTop <= 3.0, `${overallTop.toFixed(2)} m starts arguing with the 6.1 m Beacon`);
-});
-
-test('the shoulder-spikes sit outboard of the brazier -- a frost spike must never grow through the one accent', () => {
-  const spikes = spec.torso.filter((part) => part.name === 'shoulder-spike');
-  const brazierParts = spec.torso.filter((part) => part.name.startsWith('brazier'));
-  const accentX = brazierParts[0].at[0];
-  const sameSideSpike = spikes.find((s) => Math.sign(s.at[0]) === Math.sign(accentX));
-  assert.ok(Math.abs(sameSideSpike.at[0]) > Math.abs(accentX),
-    'the same-side spike must stand further out than the brazier it shares a shoulder with');
-});
-
-// ── the budget ────────────────────────────────────────────────────────────────────────────────────
-
-test('four sub-meshes, small part counts: the one animated structure stays cheap', () => {
-  assert.equal(Object.keys({ legs: 1, torso: 1, armLeft: 1, armRight: 1 }).length, 4);
-  for (const limb of [spec.legs, spec.torso, spec.armLeft, spec.armRight]) {
-    assert.ok(limb.length >= 3 && limb.length <= 14, `${limb.length} parts in one sub-mesh`);
+test('every clip the presenter names exists in the shipped GLB', () => {
+  const shipped = new Set(shippedClipNames(WARDEN_URL));
+  for (const [key, name] of Object.entries(WARDEN_CLIPS)) {
+    assert.ok(shipped.has(name),
+      `WARDEN_CLIPS.${key} names '${name}', which is not in ${WARDEN_URL}: [${[...shipped].join(', ')}]`);
   }
-  assert.ok(allParts.length <= 30, `${allParts.length} parts total -- this is a stand-in, not a statue`);
-  // No thin filigree: every box face at least 7 cm, the brief's "no thin geometry" as a floor.
-  for (const part of allParts.filter((p) => p.kind === 'box')) {
-    assert.ok(Math.min(...part.size) >= 0.07, `'${part.name}' has a ${Math.min(...part.size)} m face`);
+});
+
+test('every mode -> clip mapping resolves to a clip the asset really has', () => {
+  const shipped = new Set(shippedClipNames(WARDEN_URL));
+  for (const [mode, name] of Object.entries(WARDEN_MODE_CLIPS)) {
+    assert.ok(shipped.has(name), `mode '${mode}' plays '${name}', which the asset does not contain`);
   }
+});
+
+test('sabotage: the clip check DOES fail against a plausible-looking wrong name', () => {
+  // The exact failure this guards: a name that reads perfectly in review ('idle', 'attack') but was
+  // never in the file. Meshy exports carry armature-prefixed names, so the pretty guess is the wrong
+  // one -- which is why the map is checked against bytes rather than against taste.
+  const shipped = new Set(shippedClipNames(WARDEN_URL));
+  assert.equal(shipped.has('idle'), false);
+  assert.equal(shipped.has('attack'), false);
+});
+
+test('the asset owns no idle clip, so most modes must fall through to the pure pose', () => {
+  // Not a wish -- a recorded measurement. If a future asset DOES ship an idle, this goes red and the
+  // mode map should gain it rather than leaving a real clip unused.
+  const shipped = shippedClipNames(WARDEN_URL);
+  assert.equal(shipped.length, 3, `asset now has ${shipped.length} clips: ${shipped.join(', ')}`);
+  const covered = Object.keys(WARDEN_MODE_CLIPS);
+  for (const mode of ['dormant', 'waking', 'idle', 'pulse', 'hit', 'dying', 'dead']) {
+    assert.ok(!covered.includes(mode), `'${mode}' claims a clip; the asset has none for it`);
+  }
+});
+
+// ── the body you cannot walk through (#79) ────────────────────────────────────────────────────────
+
+test('a hero standing inside the Warden is pushed out to its body radius', () => {
+  const warden = { x: 0, z: 0, mode: 'idle' };
+  const pushed = separateFromWarden({ x: 0.2, z: 0 }, warden);
+  assert.ok(Math.hypot(pushed.x, pushed.z) >= WARDEN_BODY_SEPARATION_METERS - 1e-9,
+    'a child inside the boss must end up on its surface, not inside it');
+});
+
+test('a hero already clear of the Warden is not dragged anywhere', () => {
+  const warden = { x: 0, z: 0, mode: 'idle' };
+  const away = { x: 5, z: 5 };
+  assert.deepEqual(separateFromWarden(away, warden), away);
+});
+
+test('a DEAD Warden stops blocking -- the arena is the payoff, not a fenced-off circle', () => {
+  const inside = { x: 0.2, z: 0 };
+  assert.deepEqual(separateFromWarden(inside, { x: 0, z: 0, mode: 'dead' }), inside);
+  // ...but the dormant kneel still blocks: #79's complaint was children walking through it before
+  // the fight ever started.
+  const dormant = separateFromWarden(inside, { x: 0, z: 0, mode: 'dormant' });
+  assert.ok(Math.hypot(dormant.x, dormant.z) >= WARDEN_BODY_SEPARATION_METERS - 1e-9);
+});
+
+test('separation stays INSIDE melee reach, or the boss could never land a blow again', () => {
+  // The one relationship whose breakage is silent: push the hero further out than the Warden can
+  // reach and every attack whiffs forever, with no error and no failing state check anywhere.
+  assert.ok(WARDEN_BODY_SEPARATION_METERS < WARDEN_MELEE_RANGE,
+    `separation ${WARDEN_BODY_SEPARATION_METERS} m must stay under melee reach ${WARDEN_MELEE_RANGE} m`);
 });
 
 // ── the poses, driven browserlessly ───────────────────────────────────────────────────────────────

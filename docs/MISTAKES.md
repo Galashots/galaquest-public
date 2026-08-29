@@ -88,6 +88,8 @@ vocabulary. A new entry adds its row in the same commit.
 | — | A scripted edit that is not asserted is a change you have not made. | harness |
 | — | An instrument that covers a subset reports on the subset, and reads as covering the whole. | evidence, tests |
 | GQ-023 | One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire. | net, tests |
+| — | A skinned body goes where its BONES go, not where its geometry box says. | code, visual, harness |
+| — | A shared readiness promise must not await one optional body. | code, harness |
 
 ---
 
@@ -1625,6 +1627,57 @@ reached FORGE READY". The symptom named the Forge; the cause was the address.
 landed on before checking the badge, so a wrong address costs one line rather than a day; and
 `ci-diff.py --sha` reads `/commits/{sha}/check-runs`, which returns every check on a commit whatever
 workflow raised it. The file mode still exists and now prints "one workflow only" beside its answer.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A skinned body goes where its BONES go, not where its geometry box says.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-28 (BW1, the real Beacon Warden GLB)
+**Rule:** For a skinned mesh, `Box3.setFromObject` reports the geometry box under the MESH's matrix.
+The vertices are actually placed by the skeleton. When those two disagree the box is the one lying,
+so any claim about where a rigged character IS must be read off a bone. Two corollaries earned the
+same day: `Box3` on a freshly cloned, not-yet-parented hierarchy measures STALE world matrices unless
+you `updateMatrixWorld(true)` first; and a self-correcting measurement (`target / measured`) is only
+as honest as the thing it measured -- it will confidently converge on the wrong answer and show no
+symptom, because the formula agrees with itself.
+**Incidents:** BW1 integrated the owner's rigged Warden GLB. `prepareWardenRoot` measured the fresh
+clone before updating its matrices, read 0.023 m instead of the authored 2.3 (a clean factor of 100
+out of the Armature's own 0.01 scale), and derived a scale of **113x instead of 1.13x**. The creature
+was skinned to a head height of **155.95 m**, somewhere off camera. Nothing threw. No console error
+was logged. `renderer.info` reported all 3,898 triangles submitted every frame, and `Box3` over the
+finished group still answered a reassuring 2.46 m while the bones were two orders of magnitude away.
+The whole `drive-beacon-siege.mjs` run -- seals, wake, boss bar, phases, death, the Beacon catching,
+"no console errors" -- passed **ALL CHECKS against a boss nobody could see**, because every assertion
+in it asked about STATE and none asked whether there was a body in the world. It was caught by opening
+the captures, which is the only reason it was caught at all (see GQ-010).
+**Prevention that landed with it:** the presenter's `getState()` now publishes the `Head` BONE's world
+height, `main.js` republishes it as `wardenHeadMeters`, and the siege harness asserts a sane band --
+verified red-capable by restoring the bug, which produced `head bone at 155.95 m against a 2.6 m
+Warden` while `wardenBuilt` stayed happily true.
+**Not enforced because:** reproducing it needs GLTFLoader and a real skinned draw, so the check lives
+in the browser harness rather than in `node --test`; the ledger's ENFORCED rung wants a file in
+`test/` and this one honestly cannot be.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A shared readiness promise must not await one optional body.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-28 (BW1, the real Beacon Warden GLB)
+**Rule:** `zone.ready` is not "this presenter is ready", it is "EVERY presenter in this zone is
+ready" -- so anything awaited inside it becomes a prerequisite for things that have nothing to do
+with it. A body that the world can survive without must not be awaited there. Build it synchronously
+and let it attach itself when it lands, the way the keeper, the villagers and Rowan already degrade
+to nothing. The blast radius of an await is the whole promise, not the line it is written on.
+**Incidents:** BW1 replaced the procedural Warden with a 618 KB GLB and had `world/zoneLoader.js`
+await `buildWarden`. `drive-old-beacon.mjs` then failed its reload phase with `built false, stirring
+false, glow null` -- **the Old Beacon**, a landmark with nothing to do with the Warden, dark because
+the Warden's texture was still downloading. The unit gate did not see it (no browser) and
+`drive-beacon-siege.mjs` did not see it (it waits for the fight, by which time everything has
+loaded). Only the full browser matrix did, and only on three harnesses that never mention the boss.
+**Causality, established rather than assumed:** the same harness passes 65/65 on the package base and
+failed on the package head, and an A/B run with the package's OTHER change (Warden collision)
+disabled still failed -- which ruled the collision out and left the await. That is the shape the
+ledger's own "a NEW FAILURE against a base is not evidence that this commit caused it" entry asks
+for, run in the direction that actually convicts.
+**Not enforced because:** the defect is a latency ordering, not a state a static check can read --
+the code is correct in isolation and only wrong because of what else shares its promise. The
+existing browser matrix is the instrument that catches it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-023 — One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire.

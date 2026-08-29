@@ -1088,10 +1088,18 @@ export function loadZone(scene, zoneData) {
     const oldBeacon = zoneData.OLD_BEACON ? buildOldBeacon(scene, zoneData.OLD_BEACON) : null;
     const beaconWaystones = buildBeaconWaystones(scene, zoneData.BEACON_WAYSTONES);
     // G2..G5: the three cold seals, the Warden kneeling beside them, and the blackthorn wall with
-    // its pocket behind it. Built and not loaded for the same reason everything above is -- no
-    // fetch to fail, nothing in `counts`, and the Warden in particular is deliberately procedural
-    // (enemies/warden.js) so the encounter ships without waiting on a generated asset.
+    // its pocket behind it. The seals and the wall are built, not loaded, for the same reason
+    // everything above is -- no fetch to fail and nothing in `counts`.
+    //
+    // The WARDEN is the exception as of BW1, and deliberately so: it was procedural precisely so the
+    // encounter could ship without waiting on a generated asset, and that asset now exists, so it
+    // loads like the hero and the wolf do (enemies/warden.js) -- without making anything wait on it.
     const coldSeals = buildColdSeals(scene, zoneData.COLD_SEALS ?? []);
+    // NOT AWAITED, and that is deliberate. The Warden is a real fetched GLB since BW1, and awaiting
+    // it here put a 618 KB download in front of `zone.ready` -- which is what hands main.js EVERY
+    // presenter in this zone, so the Old Beacon arrived late and drive-old-beacon.mjs's reload phase
+    // went red with `built false` for a landmark that has nothing to do with the Warden. buildWarden
+    // returns synchronously and attaches its own body when it lands; one asset does not gate the world.
     const warden = zoneData.BEACON_WARDEN ? buildWarden(scene, zoneData.BEACON_WARDEN.at) : null;
     if (warden && zoneData.BEACON_WARDEN.rotY != null) warden.setHeading(zoneData.BEACON_WARDEN.rotY);
     const blackthorn = zoneData.BLACKTHORN ? buildBlackthornBarrier(scene, zoneData.BLACKTHORN) : null;

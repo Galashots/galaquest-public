@@ -230,6 +230,7 @@ import {
   canSiegeHeroAttack,
   createSiegeState,
   requestSiegeAttack,
+  separateFromWarden,
   stepSiege,
 } from './world/beaconSiege.js';
 // The overhead boss bar rides above the Warden's own actual height, imported rather than guessed --
@@ -3323,6 +3324,10 @@ async function bootstrap() {
         z: siegeState.warden.z,
       },
       wardenBuilt: zoneWarden !== null,
+      // The Warden's own head BONE height in world metres. Published because "the presenter exists"
+      // and "a child can see it" turned out to be different questions: a 113x scale once put the
+      // body 150 m up with wardenBuilt still true and every siege check still green.
+      wardenHeadMeters: zoneWarden?.getState().headMeters ?? null,
       beaconLit: siegeState.beaconLit,
       beaconLitInScene: zoneOldBeacon?.isLit() ?? false,
       // NOT THE SAME QUESTION as beaconLitInScene, and the difference cost a shipped payoff: the
@@ -3621,8 +3626,13 @@ async function bootstrap() {
     // wolf position this same tick's snapshot may already have moved.
     if (netStatus !== 'online') {
       const separated = separateFromEnemies(player.position, encounterState.enemies);
-      player.position.x = separated.x;
-      player.position.z = separated.z;
+      // #79, offline half: the same Warden body law the server runs every tick, so a child playing
+      // alone is pushed out of the boss exactly as a child on a server is. Online it is deliberately
+      // skipped with the wolves' own push, for the reason stated above -- the server already did it
+      // and reconcile() is what agrees with it.
+      const clearOfWarden = separateFromWarden(separated, siegeState.warden);
+      player.position.x = clearOfWarden.x;
+      player.position.z = clearOfWarden.z;
     }
 
     // GP3: Village Supplies, read once per frame and shared by every consumer below -- the Board's
