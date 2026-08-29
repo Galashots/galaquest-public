@@ -441,11 +441,12 @@ export const RIGID_WILDWOOD_BLADE_CANDIDATE = Object.freeze({
     // rig -- confirmed directly, not assumed).
     //
     // RE-SOLVED 2026-08-28 against the RUNNING GAME (Issue #82). The 2026-08-16 value above was
-    // solved and screenshot-verified in Character Studio, but in the live game it left the grip
-    // 0.243m from the RightHand bone: the blade sat buried against the chest, edge-on to the
-    // gameplay camera, and the hand read as EMPTY -- the Owner's playtest report. The Studio
-    // showcase pose and camera happened to make that same 0.243m offset look almost seated, which
-    // is how it passed visual acceptance (GQ-010: flags/one-pose captures are not gameplay pixels).
+    // solved and screenshot-verified in Character Studio, but in the live game the blade was nearly
+    // flat and edge-on through the torso, so the hand read as EMPTY -- the Owner's playtest report.
+    // The old grip seat was about 0.055m from the RightHand bone; the defect was its orientation,
+    // not a 0.243m grip offset. The Studio showcase pose and camera made that bad pitch look almost
+    // seated, which is how it passed visual acceptance (GQ-010: flags/one-pose captures are not
+    // gameplay pixels).
     // This value was produced by the same geometry solve (grip-frac 0.45, shipping-sword-matched
     // direction/length/seat) run against window.__galaQuestRuntime, then baked through THIS
     // function's own inversion (rest = rigRoot.matrixWorld^-1 * bindPoseMatrixWorld * local) so the
