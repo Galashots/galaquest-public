@@ -89,6 +89,7 @@ vocabulary. A new entry adds its row in the same commit.
 | — | An instrument that covers a subset reports on the subset, and reads as covering the whole. | evidence, tests |
 | GQ-023 | One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire. | net, tests |
 | — | A skinned body goes where its BONES go, not where its geometry box says. | code, visual, harness |
+| — | A shared readiness promise must not await one optional body. | code, harness |
 
 ---
 
@@ -1654,6 +1655,29 @@ Warden` while `wardenBuilt` stayed happily true.
 **Not enforced because:** reproducing it needs GLTFLoader and a real skinned draw, so the check lives
 in the browser harness rather than in `node --test`; the ledger's ENFORCED rung wants a file in
 `test/` and this one honestly cannot be.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A shared readiness promise must not await one optional body.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-28 (BW1, the real Beacon Warden GLB)
+**Rule:** `zone.ready` is not "this presenter is ready", it is "EVERY presenter in this zone is
+ready" -- so anything awaited inside it becomes a prerequisite for things that have nothing to do
+with it. A body that the world can survive without must not be awaited there. Build it synchronously
+and let it attach itself when it lands, the way the keeper, the villagers and Rowan already degrade
+to nothing. The blast radius of an await is the whole promise, not the line it is written on.
+**Incidents:** BW1 replaced the procedural Warden with a 618 KB GLB and had `world/zoneLoader.js`
+await `buildWarden`. `drive-old-beacon.mjs` then failed its reload phase with `built false, stirring
+false, glow null` -- **the Old Beacon**, a landmark with nothing to do with the Warden, dark because
+the Warden's texture was still downloading. The unit gate did not see it (no browser) and
+`drive-beacon-siege.mjs` did not see it (it waits for the fight, by which time everything has
+loaded). Only the full browser matrix did, and only on three harnesses that never mention the boss.
+**Causality, established rather than assumed:** the same harness passes 65/65 on the package base and
+failed on the package head, and an A/B run with the package's OTHER change (Warden collision)
+disabled still failed -- which ruled the collision out and left the await. That is the shape the
+ledger's own "a NEW FAILURE against a base is not evidence that this commit caused it" entry asks
+for, run in the direction that actually convicts.
+**Not enforced because:** the defect is a latency ordering, not a state a static check can read --
+the code is correct in isolation and only wrong because of what else shares its promise. The
+existing browser matrix is the instrument that catches it.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-023 — One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire.
