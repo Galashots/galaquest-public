@@ -62,6 +62,15 @@ export const CORPSE_LOOT_EXPIRE_SECONDS = 180;
 // wire's own MAX_WIRE_CORPSES headroom (net/protocolCore.js).
 export const MAX_CONCURRENT_CORPSES = 12;
 
+// Correction: mirrors net/protocolCore.js's own MAX_CORPSE_CLAIMS (8) exactly. Not imported --
+// world/ stays a leaf the net/ layer imports FROM, never the reverse -- but this module must never
+// mint a corpse the wire's own decoder would refuse. Nine or more eligible heroes contributing to a
+// single kill (already reachable today with enough connected players, and trivially reachable once a
+// guaranteed reward grants a claim to every eligible hero unconditionally) used to produce a corpse
+// with more claims than the wire allows; decodeCorpses would then fail on every client and the whole
+// snapshot -- positions, enemies, everything -- got silently dropped until the corpse retired.
+export const MAX_CLAIMS_PER_CORPSE = 8;
+
 function freezeItem(item) {
   return Object.freeze({ ...item });
 }
@@ -101,7 +110,17 @@ function enforceCorpseCap(corpses) {
  */
 function rollOrdinaryGear(kind, ownedItemIds, rng) {
   const table = dropTableForKind(kind);
-  if (table.gearChance <= 0 || rng() >= table.gearChance) return null;
+  // Correction: a table with guaranteedGearOrHeart (today only alpha-wolf) sets gearChance to 0 on
+  // purpose for enemyDrops.js's OWN killer-only roll -- see requestEnemyDrop's own guaranteed
+  // branch, which flips a coin between gear and a heart instead of reading gearChance at all. A
+  // non-killer eligible hero's independent ordinary roll here must not read that literal 0 -- doing
+  // so made the game's single highest-value enemy the one kind that could NEVER grant a contributor
+  // gear, exactly backwards from #87's own fairness goal (a killing-blow monopoly on gear, on the
+  // Alpha specifically). Mirrors the killer's own odds instead: the same 0.5 coin-flip shot at gear;
+  // the other half of that flip is enemyDrops.js's own heart, which sits outside this module's scope
+  // (see this file's header), so it simply produces nothing here.
+  const gearChance = table.guaranteedGearOrHeart ? 0.5 : table.gearChance;
+  if (gearChance <= 0 || rng() >= gearChance) return null;
   const candidates = GEAR_DROP_POOL.filter((itemId) => !ownedItemIds.includes(itemId));
   if (candidates.length === 0) return null;
   return candidates[Math.floor(rng() * candidates.length)];
@@ -147,8 +166,18 @@ export function requestCorpseLoot(state, kill, rng) {
     killerGearItemId = null, guaranteedItemIds = [], ownedItemIdsFor = () => [],
   } = kill;
 
+  // Correction: cap how many eligible heroes this corpse actually processes at MAX_CLAIMS_PER_CORPSE
+  // -- BEFORE any rolling happens, so a 9th-or-later eligible hero never even takes a roll it could
+  // not keep. The killing hero, when eligible, is always kept (unshifted to the front) rather than
+  // left to alphabetic/insertion luck, since losing the killer's own claim to a headcount overflow
+  // would be a strictly worse failure than losing an assisting contributor's.
+  const boundedHeroIds = (killerHeroId != null && eligibleHeroIds.includes(killerHeroId)
+    ? [killerHeroId, ...eligibleHeroIds.filter((heroId) => heroId !== killerHeroId)]
+    : eligibleHeroIds
+  ).slice(0, MAX_CLAIMS_PER_CORPSE);
+
   const claims = [];
-  for (const heroId of eligibleHeroIds) {
+  for (const heroId of boundedHeroIds) {
     const owned = ownedItemIdsFor(heroId) ?? [];
     const items = [];
 
@@ -276,4 +305,38 @@ export function requestClaimAllCorpseLoot(state, heroId, corpseId, heroPosition)
   );
   if (!result) return { state, accepted: false, items: [] };
   return { state: result.state, accepted: true, items: result.items };
+}
+
+/**
+ * Correction: reattach every still-live claim keyed to `fromHeroId` onto `toHeroId` instead --
+ * a reconnect fix. A full reconnect mints a NEW heroId (net/gameServerCore.mjs's own addPlayer,
+ * connection-scoped), but a corpse claim was earned by the same guest, keyed by their own durable
+ * `ownedItemIdsFor`/reward-store identity. Without this, a claim minted before a reload/wifi blip
+ * became permanently unreachable (the new heroId holds no claim, the old one is gone) AND kept
+ * occupying that corpse's own slot toward MAX_CONCURRENT_CORPSES for the full expiry window, even
+ * though nothing was actually being duplicated.
+ *
+ * The caller (net/gameServerCore.mjs) is the one that actually knows a guestId maps
+ * old-heroId -> new-heroId; this module only ever deals in heroIds, so it takes both explicitly
+ * rather than reaching for a guestId concept of its own.
+ *
+ * A no-op (returns `state` unchanged) when nothing is owed: no live corpse holds a claim under
+ * `fromHeroId`, or a corpse already holds a claim under BOTH ids (should not happen in practice --
+ * a heroId is retired the instant its own connection drops -- but a caller mistake here fails safe,
+ * leaving the existing claims alone, rather than silently merging or dropping one).
+ */
+export function reassignClaimHero(state, fromHeroId, toHeroId) {
+  if (fromHeroId === toHeroId) return state;
+  let changed = false;
+  const corpses = state.corpses.map((corpse) => {
+    const claimIndex = corpse.claims.findIndex((claim) => claim.heroId === fromHeroId);
+    if (claimIndex === -1) return corpse;
+    if (corpse.claims.some((claim) => claim.heroId === toHeroId)) return corpse;
+    changed = true;
+    const nextClaims = [...corpse.claims];
+    nextClaims[claimIndex] = { ...nextClaims[claimIndex], heroId: toHeroId };
+    return { ...corpse, claims: nextClaims };
+  });
+  if (!changed) return state;
+  return freezeState({ corpses });
 }

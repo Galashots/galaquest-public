@@ -10,8 +10,10 @@ import {
   CORPSE_GEAR_KIND,
   CORPSE_LOOT_EXPIRE_SECONDS,
   CORPSE_LOOT_INTERACT_RADIUS_METERS,
+  MAX_CLAIMS_PER_CORPSE,
   MAX_CONCURRENT_CORPSES,
   createCorpseLootState,
+  reassignClaimHero,
   requestClaimAllCorpseLoot,
   requestClaimCorpseItem,
   requestCorpseLoot,
@@ -255,4 +257,95 @@ test('an unknown corpse id is rejected cleanly', () => {
   const all = requestClaimAllCorpseLoot(state, 'a', 'corpse:missing:1', { x: 0, z: 0 });
   assert.equal(all.accepted, false);
   assert.deepEqual(all.items, []);
+});
+
+// Correction: alpha-wolf sets ordinary gearChance to 0 on purpose (see dropTableForKind's own
+// comment) because its guaranteed gear-or-heart coin flip lives entirely in enemyDrops.js's
+// killer-only roll. Before this correction rollOrdinaryGear read that literal 0 for every OTHER
+// eligible hero too, so a non-killing contributor to the game's single highest-value enemy could
+// never receive gear from it at all -- precisely the killing-blow-monopoly bug #87 exists to fix.
+test('correction: a non-killer contributor to an Alpha Wolf kill still has an independent shot at gear', () => {
+  const rng = scripted(0.1, 0.0); // hits the corrected 0.5 coin-flip gate, picks pool index 0
+  const { spawned } = requestCorpseLoot(createCorpseLootState(), kill({
+    kind: 'alpha-wolf',
+    eligibleHeroIds: ['a', 'b'],
+    killerHeroId: 'a',
+    killerGearItemId: null, // the killer's own ground roll landed on the heart half of its own flip
+  }), rng);
+  assert.ok(spawned, 'a non-killer contributor to the Alpha must be able to receive a claim');
+  assert.equal(spawned.claims.length, 1);
+  assert.equal(spawned.claims[0].heroId, 'b');
+});
+
+test('correction: a non-killer contributor to an Alpha Wolf kill can still miss its own coin flip', () => {
+  const rng = scripted(0.9); // misses the corrected 0.5 gate
+  const { spawned } = requestCorpseLoot(createCorpseLootState(), kill({
+    kind: 'alpha-wolf',
+    eligibleHeroIds: ['b'],
+    killerHeroId: 'a',
+    killerGearItemId: null,
+  }), rng);
+  assert.equal(spawned, null, 'a miss on the 0.5 coin flip must still produce nothing, not a guarantee');
+});
+
+// Correction: net/protocolCore.js's own MAX_CORPSE_CLAIMS (8) refuses to decode a corpse with more
+// claims than that -- before this correction requestCorpseLoot had no matching cap, so nine or more
+// eligible heroes on one kill minted a corpse the wire itself would then fail to decode on every
+// client, silently dropping the ENTIRE snapshot (not just the corpse) until it expired.
+test('correction: claims per corpse are capped at MAX_CLAIMS_PER_CORPSE, always keeping the killer', () => {
+  const heroIds = Array.from({ length: MAX_CLAIMS_PER_CORPSE + 3 }, (_, i) => `hero-${i}`);
+  const killerHeroId = heroIds[heroIds.length - 1]; // deliberately last in the eligible list
+  const rng = scripted(0.0); // every ordinary roll hits and always picks pool index 0
+  const { spawned } = requestCorpseLoot(createCorpseLootState(), kill({
+    eligibleHeroIds: heroIds,
+    killerHeroId,
+    killerGearItemId: SHIELD_IRONWOOD_ID,
+  }), rng);
+  assert.ok(spawned);
+  assert.equal(spawned.claims.length, MAX_CLAIMS_PER_CORPSE,
+    'must never exceed the wire\'s own MAX_CORPSE_CLAIMS');
+  assert.ok(spawned.claims.some((c) => c.heroId === killerHeroId),
+    'the killer must never be dropped purely for being late in the eligible list');
+});
+
+// Correction: a full reconnect mints a fresh, connection-scoped heroId (net/gameServerCore.mjs's own
+// addPlayer). Before this correction a corpse claim earned right before a reload/wifi blip became
+// permanently unreachable under the old heroId and kept occupying that corpse's own slot toward
+// MAX_CONCURRENT_CORPSES for the full expiry window -- an earned reward silently forfeited even
+// though nothing was actually duplicated. net/gameServerCore.mjs's own 'join' handler is the
+// caller that knows guestId maps oldHeroId -> newHeroId; this module only ever deals in heroIds.
+test('correction: reassignClaimHero reattaches a stale heroId\'s claim to a fresh reconnect heroId', () => {
+  const rng = scripted(0.1, 0.0);
+  const { state: spawnedState, spawned } = requestCorpseLoot(createCorpseLootState(), kill({
+    eligibleHeroIds: ['a'],
+  }), rng);
+  const reassigned = reassignClaimHero(spawnedState, 'a', 'a-reconnected');
+  const corpse = reassigned.corpses.find((c) => c.id === spawned.id);
+  assert.equal(corpse.claims.length, 1);
+  assert.equal(corpse.claims[0].heroId, 'a-reconnected');
+
+  const staleAttempt = requestClaimCorpseItem(
+    reassigned, 'a', spawned.id, corpse.claims[0].items[0].id, { x: 10, z: 20 },
+  );
+  assert.equal(staleAttempt.accepted, false, 'the stale, disconnected heroId must no longer reach it');
+
+  const freshAttempt = requestClaimCorpseItem(
+    reassigned, 'a-reconnected', spawned.id, corpse.claims[0].items[0].id, { x: 10, z: 20 },
+  );
+  assert.equal(freshAttempt.accepted, true, 'the reconnected heroId must now be able to take it');
+});
+
+test('reassignClaimHero is a no-op when the old heroId holds no live claim', () => {
+  const state = createCorpseLootState();
+  const result = reassignClaimHero(state, 'a', 'b');
+  assert.equal(result, state);
+});
+
+test('reassignClaimHero fails safe rather than merging when the new heroId already holds a claim on the same corpse', () => {
+  const rng = scripted(0.1, 0.0, 0.1, 0.0);
+  const { state: spawnedState } = requestCorpseLoot(createCorpseLootState(), kill({
+    eligibleHeroIds: ['a', 'b'],
+  }), rng);
+  const result = reassignClaimHero(spawnedState, 'a', 'b');
+  assert.equal(result, spawnedState, 'must not merge two live claims on the same corpse');
 });

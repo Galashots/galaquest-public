@@ -261,6 +261,42 @@ test('ownership-aware suppression is wired: a killer who already owns the whole 
   }
 });
 
+// Correction: every prior corpse-loot test in this file drives a SOLO kill. The riskiest new server
+// logic this package adds -- deriving eligibility from a second foldKillXpEvents ledger
+// (corpseContribFold in net/gameServerCore.mjs) -- has no coverage at the real-simulation level for
+// more than one contributor, so a wrong event source feeding that fold (the arena-filtered
+// pendingEvents instead of partyResult.events, say) would silently collapse eligibility to the
+// killing-blow hero alone while every other test in this file and in test/corpse-loot.test.mjs
+// (which hands eligibleHeroIds in directly) stayed green.
+test('#87 seam: two real, independently-attacking players both receive their own corpse claim', () => {
+  let corpse = null;
+  let sim = null;
+  let playerA = null;
+  let playerB = null;
+  for (let attemptNumber = 0; attemptNumber < 80 && !corpse; attemptNumber += 1) {
+    sim = singleEnemySimulation('frost-wolf', 'target');
+    playerA = sim.addPlayer('a', { x: 0, z: 7 });
+    playerB = sim.addPlayer('b', { x: 0.3, z: 7 });
+    fightToDeath(sim, [playerA, playerB], 'target');
+    corpse = sim.corpsesSnapshot().find((c) => c.claims.length >= 2) ?? null;
+  }
+  assert.ok(corpse, 'no corpse with two independent claims spawned across 80 two-player frost-wolf kills');
+
+  const claimA = corpse.claims.find((c) => c.heroId === playerA.id);
+  const claimB = corpse.claims.find((c) => c.heroId === playerB.id);
+  assert.ok(claimA && claimB,
+    'both real contributing heroIds must hold their own claim on the same corpse -- proves the '
+    + 'corpseContribFold derivation actually credits both hits, not only the killing blow');
+
+  const { accepted } = sim.applyClaimCorpseItem(playerA.id, corpse.id, claimA.items[0].id);
+  assert.equal(accepted, true);
+  const after = sim.corpsesSnapshot().find((c) => c.id === corpse.id);
+  const stillClaimB = after?.claims.find((c) => c.heroId === playerB.id);
+  assert.ok(stillClaimB, 'B\'s own claim must still exist on the corpse after A collects');
+  assert.ok(stillClaimB.items.every((item) => !item.taken),
+    'A collecting their own claim must never resolve B\'s own claim');
+});
+
 test('expiry: an uncollected drop is gone from the wire after DROP_EXPIRE_SECONDS of real ticks', () => {
   const sim = singleEnemySimulation('wolf', 'target');
   const player = sim.addPlayer('a', { x: 0, z: 7 });

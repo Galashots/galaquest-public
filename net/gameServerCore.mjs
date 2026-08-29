@@ -53,8 +53,8 @@ import {
 // claim rather than a shared ground pickup (see corpseLoot.js's own header for the full scope and
 // why coins/hearts above are unaffected).
 import {
-  createCorpseLootState, requestClaimAllCorpseLoot, requestClaimCorpseItem, requestCorpseLoot,
-  stepCorpseLoot,
+  createCorpseLootState, reassignClaimHero, requestClaimAllCorpseLoot, requestClaimCorpseItem,
+  requestCorpseLoot, stepCorpseLoot,
 } from '../public/src/world/corpseLoot.js';
 // R1: the coin multiplier a kill-drop roll reads off a per-player rolling streak.
 import { coinMultiplierForStreak, createStreakState, registerKill as registerKillStreak, stepStreak }
@@ -1296,6 +1296,18 @@ export function createSimulation(options = {}) {
   }
 
   /**
+   * Correction: reattach any corpse claim(s) held under a stale connection-scoped heroId onto the
+   * hero id of a fresh reconnect for the SAME guest. attachGameServer's own 'join' handler is the
+   * only caller -- it is the one place that actually knows a guestId maps oldHeroId -> newHeroId; see
+   * world/corpseLoot.js's own reassignClaimHero for why this module does not resolve guestId itself.
+   * A no-op for a guestId-less (ephemeral) connection or a guestId this server has never seen before
+   * -- there is nothing stale to reattach.
+   */
+  function reassignCorpseClaims(fromHeroId, toHeroId) {
+    corpseLootState = reassignClaimHero(corpseLootState, fromHeroId, toHeroId);
+  }
+
+  /**
    * R1: a non-kill heal -- today, only a collected heart drop. Pushes combat/encounter.js's own
    * `hero-healed` event onto the SAME pendingEvents queue attack/step already fill, so it rides the
    * next snapshot exactly the way any other combat event does; announceRewardFacts is the wrong seam
@@ -1468,13 +1480,19 @@ export function createSimulation(options = {}) {
         streakMultiplier: coinMultiplierForStreak(streak.streak),
         killerOwnedItemIds: ownedItemIdsFor(event.heroId),
       }, Math.random);
-      // #87: gear no longer becomes a ground pickup -- see corpseLoot.js's own header for the full
-      // scope. Coins and hearts still scatter exactly as before; any gear entry THIS roll produced
-      // is lifted out (never lost -- it becomes the killing hero's own corpse claim just below,
-      // reusing this exact already-ownership-checked roll rather than a second one) instead of being
-      // merged into the shared ground state.
+      // Correction (was: "gear no longer becomes a ground pickup"): stripping gear out of dropsState
+      // here made it unobtainable online with no compensating fix. world/corpseLoot.js's own personal
+      // claim has no client consumer yet -- public/ has no corpse presenter, no glow, no Loot prompt,
+      // and no sendCollectCorpseItem/sendCollectCorpseAll -- so gear acquisition dropped to zero for
+      // every hosted session the instant this landed. Gear stays merged into the shared ground state
+      // exactly as R1 always did (this is a plain revert of that one line) SO THAT the existing
+      // ground-pickup client path keeps working today; the personal corpse claim below still spawns
+      // in parallel (shadow mode) so a future client presenter has real server state to build against
+      // without needing a second server change. This is deliberately a stopgap, not #87's actual
+      // fairness fix (a killing-blow-only pickup can still be raced away from a non-killing
+      // contributor) -- see the PR body for why the corpse-claim UI is a separate follow-up.
       const killerGearDrop = rolled.spawned.find((drop) => drop.kind === GEAR_DROP_KIND) ?? null;
-      dropsState = { drops: rolled.state.drops.filter((drop) => drop.kind !== GEAR_DROP_KIND) };
+      dropsState = rolled.state;
 
       const eligibleHeroIds = corpseContribFold.awards
         .filter((award) => award.enemyId === event.enemyId)
@@ -1755,6 +1773,7 @@ export function createSimulation(options = {}) {
     applyCollectDrop,
     applyClaimCorpseItem,
     applyClaimAllCorpseLoot,
+    reassignCorpseClaims,
     applyHeroHeal,
     step,
     snapshot,
@@ -1814,6 +1833,12 @@ export function attachGameServer(httpServer, options = {}) {
   const snapshotEveryTicks = Math.max(1, Math.round(TICK_HZ / (options.snapshotHz ?? SNAPSHOT_HZ)));
   let lastStepAt = now();
   let ticksSinceSnapshot = 0;
+  // Correction: guestId -> the most recent heroId that guest joined as, kept ONLY at this layer
+  // (createRewardCoordinator's own guestIdByPlayer map goes the other direction and is not exposed
+  // for reverse lookup, and world/corpseLoot.js deliberately knows nothing about guestId at all --
+  // see its own reassignClaimHero). A reconnect (same guestId, fresh heroId) uses this to reattach
+  // any corpse claim the old heroId was still owed onto the new one, in the 'join' handler below.
+  const heroIdByGuestId = new Map();
 
   // The wire's encounter block, with rewards (D3) and GP2's loot state folded on: every reader of
   // encounterSnapshot()/lootSnapshot() above stays untouched, this is the one seam that adds the
@@ -1847,6 +1872,19 @@ export function attachGameServer(httpServer, options = {}) {
         // whose localStorage threw) leaves this player ephemeral -- see createRewardCoordinator's
         // own comment.
         rewards.join(player.id, message.guestId);
+        // Correction: a reconnect (same guestId, fresh heroId) reattaches any corpse claim still
+        // owed to the guest's PREVIOUS heroId -- otherwise a claim earned right before a reload/wifi
+        // blip became permanently unreachable (the new heroId holds no claim, the old one is gone)
+        // while still occupying that corpse's own slot toward MAX_CONCURRENT_CORPSES for the whole
+        // expiry window. Guarded on a real (non-empty) guestId the same way `rewards.join` above is,
+        // since an ephemeral connection has no durable identity to match a stale heroId against.
+        if (typeof message.guestId === 'string' && message.guestId.length > 0) {
+          const previousHeroId = heroIdByGuestId.get(message.guestId);
+          if (previousHeroId && previousHeroId !== player.id) {
+            simulation.reassignCorpseClaims(previousHeroId, player.id);
+          }
+          heroIdByGuestId.set(message.guestId, player.id);
+        }
         // The current encounter block, not the empty placeholder -- a late joiner has to see a
         // mid-fight wolf correctly (Design ruling 7). Now including that guest's own persisted
         // marks, so a reconnect (same guestId, new playerId) sees them immediately on welcome --
