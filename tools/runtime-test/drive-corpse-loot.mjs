@@ -201,6 +201,22 @@ if (booted) {
     wiring.panelExists && wiring.panelClosedAtBoot, JSON.stringify(wiring));
   check('the acquired-item toast layer exists in the real DOM',
     wiring.toastLayerExists, JSON.stringify(wiring));
+
+  // REGRESSION GUARD, from a defect this package actually shipped and drive-drop-collect caught by
+  // accident: the CLOSED loot panel is hidden with `opacity: 0`, and an opacity-0 element is still
+  // hit-testable, so an unconditional `pointer-events: auto` on the panel left an invisible Take All
+  // button sitting over the middle of the screen eating every tap that landed there. Nothing in the
+  // loot flow notices -- the panel opens and collects perfectly well either way -- which is exactly
+  // why it needs its own assertion rather than trusting the flow above to surface it.
+  const centreOwner = await page.eval(`(() => {
+    const el = document.elementFromPoint(${Math.round(VIEWPORT.width / 2)}, ${Math.round(VIEWPORT.height / 2)});
+    return JSON.stringify({
+      tag: el ? el.tagName + (el.id ? '#' + el.id : '') : 'nothing',
+      insideLootPanel: Boolean(el && el.closest('#corpse-loot-panel-layer')),
+    });
+  })()`).then(JSON.parse);
+  check('the CLOSED loot panel does not swallow taps at the centre of the screen',
+    centreOwner.insideLootPanel === false, `centre owned by ${centreOwner.tag}`);
 }
 
 // TARGET: the authored starter Wolf, read through in-page-driver.js's own shared authoredWolfSource()

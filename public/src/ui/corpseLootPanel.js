@@ -45,8 +45,18 @@ export const CORPSE_LOOT_PANEL_CSS = `
       }
       #corpse-loot-panel-layer[data-shown="true"] { opacity: 1; pointer-events: auto; }
       #corpse-loot-panel-backdrop { position: absolute; inset: 0; background: rgb(6 10 16 / 55%); }
+      /* pointer-events is scoped to the SHOWN state deliberately. An unconditional
+         "pointer-events: auto" here re-enabled hit-testing on a descendant of a layer that is
+         hidden only by "opacity: 0" -- and an opacity-0 element is still hit-testable (unlike
+         display:none/visibility:hidden). The closed panel is centred by the layer's own
+         "place-items: center", so it sat invisibly over the middle of the screen swallowing every
+         tap that landed there. Measured, not theorised: drive-drop-collect.mjs's own per-frame
+         "document.elementFromPoint(centre)" probe reported the centre covered by
+         BUTTON#corpse-loot-panel-take-all for all 334 frames of a run in which no corpse ever
+         existed and this panel never opened. */
+      #corpse-loot-panel-layer[data-shown="true"] #corpse-loot-panel { pointer-events: auto; }
       #corpse-loot-panel {
-        position: relative; pointer-events: auto;
+        position: relative;
         width: min(20rem, calc(100% - 2rem));
         max-height: min(26rem, calc(100% - 4rem));
         display: flex; flex-direction: column;
