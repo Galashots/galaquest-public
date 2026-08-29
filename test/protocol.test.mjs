@@ -55,6 +55,10 @@ const ENCOUNTER_FIXTURE = {
   // nothing on the ground until a kill spawns something. See "an encounter block with no drops key
   // at all still decodes" below for the pre-R1 backward-compatibility case this fixture used to cover.
   drops: [],
+  // #87: same "present and empty, matches what a real snapshot always carries" reasoning again --
+  // no corpse until a loot-bearing kill spawns one. The pre-#87 backward-compatibility case (no
+  // `corpses` key at all) is covered in test/corpse-loot-wire.test.mjs, not here.
+  corpses: [],
   // GP3: same "present and empty, matches what a real snapshot always carries" reasoning again --
   // nothing earned yet, Workshop I not bought. See "an encounter block with no village key at all
   // still decodes" below for the pre-GP3 backward-compatibility case this fixture used to cover.

@@ -189,16 +189,22 @@ test('a collected heart drop heals through combat/encounter.js\'s own requestHer
   assert.ok(hpAfterCollect <= HERO_MAX_HP, 'a heart must never carry a hero past their own maxHp');
 });
 
-// The "already-owned converts to coins instead" half is proven by the wiring test right after this
-// one -- this test only needs the unowned-grant path, since the conversion arithmetic itself is
-// already pinned deterministically in test/enemy-drops.test.mjs.
-test('a collected gear drop for an unowned item grants it durably through the real reward store', () => {
-  let gearDrop = null;
+// #87: gear no longer becomes a ground pickup at all -- net/gameServerCore.mjs's own tick now lifts
+// any gear entry world/enemyDrops.js's own roll produces out of the ground state and hands it to the
+// killing hero as a world/corpseLoot.js personal claim instead (see that module's own header, and
+// gameServerCore.mjs's own integration comment, for the full scope). These two tests used to prove
+// the ground pickup's grant/conversion wiring; they now prove the identical wiring one hop later, at
+// the corpse. The "already-owned converts to coins instead" half retired with the ground path itself
+// -- corpseLoot.js's own ownership-aware suppression (proven in test/corpse-loot.test.mjs) simply
+// omits the claim rather than converting it, which the second test below proves is actually wired
+// end to end through the real reward coordinator.
+test('a corpse claim for an unowned item grants it durably through the real reward store', () => {
+  let corpse = null;
   let sim = null;
   let player = null;
   let rewards = null;
   let dir = null;
-  for (let attemptNumber = 0; attemptNumber < 80 && !gearDrop; attemptNumber += 1) {
+  for (let attemptNumber = 0; attemptNumber < 80 && !corpse; attemptNumber += 1) {
     const fixture = tempDb();
     dir = fixture.dir;
     sim = singleEnemySimulation('frost-wolf', 'target');
@@ -206,30 +212,32 @@ test('a collected gear drop for an unowned item grants it durably through the re
     player = sim.addPlayer('a', { x: 0, z: 7 });
     rewards.join(player.id, `guest-gear-${attemptNumber}`);
     fightToDeath(sim, [player], 'target');
-    gearDrop = sim.dropsSnapshot().find((d) => d.kind === GEAR_DROP_KIND) ?? null;
-    if (!gearDrop) { rewards.close(); cleanupTempDb(dir); }
+    corpse = sim.corpsesSnapshot().find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null;
+    if (!corpse) { rewards.close(); cleanupTempDb(dir); }
   }
-  assert.ok(gearDrop, 'no gear dropped across 80 frost-wolf kills -- the roll table has likely regressed');
+  assert.ok(corpse, 'no corpse spawned across 80 frost-wolf kills -- the roll table has likely regressed');
   walkOntoDeathSpot(sim, player.id, 'target', 5000);
 
   try {
-    const { accepted } = sim.applyCollectDrop(player.id, gearDrop.id);
+    const claim = corpse.claims.find((c) => c.heroId === player.id);
+    const item = claim.items[0];
+    const { accepted, item: taken } = sim.applyClaimCorpseItem(player.id, corpse.id, item.id);
     assert.equal(accepted, true);
-    const facts = rewards.grantOwnership(player.id, gearDrop.itemId);
+    const facts = rewards.grantOwnership(player.id, taken.itemId);
     assert.equal(facts[0]?.type, 'gear-owned');
-    assert.ok(rewards.ownedItemIdsFor(player.id).includes(gearDrop.itemId));
+    assert.ok(rewards.ownedItemIdsFor(player.id).includes(taken.itemId));
   } finally {
     rewards.close();
     cleanupTempDb(dir);
   }
 });
 
-test('the owned-gear-to-coins conversion is wired: the killer\'s own ownership feeds the roll', () => {
+test('ownership-aware suppression is wired: a killer who already owns the whole pool gets no corpse claim', () => {
   // Not statistical: this proves the SEAM (ownedItemIdsFor is actually threaded from the reward
-  // coordinator into world/enemyDrops.js's own roll), not the roll's own conversion arithmetic
-  // (already proven deterministically in test/enemy-drops.test.mjs). If a guest who already owns
-  // BOTH gear items in the pool ever collects a fresh 'gear' drop, the wiring itself has a defect --
-  // this asserts that never happens across enough tries to be confident the seam works.
+  // coordinator into world/corpseLoot.js's own roll), not the roll's own suppression logic (already
+  // proven deterministically in test/corpse-loot.test.mjs). If a guest who already owns BOTH gear
+  // items in the pool ever receives a corpse claim from a solo frost-wolf kill, the wiring itself has
+  // a defect -- this asserts that never happens across enough tries to be confident the seam works.
   const { dir, path } = tempDb();
   try {
     const rewards = createRewardCoordinator({ rewardStorePath: path });
@@ -239,13 +247,13 @@ test('the owned-gear-to-coins conversion is wired: the killer\'s own ownership f
       sim = singleEnemySimulation('frost-wolf', 'target', rewards);
       player = sim.addPlayer(`p${attemptNumber}`, { x: 0, z: 7 });
       rewards.join(player.id, 'guest-already-owns-everything');
-      // Grant BOTH pool items up front so any real gear roll this kill produces must convert.
+      // Grant BOTH pool items up front so any real gear roll this kill produces must be suppressed.
       rewards.grantOwnership(player.id, SHIELD_IRONWOOD_ID);
       rewards.grantOwnership(player.id, SHOULDER_SILVERGUARD_ID);
       fightToDeath(sim, [player], 'target');
-      const drops = sim.dropsSnapshot();
-      assert.equal(drops.some((d) => d.kind === GEAR_DROP_KIND), false,
-        'a guest who already owns the whole gear pool must never see a live gear pickup on the ground');
+      const corpses = sim.corpsesSnapshot();
+      assert.equal(corpses.length, 0,
+        'a solo guest who already owns the whole gear pool must never see a corpse spawn at all');
     }
     rewards.close();
   } finally {

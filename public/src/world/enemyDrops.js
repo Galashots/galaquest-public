@@ -63,7 +63,11 @@ export const HEART_HEAL_HP = 20;
 // the one that actually changes a hero's own defence. Both stay in the same pool anyway: owning
 // EITHER one is real progress even before a future pass gives the Shield teeth, and a gear drop that
 // only ever named one item would not read as a pool at all.
-const GEAR_DROP_POOL = Object.freeze([SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID]);
+//
+// Exported for the identical reason dropTableForKind is now exported just above: world/corpseLoot.js
+// rolls its own independent per-eligible-hero pick from this SAME pool rather than inventing a
+// second one.
+export const GEAR_DROP_POOL = Object.freeze([SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID]);
 
 // A gear roll that lands on an item the credited hero already owns converts to this many coins
 // instead -- never a wasted roll, and never a second copy of an item this game has no use for owning
@@ -77,9 +81,11 @@ const SCATTER_MIN_METERS = 0.5;
 const SCATTER_MAX_METERS = 1.0;
 
 /**
- * The roll table for one enemy kind. Not exported: `requestEnemyDrop` below is the one seam a caller
- * needs, and exposing the table itself would invite a second place to read "does this kind drop
- * gear" that could disagree with the roll.
+ * The roll table for one enemy kind. Exported (R1 kept it private; #87's world/corpseLoot.js is a
+ * second, later caller that needs the SAME "does this kind drop gear, how often" answer for its own
+ * independent per-eligible-hero roll) so there is exactly one authority for that question rather
+ * than a second table free to drift from this one -- see corpseLoot.js's own header for why gear
+ * moved out of the ground pickup below into a personal corpse claim.
  *
  *   coinCount             [min, max] BASE coin pickups (before the streak multiplier), each worth 1.
  *   heartChance           independent roll, 0..1.
@@ -87,7 +93,7 @@ const SCATTER_MAX_METERS = 1.0;
  *   guaranteedGearOrHeart true only for the Alpha: skips the independent heart/gear rolls above and
  *                          guarantees exactly one of the two, on top of its own bigger coin haul.
  */
-function dropTableForKind(kind) {
+export function dropTableForKind(kind) {
   if (kind === 'alpha-wolf') {
     return { coinCount: [4, 7], heartChance: 0, gearChance: 0, guaranteedGearOrHeart: true };
   }
