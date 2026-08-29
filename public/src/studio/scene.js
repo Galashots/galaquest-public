@@ -22,7 +22,7 @@ import {
 } from './candidateGear.js';
 import { ALL_STUDIO_GEAR, LOADOUT_IDS, loadoutDescriptor } from './loadoutDescriptors.js';
 import { loadGLB } from '../world/assets.js';
-import { GAMEPLAY_DISTANCE, cameraPositionFor } from '../review/cameraPresets.js';
+import { GAMEPLAY_DISTANCE, cameraPositionFor, bearingRadians } from '../review/cameraPresets.js';
 import {
   measureGrip, measureShield, computeBodyOccupancyBox,
   buildGripOverlay, buildShieldOverlay, clearOverlay,
@@ -106,6 +106,103 @@ export async function createStudioScene(canvas) {
       scale: object.scale.clone(),
     }));
   });
+
+  // ── Library generic asset stage (#92 STUDIO-V2A) ────────────────────────────────────────────
+  // A separate, empty-by-default group for any registry-selected asset (character/model/gear/
+  // texture-bearing GLB) that is NOT the hero -- Library must be able to load ANY renderable
+  // registry record generically, not just the fixed hero+gear loadout vocabulary above. The hero
+  // is hidden (not removed -- its rig/animation state stays intact) while a Library asset is on
+  // stage, and restored the moment the Library asset is cleared.
+  const genericAssetGroup = new THREE.Group();
+  genericAssetGroup.name = 'studio-generic-asset';
+  genericAssetGroup.visible = false;
+  scene.add(genericAssetGroup);
+  let genericAssetState = null; // { assetId, runtimeUrl, measured } | null
+
+  function clearGenericAsset() {
+    for (const child of [...genericAssetGroup.children]) genericAssetGroup.remove(child);
+    genericAssetGroup.visible = false;
+    genericAssetState = null;
+    hero.root.visible = true;
+  }
+
+  /**
+   * Loads real bytes from `runtimeUrl` (already proven servable by the caller -- api.js only calls
+   * this after the registry's own `runtime_availability.loadable` said so) and measures the loaded
+   * scene graph directly, rather than trusting any declared number. A load failure throws; it must
+   * never silently fall back to the shared magenta placeholder and claim success.
+   */
+  async function loadGenericAsset(assetId, runtimeUrl) {
+    clearGenericAsset();
+    if (!runtimeUrl) throw new Error(`loadGenericAsset: no runtime URL for "${assetId}"`);
+
+    const gltf = await loadGLB(runtimeUrl);
+    if (gltf.userData?.loadError) {
+      throw new Error(`asset bytes unavailable at runtime for "${assetId}": ${runtimeUrl}`);
+    }
+    const root = gltf.scene;
+
+    // Deterministic neutral framing: centre on X/Z and ground at Y=0 from the asset's OWN bounding
+    // box, independent of the hero rig's conventions -- a village prop and a hand-held sword must
+    // both land predictably regardless of how their source file was authored/pivoted.
+    const box = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= box.min.y;
+
+    let meshCount = 0;
+    let triangleCount = 0;
+    const materialUuids = new Set();
+    root.traverse((object) => {
+      if (!object.isMesh) return;
+      meshCount += 1;
+      const geometry = object.geometry;
+      if (geometry?.index) triangleCount += geometry.index.count / 3;
+      else if (geometry?.attributes?.position) triangleCount += geometry.attributes.position.count / 3;
+      for (const material of [].concat(object.material ?? [])) if (material) materialUuids.add(material.uuid);
+    });
+
+    genericAssetGroup.add(root);
+    genericAssetGroup.visible = true;
+    hero.root.visible = false;
+
+    genericAssetState = Object.freeze({
+      assetId,
+      runtimeUrl,
+      measured: Object.freeze({
+        meshCount,
+        triangleCount: Math.round(triangleCount),
+        materialCount: materialUuids.size,
+        animationClipCount: gltf.animations?.length ?? 0,
+        boundingBoxSize: Object.freeze({ x: size.x, y: size.y, z: size.z }),
+      }),
+    });
+    return genericAssetState;
+  }
+
+  /** Deterministic standard view for whatever is currently on the generic asset stage. */
+  function frameGenericAsset(bearingName = 'three-quarter') {
+    if (!genericAssetState) return null;
+    const box = new THREE.Box3().setFromObject(genericAssetGroup);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const radius = Math.max(size.length() * 0.5, 0.15);
+    const distance = radius * 2.4 + 0.4;
+    const bearing = bearingRadians(bearingName);
+    const x = center.x + Math.sin(bearing) * distance;
+    const z = center.z + Math.cos(bearing) * distance;
+    const y = center.y + distance * 0.28;
+    camera.position.set(x, y, z);
+    camera.lookAt(center.x, center.y, center.z);
+    camera.updateMatrixWorld(true);
+    return Object.freeze({ bearing: bearingName, distance, center: { x: center.x, y: center.y, z: center.z } });
+  }
 
   // ── explicit locked-comparison loadouts ─────────────────────────────────────────────────────
   let loadout = 'shipping';
@@ -356,6 +453,10 @@ export async function createStudioScene(canvas) {
     setTuningOverride,
     TUNING_TARGETS,
     TUNING_BOUNDS,
+    loadGenericAsset,
+    clearGenericAsset,
+    frameGenericAsset,
+    get activeAsset() { return genericAssetState; },
     get lightingMode() { return lightingMode; },
     get currentClipName() { return currentAction?.getClip().name ?? null; },
     get currentTime() { return currentAction?.time ?? 0; },
