@@ -358,33 +358,49 @@ if (booted) {
       await sleep(500);
     }
 
-    await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.5));
-    await touch(page, 'touchStart', [{ x: VIEWPORT.width * 0.18, y: VIEWPORT.height * 0.86, id: 1 }]);
-    await touch(page, 'touchMove', [{
+    // RELEASE THE THUMB IN THE PAGE, and converge in passes.
+    //
+    // The first hosted attempt at this stopped the hero with a CDP touchEnd once the harness noticed
+    // arrival, and it failed in the exact shape in-page-driver.js's own header documents from
+    // drive-village at 40x: the walk latched at closestMetres 1.29m and the very next reading put the
+    // hero at 2.63m, outside the 2.5m ring, because on a starved page the round trip back out is two
+    // frames and the hero keeps running at RUN_DEFLECTION the whole time. A loop cannot converge when
+    // every pass overshoots by more than the ring it is aiming at.
+    //
+    // releaseOnArrival lifts the thumb on the latch frame itself, from inside the page -- the same
+    // pointerup the harness's own touchEnd produces, one frame earlier. Passes are then re-issued
+    // until the RENDERED hero (the position nearestLootableCorpse actually reads) is genuinely inside
+    // the ring, rather than trusting a single pass to land it.
+    const stickDown = { x: VIEWPORT.width * 0.18, y: VIEWPORT.height * 0.86, id: 1 };
+    const stickPush = {
       x: VIEWPORT.width * 0.18,
       y: VIEWPORT.height * 0.86 - Math.round(STICK_RADIUS_PX * RUN_DEFLECTION),
       id: 1,
-    }]);
-    // Hold the stick until the RENDERED hero is genuinely close, not merely until startWalk's own
-    // arrival flag flips. Its flag is the right stop condition for a walk, but the prompt reads the
-    // rendered position, and on a loaded runner the rendered body lags the server body -- so the walk
-    // can honestly report "arrived" while the presenter still, correctly, sees the hero as too far
-    // away. Polling the same number the rule reads closes that gap.
+    };
+    const renderedGapNow = () => page.eval(
+      `(() => { const p = window.__galaQuestRuntime.player.position;`
+      + ` return Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}); })()`,
+    );
     let walkReport = null;
-    try {
-      const arriveDeadline = deadlineAfter(60_000);
-      for (;;) {
-        walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
-        const renderedNow = await page.eval(
-          `(() => { const p = window.__galaQuestRuntime.player.position;`
-          + ` return Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}); })()`,
-        );
-        if (renderedNow <= 1.5 || Date.now() >= arriveDeadline) break;
-        await sleep(150);
+    const approachDeadline = deadlineAfter(90_000);
+    for (let pass = 0; pass < 8; pass += 1) {
+      if (await renderedGapNow() <= 1.2) break;
+      if (Date.now() >= approachDeadline) break;
+      await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.0, { releaseOnArrival: true }));
+      await touch(page, 'touchStart', [stickDown]);
+      await touch(page, 'touchMove', [stickPush]);
+      try {
+        const passDeadline = deadlineAfter(20_000);
+        for (;;) {
+          walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
+          if (walkReport?.arrived || Date.now() >= passDeadline) break;
+          await sleep(120);
+        }
+      } finally {
+        await page.eval(STOP_WALK);
+        await touch(page, 'touchEnd', []);
       }
-    } finally {
-      await page.eval(STOP_WALK);
-      await touch(page, 'touchEnd', []);
+      await sleep(300); // let the release land and the body settle before re-measuring
     }
     await sleep(400); // let one more snapshot land so the presenter's own frame loop has caught up
 
