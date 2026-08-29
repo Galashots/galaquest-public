@@ -46,10 +46,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { deadlineAfter, movementPulseMillis } from './automation-timing.mjs';
-import { authoredWolfSource } from './in-page-driver.mjs';
+import { deadlineAfter } from './automation-timing.mjs';
+import { authoredWolfSource, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../../public/src/progression/items.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 
 const CHROME_PORT = 9224;
 const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-corpse-loot-')), 'rewards.db');
@@ -175,6 +177,18 @@ page.ws.addEventListener('message', (event) => {
 });
 await page.send('Runtime.enable');
 
+// play-fight.mjs's own convention, adopted here for the reason this file learned the hard way: it
+// passed locally five runs in a row and still went red hosted, because everything that broke it was
+// latency-shaped and a fast desktop hides that entirely. Setting GALAQUEST_CPU_THROTTLE=6 reproduces
+// something near the hosted judging regime on this machine, so a change to the fight or approach can
+// be measured against it BEFORE spending a CI cycle to find out. Unset (1x) in normal use and in CI --
+// the hosted runner supplies its own contention.
+const CPU_THROTTLE = Number(process.env.GALAQUEST_CPU_THROTTLE ?? 1);
+if (CPU_THROTTLE > 1) {
+  await page.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE });
+  console.log(`  CPU throttled ${CPU_THROTTLE}x (GALAQUEST_CPU_THROTTLE)`);
+}
+
 const booted = await waitFor(
   page, 'Boolean(window.__galaQuestRuntime?.hero && window.__galaQuestRuntime.netState().status === "online")',
   'client boots and joins the owned server', 30_000,
@@ -261,72 +275,50 @@ if (booted) {
 
   const ATTACK_X = VIEWPORT.width - 68;
   const ATTACK_Y = VIEWPORT.height - 68;
-  const STICK = { x: VIEWPORT.width * 0.2, y: VIEWPORT.height * 0.85 };
 
-  async function walkToward(target, stopWithin, maxMillis) {
-    let last = await fightState();
-    const deadline = deadlineAfter(maxMillis);
-    while (Date.now() < deadline) {
-      const authority = last.serverPos ?? last.heroPos;
-      const dx = target.x - authority[0];
-      const dz = target.z - authority[1];
-      const distance = Math.hypot(dx, dz);
-      if (distance <= stopWithin) break;
-      const nx = dx / distance; const nz = dz / distance;
-      const cos = Math.cos(last.heading); const sin = Math.sin(last.heading);
-      const sx = -cos * nx + sin * nz;
-      const sy = sin * nx + cos * nz;
-      await touch(page, 'touchStart', [STICK]);
-      try {
-        await touch(page, 'touchMove', [{ x: STICK.x + sx * 56, y: STICK.y - sy * 56 }]);
-        await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
-      } finally {
-        await touch(page, 'touchEnd', []);
-      }
-      await sleep(80);
-      last = await fightState();
-    }
-    return last;
-  }
+  // FIGHT ON THE HELD STICK, ATTACK TAPS RIDING ON TOP. This is the choreography drive-lifecycle,
+  // drive-marks, drive-first-level-up and play-fight all carry, and it is here for the reason
+  // drive-lifecycle's own comment records: a "walk, stop, tap" loop STARVES on a hosted runner,
+  // because a stationary hero whiffs on FACING -- he swings where his body points and only turns
+  // while he is moving. That is not a hypothesis about this file, it is what its own hosted run at
+  // ab305e8 measured: the wolf finished on hp=30 of 30, untouched, after 9 taps. Locally the same
+  // code killed in 8-13 swings, which is exactly how a latency-shaped defect hides.
+  //
+  // So the stick is HELD at the walk deflection for the whole fight (steered every frame from INSIDE
+  // the page by startWalk, immune to CDP round-trip latency), and each ATTACK is a second touch point
+  // pressed and released on top of it. touchStart's touchPoints are the full active set (Chrome
+  // presses only the new one) and touchEnd's are the points being RELEASED, so the tap's end names
+  // the attack point alone and the hero never stops walking into contact. There is deliberately no
+  // knockdown branch: the rules ignore held input on a down body, and the respawned hero walks
+  // himself back into the fight on the same hold.
+  const WOLF_TARGET = authoredWolfSource();
+  const stickX = VIEWPORT.width * 0.18;
+  const stickY = VIEWPORT.height * 0.86;
+  const FIGHT_STICK_POINT = () => ({
+    x: stickX, y: stickY - Math.round(STICK_RADIUS_PX * RUN_DEFLECTION), id: 1,
+  });
+  console.log('  walking to the authored wolf on a held stick...');
+  await page.eval(startWalk(WOLF_TARGET, 0));
+  await touch(page, 'touchStart', [{ x: stickX, y: stickY, id: 1 }]);
+  await touch(page, 'touchMove', [FIGHT_STICK_POINT()]);
 
-  async function tapAttack() {
-    await touch(page, 'touchStart', [{ x: ATTACK_X, y: ATTACK_Y }]);
-    await sleep(60);
-    await touch(page, 'touchEnd', []);
-  }
-
-  // drive-drop-collect.mjs's own kill loop, which is green on the hosted matrix: steer at the wolf's
-  // LIVE position, stop at 1.2m, swing on a clock, and only re-walk once the wolf has actually pulled
-  // past 1.4m. Bounded by TIME rather than by a swing count, because a swing budget is the wrong unit
-  // -- a starved run burns 45 "swings" without ever getting in range, which is precisely how the
-  // hosted dd7ce2e run reported 45 swings and zero kills.
-  {
-    const first = await fightState();
-    console.log(`  walking to ${first.wolf?.enemyId ?? 'the authored wolf'}...`);
-  }
-  await walkToward({ x: (await fightState()).wolf.x, z: (await fightState()).wolf.z }, 1.2, 45_000);
-
-  const killDeadline = deadlineAfter(90_000);
   let state = await fightState();
   let swings = 0;
-  while (Date.now() < killDeadline && state.wolf && state.wolf.hp > 0) {
-    // A downed hero cannot land a swing at all (combat/encounter.js's own canHeroAttack) -- tapping
-    // ATTACK while down achieves nothing. Wait out recovery instead of whiffing.
-    if (state.heroDownSeconds > 0 || state.heroHp <= 0) {
-      await sleep(600);
-      state = await fightState();
-      continue;
+  try {
+    const killDeadline = deadlineAfter(180_000);
+    while (Date.now() < killDeadline && state.wolf && state.wolf.hp > 0) {
+      await touch(page, 'touchStart', [FIGHT_STICK_POINT(), { x: ATTACK_X, y: ATTACK_Y, id: 2 }]);
+      await sleep(60);
+      await touch(page, 'touchEnd', [{ x: ATTACK_X, y: ATTACK_Y, id: 2 }]);
+      swings += 1;
+      await sleep(120);
+      if (swings % 3 === 0) state = await fightState();
     }
-    await tapAttack();
-    swings += 1;
-    await sleep(600);
-    state = await fightState();
-    if (!state.wolf || state.wolf.hp <= 0) break;
-    const authority = state.serverPos ?? state.heroPos;
-    if (Math.hypot(authority[0] - state.wolf.x, authority[1] - state.wolf.z) > 1.4) {
-      state = await walkToward({ x: state.wolf.x, z: state.wolf.z }, 1.2, 6_000);
-    }
+  } finally {
+    await page.eval(STOP_WALK);
+    await touch(page, 'touchEnd', [FIGHT_STICK_POINT()]);
   }
+  state = await fightState();
   check('the authored wolf is dead by real taps over the real socket',
     !state.wolf || state.wolf.hp <= 0,
     `hp=${state.wolf?.hp ?? 'gone'}, swings=${swings}`);
@@ -351,7 +343,28 @@ if (booted) {
     console.log(`  corpse=${corpse.id} claimed item=${claimItem?.itemId}`);
 
     // ── walk to the corpse, watch the player-specific glow/prompt appear ──────────────────────────
-    await walkToward({ x: corpse.x, z: corpse.z }, 1.5, 30_000);
+    // Same in-page steering as the fight above, and for the same latency reason: a CDP-pulsed walk
+    // that has to land inside CORPSE_LOOT_INTERACT_RADIUS_METERS is exactly the kind of precision
+    // that holds locally and starves hosted. startWalk recomputes the heading every rendered frame
+    // inside the page; the harness only holds the stick and waits for its own arrival report.
+    await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.5));
+    await touch(page, 'touchStart', [{ x: VIEWPORT.width * 0.18, y: VIEWPORT.height * 0.86, id: 1 }]);
+    await touch(page, 'touchMove', [{
+      x: VIEWPORT.width * 0.18,
+      y: VIEWPORT.height * 0.86 - Math.round(STICK_RADIUS_PX * RUN_DEFLECTION),
+      id: 1,
+    }]);
+    try {
+      const arriveDeadline = deadlineAfter(60_000);
+      for (;;) {
+        const walk = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
+        if (walk?.arrived || Date.now() >= arriveDeadline) break;
+        await sleep(150);
+      }
+    } finally {
+      await page.eval(STOP_WALK);
+      await touch(page, 'touchEnd', []);
+    }
     await sleep(400); // let one more snapshot land so the presenter's own frame loop has caught up
 
     // A: the PHYSICAL "this loot is yours" signal, asserted against the real rendered scene object
@@ -417,8 +430,14 @@ if (booted) {
         // Watch the toast layer from INSIDE the page across the whole collect sequence. The toast is
         // deliberately short-lived, and a CDP poll that happens to land between two reads would miss
         // it and report a defect that is not there -- so record arrivals as they happen instead.
+        // The Hero-button pulse is watched the SAME way and for the same reason. It was originally
+        // polled ("reset the attribute, then look for 'true' every 100ms"), which held at 1x and 6x
+        // and then missed at 12x: the flip is short-lived, and a poll that lands either side of it
+        // reports a defect that is not there. Observing the attribute records the transition whenever
+        // it happens, so this check measures the game rather than the harness's own sampling luck.
         await page.eval(`(() => {
           window.__corpseToasts = [];
+          window.__corpsePulses = 0;
           const layer = document.querySelector('#corpse-loot-toast-layer');
           new MutationObserver((records) => {
             for (const record of records) {
@@ -429,6 +448,10 @@ if (booted) {
               }
             }
           }).observe(layer, { childList: true });
+          const heroButton = document.querySelector('#hero-button');
+          new MutationObserver(() => {
+            if (heroButton.dataset.lootPulse === 'true') window.__corpsePulses += 1;
+          }).observe(heroButton, { attributes: true, attributeFilter: ['data-loot-pulse'] });
         })()`);
         const tapById = async (selector) => {
           const rect = await page.eval(
@@ -444,12 +467,12 @@ if (booted) {
         // Poll for a real acquisition receipt: a toast ARRIVAL plus the Hero-button pulse. This is a
         // genuine network round trip (collect -> server grants -> next snapshot -> presenter diffs
         // it), never an optimistic local flip, so it legitimately takes a couple of 100ms ticks.
-        const awaitReceipt = async (toastsBefore) => {
+        const awaitReceipt = async (toastsBefore, pulsesBefore) => {
           let sawToast = false;
           let sawPulse = false;
-          for (let i = 0; i < 40 && !(sawToast && sawPulse); i += 1) {
+          for (let i = 0; i < 60 && !(sawToast && sawPulse); i += 1) {
             if (!sawToast) sawToast = await page.eval(`window.__corpseToasts.length > ${toastsBefore}`);
-            if (!sawPulse) sawPulse = (await page.eval("document.querySelector('#hero-button')?.dataset.lootPulse")) === 'true';
+            if (!sawPulse) sawPulse = await page.eval(`window.__corpsePulses > ${pulsesBefore}`);
             await sleep(100);
           }
           return { sawToast, sawPulse };
@@ -458,7 +481,7 @@ if (booted) {
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
         const tookOne = await tapById('.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take');
         check('an individual TAKE button exists and was tapped by real touch', tookOne);
-        const single = await awaitReceipt(0);
+        const single = await awaitReceipt(0, 0);
         check('individual TAKE produced a short acquired-item toast', single.sawToast);
         check('individual TAKE pulsed the Hero button -- "it went to your inventory"', single.sawPulse);
         await shot(page, 'corpse-loot-individual-take.png');
@@ -476,10 +499,10 @@ if (booted) {
         // regression returns, the toast assertion below goes red -- which is exactly why this file
         // takes one item individually FIRST rather than opening with Take All.
         const toastsBefore = await page.eval('window.__corpseToasts.length');
-        await page.eval("document.querySelector('#hero-button').dataset.lootPulse = 'false'");
+        const pulsesBefore = await page.eval('window.__corpsePulses');
         const tookAll = await tapById('#corpse-loot-panel-take-all');
         check('the prominent Take All button exists and was tapped by real touch', tookAll);
-        const takeAll = await awaitReceipt(toastsBefore);
+        const takeAll = await awaitReceipt(toastsBefore, pulsesBefore);
         check('Take All on the corpse\'s LAST item still produced an acquired-item toast '
           + '(the dd7ce2e corpse-retirement receipt blocker, live)', takeAll.sawToast);
         check('Take All on the LAST item still pulsed the Hero button', takeAll.sawPulse);
