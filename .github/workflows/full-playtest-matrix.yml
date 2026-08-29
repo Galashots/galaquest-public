@@ -76,6 +76,7 @@ jobs:
           - drive-e2-enemy
           - drive-helmet-vertical
           - drive-drop-collect
+          - drive-corpse-loot
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

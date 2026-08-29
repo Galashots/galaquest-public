@@ -89,6 +89,16 @@ export const HARNESSES = {
   // never about how it looks. Its captures are the human evidence; its exit code is not a claim anyone
   // has looked at them.
   'drive-helmet-vertical': { gate: true, why: 'the Silverguard Helmet vertical played end to end: mid-session grant, the acquisition card and its POWER move, EQUIP NOW mounts it, truthful Hero screen, and a reload that restores the worn Helmet without replaying the ceremony' },
+  // #87's client presenter. Two halves with different honesty profiles, both real: the boot/DOM-
+  // wiring checks (new imports load with zero uncaught exceptions, the Loot prompt/panel/toast layer
+  // exist and start hidden/closed) are deterministic and always run. The deeper open/collect proof
+  // fights a real, UNSEEDED server enemy to death repeatedly until a real gear roll produces a real
+  // corpse claim -- there is deliberately no seed hook (the server must not special-case a harness's
+  // own dice), so this half can legitimately go red on bad luck within its own time budget rather
+  // than on a regression. A gate, not an instrument: the wiring half is a genuine regression signal,
+  // and the file's own header records the exact real-kill/gear-roll counts this session's runs
+  // produced, for a reader deciding whether a red run is bad luck or a real defect.
+  'drive-corpse-loot': { gate: true, why: 'personal corpse loot client presenter: real-browser boot/DOM-wiring sanity (always gates) plus a best-effort real-roll open/collect/Take-All/toast proof over real touch dispatch (RNG-dependent -- interpret a red run against its own PASS/FAIL breakdown)' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -106,6 +116,6 @@ export const SUITES = {
     'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
-    'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect',
+    'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect', 'drive-corpse-loot',
   ],
 };
