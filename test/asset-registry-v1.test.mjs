@@ -37,6 +37,37 @@ test('registry has unique stable logical identities and only declared runtime as
   }
 });
 
+test('semantic facets and next actions are deterministic facts, not duplicate status labels', () => {
+  for (const record of registry.records) {
+    assert.deepEqual(record.facets, [...record.facets].sort(), `${record.asset_id} facets sorted`);
+    assert.equal(new Set(record.facets).size, record.facets.length, `${record.asset_id} facets unique`);
+    assert.equal(record.facets.includes(record.asset_kind), false, `${record.asset_id} does not duplicate asset_kind`);
+    if (record.asset_kind !== 'character') {
+      assert.equal(record.facets.includes('enemy'), false, `${record.asset_id} non-character is not inferred as enemy`);
+    }
+  }
+  const mystery = registry.records.find((record) => record.asset_id === 'intake.20260829.0829150207');
+  assert.equal(mystery.next_action, 'OWNER_REVIEW');
+  assert.equal(mystery.qualification_gates.visual.status, 'UNKNOWN');
+  assert.deepEqual(mystery.facets, ['meshy']);
+  assert.ok(registry.records.find((record) => record.asset_id === 'frostbound-warden-v1').facets.includes('enemy'));
+  assert.equal(registry.records.find((record) => record.asset_id === 'prop.thornwood-tangle-intake-v1').facets.includes('beacon'), false);
+  assert.equal(registry.records.find((record) => record.asset_id === 'prop.maplewood-lantern-intake-v1').facets.includes('village'), false);
+  assert.equal(registry.records.find((record) => record.asset_id === 'prop.campfire-essentials-intake-v1').facets.includes('forest'), false);
+  assert.equal(registry.records.find((record) => record.asset_id === 'landmark.crystal-sanctum-intake-v1').facets.includes('forest'), false);
+});
+
+test('the complete Drive intake is represented once and the unresolved animation source stays unknown', () => {
+  const intake = registry.records.filter((record) => record.source.authority === 'drive-intake-2026-08-29');
+  assert.equal(intake.length, 12);
+  assert.equal(new Set(intake.map((record) => record.source.sha256)).size, 12);
+  assert.ok(intake.every((record) => record.custody === 'IN_DRIVE' && record.recoverability === 'VERIFIED_FROM_DRIVE'));
+  const source = registry.records.find((record) => record.asset_id === 'animation-source.hero.meshy.hdus9c');
+  assert.equal(source.source.sha256, null);
+  assert.equal(source.recoverability, 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT');
+  assert.equal(source.qualification_gates.animation.status, 'UNKNOWN');
+});
+
 test('qualification gates are independent and evidence-bound when proven', () => {
   for (const record of registry.records) {
     for (const name of gateNames) {
@@ -67,6 +98,23 @@ test('custody preserves multiple durable recovery coordinates', () => {
   const frog = registry.records.find((record) => record.asset_id === 'frog-meshy-download-v1');
   assert.equal(frog.custody, 'LOCAL_ONLY');
   assert.equal(frog.custody_locations[0].durable, false);
+});
+
+test('Drive custody requires file-specific evidence, not folder context alone', () => {
+  const providerOnly = registry.records.find((record) => record.asset_id === 'gear_behemoth_lower_kit');
+  assert.ok(providerOnly, 'historical provider-only gear exists');
+  assert.equal(providerOnly.custody, 'PROVIDER_ONLY');
+  assert.equal(providerOnly.recoverability, 'UNAVAILABLE_CURRENT_PROVIDER_CONTEXT');
+  const folderContext = providerOnly.custody_locations.find((location) => location.kind === 'DRIVE');
+  assert.ok(folderContext?.archive_path, 'Drive folder context remains recorded');
+  assert.equal(folderContext.durable, false);
+  assert.equal(folderContext.drive_file_id, null);
+  assert.equal(folderContext.drive_file_url, null);
+
+  for (const record of registry.records.filter((candidate) => candidate.custody === 'IN_DRIVE' || candidate.recoverability === 'VERIFIED_FROM_DRIVE')) {
+    const drive = record.custody_locations.find((location) => location.kind === 'DRIVE' && location.durable);
+    assert.ok(drive?.drive_file_id && drive?.drive_file_url, `${record.asset_id} Drive custody has file-specific evidence`);
+  }
 });
 
 test('structural metrics and rights are explicit without inferred facts', () => {

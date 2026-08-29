@@ -42,6 +42,7 @@ import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/gues
 import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
 import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
 import { BEACON_TOTAL_HEIGHT_METERS } from '../../public/src/world/oldBeacon.js';
+import { WARDEN_HEIGHT_METERS } from '../../public/src/enemies/warden.js';
 import { ATTACK_REACH, isWithinStrike } from '../../public/src/combat/encounter.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
@@ -490,6 +491,17 @@ async function run() {
     check(arrived.beaconFound === true, 'the child reaches the Old Beacon', `at ${JSON.stringify(arrived.heroPos.map((n) => +n.toFixed(1)))}`);
     check(arrived.siege?.sealsBuilt === 3, 'three cold seals stand around its base', `built ${arrived.siege?.sealsBuilt}`);
     check(arrived.siege?.wardenBuilt === true, 'and something is kneeling beside it');
+    // AND IT IS ACTUALLY A BODY A CHILD CAN SEE. wardenBuilt only says the presenter exists, and
+    // that is not the same claim: BW1's first integration scaled the real GLB 113x and skinned it to
+    // roughly 150 m in the air, where wardenBuilt stayed true, the boss bar still tracked, the whole
+    // fight still played, and every check in this harness passed against an invisible boss. The head
+    // BONE's world height is the cheapest thing that could have caught it -- it is read from the live
+    // scene graph, so it disagrees with a bad scale instead of restating it.
+    const headMeters = arrived.siege?.wardenHeadMeters;
+    check(typeof headMeters === 'number' && headMeters > 1 && headMeters < WARDEN_HEIGHT_METERS + 0.5,
+      'and its body is really standing in the world, at a height a child could look up at',
+      `head bone at ${typeof headMeters === 'number' ? headMeters.toFixed(2) : headMeters} m `
+      + `against a ${WARDEN_HEIGHT_METERS} m Warden`);
     check(/cold seal/i.test(arrived.objective), 'the chip names the seals rather than asking a question', JSON.stringify(arrived.objective));
 
     // AND THE ARROW AGREES WITH THE CHIP. "N cold seals left" is one of only two objectives whose
