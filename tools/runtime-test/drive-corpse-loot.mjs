@@ -467,15 +467,57 @@ if (booted) {
       glow.present && glow.visible !== false && glowOffset < 1.0,
       `${JSON.stringify(glow)} corpse=(${corpse.x.toFixed(2)}, ${corpse.z.toFixed(2)}) offset=${glowOffset.toFixed(2)}m`);
 
-    const promptShown = await waitFor(
-      page, "document.querySelector('#corpse-loot-interact')?.dataset.shown === 'true'",
-      'the "Loot" prompt appears once standing near a personal corpse claim', 10_000,
-    );
-    // waitFor only records a FAILURE, so a silent success left requirements A/B unevidenced in the
-    // log even though they gated. Record the positive observation too -- this file's output is the
-    // artifact a reviewer reads.
+    // Keep the PRECONDITION alive while waiting for the prompt. The hosted reconciliation run at
+    // 1109b4f took 67 seconds between the kill and the first settled corpse approach; wolf-1 had
+    // therefore respawned beside its own corpse many times over before this assertion ran. The same
+    // file already documents that the respawned wolf can shove or knock the hero out of the server's
+    // reach between loot taps, and collectWithRetry below re-approaches for exactly that reason.
+    //
+    // The old prompt check did not. It measured renderedGap=2.04m once, then waited ten seconds while
+    // the live wolf kept moving the hero and reported that STALE 2.04m value when the prompt failed.
+    // That cannot distinguish "presenter is broken while genuinely in range" from "the moving world
+    // invalidated the harness's setup before the next rendered frame". Re-establishing the real
+    // in-range condition is not leniency: every attempt still requires the production presenter to
+    // set data-shown=true while the hero is actually inside the imported production radius.
+    const readPromptState = () => page.eval(`(() => {
+      const r = window.__galaQuestRuntime;
+      const net = r.netState();
+      const enc = r.authoritativeEncounterState();
+      const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
+      const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
+      const p = r.player.position;
+      const renderedGap = Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z});
+      const me = net.selfId != null ? (enc?.heroes ?? {})[net.selfId] : null;
+      return JSON.stringify({
+        shown: document.querySelector('#corpse-loot-interact')?.dataset.shown === 'true',
+        panelOpen: document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true',
+        renderedGap: +renderedGap.toFixed(3),
+        netStatus: net.status,
+        corpseOnWire: Boolean(mine),
+        untakenItems: claim ? claim.items.filter((i) => !i.taken).length : null,
+        hp: me?.hp ?? null,
+        downSeconds: me?.downSeconds ?? null,
+      });
+    })()`).then(JSON.parse);
+
+    let promptShown = false;
+    let promptEvidence = null;
+    let promptAttempts = 0;
+    for (; promptAttempts < 4 && !promptShown; promptAttempts += 1) {
+      await approachCorpse(1.2);
+      const promptDeadline = deadlineAfter(4_000);
+      while (Date.now() < promptDeadline) {
+        promptEvidence = await readPromptState();
+        if (promptEvidence.shown) { promptShown = true; break; }
+        // If the live enemy moved the hero back outside the rule's own radius, re-approach now
+        // rather than spending the rest of this attempt polling a precondition that is no longer true.
+        if (promptEvidence.renderedGap > CORPSE_LOOT_INTERACT_RADIUS_METERS) break;
+        await sleep(100);
+      }
+    }
+    promptEvidence ??= await readPromptState();
     check('B: the "Loot" affordance became available standing near this hero\'s own claim',
-      promptShown, approachDetail);
+      promptShown, `${approachDetail} promptAttempts=${promptAttempts} current=${JSON.stringify(promptEvidence)}`);
     await shot(page, 'corpse-loot-prompt.png');
 
     if (promptShown) {
