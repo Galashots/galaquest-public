@@ -738,11 +738,52 @@ if (booted) {
         // Did a real click ever reach a loot control? Capture phase on the layer, so it counts the
         // click whatever the button then does with it.
         window.__corpseClicks = 0;
-        document.querySelector('#corpse-loot-panel-layer').addEventListener('click', (event) => {
+        const panelLayer = document.querySelector('#corpse-loot-panel-layer');
+        panelLayer.addEventListener('click', (event) => {
           if (event.target.closest('.corpse-loot-item-take, #corpse-loot-panel-take-all')) {
             window.__corpseClicks += 1;
           }
         }, true);
+
+        // EVERY OPEN/CLOSE TRANSITION OF THE PANEL, with the hero's body and the movement stick's
+        // owner recorded AT that instant. A MutationObserver rather than a polled read for the same
+        // reason the toast one is: the transition is a single frame, and a CDP poll landing either
+        // side of it reports a defect that is not there. Recorded in the page, so reading it is free.
+        //
+        // byHarness is set by this file immediately around its own recovery tap on the close button,
+        // so a PRODUCT dismissal can be told apart from the harness closing the panel itself.
+        // Without that the two are indistinguishable and the combat rule cannot be proven at all.
+        window.__corpsePanelEvents = [];
+        window.__corpseHarnessClosing = false;
+        let wasShown = panelLayer.dataset.shown === 'true';
+        const bodyNow = () => {
+          const rt = window.__galaQuestRuntime;
+          const net = rt.netState();
+          const enc = rt.authoritativeEncounterState();
+          const me = net.selfId != null ? (enc?.heroes ?? {})[net.selfId] : null;
+          const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
+          const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
+          return {
+            hp: me?.hp ?? null,
+            down: me?.downSeconds ?? null,
+            untaken: claim ? claim.items.filter((i) => !i.taken).length : null,
+          };
+        };
+        new MutationObserver(() => {
+          const shown = panelLayer.dataset.shown === 'true';
+          if (shown === wasShown) return;
+          wasShown = shown;
+          const stickAt = document.elementFromPoint(
+            ${Math.round(VIEWPORT.width * 0.18)}, ${Math.round(VIEWPORT.height * 0.86)},
+          );
+          window.__corpsePanelEvents.push({
+            shown,
+            ...bodyNow(),
+            byHarness: window.__corpseHarnessClosing === true,
+            stickOwner: stickAt ? stickAt.tagName + (stickAt.id ? '#' + stickAt.id : '') : 'nothing',
+            stickInsidePanel: Boolean(stickAt && stickAt.closest('#corpse-loot-panel-layer')),
+          });
+        }).observe(panelLayer, { attributes: true, attributeFilter: ['data-shown'] });
       })()`);
 
       let panelOpen = false;
@@ -919,18 +960,31 @@ if (booted) {
         // is a real touch on a real control; nothing here is a shortcut around the interaction.
         const recoverIntoRange = async (reserveMillis) => {
           if (await panelIsOpen()) {
+            // Announce this one as ours. Anything else that closes the panel is the product.
+            await page.eval('window.__corpseHarnessClosing = true');
             await tapById('#corpse-loot-panel-close');
-            if (!(await awaitPanelState(false))) return false;
+            const closed = await awaitPanelState(false);
+            await page.eval('window.__corpseHarnessClosing = false');
+            if (!closed) return false;
           }
           if (!(await approachCorpse({ reserveMillis }))) return false;
           return openPanelByTouch();
         };
-        const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
+        // panelKnownOpen lets the FIRST collect skip a state read it does not need -- the panel-open
+        // check two steps above already proved it -- so nothing is added to the panel-open -> first
+        // TAKE window. Take All cannot assume the same: by then the product may legitimately have
+        // dismissed the panel because the wolf reached the hero, which is the whole point of the
+        // combat law. A child in that position walks back and opens it again, and so does this.
+        const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis, {
+          panelKnownOpen = false,
+        } = {}) => {
           let last = null;
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            if (attempt > 0 && !(await recoverIntoRange(reserveMillis))) {
+            const needsPanel = attempt > 0
+              || !(panelKnownOpen && attempt === 0) && !(await panelIsOpen());
+            if (needsPanel && !(await recoverIntoRange(reserveMillis))) {
               return {
-                ...last, collected: false, recovered: false, attempts: attempt + 1,
+                ...(last ?? {}), collected: false, recovered: false, attempts: attempt + 1,
                 claimAgeSeconds: claimLife.elapsedSeconds(),
               };
             }
@@ -974,7 +1028,8 @@ if (booted) {
 
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
         const tookOne = await collectWithRetry(
-          '.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2, AFTER_APPROACH_RESERVE_MS,
+          '.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2,
+          AFTER_APPROACH_RESERVE_MS, { panelKnownOpen: true },
         );
         check('an individual TAKE really collected one item through the real wire',
           tookOne.collected === true && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
@@ -1052,6 +1107,64 @@ if (booted) {
           'the personal loot glow leaves the scene once this hero has collected their own claim', 8_000,
         );
         check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
+
+        // ── THE COMBAT-DISMISSAL LAW, read off the recorded transitions ───────────────────────────
+        // These are INVARIANTS, not event-spotting, and that distinction is the whole design. A
+        // check of the form "a dismissal happened" is green hosted (the wolf always bites) and
+        // vacuously red locally (it often does not), which is a gate nobody can read -- the exact
+        // shape of the unseeded-roll problem this file already threw out once. So the assertions
+        // below hold on EVERY run, and the log reports how many times the rule was actually
+        // exercised, so a reader can tell a proven run from an untested one without either lying.
+        const panelEvents = await page.eval('JSON.stringify(window.__corpsePanelEvents ?? [])')
+          .then(JSON.parse);
+        const opens = panelEvents.filter((e) => e.shown);
+        const closes = panelEvents.filter((e) => !e.shown);
+        const productCloses = closes.filter((e) => !e.byHarness);
+        // Pair each close with the open before it, so "did the hero lose health while this panel was
+        // up" is a real interval question rather than two unrelated numbers.
+        const intervals = [];
+        for (const close of closes) {
+          const open = opens.filter((o) => panelEvents.indexOf(o) < panelEvents.indexOf(close)).pop();
+          if (open) intervals.push({ open, close, lostHp: (open.hp ?? 0) - (close.hp ?? 0) });
+        }
+        const hurtIntervals = intervals.filter((i) => i.lostHp > 0 || (i.close.down ?? -1) >= 0);
+        console.log(`  panel transitions: ${opens.length} open, ${closes.length} close `
+          + `(${productCloses.length} by the product), ${hurtIntervals.length} interval(s) with damage`);
+
+        // 1. The law itself. Every interval in which this hero was hurt must have ended with the
+        //    PRODUCT giving the game back -- never with the harness having to close it, and never
+        //    with the panel still up.
+        check('#87 combat law: the loot panel never stayed open through damage to this hero',
+          hurtIntervals.every((i) => !i.close.byHarness),
+          `${hurtIntervals.length} interval(s) with damage; ${JSON.stringify(hurtIntervals.map((i) => ({ lostHp: i.lostHp, down: i.close.down, byHarness: i.close.byHarness })))}`);
+
+        // 2. Controls come back. Measured at the transition itself, on the movement stick's own
+        //    point -- the thing the modal was taking away.
+        check('gameplay controls regain hit-testing the moment the panel closes',
+          closes.length > 0 && closes.every((e) => e.stickInsidePanel === false),
+          `closes=${JSON.stringify(closes.map((e) => e.stickOwner))}`);
+
+        // A DISMISSAL is not the same event as COMPLETION, and conflating them makes both checks
+        // meaningless. The panel also closes by design when the corpse itself leaves the wire --
+        // fully looted, or expired -- and at that moment there is nothing left to return for. A
+        // dismissal is a product close with this hero's claim STILL HOLDING untaken items.
+        const dismissals = productCloses.filter((e) => (e.untaken ?? 0) > 0);
+
+        // 3. A dismissal is an interruption, not a forfeit: the personal claim is server truth and
+        //    must survive it whole, or a child loses gear for the crime of being attacked.
+        check('the remaining personal claim survives every dismissal, unresolved and still lootable',
+          dismissals.every((e) => e.untaken > 0),
+          `${dismissals.length} dismissal(s); untaken at each close=${JSON.stringify(closes.map((e) => e.untaken))}`);
+
+        // 4. And the child can come back. Every dismissal must be followed by the panel opening
+        //    again -- and the only way this file ever opens it is a real touch on the real prompt
+        //    (openPanelByTouch), so a later open transition IS proof of a real reopen.
+        const reopenedAfterEveryDismissal = dismissals.every(
+          (d) => panelEvents.some((e, i) => e.shown && i > panelEvents.indexOf(d)),
+        );
+        check('the hero can return and reopen the corpse by real touch after a dismissal',
+          reopenedAfterEveryDismissal,
+          `dismissals=${dismissals.length}, transitions=${JSON.stringify(panelEvents.map((e) => (e.shown ? 'open' : 'close')))}`);
       }
     }
 

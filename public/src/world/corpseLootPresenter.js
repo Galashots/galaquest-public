@@ -146,3 +146,49 @@ export function newlyTakenItems(previousCorpses, nextCorpses, heroId) {
   }
   return arrivals;
 }
+
+/**
+ * SHOULD AN OPEN LOOT PANEL SURRENDER THIS FRAME? A snapshot diff on this hero's own body, in the
+ * same shape newlyTakenItems above takes for their claim -- previous view, next view, no clock, no
+ * DOM, no wire.
+ *
+ * WHY THIS EXISTS, measured hosted at 946857f. The loot panel is a MODAL: ui/corpseLootPanel.js's
+ * layer is `inset: 0` and flips to `pointer-events: auto` while shown, over a full-screen backdrop
+ * whose pointerdown is stopped from reaching `#game`. So while it is open the hero can neither walk
+ * nor swing. wolf-1 respawns ENEMY_KIND_RESPAWN_SECONDS (10s) after death at its authored home --
+ * which is exactly where its own corpse is -- and bites WOLF_LEVEL_STATS[1].biteDamage (10) into
+ * HERO_MAX_HP (30) every WOLF_BITE_COOLDOWN_SECONDS (2.6s). A hero who opened the panel on hp 20 had
+ * two bites, about 2.6 seconds: he collected the first item correctly and was dead before the second
+ * round trip finished, then reseated at HERO_SPAWN where every further TAKE was refused on reach --
+ * silently, because net/gameServerCore.mjs answers an out-of-reach collect with a bare
+ * `if (!accepted) return;`. The child is shown live TAKE buttons that do nothing.
+ *
+ * THE SAME LAW THE RUNE CHEST ALREADY STATES, reused as a principle and deliberately NOT as a
+ * helper. progression/runeChests.js's own heroInCombat exists because "a child who backs over a
+ * chest while a wolf is on them gets a maths question over a frozen hero and keeps taking bites they
+ * can no longer answer" -- identical failure, identical cause. But that helper is a proximity/mode
+ * gate on OPENING, and this is a damage gate on STAYING OPEN, and the two cannot be the same
+ * function here: the wolf respawns ON this corpse forever, so a proximity rule would make this
+ * corpse permanently unlootable rather than merely interrupted. Sharing the sentence, not the code,
+ * is the honest reuse -- and it keeps this a local #87 correction rather than a modal framework.
+ *
+ * The rule is deliberately the narrowest thing that answers the evidence: real damage, or actually
+ * going down. Not proximity, not "a wolf exists", not a mode list that goes stale as the state
+ * machine grows -- the exact trap runeChests.js's own header records being caught by twice.
+ *
+ * @param previousSelf  this hero's body on the last snapshot, or null (first frame, offline, or a
+ *                      reconnect that minted a fresh heroId -- none of which can prove damage).
+ * @param nextSelf      this hero's body on the current snapshot.
+ */
+export function dismissLootPanelForCombat(previousSelf, nextSelf) {
+  if (!nextSelf) return false;
+  // Downed is its own trigger, not a consequence of the hp diff: the blow that puts a hero down can
+  // land on a frame this client never sampled, and a body on the floor must not be left holding a
+  // modal open whatever the numbers either side of it say.
+  if (Number.isFinite(nextSelf.downSeconds) && nextSelf.downSeconds >= 0) return true;
+  if (!previousSelf) return false;
+  if (!Number.isFinite(previousSelf.hp) || !Number.isFinite(nextSelf.hp)) return false;
+  // A DROP is damage; a rise is a heart pickup or the full-HP restore that ends a knockdown, and
+  // neither is a reason to take the loot away from a child who is reading it.
+  return nextSelf.hp < previousSelf.hp;
+}

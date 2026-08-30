@@ -1759,11 +1759,30 @@ and burned their whole budget proving nothing. **Before writing a recovery that 
 ask what owns the input while the thing you are recovering FROM is on screen.** The harness now
 closes the panel, walks, and reopens it — what a child does — and prints what owns the stick point
 while the panel is open, so the coupling is never inferred again.
-**And the thing that displaced the hero is worth stating on its own:** `wolf-1` respawns at its
-authored home 10s after death, which is where it died, which is where its corpse is. So the loot
-interaction happens inside a live re-fight, against a modal that has taken away movement and
-attack. The hero opened the panel on hp 20 of 30 and was killed while reading it. That is a product
-question for the Owner, not a harness one, and it is recorded on PR #105 rather than fixed there.
+**And the thing that displaced the hero turned out to be the real defect — RESOLVED, and the way it
+was reached is the lesson.** `wolf-1` respawns at its authored home 10s after death, which is where
+it died, which is where its corpse is. So looting happens inside a live re-fight, against a modal
+that has taken away movement and attack: 10 damage per bite every 2.6s into 30 HP is three bites,
+and the hero opened the panel on hp 20. He collected the first item correctly and was dead before
+the second round trip finished.
+
+**Two harness defects had to be removed before that sentence could be trusted**, and each one looked
+like the answer while it stood. The first was the budget problem above. The second was an approach
+target of 1.2m that the product never asks for — the real radius is 2.5m and the hosted walk report
+read `startMetres: 1.376`, so the hero was *already* lootable and the instrument was spending the
+wolf's respawn window walking closer for no reason. Only with both gone did a clean measurement
+exist: kill → first TAKE 9.8s with zero screenshot time inside it, first TAKE passing, Take All lost
+to a death. **A product conclusion drawn while the instrument still has a known artifact in it is a
+guess wearing a number.** The Production Director refused the first two attempts to call this a
+product blocker, correctly, on exactly that ground.
+
+The fix reuses `progression/runeChests.js`'s own law — that module's `heroInCombat` exists because
+"a child who backs over a chest while a wolf is on them gets a maths question over a frozen hero and
+keeps taking bites they can no longer answer" — but deliberately **not** its helper: that one gates
+OPENING on proximity, and a proximity rule here would make a corpse the wolf respawns on top of
+permanently unlootable. `world/corpseLootPresenter.js`'s `dismissLootPanelForCombat` gates STAYING
+OPEN on real damage or going down. **Share the sentence, not the code, when the failure is identical
+and the trigger is not.**
 **The general form:** ask what the subject's clock RATE is (GQ-021), and then ask how much of the
 subject is LEFT. An instrument that consumes what it observes has to report the consumption, or its
 own thoroughness becomes the failure.

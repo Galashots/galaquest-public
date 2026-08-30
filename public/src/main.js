@@ -119,6 +119,7 @@ import { createEnemyDropsPresenter } from './world/enemyDropsPresenter.js';
 import {
   corpseLootPanelViewModel,
   corpsesToGlowFor,
+  dismissLootPanelForCombat,
   nearestLootableCorpse,
   newlyTakenItems,
 } from './world/corpseLootPresenter.js';
@@ -1059,6 +1060,10 @@ async function bootstrap() {
   // reconnect is always treated as a fresh "no baseline yet" welcome, exactly like bootstrap.
   const corpseGlowPresenter = createCorpseLootGlowPresenter(scene);
   let previousCorpses = null;
+  // This hero's own body as of the last snapshot, for the combat-dismissal diff below. Re-armed to
+  // null wherever previousCorpses is, and for the identical reason: a reconnect mints a fresh heroId,
+  // and a stale body kept across that blip would compare two different heroes' hit points.
+  let previousSelfBody = null;
   let heroButtonLootPulseTimer = null;
   // Offline-only: world/enemyDrops.js's own lifeId is deliberately non-durable ("used only to keep
   // this kill's drop ids distinct... never persisted or checked for durable idempotency"), so a
@@ -4949,12 +4954,28 @@ async function bootstrap() {
       // all show up here without the panel needing its own copy of the rule. A corpse that vanished
       // out from under an open panel (fully resolved, or CORPSE_LOOT_EXPIRE_SECONDS ran out while a
       // child was mid-read) closes the panel rather than showing a frozen, wrong list.
+      // COMBAT PRE-EMPTS THE MODAL. The panel may stay up while it is safe; the moment the fight
+      // actually reaches this hero it has to give the game back. Without this the child is frozen
+      // inside a full-screen overlay -- no walking, no swinging -- while the wolf that respawned on
+      // this very corpse bites them to death, and is then left holding live TAKE buttons for a body
+      // they are now metres away from, every tap silently refused on reach. Measured hosted at
+      // 946857f; world/corpseLootPresenter.js's own dismissLootPanelForCombat carries the full
+      // argument and the numbers, and states why progression/runeChests.js's heroInCombat is the
+      // right PRINCIPLE here but the wrong helper.
+      //
+      // Dismiss only. The claim is server-side truth and is not touched: nothing is awarded, nothing
+      // is equipped, no item is resolved, and every remaining personal item stays exactly as untaken
+      // as it was -- so the hero walks back, taps Loot again, and finishes. The panel has no onClose
+      // handler at all (see its construction above), which is what makes that free.
+      const selfBody = serverEncounter?.heroes?.[heroId] ?? null;
       if (corpseLootPanel.isOpen()) {
         const openCorpseId = corpseLootPanel.currentCorpseId();
         const openCorpse = corpses.find((corpse) => corpse.id === openCorpseId);
-        if (openCorpse) corpseLootPanel.render(openCorpse.id, corpseLootPanelViewModel(openCorpse, heroId));
+        if (dismissLootPanelForCombat(previousSelfBody, selfBody)) corpseLootPanel.close();
+        else if (openCorpse) corpseLootPanel.render(openCorpse.id, corpseLootPanelViewModel(openCorpse, heroId));
         else corpseLootPanel.close();
       }
+      previousSelfBody = selfBody;
 
       // The short acquired-item confirmation, plus "visible movement toward the inventory/Hero
       // destination" (#87's own required outcome list) -- fires off a SNAPSHOT DIFF, so it fires
@@ -4983,6 +5004,7 @@ async function bootstrap() {
       previousCorpses = corpses;
     } else {
       corpseGlowPresenter.update(deltaSeconds, []);
+      previousSelfBody = null;
       if (promptCorpseId !== null) {
         promptCorpseId = null;
         corpseLootInteract.show(false);

@@ -18,6 +18,7 @@ import {
   corpsesToGlowFor,
   hasUnclaimedLoot,
   nearestLootableCorpse,
+  dismissLootPanelForCombat,
   newlyTakenItems,
   panelItemsFor,
 } from '../public/src/world/corpseLootPresenter.js';
@@ -179,4 +180,49 @@ test('corpseLootPanelViewModel falls back to a generic name/icon for an unknown 
   assert.equal(rows.length, 1);
   assert.equal(typeof rows[0].name, 'string');
   assert.ok(rows[0].name.length > 0);
+});
+
+// ── #87 combat pre-emption: a modal that freezes the hero must surrender when the fight reaches him.
+//
+// Measured at 946857f, hosted: the loot panel is a modal whose full-screen backdrop owns every touch
+// point including the movement stick, so while it is open the hero can neither walk nor swing.
+// wolf-1 respawns 10s after death at its authored home -- which is where its corpse is -- and bites
+// 10 into 30 HP every 2.6s. A hero who opened the panel on hp 20 had about 2.6 seconds: he collected
+// the first item correctly and was dead before the second round trip finished, then reseated at
+// HERO_SPAWN where every further TAKE was refused on reach, silently.
+//
+// This is the same law progression/runeChests.js's own heroInCombat already states for the question
+// card ("a child who backs over a chest while a wolf is on them gets a maths question over a frozen
+// hero and keeps taking bites they can no longer answer"). The PRINCIPLE is reused; the helper is
+// deliberately NOT, because that one is a proximity/mode gate on OPENING and this is a damage gate on
+// STAYING OPEN. Closing on mere proximity would make this corpse permanently unlootable, since the
+// wolf respawns on top of it forever.
+test('an open loot panel surrenders the moment this hero takes damage', () => {
+  assert.equal(dismissLootPanelForCombat({ hp: 30, downSeconds: -1 }, { hp: 20, downSeconds: -1 }), true);
+});
+
+test('an open loot panel surrenders when this hero goes down, even without a fresh damage tick', () => {
+  assert.equal(dismissLootPanelForCombat({ hp: 10, downSeconds: -1 }, { hp: 10, downSeconds: 0 }), true);
+  assert.equal(dismissLootPanelForCombat(null, { hp: 0, downSeconds: 1.4 }), true);
+});
+
+test('reading loot in peace is never interrupted', () => {
+  assert.equal(dismissLootPanelForCombat({ hp: 30, downSeconds: -1 }, { hp: 30, downSeconds: -1 }), false);
+  assert.equal(dismissLootPanelForCombat({ hp: 20, downSeconds: -1 }, { hp: 30, downSeconds: -1 }), false,
+    'a heart pickup RAISES hp and must not read as damage');
+});
+
+// The respawn that ends a knockdown restores full HP. Read as a diff alone that is a RISE, so it can
+// never be mistaken for damage -- but the frame it lands on must also not re-trigger on downSeconds,
+// which encounter.js sets back to -1 in the same step.
+test('respawning is not damage and does not re-fire the dismissal', () => {
+  assert.equal(dismissLootPanelForCombat({ hp: 0, downSeconds: 1.9 }, { hp: 30, downSeconds: -1 }), false);
+});
+
+test('a missing or partial hero view is never a dismissal', () => {
+  assert.equal(dismissLootPanelForCombat({ hp: 30, downSeconds: -1 }, null), false);
+  assert.equal(dismissLootPanelForCombat(null, { hp: 30, downSeconds: -1 }), false,
+    'no baseline yet (first frame, or a fresh heroId after reconnect) cannot prove damage');
+  assert.equal(dismissLootPanelForCombat({ hp: undefined }, { hp: 20, downSeconds: -1 }), false);
+  assert.equal(dismissLootPanelForCombat({ hp: 30, downSeconds: -1 }, { hp: undefined, downSeconds: -1 }), false);
 });
