@@ -1748,6 +1748,22 @@ faster, not harsher — and at 20x and 40x the client cannot boot inside 30s, a 
 never shown. CPU throttling scales the RENDERER while server-side timers keep real wall-clock time,
 and it slows boot and fight uniformly where contention does not. It reproduces starvation. It cannot
 reproduce elapsed time, which is the axis this defect lived on.
+**Corollary, and the second head of the same incident — a recovery path can be a guaranteed no-op,
+and it looks exactly like a slow one.** With the budgets fixed the same harness went red again, and
+this time every tap landed on the real button (`hitIsTarget:true`, `clickLanded:true`) and the
+server refused all three on reach. The loot panel is a MODAL: `inset: 0`, `pointer-events: auto`
+while shown, over a full-screen backdrop whose pointerdown is stopped from reaching `#game`. So
+while it is open it owns the movement stick, and the retry's `approachCorpse` — stick touches
+dispatched into that backdrop — could never move anybody. Two recoveries moved the hero zero metres
+and burned their whole budget proving nothing. **Before writing a recovery that acts on the world,
+ask what owns the input while the thing you are recovering FROM is on screen.** The harness now
+closes the panel, walks, and reopens it — what a child does — and prints what owns the stick point
+while the panel is open, so the coupling is never inferred again.
+**And the thing that displaced the hero is worth stating on its own:** `wolf-1` respawns at its
+authored home 10s after death, which is where it died, which is where its corpse is. So the loot
+interaction happens inside a live re-fight, against a modal that has taken away movement and
+attack. The hero opened the panel on hp 20 of 30 and was killed while reading it. That is a product
+question for the Owner, not a harness one, and it is recorded on PR #105 rather than fixed there.
 **The general form:** ask what the subject's clock RATE is (GQ-021), and then ask how much of the
 subject is LEFT. An instrument that consumes what it observes has to report the consumption, or its
 own thoroughness becomes the failure.

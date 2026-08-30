@@ -180,7 +180,14 @@ export function createCorpseLootInteract(doc, options = {}) {
  *
  * @param options.onCollectItem(claimItemId)  a single item's own TAKE button.
  * @param options.onCollectAll()              the prominent Take All action.
- * @param options.onClose()                   ✕, backdrop tap, or main.js's own dismiss (walking away).
+ * @param options.onClose()                   ✕ or a backdrop tap. NOTE, corrected 2026-08-30 (GQ-002:
+ *   a stale comment is a lie the file tells about itself): this used to also say "or main.js's own
+ *   dismiss (walking away)". main.js has no walking-away dismiss — it closes an open panel only when
+ *   the corpse itself leaves the wire (retired or expired), never when this hero moves out of
+ *   CORPSE_LOOT_INTERACT_RADIUS_METERS. Whether it should is an open product question raised on
+ *   PR #105 and left for the Owner/Production Director, because the panel is a MODAL: its layer is
+ *   `inset: 0` with `pointer-events: auto` while shown, so a hero who is displaced with it open
+ *   cannot walk back to the corpse, and every TAKE tap is then refused on reach in silence.
  */
 export function createCorpseLootPanel(doc, options = {}) {
   ensureStyle(doc);

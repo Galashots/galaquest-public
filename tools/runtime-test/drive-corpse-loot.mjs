@@ -87,8 +87,13 @@ const RECEIPT_BUDGET_MS = 8_000;        // the same round trip, plus the toast/p
 // What still has to happen after any approach: open the panel, take one item and see its receipt,
 // Take All and see its receipt, then the closing prompt/glow assertions. An approach may never spend
 // this, which is the exact mistake that produced the a20fcd7 red.
+const TAIL_RESERVE_MS = 20_000;         // the closing prompt/glow/panel-state assertions
 const AFTER_APPROACH_RESERVE_MS = PANEL_STATE_BUDGET_MS
-  + 2 * (WIRE_CONFIRM_BUDGET_MS + RECEIPT_BUDGET_MS) + 20_000;
+  + 2 * (WIRE_CONFIRM_BUDGET_MS + RECEIPT_BUDGET_MS) + TAIL_RESERVE_MS;
+// By the time Take All is recovering, only ONE collect and its receipt are still ahead, so holding
+// back the reserve for two would refuse an approach the corpse can actually still afford.
+const LAST_COLLECT_RESERVE_MS = PANEL_STATE_BUDGET_MS
+  + WIRE_CONFIRM_BUDGET_MS + RECEIPT_BUDGET_MS + TAIL_RESERVE_MS;
 const server = await startOwnedServer({
   rewardStorePath: REWARD_STORE_PATH,
   guaranteedCorpseItemIds: FIXTURE_ITEM_IDS,
@@ -469,9 +474,9 @@ if (booted) {
     // exactly what happened at a20fcd7. It now takes what a real approach costs (a 6.7m walk was 16
     // rendered frames hosted), clamped by what the corpse has left, and reserving the time the
     // panel/collect/receipt steps after it still need.
-    const approachCorpse = async (withinMetres) => {
+    const approachCorpse = async (withinMetres, reserveMillis = AFTER_APPROACH_RESERVE_MS) => {
       const approachDeadline = deadlineAfter(claimLife.budgetFor(
-        APPROACH_BUDGET_MS, { reserveMillis: AFTER_APPROACH_RESERVE_MS },
+        APPROACH_BUDGET_MS, { reserveMillis },
       ));
       for (let pass = 0; pass < 8; pass += 1) {
         if (await renderedGapNow() <= withinMetres) return true;
@@ -614,35 +619,57 @@ if (booted) {
       // runs before it. Every unretried single tap in this file has now been observed to drop at
       // least once on a loaded runner. The assertion is unchanged -- the panel still has to actually
       // open, by real touch, and a child whose first tap does nothing taps again.
-      let panelOpen = false;
-      let openAttempts = 0;
-      for (; openAttempts < 4 && !panelOpen; openAttempts += 1) {
-        if (openAttempts > 0) await approachCorpse(1.2);
+      const panelIsOpen = () => page.eval(
+        "document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
+      );
+      // Wait on the panel's own state with a real deadline, not an iteration count. `25 iterations
+      // of an eval plus a 200ms sleep` reads as 5 seconds and cost 15 hosted, for a DOM flip that
+      // lands on the frame after the click.
+      const awaitPanelState = async (wantOpen) => {
+        const deadline = deadlineAfter(claimLife.budgetFor(PANEL_STATE_BUDGET_MS));
+        for (;;) {
+          if ((await panelIsOpen()) === wantOpen) return true;
+          if (Date.now() >= deadline) return false;
+          await sleep(120);
+        }
+      };
+      // One real tap on the real Loot prompt. Extracted because the collect recovery below has to
+      // re-open the panel too, and it must do it the same way a child does rather than by some
+      // second, easier route.
+      const openPanelByTouch = async () => {
         const promptRect = await page.eval(
           "(() => { const el = document.querySelector('#corpse-loot-interact');"
           + " if (!el || el.dataset.shown !== 'true') return 'null';"
           + " const r = el.getBoundingClientRect();"
           + " return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()",
         );
-        if (promptRect === 'null') { await sleep(500); continue; }
+        if (promptRect === 'null') { await sleep(300); return false; }
         const point = JSON.parse(promptRect);
         await touch(page, 'touchStart', [point]);
         await sleep(80);
         await touch(page, 'touchEnd', []);
-        // Deadline, not an iteration count. `25 iterations of an eval plus a 200ms sleep` reads as
-        // 5 seconds and cost 15 hosted, for a DOM flip that lands on the frame after the click.
-        const openDeadline = deadlineAfter(claimLife.budgetFor(PANEL_STATE_BUDGET_MS));
-        while (!panelOpen) {
-          panelOpen = await page.eval(
-            "document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
-          );
-          if (panelOpen || Date.now() >= openDeadline) break;
-          await sleep(120);
-        }
+        return awaitPanelState(true);
+      };
+      let panelOpen = false;
+      let openAttempts = 0;
+      for (; openAttempts < 4 && !panelOpen; openAttempts += 1) {
+        if (openAttempts > 0) await approachCorpse(1.2);
+        panelOpen = await openPanelByTouch();
       }
       check('C: tapping Loot by real touch (no hover anywhere) opened the corpse loot panel',
         panelOpen, `attempts=${openAttempts}, ${claimLeft()}`);
       await shot(page, 'corpse-loot-panel-open.png');
+
+      // RECORDED, not asserted, because it is intended modal behaviour and it is also the single
+      // fact that explains every recovery path below: with the panel open, what owns the movement
+      // stick? If this ever stops saying the panel, the close-first recovery is no longer needed.
+      if (panelOpen) {
+        const stickOwner = await page.eval(`(() => {
+          const el = document.elementFromPoint(${Math.round(VIEWPORT.width * 0.18)}, ${Math.round(VIEWPORT.height * 0.86)});
+          return el ? el.tagName + (el.id ? '#' + el.id : '') : 'nothing';
+        })()`);
+        console.log(`  with the panel open, the movement stick point is owned by ${stickOwner}`);
+      }
 
       if (panelOpen) {
         const rowCount = await page.eval("document.querySelectorAll('.corpse-loot-item').length");
@@ -794,10 +821,42 @@ if (booted) {
         // its centre correctly hit the canvas. A child looking at an open panel taps it immediately.
         // Only a real landed tap that the server refused gets one recovery re-approach and retry.
         // A vanished corpse/claim is an explicit failure, never collection success.
-        const collectWithRetry = async (selector, expectUntakenBelow) => {
+        // RECOVERY HAS TO CLOSE THE PANEL FIRST, and this is the whole reason the previous head was
+        // still red after the budgets were fixed. The loot panel is a MODAL: its layer is
+        // `position: absolute; inset: 0` and flips to `pointer-events: auto` when shown, over a
+        // full-screen backdrop. So while it is open it owns every touch point on the screen --
+        // including the movement stick at the bottom-left, whose pointerdown the panel explicitly
+        // stops from propagating to `#game`. An `approachCorpse` issued with the panel open is
+        // therefore a GUARANTEED NO-OP: the stick touches land on the backdrop, the hero never
+        // moves, and the loop burns its whole budget proving nothing.
+        //
+        // Measured hosted at 1712131: the hero opened the panel at claimAge 25.5s standing 1.11m
+        // from the corpse on hp 20 of 30; wolf-1 had respawned at its authored home -- which is
+        // where it died, i.e. on top of its own corpse -- 10s after the kill, and killed him while
+        // the modal held every input. `hero-respawned` reseated him at HERO_SPAWN, and every probe
+        // after that reads `server:[0,0], hp:30`, 7.2m away. Three taps then landed on the real
+        // button (`hitIsTarget:true`, `clickLanded:true`) and the server refused all three on reach,
+        // silently, while two re-approaches moved nobody.
+        //
+        // So recovery does what a child does: close the window, walk back, open it again. Every step
+        // is a real touch on a real control; nothing here is a shortcut around the interaction.
+        const recoverIntoRange = async (reserveMillis) => {
+          if (await panelIsOpen()) {
+            await tapById('#corpse-loot-panel-close');
+            if (!(await awaitPanelState(false))) return false;
+          }
+          if (!(await approachCorpse(1.2, reserveMillis))) return false;
+          return openPanelByTouch();
+        };
+        const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
           let last = null;
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            if (attempt > 0) await approachCorpse(1.2);
+            if (attempt > 0 && !(await recoverIntoRange(reserveMillis))) {
+              return {
+                ...last, collected: false, recovered: false, attempts: attempt + 1,
+                claimAgeSeconds: claimLife.elapsedSeconds(),
+              };
+            }
             last = await tapById(selector);
             if (!last.found || !last.hitIsTarget || !last.clickLanded) {
               return { ...last, collected: false, attempts: attempt + 1 };
@@ -837,7 +896,9 @@ if (booted) {
         };
 
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
-        const tookOne = await collectWithRetry('.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2);
+        const tookOne = await collectWithRetry(
+          '.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2, AFTER_APPROACH_RESERVE_MS,
+        );
         check('an individual TAKE really collected one item through the real wire',
           tookOne.collected === true && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
           JSON.stringify(tookOne));
@@ -875,7 +936,7 @@ if (booted) {
         // takes one item individually FIRST rather than opening with Take All.
         const toastsBefore = await page.eval('window.__corpseToasts.length');
         const pulsesBefore = await page.eval('window.__corpsePulses');
-        const tookAll = await collectWithRetry('#corpse-loot-panel-take-all', 1);
+        const tookAll = await collectWithRetry('#corpse-loot-panel-take-all', 1, LAST_COLLECT_RESERVE_MS);
         check('Take All really collected the remaining item through the real wire',
           tookAll.collected === true && tookAll.clickLanded && !tookAll.disabled && tookAll.hitIsTarget,
           JSON.stringify(tookAll));
