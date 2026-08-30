@@ -439,9 +439,31 @@ export const RIGID_WILDWOOD_BLADE_CANDIDATE = Object.freeze({
     // no matter when in the loop it happens to be called. See that function's own comment for why
     // calling skeleton.pose() directly is NOT the fix (it visibly shrinks the whole character on this
     // rig -- confirmed directly, not assumed).
-    position: Object.freeze([-69.7551, 91.67212, -7.1324]),
-    quaternion: Object.freeze([0.803156021057, -0.448527140425, -0.106576043911, -0.377366343235]),
-    scale: Object.freeze([59.92, 59.92, 59.92]),
+    //
+    // RE-SOLVED 2026-08-28 against the RUNNING GAME (Issue #82). The 2026-08-16 value above was
+    // solved and screenshot-verified in Character Studio, but in the live game the blade was nearly
+    // flat and edge-on through the torso, so the hand read as EMPTY -- the Owner's playtest report.
+    // The old grip seat was about 0.055m from the RightHand bone; the defect was its orientation,
+    // not a 0.243m grip offset. The Studio showcase pose and camera made that bad pitch look almost
+    // seated, which is how it passed visual acceptance (GQ-010: flags/one-pose captures are not
+    // gameplay pixels).
+    // This value was produced by the same geometry solve (grip-frac 0.45, shipping-sword-matched
+    // direction/length/seat) run against window.__galaQuestRuntime, then baked through THIS
+    // function's own inversion (rest = rigRoot.matrixWorld^-1 * bindPoseMatrixWorld * local) so the
+    // attach below reconstructs it exactly -- no skeleton.pose() roundtrip, whose bind frame is NOT
+    // the boneInverses bind frame this function reads. Note the old value ALSO measured a 0.055m
+    // grip seat -- its defect was pure orientation (blade pitch 26.9 degrees vs the shipping
+    // sword's 68.8; this value measures 63.9) -- so the drive-hero-screen regression asserts the
+    // pitch, not just the seat. Verified by running-game screenshots at gameplay framing, world and
+    // Hero screen, on a fresh reload.
+    // The blade-axis sign is flipped relative to the raw shipping-sword bbox measurement: the
+    // guard-nearest-anchor heuristic picks the wrong end on the live-game ironwood mesh, and the
+    // unflipped solve held the blade tip-up through the chest. Flipped, the presentation matches
+    // the shipping sword's own (tip down-forward from the fist at idle) -- judged from running-game
+    // captures of both swords, not from the heuristic.
+    position: Object.freeze([-61.7927, 89.96901, 19.44264]),
+    quaternion: Object.freeze([0.637740055228, -0.502196269715, -0.53841711913, 0.22625988259]),
+    scale: Object.freeze([59.92007, 59.92008, 59.92008]),
   }),
 });
 

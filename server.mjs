@@ -6,6 +6,7 @@ import { networkInterfaces } from 'node:os';
 
 import { attachGameServer } from './net/gameServer.mjs';
 import { handleForgeApiRequest } from './net/forgeApi.mjs';
+import { handleRegistryApiRequest } from './net/registryApi.mjs';
 
 export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -40,6 +41,11 @@ export function createRuntimeServer() {
       // into the real Three.js inspection scene without exposing the Meshy credential to the browser.
       // handleForgeApiRequest returns false for every non-Forge URL, preserving the existing runtime.
       if (await handleForgeApiRequest(request, response)) return;
+
+      // Studio Library (#92 STUDIO-V2A): a read-only, same-origin passthrough of the canonical
+      // asset registry, augmented with a live "can this checkout actually serve these bytes"
+      // check. See net/registryApi.mjs's own header for why this is not a second asset database.
+      if (await handleRegistryApiRequest(request, response)) return;
 
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         response.writeHead(405, { allow: 'GET, HEAD' });

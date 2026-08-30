@@ -43,6 +43,11 @@ export const HARNESSES = {
   // Studio frame. It gates mechanics (exact context, pointer marks, PNG capture, invalidation and
   // responsive panel bounds) but its screenshots remain human evidence rather than appearance PASS.
   'review-owner-annotations': { gate: true, why: 'Owner Review annotation packet mechanics and exact-state binding, portrait and landscape' },
+  // #92 STUDIO-V2A: the registry-driven Library/Inspect surface -- listAssets/loadAsset/
+  // getAssetInspection against the live canonical registry, truthful loadable-vs-refused behaviour
+  // for a Git-backed asset vs one recorded only on another branch, and the manual UI panel driving
+  // the same typed API. A behavioural gate, not an appearance claim.
+  'review-studio-library': { gate: true, why: 'Studio Library/Inspect: registry-driven listing/filtering, stable asset_id selection, truthful load vs refusal, and the UI panel wired to the same typed API' },
   // AP1's two artist-review cameras. Both are instruments, not gates: their product is the captures
   // and a per-frame record, and a person decides what those show. A green exit code from either
   // would be a claim that somebody has LOOKED, which is exactly the thing a script cannot assert.
@@ -89,15 +94,10 @@ export const HARNESSES = {
   // never about how it looks. Its captures are the human evidence; its exit code is not a claim anyone
   // has looked at them.
   'drive-helmet-vertical': { gate: true, why: 'the Silverguard Helmet vertical played end to end: mid-session grant, the acquisition card and its POWER move, EQUIP NOW mounts it, truthful Hero screen, and a reload that restores the worn Helmet without replaying the ceremony' },
-  // #87's client presenter. Two halves with different honesty profiles, both real: the boot/DOM-
-  // wiring checks (new imports load with zero uncaught exceptions, the Loot prompt/panel/toast layer
-  // exist and start hidden/closed) are deterministic and always run. The deeper open/collect proof
-  // fights a real, UNSEEDED server enemy to death repeatedly until a real gear roll produces a real
-  // corpse claim -- there is deliberately no seed hook (the server must not special-case a harness's
-  // own dice), so this half can legitimately go red on bad luck within its own time budget rather
-  // than on a regression. A gate, not an instrument: the wiring half is a genuine regression signal,
-  // and the file's own header records the exact real-kill/gear-roll counts this session's runs
-  // produced, for a reader deciding whether a red run is bad luck or a real defect.
+  // #87's client presenter. This is a real browser gate: the harness's opt-in test seam fixes only
+  // which item ids sit on the personal claim. The kill, contributor eligibility, corpse spawn, claim,
+  // wire, touch interactions, presenter, collection round trip, final-item receipt, toast and Hero
+  // button pulse all stay real. A non-zero exit therefore means the player-facing loop did not prove.
   'drive-corpse-loot': { gate: true, why: 'personal corpse loot client presenter, end to end and fully gating: a real fought kill spawns a real personal claim (contents fixtured through net/gameServerCore.mjs\'s opt-in guaranteedCorpseItemIds, so no unseeded gear roll decides whether this gate can run), then real touch dispatch drives glow/prompt -> panel -> individual TAKE -> Take All on the last item -> acquired-item toast and Hero-button pulse. No best-effort tier: a red run is a real regression' },
 };
 /**
@@ -113,7 +113,7 @@ export const SUITES = {
     'drive-two-clients', 'play-fight', 'fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern',
     'fit-helmet', 'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
-    'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
+    'review-studio', 'review-studio-library', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
     'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect', 'drive-corpse-loot',

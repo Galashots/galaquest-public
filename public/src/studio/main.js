@@ -2,6 +2,7 @@ import { createStudioScene, OVERLAY_MODES } from './scene.js';
 import { installStudioApi } from './api.js';
 import { installReviewAnnotations } from './reviewAnnotations.js';
 import { installReviewImageDownload } from './reviewImageDownload.js';
+import { installLibraryPanel } from './libraryPanel.js';
 import { STUDIO_LOADOUTS } from './loadoutDescriptors.js';
 import { BEARINGS, SCALE_DISTANCES } from '../review/cameraPresets.js';
 
@@ -136,6 +137,7 @@ async function bootstrap() {
   // docs/review-guides/ so the same owner intent is reproducible by every future asset-review agent.
   const reviewApi = installReviewAnnotations({ api, studioCanvas: canvas });
   installReviewImageDownload(reviewApi);
+  installLibraryPanel({ api });
 
   window.addEventListener('resize', () => {
     studioScene.resize(canvas.clientWidth, canvas.clientHeight);

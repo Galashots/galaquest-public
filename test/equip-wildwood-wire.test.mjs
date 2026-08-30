@@ -43,10 +43,11 @@ import {
   weaponVisibility,
 } from '../public/src/character/weaponLoadout.js';
 
-// The ceilings the identity is built against, exercised at their maxima so this test stands where a
-// production id would first die: a 64-char guest id (net/protocolCore.js GUEST_ID_PATTERN) and a
-// 64-char profile id (the ceiling protocolCore's own EVENT_ID_MAX_LENGTH comment derives from).
-const LONGEST_GUEST_ID = `g-equip-wire-${'x'.repeat(51)}`;
+// The ceiling the identity is built against, exercised at its maximum so this test stands where a
+// production id would first die: a 64-char profile/guest id (net/protocolCore.js GUEST_ID_PATTERN;
+// the ceiling protocolCore's own EVENT_ID_MAX_LENGTH comment derives from). The same id is used for
+// the joined client and the minted fact, matching the real Hero-screen path rather than merely
+// producing two independently legal strings.
 const LONGEST_PROFILE_ID = `p-equip-wire-${'y'.repeat(51)}`;
 
 function mintRealEquipIdentity(profileId, itemId) {
@@ -108,7 +109,7 @@ test('a real client-minted Wildwood equip crosses the wire and resolves to the B
   await withGameServer(async ({ url, game }) => {
     const child = client(url);
     await child.open();
-    child.send(joinMessage('Luke', LONGEST_GUEST_ID));
+    child.send(joinMessage('Luke', LONGEST_PROFILE_ID));
     await child.waitForSnapshot(() => child.of('welcome').length > 0, 'welcome arrived');
     const playerId = child.of('welcome')[0].id;
 
@@ -157,7 +158,7 @@ test('an equip for an unowned item is a clean refusal, never a disconnect', asyn
   await withGameServer(async ({ url }) => {
     const child = client(url);
     await child.open();
-    child.send(joinMessage('Henrik', LONGEST_GUEST_ID));
+    child.send(joinMessage('Henrik', LONGEST_PROFILE_ID));
     await child.waitForSnapshot(() => child.of('welcome').length > 0, 'welcome arrived');
     const playerId = child.of('welcome')[0].id;
 

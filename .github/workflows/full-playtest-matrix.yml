@@ -62,6 +62,7 @@ jobs:
           - review-shipping-assets
           - review-rowan-camp-composite
           - review-studio
+          - review-studio-library
           - review-owner-annotations
           - drive-hero-screen
           - drive-cart-loot
