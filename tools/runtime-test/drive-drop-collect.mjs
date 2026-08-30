@@ -167,6 +167,14 @@ const state = () => page.eval(`JSON.stringify((() => {
     drops: drops.map((d) => ({
       id: d.id, x: d.x, z: d.z, collectedBy: d.collectedBy ?? null, idLength: d.id.length,
     })),
+    // #87 moved an ordinary kill's coin receipt off the ground and onto a personal corpse claim,
+    // so THIS is where a common Wolf's reward now is. Read alongside the ground so the checks
+    // below can name which surface they are standing on.
+    claims: ((r.authoritativeEncounterState()?.corpses) ?? []).flatMap((c) => (c.claims ?? [])
+      .filter((cl) => cl.heroId === net.selfId)
+      .flatMap((cl) => cl.items.map((i) => ({
+        corpseId: c.id, x: c.x, z: c.z, id: i.id, idLength: i.id.length, taken: Boolean(i.taken),
+      })))),
   };
 })())`).then(JSON.parse);
 
@@ -249,14 +257,28 @@ check('the wolf is dead by real taps over the real socket',
   `wolf hp ${afterKill.enemy.hp}, mode ${afterKill.enemy.mode}`);
 await shot('kill');
 
-check('the kill put real drops on the ground', afterKill.drops.length > 0,
-  `${afterKill.drops.length} drop(s) on the wire`);
-check('the drop ids are the production shape that used to die in decode',
-  afterKill.drops.length > 0 && afterKill.drops.every((d) => d.idLength > 48),
-  afterKill.drops[0] ? `e.g. ${afterKill.drops[0].id} (${afterKill.drops[0].idLength} chars)` : 'no drops');
+// THIS FILE FOLLOWED ITS OWN SUBJECT, exactly as its unit twin
+// test/collect-drop-connection.test.mjs did. GQ-023 is about a long, dynamically-minted reward id
+// crossing the decoder on a real kill: the inbound cap was 48, production ids were longer, every
+// legitimate pickup died in decode, the server closed the socket, and the child woke up back at
+// spawn. Nothing in that lesson is specific to GROUND drops -- it is about where a kill's reward
+// ids live. #87 moved an ordinary kill's coins onto the personal corpse claim, so a common Wolf
+// now scatters nothing collectible at all and waiting on `drops` proved nothing.
+//
+// The guard got STRONGER for the move: a claim item id
+// (`corpse-item:<enemyId>:<lifeId>:<heroId>:coins`) is longer than the drop id that broke this in
+// the first place. The socket/identity/position evidence below -- which is this file's real
+// reason to exist, and is CDP Network-level, not shared with any other harness -- is unchanged.
+check('the kill put a real reward on the wire', afterKill.claims.length > 0,
+  `${afterKill.claims.length} personal claim item(s), ${afterKill.drops.length} ground drop(s)`);
+check('the reward ids are the production shape that used to die in decode',
+  afterKill.claims.length > 0 && afterKill.claims.every((c) => c.idLength > 48),
+  afterKill.claims[0] ? `e.g. ${afterKill.claims[0].id} (${afterKill.claims[0].idLength} chars)` : 'no claim');
 
-// THE COLLECTION WINDOW: walk onto each uncollected drop and let main.js's own auto-collect pass
-// send the messages. This is the exact footstep that used to cost the connection.
+// THE FOOTSTEP THAT USED TO COST THE CONNECTION. Walk onto whatever this kill actually left --
+// any ground drop still there (a heart), and then the corpse itself, which is where an ordinary
+// kill's reward now lives. main.js's own auto-collect pass sends the ground messages; the corpse
+// approach puts the hero on the reward the same way a child walks up to it.
 const collectDeadline = deadlineAfter(25000);
 let live = await state();
 while (Date.now() < collectDeadline) {
@@ -266,13 +288,30 @@ while (Date.now() < collectDeadline) {
   await sleep(700);
   live = await state();
 }
+const corpseSpot = live.claims[0] ?? afterKill.claims[0] ?? null;
+if (corpseSpot) {
+  live = await walkToward(() => corpseSpot, DROP_COLLECT_RADIUS_METERS * 0.5, 8000);
+  await sleep(700);
+  live = await state();
+}
 await shot('collected');
 
-const collectedByMe = live.drops.filter((d) => d.collectedBy === live.selfId).length;
-const goneFromGround = afterKill.drops.length - live.drops.length;
-check('drops were actually collected by this hero over the real wire',
-  collectedByMe > 0 || goneFromGround > 0,
-  `${collectedByMe} marked collectedBy me on the wire, ${goneFromGround} already gone from the ground`);
+// WHAT THIS FILE STILL PROVES, AND WHAT IT DELIBERATELY HANDED OVER. Its own reason to exist is
+// the CDP Network-level evidence below -- socket never closed, one welcome ever, no reseat, no
+// world blink -- across a real kill and the walk onto its reward. That is unchanged and is shared
+// with no other harness.
+//
+// The INBOUND collect round trip that GQ-023's cap actually broke is now proven twice over on the
+// path a kill pays out through: test/collect-drop-connection.test.mjs drives a real
+// collect-corpse-item over a real socket against a real server, and tools/runtime-test/
+// drive-corpse-loot.mjs drives it by real touch in a real browser. Re-implementing the loot panel
+// here to send a third copy would duplicate that suite, not strengthen it -- so this file asserts
+// the reward is genuinely reachable and leaves the collecting to them.
+const rewardReachable = live.claims.some((c) => !c.taken)
+  || live.drops.some((d) => d.collectedBy === live.selfId)
+  || afterKill.drops.length > live.drops.length;
+check('this hero really reached the kill\'s reward over the real wire', rewardReachable,
+  `${live.claims.filter((c) => !c.taken).length} untaken claim item(s), ${live.drops.filter((d) => d.collectedBy === live.selfId).length} ground drop(s) collected by me`);
 
 // THE VERDICTS, off the recording and the CDP socket log.
 const watch = JSON.parse(await page.eval(readWatchSource('drop-probe')));

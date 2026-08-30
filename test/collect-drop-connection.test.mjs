@@ -31,7 +31,7 @@ import test from 'node:test';
 import { attachGameServer } from '../net/gameServer.mjs';
 import {
   attackMessage,
-  collectDropMessage,
+  collectCorpseItemMessage, collectDropMessage,
   decode,
   encode,
   joinMessage,
@@ -117,27 +117,42 @@ test('collecting a real kill drop over the real wire never costs the connection,
       await new Promise((resolve) => setTimeout(resolve, Math.round((SWING_SECONDS + 0.15) * 1000)));
     }
 
-    // The drop ids come off the WIRE -- a real snapshot of a real kill -- and must be the exact
-    // production shape that used to die in decode, or this test is not standing where the bug stood.
-    const withDrops = await child.waitForSnapshot(
-      (m) => (m.encounter?.drops?.length ?? 0) > 0, 'the kill\'s drops ride a snapshot');
-    const drop = withDrops.encounter.drops[0];
-    assert.ok(drop.id.startsWith('drop:wolf-1:'), `expected a minted kill-drop id, got ${drop.id}`);
-    assert.ok(drop.id.length > 48,
-      `a production drop id must exceed the old 48-char cap to prove this seam (got ${drop.id.length})`);
+    // THIS TEST FOLLOWED ITS OWN SUBJECT. GQ-023 was about a long, dynamically-minted reward id
+    // crossing the decoder on a real kill: the inbound cap was 48, production ids were longer,
+    // every legitimate pickup died in decode, the server closed the socket, and the child woke up
+    // back at spawn. Nothing about that lesson is specific to GROUND drops -- it is about where a
+    // kill's reward ids live. #87 moved the ordinary reward onto the personal corpse claim, and an
+    // ordinary Wolf now scatters nothing collectible at all, so waiting for `encounter.drops` here
+    // waited forever and proved nothing.
+    //
+    // So it stands where the bug stands now, and the guard got STRONGER for it: a corpse claim item
+    // id (`corpse-item:<enemyId>:<lifeId>:<heroId>:coins`) is longer than the drop id that broke
+    // this in the first place, and it crosses its own inbound cap on collect-corpse-item.
+    const withClaim = await child.waitForSnapshot(
+      (m) => (m.encounter?.corpses?.length ?? 0) > 0,
+      'the kill\'s personal corpse claim rides a snapshot');
+    const corpse = withClaim.encounter.corpses[0];
+    const claim = corpse.claims.find((c) => c.heroId === playerId);
+    assert.ok(claim, 'the killing hero must hold a claim on their own kill');
+    const claimItem = claim.items[0];
+    assert.ok(corpse.id.startsWith('corpse:wolf-1:'), `expected a minted corpse id, got ${corpse.id}`);
+    assert.ok(claimItem.id.length > 48,
+      `a production claim-item id must exceed the old 48-char cap to prove this seam (got ${claimItem.id.length})`);
 
-    // Stand the body on the drop and collect it THROUGH THE SOCKET -- the exact message the old
-    // decoder rejected, closing the connection.
+    // Stand the body on the corpse and collect THROUGH THE SOCKET -- the same class of message the
+    // old decoder rejected, on the path a kill now actually pays out through.
     const body = game.simulation.players.get(playerId);
-    body.x = drop.x;
-    body.z = drop.z;
-    child.send(collectDropMessage(drop.id));
+    body.x = corpse.x;
+    body.z = corpse.z;
+    child.send(collectCorpseItemMessage(corpse.id, claimItem.id));
 
-    // Award processed: the same drop comes back on the wire as collectedBy THIS player (the linger
-    // window world/enemyDrops.js keeps a collected drop visible for its attraction flight).
+    // Award processed: the same item comes back on the wire as taken (the linger window
+    // world/corpseLoot.js keeps a resolved corpse visible for exactly this transition).
     await child.waitForSnapshot(
-      (m) => m.encounter?.drops?.some((d) => d.id === drop.id && d.collectedBy === playerId),
-      'the collected drop reads collectedBy this player');
+      (m) => m.encounter?.corpses?.some((c) => c.id === corpse.id
+        && c.claims.some((cl) => cl.heroId === playerId
+          && cl.items.some((i) => i.id === claimItem.id && i.taken))),
+      'the collected claim item reads taken for this player');
 
     // The connection survived: no close ever fired, and the socket still streams live snapshots.
     assert.deepEqual(child.closes, [], 'the server must not close the socket over a legitimate collect');

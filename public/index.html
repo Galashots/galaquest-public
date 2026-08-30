@@ -787,6 +787,13 @@
         transition: background-color 90ms ease-out, transform 90ms ease-out;
       }
       #hero-button[aria-pressed="true"] { background: rgb(242 179 61 / 30%); transform: scale(0.94); }
+      /* #87: "went to your inventory" -- a single brief pulse the instant an acquired-item toast
+         lands here (main.js's own corpseLootToastLayer.announce), so the button that opens Hero/Gear
+         visibly reacts at the moment gear actually arrives there rather than only in a card the child
+         has to have already read. data-loot-pulse is set true then cleared by a short setTimeout,
+         the identical one-shot flash discipline main.js's own popLootHud already uses for the coin/
+         shard HUD. */
+      #hero-button[data-loot-pulse="true"] { transform: scale(1.18); background: rgb(242 179 61 / 45%); }
       /* The screen itself is NOT a solid overlay: pointer-events none on the container, auto only on
          its own chrome (header/slots/list/card below). The centre stays clickable straight through
          to #game, so the SAME cameraGesture already bound to #game (input/cameraGesture.js) keeps

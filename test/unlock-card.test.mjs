@@ -99,6 +99,19 @@ test('the card\'s accent is derived from WILDWOOD_COLOR, and the CSS is reduced-
   assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(UNLOCK_CARD_CSS), 'reduced motion must be handled in CSS');
 });
 
+test('a closed unlock card is absent from hit-testing even though its visible card accepts taps', () => {
+  assert.match(
+    UNLOCK_CARD_CSS,
+    /#unlock-card-layer\s*\{[^}]*visibility:\s*hidden;/s,
+    'opacity alone does not remove a child with pointer-events:auto from browser hit-testing',
+  );
+  assert.match(
+    UNLOCK_CARD_CSS,
+    /#unlock-card-layer\[data-shown="true"\]\s*\{[^}]*visibility:\s*visible;/s,
+    'the ceremony must restore visibility only while its own shown state is true',
+  );
+});
+
 test('the ceremony auto-dismisses around 4.5s -- short enough to stay a moment, not a modal wall', () => {
   assert.ok(UNLOCK_CARD_SECONDS >= 3 && UNLOCK_CARD_SECONDS <= 6, `${UNLOCK_CARD_SECONDS}s is not a brief ceremony`);
 });
