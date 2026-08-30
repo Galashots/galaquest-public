@@ -49,8 +49,9 @@ function stepTicks(sim, count, deltaSeconds = 0.05, startAtMs = 1000) {
 // a real fight -- nearestTargetableHero refuses a sanctuary-standing hero as a target at all, so the
 // enemy would only ever be swung at, never bite back, and every "was the hero actually hurt" claim
 // below would be untestable by construction.
-function singleEnemySimulation(kind, enemyId, rewards) {
+function singleEnemySimulation(kind, enemyId, rewards, options = {}) {
   return createSimulation({
+    ...options,
     enemies: [{ enemyId, kind, spawn: { x: 0, z: 8 } }],
     ...(rewards ? { ownedItemIdsFor: (playerId) => rewards.ownedItemIdsFor(playerId) } : {}),
   });
@@ -319,18 +320,19 @@ test('ownership-aware suppression is wired: a killer who already owns the whole 
 // killing-blow hero alone while every other test in this file and in test/corpse-loot.test.mjs
 // (which hands eligibleHeroIds in directly) stayed green.
 test('#87 seam: two real, independently-attacking players both receive their own corpse claim', () => {
-  let corpse = null;
-  let sim = null;
-  let playerA = null;
-  let playerB = null;
-  for (let attemptNumber = 0; attemptNumber < 80 && !corpse; attemptNumber += 1) {
-    sim = singleEnemySimulation('frost-wolf', 'target');
-    playerA = sim.addPlayer('a', { x: 0, z: 7 });
-    playerB = sim.addPlayer('b', { x: 0.3, z: 7 });
-    fightToDeath(sim, [playerA, playerB], 'target');
-    corpse = sim.corpsesSnapshot().find((c) => c.claims.length >= 2) ?? null;
-  }
-  assert.ok(corpse, 'no corpse with two independent claims spawned across 80 two-player frost-wolf kills');
+  // This test is about CONTRIBUTOR ELIGIBILITY, not whether two independent 20% gear rolls happen
+  // to land on the same kill. Use #87's existing test-only guaranteed-item seam to make the claim
+  // contents deterministic while keeping the fight, hit ledger, corpse creation, eligibility fold,
+  // per-hero claims, and collection isolation real. The seam defaults off and has its own opt-in
+  // regression below, so this does not alter shipped drop behaviour.
+  const sim = singleEnemySimulation('frost-wolf', 'target', undefined, {
+    guaranteedCorpseItemIds: [SHIELD_IRONWOOD_ID],
+  });
+  const playerA = sim.addPlayer('a', { x: 0, z: 7 });
+  const playerB = sim.addPlayer('b', { x: 0.3, z: 7 });
+  fightToDeath(sim, [playerA, playerB], 'target');
+  const corpse = sim.corpsesSnapshot().find((c) => c.claims.length >= 2) ?? null;
+  assert.ok(corpse, 'both real contributors must deterministically receive a claim on the same corpse');
 
   const claimA = corpse.claims.find((c) => c.heroId === playerA.id);
   const claimB = corpse.claims.find((c) => c.heroId === playerB.id);
