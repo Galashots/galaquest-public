@@ -33,6 +33,14 @@ function cleanupTempDb(dir) {
   }
 }
 
+/** A scripted rng: returns each queued value in order, then keeps returning the last one. Same
+ *  helper, same contract, as test/enemy-drops.test.mjs's own -- that file drives world/enemyDrops.js
+ *  directly with scripted sequences, this one drives the same roll through the real simulation. */
+function scripted(...values) {
+  let i = 0;
+  return () => (i < values.length ? values[i++] : values[values.length - 1]);
+}
+
 function attack(sim, playerId, seq) {
   return sim.applyAttack(playerId, decode(encode(attackMessage(seq))));
 }
@@ -427,24 +435,47 @@ test('shadow mode safety: collecting the ground copy resolves the matching corps
   const { dir, path } = tempDb();
   try {
     const rewards = createRewardCoordinator({ rewardStorePath: path });
-    let sim = null;
-    let player = null;
-    let groundGearDrop = null;
-    let corpse = null;
-    for (let attemptNumber = 0; attemptNumber < 80 && !groundGearDrop; attemptNumber += 1) {
-      sim = singleEnemySimulation('frost-wolf', 'target', rewards);
-      player = sim.addPlayer(`p${attemptNumber}`, { x: 0, z: 7 });
-      rewards.join(player.id, `guest-shadow-${attemptNumber}`);
-      fightToDeath(sim, [player], 'target');
-      groundGearDrop = sim.dropsSnapshot().find((d) => d.kind === GEAR_DROP_KIND) ?? null;
-      corpse = groundGearDrop
-        ? sim.corpsesSnapshot().find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null
-        : null;
-      if (!groundGearDrop || !corpse) { groundGearDrop = null; corpse = null; }
-    }
-    assert.ok(groundGearDrop && corpse,
-      'no kill produced BOTH a ground gear drop and a corpse claim for the killer across 80 tries -- '
-      + 'the shadow-mode duplication this test is proving safe may have already been retired for real');
+    // ONE kill, not up to eighty. This used to fight real kills in a loop waiting for an unseeded
+    // 20% gear roll to land, which made a REQUIRED gate probabilistic: it failed hosted on a head
+    // whose other `test` trigger passed on the identical SHA. A gate that flakes is not a gate, and
+    // raising 80 to 200 would only move the failure rate, not remove it.
+    //
+    // `rng` is createSimulation's own opt-in determinism seam (default Math.random), which exists
+    // because world/enemyDrops.js's requestEnemyDrop has always documented its third parameter as
+    // "the server passes Math.random; a test passes a scripted" one. Scripted by VALUE with the same
+    // annotated-sequence convention test/enemy-drops.test.mjs already uses against this exact
+    // function, so the intent of each draw is readable rather than implied.
+    //
+    // The gear index matters and is the whole reason the old loop needed so many tries: a freshly
+    // joined guest already owns GEAR_DROP_POOL[0] (`shield_ironwood`) as a STARTER item, and a roll
+    // landing on an owned item converts to coins instead of spawning gear. So the old test was
+    // really waiting on a 20% gear roll AND a coin-flip landing on index 1 -- about one kill in ten.
+    const rng = scripted(
+      0.0, // coin roll -> min count
+      0.99, // heart roll misses (0.25 chance)
+      0.1, // gear roll HITS (0.2 chance)
+      0.9, // which gear item -> index 1, the one a fresh guest does NOT already own
+    );
+    //
+    // WHAT THIS DOES NOT FAKE, which is the whole point: it decides only how the DICE came down. The
+    // kill is a real fought kill through the real simulation, the ground drop is spawned by the real
+    // requestEnemyDrop against the real ownership lookup, the corpse claim is minted by the real
+    // requestCorpseLoot, and the identity this test exists to prove -- that the claim reuses the
+    // killer's own rolled itemId rather than re-rolling -- is still produced by production code, not
+    // asserted into place here.
+    const sim = singleEnemySimulation('frost-wolf', 'target', rewards, { rng });
+    const player = sim.addPlayer('p-shadow', { x: 0, z: 7 });
+    rewards.join(player.id, 'guest-shadow');
+    fightToDeath(sim, [player], 'target');
+
+    const groundGearDrop = sim.dropsSnapshot().find((d) => d.kind === GEAR_DROP_KIND) ?? null;
+    assert.ok(groundGearDrop,
+      'a determinized gear roll must put a real ground gear drop on the wire -- if this fails, gear '
+      + 'has stopped reaching dropsState at all and the shadow-mode duplication this test proves safe '
+      + 'may already have been retired for real');
+    const corpse = sim.corpsesSnapshot()
+      .find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null;
+    assert.ok(corpse, 'the same kill must also mint this hero\'s own personal corpse claim');
 
     const claim = corpse.claims.find((c) => c.heroId === player.id);
     const corpseItem = claim.items.find((item) => item.itemId === groundGearDrop.itemId);

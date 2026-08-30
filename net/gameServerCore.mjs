@@ -988,6 +988,18 @@ export function createSimulation(options = {}) {
   const guaranteedCorpseItemIds = Array.isArray(options.guaranteedCorpseItemIds)
     ? options.guaranteedCorpseItemIds.filter((itemId) => typeof itemId === 'string' && itemId.length > 0)
     : [];
+  // TEST-ONLY DETERMINISM SEAM, defaulting to the real thing. world/enemyDrops.js has always
+  // documented its third parameter as "the server passes Math.random; a test passes a scripted"
+  // rng -- the plumbing simply stopped here, so the only way to reach a gear-bearing kill through
+  // the real simulation was to roll real dice and hope. test/enemy-drops-server.test.mjs did exactly
+  // that, fighting up to 80 real kills waiting on a 20% roll, and it failed the REQUIRED unit gate
+  // on a head whose other trigger passed. A gate that flakes is not a gate.
+  //
+  // Same opt-in discipline as heroStatsFor/ownedItemIdsFor/guaranteedCorpseItemIds above: the
+  // default IS Math.random, so every production server, every offline client and every test that
+  // does not deliberately ask rolls exactly the dice it always rolled. Nothing about the drop rules,
+  // the odds, or the tables changes -- only whether a test can say which way the coin came down.
+  const rng = typeof options.rng === 'function' ? options.rng : Math.random;
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -1508,7 +1520,7 @@ export function createSimulation(options = {}) {
         z: enemy.z,
         streakMultiplier: coinMultiplierForStreak(streak.streak),
         killerOwnedItemIds: ownedItemIdsFor(event.heroId),
-      }, Math.random);
+      }, rng);
       // Correction (was: "gear no longer becomes a ground pickup"): stripping gear out of dropsState
       // here made it unobtainable online with no compensating fix. world/corpseLoot.js's own personal
       // claim has no client consumer yet -- public/ has no corpse presenter, no glow, no Loot prompt,
@@ -1537,7 +1549,7 @@ export function createSimulation(options = {}) {
         killerGearItemId: killerGearDrop?.itemId ?? null,
         guaranteedItemIds: guaranteedCorpseItemIds,
         ownedItemIdsFor,
-      }, Math.random);
+      }, rng);
       corpseLootState = corpseRolled.state;
     }
     // Advance every drop's/corpse's own clock -- expiry for the uncollected, a short linger for the

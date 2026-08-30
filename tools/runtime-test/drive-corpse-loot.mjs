@@ -53,7 +53,12 @@ import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../../public/src/pr
 import {
   CORPSE_LOOT_EXPIRE_SECONDS, CORPSE_LOOT_INTERACT_RADIUS_METERS,
 } from '../../public/src/world/corpseLoot.js';
-import { RESPAWN_SECONDS } from '../../public/src/combat/encounter.js';
+import {
+  HERO_MAX_HP, RESPAWN_SECONDS, WOLF_RESPAWN_SECONDS,
+} from '../../public/src/combat/encounter.js';
+// GQ-007: the timeline below reports the wolf's own bite against the hero's own health, so it reads
+// both off the authored stats table rather than restating two numbers that would go stale silently.
+import { wolfStatsForLevel } from '../../public/src/combat/enemyStats.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 
@@ -179,9 +184,17 @@ const touch = (page, type, points) => page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((point, index) => ({ x: point.x, y: point.y, id: point.id ?? index })),
 });
 
+// A shutter is not free and it is not fast: on a software rasterizer Page.captureScreenshot costs
+// eight rendered frames -- 1628-2627ms measured, docs/MISTAKES.md GQ-021. This suite now reports how
+// long a child's loot takes, so the harness has to be able to say how much of that span was its own
+// camera rather than the game. Otherwise the next reader re-derives a timing conclusion from a
+// number that is partly a photograph.
+let shutterMs = 0;
 async function shot(page, name) {
+  const startedAt = Date.now();
   const { data } = await page.send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(OUT + name, Buffer.from(data, 'base64'));
+  shutterMs += Date.now() - startedAt;
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────────────────────
@@ -382,6 +395,22 @@ if (booted) {
     await touch(page, 'touchEnd', [FIGHT_STICK_POINT()]);
   }
   state = await fightState();
+  // THE CAUSAL TIMELINE, printed at the end. The Production Director's question about this suite is
+  // not "did it pass" but "how long does a child's loot actually take, measured against the wolf's
+  // own 10-second respawn" -- and no previous run could answer it, which is why an artificial
+  // approach target survived three hosted cycles unnoticed. `kill` is the instant the harness
+  // CONFIRMED the wolf dead (it polls every third swing, so the real death is a little earlier --
+  // stated rather than smoothed over, and it makes every span below a conservative over-estimate).
+  const timeline = { kill: Date.now(), prompt: null, panelOpen: null, firstTakeTouch: null };
+  // Each stamp also records the shutter total as of that moment, so every span below can be reported
+  // BOTH raw and net of this harness's own camera. Without that, a reader cannot tell a slow game
+  // from a slow instrument -- which is the entire mistake this suite has now made three times.
+  const shutterAt = { kill: 0, prompt: null, panelOpen: null, firstTakeTouch: null };
+  const stamp = (key) => {
+    if (timeline[key] != null) return;
+    timeline[key] = Date.now();
+    shutterAt[key] = shutterMs;
+  };
   check('the authored wolf is dead by real taps over the real socket',
     !state.wolf || state.wolf.hp <= 0,
     `hp=${state.wolf?.hp ?? 'gone'}, swings=${swings}`);
@@ -457,10 +486,6 @@ if (booted) {
       y: VIEWPORT.height * 0.86 - Math.round(STICK_RADIUS_PX * RUN_DEFLECTION),
       id: 1,
     };
-    const renderedGapNow = () => page.eval(
-      `(() => { const p = window.__galaQuestRuntime.player.position;`
-      + ` return Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}); })()`,
-    );
     let walkReport = null;
     // Reusable, because the hero does not necessarily STAY put. wolf-1 respawns on its own
     // ENEMY_KIND_RESPAWN_SECONDS clock at the home it died at -- i.e. next to its own corpse -- so on
@@ -474,12 +499,28 @@ if (booted) {
     // exactly what happened at a20fcd7. It now takes what a real approach costs (a 6.7m walk was 16
     // rendered frames hosted), clamped by what the corpse has left, and reserving the time the
     // panel/collect/receipt steps after it still need.
-    const approachCorpse = async (withinMetres, reserveMillis = AFTER_APPROACH_RESERVE_MS) => {
+    // THE READINESS CONDITION IS THE PRODUCT'S, NOT A NUMBER THIS FILE PICKED. Every approach here
+    // used to walk until the hero was inside 1.2m -- a harness-only target less than half the real
+    // CORPSE_LOOT_INTERACT_RADIUS_METERS (2.5). Hosted at 1712131 the walk report reads
+    // `startMetres: 1.376`: the hero was ALREADY legally lootable, the prompt could already have been
+    // offered, and the harness spent eight more rendered frames closing a gap the product does not
+    // ask a child to close. With the wolf's authored respawn at 10s, that self-inflicted delay is
+    // enough to manufacture the very respawn collision the run was blaming.
+    //
+    // So readiness is now "is the real LOOT affordance actually offered", which is main.js's own
+    // nearestLootableCorpse(heroId, corpses, RENDERED position) decision, read straight off the DOM
+    // the child would be looking at. If it is already true, this returns without walking at all.
+    const promptOfferedNow = () => page.eval(
+      "document.querySelector('#corpse-loot-interact')?.dataset.shown === 'true'",
+    );
+    const approachCorpse = async ({
+      readyNow = promptOfferedNow, reserveMillis = AFTER_APPROACH_RESERVE_MS,
+    } = {}) => {
       const approachDeadline = deadlineAfter(claimLife.budgetFor(
         APPROACH_BUDGET_MS, { reserveMillis },
       ));
       for (let pass = 0; pass < 8; pass += 1) {
-        if (await renderedGapNow() <= withinMetres) return true;
+        if (await readyNow()) return true;
         if (Date.now() >= approachDeadline) return false;
         await page.eval(startWalk(`({ x: ${corpse.x}, z: ${corpse.z} })`, 1.0, { releaseOnArrival: true }));
         await touch(page, 'touchStart', [stickDown]);
@@ -489,6 +530,9 @@ if (booted) {
           // clamp back where it started.
           const passDeadline = Math.min(deadlineAfter(20_000), approachDeadline);
           for (;;) {
+            // Stop the instant the product says it is ready, not when the walk reaches some closer
+            // place the product never asked for. A child stops walking when LOOT appears.
+            if (await readyNow()) break;
             walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
             if (walkReport?.arrived || Date.now() >= passDeadline) break;
             await sleep(120);
@@ -499,10 +543,9 @@ if (booted) {
         }
         await sleep(300); // let the release land and the body settle before re-measuring
       }
-      return (await renderedGapNow()) <= withinMetres;
+      return readyNow();
     };
-    await approachCorpse(1.2);
-    await sleep(400); // let one more snapshot land so the presenter's own frame loop has caught up
+    await approachCorpse();
 
     // MEASURE THE APPROACH, and assert it against the rule's OWN constant rather than a number typed
     // here. This is its own gating check for a reason beyond tidiness: when the prompt failed hosted
@@ -595,7 +638,9 @@ if (booted) {
     let promptEvidence = null;
     let promptAttempts = 0;
     for (; promptAttempts < 4 && !promptShown; promptAttempts += 1) {
-      await approachCorpse(1.2);
+      // approachCorpse's own readiness IS the prompt now, so a hero already in range returns from
+      // this without walking, and the poll below usually finds it already true on its first read.
+      await approachCorpse();
       const promptDeadline = deadlineAfter(4_000);
       while (Date.now() < promptDeadline) {
         promptEvidence = await readPromptState();
@@ -606,6 +651,7 @@ if (booted) {
         await sleep(100);
       }
     }
+    if (promptShown) stamp('prompt');
     promptEvidence ??= await readPromptState();
     check('B: the "Loot" affordance became available standing near this hero\'s own claim',
       promptShown, `${approachDetail} promptAttempts=${promptAttempts} current=${JSON.stringify(promptEvidence)}`);
@@ -650,76 +696,94 @@ if (booted) {
         await touch(page, 'touchEnd', []);
         return awaitPanelState(true);
       };
+      // SET THE OBSERVERS UP BEFORE THE PANEL OPENS, not after. They watch #corpse-loot-toast-layer
+      // and #hero-button, both of which exist from boot, so nothing about them needs an open panel --
+      // and doing it here takes one more CDP eval out of the panel-open -> first-TAKE window, which
+      // is the window a child spends unable to move or fight. It is also strictly safer: an observer
+      // armed earlier cannot miss a toast that arrives sooner than expected.
+      // Watch the toast layer from INSIDE the page across the whole collect sequence. The toast is
+      // deliberately short-lived, and a CDP poll that happens to land between two reads would miss
+      // it and report a defect that is not there -- so record arrivals as they happen instead.
+      // The Hero-button pulse is watched the SAME way and for the same reason. It was originally
+      // polled ("reset the attribute, then look for 'true' every 100ms"), which held at 1x and 6x
+      // and then missed at 12x: the flip is short-lived, and a poll that lands either side of it
+      // reports a defect that is not there. Observing the attribute records the transition whenever
+      // it happens, so this check measures the game rather than the harness's own sampling luck.
+      await page.eval(`(() => {
+        window.__corpseToasts = [];
+        window.__corpsePulses = 0;
+        const layer = document.querySelector('#corpse-loot-toast-layer');
+        new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              if (node.classList?.contains('corpse-loot-toast')) {
+                window.__corpseToasts.push((node.textContent ?? '').trim());
+              }
+            }
+          }
+        }).observe(layer, { childList: true });
+        const heroButton = document.querySelector('#hero-button');
+        new MutationObserver(() => {
+          if (heroButton.dataset.lootPulse === 'true') window.__corpsePulses += 1;
+        }).observe(heroButton, { attributes: true, attributeFilter: ['data-loot-pulse'] });
+        // Did a real click ever reach a loot control? Capture phase on the layer, so it counts the
+        // click whatever the button then does with it.
+        window.__corpseClicks = 0;
+        document.querySelector('#corpse-loot-panel-layer').addEventListener('click', (event) => {
+          if (event.target.closest('.corpse-loot-item-take, #corpse-loot-panel-take-all')) {
+            window.__corpseClicks += 1;
+          }
+        }, true);
+      })()`);
+
       let panelOpen = false;
       let openAttempts = 0;
       for (; openAttempts < 4 && !panelOpen; openAttempts += 1) {
-        if (openAttempts > 0) await approachCorpse(1.2);
+        if (openAttempts > 0) await approachCorpse();
         panelOpen = await openPanelByTouch();
       }
+      if (panelOpen) stamp('panelOpen');
       check('C: tapping Loot by real touch (no hover anywhere) opened the corpse loot panel',
         panelOpen, `attempts=${openAttempts}, ${claimLeft()}`);
-      await shot(page, 'corpse-loot-panel-open.png');
-
-      // RECORDED, not asserted, because it is intended modal behaviour and it is also the single
-      // fact that explains every recovery path below: with the panel open, what owns the movement
-      // stick? If this ever stops saying the panel, the close-first recovery is no longer needed.
-      if (panelOpen) {
-        const stickOwner = await page.eval(`(() => {
-          const el = document.elementFromPoint(${Math.round(VIEWPORT.width * 0.18)}, ${Math.round(VIEWPORT.height * 0.86)});
-          return el ? el.tagName + (el.id ? '#' + el.id : '') : 'nothing';
-        })()`);
-        console.log(`  with the panel open, the movement stick point is owned by ${stickOwner}`);
-      }
 
       if (panelOpen) {
-        const rowCount = await page.eval("document.querySelectorAll('.corpse-loot-item').length");
+        // ONE eval, not three, and NO SCREENSHOT, because everything between the panel opening and
+        // the first TAKE touch is time a child spends standing in a modal that has taken away their
+        // movement and their attack -- with a respawned wolf biting. This window is now the suite's
+        // central measurement, so the harness must not be the thing filling it.
+        //
+        // The screenshot in particular used to sit right here. `Page.captureScreenshot` on a software
+        // rasterizer costs eight rendered frames -- measured 1628-2627ms in docs/MISTAKES.md GQ-021 --
+        // which at a wolf bite of 10 against 30 HP is a meaningful slice of the hero's whole life.
+        // It is gone from this window entirely: `corpse-loot-individual-take.png`, taken the moment
+        // the first collect confirms, already shows a real open populated panel, so nothing is lost
+        // but the delay. Every remaining shutter in this file is timed and reported below.
+        //
+        // The stick-owner probe rides along in the same eval rather than costing its own frame. It is
+        // RECORDED, not asserted: it is intended modal behaviour, and it is the single fact that
+        // explains every recovery path below.
+        const panelState = await page.eval(`(() => {
+          const stickAt = document.elementFromPoint(${Math.round(VIEWPORT.width * 0.18)}, ${Math.round(VIEWPORT.height * 0.86)});
+          return JSON.stringify({
+            rowCount: document.querySelectorAll('.corpse-loot-item').length,
+            firstRowName: (document.querySelector('.corpse-loot-item-name')?.textContent ?? '').trim(),
+            stickOwner: stickAt ? stickAt.tagName + (stickAt.id ? '#' + stickAt.id : '') : 'nothing',
+          });
+        })()`).then(JSON.parse);
+        console.log(`  with the panel open, the movement stick point is owned by ${panelState.stickOwner}`);
+
+        const rowCount = panelState.rowCount;
         check('the panel lists one row per item on this hero\'s own claim',
           rowCount === FIXTURE_ITEM_IDS.length, `rows=${rowCount}, expected ${FIXTURE_ITEM_IDS.length}`);
 
         // C: a child reads a NAME, not an id. Assert the row renders a real, non-empty, human item
         // name off progression/items.js rather than an id, a blank, or "undefined" -- a panel that
         // opens but says nothing recognizable is not a loot panel a 5-year-old can use.
-        const firstRowName = await page.eval(
-          "(document.querySelector('.corpse-loot-item-name')?.textContent ?? '').trim()",
-        );
+        const firstRowName = panelState.firstRowName;
         check('the first row presents a recognizable item NAME, not a raw id',
           firstRowName.length > 2 && !firstRowName.includes('_') && firstRowName !== 'undefined',
           `name=${JSON.stringify(firstRowName)}`);
 
-        // Watch the toast layer from INSIDE the page across the whole collect sequence. The toast is
-        // deliberately short-lived, and a CDP poll that happens to land between two reads would miss
-        // it and report a defect that is not there -- so record arrivals as they happen instead.
-        // The Hero-button pulse is watched the SAME way and for the same reason. It was originally
-        // polled ("reset the attribute, then look for 'true' every 100ms"), which held at 1x and 6x
-        // and then missed at 12x: the flip is short-lived, and a poll that lands either side of it
-        // reports a defect that is not there. Observing the attribute records the transition whenever
-        // it happens, so this check measures the game rather than the harness's own sampling luck.
-        await page.eval(`(() => {
-          window.__corpseToasts = [];
-          window.__corpsePulses = 0;
-          const layer = document.querySelector('#corpse-loot-toast-layer');
-          new MutationObserver((records) => {
-            for (const record of records) {
-              for (const node of record.addedNodes) {
-                if (node.classList?.contains('corpse-loot-toast')) {
-                  window.__corpseToasts.push((node.textContent ?? '').trim());
-                }
-              }
-            }
-          }).observe(layer, { childList: true });
-          const heroButton = document.querySelector('#hero-button');
-          new MutationObserver(() => {
-            if (heroButton.dataset.lootPulse === 'true') window.__corpsePulses += 1;
-          }).observe(heroButton, { attributes: true, attributeFilter: ['data-loot-pulse'] });
-          // Did a real click ever reach a loot control? Capture phase on the layer, so it counts the
-          // click whatever the button then does with it.
-          window.__corpseClicks = 0;
-          document.querySelector('#corpse-loot-panel-layer').addEventListener('click', (event) => {
-            if (event.target.closest('.corpse-loot-item-take, #corpse-loot-panel-take-all')) {
-              window.__corpseClicks += 1;
-            }
-          }, true);
-        })()`);
         // Tapping reports WHAT IT HIT, not merely that it dispatched. Hosted at 141f648 both taps
         // "succeeded" by the old definition (the element existed, the events went out) and yet
         // nothing was ever collected -- taken flags [false,false], zero toasts -- which left no way
@@ -757,6 +821,10 @@ if (booted) {
             })()`,
           ).then(JSON.parse);
           if (!probe.found) return { ...probe, tapped: false };
+          // The instant the child's thumb lands on a loot control for the first time. This is the
+          // causal observation the Production Director asked for: everything before it is how long
+          // the game made the child wait, everything after it is whether the collect survived.
+          stamp('firstTakeTouch');
           await touch(page, 'touchStart', [{ x: probe.x, y: probe.y }]);
           await sleep(80);
           await touch(page, 'touchEnd', []);
@@ -845,7 +913,7 @@ if (booted) {
             await tapById('#corpse-loot-panel-close');
             if (!(await awaitPanelState(false))) return false;
           }
-          if (!(await approachCorpse(1.2, reserveMillis))) return false;
+          if (!(await approachCorpse({ reserveMillis }))) return false;
           return openPanelByTouch();
         };
         const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
@@ -974,6 +1042,25 @@ if (booted) {
         check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
       }
     }
+
+    // THE CAUSAL TIMELINE. Printed unconditionally, pass or fail, because the question this suite
+    // now has to answer is not "green?" but "how long does a child's loot take, against the wolf's
+    // own 10-second respawn and its 10-damage bite into 30 HP". Three hosted cycles argued about
+    // that without a single number for it.
+    const span = (from, to) => {
+      if (timeline[from] == null || timeline[to] == null) return 'n/a';
+      const raw = (timeline[to] - timeline[from]) / 1000;
+      const camera = (shutterAt[to] - shutterAt[from]) / 1000;
+      return `${raw.toFixed(1)}s${camera > 0.05 ? ` (${(raw - camera).toFixed(1)}s net of camera)` : ''}`;
+    };
+    const wolfBite = wolfStatsForLevel(1).biteDamage;
+    console.log(`  ── loot timeline (wolf respawn ${WOLF_RESPAWN_SECONDS}s; bite ${wolfBite} into `
+      + `${HERO_MAX_HP} HP = ${Math.ceil(HERO_MAX_HP / wolfBite)} bites) ──`);
+    console.log(`  kill -> LOOT prompt          ${span('kill', 'prompt')}`);
+    console.log(`  prompt -> panel open         ${span('prompt', 'panelOpen')}`);
+    console.log(`  panel open -> first TAKE     ${span('panelOpen', 'firstTakeTouch')}`);
+    console.log(`  kill -> first TAKE touch     ${span('kill', 'firstTakeTouch')}`);
+    console.log(`  of which this harness's own screenshots: ${(shutterMs / 1000).toFixed(1)}s`);
 
     // THE CHECK THAT WOULD HAVE NAMED THE a20fcd7 FAILURE IN ONE LINE. That run cascaded six reds --
     // TAKE hit the canvas, no toast, no pulse, rows unchanged, Take All the same, panel never
