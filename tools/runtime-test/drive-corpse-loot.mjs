@@ -1003,19 +1003,21 @@ if (booted) {
           if (!(await approachCorpse({ reserveMillis }))) return false;
           return openPanelByTouch();
         };
-        // panelKnownOpen lets the FIRST collect skip a state read it does not need -- the panel-open
-        // check two steps above already proved it -- so nothing is added to the panel-open -> first
-        // TAKE window. Take All cannot assume the same: by then the product may legitimately have
-        // dismissed the panel because the wolf reached the hero, which is the whole point of the
-        // combat law. A child in that position walks back and opens it again, and so does this.
-        const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis, {
-          panelKnownOpen = false,
-        } = {}) => {
+        // A MISSED TAP IS NO LONGER A VERDICT, and that changed the moment the combat law landed.
+        // The panel can now be dismissed by the product at ANY instant -- the frame the wolf lands a
+        // bite is the frame the modal gives the game back -- so a tap that finds the button's stale
+        // geometry and hits the canvas underneath is not "the loot flow is broken", it is "you got
+        // bitten mid-tap". Hosted at 1f5beff exactly that happened twice in one run (both closes
+        // `byHarness:false`, one with the hero downed at 1.16s), and the collect returned on the
+        // first miss instead of doing what a child does: walk back, open it again, tap again.
+        //
+        // So a miss now falls through to the next attempt, which recovers through the real path.
+        // Attempt 0 still costs nothing extra -- no pre-flight state read -- so the panel-open ->
+        // first TAKE window this suite measures is unchanged.
+        const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
           let last = null;
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            const needsPanel = attempt > 0
-              || !(panelKnownOpen && attempt === 0) && !(await panelIsOpen());
-            if (needsPanel && !(await recoverIntoRange(reserveMillis))) {
+            if (attempt > 0 && !(await recoverIntoRange(reserveMillis))) {
               return {
                 ...(last ?? {}), collected: false, recovered: false, attempts: attempt + 1,
                 claimAgeSeconds: claimLife.elapsedSeconds(),
@@ -1023,7 +1025,11 @@ if (booted) {
             }
             last = await tapById(selector);
             if (!last.found || !last.hitIsTarget || !last.clickLanded) {
-              return { ...last, collected: false, attempts: attempt + 1 };
+              if (attempt < 2) continue;
+              return {
+                ...last, collected: false, attempts: attempt + 1,
+                claimAgeSeconds: claimLife.elapsedSeconds(),
+              };
             }
             // Deadline-bounded, and abandoned the moment the server's own reach rule says the
             // request it is waiting on was already refused. The old shape polled a fixed 25 times
@@ -1062,7 +1068,7 @@ if (booted) {
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
         const tookOne = await collectWithRetry(
           '.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2,
-          AFTER_APPROACH_RESERVE_MS, { panelKnownOpen: true },
+          AFTER_APPROACH_RESERVE_MS,
         );
         check('an individual TAKE really collected one item through the real wire',
           tookOne.collected === true && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
