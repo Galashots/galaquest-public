@@ -184,6 +184,16 @@ const touch = (page, type, points) => page.send('Input.dispatchTouchEvent', {
   type, touchPoints: points.map((point, index) => ({ x: point.x, y: point.y, id: point.id ?? index })),
 });
 
+// WHY THIS FILE TAKES SO FEW SCREENSHOTS NOW. Two of them used to sit inside the window this suite
+// exists to measure -- one between the LOOT prompt and the panel opening, one between the two
+// collects -- and hosted they cost 1.9s and ~2s of a hero standing in a modal that has taken away
+// his movement and his attack, next to a wolf biting for 10 into 30 HP. They were deleted rather
+// than moved: what they showed is carried better, and at zero cost to the hero, by the structured
+// detail every check already prints (row taken-state, the server's own wire view, the element
+// actually under the tap, serverGap, hp, downSeconds). AGENTS.md is explicit that running-game
+// pixels are the appearance authority and a machine screenshot cannot visually accept anything, so
+// these artifacts were only ever diagnostics -- and they were worse diagnostics than the numbers.
+//
 // A shutter is not free and it is not fast: on a software rasterizer Page.captureScreenshot costs
 // eight rendered frames -- 1628-2627ms measured, docs/MISTAKES.md GQ-021. This suite now reports how
 // long a child's loot takes, so the harness has to be able to say how much of that span was its own
@@ -655,7 +665,6 @@ if (booted) {
     promptEvidence ??= await readPromptState();
     check('B: the "Loot" affordance became available standing near this hero\'s own claim',
       promptShown, `${approachDetail} promptAttempts=${promptAttempts} current=${JSON.stringify(promptEvidence)}`);
-    await shot(page, 'corpse-loot-prompt.png');
 
     if (promptShown) {
       // ── open the panel via a REAL TOUCH DISPATCH, no hover involved at all ─────────────────────
@@ -973,7 +982,6 @@ if (booted) {
         const single = await awaitReceipt(0, 0);
         check('individual TAKE produced a short acquired-item toast', single.sawToast);
         check('individual TAKE pulsed the Hero button -- "it went to your inventory"', single.sawPulse);
-        await shot(page, 'corpse-loot-individual-take.png');
 
         // Read the DOM rows AND the server's own wire view together. On their own, "the rows still
         // say untaken" cannot distinguish a click that never reached the server from a collect the
@@ -990,6 +998,11 @@ if (booted) {
             wireTaken: claim ? claim.items.map((i) => Boolean(i.taken)) : null,
             corpseOnWire: Boolean(mine),
             netStatus: net.status,
+            // Read in the SAME frame as the row state, so Take All can be tapped on the very next
+            // instruction. These were two separate evals; hosted that is two more rendered frames
+            // the hero spends unable to move or swing, between two collects, next to a live wolf.
+            toastsBefore: window.__corpseToasts.length,
+            pulsesBefore: window.__corpsePulses,
           });
         })()`).then(JSON.parse);
         check('exactly the collected item stops being offered; the other is still live',
@@ -1002,8 +1015,7 @@ if (booted) {
         // retired before the snapshot carrying its own taken-transition was ever built. If that
         // regression returns, the toast assertion below goes red -- which is exactly why this file
         // takes one item individually FIRST rather than opening with Take All.
-        const toastsBefore = await page.eval('window.__corpseToasts.length');
-        const pulsesBefore = await page.eval('window.__corpsePulses');
+        const { toastsBefore, pulsesBefore } = afterOne;
         const tookAll = await collectWithRetry('#corpse-loot-panel-take-all', 1, LAST_COLLECT_RESERVE_MS);
         check('Take All really collected the remaining item through the real wire',
           tookAll.collected === true && tookAll.clickLanded && !tookAll.disabled && tookAll.hitIsTarget,
