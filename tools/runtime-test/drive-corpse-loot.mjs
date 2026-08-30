@@ -661,30 +661,45 @@ if (booted) {
           return { sawToast, sawPulse };
         };
 
-        // How many items this hero's own claim still has untaken, read off the SERVER's snapshot --
-        // the only authority on whether a collect actually happened.
-        const untakenOnWire = () => page.eval(`(() => {
+        // Read this hero's own claim off the SERVER snapshot -- the only authority on whether a
+        // collect actually happened. Keep corpse/claim presence separate from the item count: the
+        // old numeric sentinel (-1) accidentally made an expired corpse satisfy "less than 2" and
+        // falsely reported a collection after the panel had already disappeared.
+        const claimOnWire = () => page.eval(`(() => {
           const r = window.__galaQuestRuntime;
           const net = r.netState();
           const enc = r.authoritativeEncounterState();
           const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
           const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
-          return claim ? claim.items.filter((i) => !i.taken).length : (mine ? 0 : -1);
-        })()`);
+          return JSON.stringify({
+            corpsePresent: Boolean(mine),
+            claimPresent: Boolean(claim),
+            untaken: claim ? claim.items.filter((i) => !i.taken).length : null,
+          });
+        })()`).then(JSON.parse);
 
-        // Tap, then confirm against the wire; if nothing moved, re-approach and tap again. A child
-        // whose tap did nothing taps again, so this is not leniency -- the assertions below still
-        // require a real collect to have actually happened. It exists because the collect can be
-        // legitimately refused for a transient reason (the respawned wolf shoving the hero out of
-        // reach) that says nothing about the presenter this file is here to test.
+        // Tap the already-visible button FIRST, then confirm against the wire. Re-walking before
+        // every tap made the hosted run spend so long under the respawned wolf that the real
+        // 180-second corpse lifetime elapsed; the stale, now-invisible button still had geometry and
+        // its centre correctly hit the canvas. A child looking at an open panel taps it immediately.
+        // Only a real landed tap that the server refused gets one recovery re-approach and retry.
+        // A vanished corpse/claim is an explicit failure, never collection success.
         const collectWithRetry = async (selector, expectUntakenBelow) => {
           let last = null;
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            await approachCorpse(1.2);
+            if (attempt > 0) await approachCorpse(1.2);
             last = await tapById(selector);
-            if (!last.found) return last;
+            if (!last.found || !last.hitIsTarget || !last.clickLanded) {
+              return { ...last, collected: false, attempts: attempt + 1 };
+            }
             for (let i = 0; i < 25; i += 1) {
-              if ((await untakenOnWire()) < expectUntakenBelow) return { ...last, collected: true, attempts: attempt + 1 };
+              const wire = await claimOnWire();
+              if (!wire.corpsePresent || !wire.claimPresent) {
+                return { ...last, collected: false, expired: true, wire, attempts: attempt + 1 };
+              }
+              if (wire.untaken < expectUntakenBelow) {
+                return { ...last, collected: true, wire, attempts: attempt + 1 };
+              }
               await sleep(200);
             }
           }
