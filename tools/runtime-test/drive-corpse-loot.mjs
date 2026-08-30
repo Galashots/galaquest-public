@@ -537,9 +537,25 @@ if (booted) {
     // So readiness is now "is the real LOOT affordance actually offered", which is main.js's own
     // nearestLootableCorpse(heroId, corpses, RENDERED position) decision, read straight off the DOM
     // the child would be looking at. If it is already true, this returns without walking at all.
-    const promptOfferedNow = () => page.eval(
-      "document.querySelector('#corpse-loot-interact')?.dataset.shown === 'true'",
-    );
+    // TWO REAL PRODUCT RULES, NOT ONE, and hosted at ce77163 the difference was the whole failure.
+    // That run read `renderedGap=1.70m serverGap=2.57m of 2.5m`: main.js offers the LOOT prompt off
+    // the RENDERED hero (nearestLootableCorpse takes player.position), while the server adjudicates
+    // the collect off its OWN authoritative position. On a loaded runner those two diverge -- exactly
+    // the drawn-vs-authoritative gap docs/MISTAKES.md GQ-021 measures -- so the prompt appeared, the
+    // panel opened, the button was real, the tap landed, and the server refused on reach in silence.
+    //
+    // So readiness is both rules: the affordance the child can see AND the reach the server will
+    // actually honour. Neither is a number this file invented -- the radius is imported, and both
+    // conditions are the product's own. (That a child can be OFFERED loot the server would refuse is
+    // a real #87 product question, and it is reported to the Director rather than papered over here.)
+    const promptOfferedNow = () => page.eval(`(() => {
+      const r = window.__galaQuestRuntime;
+      const net = r.netState();
+      const shown = document.querySelector('#corpse-loot-interact')?.dataset.shown === 'true';
+      const p = net.serverSelf;
+      const serverGap = p ? Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}) : Infinity;
+      return shown && serverGap <= ${CORPSE_LOOT_INTERACT_RADIUS_METERS};
+    })()`);
     const approachCorpse = async ({
       readyNow = promptOfferedNow, reserveMillis = AFTER_APPROACH_RESERVE_MS,
     } = {}) => {
