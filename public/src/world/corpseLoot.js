@@ -6,12 +6,13 @@
 // must never remove another sibling's -- the whole point of this module existing separately from
 // enemyDrops.js's shared, anyone-can-grab-it ground state.
 //
-// SCOPE: coins and hearts are UNCHANGED and keep scattering physically through enemyDrops.js exactly
-// as before. This module only owns GEAR, because gear is where #87's actual reported fairness bugs
-// live: only the killing blow got a shot at the roll, and whoever reached the ground pickup first
-// took it regardless of who actually fought for it. Replacing the coin/heart ambient scatter with a
-// second corpse-UI moment is a separate, later visual/product decision, not a correctness law this
-// package is gating on -- see the PR body for the explicit exclusion.
+// SCOPE, corrected after the Owner running-game FAIL at d575f240 (this paragraph used to say coins
+// were unchanged and this module owned GEAR ONLY, which is what made the defect invisible): personal
+// corpse loot owns the ordinary NON-HEALTH reward receipt -- COINS always, GEAR when its existing
+// roll succeeds. Gear alone was not enough, because the game's own opening enemy is kind 'wolf' and
+// dropTableForKind('wolf') gives gearChance 0, so the first fight every child has could never
+// produce a claim at all. See CORPSE_COIN_KIND below for the full argument and for why HEARTS
+// deliberately stay physical.
 //
 // ELIGIBILITY: this module does not decide who is eligible -- it trusts `kill.eligibleHeroIds`,
 // which net/gameServerCore.mjs derives from the SAME participation rule rewards/killXp.js already
@@ -43,6 +44,24 @@
 import { GEAR_DROP_POOL, dropTableForKind } from './enemyDrops.js';
 
 export const CORPSE_GEAR_KIND = 'gear';
+
+// #87, Owner running-game FAIL at d575f240: this module was GEAR-ONLY, and the game's own opening
+// enemy is kind 'wolf', whose dropTableForKind gives gearChance 0. So requestCorpseLoot returned
+// spawned:null on every ordinary kill and the natural first fight could NEVER show a LOOT
+// affordance -- the child's whole introduction to #87 was unreachable, deterministically, not
+// unluckily. Personal corpse loot now owns the ordinary NON-HEALTH reward receipt: coins always,
+// gear when its existing roll succeeds.
+//
+// Hearts deliberately stay physical ground pickups. A heart is immediate combat sustain -- you want
+// it in the middle of a fight, by running over it, not behind a modal that stops you fighting.
+// Moving it here for architectural symmetry would make the game worse.
+//
+// ONE ROW, NOT N. A claim carries a single coin item with an AMOUNT, because a child reads
+// "Coins x 3" and taps once; three separate rows to tap is a worse panel and blows the wire's own
+// MAX_CORPSE_ITEMS_PER_CLAIM. The durable ledger still records one row per coin -- see
+// net/gameServerCore.mjs, which derives that many distinct eventIds from this one item id, so
+// rewardStore's COUNT(*)-based coinsFor is unchanged and a replayed collect still pays once.
+export const CORPSE_COIN_KIND = 'coin';
 
 // How close a hero must stand to actually take an item off a corpse. Generous like enemyDrops.js's
 // own DROP_COLLECT_RADIUS_METERS (1.3m, "a thumb, not a keyhole"), a little larger because opening a
@@ -157,6 +176,13 @@ function rollOrdinaryGear(kind, ownedItemIds, rng) {
  *   eligibleHeroIds       every hero credited as a contributor to this life. See this file's own
  *                         header for where net/gameServerCore.mjs derives this from.
  *   killerHeroId          the hero who landed the killing blow, or null.
+ *   coinAmountFor(heroId) how many ordinary coins THIS hero's own claim carries. The caller owns
+ *                         this because coin counts are per-hero: the killer's is the exact count
+ *                         enemyDrops.js's own roll already produced for this kill (reused verbatim,
+ *                         never re-rolled, the same discipline killerGearItemId keeps below), and a
+ *                         non-killing contributor's is rolled from the same band at THEIR own
+ *                         streak. Defaults to none, so every existing caller and fixture behaves
+ *                         exactly as it did before coins existed here.
  *   killerGearItemId      an item id already rolled AND ownership-checked by enemyDrops.js's own
  *                         requestEnemyDrop for the killing blow, or null if that roll produced no
  *                         gear (or there is no killer). Reused rather than re-rolled here, so the
@@ -182,6 +208,7 @@ export function requestCorpseLoot(state, kill, rng) {
   const {
     enemyId, lifeId, kind, x, z, eligibleHeroIds = [], killerHeroId = null,
     killerGearItemId = null, guaranteedItemIds = [], ownedItemIdsFor = () => [],
+    coinAmountFor = () => 0,
   } = kill;
 
   // Correction: cap how many eligible heroes this corpse actually processes at MAX_CLAIMS_PER_CORPSE
@@ -221,6 +248,18 @@ export function requestCorpseLoot(state, kill, rng) {
         id: `corpse-item:${enemyId}:${lifeId}:${heroId}:ordinary`,
         kind: CORPSE_GEAR_KIND,
         itemId: ordinaryItemId,
+        guaranteed: false,
+        taken: false,
+      });
+    }
+
+    // Coins last, so the gear a child is actually excited about reads at the top of the panel.
+    const coinAmount = Math.max(0, Math.floor(Number(coinAmountFor(heroId)) || 0));
+    if (coinAmount > 0) {
+      items.push({
+        id: `corpse-item:${enemyId}:${lifeId}:${heroId}:coins`,
+        kind: CORPSE_COIN_KIND,
+        amount: coinAmount,
         guaranteed: false,
         taken: false,
       });

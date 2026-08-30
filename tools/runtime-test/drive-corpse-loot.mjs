@@ -49,7 +49,7 @@ import { fileURLToPath } from 'node:url';
 import { deadlineAfter, subjectLifetime } from './automation-timing.mjs';
 import { authoredWolfSource, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
-import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../../public/src/progression/items.js';
+import { SHIELD_IRONWOOD_ID } from '../../public/src/progression/items.js';
 import {
   CORPSE_LOOT_EXPIRE_SECONDS, CORPSE_LOOT_INTERACT_RADIUS_METERS,
 } from '../../public/src/world/corpseLoot.js';
@@ -69,7 +69,24 @@ const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-corpse-loot-')), '
 // (a fully-resolved corpse used to retire before the snapshot carrying its own taken-transition was
 // built, so the last thing a child collected was the one thing that never confirmed). Driving both
 // through one real corpse is what makes this file able to catch that defect coming back.
-const FIXTURE_ITEM_IDS = [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID];
+// ONE fixture item now, not two, and the reason is the Owner running-game FAIL at d575f240.
+//
+// This harness always killed the production opening wolf-1 (kind 'wolf'), but it needed TWO gear
+// items handed over by the seam to have anything to loot at all -- because corpseLoot.js was
+// gear-only and dropTableForKind('wolf') gives gearChance 0. So CI proved a loot loop the Owner
+// could not reach by playing: he killed the same wolf and saw no LOOT affordance whatsoever.
+//
+// #87's correction makes personal corpse loot own the ordinary COIN receipt, so an ordinary Wolf
+// now always leaves a real claim. The claim this run drives is therefore [gear, coins]: one
+// guaranteed gear item, plus the coins the kill genuinely rolled -- which means the panel below
+// still has two rows (individual TAKE, then Take All on the LAST item, which is the exact shape
+// of the dd7ce2e receipt blocker) while the reward being proven is the one the Owner's own fight
+// produces. A claim of coins ONLY -- literally what the Owner sees, with no seam at all -- is
+// proven deterministically at the server level by test/enemy-drops-server.test.mjs's own
+// "#87 Owner path" test, which is red on d575f240.
+const FIXTURE_ITEM_IDS = [SHIELD_IRONWOOD_ID];
+// gear rows + the one coin row the ordinary kill always adds.
+const EXPECTED_CLAIM_ROWS = FIXTURE_ITEM_IDS.length + 1;
 
 // WHAT EACH LOOT STEP IS ALLOWED TO SPEND OF THE CORPSE'S OWN LIFETIME, and why they are declared
 // together rather than typed at their call sites. Every budget in this file was already a wall-clock
@@ -817,14 +834,30 @@ if (booted) {
           return JSON.stringify({
             rowCount: document.querySelectorAll('.corpse-loot-item').length,
             firstRowName: (document.querySelector('.corpse-loot-item-name')?.textContent ?? '').trim(),
+            rows: [...document.querySelectorAll('.corpse-loot-item')].map((el) => ({
+              name: (el.querySelector('.corpse-loot-item-name')?.textContent ?? '').trim(),
+              icon: (el.querySelector('.corpse-loot-item-icon')?.textContent ?? '').trim(),
+            })),
+            hudCoins: Number(document.querySelector('#coin-count')?.textContent ?? '0'),
             stickOwner: stickAt ? stickAt.tagName + (stickAt.id ? '#' + stickAt.id : '') : 'nothing',
           });
         })()`).then(JSON.parse);
         console.log(`  with the panel open, the movement stick point is owned by ${panelState.stickOwner}`);
 
+        // THE OWNER-VISIBLE REWARD, read the way a child reads it: the row text in the panel and
+        // the HUD's own coin counter. #coin-count is the shipped element the game already updates,
+        // so asserting on it proves the number the child actually sees moved -- not some internal
+        // total a presenter might or might not be wired to.
+        const coinRow = panelState.rows.find((row) => /Coins/.test(row.name));
+        const claimedCoins = coinRow ? Number(coinRow.name.replace(/[^0-9]/g, "")) : 0;
+        check("the panel shows the ordinary kill's own COIN reward, the thing every Wolf pays",
+          coinRow != null && claimedCoins > 0,
+          `coinRow=${JSON.stringify(coinRow)} rows=${JSON.stringify(panelState.rows.map((r) => r.name))}`);
+        const coinsBefore = panelState.hudCoins;
+
         const rowCount = panelState.rowCount;
         check('the panel lists one row per item on this hero\'s own claim',
-          rowCount === FIXTURE_ITEM_IDS.length, `rows=${rowCount}, expected ${FIXTURE_ITEM_IDS.length}`);
+          rowCount === EXPECTED_CLAIM_ROWS, `rows=${rowCount}, expected ${EXPECTED_CLAIM_ROWS}`);
 
         // C: a child reads a NAME, not an id. Assert the row renders a real, non-empty, human item
         // name off progression/items.js rather than an id, a blank, or "undefined" -- a panel that
@@ -1061,7 +1094,7 @@ if (booted) {
           });
         })()`).then(JSON.parse);
         check('exactly the collected item stops being offered; the other is still live',
-          afterOne.rows.filter(Boolean).length === 1 && afterOne.rows.length === FIXTURE_ITEM_IDS.length
+          afterOne.rows.filter(Boolean).length === 1 && afterOne.rows.length === EXPECTED_CLAIM_ROWS
           && afterOne.wireTaken?.filter(Boolean).length === 1,
           JSON.stringify(afterOne));
 
@@ -1107,6 +1140,29 @@ if (booted) {
           'the personal loot glow leaves the scene once this hero has collected their own claim', 8_000,
         );
         check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
+
+        // COIN OWNERSHIP MOVED, EXACTLY ONCE. Polled against the HUD the child is looking at, and
+        // then held for a beat and re-read: a second read that keeps climbing would mean the same
+        // claim paid twice, which is the whole risk of moving a reward off the ground onto a claim
+        // that can be re-requested. The award is idempotent by construction server-side (derived,
+        // stable eventIds through INSERT OR IGNORE) -- this is the live proof of it.
+        const readHudCoins = () => page.eval(
+          "Number(document.querySelector('#coin-count')?.textContent ?? '0')",
+        );
+        const coinDeadline = deadlineAfter(claimLife.budgetFor(RECEIPT_BUDGET_MS));
+        let coinsAfter = await readHudCoins();
+        while (coinsAfter < coinsBefore + claimedCoins && Date.now() < coinDeadline) {
+          await sleep(150);
+          coinsAfter = await readHudCoins();
+        }
+        check("the child's own coin total went up by exactly the claim's coins",
+          coinsAfter === coinsBefore + claimedCoins,
+          `before=${coinsBefore} claimed=${claimedCoins} after=${coinsAfter}`);
+        await sleep(1200);
+        const coinsSettled = await readHudCoins();
+        check("and stays there -- a corpse claim never pays the same coins twice",
+          coinsSettled === coinsBefore + claimedCoins,
+          `after=${coinsAfter} settled=${coinsSettled}`);
 
         // ── THE COMBAT-DISMISSAL LAW, read off the recorded transitions ───────────────────────────
         // These are INVARIANTS, not event-spotting, and that distinction is the whole design. A

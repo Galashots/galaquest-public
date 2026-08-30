@@ -47,14 +47,14 @@ import {
 // of world/cartLoot.js's own fixed haul (see that module's own header for the split).
 import {
   GEAR_DROP_KIND, HEART_DROP_KIND, HEART_HEAL_HP, createEnemyDropsState, requestCollectEnemyDrop,
-  requestEnemyDrop, stepEnemyDrops,
+  requestEnemyDrop, rollCoinCount, stepEnemyDrops,
 } from '../public/src/world/enemyDrops.js';
 // #87: personal corpse loot -- gear from a loot-bearing kill now becomes a per-eligible-hero corpse
 // claim rather than a shared ground pickup (see corpseLoot.js's own header for the full scope and
 // why coins/hearts above are unaffected).
 import {
-  createCorpseLootState, reassignClaimHero, requestClaimAllCorpseLoot, requestClaimCorpseItem,
-  requestCorpseLoot, resolveGroundCollectedClaimItems, stepCorpseLoot,
+  CORPSE_COIN_KIND, createCorpseLootState, reassignClaimHero, requestClaimAllCorpseLoot,
+  requestClaimCorpseItem, requestCorpseLoot, resolveGroundCollectedClaimItems, stepCorpseLoot,
 } from '../public/src/world/corpseLoot.js';
 // R1: the coin multiplier a kill-drop roll reads off a per-player rolling streak.
 import { coinMultiplierForStreak, createStreakState, registerKill as registerKillStreak, stepStreak }
@@ -1520,6 +1520,15 @@ export function createSimulation(options = {}) {
         z: enemy.z,
         streakMultiplier: coinMultiplierForStreak(streak.streak),
         killerOwnedItemIds: ownedItemIdsFor(event.heroId),
+        // #87: the ordinary COIN receipt moved onto the personal corpse claim below. The roll
+        // still happens in requestEnemyDrop, at the same odds and the same streak multiplier and
+        // in the same rng sequence -- only the destination changes, so solo economics are
+        // untouched. It must NOT also scatter on the ground, or the same kill would pay twice
+        // (a ground coin and a claim coin are different durable eventIds, so nothing downstream
+        // would catch it) -- and, worse for #87, ground coins auto-collect on proximity, so the
+        // killer standing on the corpse would absorb them before ever seeing a LOOT prompt.
+        // That is precisely the Owner-visible failure at d575f240.
+        groundCoins: false,
       }, rng);
       // Correction (was: "gear no longer becomes a ground pickup"): stripping gear out of dropsState
       // here made it unobtainable online with no compensating fix. world/corpseLoot.js's own personal
@@ -1538,6 +1547,30 @@ export function createSimulation(options = {}) {
       const eligibleHeroIds = corpseContribFold.awards
         .filter((award) => award.enemyId === event.enemyId)
         .map((award) => award.heroId);
+
+      // HOW MANY COINS EACH ELIGIBLE HERO GETS, and why the killer is a reuse rather than a
+      // re-roll. The killer takes `rolled.coinCount` VERBATIM -- the exact number the ground
+      // roll just produced for this kill, including any owned-gear conversion it folded in --
+      // so a solo kill mints precisely what it always did and the economy cannot drift. That is
+      // the same discipline killerGearItemId already keeps for gear.
+      //
+      // A non-killing contributor has no ground roll to reuse, so theirs is rolled from the
+      // SAME band via enemyDrops.js's own rollCoinCount, at THEIR OWN streak. `streakByPlayer`
+      // is already a truthful per-player authority -- stepped for every player every tick, and
+      // advanced by registerKillStreak only for whoever landed the killing blow -- so an
+      // assisting hero reads their own honest multiplier here with no new progression law and
+      // no parallel table. #87 requires each contributor gets their OWN ordinary loot.
+      const coinAmountByHero = new Map();
+      for (const heroId of eligibleHeroIds) {
+        if (heroId === event.heroId) {
+          coinAmountByHero.set(heroId, rolled.coinCount);
+          continue;
+        }
+        const contributorStreak = streakByPlayer.get(heroId) ?? createStreakState();
+        coinAmountByHero.set(heroId, rollCoinCount(
+          event.kind, coinMultiplierForStreak(contributorStreak.streak), rng,
+        ));
+      }
       const corpseRolled = requestCorpseLoot(corpseLootState, {
         enemyId: event.enemyId,
         lifeId: randomUUID(),
@@ -1549,6 +1582,7 @@ export function createSimulation(options = {}) {
         killerGearItemId: killerGearDrop?.itemId ?? null,
         guaranteedItemIds: guaranteedCorpseItemIds,
         ownedItemIdsFor,
+        coinAmountFor: (heroId) => coinAmountByHero.get(heroId) ?? 0,
       }, rng);
       corpseLootState = corpseRolled.state;
     }
@@ -1687,8 +1721,15 @@ export function createSimulation(options = {}) {
       z: roundToWire(corpse.z),
       claims: corpse.claims.map((claim) => ({
         heroId: claim.heroId,
+        // Each kind carries only the field it actually has: gear an itemId, coins an amount.
+        // Sending both with one always undefined is what the wire's own decoder refuses, and it
+        // would also put a meaningless key in front of every presenter reading this.
         items: claim.items.map((item) => ({
-          id: item.id, kind: item.kind, itemId: item.itemId, guaranteed: item.guaranteed, taken: item.taken,
+          id: item.id,
+          kind: item.kind,
+          ...(item.kind === CORPSE_COIN_KIND ? { amount: item.amount } : { itemId: item.itemId }),
+          guaranteed: item.guaranteed,
+          taken: item.taken,
         })),
       })),
     }));
@@ -2120,6 +2161,34 @@ export function attachGameServer(httpServer, options = {}) {
       // world/corpseLoot.js's own per-hero claims. Every corpse item today is CORPSE_GEAR_KIND, so
       // this always routes through the identical durable grantOwnership path a ground gear pickup
       // already used -- the delivery mechanism changed, the award path did not.
+  /**
+   * #87: pay ONE accepted corpse-claim item through the reward paths the game already uses. Gear
+   * is a durable ownership grant, exactly as a ground gear pickup always was. Coins are the new
+   * half, and the shape matters:
+   *
+   * rewardStore counts coins as ROWS -- coinsFor is a literal COUNT(*) of coin-earned events, and
+   * Village Supplies counts the same way. So an `amount` on the claim cannot become one row
+   * carrying a number without changing what a coin IS everywhere in the store. Instead this
+   * derives `amount` distinct eventIds from the claim item's own already-globally-unique id, and
+   * applies each through the identical applyLootAward a ground coin uses. Nothing about the
+   * durable model changes; the child just sees one row saying "Coins x 3" instead of three.
+   *
+   * IDEMPOTENT BY CONSTRUCTION, which is what makes a resent collect safe: those derived ids are
+   * stable for a given claim item, and store.apply is INSERT OR IGNORE, so replaying the same
+   * collect pays exactly once -- the same defence-in-depth applyLootAward's own header describes
+   * for a physical pickup id, and independent of the simulation-layer `taken` flag that decided to
+   * call this at all.
+   */
+  function awardCorpseClaimItem(playerId, item) {
+    if (item.kind === CORPSE_COIN_KIND) {
+      const facts = [];
+      for (let i = 0; i < item.amount; i += 1) {
+        facts.push(...rewards.applyLootAward(playerId, `${item.id}#${i}`, COIN_KIND));
+      }
+      return facts;
+    }
+    return rewards.grantOwnership(playerId, item.itemId);
+  }
       if (message.type === 'collect-corpse-item') {
         if (!client.data.playerId) throw new ProtocolError('collect-corpse-item before join');
         const playerId = client.data.playerId;
@@ -2127,7 +2196,7 @@ export function attachGameServer(httpServer, options = {}) {
           playerId, message.corpseId, message.claimItemId,
         );
         if (!accepted) return;
-        simulation.announceRewardFacts(rewards.grantOwnership(playerId, item.itemId));
+        simulation.announceRewardFacts(awardCorpseClaimItem(playerId, item));
         return;
       }
 
@@ -2139,7 +2208,7 @@ export function attachGameServer(httpServer, options = {}) {
         const { accepted, items } = simulation.applyClaimAllCorpseLoot(playerId, message.corpseId);
         if (!accepted) return;
         for (const item of items) {
-          simulation.announceRewardFacts(rewards.grantOwnership(playerId, item.itemId));
+          simulation.announceRewardFacts(awardCorpseClaimItem(playerId, item));
         }
         return;
       }

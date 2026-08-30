@@ -18,7 +18,7 @@
 // own the browser half, main.js wires them to this file's own outputs every frame, the same
 // pure-viewmodel/DOM split unlockCard.js documents for its own two halves.
 
-import { CORPSE_LOOT_INTERACT_RADIUS_METERS } from './corpseLoot.js';
+import { CORPSE_COIN_KIND, CORPSE_LOOT_INTERACT_RADIUS_METERS } from './corpseLoot.js';
 import {
   HELMET_SLOT, SHIELD_SLOT, SHOULDERS_SLOT, WEAPON_SLOT, itemDef,
 } from '../progression/items.js';
@@ -36,6 +36,10 @@ const SLOT_ICONS = {
   [SHOULDERS_SLOT]: '🎽',
 };
 const GENERIC_GEAR_ICON = '🎁';
+// The SHIPPED coin glyph, not a new one: public/index.html paints #loot-hud's coin count with
+// `content: '\25CF'` in gold, so the loot panel shows a child the same mark their coin counter
+// already uses. A second, prettier coin here would read as a second currency to a five-year-old.
+const COIN_ICON = '●';
 
 /** This hero's own claim on one corpse, or null -- never anyone else's. The one lookup every other
  *  function below is built from, so "whose claim is this" has exactly one implementation. */
@@ -106,6 +110,18 @@ export function panelItemsFor(corpse, heroId) {
  */
 export function corpseLootPanelViewModel(corpse, heroId) {
   return panelItemsFor(corpse, heroId).map((item) => {
+    // #87: a coin row is a COUNT, not a catalogue entry -- there is no items.js def to look up, and a
+    // child reads "Coins × 3" as one thing they are getting, not three things to tap.
+    if (item.kind === CORPSE_COIN_KIND) {
+      return {
+        id: item.id,
+        itemId: null,
+        name: `Coins × ${item.amount}`,
+        icon: COIN_ICON,
+        guaranteed: item.guaranteed,
+        taken: item.taken,
+      };
+    }
     const def = itemDef(item.itemId);
     return {
       id: item.id,

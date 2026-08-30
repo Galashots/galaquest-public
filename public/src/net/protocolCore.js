@@ -784,7 +784,17 @@ function decodeDrops(drops) {
 // item, a guaranteed one, or both). Optional/additive, the same shape decodeDrops itself uses --
 // absent entirely for every pre-#87 fixture and caller, decoding to "no corpses on the ground" rather
 // than failing.
-const CORPSE_LOOT_KINDS = ['gear'];
+// #87: 'coin' joined 'gear' when personal corpse loot took over the ordinary non-health reward
+// receipt -- an ordinary Wolf has gearChance 0, so a gear-only claim meant the opening fight could
+// never show the loot UI at all. A coin item carries an AMOUNT and no itemId; a gear item carries
+// an itemId and no amount. Both are validated below rather than trusted, because this is the
+// boundary a hostile or stale frame crosses.
+const CORPSE_LOOT_KINDS = ['gear', 'coin'];
+// A claim's coin row is a COUNT, not a stack of objects, and a count that arrives absurd is a
+// frame this decoder should refuse rather than render. Sized well above any real streak-multiplied
+// band (the richest table is the Alpha's 4-7 at a x3 streak) so a legitimate payout is never
+// rejected.
+const MAX_CORPSE_COIN_AMOUNT = 999;
 // Small player counts in practice (this game's own co-op ceiling), capped generously rather than
 // tied to a literal player count so a malformed frame cannot turn validation into unbounded work.
 const MAX_CORPSE_CLAIMS = 8;
@@ -803,6 +813,14 @@ function decodeCorpseItem(item, field) {
   const kind = requireString(item.kind, `${field}.kind`, 16);
   if (!CORPSE_LOOT_KINDS.includes(kind)) {
     fail(`${field}.kind must be one of ${CORPSE_LOOT_KINDS.join(', ')}, got ${JSON.stringify(kind)}`);
+  }
+  if (kind === 'coin') {
+    const amount = requireInteger(item.amount, `${field}.amount`);
+    if (amount < 1) fail(`${field}.amount must be >= 1, got ${amount}`);
+    if (amount > MAX_CORPSE_COIN_AMOUNT) {
+      fail(`${field}.amount may be at most ${MAX_CORPSE_COIN_AMOUNT}, got ${amount}`);
+    }
+    return { id, kind, amount, guaranteed: Boolean(item.guaranteed), taken: Boolean(item.taken) };
   }
   const itemId = requireString(item.itemId, `${field}.itemId`, ITEM_ID_MAX_LENGTH);
   if (itemId.length === 0) fail(`${field}.itemId must not be empty`);

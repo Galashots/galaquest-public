@@ -123,6 +123,7 @@ import {
   nearestLootableCorpse,
   newlyTakenItems,
 } from './world/corpseLootPresenter.js';
+import { CORPSE_COIN_KIND } from './world/corpseLoot.js';
 import { createCorpseLootGlowPresenter } from './world/corpseLootGlowPresenter.js';
 import {
   createCorpseLootInteract, createCorpseLootPanel, createCorpseLootToastLayer,
@@ -4988,6 +4989,21 @@ async function bootstrap() {
           ? { x: heroButtonRect.left + heroButtonRect.width / 2, y: heroButtonRect.top + heroButtonRect.height / 2 }
           : null;
         for (const arrival of arrivals) {
+          // #87: a claim now pays COINS as well as gear, and a coin arrival has to reach the HUD the
+          // same way a ground coin's own arrival flight does -- by advancing coinsDisplayed and
+          // popping the counter. The background Village sync further down cannot do it: it only ever
+          // runs for the cart's own pickups, so before this the child collected coins, watched the
+          // server credit them, and saw their coin counter sit unchanged. "It went into my inventory"
+          // is half of what #87 asks a child to understand, and a number that does not move does not
+          // say it.
+          if (arrival.kind === CORPSE_COIN_KIND) {
+            corpseLootToastLayer.announce(`+ ${arrival.amount} coins`, destination);
+            coinsDisplayed += arrival.amount;
+            renderLootHud();
+            popLootHud(COIN_KIND);
+            audio.play(COIN_PICKUP_RECIPE_NAME);
+            continue;
+          }
           const name = itemDef(arrival.itemId)?.name ?? 'Gear';
           corpseLootToastLayer.announce(`+ ${name}`, destination);
           audio.play(GEAR_PICKUP_RECIPE_NAME);

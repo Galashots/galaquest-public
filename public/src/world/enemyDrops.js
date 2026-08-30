@@ -106,6 +106,19 @@ export function dropTableForKind(kind) {
   return { coinCount: [2, 4], heartChance: 0.25, gearChance: 0, guaranteedGearOrHeart: false };
 }
 
+/**
+ * THE ORDINARY COIN COUNT FOR ONE KILL, for one hero, at their own streak. Extracted so there is
+ * exactly ONE authority for it: #87 moved the ordinary coin receipt onto the personal corpse claim,
+ * and a non-killing contributor's own count has to be rolled from the same band and the same
+ * multiplier rule the killer's is -- restating that arithmetic beside the corpse code would be two
+ * tables free to drift (GQ-007). requestEnemyDrop below calls this too, so the ground path and the
+ * claim path can never disagree about what a kill is worth.
+ */
+export function rollCoinCount(kind, streakMultiplier, rng) {
+  const [coinMin, coinMax] = dropTableForKind(kind).coinCount;
+  return randomInt(rng, coinMin, coinMax) * Math.max(1, Math.round(streakMultiplier));
+}
+
 function randomInt(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1));
 }
@@ -167,12 +180,18 @@ function enforceDropCap(drops) {
 export function requestEnemyDrop(state, kill, rng) {
   const {
     enemyId, lifeId, kind, x, z, streakMultiplier = 1, killerOwnedItemIds = [],
+    // #87: online, world/corpseLoot.js now owns the ordinary COIN receipt -- a kill's coins become
+    // the killing hero's own personal claim instead of a scatter every passer-by walks through. The
+    // roll still happens here, at the same odds and the same streak multiplier, so the economy is
+    // untouched and the rng sequence is identical; only the DESTINATION moves. Defaults true, which
+    // is what keeps the offline fallback (main.js's own solo loop) exactly as it was -- offline has
+    // no server-authoritative corpse to put a claim on.
+    groundCoins = true,
   } = kill;
   const table = dropTableForKind(kind);
   const rolled = [];
 
-  const [coinMin, coinMax] = table.coinCount;
-  let coinCount = randomInt(rng, coinMin, coinMax) * Math.max(1, Math.round(streakMultiplier));
+  let coinCount = rollCoinCount(kind, streakMultiplier, rng);
   let wantsHeart = table.heartChance > 0 && rng() < table.heartChance;
   let wantsGear = table.gearChance > 0 && rng() < table.gearChance;
 
@@ -195,7 +214,7 @@ export function requestEnemyDrop(state, kill, rng) {
 
   if (wantsHeart) rolled.push({ kind: HEART_DROP_KIND });
 
-  for (let i = 0; i < coinCount; i += 1) rolled.push({ kind: COIN_DROP_KIND });
+  if (groundCoins) for (let i = 0; i < coinCount; i += 1) rolled.push({ kind: COIN_DROP_KIND });
 
   const spawned = rolled.map((payload, index) => {
     const point = scatterPoint(rng, x, z);
@@ -214,6 +233,12 @@ export function requestEnemyDrop(state, kill, rng) {
   return {
     state: freezeDropsState({ drops: enforceDropCap([...state.drops, ...spawned]) }),
     spawned,
+    // The FINAL count, after any owned-gear conversion above. Returned rather than recomputed by the
+    // caller because that conversion is real economy: a gear roll landing on something the hero
+    // already owns pays OWNED_GEAR_COIN_CONVERSION coins instead, and #87 moving the coin receipt
+    // onto the corpse claim must carry that through rather than silently dropping it. When
+    // groundCoins is false these coins exist ONLY as this number, so losing it loses the reward.
+    coinCount,
   };
 }
 

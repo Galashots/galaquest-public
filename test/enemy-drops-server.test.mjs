@@ -19,6 +19,8 @@ import {
 import { attackMessage, decode, encode } from '../public/src/net/protocol.js';
 import { openRewardStore } from '../net/rewardStore.mjs';
 import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../public/src/progression/items.js';
+import { CORPSE_COIN_KIND } from '../public/src/world/corpseLoot.js';
+import { COIN_KIND } from '../public/src/world/cartLoot.js';
 
 function tempDb() {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-drops-server-'));
@@ -98,21 +100,37 @@ function walkOntoDeathSpot(sim, playerId, enemyId, startAtMs) {
   return now;
 }
 
-test('spawn-on-defeat: killing a wolf puts real drops on the wire', () => {
-  const sim = singleEnemySimulation('wolf', 'target');
+// #87 moved the ordinary COIN receipt off the ground and onto the personal corpse claim, so this
+// test was rewritten rather than deleted: it now pins BOTH halves of the new law in one place, so
+// a future change that quietly puts coins back on the ground (double-paying every kill) fails here.
+test('spawn-on-defeat: an ordinary kill pays coins to the personal claim, never to the ground', () => {
+  // Heart misses, so the only thing that could reach the ground is a coin -- which is exactly what
+  // must no longer be there.
+  const rng = scripted(0.0, 0.99);
+  const sim = singleEnemySimulation('wolf', 'target', null, { rng });
   const player = sim.addPlayer('a', { x: 0, z: 7 });
   fightToDeath(sim, [player], 'target');
+
   const drops = sim.dropsSnapshot();
-  assert.ok(drops.length >= 2, 'a common kill always drops at least two coins');
-  assert.ok(drops.every((d) => d.kind === COIN_DROP_KIND || d.kind === HEART_DROP_KIND
-    || d.kind === GEAR_DROP_KIND));
+  assert.equal(drops.some((d) => d.kind === COIN_DROP_KIND), false,
+    'an ordinary kill must not scatter ground coins online -- they would double-pay against the claim, and they auto-collect on proximity so the killer would absorb them before ever seeing LOOT');
+  assert.ok(drops.every((d) => d.kind === HEART_DROP_KIND || d.kind === GEAR_DROP_KIND),
+    'hearts and gear are the only kinds still allowed on the ground');
   assert.ok(drops.every((d) => typeof d.x === 'number' && typeof d.z === 'number'));
+
+  const claim = sim.corpsesSnapshot()[0]?.claims.find((c) => c.heroId === player.id);
+  assert.ok(claim, 'and the kill must leave this hero a real personal claim instead');
+  const coins = claim.items.find((item) => item.kind === CORPSE_COIN_KIND);
+  assert.equal(coins?.amount, 2, 'carrying the same count the ground roll would have paid');
 });
 
 test('collect authorization: the server checks the PLAYER\'S OWN position, not a client claim', () => {
   const { dir, path } = tempDb();
   try {
-    const sim = singleEnemySimulation('wolf', 'target');
+    // Coins go to the personal claim now, so a HEART is the only ground drop an ordinary kill
+    // still makes. Rolled deterministically rather than hoped for -- 0.0 clears the heart chance.
+    const rng = scripted(0.0, 0.0);
+    const sim = singleEnemySimulation('wolf', 'target', null, { rng });
     const rewards = createRewardCoordinator({ rewardStorePath: path });
     const player = sim.addPlayer('a', { x: 0, z: 7 });
     rewards.join(player.id, 'guest-reach');
@@ -135,10 +153,15 @@ test('collect authorization: the server checks the PLAYER\'S OWN position, not a
   }
 });
 
-test('a collected coin drop credits the reward store AND the communal Village total', () => {
+// #87 moved the ordinary coin receipt onto the personal claim, so this test follows it there. The
+// property is unchanged and still load-bearing -- a collected coin has to reach the durable store
+// AND the communal Village total -- but the claim pays an AMOUNT in one action, so it also pins
+// the thing that shape introduces: N coins means exactly N rows, once.
+test('a collected corpse coin credits the reward store AND the communal Village total, exactly once', () => {
   const { dir, path } = tempDb();
   try {
-    const sim = singleEnemySimulation('wolf', 'target');
+    const rng = scripted(0.0, 0.99); // min coin band (2), heart misses
+    const sim = singleEnemySimulation('wolf', 'target', null, { rng });
     const rewards = createRewardCoordinator({ rewardStorePath: path });
     const player = sim.addPlayer('a', { x: 0, z: 7 });
     rewards.join(player.id, 'guest-coin');
@@ -146,18 +169,38 @@ test('a collected coin drop credits the reward store AND the communal Village to
     walkOntoDeathSpot(sim, player.id, 'target', 5000);
 
     const before = rewards.villageSnapshot().coins;
-    const coinDrop = sim.dropsSnapshot().find((d) => d.kind === COIN_DROP_KIND);
-    const { accepted, drop } = sim.applyCollectDrop(player.id, coinDrop.id);
-    assert.equal(accepted, true);
-    const facts = rewards.applyLootAward(player.id, drop.id, drop.kind);
-    assert.equal(facts[0]?.type, 'coin-earned');
+    const corpse = sim.corpsesSnapshot()[0];
+    const claim = corpse.claims.find((c) => c.heroId === player.id);
+    const coins = claim.items.find((item) => item.kind === CORPSE_COIN_KIND);
+    assert.equal(coins.amount, 2, 'the ordinary band, so the numbers below are not accidental');
 
-    assert.equal(rewards.rewardsFor([player.id])[player.id].coins, 1);
-    assert.equal(rewards.villageSnapshot().coins, before + 1,
-      'a kill-drop coin funds the shared Village economy the same way cart-loot coins do');
+    const { accepted, item } = sim.applyClaimCorpseItem(player.id, corpse.id, coins.id);
+    assert.equal(accepted, true);
+    // Exactly what net/gameServerCore.mjs's own awardCorpseClaimItem does for a coin row: one
+    // durable eventId per coin, derived from the claim item's own globally-unique id.
+    const facts = [];
+    for (let i = 0; i < item.amount; i += 1) {
+      facts.push(...rewards.applyLootAward(player.id, `${item.id}#${i}`, COIN_KIND));
+    }
+    assert.equal(facts.length, 2, 'two coins, two announced facts');
+    assert.ok(facts.every((fact) => fact.type === 'coin-earned'));
+
+    assert.equal(rewards.rewardsFor([player.id])[player.id].coins, 2);
+    assert.equal(rewards.villageSnapshot().coins, before + 2,
+      'claim coins fund the shared Village economy exactly as ground coins did');
+
+    // A resent collect must not mint a second payout. Same item, same derived ids, INSERT OR
+    // IGNORE -- this is the idempotency the whole one-row-carrying-an-amount shape rests on.
+    for (let i = 0; i < item.amount; i += 1) {
+      assert.deepEqual(rewards.applyLootAward(player.id, `${item.id}#${i}`, COIN_KIND), [],
+        'a replayed corpse-coin award announces nothing, because it applied nothing');
+    }
+    assert.equal(rewards.rewardsFor([player.id])[player.id].coins, 2,
+      'and the hero is no richer for the replay');
+    assert.equal(rewards.villageSnapshot().coins, before + 2);
 
     const reopened = openRewardStore(path);
-    assert.equal(reopened.coinsFor('guest-coin'), 1, 'the coin is durable across a fresh store open');
+    assert.equal(reopened.coinsFor('guest-coin'), 2, 'the coins are durable across a fresh store open');
     reopened.close();
     rewards.close();
   } finally {
@@ -219,29 +262,34 @@ test('a collected heart drop heals through combat/encounter.js\'s own requestHer
 // own ownership-aware suppression (proven in test/corpse-loot.test.mjs) simply omits the claim rather
 // than converting it, which the second test below proves is actually wired end to end through the real
 // reward coordinator.
+// Deterministic since #87 moved coins onto the claim, for two reasons. The old 80-kill hunt for a
+// gear claim now exits on the FIRST kill whether or not gear was rolled -- every kill leaves a coin
+// claim -- so it silently stopped testing gear at all and started handing a coin row to
+// grantOwnership. And an unseeded hunt on a required gate is the flake class this suite already
+// threw out once. The scripted roll lands gear on the pool item a fresh guest does not own.
 test('a corpse claim for an unowned item grants it durably through the real reward store', () => {
-  let corpse = null;
-  let sim = null;
-  let player = null;
-  let rewards = null;
-  let dir = null;
-  for (let attemptNumber = 0; attemptNumber < 80 && !corpse; attemptNumber += 1) {
-    const fixture = tempDb();
-    dir = fixture.dir;
-    sim = singleEnemySimulation('frost-wolf', 'target');
-    rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
-    player = sim.addPlayer('a', { x: 0, z: 7 });
-    rewards.join(player.id, `guest-gear-${attemptNumber}`);
-    fightToDeath(sim, [player], 'target');
-    corpse = sim.corpsesSnapshot().find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null;
-    if (!corpse) { rewards.close(); cleanupTempDb(dir); }
-  }
-  assert.ok(corpse, 'no corpse spawned across 80 frost-wolf kills -- the roll table has likely regressed');
+  const { dir, path } = tempDb();
+  const rng = scripted(
+    0.0, // coin roll -> min band
+    0.99, // heart roll misses
+    0.1, // gear roll HITS (frost-wolf, 0.2 chance)
+    0.9, // which gear item -> index 1, the one a fresh guest does NOT already own
+  );
+  const rewards = createRewardCoordinator({ rewardStorePath: path });
+  const sim = singleEnemySimulation('frost-wolf', 'target', rewards, { rng });
+  const player = sim.addPlayer('a', { x: 0, z: 7 });
+  rewards.join(player.id, 'guest-gear');
+  fightToDeath(sim, [player], 'target');
+  const corpse = sim.corpsesSnapshot()
+    .find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null;
+  assert.ok(corpse, 'the kill must leave this hero a claim');
   walkOntoDeathSpot(sim, player.id, 'target', 5000);
 
   try {
     const claim = corpse.claims.find((c) => c.heroId === player.id);
-    const item = claim.items[0];
+    // The GEAR row specifically -- items[0] is no longer guaranteed to be one.
+    const item = claim.items.find((candidate) => candidate.kind === 'gear');
+    assert.ok(item, 'the scripted roll must have produced a real gear claim item');
     const { accepted, item: taken } = sim.applyClaimCorpseItem(player.id, corpse.id, item.id);
     assert.equal(accepted, true);
     const facts = rewards.grantOwnership(player.id, taken.itemId);
@@ -310,9 +358,13 @@ test('ownership-aware suppression is wired: a killer who already owns the whole 
       rewards.grantOwnership(player.id, SHIELD_IRONWOOD_ID);
       rewards.grantOwnership(player.id, SHOULDER_SILVERGUARD_ID);
       fightToDeath(sim, [player], 'target');
-      const corpses = sim.corpsesSnapshot();
-      assert.equal(corpses.length, 0,
-        'a solo guest who already owns the whole gear pool must never see a corpse spawn at all');
+      // The law is about GEAR suppression, and it had to be restated when #87 moved the coin
+      // receipt onto the claim: an ordinary kill now always leaves a corpse, so "no corpse at all"
+      // stopped being a truthful way to say "no gear was granted".
+      const claim = sim.corpsesSnapshot()[0]?.claims.find((c) => c.heroId === player.id);
+      assert.ok(claim, 'the kill still owes this hero their ordinary coins');
+      assert.equal(claim.items.some((item) => item.kind === 'gear'), false,
+        'a guest who already owns the whole gear pool must never be granted a gear claim item');
     }
     rewards.close();
   } finally {
@@ -370,17 +422,22 @@ test('#87 seam: two real, independently-attacking players both receive their own
 // simulation must produce NO corpse whatsoever from a real, fully-fought wolf kill. If a future change
 // ever defaults this option on, or leaks a production caller into it, this assertion fails immediately
 // rather than quietly handing every child free gear.
-test('#87 harness seam is opt-in: an unwired simulation still spawns NO corpse from a kill that rolled no gear', () => {
+// The seam is still opt-in, but "opt-in" can no longer be spelled "no corpse at all": every ordinary
+// kill now leaves a coin claim by design. So the property is stated where it actually lives -- an
+// unwired simulation hands out no GUARANTEED item.
+test('#87 harness seam is opt-in: an unwired kill grants no guaranteed item, only its ordinary coins', () => {
   const sim = createSimulation({ enemies: [{ enemyId: 'target', kind: 'wolf', spawn: { x: 0, z: 8 } }] });
   const player = sim.addPlayer('a', { x: 0, z: 7 });
   fightToDeath(sim, [player], 'target');
 
   assert.equal(sim.encounterSnapshot().enemies.find((e) => e.enemyId === 'target').hp, 0,
     'the wolf must actually be dead, or this proves nothing about what its death did or did not spawn');
-  assert.deepEqual(sim.corpsesSnapshot(), [],
-    'a common wolf drops no gear (gearChance 0) and corpseLoot.js never creates an empty corpse -- so an '
-    + 'unwired simulation must show no corpse at all. A corpse here means guaranteedCorpseItemIds stopped '
-    + 'being opt-in.');
+  const claim = sim.corpsesSnapshot()[0]?.claims.find((c) => c.heroId === player.id);
+  assert.ok(claim, 'an ordinary kill always leaves this hero something personal to loot');
+  assert.equal(claim.items.some((item) => item.guaranteed), false,
+    'a guaranteed item here means guaranteedCorpseItemIds stopped being opt-in');
+  assert.deepEqual(claim.items.map((item) => item.kind), [CORPSE_COIN_KIND],
+    'and a common wolf has gearChance 0, so coins are the whole claim');
 });
 
 test('#87 harness seam: guaranteedCorpseItemIds puts a real, takeable personal claim on the corpse', () => {
@@ -395,17 +452,24 @@ test('#87 harness seam: guaranteedCorpseItemIds puts a real, takeable personal c
   assert.ok(corpse, 'the same kill that spawns nothing unwired must spawn a real corpse once the seam is set');
   const claim = corpse.claims.find((c) => c.heroId === player.id);
   assert.ok(claim, 'the real contributing hero must hold the claim -- not some synthesized fixture hero');
-  assert.deepEqual(claim.items.map((item) => item.itemId), [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID],
+  assert.deepEqual(
+    claim.items.filter((item) => item.kind === 'gear').map((item) => item.itemId),
+    [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID],
     'the claim carries exactly the requested items, in order, so the harness knows what to assert on screen');
-  assert.ok(claim.items.every((item) => item.guaranteed === true && item.taken === false),
-    'they ride the already-tested guaranteed path and start untaken');
+  assert.ok(claim.items.some((item) => item.kind === CORPSE_COIN_KIND),
+    'and the kill\'s ordinary coins ride the same claim -- the seam adds gear, it does not replace the normal reward');
+  assert.ok(claim.items.filter((item) => item.kind === 'gear')
+    .every((item) => item.guaranteed === true && item.taken === false),
+    'the seam\'s own items ride the already-tested guaranteed path and start untaken');
+  assert.equal(claim.items.find((item) => item.kind === CORPSE_COIN_KIND).guaranteed, false,
+    'the ordinary coin reward is NOT a guaranteed item -- it is the normal roll, and mislabelling it would let a future guaranteed-reward rule quietly capture every kill\'s coins');
 
   // The harness's own flow: take one individually, then the LAST one -- the exact shape of the
   // corpse-retirement blocker corrected at dd7ce2e, driven here through the real server entry points.
   assert.equal(sim.applyClaimCorpseItem(player.id, corpse.id, claim.items[0].id).accepted, true);
   const midway = sim.corpsesSnapshot().find((c) => c.id === corpse.id);
-  assert.deepEqual(midway.claims[0].items.map((item) => item.taken), [true, false],
-    'taking one item must resolve exactly that item and leave the other still offered');
+  assert.deepEqual(midway.claims[0].items.map((item) => item.taken), [true, false, false],
+    'taking one item must resolve exactly that item and leave the others -- the second guaranteed item AND the ordinary coin row -- still offered');
   assert.equal(sim.applyClaimCorpseItem(player.id, corpse.id, claim.items[1].id).accepted, true);
 });
 
@@ -519,10 +583,138 @@ test('shadow mode safety: collecting the ground copy resolves the matching corps
 });
 
 test('expiry: an uncollected drop is gone from the wire after DROP_EXPIRE_SECONDS of real ticks', () => {
-  const sim = singleEnemySimulation('wolf', 'target');
+  // Coins go to the personal claim now, so a HEART is the only ground drop an ordinary kill still
+  // makes. Rolled deterministically rather than hoped for -- 0.0 clears the 0.25 heart chance.
+  const rng = scripted(0.0, 0.0);
+  const sim = singleEnemySimulation('wolf', 'target', null, { rng });
   const player = sim.addPlayer('a', { x: 0, z: 7 });
   fightToDeath(sim, [player], 'target');
   assert.ok(sim.dropsSnapshot().length > 0);
   stepTicks(sim, Math.ceil((DROP_EXPIRE_SECONDS + 1) / 0.05));
   assert.equal(sim.dropsSnapshot().length, 0, 'every uncollected drop must have expired');
+});
+
+// ── THE OWNER FAILURE, AS A TEST ────────────────────────────────────────────────────────────────
+// Owner running-game gate FAIL at d575f240: he verified /source-sha.json, played the natural opening
+// fight, and saw no LOOT affordance at all. Not bad luck -- a deterministic spec gap. Production
+// ENEMY_POPULATION authors wolf-1 as kind 'wolf'; dropTableForKind('wolf') gives gearChance 0; and
+// world/corpseLoot.js was gear-only, returning spawned:null when nobody ended up holding gear. So the
+// game's own opening enemy could NEVER create a claim or show #87's UI, however many times it died.
+//
+// That is #87's selected outcome failing on the one fight every child has first. This test is the
+// exact shape of what the Owner did, with the dice pinned so it can never pass by luck.
+test('#87 Owner path: the ordinary opening Wolf always leaves a personal corpse claim carrying its coins', () => {
+  const { dir, path } = tempDb();
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath: path });
+    // The production opening kind, and a roll with NO bonus of any sort: minimum coins, heart misses,
+    // and 'wolf' has gearChance 0 so gear cannot happen at all. If a claim still appears, it appears
+    // because the ordinary coin reward is genuinely personal now -- not because the dice were kind.
+    const rng = scripted(
+      0.0, // coin roll -> minimum of the [2,4] band
+      0.99, // heart roll misses (0.25 chance)
+    );
+    const sim = singleEnemySimulation('wolf', 'target', rewards, { rng });
+    const player = sim.addPlayer('p-owner', { x: 0, z: 7 });
+    rewards.join(player.id, 'guest-owner');
+    fightToDeath(sim, [player], 'target');
+
+    const corpse = sim.corpsesSnapshot()
+      .find((c) => c.claims.some((claim) => claim.heroId === player.id)) ?? null;
+    assert.ok(corpse,
+      'the ordinary opening Wolf must leave a corpse this hero can loot -- this is the Owner-visible '
+      + 'failure at d575f240, where a common Wolf produced no claim and therefore no LOOT affordance');
+
+    const claim = corpse.claims.find((c) => c.heroId === player.id);
+    const coinItems = claim.items.filter((item) => item.kind === CORPSE_COIN_KIND);
+    assert.equal(coinItems.length, 1, 'coins present as ONE presentable row, not one row per coin');
+    assert.equal(coinItems[0].amount, 2, 'and carrying the same count the ground roll would have paid');
+    assert.equal(coinItems[0].taken, false);
+    assert.equal(claim.items.some((item) => item.kind === 'gear'), false,
+      'no gear on a common Wolf -- gearChance is 0 and this test must not be secretly proving gear');
+  } finally {
+    cleanupTempDb(dir);
+  }
+});
+
+// #87 economy: the owned-gear conversion is real money and must not evaporate when the receipt moves.
+// enemyDrops.js pays OWNED_GEAR_COIN_CONVERSION extra coins when a gear roll lands on something the
+// hero already has ("never a wasted roll"). Those coins used to reach the child as ground pickups; now
+// they can only reach them through the claim, so if requestEnemyDrop's post-conversion count were not
+// the number handed to the claim, a hero would silently lose the whole conversion.
+test('#87 economy: an owned-gear conversion still pays, through the personal claim', () => {
+  const { dir, path } = tempDb();
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath: path });
+    const rng = scripted(
+      0.0, // coin roll -> min band (2 for frost-wolf)
+      0.99, // heart roll misses
+      0.1, // gear roll HITS
+      0.0, // which gear item -> index 0, shield_ironwood, which a fresh guest ALREADY OWNS
+    );
+    const sim = singleEnemySimulation('frost-wolf', 'target', rewards, { rng });
+    const player = sim.addPlayer('p-convert', { x: 0, z: 7 });
+    rewards.join(player.id, 'guest-convert');
+    assert.ok(rewards.ownedItemIdsFor(player.id).includes(SHIELD_IRONWOOD_ID),
+      'precondition: a joined guest starts owning the shield, which is what makes this roll a conversion');
+    fightToDeath(sim, [player], 'target');
+
+    const claim = sim.corpsesSnapshot()[0]?.claims.find((c) => c.heroId === player.id);
+    assert.ok(claim, 'the kill still leaves a claim');
+    assert.equal(claim.items.some((item) => item.kind === 'gear'), false,
+      'the already-owned roll must be suppressed as gear -- that is the suppression law');
+    const coins = claim.items.find((item) => item.kind === CORPSE_COIN_KIND);
+    // 2 from the band + OWNED_GEAR_COIN_CONVERSION (5). Asserted as "more than the plain band"
+    // rather than a restated literal, so a future conversion re-tuning does not silently pass here.
+    assert.ok(coins.amount > 2,
+      `the conversion coins must ride the claim, not vanish -- got ${coins.amount}, expected more than the plain band of 2`);
+    assert.equal(coins.amount, 7, '2 from the band plus the 5-coin owned-gear conversion');
+    rewards.close();
+  } finally {
+    cleanupTempDb(dir);
+  }
+});
+
+// #87 co-op: each eligible contributor gets their OWN ordinary loot, and the killing blow does not
+// monopolise it. The dispatch asked whether preserving streak semantics for a non-killer needed a new
+// progression subsystem: it does not. streakByPlayer is already a truthful per-player authority, so a
+// contributor's coins are rolled from the same band at their own honest multiplier.
+test('#87 co-op: both contributors get their own coin claim, and the killer does not monopolise it', () => {
+  const { dir, path } = tempDb();
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath: path });
+    const rng = scripted(0.0, 0.99); // min band, heart misses, no gear on a common wolf
+    const sim = singleEnemySimulation('wolf', 'target', rewards, { rng });
+    const a = sim.addPlayer('hero-a', { x: 0, z: 7 });
+    const b = sim.addPlayer('hero-b', { x: 0.6, z: 7 });
+    rewards.join(a.id, 'guest-a');
+    rewards.join(b.id, 'guest-b');
+    fightToDeath(sim, [a, b], 'target');
+
+    const corpse = sim.corpsesSnapshot()[0];
+    assert.ok(corpse, 'a real two-contributor kill must leave a corpse');
+    for (const hero of [a, b]) {
+      const claim = corpse.claims.find((c) => c.heroId === hero.id);
+      assert.ok(claim, `every eligible contributor holds their own claim (missing for ${hero.id})`);
+      const coins = claim.items.find((item) => item.kind === CORPSE_COIN_KIND);
+      assert.ok(coins && coins.amount > 0,
+        `an assisting contributor must receive real coins of their own, not nothing (${hero.id})`);
+    }
+    // Independent objects, not a shared one: distinct item ids are what makes A's collect incapable
+    // of touching B's (the isolation law test/corpse-loot.test.mjs proves at the claim level).
+    const [claimA, claimB] = [a, b].map((hero) => corpse.claims.find((c) => c.heroId === hero.id));
+    const coinIdA = claimA.items.find((item) => item.kind === CORPSE_COIN_KIND).id;
+    const coinIdB = claimB.items.find((item) => item.kind === CORPSE_COIN_KIND).id;
+    assert.notEqual(coinIdA, coinIdB, 'each hero\'s coin row is their own object with its own id');
+
+    // And A taking theirs leaves B's untouched.
+    assert.equal(sim.applyClaimCorpseItem(a.id, corpse.id, coinIdA).accepted, true);
+    const after = sim.corpsesSnapshot().find((c) => c.id === corpse.id);
+    const bAfter = after.claims.find((c) => c.heroId === b.id);
+    assert.equal(bAfter.items.every((item) => item.taken === false), true,
+      'one sibling collecting must never resolve the other sibling\'s coins');
+    rewards.close();
+  } finally {
+    cleanupTempDb(dir);
+  }
 });
