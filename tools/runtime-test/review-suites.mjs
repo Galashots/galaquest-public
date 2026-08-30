@@ -43,6 +43,11 @@ export const HARNESSES = {
   // Studio frame. It gates mechanics (exact context, pointer marks, PNG capture, invalidation and
   // responsive panel bounds) but its screenshots remain human evidence rather than appearance PASS.
   'review-owner-annotations': { gate: true, why: 'Owner Review annotation packet mechanics and exact-state binding, portrait and landscape' },
+  // #92 STUDIO-V2A: the registry-driven Library/Inspect surface -- listAssets/loadAsset/
+  // getAssetInspection against the live canonical registry, truthful loadable-vs-refused behaviour
+  // for a Git-backed asset vs one recorded only on another branch, and the manual UI panel driving
+  // the same typed API. A behavioural gate, not an appearance claim.
+  'review-studio-library': { gate: true, why: 'Studio Library/Inspect: registry-driven listing/filtering, stable asset_id selection, truthful load vs refusal, and the UI panel wired to the same typed API' },
   // AP1's two artist-review cameras. Both are instruments, not gates: their product is the captures
   // and a per-frame record, and a person decides what those show. A green exit code from either
   // would be a claim that somebody has LOOKED, which is exactly the thing a script cannot assert.
@@ -103,7 +108,7 @@ export const SUITES = {
     'drive-two-clients', 'play-fight', 'fit-carry', 'fit-sword', 'fit-shield', 'fit-lantern',
     'fit-helmet', 'fit-wildwood-blade', 'review-keeper-idle', 'review-hero-attack', 'review-keeper-material',
     'review-keeper-turn', 'review-hero-idle11', 'review-shipping-assets', 'review-rowan-camp-composite',
-    'review-studio', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
+    'review-studio', 'review-studio-library', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
     'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect',

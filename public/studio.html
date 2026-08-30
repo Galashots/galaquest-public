@@ -85,6 +85,44 @@
       #review-export, #review-export-image { width: 100%; font-weight: 800; border-color: var(--studio-accent); }
       #review-help { color: #aebdcb; font-size: 0.72rem; }
 
+      #library-panel {
+        position: absolute; z-index: 4;
+        bottom: max(0.5rem, env(safe-area-inset-bottom));
+        left: max(0.5rem, env(safe-area-inset-left));
+        width: min(22rem, calc(100vw - 1rem));
+        max-height: 48%; overflow-y: auto;
+        padding: 0.55rem 0.7rem;
+        background: var(--studio-panel-strong); color: #fff;
+        border: 1px solid var(--studio-border); border-radius: 0.55rem;
+        font: 0.76rem/1.4 system-ui, sans-serif;
+      }
+      #library-panel[hidden] { display: none; }
+      #library-panel .head { display: flex; align-items: center; gap: 0.5rem; }
+      #library-panel .head strong { flex: 1; }
+      #library-panel select, #library-panel input, #library-panel button {
+        font: inherit; margin: 0.15rem 0.25rem 0.15rem 0; padding: 0.25rem 0.4rem; min-height: 1.8rem;
+      }
+      #library-search { width: 100%; box-sizing: border-box; background: #263341; color: #fff; border: 1px solid var(--studio-border); border-radius: 0.35rem; }
+      #library-results { list-style: none; margin: 0.4rem 0 0; padding: 0; max-height: 11rem; overflow-y: auto; border-top: 1px solid var(--studio-border); }
+      #library-results li { padding: 0.3rem 0.15rem; border-bottom: 1px solid rgb(255 255 255 / 8%); cursor: pointer; }
+      #library-results li:hover { background: rgb(255 255 255 / 6%); }
+      #library-results li[aria-current="true"] { color: var(--studio-accent); font-weight: 700; }
+      #library-results .unavailable { color: #8a97a5; font-style: italic; }
+      #library-status { color: #d7e3ef; min-height: 1.2em; margin-top: 0.2rem; }
+      #inspect-panel {
+        position: absolute; z-index: 4;
+        bottom: max(0.5rem, env(safe-area-inset-bottom));
+        right: max(0.5rem, env(safe-area-inset-right));
+        width: min(22rem, calc(100vw - 1rem));
+        max-height: 48%; overflow-y: auto;
+        padding: 0.55rem 0.7rem;
+        background: var(--studio-panel-strong); color: #fff;
+        border: 1px solid var(--studio-border); border-radius: 0.55rem;
+        font: 0.72rem/1.4 ui-monospace, monospace;
+      }
+      #inspect-panel[hidden] { display: none; }
+      #inspect-panel pre { white-space: pre-wrap; word-break: break-word; margin: 0.3rem 0 0; }
+
       @media (max-width: 900px) {
         #studio-panel { max-width: min(15rem, calc(100vw - 1rem)); font-size: 0.72rem; padding: 0.45rem 0.55rem; }
         #studio-panel select, #studio-panel button, #review-panel button { min-height: 2.2rem; }
@@ -144,7 +182,38 @@
           owner review
           <button id="review-open">review / annotate</button>
         </div>
+        <div class="row">
+          asset library
+          <button id="library-open">library / inspect</button>
+        </div>
       </div>
+
+      <section id="library-panel" hidden aria-label="Registry asset library">
+        <div class="row head">
+          <strong>Library</strong> — <span id="library-count">…</span>
+          <button id="library-close">close</button>
+        </div>
+        <input id="library-search" type="search" placeholder="search asset id, name, facet…">
+        <div class="row">
+          <select id="library-kind"><option value="">kind: all</option></select>
+          <select id="library-lifecycle"><option value="">lifecycle: all</option></select>
+        </div>
+        <div class="row">
+          <select id="library-custody"><option value="">custody: all</option></select>
+          <label><input id="library-loadable-only" type="checkbox"> loadable only</label>
+        </div>
+        <ul id="library-results"></ul>
+        <div id="library-status"></div>
+        <button id="library-clear">back to hero</button>
+      </section>
+
+      <section id="inspect-panel" hidden aria-label="Selected asset facts">
+        <div class="row head">
+          <strong>Inspect</strong>
+          <button id="inspect-close">close</button>
+        </div>
+        <pre id="inspect-facts">select an asset in the Library to inspect it.</pre>
+      </section>
 
       <section id="review-panel" hidden aria-label="Owner review annotation">
         <div class="row head">

@@ -153,6 +153,13 @@ function reviewContextSignature(state) {
     lightingMode: state.lightingMode,
     overlay: state.overlay,
     viewport: state.viewport,
+    // #92 STUDIO-V2A follow-up: the Library stage swaps the whole scene graph (hero hidden, a
+    // different asset framed) without touching any field above -- loadAsset()/clearLibraryAsset()
+    // change neither loadout nor view. Without this, a Library load while Review Mode is open left
+    // `contextInvalid` false, so an exported packet could carry a fresh canvas image of the newly
+    // loaded asset bound to a `frozenState` still describing the previous one (or the hero).
+    libraryAsset: state.libraryAsset,
+    libraryLoaded: state.libraryLoadResult?.loaded ?? null,
   });
 }
 

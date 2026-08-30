@@ -272,6 +272,34 @@ check('Closing Review Mode restores normal Studio controls',
   closed.active === false && closed.panelHidden === true && closed.openDisabled === false && closed.reviewClass === false,
   JSON.stringify(closed));
 
+// review-B finding 1: loading a Library asset while Review Mode is open swaps the whole scene graph
+// (hero hidden, an unrelated asset framed) without touching loadout/clip/view/lighting/overlay/
+// viewport -- reviewContextSignature must explicitly track libraryAsset or this goes unnoticed and
+// an exported packet's PNG (a fresh capture) can show a different asset than its own frozenState.
+await page.eval(`window.__galaQuestReview.open()`);
+const reopened = await page.eval(`({ active: window.__galaQuestReview.getState().active, invalid: window.__galaQuestReview.getState().contextInvalid })`);
+check('Review Mode reopens clean before the Library-load probe',
+  reopened.active === true && reopened.invalid === false, JSON.stringify(reopened));
+await page.eval(`window.__galaQuestStudio.loadAsset('prop.village.tree')`);
+await sleep(250);
+const afterLibraryLoad = await page.eval(`(async () => {
+  const state = window.__galaQuestReview.getState();
+  let error = null;
+  try {
+    await window.__galaQuestReview.buildPacket({ includeImage: false });
+  } catch (caught) {
+    error = caught.message;
+  }
+  return { contextInvalid: state.contextInvalid, error };
+})()`);
+check('Loading a Library asset while Review Mode is open invalidates the frozen context',
+  afterLibraryLoad.contextInvalid === true, JSON.stringify(afterLibraryLoad));
+check('Invalidated-by-Library-load review refuses export/build, same as a camera move',
+  /changed after Review Mode was opened/.test(afterLibraryLoad.error ?? ''), afterLibraryLoad.error ?? 'no error');
+await page.eval(`window.__galaQuestReview.close()`);
+await page.eval(`window.__galaQuestStudio.clearLibraryAsset()`);
+await sleep(200);
+
 // Landscape layout gets its own open context and screenshot. Reopening after the camera change must
 // clear the old marks rather than carrying a palm arrow into a new view.
 await page.send('Emulation.setDeviceMetricsOverride', LANDSCAPE_VIEWPORT);
