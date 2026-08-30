@@ -50,7 +50,11 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
   enemy drops under `world/`, wayfinding trail and directional arrow under `render/`;
 - `input/`, `ui/`, `audio/` — touch/keyboard input, HUD, sound;
 - `studio/`, `review/`, `debug/` — inspection surfaces (`public/studio.html`,
-  `public/forge.html`), not gameplay.
+  `public/forge.html`), not gameplay. Studio's Library/Inspect mode (`registryLibrary.js`,
+  `assetInspection.js`, `registryClient.js`) reads the canonical
+  `docs/asset-production/asset-registry-v1.json` live through the same-origin `net/registryApi.mjs`
+  route (`/api/asset-registry`) rather than a duplicated catalogue -- see that module's own header
+  for the truthful-loadability contract.
 
 Vendored libraries live in `public/vendor/`. Numeric character/gear authority, where applicable, is
 `docs/teardown/hero_contract.json`.
