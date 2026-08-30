@@ -46,11 +46,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { deadlineAfter } from './automation-timing.mjs';
+import { deadlineAfter, subjectLifetime } from './automation-timing.mjs';
 import { authoredWolfSource, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import { SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID } from '../../public/src/progression/items.js';
-import { CORPSE_LOOT_INTERACT_RADIUS_METERS } from '../../public/src/world/corpseLoot.js';
+import {
+  CORPSE_LOOT_EXPIRE_SECONDS, CORPSE_LOOT_INTERACT_RADIUS_METERS,
+} from '../../public/src/world/corpseLoot.js';
+import { RESPAWN_SECONDS } from '../../public/src/combat/encounter.js';
 import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 
@@ -62,6 +65,30 @@ const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-corpse-loot-')), '
 // built, so the last thing a child collected was the one thing that never confirmed). Driving both
 // through one real corpse is what makes this file able to catch that defect coming back.
 const FIXTURE_ITEM_IDS = [SHIELD_IRONWOOD_ID, SHOULDER_SILVERGUARD_ID];
+
+// WHAT EACH LOOT STEP IS ALLOWED TO SPEND OF THE CORPSE'S OWN LIFETIME, and why they are declared
+// together rather than typed at their call sites. Every budget in this file was already a wall-clock
+// deadline, and the file still went red hosted at a20fcd7 -- because the deadlines were sized against
+// each other instead of against the subject. One re-approach was allowed 60s of a claim that lives
+// CORPSE_LOOT_EXPIRE_SECONDS (180), so a run that used two of them had spent the corpse before it
+// ever tapped TAKE. Measured on that run: 188.6s from corpse to the tap, of which ~50s was a
+// knockdown poll waiting on a 2-second respawn, ~30s was three `for (i<25) { eval; sleep(200) }`
+// loops waiting on a ~1s round trip, and ~60s was a single recovery approach.
+//
+// Each number below is sized on what its step actually waits for, at the hosted cost of a CDP read
+// (measured ~400ms at a20fcd7 -- an observation costs a rendered FRAME, not a millisecond, which is
+// why an iteration-count loop is never a budget). They are then all clamped by subjectLifetime, so
+// the sum can never outlive the corpse no matter how the retries compose.
+const BODY_UP_BUDGET_MS = RESPAWN_SECONDS * 1000 + 4_000; // a 2s respawn, plus room for slow reads
+const APPROACH_BUDGET_MS = 20_000;      // a 6.7m walk was 16 rendered frames hosted
+const PANEL_STATE_BUDGET_MS = 6_000;    // a DOM flip on the frame after the click
+const WIRE_CONFIRM_BUDGET_MS = 6_000;   // client -> server -> next snapshot -> presenter's frame
+const RECEIPT_BUDGET_MS = 8_000;        // the same round trip, plus the toast/pulse it drives
+// What still has to happen after any approach: open the panel, take one item and see its receipt,
+// Take All and see its receipt, then the closing prompt/glow assertions. An approach may never spend
+// this, which is the exact mistake that produced the a20fcd7 red.
+const AFTER_APPROACH_RESERVE_MS = PANEL_STATE_BUDGET_MS
+  + 2 * (WIRE_CONFIRM_BUDGET_MS + RECEIPT_BUDGET_MS) + 20_000;
 const server = await startOwnedServer({
   rewardStorePath: REWARD_STORE_PATH,
   guaranteedCorpseItemIds: FIXTURE_ITEM_IDS,
@@ -180,10 +207,22 @@ await page.send('Runtime.enable');
 
 // play-fight.mjs's own convention, adopted here for the reason this file learned the hard way: it
 // passed locally five runs in a row and still went red hosted, because everything that broke it was
-// latency-shaped and a fast desktop hides that entirely. Setting GALAQUEST_CPU_THROTTLE=6 reproduces
-// something near the hosted judging regime on this machine, so a change to the fight or approach can
-// be measured against it BEFORE spending a CI cycle to find out. Unset (1x) in normal use and in CI --
-// the hosted runner supplies its own contention.
+// latency-shaped and a fast desktop hides that entirely. Unset (1x) in normal use and in CI -- the
+// hosted runner supplies its own contention.
+//
+// WHAT THIS KNOB IS NOT, corrected here because believing otherwise is what let the a20fcd7 defect
+// ship. This comment used to claim 6x "reproduces something near the hosted judging regime", and the
+// PR body reported "1x 24/24, 6x 24/24, 12x 24/24 (harsher than hosted)" as evidence. Measured on
+// 2026-08-30 against the hosted run that then failed: at 12x the whole post-corpse loot sequence
+// finished in 13.2s, and hosted the same sequence took 188.6s -- fourteen times longer. At 20x and
+// 40x the client cannot even boot inside 30s, a failure mode hosted has never shown (its boot took
+// 7s on the run whose fight then took 109s). There is no setting of this knob that produces the
+// hosted shape, because throttling scales the RENDERER while the server's own timers -- the corpse's
+// CORPSE_LOOT_EXPIRE_SECONDS, the wolf's respawn -- keep running at real wall-clock speed, and it
+// slows boot and fight uniformly where a contended runner does not. Use it to reproduce STARVATION
+// (a stationary hero whiffing on facing, an input pulse spanning no frame). Do not read a green run
+// at any multiplier as evidence about elapsed time. For that, read the claimAge this file now
+// prints at every phase.
 const CPU_THROTTLE = Number(process.env.GALAQUEST_CPU_THROTTLE ?? 1);
 if (CPU_THROTTLE > 1) {
   await page.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE });
@@ -305,6 +344,20 @@ if (booted) {
 
   let state = await fightState();
   let swings = 0;
+  // WHEN WAS THE CORPSE BORN? The harness cannot ask: ageSeconds is deliberately server-only
+  // bookkeeping and never rides the wire (net/protocolCore.js's own comment), and widening the wire
+  // to make a test's arithmetic easier would be changing the product for the instrument. So it has
+  // to be anchored on a structural event this file can actually observe -- and the obvious one,
+  // "when I first SAW the corpse", is the exact stopwatch error docs/MISTAKES.md GQ-021 records
+  // drive-lifecycle making (it timed a 10s respawn at 0.26s because the clock started when a poll
+  // NOTICED the corpse). This loop only reads every third swing, so the wolf can be dead for ~12
+  // hosted seconds before the harness knows.
+  //
+  // Anchor on the LAST READ THAT STILL SHOWED THE WOLF ALIVE instead. The corpse cannot possibly
+  // predate that instant, so every budget derived from it under-estimates the life remaining rather
+  // than over-estimating it -- the direction an instrument must err in when it is spending the
+  // subject it is measuring.
+  let wolfLastSeenAliveAt = Date.now();
   try {
     const killDeadline = deadlineAfter(180_000);
     while (Date.now() < killDeadline && state.wolf && state.wolf.hp > 0) {
@@ -313,7 +366,11 @@ if (booted) {
       await touch(page, 'touchEnd', [{ x: ATTACK_X, y: ATTACK_Y, id: 2 }]);
       swings += 1;
       await sleep(120);
-      if (swings % 3 === 0) state = await fightState();
+      if (swings % 3 === 0) {
+        const readAt = Date.now();
+        state = await fightState();
+        if (state.wolf && state.wolf.hp > 0) wolfLastSeenAliveAt = readAt;
+      }
     }
   } finally {
     await page.eval(STOP_WALK);
@@ -335,8 +392,14 @@ if (booted) {
     corpse = look.corpses.find((c) => c.claims.some((claim) => claim.heroId === look.selfId)) ?? null;
     if (!corpse) await sleep(250);
   }
+  // The corpse is now dying on the server's own clock. Every wait from here to the last assertion
+  // is spending it, so every wait is budgeted against it rather than against a constant.
+  const claimLife = subjectLifetime({
+    bornAtMillis: wolfLastSeenAliveAt, lifetimeSeconds: CORPSE_LOOT_EXPIRE_SECONDS,
+  });
+  const claimLeft = () => `claimAge=${claimLife.elapsedSeconds()}s of ${CORPSE_LOOT_EXPIRE_SECONDS}s`;
   check('a real corpse carrying THIS hero\'s own personal claim appeared after the kill',
-    corpse != null, corpse ? `corpse ${corpse.id}` : 'no corpse on the wire within 10s of the kill');
+    corpse != null, corpse ? `corpse ${corpse.id}, ${claimLeft()}` : 'no corpse on the wire within 10s of the kill');
 
   if (corpse) {
     const selfId = (await fightState()).selfId;
@@ -352,10 +415,22 @@ if (booted) {
     // down at the end of it, and a downed hero is reseated at HERO_SPAWN -- so walking "to the
     // corpse" while down either steers a body that ignores input or starts the walk from across the
     // map. This is setup, not leniency: the prompt assertion below is unchanged and still gates.
-    for (let i = 0; i < 60; i += 1) {
-      const live = await fightState();
-      if (live.heroDownSeconds <= 0 && (live.heroHp ?? 1) > 0) break;
-      await sleep(500);
+    // Budgeted on RESPAWN_SECONDS, the thing it is actually waiting for, and polled with a small
+    // eval rather than the whole fightState() blob. The old shape was `60 iterations of a large eval
+    // plus a 500ms sleep` -- an iteration count, not a budget, and hosted at ~400ms per CDP read
+    // that is up to 54 seconds spent on a 2-second respawn. It was the single largest consumer of
+    // the corpse's life in the a20fcd7 run.
+    const bodyUpDeadline = deadlineAfter(claimLife.budgetFor(BODY_UP_BUDGET_MS));
+    for (;;) {
+      const live = await page.eval(`(() => {
+        const r = window.__galaQuestRuntime;
+        const net = r.netState();
+        const me = net.selfId != null ? (r.authoritativeEncounterState()?.heroes ?? {})[net.selfId] : null;
+        return JSON.stringify({ down: me?.downSeconds ?? 0, hp: me?.hp ?? null });
+      })()`).then(JSON.parse);
+      if (live.down <= 0 && (live.hp ?? 1) > 0) break;
+      if (Date.now() >= bodyUpDeadline) break;
+      await sleep(200);
     }
 
     // RELEASE THE THUMB IN THE PAGE, and converge in passes.
@@ -388,8 +463,16 @@ if (booted) {
     // starts again underneath the open panel and can shove or knock the hero out of the ring
     // mid-loot. The server then refuses the collect on reach and says nothing about it
     // (gameServerCore's own `if (!accepted) return;`), which presents as a tap that did nothing.
+    // BUDGETED AGAINST THE CORPSE, NOT AGAINST ITSELF. This used to carry a flat 60-second deadline,
+    // and it is called from the prompt loop, the panel-open loop and every collect retry -- so two
+    // unlucky invocations could spend two thirds of a claim that only lives 180 seconds. That is
+    // exactly what happened at a20fcd7. It now takes what a real approach costs (a 6.7m walk was 16
+    // rendered frames hosted), clamped by what the corpse has left, and reserving the time the
+    // panel/collect/receipt steps after it still need.
     const approachCorpse = async (withinMetres) => {
-      const approachDeadline = deadlineAfter(60_000);
+      const approachDeadline = deadlineAfter(claimLife.budgetFor(
+        APPROACH_BUDGET_MS, { reserveMillis: AFTER_APPROACH_RESERVE_MS },
+      ));
       for (let pass = 0; pass < 8; pass += 1) {
         if (await renderedGapNow() <= withinMetres) return true;
         if (Date.now() >= approachDeadline) return false;
@@ -397,7 +480,9 @@ if (booted) {
         await touch(page, 'touchStart', [stickDown]);
         await touch(page, 'touchMove', [stickPush]);
         try {
-          const passDeadline = deadlineAfter(20_000);
+          // Never past the loop's own budget: a pass that outlives its deadline puts the whole
+          // clamp back where it started.
+          const passDeadline = Math.min(deadlineAfter(20_000), approachDeadline);
           for (;;) {
             walkReport = await page.eval(READ_WALK).then((raw) => JSON.parse(raw ?? 'null'));
             if (walkReport?.arrived || Date.now() >= passDeadline) break;
@@ -443,7 +528,8 @@ if (booted) {
     const serverGap = approach.server
       ? Math.hypot(approach.server[0] - corpse.x, approach.server[1] - corpse.z) : Infinity;
     const approachDetail = `renderedGap=${renderedGap.toFixed(2)}m serverGap=${serverGap.toFixed(2)}m `
-      + `of ${CORPSE_LOOT_INTERACT_RADIUS_METERS}m, corpse=(${corpse.x.toFixed(2)}, ${corpse.z.toFixed(2)}), `
+      + `of ${CORPSE_LOOT_INTERACT_RADIUS_METERS}m, ${claimLeft()}, `
+      + `corpse=(${corpse.x.toFixed(2)}, ${corpse.z.toFixed(2)}), `
       + `${JSON.stringify(approach)} walk=${JSON.stringify(walkReport)}`;
     check('the hero really walked inside the corpse\'s own interact radius, measured on the '
       + 'RENDERED position the prompt rule itself reads',
@@ -543,15 +629,19 @@ if (booted) {
         await touch(page, 'touchStart', [point]);
         await sleep(80);
         await touch(page, 'touchEnd', []);
-        for (let i = 0; i < 25 && !panelOpen; i += 1) {
+        // Deadline, not an iteration count. `25 iterations of an eval plus a 200ms sleep` reads as
+        // 5 seconds and cost 15 hosted, for a DOM flip that lands on the frame after the click.
+        const openDeadline = deadlineAfter(claimLife.budgetFor(PANEL_STATE_BUDGET_MS));
+        while (!panelOpen) {
           panelOpen = await page.eval(
             "document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
           );
-          if (!panelOpen) await sleep(200);
+          if (panelOpen || Date.now() >= openDeadline) break;
+          await sleep(120);
         }
       }
       check('C: tapping Loot by real touch (no hover anywhere) opened the corpse loot panel',
-        panelOpen, `attempts=${openAttempts}`);
+        panelOpen, `attempts=${openAttempts}, ${claimLeft()}`);
       await shot(page, 'corpse-loot-panel-open.png');
 
       if (panelOpen) {
@@ -650,19 +740,37 @@ if (booted) {
         // Poll for a real acquisition receipt: a toast ARRIVAL plus the Hero-button pulse. This is a
         // genuine network round trip (collect -> server grants -> next snapshot -> presenter diffs
         // it), never an optimistic local flip, so it legitimately takes a couple of 100ms ticks.
+        // Deadline, not `60 iterations of two evals and a 100ms sleep`. That reads as six seconds
+        // and cost 61.5s hosted at a20fcd7, then 61.2s again for Take All -- two minutes of a
+        // five-minute job spent confirming receipts for collects that had already failed, which is
+        // why the run's real cause was buried under six cascading reds. The observers are
+        // MutationObservers recording into the page, so nothing is missed by reading them less
+        // often; only the waiting is shortened.
         const awaitReceipt = async (toastsBefore, pulsesBefore) => {
           let sawToast = false;
           let sawPulse = false;
-          for (let i = 0; i < 60 && !(sawToast && sawPulse); i += 1) {
-            if (!sawToast) sawToast = await page.eval(`window.__corpseToasts.length > ${toastsBefore}`);
-            if (!sawPulse) sawPulse = await page.eval(`window.__corpsePulses > ${pulsesBefore}`);
-            await sleep(100);
+          const receiptDeadline = deadlineAfter(claimLife.budgetFor(RECEIPT_BUDGET_MS));
+          for (;;) {
+            const seen = await page.eval(
+              `JSON.stringify([window.__corpseToasts.length > ${toastsBefore},`
+              + ` window.__corpsePulses > ${pulsesBefore}])`,
+            ).then(JSON.parse);
+            sawToast ||= seen[0];
+            sawPulse ||= seen[1];
+            if ((sawToast && sawPulse) || Date.now() >= receiptDeadline) break;
+            await sleep(120);
           }
           return { sawToast, sawPulse };
         };
 
         // Read this hero's own claim off the SERVER snapshot -- the only authority on whether a
-        // collect actually happened. Keep corpse/claim presence separate from the item count: the
+        // collect actually happened. serverGap rides along because it is the exact quantity
+        // world/corpseLoot.js's requestClaimCorpseItem tests before it refuses, and
+        // net/gameServerCore.mjs answers a refusal with a bare `if (!accepted) return;` -- silently.
+        // A click that landed while the hero was out of reach is therefore a request that was
+        // already rejected before the confirmation poll below even began, so waiting out that
+        // poll's whole budget only spends the corpse. Reading the gap here is what lets the retry
+        // re-approach immediately instead. Keep corpse/claim presence separate from the item count: the
         // old numeric sentinel (-1) accidentally made an expired corpse satisfy "less than 2" and
         // falsely reported a collection after the panel had already disappeared.
         const claimOnWire = () => page.eval(`(() => {
@@ -671,10 +779,12 @@ if (booted) {
           const enc = r.authoritativeEncounterState();
           const mine = (enc?.corpses ?? []).find((c) => c.id === ${JSON.stringify(corpse.id)}) ?? null;
           const claim = mine?.claims?.find((c) => c.heroId === net.selfId) ?? null;
+          const p = net.serverSelf;
           return JSON.stringify({
             corpsePresent: Boolean(mine),
             claimPresent: Boolean(claim),
             untaken: claim ? claim.items.filter((i) => !i.taken).length : null,
+            serverGap: p ? +Math.hypot(p.x - ${corpse.x}, p.z - ${corpse.z}).toFixed(2) : null,
           });
         })()`).then(JSON.parse);
 
@@ -692,18 +802,38 @@ if (booted) {
             if (!last.found || !last.hitIsTarget || !last.clickLanded) {
               return { ...last, collected: false, attempts: attempt + 1 };
             }
-            for (let i = 0; i < 25; i += 1) {
+            // Deadline-bounded, and abandoned the moment the server's own reach rule says the
+            // request it is waiting on was already refused. The old shape polled a fixed 25 times
+            // whatever happened, which hosted was ~15 seconds of waiting for a confirmation that was
+            // never coming -- and then handed what was left of the corpse to a 60-second re-approach.
+            const confirmDeadline = deadlineAfter(claimLife.budgetFor(WIRE_CONFIRM_BUDGET_MS));
+            let outOfReach = false;
+            for (;;) {
               const wire = await claimOnWire();
               if (!wire.corpsePresent || !wire.claimPresent) {
-                return { ...last, collected: false, expired: true, wire, attempts: attempt + 1 };
+                return {
+                  ...last, collected: false, expired: true, wire, attempts: attempt + 1,
+                  claimAgeSeconds: claimLife.elapsedSeconds(),
+                };
               }
               if (wire.untaken < expectUntakenBelow) {
-                return { ...last, collected: true, wire, attempts: attempt + 1 };
+                return {
+                  ...last, collected: true, wire, attempts: attempt + 1,
+                  claimAgeSeconds: claimLife.elapsedSeconds(),
+                };
               }
-              await sleep(200);
+              if (wire.serverGap != null && wire.serverGap > CORPSE_LOOT_INTERACT_RADIUS_METERS) {
+                outOfReach = true;
+                break;
+              }
+              if (Date.now() >= confirmDeadline) break;
+              await sleep(120);
             }
+            if (!outOfReach && claimLife.expired()) break;
           }
-          return { ...last, collected: false, attempts: 3 };
+          return {
+            ...last, collected: false, attempts: 3, claimAgeSeconds: claimLife.elapsedSeconds(),
+          };
         };
 
         // ── D/E/F/G: ONE item, individually, through the real client -> server -> snapshot path ────
@@ -783,6 +913,19 @@ if (booted) {
         check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
       }
     }
+
+    // THE CHECK THAT WOULD HAVE NAMED THE a20fcd7 FAILURE IN ONE LINE. That run cascaded six reds --
+    // TAKE hit the canvas, no toast, no pulse, rows unchanged, Take All the same, panel never
+    // confirmed -- and every one of them was a true statement about a corpse that had already
+    // expired 8.6 seconds earlier. Three separate hosted cycles were spent reading that cascade as
+    // an interaction bug (an intercepting overlay, a stale prompt precondition, an unseeded roll)
+    // because no number in the output said how much of the subject was left. An instrument that
+    // consumes the thing it is measuring has to report that it did.
+    check('the harness drove the whole loot sequence inside the corpse lifetime it was measuring '
+      + '(a red here means the instrument outlived its subject, not that the game is broken)',
+      !claimLife.expired(),
+      `${claimLeft()}; every loot assertion above is only meaningful while this is under `
+      + `${CORPSE_LOOT_EXPIRE_SECONDS}s`);
   }
 
   await shot(page, 'corpse-loot-final.png');
