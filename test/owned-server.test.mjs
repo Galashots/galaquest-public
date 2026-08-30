@@ -7,9 +7,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer as createProbeServer } from 'node:net';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { startOwnedServer } from '../tools/runtime-test/owned-server.mjs';
 
 // data/README.md: "Tests must never open a store at a path under `data/`." startOwnedServer still
@@ -21,6 +21,7 @@ import { startOwnedServer } from '../tools/runtime-test/owned-server.mjs';
 // store at an OS-temp path costs the tests nothing and removes them from the family save path.
 const storeDir = mkdtempSync(join(tmpdir(), 'galaquest-owned-server-'));
 const isolatedStore = () => join(storeDir, 'rewards.db');
+const repoDataDir = resolve(import.meta.dirname, '../data');
 
 // Best-effort. On Windows the just-killed child can still hold the file briefly, and a failed
 // cleanup of an OS-temp directory must never fail a test about process lifecycle -- that is exactly
@@ -38,6 +39,19 @@ function portFree(port) {
   });
 }
 
+const rewardArtifactsInRepoData = () => readdirSync(repoDataDir)
+  .filter((name) => name === 'rewards.db' || /^backup-.*\.db$/.test(name))
+  .sort()
+  .map((name) => {
+    const stat = statSync(join(repoDataDir, name));
+    return { name, size: stat.size, mtimeMs: stat.mtimeMs };
+  });
+
+const outsideRepoData = (path) => {
+  const pathFromData = relative(repoDataDir, path);
+  return pathFromData.startsWith('..') || isAbsolute(pathFromData);
+};
+
 test('kill() terminates the real owned child and the port is independently confirmed free afterward', async () => {
   const server = await startOwnedServer({ quiet: true, rewardStorePath: isolatedStore() });
   assert.equal(await portFree(server.port), false, 'the server should genuinely be listening before kill()');
@@ -46,6 +60,35 @@ test('kill() terminates the real owned child and the port is independently confi
 
   assert.equal(result, true, 'kill() should report a trustworthy true, not just "an exit event fired"');
   assert.equal(await portFree(server.port), true, 'the port must be independently verified free, not merely assumed');
+});
+
+test('default owned servers receive unique OS-temp reward stores and leave repository data untouched', async () => {
+  const beforeArtifacts = rewardArtifactsInRepoData();
+  const first = await startOwnedServer({ quiet: true });
+  const second = await startOwnedServer({ quiet: true });
+  try {
+    assert.equal(first.rewardStore.kind, 'temporary');
+    assert.equal(second.rewardStore.kind, 'temporary');
+    assert.notEqual(first.rewardStore.rewardStorePath, second.rewardStore.rewardStorePath);
+    assert.equal(outsideRepoData(first.rewardStore.rewardStorePath), true);
+    assert.equal(outsideRepoData(second.rewardStore.rewardStorePath), true);
+  } finally {
+    await first.kill();
+    await second.kill();
+  }
+  assert.deepEqual(rewardArtifactsInRepoData(), beforeArtifacts);
+});
+
+test('an explicit reward-store path remains available without opting into the family store', async () => {
+  const beforeArtifacts = rewardArtifactsInRepoData();
+  const rewardStorePath = isolatedStore();
+  const server = await startOwnedServer({ quiet: true, rewardStorePath });
+  try {
+    assert.deepEqual(server.rewardStore, { kind: 'explicit', rewardStorePath });
+  } finally {
+    await server.kill();
+  }
+  assert.deepEqual(rewardArtifactsInRepoData(), beforeArtifacts);
 });
 
 test('kill() is idempotent -- calling it a second time after the child already exited still confirms free and does not throw', async () => {
