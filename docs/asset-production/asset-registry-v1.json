@@ -9362,7 +9362,8 @@
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
       "facets": [
-        "meshy"
+        "meshy",
+        "shield"
       ],
       "next_action": "OWNER_REVIEW",
       "aliases": [
@@ -9477,7 +9478,8 @@
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
       "facets": [
-        "meshy"
+        "meshy",
+        "shield"
       ],
       "next_action": "OWNER_REVIEW",
       "aliases": [
@@ -9592,7 +9594,8 @@
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
       "facets": [
-        "meshy"
+        "meshy",
+        "shield"
       ],
       "next_action": "OWNER_REVIEW",
       "aliases": [
@@ -9707,7 +9710,8 @@
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
       "facets": [
-        "meshy"
+        "meshy",
+        "sword"
       ],
       "next_action": "OWNER_REVIEW",
       "aliases": [
@@ -9822,7 +9826,8 @@
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
       "facets": [
-        "meshy"
+        "meshy",
+        "sword"
       ],
       "next_action": "OWNER_REVIEW",
       "aliases": [
@@ -9937,7 +9942,8 @@
       "asset_kind": "gear",
       "lifecycle": "GENERATED",
       "facets": [
-        "meshy"
+        "meshy",
+        "sword"
       ],
       "next_action": "OWNER_REVIEW",
       "aliases": [

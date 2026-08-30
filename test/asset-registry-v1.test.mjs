@@ -49,7 +49,13 @@ test('semantic facets and next actions are deterministic facts, not duplicate st
   const mystery = registry.records.find((record) => record.asset_id === 'intake.20260829.0829150207');
   assert.equal(mystery.next_action, 'OWNER_REVIEW');
   assert.equal(mystery.qualification_gates.visual.status, 'UNKNOWN');
-  assert.deepEqual(mystery.facets, ['meshy']);
+  // Its observed visual class (a shield) is a recorded fact, so it is filterable.
+  // Its theme/area is still genuinely unknown, so no theme facet may appear and
+  // the visual gate above stays UNKNOWN pending an Owner look at the real game.
+  assert.deepEqual(mystery.facets, ['meshy', 'shield']);
+  for (const themeFacet of ['beacon', 'village', 'forest', 'wildwood']) {
+    assert.equal(mystery.facets.includes(themeFacet), false, `unresolved intake must not acquire the ${themeFacet} theme`);
+  }
   assert.ok(registry.records.find((record) => record.asset_id === 'frostbound-warden-v1').facets.includes('enemy'));
   assert.equal(registry.records.find((record) => record.asset_id === 'prop.thornwood-tangle-intake-v1').facets.includes('beacon'), false);
   assert.equal(registry.records.find((record) => record.asset_id === 'prop.maplewood-lantern-intake-v1').facets.includes('village'), false);
@@ -175,4 +181,14 @@ test('authority remains secret-free and Package B interface-only', () => {
   assert.equal(registry.historical_sources.some((source) => source.path.endsWith('asset-registry-v1.evidence.json')), true);
   assert.equal(registry.animation_lab_interface.consumer, 'Package B Animation Lab v1');
   assert.deepEqual(registry.animation_lab_interface.exclusions, ['authoring implementation', 'retarget promotion', 'runtime integration']);
+});
+
+test('every intake asset is filterable by something other than where it came from', () => {
+  const sourceFamilyFacets = new Set(['meshy']);
+  const intakeRecords = registry.records.filter((record) => record.source.authority === 'drive-intake-2026-08-29');
+  assert.equal(intakeRecords.length, 12);
+  for (const record of intakeRecords) {
+    const semantic = record.facets.filter((facet) => !sourceFamilyFacets.has(facet));
+    assert.ok(semantic.length > 0, `${record.asset_id} carries only source-family facets (${record.facets.join(', ')}); a bank filtered only by provider is not filterable`);
+  }
 });
