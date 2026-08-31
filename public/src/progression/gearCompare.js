@@ -218,20 +218,39 @@ export function gearComparison({ candidateItemId, equippedItemIds = {}, stats = 
  * to the stat rows alone -- and says SIDEGRADE, not UPGRADE, when they disagree with each other.
  * Refusing to promise "better" on incomplete information is the conservative direction, and it is
  * the direction the contract points.
+ *
+ * ── `isEquipped` IS THE ONLY THING THAT MAKES AN ITEM "WORN" ───────────────────────────────────
+ *
+ * Corrected after an exact-head Production Director review of 4741aec. The first draft of this
+ * function used VERDICT_EQUIPPED as its "nothing to say" answer, and reached it two ways that have
+ * nothing to do with being equipped: POWER flat with no row moving, and no rows at all. Both are
+ * satisfiable by an item the hero is demonstrably NOT wearing -- a cosmetic variant, a reskin, a
+ * second piece with identical numbers -- and the card would then print WEARING IT over an item
+ * sitting in the bag. That is not a mislabelled comparison, it is a false statement about what the
+ * child has on.
+ *
+ * Latent with today's catalogue, which is exactly why it was worth fixing now: this package is
+ * establishing the four-valued contract every future gear item will be read through, and "equal
+ * numbers" must never be allowed to imply "same item". Identity comes from `isEquipped` and from
+ * nowhere else; a distinct candidate that changes nothing measurable is a SIDEGRADE -- genuinely
+ * different, no better and no worse -- which is the honest thing to say about a reskin.
  */
 export function gearVerdict({ isEquipped = false, rows = [], power = null } = {}) {
+  // The ONLY route to VERDICT_EQUIPPED. Everything below this line is about an item the hero is not
+  // wearing, so none of it may return that verdict however little the numbers move.
   if (isEquipped) return VERDICT_EQUIPPED;
   if (power !== null) {
     if (power.delta > 0) return VERDICT_UPGRADE;
     if (power.delta < 0) return VERDICT_DOWNGRADE;
-    return rows.some((row) => row.direction !== 'same') ? VERDICT_SIDEGRADE : VERDICT_EQUIPPED;
+    return VERDICT_SIDEGRADE;
   }
   const up = rows.some((row) => row.direction === 'up');
   const down = rows.some((row) => row.direction === 'down');
   if (up && !down) return VERDICT_UPGRADE;
   if (down && !up) return VERDICT_DOWNGRADE;
-  if (up && down) return VERDICT_SIDEGRADE;
-  return VERDICT_EQUIPPED;
+  // Nothing moved, and this item is not the worn one -- a distinct piece with identical numbers.
+  // SIDEGRADE, never EQUIPPED: see the identity note above.
+  return VERDICT_SIDEGRADE;
 }
 
 /**

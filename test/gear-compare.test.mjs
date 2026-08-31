@@ -169,6 +169,47 @@ test('an unequipped item whose stats match the worn one exactly is not sold as a
   assert.equal(same.verdict, VERDICT_EQUIPPED, 'the worn item is not an upgrade over itself');
 });
 
+test('IDENTITY: a distinct item with identical numbers is never labelled WEARING IT', () => {
+  // Found by an exact-head Production Director review of 4741aec, and red against the first draft of
+  // gearVerdict, which used VERDICT_EQUIPPED as its "nothing to say" answer and reached it two ways
+  // that have nothing to do with being equipped.
+  //
+  // The failure this prevents is not a mislabelled comparison, it is a FALSE STATEMENT: the card
+  // would print "WEARING IT" over an item sitting in the bag. Being worn is `isEquipped` and nothing
+  // else -- equal numbers must never be allowed to imply the same item.
+  const unchangedRows = [
+    { key: 'damage', direction: 'same', delta: 0 },
+    { key: 'damageReductionPercent', direction: 'same', delta: 0 },
+  ];
+
+  assert.equal(
+    gearVerdict({ isEquipped: false, rows: unchangedRows, power: { before: 1000, after: 1000, delta: 0 } }),
+    VERDICT_SIDEGRADE,
+    'a not-worn item with flat POWER and flat rows is a sidegrade, not the item you are wearing',
+  );
+  assert.equal(
+    gearVerdict({ isEquipped: false, rows: [], power: { before: 1000, after: 1000, delta: 0 } }),
+    VERDICT_SIDEGRADE,
+    'no rows at all is still not a reason to claim the hero is wearing it',
+  );
+  assert.equal(
+    gearVerdict({ isEquipped: false, rows: unchangedRows, power: null }),
+    VERDICT_SIDEGRADE,
+    'and with no hero to compare against, the answer is still not WEARING IT',
+  );
+  assert.equal(gearVerdict({ isEquipped: false, rows: [], power: null }), VERDICT_SIDEGRADE);
+
+  // The one and only route to EQUIPPED.
+  assert.equal(
+    gearVerdict({ isEquipped: true, rows: [], power: { before: 1000, after: 1000, delta: 0 } }),
+    VERDICT_EQUIPPED,
+  );
+  assert.equal(
+    gearVerdict({ isEquipped: true, rows: unchangedRows, power: null }),
+    VERDICT_EQUIPPED,
+  );
+});
+
 test('the item already worn reads WEARING IT and offers no stat arrows', () => {
   const stats = statsFor(STARTER_LOADOUT);
   const compare = gearComparison({
