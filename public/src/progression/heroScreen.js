@@ -53,6 +53,9 @@ import { itemIconSvgFor, itemIconUrlFor, rarityFor, rarityLabelFor, rarityRankFo
 // and decides none of it -- see that file's header for why a verdict a child reads as "yes, put it
 // on" belongs somewhere `node --test` can interrogate.
 import { gearComparison } from './gearCompare.js';
+// The one piece of DOM that draws an item's picture, shared with the acquisition ceremony and the
+// corpse-loot receipt. See ui/itemArtView.js for why it is not three copies.
+import { clearItemArt, paintItemArt } from '../ui/itemArtView.js';
 // A plain numeric hex constant, not a three.js Color or a DOM value -- safe to import into a
 // browser-only UI module with zero new coupling. Reusing it (rather than a second guess at "what
 // colour is the Wildwood Blade") is what keeps the accent agreeing with the planted prop a child
@@ -264,34 +267,6 @@ export function heroScreenViewModel({
 
 // ── THE DOM HALF ────────────────────────────────────────────────────────────────────────────────
 
-/** An <img> for a rendered portrait with the inline silhouette behind it, so a missing or
- *  slow-loading PNG degrades to a readable shape rather than an empty frame. #88's final art arrives
- *  as a file drop at the same URL, which is why this is an <img src> and not an inlined asset. */
-function paintArt(host, { iconUrl, iconSvg }) {
-  if (host.dataset.artUrl === String(iconUrl) && host.dataset.artPainted === 'true') return;
-  host.dataset.artUrl = String(iconUrl);
-  host.dataset.artPainted = 'true';
-  host.innerHTML = '';
-  const fallback = document.createElement('span');
-  fallback.className = 'item-art-fallback';
-  fallback.setAttribute('aria-hidden', 'true');
-  fallback.innerHTML = iconSvg ?? '';
-  host.appendChild(fallback);
-  if (!iconUrl) return;
-  const img = document.createElement('img');
-  img.className = 'item-art-image';
-  img.alt = '';
-  img.decoding = 'async';
-  img.loading = 'eager';
-  // The fallback is hidden only once the real portrait has actually decoded. Hiding it up front
-  // would leave an empty square for as long as the PNG takes, and an empty square is the exact
-  // Checkpoint 0 failure this whole package is about.
-  img.addEventListener('load', () => { fallback.hidden = true; });
-  img.addEventListener('error', () => { img.remove(); });
-  img.src = iconUrl;
-  host.appendChild(img);
-}
-
 /**
  * Queries its elements once from `root`, wires clicks straight to the callbacks it is given, and
  * exposes render()/open()/close()/isOpen().
@@ -367,12 +342,8 @@ export function createHeroScreen(options = {}) {
       el.style.setProperty('--slot-swatch', slot.swatch ?? 'transparent');
       const art = el.querySelector('.hero-slot-art');
       if (art) {
-        if (slot.filled) paintArt(art, slot);
-        else if (art.dataset.artPainted === 'true') {
-          art.innerHTML = '';
-          art.dataset.artPainted = 'false';
-          art.dataset.artUrl = '';
-        }
+        if (slot.filled) paintItemArt(art, slot);
+        else clearItemArt(art);
       }
       const nameSpan = el.querySelector('.hero-slot-name');
       // Filled -> the worn item's name; unlocked-but-empty -> the slot's own label (an empty
@@ -436,7 +407,7 @@ export function createHeroScreen(options = {}) {
         `${item.name}, ${item.rarityLabel}, ${itemAriaStat(item)}`
         + `${item.equipped ? ', equipped' : ''}${item.armed ? ', tap again to equip' : ''}`,
       );
-      paintArt(el.querySelector('.hero-item-art'), item);
+      paintItemArt(el.querySelector('.hero-item-art'), item);
       el.querySelector('.hero-item-label').textContent = item.name;
       el.querySelector('.hero-item-tag').textContent = item.equipped ? 'WORN' : '';
     }
@@ -473,7 +444,7 @@ export function createHeroScreen(options = {}) {
     cardEl.dataset.armed = String(!compare.isEquipped);
     cardEl.style.setProperty('--slot-swatch', swatchFor(compare.candidate.id));
 
-    paintArt(cardArtEl, compare.candidate);
+    paintItemArt(cardArtEl, compare.candidate);
     nameEl.textContent = compare.candidate.name;
     rarityEl.textContent = compare.candidate.rarityLabel;
     // The verdict as a WORD, not only as the attribute the stylesheet colours from. "Is this better"
@@ -502,7 +473,13 @@ export function createHeroScreen(options = {}) {
     // THE SENTENCE THAT MAKES THE GESTURE DISCOVERABLE. A two-tap interaction nobody is told about
     // is a two-tap interaction nobody performs -- and a child who cannot read still learns it,
     // because the first tap visibly changes the card and this line changes with it.
-    actionEl.textContent = compare.isEquipped ? 'WEARING IT' : 'TAP AGAIN TO EQUIP';
+    //
+    // The worn case does NOT repeat "WEARING IT" here. That is what the verdict badge above already
+    // says, and a Checkpoint 1 player-fair capture showed the two of them within a couple of
+    // centimetres of each other -- the same statement twice, in the one place on the card whose job
+    // is to describe the next tap. So the worn case teaches the loop instead, which is the thing a
+    // child holding only their starting gear actually needs to know.
+    actionEl.textContent = compare.isEquipped ? 'TAP ANOTHER ITEM TO COMPARE' : 'TAP AGAIN TO EQUIP';
     actionEl.dataset.armed = String(!compare.isEquipped);
   }
 

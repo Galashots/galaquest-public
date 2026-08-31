@@ -267,7 +267,7 @@ import {
   strikeBarrier,
 } from './world/blackthornHollow.js';
 import { BOSS_BAR_SAFE_HEIGHT, BOSS_BAR_SAFE_WIDTH, bossBarState, createBossBar } from './ui/bossBar.js';
-import { HELMET_ICON_SVG, SHOULDER_ICON_SVG, createUnlockCard, unlockCardState } from './ui/unlockCard.js';
+import { createUnlockCard, unlockCardState } from './ui/unlockCard.js';
 import { SIEGE_EVENT_RECIPE_MAP, soundForSiegeEvent } from './audio/siegeRecipes.js';
 import { HELMET_SILVERGUARD_ID, HELMET_SLOT, WILDWOOD_BLADE_ID, damageFor, itemDef } from './progression/items.js';
 import { predictionStep } from './net/prediction.js';
@@ -4092,7 +4092,8 @@ async function bootstrap() {
         });
         unlockCard.show(acquired, {
           accent: swatchFor(HELMET_SILVERGUARD_ID),
-          icon: HELMET_ICON_SVG,
+          // The catalogued portrait, so this ceremony and the inventory show one item.
+          art: { iconUrl: itemIconUrlFor(HELMET_SILVERGUARD_ID), iconSvg: itemIconSvgFor(HELMET_SILVERGUARD_ID) },
           // The second beat, the child's to take. EQUIP NOW mints the same durable equip fact the
           // Hero screen would; LATER leaves it owned-but-off for the owned strip to equip later.
           onEquip: () => equipHeroItem(HELMET_SILVERGUARD_ID),
@@ -4125,7 +4126,8 @@ async function bootstrap() {
         });
         unlockCard.show(acquiredShoulders, {
           accent: swatchFor(SHOULDER_SILVERGUARD_ID),
-          icon: SHOULDER_ICON_SVG,
+          // The catalogued portrait, so this ceremony and the inventory show one item.
+          art: { iconUrl: itemIconUrlFor(SHOULDER_SILVERGUARD_ID), iconSvg: itemIconSvgFor(SHOULDER_SILVERGUARD_ID) },
           onEquip: () => equipHeroItem(SHOULDER_SILVERGUARD_ID),
         });
         speakKeeperLineIfUnlocked(acquiredShoulders.spoken);

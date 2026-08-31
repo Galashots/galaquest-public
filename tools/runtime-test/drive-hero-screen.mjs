@@ -514,11 +514,18 @@ check('#88: a real upgrade is labelled an upgrade', verdict === 'upgrade', Strin
 const portrait = await page.eval(
   "(() => { const img = document.querySelector('#hero-card-art .item-art-image');"
   + " return JSON.stringify({ present: !!img, src: img ? new URL(img.src).pathname : null,"
-  + ' loaded: img ? img.naturalWidth > 0 : false }); })()',
+  + " loaded: img ? img.naturalWidth > 0 : false,"
+  // The silhouette BEHIND the portrait must be hidden once the portrait is up. It is drawn in the
+  // rarity ink, so a fallback left lit tints the item -- which is #88's "rarity must not change the
+  // art" broken by a load-event race that only shows up on a repaint of a cached image. Asserted,
+  // because "the PNG loaded" and "the PNG is what you can see" are different claims.
+  + " fallbackHidden: document.querySelector('#hero-card-art .item-art-fallback')?.hidden === true }); })()",
 ).then(JSON.parse);
 check('#88: the comparison shows a real rendered item portrait, not a coloured square',
   portrait.present && portrait.loaded && portrait.src.endsWith(`${WILDWOOD_BLADE_ID}.png`),
   JSON.stringify(portrait));
+check('#88: and the rarity-tinted fallback silhouette is hidden behind it, not tinting the item',
+  portrait.fallbackHidden === true, JSON.stringify(portrait));
 
 const armedAction = await page.eval(
   "JSON.stringify({ text: document.querySelector('#hero-compare-action').textContent,"
@@ -594,8 +601,8 @@ const afterRepeatTaps = await heroRuntimeState();
 check('#88: repeatedly tapping the item you are already wearing never unequips it',
   afterRepeatTaps.equipped === WILDWOOD_BLADE_ID, JSON.stringify(afterRepeatTaps));
 const wornAction = await page.eval("document.querySelector('#hero-compare-action').textContent");
-check('#88: and the card says you are wearing it rather than offering the equip gesture again',
-  /WEARING/i.test(wornAction), String(wornAction));
+check('#88: and the card stops offering the equip gesture once the item is worn',
+  !/TAP AGAIN/i.test(wornAction) && /COMPARE/i.test(wornAction), String(wornAction));
 
 // A tap on the equipped SLOT is likewise inert. #88 allows an unequip, but only as "a separate
 // small deliberate action" -- so the big obvious slot must not be it.

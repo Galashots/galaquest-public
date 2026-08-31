@@ -18,6 +18,9 @@
 // header names an under-44 close button as the exact defect class it exists to catch.
 
 import { TAP_TARGET_FLOOR_PX } from './tapTargets.js';
+// The shared item-art painter -- see ui/itemArtView.js for why the three surfaces that draw an
+// item share one of these rather than each keeping their own.
+import { paintItemArt } from './itemArtView.js';
 
 const STYLE_ID = 'corpse-loot-panel-style';
 
@@ -88,6 +91,16 @@ export const CORPSE_LOOT_PANEL_CSS = `
       }
       .corpse-loot-item[data-taken="true"] { opacity: 0.45; }
       .corpse-loot-item-icon { font-size: 1.6rem; line-height: 1; width: 2rem; text-align: center; }
+      /* A row carrying a real portrait needs a box for it. Squared up and rarity-framed, so the
+         first sight of an item already reads as the same object the inventory will show. The frame
+         colours come from index.html's shared [data-rarity] rules -- this file styles the box, not
+         the palette, so a new tier never needs editing in two places. */
+      .corpse-loot-item-icon.item-art {
+        width: 2.6rem; height: 2.6rem; flex: 0 0 auto; border-radius: 0.4rem;
+        border: 2px solid var(--rarity-edge, rgb(255 255 255 / 22%));
+        background: radial-gradient(circle at 50% 40%, rgb(58 66 80 / 70%), rgb(16 20 27 / 92%));
+        box-shadow: 0 0 0.5rem var(--rarity-glow, transparent);
+      }
       .corpse-loot-item-body { flex: 1 1 auto; min-width: 0; }
       .corpse-loot-item-name {
         font: 800 0.95rem/1.2 system-ui, sans-serif; white-space: nowrap; overflow: hidden;
@@ -268,8 +281,16 @@ export function createCorpseLootPanel(doc, options = {}) {
 
       const icon = doc.createElement('span');
       icon.className = 'corpse-loot-item-icon';
-      icon.textContent = row.icon;
       icon.setAttribute('aria-hidden', 'true');
+      // #88: a real catalogued item shows its own portrait -- the same one the inventory and the
+      // acquisition ceremony draw -- and only a coin row or an unknown id falls back to the glyph.
+      if (row.art) {
+        icon.classList.add('item-art');
+        if (row.rarity) icon.dataset.rarity = row.rarity;
+        paintItemArt(icon, row.art);
+      } else {
+        icon.textContent = row.icon;
+      }
 
       const body = doc.createElement('div');
       body.className = 'corpse-loot-item-body';

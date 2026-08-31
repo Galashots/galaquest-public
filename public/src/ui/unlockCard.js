@@ -23,6 +23,11 @@ import { WILDWOOD_COLOR } from '../world/wildwoodBlade.js';
 // Imported as well as re-exported below: `export ... from` creates no local binding, and this
 // card's own default icon is a local use.
 import { SWORD_ICON_SVG } from '../progression/itemArt.js';
+// #88: the ceremony that HANDS a child an item must show the same picture the inventory will show
+// them ten seconds later. It used to draw its own crude silhouette while the Hero screen drew a
+// rendered portrait -- one item, two pictures, photographed side by side in a Checkpoint 2
+// player-fair session.
+import { paintItemArt } from './itemArtView.js';
 
 const WILDWOOD_CSS = `#${WILDWOOD_COLOR.toString(16).padStart(6, '0')}`;
 const WILDWOOD_R = (WILDWOOD_COLOR >> 16) & 0xff;
@@ -333,7 +338,7 @@ export function createUnlockCard(doc) {
   /**
    * show(state) -- announce and auto-dismiss (the weapon path, unchanged).
    * show(state, onDone) -- same, with a completion callback (onDone fires once, on any dismissal).
-   * show(state, { onDone, onEquip, accent, icon }) -- an OFFER: renders Equip/Later against
+   * show(state, { onDone, onEquip, accent, art, icon }) -- an OFFER: renders Equip/Later against
    *   state.prompt and does NOT auto-dismiss, because putting the item on is the child's beat to take.
    *   onEquip fires only when Equip is tapped; onDone fires on either choice. accent (a '#rrggbb' from
    *   heroScreen's swatch) and icon (an SVG string) restyle the card for this reward.
@@ -359,7 +364,20 @@ export function createUnlockCard(doc) {
       element.style.removeProperty('--burst');
       element.style.removeProperty('--burst-soft');
     }
-    iconEl.innerHTML = typeof options.icon === 'string' ? options.icon : SWORD_ICON_SVG;
+    // `art` is the rendered-portrait route (progression/itemArt.js's own row, handed in by main.js)
+    // and is preferred; `icon` remains the raw-SVG route for a caller that has no catalogued item to
+    // point at. Both still exist because they answer different questions -- an unlock ceremony for a
+    // non-item reward has a silhouette and no portrait -- but a real item must take the first.
+    if (options.art) {
+      // The art host is reused across shows, so its idempotence key has to be reset or a second
+      // reward would keep the first one's picture.
+      iconEl.dataset.artPainted = 'false';
+      paintItemArt(iconEl, options.art);
+    } else {
+      iconEl.dataset.artPainted = 'false';
+      iconEl.dataset.artUrl = '';
+      iconEl.innerHTML = typeof options.icon === 'string' ? options.icon : SWORD_ICON_SVG;
+    }
 
     eyebrowEl.textContent = state.eyebrow;
     nameEl.textContent = state.name;
