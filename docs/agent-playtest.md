@@ -113,6 +113,10 @@ Three constraints worth knowing about:
   silent agent cannot outlive its session. Completion, stream closure, timeout, exception, and a
   handled interrupt each produce one authoritative session end and run the same idempotent tab/server
   cleanup path.
+- **Enemy visibility.** An enemy is reported only from its visibly rendered nameplate card, never by
+  projecting the underlying encounter snapshot. A missing label therefore fails closed as absent;
+  its on-screen name and position can be reported, but its world position, health, and id stay
+  private. Literal on-screen card text remains in `read`, not structured enemy state.
 
 ## Oracles
 

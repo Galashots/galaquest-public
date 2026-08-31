@@ -409,10 +409,24 @@ let lastActionAt = 0;
 async function nextLineBeforeDeadline() {
   const remaining = deadline - Date.now();
   if (remaining <= 0) return { deadline: true };
-  return Promise.race([
-    lines.next().then((next) => ({ next })),
-    sleep(remaining).then(() => ({ deadline: true })),
-  ]);
+  // A deadline timer is a resource too. Leaving the loser of this race alive made a successful
+  // `done` (or closed stdin) keep Node running until the full requested session time elapsed.
+  let cancelDeadline = () => {};
+  const deadlineWait = new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ deadline: true }), remaining);
+    cancelDeadline = () => {
+      clearTimeout(timer);
+      resolve({ cancelled: true });
+    };
+  });
+  try {
+    return await Promise.race([
+      lines.next().then((next) => ({ next })),
+      deadlineWait,
+    ]);
+  } finally {
+    cancelDeadline();
+  }
 }
 
 /** Two views are "the same" to a player if the same things are on screen and the same words are

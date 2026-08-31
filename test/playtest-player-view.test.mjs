@@ -49,7 +49,7 @@ test('distanceBucket never hands back a number to do arithmetic with', () => {
  *  failure with a name on it rather than a silently different answer. */
 function makeContext({
   enemies = [], drops = [], hero = { hp: 100, maxHp: 100 }, texts = [],
-  sceneNodes = [], questMarker = false, projectY = () => 0.5,
+  sceneNodes = [], enemyNameplates = [], questMarker = false, projectY = () => 0.5,
 } = {}) {
   const trap = (name) => () => { throw new Error(`player view reached privileged accessor: ${name}`); };
 
@@ -75,6 +75,17 @@ function makeContext({
       getBoundingClientRect: () => box,
     };
   };
+  const enemyNameplate = (spec) => {
+    const {
+      name = 'Wolf', visible = true,
+      box = { width: 84, height: 48, top: 120, left: 320, bottom: 168, right: 404 },
+    } = spec;
+    return {
+      checkVisibility: () => visible,
+      getBoundingClientRect: () => box,
+      querySelector: (selector) => selector === '.enemy-nameplate-name' ? { textContent: name } : null,
+    };
+  };
 
   const runtime = {
     hero: {},
@@ -97,7 +108,11 @@ function makeContext({
 
   const context = {
     window: { __galaQuestRuntime: runtime, innerWidth: 768, innerHeight: 1024, __gqSpoken: [], __gqSpokenSeen: 0 },
-    document: { body: { querySelectorAll: () => texts.map(element) } },
+    document: {
+      querySelectorAll: (selector) => selector === '.enemy-nameplate'
+        ? enemyNameplates.map(enemyNameplate) : [],
+      body: { querySelectorAll: () => texts.map(element) },
+    },
     getComputedStyle: () => ({ position: 'static', visibility: 'visible', display: 'block', opacity: '1' }),
   };
   context.globalThis = context;
@@ -118,17 +133,19 @@ test('the view exposes exactly the player-fair keys and no others', () => {
   );
 });
 
-test('an enemy on screen arrives as a kind, a screen position and a bucket — never its stats', () => {
+test('a visible enemy nameplate arrives as player-rendered kind and screen position — never its stats', () => {
   const view = viewFrom({
     enemies: [{
       kind: 'wolf', x: 4, z: 1, hp: 3, maxHp: 40,
       leashRadius: 12, patrol: [{ x: 0, z: 0 }], enemyId: 'wolf-1', level: 2, biteDamage: 5, speed: 3.2,
     }],
+    enemyNameplates: [{ name: 'Wolf' }],
   });
 
   assert.equal(view.see.length, 1);
   assert.deepEqual(Object.keys(view.see[0]).sort(), ['distance', 'what', 'xPct', 'yPct']);
   assert.equal(view.see[0].what, 'wolf');
+  assert.equal(view.see[0].distance, 'unknown');
 
   // The load-bearing assertion, made STRUCTURALLY rather than by hunting for the number 3 in the
   // serialized view. Screen positions are numbers too, and an hp that happens to equal a coordinate
@@ -139,12 +156,15 @@ test('an enemy on screen arrives as a kind, a screen position and a bucket — n
   }
 });
 
-test('an enemy the camera is not pointing at is absent, not listed as hidden', () => {
-  const offScreen = viewFrom({ enemies: [{ kind: 'wolf', x: 400, z: 0, hp: 40, maxHp: 40 }] });
+test('an off-screen enemy nameplate is absent, not listed as hidden', () => {
+  const offScreen = viewFrom({
+    enemies: [{ kind: 'wolf', x: 4, z: 1, hp: 40, maxHp: 40 }],
+    enemyNameplates: [{ box: { width: 84, height: 48, top: 120, left: -100, bottom: 168, right: -16 } }],
+  });
   assert.deepEqual(offScreen.see, []);
 });
 
-test('a dead enemy is not on screen', () => {
+test('a known enemy without a rendered nameplate is absent', () => {
   const view = viewFrom({ enemies: [{ kind: 'wolf', x: 4, z: 1, hp: 0, maxHp: 40 }] });
   assert.deepEqual(view.see, []);
 });
@@ -250,18 +270,20 @@ test('the view degrades to not-ready rather than throwing before the hero exists
   assert.deepEqual(JSON.parse(runInNewContext(READ_PLAYER_VIEW, context)), { ready: false });
 });
 
-test('a wolf whose feet are below the frame is still seen when its upper body is visibly on screen', () => {
+test('an enemy behind an occluder stays absent when its nameplate is not rendered', () => {
   const view = viewFrom({
-    enemies: [{ kind: 'wolf', x: 4, z: 1, hp: 40, maxHp: 40 }],
-    projectY: (height) => (height === 1 ? -1.2 : 0.5),
+    enemies: [{ kind: 'wolf', x: 4, z: 1, hp: 40, maxHp: 40, enemyId: 'wolf-behind-building' }],
   });
-  assert.deepEqual(view.see.map((entity) => entity.what), ['wolf']);
+  assert.deepEqual(view.see, []);
+  assert.doesNotMatch(installPlayerViewSource(), /const enemies = \(encounter && encounter\.enemies\)/);
+  assert.match(installPlayerViewSource(), /document\.querySelectorAll\('\.enemy-nameplate'\)/);
 });
 
 test('a silent playtest stdin read races the requested deadline instead of blocking the session forever', () => {
   const source = playtestSessionSource();
   assert.match(source, /async function nextLineBeforeDeadline\(\)/);
-  assert.match(source, /Promise\.race\(\[\s*lines\.next\(\)\.then[\s\S]*sleep\(remaining\)\.then/s);
+  assert.match(source, /Promise\.race\(\[\s*lines\.next\(\)\.then[\s\S]*deadlineWait/);
+  assert.match(source, /clearTimeout\(timer\)/);
   assert.match(source, /if \(pending\.deadline\) \{\s*endSession\('time'\);\s*break;/);
 });
 

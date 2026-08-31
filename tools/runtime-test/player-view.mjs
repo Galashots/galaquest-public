@@ -54,9 +54,9 @@ const CLOSE_METRES = 3;
  * test/playtest-player-view.test.mjs, so adding a leak here is a red test rather than a quiet
  * change in what the agent is allowed to know.
  *
- * `encounterState` is the deliberate exception and is NOT on this list: it is the only source of
- * where the enemies are, and the projection below takes position and kind from it and nothing else.
- * The test pins that narrowness separately.
+ * `encounterState` is the deliberate exception and is NOT on this list because it supplies the
+ * hero's published health. It is never used to disclose an enemy: enemy labels and screen positions
+ * come from the visible nameplate DOM instead.
  */
 export const FORBIDDEN_VIEW_ACCESSORS = Object.freeze([
   'authoritativeEncounterState',
@@ -119,11 +119,6 @@ export function distanceBucket(metres) {
 export function installPlayerViewSource() {
   return `(() => {
   const NEAR = ${NEAR_METRES}, CLOSE = ${CLOSE_METRES}, FAR = ${FAR_METRES};
-  // Enemy snapshots give only ground position, while the camera sees their mesh volume. Project an
-  // upper-body point so a wolf whose feet are below the frame is not omitted while its visible body
-  // is plainly on screen. This is a visibility probe, not an extra gameplay fact.
-  const ENEMY_VISIBLE_HEIGHT = 3;
-
   const healthBucket = (hp, maxHp) => {
     if (!Number.isFinite(hp) || !Number.isFinite(maxHp) || maxHp <= 0) return 'unknown';
     const f = hp / maxHp;
@@ -203,28 +198,30 @@ export function installPlayerViewSource() {
     const heroPos = r.player.position;
     const screen = { w: window.innerWidth, h: window.innerHeight };
 
-    // WHAT IS ON SCREEN. An entity is in the view only if the camera is pointing at it: inside the
-    // normalised device cube, and in front of the near plane. Off-screen entities are omitted, not
-    // listed-as-hidden, because a listed entity is a thing the agent knows about.
-    //
-    // KNOWN GAP, stated rather than papered over: this is a frustum test, not an occlusion test.
-    // A wolf directly behind a building is reported as visible. Fixing it needs a raycast per
-    // entity per view and the first session does not need to pay for that -- but a report that
-    // depends on the agent having seen something through a wall is not evidence, and the transcript
-    // carries this note so a reader can tell.
+    // WHAT IS ON SCREEN. Enemy presence comes only from the rendered nameplate DOM, never from an
+    // encounter snapshot projected through the scene. That fails closed for occlusion: an enemy
+    // behind a building with no visible label is absent rather than leaked to the agent. The card's
+    // name and rectangle are ordinary player-visible pixels, so the nameplate can speak for itself
+    // without handing over its backing enemy id, hp, or world coordinates. Other literal visible
+    // nameplate text remains in `read`, not as privileged structured entity state.
     const see = [];
-    const enemies = (encounter && encounter.enemies) || [];
-    for (const e of enemies) {
-      if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) continue;
-      if (Number.isFinite(e.hp) && e.hp <= 0) continue;
-      const ndc = project(r, e.x, ENEMY_VISIBLE_HEIGHT, e.z);
-      if (ndc.z >= 1 || ndc.x < -1 || ndc.x > 1 || ndc.y < -1 || ndc.y > 1) continue;
-      const metres = Math.hypot(e.x - heroPos.x, e.z - heroPos.z);
+    for (const plate of document.querySelectorAll('.enemy-nameplate')) {
+      if (typeof plate.checkVisibility === 'function'
+        && !plate.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+      const style = getComputedStyle(plate);
+      if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) < 0.05) continue;
+      const box = plate.getBoundingClientRect();
+      if (box.width <= 0 || box.height <= 0) continue;
+      if (box.bottom <= 0 || box.right <= 0 || box.top >= screen.h || box.left >= screen.w) continue;
+      const name = (plate.querySelector('.enemy-nameplate-name')?.textContent || '')
+        .trim().replace(/\\s+/g, ' ');
+      if (!name) continue;
       see.push({
-        what: e.kind,
-        xPct: Math.round(((ndc.x + 1) / 2) * 100),
-        yPct: Math.round(((1 - ndc.y) / 2) * 100),
-        distance: distanceBucket(metres),
+        what: name.toLowerCase(),
+        xPct: Math.round(((box.left + (box.width / 2)) / screen.w) * 100),
+        yPct: Math.round(((box.top + (box.height / 2)) / screen.h) * 100),
+        // Screen pixels reveal no reliable metres without reading world state, so do not invent it.
+        distance: 'unknown',
       });
     }
     // THE CHARACTERS STANDING AROUND. Found by scene-node name rather than through a per-zone
