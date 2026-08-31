@@ -233,9 +233,14 @@ await shot('heroscreen-landscape', LANDSCAPE);
 await setViewport(PORTRAIT);
 await page.eval(`(() => { const b = [...document.querySelectorAll('.hero-item')].find(x => x.dataset.itemId === 'helmet_silverguard'); if (b) b.click(); })()`);
 await sleep(400);
+// #88 replaced the card's single stat line with an item-art-first comparison: a portrait, a rarity
+// word, per-stat rows and a POWER line. Read the pieces that now carry the Helmet's worth.
 const helmetCard = await page.eval(`(() => ({
   name: document.querySelector('#hero-item-name')?.textContent,
-  stat: document.querySelector('#hero-item-damage')?.textContent,
+  rarity: document.querySelector('#hero-item-rarity')?.textContent,
+  stats: document.querySelector('#hero-compare-stats')?.textContent?.replace(/\s+/g, ' ').trim(),
+  action: document.querySelector('#hero-compare-action')?.textContent,
+  portraitLoaded: (() => { const i = document.querySelector('#hero-card-art .item-art-image'); return !!i && i.naturalWidth > 0; })(),
 }))()`);
 step(`helmet card: ${JSON.stringify(helmetCard)}`);
 await shot('heroscreen-helmet-card-portrait', PORTRAIT);

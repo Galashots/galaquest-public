@@ -20,6 +20,14 @@
 // on the Hero screen's swatch -- so the card that hands the blade over must glow in it rather than
 // in a second guess. Derived to CSS strings below, never restated.
 import { WILDWOOD_COLOR } from '../world/wildwoodBlade.js';
+// Imported as well as re-exported below: `export ... from` creates no local binding, and this
+// card's own default icon is a local use.
+import { SWORD_ICON_SVG } from '../progression/itemArt.js';
+// #88: the ceremony that HANDS a child an item must show the same picture the inventory will show
+// them ten seconds later. It used to draw its own crude silhouette while the Hero screen drew a
+// rendered portrait -- one item, two pictures, photographed side by side in a Checkpoint 2
+// player-fair session.
+import { paintItemArt } from './itemArtView.js';
 
 const WILDWOOD_CSS = `#${WILDWOOD_COLOR.toString(16).padStart(6, '0')}`;
 const WILDWOOD_R = (WILDWOOD_COLOR >> 16) & 0xff;
@@ -69,7 +77,7 @@ export function unlockCardState({ itemName, fromDamage, toDamage, power = null, 
   const promptText = typeof prompt === 'string' && prompt.trim() !== '' ? prompt.trim() : null;
 
   // POWER comparison (defensive/other gear). Uses the SAME before → after shape the weapon line and
-  // the Hero screen's own #hero-item-compare draw, in POWER rather than DAMAGE, so the ceremony and
+  // the Hero screen's own comparison card draw, in POWER rather than DAMAGE, so the ceremony and
   // the Gear screen a child opens ten seconds later say it identically.
   if (power && Number.isFinite(power.before) && Number.isFinite(power.after)) {
     return {
@@ -91,7 +99,8 @@ export function unlockCardState({ itemName, fromDamage, toDamage, power = null, 
   return {
     eyebrow: 'UNLOCKED',
     name,
-    // The same '1 → 2 DAMAGE' shape as #hero-item-compare (heroScreen.js's renderCard), so the
+    // The same '1 → 2 DAMAGE' arrow shape the Hero screen's comparison rows use (heroScreen.js's
+    // renderCard), so the
     // ceremony and the Gear screen a child opens ten seconds later say it identically.
     comparison: comparable ? `${fromDamage} → ${toDamage} DAMAGE` : null,
     isUpgrade: comparable && toDamage > fromDamage,
@@ -114,51 +123,23 @@ export function unlockCardState({ itemName, fromDamage, toDamage, power = null, 
   };
 }
 
-// A sword, point down -- the same silhouette as the planted prop in Rowan's clearing (blade planted
-// point-down is that prop's whole pose), inline SVG so this ships zero image assets. Deliberately
-// crude, matching wildwoodBlade.js's own "a crude blade standing in the right place tonight" trade.
-// Drawn in `currentColor` so the icon takes the card's --accent (the Wildwood teal by default), the
-// one change from GP1-C1: the card is no longer weapon-only, and a second reward wears a second
-// accent through the same slot rather than a second card.
-export const SWORD_ICON_SVG = `
-  <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <g fill="currentColor">
-      <rect x="21.5" y="2" width="5" height="7" rx="1.5"/>
-      <rect x="22.75" y="8" width="2.5" height="5"/>
-      <rect x="12" y="13" width="24" height="4.5" rx="2.25"/>
-      <path d="M20 17.5 h8 l-2.4 22.5 L24 46 l-1.6 -6 Z"/>
-    </g>
-  </svg>
-`;
-
-// An open-face helmet: a domed skull-cap with a raised brow ridge and an open face, the read the
-// running-game mount and its hair/ear occlusion are authored for (character/gear.js). Same crude,
-// zero-asset, currentColor discipline as the sword, so G1-C3's Helmet card wears the Helmet's own
-// accent (heroScreen.js's swatch, handed in by main.js) instead of a sword in teal.
-export const HELMET_ICON_SVG = `
-  <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <g fill="currentColor">
-      <path d="M24 6 C13 6 7 14 7 25 v3 h6 v-3 c0-8 4-13 11-13 s11 5 11 13 v3 h6 v-3 C41 14 35 6 24 6 Z"/>
-      <rect x="6" y="27" width="8" height="6" rx="2"/>
-      <rect x="34" y="27" width="8" height="6" rx="2"/>
-      <rect x="20" y="6" width="8" height="9" rx="3"/>
-    </g>
-  </svg>
-`;
-
-// R1: a pair of pauldrons -- two domed shoulder caps, same crude/zero-asset/currentColor discipline
-// as the sword and helmet above, so a Shoulders card wears the item's own accent (heroScreen.js's
-// swatchFor) instead of borrowing the Helmet's silhouette for a different body slot.
-export const SHOULDER_ICON_SVG = `
-  <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <g fill="currentColor">
-      <path d="M6 22 C6 13 12 7 18 7 s10 5 10 11 v6 H6 Z"/>
-      <path d="M42 22 C42 13 36 7 30 7 s-10 5 -10 11 v6 h22 Z"/>
-      <rect x="4" y="27" width="16" height="7" rx="2.5"/>
-      <rect x="28" y="27" width="16" height="7" rx="2.5"/>
-    </g>
-  </svg>
-`;
+// ── THE ITEM SILHOUETTES NOW LIVE IN progression/itemArt.js ────────────────────────────────────
+//
+// They used to be defined here, and that was the drift #88 closed: this ceremony drew a hand-made
+// sword/helmet/pauldron while the Hero screen drew an unrelated grey square for the same items, so
+// one item had two opinions about its own shape. progression/itemArt.js is now the single art and
+// rarity authority for every gear surface -- the acquisition card, the inventory grid, the equipped
+// slot and the comparison portrait all read one row.
+//
+// Re-exported rather than moved outright so this module's existing importers (main.js) keep working
+// against the name they already use. This is a POINTER, not a copy (GQ-007): there is still exactly
+// one definition, and it is not in this file.
+export {
+  HELMET_ICON_SVG,
+  SHIELD_ICON_SVG,
+  SHOULDER_ICON_SVG,
+  SWORD_ICON_SVG,
+} from '../progression/itemArt.js';
 
 // LAYOUT, stated per index.html's own ledger discipline. The layer is inset:0 and centres the card
 // with grid -- so the card sits mid-frame in both required shapes. Checked against the touch
@@ -217,10 +198,21 @@ export const UNLOCK_CARD_CSS = `
         color: #2c7a64; font: 800 0.78rem/1.2 system-ui, sans-serif; letter-spacing: 0.22em;
       }
       #unlock-card-name { margin-top: 0.2rem; font: 900 1.5rem/1.15 system-ui, sans-serif; }
-      #unlock-card-icon { margin: 0.35rem auto 0; width: 3.4rem; height: 3.4rem; color: var(--accent); }
+      /* position: relative is load-bearing here, not tidiness. ui/itemArtView.js positions the
+         portrait with inset: 0, which resolves against the nearest POSITIONED ancestor -- without
+         this the image escaped its 3.4rem box and rendered at the size of the whole card, on top of
+         the LATER button. Caught in a Checkpoint 3 capture, not by reading this file.
+         (No backticks in this block: it lives inside a template literal.) */
+      #unlock-card-icon {
+        position: relative; margin: 0.35rem auto 0; width: 3.4rem; height: 3.4rem;
+        color: var(--accent);
+      }
       #unlock-card-icon svg { display: block; width: 100%; height: 100%; }
+      #unlock-card-icon .item-art-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+      #unlock-card-icon .item-art-fallback { position: absolute; inset: 0; display: grid; place-items: center; }
+      #unlock-card-icon .item-art-fallback svg { width: 100%; height: 100%; }
       /* The comparison is the ONLY stat, deliberately big -- same weight class as
-         #hero-item-compare, in a darker ink rather than reward gold, because this card is about the
+         the Hero screen's comparison rows, in a darker ink rather than reward gold, because this card is about the
          ITEM; the gold lives on the GEAR pill / the Equip button that points at what to do next. */
       #unlock-card-compare {
         margin-top: 0.3rem; min-height: 1.3em;
@@ -296,6 +288,9 @@ export function createUnlockCard(doc) {
   nameEl.id = 'unlock-card-name';
   const iconEl = doc.createElement('div');
   iconEl.id = 'unlock-card-icon';
+  // The shared art-host contract (see ui/itemArtView.js). index.html's `.item-art` rules make this a
+  // positioning context, which is what keeps a rendered portrait inside its own box.
+  iconEl.className = 'item-art';
   iconEl.setAttribute('aria-hidden', 'true');
   iconEl.innerHTML = SWORD_ICON_SVG;
   const compareEl = doc.createElement('div');
@@ -357,7 +352,7 @@ export function createUnlockCard(doc) {
   /**
    * show(state) -- announce and auto-dismiss (the weapon path, unchanged).
    * show(state, onDone) -- same, with a completion callback (onDone fires once, on any dismissal).
-   * show(state, { onDone, onEquip, accent, icon }) -- an OFFER: renders Equip/Later against
+   * show(state, { onDone, onEquip, accent, art, icon }) -- an OFFER: renders Equip/Later against
    *   state.prompt and does NOT auto-dismiss, because putting the item on is the child's beat to take.
    *   onEquip fires only when Equip is tapped; onDone fires on either choice. accent (a '#rrggbb' from
    *   heroScreen's swatch) and icon (an SVG string) restyle the card for this reward.
@@ -383,7 +378,20 @@ export function createUnlockCard(doc) {
       element.style.removeProperty('--burst');
       element.style.removeProperty('--burst-soft');
     }
-    iconEl.innerHTML = typeof options.icon === 'string' ? options.icon : SWORD_ICON_SVG;
+    // `art` is the rendered-portrait route (progression/itemArt.js's own row, handed in by main.js)
+    // and is preferred; `icon` remains the raw-SVG route for a caller that has no catalogued item to
+    // point at. Both still exist because they answer different questions -- an unlock ceremony for a
+    // non-item reward has a silhouette and no portrait -- but a real item must take the first.
+    if (options.art) {
+      // The art host is reused across shows, so its idempotence key has to be reset or a second
+      // reward would keep the first one's picture.
+      iconEl.dataset.artPainted = 'false';
+      paintItemArt(iconEl, options.art);
+    } else {
+      iconEl.dataset.artPainted = 'false';
+      iconEl.dataset.artUrl = '';
+      iconEl.innerHTML = typeof options.icon === 'string' ? options.icon : SWORD_ICON_SVG;
+    }
 
     eyebrowEl.textContent = state.eyebrow;
     nameEl.textContent = state.name;
