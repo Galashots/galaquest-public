@@ -44,7 +44,7 @@ test('the comparison line is items.js\'s own numbers in the Hero screen\'s exact
   const to = damageFor(WILDWOOD_BLADE_ID);
   const state = unlockCardState(wildwoodMoment());
   assert.equal(state.comparison, `${from} → ${to} DAMAGE`);
-  // The same arrow-line pattern heroScreen.js's renderCard paints into #hero-item-compare -- the
+  // The same arrow-line pattern heroScreen.js's renderCard paints into its comparison rows -- the
   // ceremony and the Gear screen a child opens ten seconds later must say it identically.
   assert.match(state.comparison, /^\d+ → \d+ DAMAGE$/);
 });

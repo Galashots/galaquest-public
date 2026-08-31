@@ -82,6 +82,12 @@ import { cumulativeXpForLevel } from './progression/levels.js';
 import { formatPower, levelUpSummary, powerChange, powerFor } from './progression/power.js';
 import { prefersReducedMotion } from './render/motionPreference.js';
 import { createHeroScreen, heroScreenViewModel, swatchFor, swatchHexFor } from './progression/heroScreen.js';
+// #88's equip feedback. equipOutcome is the pure receipt of a swap (what left the slot, what POWER
+// did) and flyGearIcon is the movement that makes it legible -- kept apart for the usual reason:
+// the numbers are testable without a browser and the animation is not.
+import { equipOutcome } from './progression/gearCompare.js';
+import { itemIconSvgFor, itemIconUrlFor } from './progression/itemArt.js';
+import { flyGearIcon } from './ui/gearFlight.js';
 import { createVillageBoardScreen, villageBoardViewModel } from './village/boardScreen.js';
 import { remainingVillageSupplies } from './village/economy.js';
 import { pipsForMarks } from './rewards/hud.js';
@@ -852,11 +858,86 @@ async function bootstrap() {
     refreshProfileState();
     if (netStatus === 'online') net.sendEquip(itemId, fact ?? undefined);
   }
+  // ── #41 / #88: THE POWER MOMENT ON EQUIP ──────────────────────────────────────────────────────
+  //
+  // "Major equipment upgrades should show a clear before -> delta -> after POWER moment" (#41), and
+  // #88 asks for the change to be obvious rather than inferred. This is that moment, drawn ON the
+  // Hero screen's own identity panel -- the place a child is already looking when they equip -- and
+  // NOT as a new full-screen modal.
+  //
+  // THE CEREMONY COLLISION RULE, honoured rather than mentioned. PROGRESSION_CONTRACT_V0: "Hero
+  // level-up remains the strongest routine celebration. Do not stack a gear modal over a level-up
+  // ceremony." Two things follow, and both are implemented here:
+  //
+  //   1. This is not a modal at all. It takes no pointer events, blocks nothing, and disappears on
+  //      its own -- so equipping never interrupts play, which is also the contract's "routine loot
+  //      must not turn progression into menu interruption".
+  //   2. If the level-up ceremony is currently up, this stays silent. The child gets one loud beat,
+  //      and it is the bigger one. The equip still HAPPENED and the identity panel's POWER still
+  //      updates on the next frame -- what is suppressed is the second celebration, not the fact.
+  const heroPowerBurstElement = document.querySelector('#hero-power-burst');
+  const POWER_BURST_MS = 1500;
+  let powerBurstTimer = null;
+
+  function showEquipPowerBurst(power) {
+    if (!heroPowerBurstElement || !power) return;
+    // A swap that moved nothing has nothing to announce. Silence is the honest output, and a "+0"
+    // flying off a hero's POWER is a celebration of nothing.
+    if (power.delta === 0) return;
+    // Queried here rather than closed over: the level-up ceremony's own element is declared far
+    // below this point, and a `const` referenced before its declaration is a ReferenceError that
+    // optional chaining does not save you from. Once per equip is not a cost worth a forward
+    // declaration for.
+    if (document.querySelector('#level-up')?.dataset.shown === 'true') return;
+
+    heroPowerBurstElement.textContent = power.deltaText;
+    heroPowerBurstElement.dataset.direction = power.delta > 0 ? 'up' : 'down';
+    // The attribute has to actually leave and come back for the CSS animation to re-trigger, which
+    // needs a frame in between -- the same reason celebrateLevelUp waits one.
+    delete heroPowerBurstElement.dataset.shown;
+    window.requestAnimationFrame(() => { heroPowerBurstElement.dataset.shown = 'true'; });
+    window.clearTimeout(powerBurstTimer);
+    powerBurstTimer = window.setTimeout(() => {
+      delete heroPowerBurstElement.dataset.shown;
+    }, POWER_BURST_MS);
+  }
+
   const heroScreen = createHeroScreen({
     onSelect: (itemId) => { selectedHeroItemId = itemId; },
-    onEquip: (itemId) => {
+    // #88's SECOND tap. The durable swap is unchanged -- equipHeroItem mints exactly the fact it
+    // always did -- and everything added here is feedback about a change that has already happened.
+    // That ordering matters: the animation must never be the thing that makes an equip true, or a
+    // child who taps while the screen is closing owns nothing.
+    onEquip: (itemId, context = {}) => {
+      // Read the loadout BEFORE the swap, because that is the only moment "what am I replacing" is
+      // still answerable. heroStatsThisFrame is the same resolved hero the fight is being fed, so
+      // the POWER this moment celebrates is the POWER the combat model agrees with.
+      const before = heroStatsThisFrame;
+      const equippedBefore = before?.equippedItemIds ?? {};
+      const outcome = equipOutcome({ itemId, equippedItemIdsBefore: equippedBefore, stats: before });
+
       equipHeroItem(itemId);
       selectedHeroItemId = itemId;
+
+      if (!outcome) return;
+      flyGearIcon({
+        sourceElement: context.sourceElement ?? null,
+        slotElement: context.slotElement ?? heroScreen.slotElement(outcome.slot),
+        art: {
+          iconUrl: itemIconUrlFor(itemId),
+          iconSvg: itemIconSvgFor(itemId),
+          accent: swatchFor(itemId),
+        },
+        // Null on a first fill, and deliberately so: inventing a return flight for an item that was
+        // never in the slot would tell a child something false about what they own.
+        replacedArt: outcome.replacedItemId === null ? null : {
+          iconUrl: itemIconUrlFor(outcome.replacedItemId),
+          iconSvg: itemIconSvgFor(outcome.replacedItemId),
+          accent: swatchFor(outcome.replacedItemId),
+        },
+      });
+      showEquipPowerBurst(outcome.power);
+      audio.play('blade-unlock');
     },
     // Suspends the movement/attack thumbs (visually and for real -- pointer-events: none makes them
     // unable to originate a touch, so input/touch.js's own ownsPointer() gate never has to know Hero

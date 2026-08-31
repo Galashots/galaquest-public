@@ -777,7 +777,11 @@ try {
         power: text('#hero-identity-power-value'),
         hp: text('#hero-identity-hp'),
         damage: text('#hero-identity-damage'),
-        itemDamage: text('#hero-item-damage'),
+        // #88 replaced the card's single stat line with per-stat comparison rows. Diagnostic
+        // only -- nothing below asserts on it -- but a selector that can only ever read null
+        // is a diagnostic that has stopped diagnosing.
+        itemName: text('#hero-item-name'),
+        itemStats: text('#hero-compare-stats'),
       });
     })()`).then(JSON.parse);
     check('HERO SCREEN: Level and POWER are shown prominently',
