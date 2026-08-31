@@ -276,7 +276,7 @@ export function installPlayerViewSource() {
     }
 
     // WHAT WAS HEARD SINCE THE LAST LOOK. audioDebug() is a harness-truth seam and its recipe keys
-    // are privileged engine vocabulary (for example `level-up` or `victory-sting`), not words a
+    // are privileged engine vocabulary (for example level-up or victory-sting), not words a
     // child's ears receive. Use it only to count successfully scheduled sound events, then discard
     // the recipe identities. A future audio-perception layer may distinguish sounds from the audio
     // itself; this first player-fair boundary must not smuggle semantic event labels through debug.
