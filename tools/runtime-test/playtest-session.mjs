@@ -22,7 +22,8 @@
  *     projection, and what it deliberately refuses to hand over);
  *   - it prints one JSON view block to stdout;
  *   - it reads one JSON action line from stdin;
- *   - it performs that action through real input events, and repeats.
+ *   - it performs the action, then repeats. Walk, attack and tap use ordinary input events; camera
+ *     turn is explicitly a controlled playtest action, not a gesture-fidelity claim.
  *
  * WHO IS THE AGENT. Whoever is on the other end of the pipe. That is deliberate and it is the whole
  * reason this has no model client in it: this repository installs nothing from npm (README, "Zero
@@ -78,6 +79,9 @@ const argValue = (name, fallback) => {
 };
 const PERSONA = argValue('persona', 'a curious first-time player who has never seen this game');
 const MINUTES = Number(argValue('minutes', '15'));
+if (!Number.isFinite(MINUTES) || MINUTES <= 0) {
+  throw new Error('--minutes must be a positive finite number');
+}
 
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 mkdirSync(OUT, { recursive: true });
@@ -97,6 +101,51 @@ const say = (line) => process.stderr.write(`${line}\n`);
 const emit = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`);
 
 const server = await startOwnedServer();
+const deadline = Date.now() + MINUTES * 60_000;
+let browser = null;
+let page = null;
+let targetId = null;
+let rl = null;
+let step = 0;
+let cleanupPromise = null;
+let sessionEnded = false;
+const consoleErrors = [];
+
+function endSession(reason, details = {}) {
+  if (sessionEnded) return;
+  sessionEnded = true;
+  record({ kind: 'session-end', reason, steps: step, consoleErrors: consoleErrors.length, ...details });
+}
+
+async function cleanup() {
+  if (cleanupPromise) return cleanupPromise;
+  cleanupPromise = (async () => {
+    rl?.close();
+    // readline.close() removes its listeners but does not close a piped stdin handle. A silent agent
+    // therefore used to leave this process alive even after the deadline won the read race.
+    process.stdin.destroy();
+    const closer = page ?? browser;
+    if (closer && targetId) await closer.send('Target.closeTarget', { targetId }).catch(() => {});
+    page?.ws.close();
+    browser?.ws.close();
+    const killed = await server.kill();
+    if (!killed) throw new Error(`could not confirm cleanup of owned server on ${server.port}`);
+  })();
+  return cleanupPromise;
+}
+
+const interrupt = (signal) => {
+  endSession('interrupted', { signal });
+  cleanup()
+    .then(() => { process.exit(128 + (signal === 'SIGINT' ? 2 : 15)); })
+    .catch((error) => { say(`cleanup failed after ${signal}: ${error.message}`); process.exit(1); });
+};
+const onSigint = () => interrupt('SIGINT');
+const onSigterm = () => interrupt('SIGTERM');
+process.once('SIGINT', onSigint);
+process.once('SIGTERM', onSigterm);
+
+try {
 const ORIGIN_UNDER_TEST = server.origin;
 
 // Cribbed from drive-village.mjs's CDP-over-websocket wrapper (no Puppeteer, no npm), unchanged
@@ -150,11 +199,11 @@ const version = await fetch(`http://127.0.0.1:${CHROME_PORT}/json/version`)
       + '--remote-debugging-port=9224 (README, "Browser harnesses").',
     );
   });
-const browser = new CDP(version.webSocketDebuggerUrl);
+browser = new CDP(version.webSocketDebuggerUrl);
 await browser.ready();
-const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank' });
+({ targetId } = await browser.send('Target.createTarget', { url: 'about:blank' }));
 const list = await fetch(`http://127.0.0.1:${CHROME_PORT}/json/list`).then((r) => r.json());
-const page = new CDP(list.find((t) => t.id === targetId).webSocketDebuggerUrl);
+page = new CDP(list.find((t) => t.id === targetId).webSocketDebuggerUrl);
 await page.ready();
 await page.send('Runtime.enable');
 await page.send('Page.enable');
@@ -168,7 +217,6 @@ await page.send('Storage.clearDataForOrigin', { origin: ORIGIN_UNDER_TEST, stora
 
 /** ORACLE 1: crashes and page errors. Cheapest and highest-signal of the four TITAN oracles, and
  *  the only one that needs no interpretation at all. */
-const consoleErrors = [];
 page.ws.addEventListener('message', (e) => {
   const msg = JSON.parse(e.data);
   if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') {
@@ -215,8 +263,6 @@ if (!heroReady) throw new Error(`runtime never came up on ${server.url}`);
  */
 const remoteCount = await page.eval('window.__galaQuestRuntime.netState().remoteCount');
 if (remoteCount > 0) {
-  await page.send('Target.closeTarget', { targetId });
-  server.kill();
   throw new Error(
     `${remoteCount} other client(s) are connected to this session's own server, so the world has `
     + 'extra heroes in it and nothing the agent reports about it would be trustworthy. These are '
@@ -243,11 +289,9 @@ await page.eval(installPlayerViewSource());
 const look = () => page.eval(READ_PLAYER_VIEW).then(JSON.parse);
 
 // ---------------------------------------------------------------------------------------------
-// THE ACTIONS. Every one of them goes through a real input event at a real screen position, which
-// is what keeps them player-fair without needing a rule about it: there is no privileged channel
-// here to accidentally use. The one exception is `look`, which writes follow.heading directly --
-// in-page-driver.mjs already established that as a control a player owns (it is the camera drag),
-// and steering by heading avoids modelling a two-finger gesture's pixel geometry for no gain.
+// THE ACTIONS. Walk, attack and tap use real ordinary input events. `turn` is deliberately narrower:
+// it is a controlled camera action through follow.orbit(), not a verified player drag. Its results
+// cannot support a finding about camera-control discoverability or gesture fidelity.
 // ---------------------------------------------------------------------------------------------
 
 const key = (type, code, windowsVirtualKeyCode, keyName) => page.send('Input.dispatchKeyEvent', {
@@ -279,7 +323,7 @@ async function walk(ms) {
 }
 
 /**
- * Swing the camera, the way a thumb drag does.
+ * Swing the camera as a controlled playtest action.
  *
  * `follow.orbit(yawDelta, pitchDelta)` is the control, and getting here took a wrong turn worth
  * recording. The first version assigned `follow.heading = follow.heading + delta`, which reads as
@@ -356,14 +400,20 @@ say(`actions:    ${ACTIONS}`);
 say('Reply to each view with ONE JSON line. Include "expect" to say what you think will happen —');
 say('that is what makes a confusion event detectable later. {"action":"done","why":"..."} ends it.');
 
-const deadline = Date.now() + MINUTES * 60_000;
-const rl = createInterface({ input: process.stdin });
+rl = createInterface({ input: process.stdin });
 const lines = rl[Symbol.asyncIterator]();
 
 let previous = null;
 let unchanged = 0;
 let lastActionAt = 0;
-let step = 0;
+async function nextLineBeforeDeadline() {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) return { deadline: true };
+  return Promise.race([
+    lines.next().then((next) => ({ next })),
+    sleep(remaining).then(() => ({ deadline: true })),
+  ]);
+}
 
 /** Two views are "the same" to a player if the same things are on screen and the same words are
  *  readable. Position is deliberately excluded: walking three metres down an empty road changes the
@@ -394,7 +444,12 @@ while (Date.now() < deadline) {
   record({ kind: 'view', step, view });
   emit({ step, timeLeftMs: deadline - Date.now(), ...view });
 
-  const next = await lines.next();
+  const pending = await nextLineBeforeDeadline();
+  if (pending.deadline) {
+    endSession('time');
+    break;
+  }
+  const { next } = pending;
   if (next.done) break;
   const raw = String(next.value || '').trim();
   if (!raw) continue;
@@ -408,7 +463,7 @@ while (Date.now() < deadline) {
   }
 
   if (command.action === 'done') {
-    record({ kind: 'session-end', reason: 'agent-done', why: command.why ?? null, step });
+    endSession('agent-done', { why: command.why ?? null });
     break;
   }
 
@@ -450,15 +505,14 @@ while (Date.now() < deadline) {
   }
 }
 
-record({
-  kind: 'session-end',
-  reason: Date.now() >= deadline ? 'time' : 'stream-closed',
-  steps: step,
-  consoleErrors: consoleErrors.length,
-});
+endSession(Date.now() >= deadline ? 'time' : 'stream-closed');
 say(`\nsession over after ${step} steps. console errors: ${consoleErrors.length}`);
 say(`transcript: ${TRANSCRIPT}`);
-
-await page.send('Target.closeTarget', { targetId });
-server.kill();
-process.exit(0);
+} catch (error) {
+  endSession('error', { error: String(error?.message ?? error) });
+  throw error;
+} finally {
+  process.off('SIGINT', onSigint);
+  process.off('SIGTERM', onSigterm);
+  await cleanup();
+}

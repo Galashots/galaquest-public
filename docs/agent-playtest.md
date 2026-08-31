@@ -85,8 +85,11 @@ JSON view to stdout and reads one JSON action line back.
 walk{ms} | turn{degrees} | attack | tap{xPct,yPct} | wait{ms} | screenshot{label} | note | done
 ```
 
-Every action goes through a real input event at a real screen position, so player-fairness needs no
-separate rule — there is no privileged channel available to reach for.
+`walk`, `attack`, and `tap` go through ordinary input events. `turn` is intentionally narrower: it
+calls the existing camera control directly as a controlled playtest action. It is not a gesture-
+fidelity or camera-control-discoverability test, so a transcript must not make findings in either of
+those categories. This keeps the first tool bounded without pretending that a privileged method call
+is a player gesture.
 
 **Who is the agent is deliberately left open.** No model client is wired in: this repository installs
 nothing from npm and holds no API credential, and hard-wiring one model would date the tool. A
@@ -106,6 +109,10 @@ Three constraints worth knowing about:
 - **Stall detection.** Six actions with no change to the readable text or the visible entities sets
   `stalled` on the view. Position is deliberately excluded from that comparison: walking three metres
   down an empty road changes the coordinates and changes nothing a player would call progress.
+- **Session boundary and cleanup.** The requested `--minutes` deadline races every stdin read, so a
+  silent agent cannot outlive its session. Completion, stream closure, timeout, exception, and a
+  handled interrupt each produce one authoritative session end and run the same idempotent tab/server
+  cleanup path.
 
 ## Oracles
 

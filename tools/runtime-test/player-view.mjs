@@ -119,6 +119,10 @@ export function distanceBucket(metres) {
 export function installPlayerViewSource() {
   return `(() => {
   const NEAR = ${NEAR_METRES}, CLOSE = ${CLOSE_METRES}, FAR = ${FAR_METRES};
+  // Enemy snapshots give only ground position, while the camera sees their mesh volume. Project an
+  // upper-body point so a wolf whose feet are below the frame is not omitted while its visible body
+  // is plainly on screen. This is a visibility probe, not an extra gameplay fact.
+  const ENEMY_VISIBLE_HEIGHT = 3;
 
   const healthBucket = (hp, maxHp) => {
     if (!Number.isFinite(hp) || !Number.isFinite(maxHp) || maxHp <= 0) return 'unknown';
@@ -213,7 +217,7 @@ export function installPlayerViewSource() {
     for (const e of enemies) {
       if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) continue;
       if (Number.isFinite(e.hp) && e.hp <= 0) continue;
-      const ndc = project(r, e.x, 1, e.z);
+      const ndc = project(r, e.x, ENEMY_VISIBLE_HEIGHT, e.z);
       if (ndc.z >= 1 || ndc.x < -1 || ndc.x > 1 || ndc.y < -1 || ndc.y > 1) continue;
       const metres = Math.hypot(e.x - heroPos.x, e.z - heroPos.z);
       see.push({

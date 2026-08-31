@@ -10,6 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import {
   FORBIDDEN_VIEW_ACCESSORS,
@@ -18,6 +19,8 @@ import {
   healthBucket,
   installPlayerViewSource,
 } from '../tools/runtime-test/player-view.mjs';
+
+const playtestSessionSource = () => readFileSync('tools/runtime-test/playtest-session.mjs', 'utf8');
 
 test('healthBucket collapses hp to the four states a bar actually shows', () => {
   assert.equal(healthBucket(100, 100), 'healthy');
@@ -46,7 +49,7 @@ test('distanceBucket never hands back a number to do arithmetic with', () => {
  *  failure with a name on it rather than a silently different answer. */
 function makeContext({
   enemies = [], drops = [], hero = { hp: 100, maxHp: 100 }, texts = [],
-  sceneNodes = [], questMarker = false,
+  sceneNodes = [], questMarker = false, projectY = () => 0.5,
 } = {}) {
   const trap = (name) => () => { throw new Error(`player view reached privileged accessor: ${name}`); };
 
@@ -57,7 +60,7 @@ function makeContext({
     set(nx, ny, nz) { this.x = nx; this.y = ny; this.z = nz; return this; },
     // A deterministic stand-in for a real projection: world x/z map linearly into the NDC cube, so
     // a test can put a thing on screen or off it by choosing coordinates.
-    project() { this.x /= 20; this.y = 0.5; this.z = 0.5; return this; },
+    project() { this.x /= 20; this.y = projectY(this.y); this.z = 0.5; return this; },
     clone() { return vector(this.x, this.y, this.z); },
   });
 
@@ -245,4 +248,37 @@ test('the view degrades to not-ready rather than throwing before the hero exists
   context.window.__galaQuestRuntime.hero = null;
   runInNewContext(installPlayerViewSource(), context);
   assert.deepEqual(JSON.parse(runInNewContext(READ_PLAYER_VIEW, context)), { ready: false });
+});
+
+test('a wolf whose feet are below the frame is still seen when its upper body is visibly on screen', () => {
+  const view = viewFrom({
+    enemies: [{ kind: 'wolf', x: 4, z: 1, hp: 40, maxHp: 40 }],
+    projectY: (height) => (height === 1 ? -1.2 : 0.5),
+  });
+  assert.deepEqual(view.see.map((entity) => entity.what), ['wolf']);
+});
+
+test('a silent playtest stdin read races the requested deadline instead of blocking the session forever', () => {
+  const source = playtestSessionSource();
+  assert.match(source, /async function nextLineBeforeDeadline\(\)/);
+  assert.match(source, /Promise\.race\(\[\s*lines\.next\(\)\.then[\s\S]*sleep\(remaining\)\.then/s);
+  assert.match(source, /if \(pending\.deadline\) \{\s*endSession\('time'\);\s*break;/);
+});
+
+test('the session records one authoritative ending and centralizes idempotent owned-resource cleanup', () => {
+  const source = playtestSessionSource();
+  assert.equal((source.match(/record\(\{ kind: 'session-end'/g) || []).length, 1);
+  assert.match(source, /if \(sessionEnded\) return;/);
+  assert.match(source, /if \(cleanupPromise\) return cleanupPromise;/);
+  assert.match(source, /process\.stdin\.destroy\(\)/);
+  assert.match(source, /page\?\.ws\.close\(\);\s*browser\?\.ws\.close\(\);/);
+  assert.match(source, /try \{[\s\S]*\} finally \{[\s\S]*await cleanup\(\);/);
+});
+
+test('the action contract calls direct camera orbit a controlled action, not a real player gesture', () => {
+  const source = playtestSessionSource();
+  const guide = readFileSync('docs/agent-playtest.md', 'utf8');
+  assert.match(source, /controlled camera action through follow\.orbit\(\), not a verified player drag/);
+  assert.match(guide, /calls the existing camera control directly as a controlled playtest action/);
+  assert.match(guide, /not a gesture-\s*fidelity or camera-control-discoverability test/);
 });
