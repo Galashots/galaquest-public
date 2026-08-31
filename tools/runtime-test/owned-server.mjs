@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { createServer as createProbeServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -55,7 +55,16 @@ const isolatedRewardStorePath = () => join(
  * Reaching the family's ordinary store requires the named `useRealRewardStore` opt-in, and that
  * opt-in is intentionally incompatible with supplying any other store path.
  */
-export function selectOwnedRewardStore({ rewardStorePath, useRealRewardStore = false } = {}) {
+const pathWithin = (directory, path) => {
+  const pathFromDirectory = relative(directory, path);
+  return pathFromDirectory === '' || (!pathFromDirectory.startsWith('..') && !isAbsolute(pathFromDirectory));
+};
+
+export function selectOwnedRewardStore({
+  rewardStorePath,
+  useRealRewardStore = false,
+  repoRoot = REPO_ROOT,
+} = {}) {
   if (typeof useRealRewardStore !== 'boolean') {
     throw new TypeError('useRealRewardStore must be a boolean');
   }
@@ -66,6 +75,9 @@ export function selectOwnedRewardStore({ rewardStorePath, useRealRewardStore = f
   if (rewardStorePath !== undefined) {
     if (typeof rewardStorePath !== 'string' || rewardStorePath.length === 0) {
       throw new TypeError('rewardStorePath must be a non-empty string when supplied');
+    }
+    if (pathWithin(resolve(repoRoot, 'data'), resolve(repoRoot, rewardStorePath))) {
+      throw new Error('rewardStorePath cannot point under the repository data directory');
     }
     return { kind: 'explicit', rewardStorePath };
   }
@@ -166,7 +178,7 @@ export async function startOwnedServer({
   guaranteedCorpseItemIds,
   repoRoot = REPO_ROOT,
 } = {}) {
-  const selectedRewardStore = selectOwnedRewardStore({ rewardStorePath, useRealRewardStore });
+  const selectedRewardStore = selectOwnedRewardStore({ rewardStorePath, useRealRewardStore, repoRoot });
   let port = null;
   for (const candidate of candidates) {
     // eslint-disable-next-line no-await-in-loop

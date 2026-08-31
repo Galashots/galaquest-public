@@ -16,6 +16,11 @@ test('real reward-store access is deliberate and cannot be combined with an expl
     () => selectOwnedRewardStore({ rewardStorePath: 'C:/safe/rewards.db', useRealRewardStore: true }),
     /cannot combine rewardStorePath with useRealRewardStore/,
   );
+
+  assert.throws(
+    () => selectOwnedRewardStore({ rewardStorePath: 'data/rewards.db', repoRoot: process.cwd() }),
+    /cannot point under the repository data directory/,
+  );
 });
 
 test('explicit reward-store paths remain distinguishable from the safe temporary default', () => {
