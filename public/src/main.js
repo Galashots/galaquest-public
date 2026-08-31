@@ -26,6 +26,8 @@ import {
   SPECIAL_ATTACK_NAME,
   SPECIAL_ATTACK_SECONDS,
   SPECIAL_ATTACK_UNLOCK_LEVEL,
+  canUseSpecialAttackAtPosition,
+  isOutsideSpecialArena,
 } from './combat/specialAttack.js';
 import { createEncounterFeedback, healthReadout, isOutOfCombatRegenRise } from './combat/feedback.js';
 import { ENEMY_KINDS, killXpForKind } from './combat/enemyStats.js';
@@ -3858,10 +3860,7 @@ async function bootstrap() {
       const pressedAttack = keyboard.takeAttack() && !anyOverlayOpen;
       const tappedSpecial = specialAttack.takeAttack() && !anyOverlayOpen;
       const pressedSpecial = keyboard.takeSpecial() && !anyOverlayOpen;
-      const outsideSpecialArena = Math.hypot(
-        player.position.x - VILLAGE.BEACON_ARENA.at[0],
-        player.position.z - VILLAGE.BEACON_ARENA.at[1],
-      ) > VILLAGE.BEACON_ARENA.radiusMeters;
+      const outsideSpecialArena = isOutsideSpecialArena(player.position, VILLAGE.BEACON_ARENA);
       // Two commands, in the order a player produces them: the button press, then the clock. Events
       // from both are collected and dispatched together below, which is the order this loop has
       // always used -- the presenters are updated to the newest state first, then told what changed.
@@ -3885,7 +3884,7 @@ async function bootstrap() {
           && canHeroSpecialAttack(serverEncounter, ownHeroId, heroStatsThisFrame.level);
         attack.setReady(canSwing);
         specialAttack.setReady(canBurst);
-        renderSpecialButton(ownHero, heroStatsThisFrame.level, canBurst);
+        renderSpecialButton(encounterState.hero, heroStatsThisFrame.level, canBurst);
         if ((tappedAttack || pressedAttack) && canSwing) {
           net.sendAttack();
           // Presentation only: the clip starts on the button press, not on the server's ack, so a
@@ -3929,7 +3928,13 @@ async function bootstrap() {
           encounterState = asked.state;
           events.push(...asked.events);
         }
-        if (tappedSpecial || pressedSpecial) {
+        const canBurstBeforeInput = canUseSpecialAttackAtPosition(
+          encounterState.hero,
+          heroStatsThisFrame.level,
+          player.position,
+          VILLAGE.BEACON_ARENA,
+        );
+        if ((tappedSpecial || pressedSpecial) && canBurstBeforeInput) {
           const asked = requestSpecialAttack(encounterState, heroStatsThisFrame.level, nextCommandId++);
           encounterState = asked.state;
           events.push(...asked.events);

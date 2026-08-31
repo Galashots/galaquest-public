@@ -5,6 +5,7 @@ import {
   SPECIAL_ATTACK_CONTACT_SECONDS,
   SPECIAL_ATTACK_COOLDOWN_SECONDS,
   SPECIAL_ATTACK_MAX_TARGETS,
+  canUseSpecialAttackAtPosition,
   canUseSpecialAttack,
   isWithinSpecialStrike,
   specialAttackDamageFor,
@@ -23,6 +24,25 @@ test('Wildwood Burst is Level 5 gated and has an honest cooldown', () => {
   assert.equal(canUseSpecialAttack({ ...locked, level: 5 }), true);
   assert.equal(canUseSpecialAttack({ ...locked, level: 5, specialCooldown: 0.1 }), false);
   assert.equal(canUseSpecialAttack({ ...locked, level: 5, specialSeconds: 0 }), false);
+});
+
+test('the offline field gate keeps Wildwood Burst out of the Beacon arena', () => {
+  const arena = { at: [10, -4], radiusMeters: 5 };
+  const levelFiveHero = {
+    level: 5, specialCooldown: 0, specialSeconds: -1, downSeconds: -1, swingSeconds: -1,
+  };
+  assert.equal(
+    canUseSpecialAttackAtPosition(levelFiveHero, 5, { x: 10, z: -4 }, arena),
+    false,
+  );
+  assert.equal(
+    canUseSpecialAttackAtPosition(levelFiveHero, 5, { x: 10, z: 2 }, arena),
+    true,
+  );
+  assert.equal(
+    canUseSpecialAttackAtPosition(levelFiveHero, 4, { x: 10, z: 2 }, arena),
+    false,
+  );
 });
 
 test('the special command is a replay-safe protocol peer of attack', () => {

@@ -69,3 +69,20 @@ export function canUseSpecialAttack({
     && specialSeconds < 0
     && specialCooldown <= 0;
 }
+
+/** The ordinary wolf field owns this power; Beacon/siege is a separate combat promise. */
+export function isOutsideSpecialArena(position, arena) {
+  const [arenaX, arenaZ] = arena?.at ?? [];
+  return Number.isFinite(position?.x)
+    && Number.isFinite(position?.z)
+    && Number.isFinite(arenaX)
+    && Number.isFinite(arenaZ)
+    && Number.isFinite(arena?.radiusMeters)
+    && Math.hypot(position.x - arenaX, position.z - arenaZ) > arena.radiusMeters;
+}
+
+/** One gate for offline control/readiness: level/state eligibility plus field location. */
+export function canUseSpecialAttackAtPosition(hero, level, position, arena) {
+  return isOutsideSpecialArena(position, arena)
+    && canUseSpecialAttack({ ...(hero ?? {}), level });
+}
