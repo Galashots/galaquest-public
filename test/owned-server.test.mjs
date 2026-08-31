@@ -12,10 +12,10 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { startOwnedServer } from '../tools/runtime-test/owned-server.mjs';
 
-// data/README.md: "Tests must never open a store at a path under `data/`." startOwnedServer still
-// inherits the real data/rewards.db when a caller omits rewardStorePath (#94), and these tests boot
-// REAL server.mjs children, so without this every run of this file writes a rewards.db and several
-// backup-*.db into the repo's data/ -- invisibly, because .gitignore's `data/*.db*` hides them.
+// data/README.md: "Tests must never open a store at a path under `data/`." Before #94's structural
+// fix, omitting rewardStorePath inherited the real data/rewards.db. These real server-child tests
+// now prove that an omitted path selects an isolated OS-temp store instead, while explicit paths
+// remain available for bounded fixtures.
 //
 // Nothing here is about rewards; this file only pins kill() and port behaviour, so pointing the
 // store at an OS-temp path costs the tests nothing and removes them from the family save path.
