@@ -198,8 +198,19 @@ export const UNLOCK_CARD_CSS = `
         color: #2c7a64; font: 800 0.78rem/1.2 system-ui, sans-serif; letter-spacing: 0.22em;
       }
       #unlock-card-name { margin-top: 0.2rem; font: 900 1.5rem/1.15 system-ui, sans-serif; }
-      #unlock-card-icon { margin: 0.35rem auto 0; width: 3.4rem; height: 3.4rem; color: var(--accent); }
+      /* position: relative is load-bearing here, not tidiness. ui/itemArtView.js positions the
+         portrait with inset: 0, which resolves against the nearest POSITIONED ancestor -- without
+         this the image escaped its 3.4rem box and rendered at the size of the whole card, on top of
+         the LATER button. Caught in a Checkpoint 3 capture, not by reading this file.
+         (No backticks in this block: it lives inside a template literal.) */
+      #unlock-card-icon {
+        position: relative; margin: 0.35rem auto 0; width: 3.4rem; height: 3.4rem;
+        color: var(--accent);
+      }
       #unlock-card-icon svg { display: block; width: 100%; height: 100%; }
+      #unlock-card-icon .item-art-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+      #unlock-card-icon .item-art-fallback { position: absolute; inset: 0; display: grid; place-items: center; }
+      #unlock-card-icon .item-art-fallback svg { width: 100%; height: 100%; }
       /* The comparison is the ONLY stat, deliberately big -- same weight class as
          the Hero screen's comparison rows, in a darker ink rather than reward gold, because this card is about the
          ITEM; the gold lives on the GEAR pill / the Equip button that points at what to do next. */
@@ -277,6 +288,9 @@ export function createUnlockCard(doc) {
   nameEl.id = 'unlock-card-name';
   const iconEl = doc.createElement('div');
   iconEl.id = 'unlock-card-icon';
+  // The shared art-host contract (see ui/itemArtView.js). index.html's `.item-art` rules make this a
+  // positioning context, which is what keeps a rendered portrait inside its own box.
+  iconEl.className = 'item-art';
   iconEl.setAttribute('aria-hidden', 'true');
   iconEl.innerHTML = SWORD_ICON_SVG;
   const compareEl = doc.createElement('div');
