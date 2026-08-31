@@ -9,12 +9,26 @@ import { HARNESSES, SUITES } from '../tools/runtime-test/review-suites.mjs';
 
 const DIR = 'tools/runtime-test';
 // Not harnesses: the shared helper modules, the suite table, and the runner itself.
+//
+// A harness, for this file's purposes, is a thing that RUNS UNATTENDED AND EXITS WITH A VERDICT.
+// That is what makes "put it in the full suite" the right default, and what makes forgetting to do
+// so a silent hole. Every exemption below is something that cannot satisfy that definition, and
+// each has to say why -- an exemption without a stated reason is how this guard would rot.
 const NOT_A_HARNESS = new Set([
   'automation-timing.mjs',
   'in-page-driver.mjs',
   'owned-server.mjs',
   'review-suites.mjs',
   'run-review-suite.mjs',
+  // Builds in-page JavaScript source for a caller to evaluate, exactly as in-page-driver.mjs does.
+  // It drives no browser and asserts nothing; test/playtest-player-view.test.mjs is what proves it.
+  'player-view.mjs',
+  // The unscripted playtest protocol, exempt for a stronger reason than the helpers above: it
+  // BLOCKS ON STDIN waiting for an agent to choose the next action, and it produces a transcript
+  // rather than a verdict. In the CI matrix it would hang the job until the timeout and then report
+  // a failure that means nothing. What reviews it instead is a person reading the transcript --
+  // see docs/agent-playtest.md. The exemption is about attendance, not about importance.
+  'playtest-session.mjs',
 ]);
 
 const onDisk = readdirSync(DIR)

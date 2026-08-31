@@ -60,6 +60,14 @@ had actually tested.
 than one client connected** — every extra client draws its own hero, so one stale tab silently puts a
 second hero in the frame. Open the captures and look at them; that is the entire point of it.
 
+Those harnesses are all scripted, and a scripted harness can only fail in ways someone already
+imagined. For the unscripted counterpart — one agent playing the real game through a deliberately
+player-fair view, producing a transcript rather than a verdict — read `docs/agent-playtest.md`.
+
+```bash
+node tools/runtime-test/playtest-session.mjs --minutes 20 --persona "a seven-year-old playing for the first time"
+```
+
 For a map of the code itself and how to run it, read `docs/CODEBASE.md`. For the full public
 development and evidence flow, read `docs/WORKFLOW.md`. For how the Markdown guidance itself is
 maintained and linted, read `docs/GUIDANCE.md`.
