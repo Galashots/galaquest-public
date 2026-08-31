@@ -47,8 +47,15 @@ import {
 // of world/cartLoot.js's own fixed haul (see that module's own header for the split).
 import {
   GEAR_DROP_KIND, HEART_DROP_KIND, HEART_HEAL_HP, createEnemyDropsState, requestCollectEnemyDrop,
-  requestEnemyDrop, stepEnemyDrops,
+  requestEnemyDrop, rollCoinCount, stepEnemyDrops,
 } from '../public/src/world/enemyDrops.js';
+// #87: personal corpse loot -- gear from a loot-bearing kill now becomes a per-eligible-hero corpse
+// claim rather than a shared ground pickup (see corpseLoot.js's own header for the full scope and
+// why coins/hearts above are unaffected).
+import {
+  CORPSE_COIN_KIND, createCorpseLootState, reassignClaimHero, requestClaimAllCorpseLoot,
+  requestClaimCorpseItem, requestCorpseLoot, resolveGroundCollectedClaimItems, stepCorpseLoot,
+} from '../public/src/world/corpseLoot.js';
 // R1: the coin multiplier a kill-drop roll reads off a per-player rolling streak.
 import { coinMultiplierForStreak, createStreakState, registerKill as registerKillStreak, stepStreak }
   from '../public/src/progression/streaks.js';
@@ -964,6 +971,35 @@ export function createSimulation(options = {}) {
   // it always did" contract heroStatsFor's own default keeps -- every test that drives
   // createSimulation() directly without wiring this gets an honest "always drop the gear" roll.
   const ownedItemIdsFor = options.ownedItemIdsFor ?? (() => []);
+  // #87 HARNESS SEAM, OFF BY DEFAULT AND UNSET IN EVERY REAL INVOCATION. world/corpseLoot.js's own
+  // `guaranteedItemIds` is a real, already-tested rule ("every eligible hero receives these
+  // unconditionally, independent of the ordinary roll"); this is the ONE caller of it, and it exists
+  // so tools/runtime-test/drive-corpse-loot.mjs can reach a real personal corpse claim without
+  // depending on an unseeded dice roll. It is emphatically NOT #90: no production code path passes
+  // this, no enemy authors it, and the shipped drop tables in world/enemyDrops.js are untouched --
+  // the hosted matrix job was red purely because a 20% gear roll is not a thing a CI gate can wait
+  // for, not because anything about the reward rules needed to change.
+  //
+  // Same opt-in discipline as GALAQUEST_REWARD_STORE_PATH (see server.mjs's own comment): the
+  // default is the empty list, so an unwired simulation -- which is every production server, every
+  // offline client, and every test that does not deliberately ask -- behaves exactly as it did
+  // before this option existed. test/enemy-drops-server.test.mjs's own "#87 harness seam is opt-in"
+  // test pins that default against a real, fully-fought kill.
+  const guaranteedCorpseItemIds = Array.isArray(options.guaranteedCorpseItemIds)
+    ? options.guaranteedCorpseItemIds.filter((itemId) => typeof itemId === 'string' && itemId.length > 0)
+    : [];
+  // TEST-ONLY DETERMINISM SEAM, defaulting to the real thing. world/enemyDrops.js has always
+  // documented its third parameter as "the server passes Math.random; a test passes a scripted"
+  // rng -- the plumbing simply stopped here, so the only way to reach a gear-bearing kill through
+  // the real simulation was to roll real dice and hope. test/enemy-drops-server.test.mjs did exactly
+  // that, fighting up to 80 real kills waiting on a 20% roll, and it failed the REQUIRED unit gate
+  // on a head whose other trigger passed. A gate that flakes is not a gate.
+  //
+  // Same opt-in discipline as heroStatsFor/ownedItemIdsFor/guaranteedCorpseItemIds above: the
+  // default IS Math.random, so every production server, every offline client and every test that
+  // does not deliberately ask rolls exactly the dice it always rolled. Nothing about the drop rules,
+  // the odds, or the tables changes -- only whether a test can say which way the coin came down.
+  const rng = typeof options.rng === 'function' ? options.rng : Math.random;
   const players = new Map();
   let nextPlayerNumber = 0;
   let tick = 0;
@@ -1011,6 +1047,21 @@ export function createSimulation(options = {}) {
   // seeded from anything durable (world/enemyDrops.js's own header explains why a restart losing an
   // un-collected coin is the honest answer here, unlike lootState's own GP3-0 restart-coherence need).
   let dropsState = createEnemyDropsState();
+  // #87: personal corpse loot, the same shared-physical-state shape as dropsState just above (and
+  // the identical NOT-durably-seeded posture, for the identical reason -- see corpseLoot.js's own
+  // header).
+  let corpseLootState = createCorpseLootState();
+  // A SEPARATE contributor ledger from the reward coordinator's own killXpLedger (net/
+  // gameServerCore.mjs's createRewardCoordinator, a different closure entirely) -- this one exists
+  // purely to answer "which heroes are eligible for THIS life's corpse loot" using the exact same
+  // participation rule (foldKillXpEvents' own contributorsByEnemy: every hero who landed at least one
+  // hit during the life that ends in the kill, not only the killing blow). Running the identical pure
+  // fold twice, through two independent ledgers, for two different purposes (one durable XP award,
+  // one ephemeral eligibility read) is deliberate reuse of the ONE canonical contributor concept
+  // this codebase already has, rather than a second hand-rolled "who gets credit" rule that could
+  // drift from it. It mints its own lifeId per call and never feeds an XP award anywhere -- awarding
+  // XP durably remains solely rewards.processTick's job.
+  let corpseContributorLedger = createKillXpLedger();
   // playerId -> streak state (public/src/progression/streaks.js). Lives here, not in the reward
   // coordinator, for the same reason lastAttackSeq above does: a streak is live combat-adjacent
   // bookkeeping the simulation's own tick already has the deltaSeconds/events to drive, not a durable
@@ -1242,7 +1293,59 @@ export function createSimulation(options = {}) {
     if (!player) return { accepted: false, drop: null };
     const result = requestCollectEnemyDrop(dropsState, id, dropId, { x: player.x, z: player.z });
     dropsState = result.state;
+    // MAJOR correction (shadow-mode-retirement): the ground-gear path stays live alongside the corpse
+    // claim (see this tick's own kill-drop comment above for why), and the killer's own corpse claim
+    // always names the SAME itemId as their own ground roll -- so the instant that ground copy is
+    // actually collected, sync any of THIS hero's own still-untaken corpse claim items naming the
+    // identical itemId to taken too. Without this a killer who auto-collects the ground copy on the
+    // walk to the corpse (world/enemyDrops.js's own DROP_COLLECT_RADIUS_METERS is smaller than this
+    // module's own CORPSE_LOOT_INTERACT_RADIUS_METERS) still found the corpse glowing, offering that
+    // same item behind a live, enabled TAKE that granted nothing -- world/corpseLoot.js's own
+    // resolveGroundCollectedClaimItems header has the full argument.
+    if (result.accepted && result.drop?.kind === GEAR_DROP_KIND) {
+      corpseLootState = resolveGroundCollectedClaimItems(corpseLootState, id, result.drop.itemId);
+    }
     return { accepted: result.accepted, drop: result.drop };
+  }
+
+  /**
+   * #87: take one named item off a personal corpse claim -- the identical "adjudicate the physical
+   * claim here, against the PLAYER'S OWN authoritative position, award it one layer up" split
+   * applyCollectDrop just above already takes, against world/corpseLoot.js's own per-hero claims
+   * instead of enemyDrops.js's shared ground. requestClaimCorpseItem itself is what refuses a claim
+   * that does not belong to `id` -- this function does not re-check ownership, the same boundary
+   * applyCollectDrop draws against requestCollectEnemyDrop.
+   */
+  function applyClaimCorpseItem(id, corpseId, claimItemId) {
+    const player = players.get(id);
+    if (!player) return { accepted: false, item: null };
+    const result = requestClaimCorpseItem(
+      corpseLootState, id, corpseId, claimItemId, { x: player.x, z: player.z },
+    );
+    corpseLootState = result.state;
+    return { accepted: result.accepted, item: result.item };
+  }
+
+  /** #87: the `Take All` action -- same shape as applyClaimCorpseItem just above, for every item
+   *  still untaken in this hero's own claim. */
+  function applyClaimAllCorpseLoot(id, corpseId) {
+    const player = players.get(id);
+    if (!player) return { accepted: false, items: [] };
+    const result = requestClaimAllCorpseLoot(corpseLootState, id, corpseId, { x: player.x, z: player.z });
+    corpseLootState = result.state;
+    return { accepted: result.accepted, items: result.items };
+  }
+
+  /**
+   * Correction: reattach any corpse claim(s) held under a stale connection-scoped heroId onto the
+   * hero id of a fresh reconnect for the SAME guest. attachGameServer's own 'join' handler is the
+   * only caller -- it is the one place that actually knows a guestId maps oldHeroId -> newHeroId; see
+   * world/corpseLoot.js's own reassignClaimHero for why this module does not resolve guestId itself.
+   * A no-op for a guestId-less (ephemeral) connection or a guestId this server has never seen before
+   * -- there is nothing stale to reattach.
+   */
+  function reassignCorpseClaims(fromHeroId, toHeroId) {
+    corpseLootState = reassignClaimHero(corpseLootState, fromHeroId, toHeroId);
   }
 
   /**
@@ -1388,12 +1491,21 @@ export function createSimulation(options = {}) {
       streakByPlayer.set(player.id, stepStreak(streakByPlayer.get(player.id) ?? createStreakState(), deltaSeconds));
     }
 
+    // #87: the SAME canonical contributor concept rewards/killXp.js already uses to award kill XP
+    // (every hero who landed at least one hit during the life that ends in the kill), folded a
+    // SECOND time through this simulation's own independent ledger purely to read off eligible
+    // heroIds for corpse loot below -- see corpseLootContributorLedger's own declaration for why a
+    // second ledger instance, not a second rule.
+    const corpseContribFold = foldKillXpEvents(
+      corpseContributorLedger, partyResult.events, { mintLifeId: () => randomUUID() },
+    );
+    corpseContributorLedger = corpseContribFold.ledger;
+
     // R1: kill drops. One roll per 'wolf-defeated' event this tick, scattered at the enemy's own
     // (now post-step, but a dying body does not move) position. `event.heroId` is the hero who
-    // landed the KILLING blow -- streak credit and the owned-gear-to-coins conversion both key off
-    // that hero specifically, the same "credit the one who actually finished it" choice a streak
-    // (a PERSONAL momentum, not a shared party fact) has to make even where marks/kill-XP credit
-    // every contributor.
+    // landed the KILLING blow -- streak credit keys off that hero specifically, the same "credit the
+    // one who actually finished it" choice a streak (a PERSONAL momentum, not a shared party fact)
+    // has to make even where marks/kill-XP credit every contributor.
     for (const event of partyResult.events) {
       if (event.type !== 'wolf-defeated' || event.heroId == null) continue;
       const enemy = encounterState.enemies.find((candidate) => candidate.enemyId === event.enemyId);
@@ -1408,12 +1520,77 @@ export function createSimulation(options = {}) {
         z: enemy.z,
         streakMultiplier: coinMultiplierForStreak(streak.streak),
         killerOwnedItemIds: ownedItemIdsFor(event.heroId),
-      }, Math.random);
+        // #87: the ordinary COIN receipt moved onto the personal corpse claim below. The roll
+        // still happens in requestEnemyDrop, at the same odds and the same streak multiplier and
+        // in the same rng sequence -- only the destination changes, so solo economics are
+        // untouched. It must NOT also scatter on the ground, or the same kill would pay twice
+        // (a ground coin and a claim coin are different durable eventIds, so nothing downstream
+        // would catch it) -- and, worse for #87, ground coins auto-collect on proximity, so the
+        // killer standing on the corpse would absorb them before ever seeing a LOOT prompt.
+        // That is precisely the Owner-visible failure at d575f240.
+        groundCoins: false,
+      }, rng);
+      // Correction (was: "gear no longer becomes a ground pickup"): stripping gear out of dropsState
+      // here made it unobtainable online with no compensating fix. world/corpseLoot.js's own personal
+      // claim has no client consumer yet -- public/ has no corpse presenter, no glow, no Loot prompt,
+      // and no sendCollectCorpseItem/sendCollectCorpseAll -- so gear acquisition dropped to zero for
+      // every hosted session the instant this landed. Gear stays merged into the shared ground state
+      // exactly as R1 always did (this is a plain revert of that one line) SO THAT the existing
+      // ground-pickup client path keeps working today; the personal corpse claim below still spawns
+      // in parallel (shadow mode) so a future client presenter has real server state to build against
+      // without needing a second server change. This is deliberately a stopgap, not #87's actual
+      // fairness fix (a killing-blow-only pickup can still be raced away from a non-killing
+      // contributor) -- see the PR body for why the corpse-claim UI is a separate follow-up.
+      const killerGearDrop = rolled.spawned.find((drop) => drop.kind === GEAR_DROP_KIND) ?? null;
       dropsState = rolled.state;
+
+      const eligibleHeroIds = corpseContribFold.awards
+        .filter((award) => award.enemyId === event.enemyId)
+        .map((award) => award.heroId);
+
+      // HOW MANY COINS EACH ELIGIBLE HERO GETS, and why the killer is a reuse rather than a
+      // re-roll. The killer takes `rolled.coinCount` VERBATIM -- the exact number the ground
+      // roll just produced for this kill, including any owned-gear conversion it folded in --
+      // so a solo kill mints precisely what it always did and the economy cannot drift. That is
+      // the same discipline killerGearItemId already keeps for gear.
+      //
+      // A non-killing contributor has no ground roll to reuse, so theirs is rolled from the
+      // SAME band via enemyDrops.js's own rollCoinCount, at THEIR OWN streak. `streakByPlayer`
+      // is already a truthful per-player authority -- stepped for every player every tick, and
+      // advanced by registerKillStreak only for whoever landed the killing blow -- so an
+      // assisting hero reads their own honest multiplier here with no new progression law and
+      // no parallel table. #87 requires each contributor gets their OWN ordinary loot.
+      const coinAmountByHero = new Map();
+      for (const heroId of eligibleHeroIds) {
+        if (heroId === event.heroId) {
+          coinAmountByHero.set(heroId, rolled.coinCount);
+          continue;
+        }
+        const contributorStreak = streakByPlayer.get(heroId) ?? createStreakState();
+        coinAmountByHero.set(heroId, rollCoinCount(
+          event.kind, coinMultiplierForStreak(contributorStreak.streak), rng,
+        ));
+      }
+      const corpseRolled = requestCorpseLoot(corpseLootState, {
+        enemyId: event.enemyId,
+        lifeId: randomUUID(),
+        kind: event.kind,
+        x: enemy.x,
+        z: enemy.z,
+        eligibleHeroIds,
+        killerHeroId: event.heroId,
+        killerGearItemId: killerGearDrop?.itemId ?? null,
+        guaranteedItemIds: guaranteedCorpseItemIds,
+        ownedItemIdsFor,
+        coinAmountFor: (heroId) => coinAmountByHero.get(heroId) ?? 0,
+      }, rng);
+      corpseLootState = corpseRolled.state;
     }
-    // Advance every drop's own clock -- expiry for the uncollected, a short linger for the just-
-    // collected (see world/enemyDrops.js's own COLLECTED_LINGER_SECONDS).
+    // Advance every drop's/corpse's own clock -- expiry for the uncollected, a short linger for the
+    // just-collected (see world/enemyDrops.js's own COLLECTED_LINGER_SECONDS and corpseLoot.js's own
+    // retirement rule).
     dropsState = stepEnemyDrops(dropsState, deltaSeconds);
+    corpseLootState = stepCorpseLoot(corpseLootState, deltaSeconds);
 
     // The siege runs on the SAME tick and the same command shape, every tick, whether or not anybody
     // is standing in it -- a Warden mid-death-animation with nobody watching still has to finish
@@ -1529,6 +1706,32 @@ export function createSimulation(options = {}) {
       z: roundToWire(drop.z),
       ...(drop.itemId ? { itemId: drop.itemId } : {}),
       ...(drop.collectedBy != null ? { collectedBy: drop.collectedBy } : {}),
+    }));
+  }
+
+  // #87's wire block (protocol.js's decodeCorpses): every corpse still on the ground, every claim on
+  // it, full stop -- sent to everyone exactly the way `rewards` already sends every hero's own
+  // block to every client (net/gameServerCore.mjs's own rewardsFor comment), not a new privacy
+  // boundary this codebase has never drawn. A presenter reading its OWN heroId's claim out of this
+  // is a client-side concern, not a server one.
+  function corpsesSnapshot() {
+    return corpseLootState.corpses.map((corpse) => ({
+      id: corpse.id,
+      x: roundToWire(corpse.x),
+      z: roundToWire(corpse.z),
+      claims: corpse.claims.map((claim) => ({
+        heroId: claim.heroId,
+        // Each kind carries only the field it actually has: gear an itemId, coins an amount.
+        // Sending both with one always undefined is what the wire's own decoder refuses, and it
+        // would also put a meaningless key in front of every presenter reading this.
+        items: claim.items.map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          ...(item.kind === CORPSE_COIN_KIND ? { amount: item.amount } : { itemId: item.itemId }),
+          guaranteed: item.guaranteed,
+          taken: item.taken,
+        })),
+      })),
     }));
   }
 
@@ -1651,12 +1854,16 @@ export function createSimulation(options = {}) {
     applySearchCart,
     applyCollectLoot,
     applyCollectDrop,
+    applyClaimCorpseItem,
+    applyClaimAllCorpseLoot,
+    reassignCorpseClaims,
     applyHeroHeal,
     step,
     snapshot,
     encounterSnapshot,
     lootSnapshot,
     dropsSnapshot,
+    corpsesSnapshot,
     siegeSnapshot,
     beaconIsLit,
     rowanClaimState,
@@ -1709,6 +1916,12 @@ export function attachGameServer(httpServer, options = {}) {
   const snapshotEveryTicks = Math.max(1, Math.round(TICK_HZ / (options.snapshotHz ?? SNAPSHOT_HZ)));
   let lastStepAt = now();
   let ticksSinceSnapshot = 0;
+  // Correction: guestId -> the most recent heroId that guest joined as, kept ONLY at this layer
+  // (createRewardCoordinator's own guestIdByPlayer map goes the other direction and is not exposed
+  // for reverse lookup, and world/corpseLoot.js deliberately knows nothing about guestId at all --
+  // see its own reassignClaimHero). A reconnect (same guestId, fresh heroId) uses this to reattach
+  // any corpse claim the old heroId was still owed onto the new one, in the 'join' handler below.
+  const heroIdByGuestId = new Map();
 
   // The wire's encounter block, with rewards (D3) and GP2's loot state folded on: every reader of
   // encounterSnapshot()/lootSnapshot() above stays untouched, this is the one seam that adds the
@@ -1720,6 +1933,7 @@ export function attachGameServer(httpServer, options = {}) {
       rewards: rewards.rewardsFor(Object.keys(encounter.heroes)),
       loot: simulation.lootSnapshot(),
       drops: simulation.dropsSnapshot(),
+      corpses: simulation.corpsesSnapshot(),
       village: rewards.villageSnapshot(),
       siege: simulation.siegeSnapshot(),
     };
@@ -1741,6 +1955,19 @@ export function attachGameServer(httpServer, options = {}) {
         // whose localStorage threw) leaves this player ephemeral -- see createRewardCoordinator's
         // own comment.
         rewards.join(player.id, message.guestId);
+        // Correction: a reconnect (same guestId, fresh heroId) reattaches any corpse claim still
+        // owed to the guest's PREVIOUS heroId -- otherwise a claim earned right before a reload/wifi
+        // blip became permanently unreachable (the new heroId holds no claim, the old one is gone)
+        // while still occupying that corpse's own slot toward MAX_CONCURRENT_CORPSES for the whole
+        // expiry window. Guarded on a real (non-empty) guestId the same way `rewards.join` above is,
+        // since an ephemeral connection has no durable identity to match a stale heroId against.
+        if (typeof message.guestId === 'string' && message.guestId.length > 0) {
+          const previousHeroId = heroIdByGuestId.get(message.guestId);
+          if (previousHeroId && previousHeroId !== player.id) {
+            simulation.reassignCorpseClaims(previousHeroId, player.id);
+          }
+          heroIdByGuestId.set(message.guestId, player.id);
+        }
         // The current encounter block, not the empty placeholder -- a late joiner has to see a
         // mid-fight wolf correctly (Design ruling 7). Now including that guest's own persisted
         // marks, so a reconnect (same guestId, new playerId) sees them immediately on welcome --
@@ -1925,6 +2152,63 @@ export function attachGameServer(httpServer, options = {}) {
           simulation.applyHeroHeal(playerId, HEART_HEAL_HP);
         } else if (drop.kind === GEAR_DROP_KIND) {
           simulation.announceRewardFacts(rewards.grantOwnership(playerId, drop.itemId));
+        }
+        return;
+      }
+
+      // #87: a decoded `collect-corpse-item` message -- the same "adjudicate the physical claim in
+      // the simulation, award it here" split 'collect-drop' just above already takes, against
+      // world/corpseLoot.js's own per-hero claims. Every corpse item today is CORPSE_GEAR_KIND, so
+      // this always routes through the identical durable grantOwnership path a ground gear pickup
+      // already used -- the delivery mechanism changed, the award path did not.
+  /**
+   * #87: pay ONE accepted corpse-claim item through the reward paths the game already uses. Gear
+   * is a durable ownership grant, exactly as a ground gear pickup always was. Coins are the new
+   * half, and the shape matters:
+   *
+   * rewardStore counts coins as ROWS -- coinsFor is a literal COUNT(*) of coin-earned events, and
+   * Village Supplies counts the same way. So an `amount` on the claim cannot become one row
+   * carrying a number without changing what a coin IS everywhere in the store. Instead this
+   * derives `amount` distinct eventIds from the claim item's own already-globally-unique id, and
+   * applies each through the identical applyLootAward a ground coin uses. Nothing about the
+   * durable model changes; the child just sees one row saying "Coins x 3" instead of three.
+   *
+   * IDEMPOTENT BY CONSTRUCTION, which is what makes a resent collect safe: those derived ids are
+   * stable for a given claim item, and store.apply is INSERT OR IGNORE, so replaying the same
+   * collect pays exactly once -- the same defence-in-depth applyLootAward's own header describes
+   * for a physical pickup id, and independent of the simulation-layer `taken` flag that decided to
+   * call this at all.
+   */
+  function awardCorpseClaimItem(playerId, item) {
+    if (item.kind === CORPSE_COIN_KIND) {
+      const facts = [];
+      for (let i = 0; i < item.amount; i += 1) {
+        facts.push(...rewards.applyLootAward(playerId, `${item.id}#${i}`, COIN_KIND));
+      }
+      return facts;
+    }
+    return rewards.grantOwnership(playerId, item.itemId);
+  }
+      if (message.type === 'collect-corpse-item') {
+        if (!client.data.playerId) throw new ProtocolError('collect-corpse-item before join');
+        const playerId = client.data.playerId;
+        const { accepted, item } = simulation.applyClaimCorpseItem(
+          playerId, message.corpseId, message.claimItemId,
+        );
+        if (!accepted) return;
+        simulation.announceRewardFacts(awardCorpseClaimItem(playerId, item));
+        return;
+      }
+
+      // #87: `Take All` -- the same award path as 'collect-corpse-item' just above, once per item
+      // this hero's own claim still had untaken.
+      if (message.type === 'collect-corpse-all') {
+        if (!client.data.playerId) throw new ProtocolError('collect-corpse-all before join');
+        const playerId = client.data.playerId;
+        const { accepted, items } = simulation.applyClaimAllCorpseLoot(playerId, message.corpseId);
+        if (!accepted) return;
+        for (const item of items) {
+          simulation.announceRewardFacts(awardCorpseClaimItem(playerId, item));
         }
         return;
       }

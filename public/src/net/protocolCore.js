@@ -39,6 +39,15 @@ export const MESSAGE_TYPES = [
   // is (see that message's own decode comment). Its dropId cap is DROP_ID_MAX_LENGTH, NOT
   // PICKUP_ID_MAX_LENGTH -- see the correction note on those constants below.
   'collect-drop',
+  // #87: personal corpse loot -- the identical shape/reasoning as 'collect-drop' just above, for a
+  // claim that lives on world/corpseLoot.js's own corpses rather than enemyDrops.js's ground state.
+  // Two messages, not one with an optional field: 'collect-corpse-item' takes exactly one named item
+  // off one corpse, 'collect-corpse-all' is the `Take All` action and takes every item that hero's
+  // own claim still has untaken. Whether either is legal (does this corpse exist, does THIS hero
+  // hold a claim on it, is any of it still untaken, is the hero actually close enough) is
+  // corpseLoot.js's own business rule, not this layer's.
+  'collect-corpse-item',
+  'collect-corpse-all',
 ];
 
 // Mirrors requireString's own default cap. Item ids are short snake_case tokens
@@ -63,6 +72,13 @@ const PICKUP_ID_MAX_LENGTH = 48;
 // Declared here beside the other string caps because the inbound decoder reads it; the outbound
 // drops block below uses the same constant. test/collect-drop-wire.test.mjs pins both legs to it.
 const DROP_ID_MAX_LENGTH = 96;
+
+// #87: a corpse id is `corpse:<enemyId>:<lifeId>` -- the same shape/length family as a drop id just
+// above, minted per kill rather than authored. A claim item id is one segment longer
+// (`corpse-item:<enemyId>:<lifeId>:<heroId>:<slot>`), so it gets its own, slightly larger cap rather
+// than reusing DROP_ID_MAX_LENGTH and hoping every future heroId stays short enough by accident.
+const CORPSE_ID_MAX_LENGTH = 96;
+const CORPSE_CLAIM_ITEM_ID_MAX_LENGTH = 160;
 
 // E1 ordinary-enemy identity is explicit on the wire. The collection is bounded like every other
 // wire aggregate/string so a malformed frame cannot turn validation itself into unbounded work.
@@ -310,6 +326,29 @@ export function decode(text) {
       const dropId = requireString(raw.dropId, 'dropId', DROP_ID_MAX_LENGTH);
       if (dropId.length === 0) fail('dropId must not be empty');
       return { v: PROTOCOL_VERSION, type: 'collect-drop', dropId };
+    }
+
+    // #87: take ONE named item off a personal corpse claim. Shape validation only -- whether this
+    // corpse exists, whether THIS hero holds a claim on it, and whether that item is still untaken
+    // and in reach is world/corpseLoot.js's own business rule, the identical boundary 'collect-drop'
+    // draws against world/enemyDrops.js.
+    case 'collect-corpse-item': {
+      const corpseId = requireString(raw.corpseId, 'corpseId', CORPSE_ID_MAX_LENGTH);
+      if (corpseId.length === 0) fail('corpseId must not be empty');
+      const claimItemId = requireString(raw.claimItemId, 'claimItemId', CORPSE_CLAIM_ITEM_ID_MAX_LENGTH);
+      if (claimItemId.length === 0) fail('claimItemId must not be empty');
+      return {
+        v: PROTOCOL_VERSION, type: 'collect-corpse-item', corpseId, claimItemId,
+      };
+    }
+
+    // #87: the `Take All` action -- every item still untaken in THIS hero's own claim on one corpse.
+    // Same reasoning as 'collect-corpse-item' just above; corpseLoot.js's own requestClaimAllCorpseLoot
+    // is what actually scopes this to the calling hero's own claim, never a sibling's.
+    case 'collect-corpse-all': {
+      const corpseId = requireString(raw.corpseId, 'corpseId', CORPSE_ID_MAX_LENGTH);
+      if (corpseId.length === 0) fail('corpseId must not be empty');
+      return { v: PROTOCOL_VERSION, type: 'collect-corpse-all', corpseId };
     }
 
     // Client -> server only, same direction as 'collect-loot'. Shape validation only -- whether
@@ -740,6 +779,101 @@ function decodeDrops(drops) {
   });
 }
 
+// #87: personal corpse loot -- world/corpseLoot.js's own gear claims, one corpse per loot-bearing
+// kill, one claim per eligible hero, one or more items per claim (an independently-rolled ordinary
+// item, a guaranteed one, or both). Optional/additive, the same shape decodeDrops itself uses --
+// absent entirely for every pre-#87 fixture and caller, decoding to "no corpses on the ground" rather
+// than failing.
+// #87: 'coin' joined 'gear' when personal corpse loot took over the ordinary non-health reward
+// receipt -- an ordinary Wolf has gearChance 0, so a gear-only claim meant the opening fight could
+// never show the loot UI at all. A coin item carries an AMOUNT and no itemId; a gear item carries
+// an itemId and no amount. Both are validated below rather than trusted, because this is the
+// boundary a hostile or stale frame crosses.
+const CORPSE_LOOT_KINDS = ['gear', 'coin'];
+// A claim's coin row is a COUNT, not a stack of objects, and a count that arrives absurd is a
+// frame this decoder should refuse rather than render. Sized well above any real streak-multiplied
+// band (the richest table is the Alpha's 4-7 at a x3 streak) so a legitimate payout is never
+// rejected.
+const MAX_CORPSE_COIN_AMOUNT = 999;
+// Small player counts in practice (this game's own co-op ceiling), capped generously rather than
+// tied to a literal player count so a malformed frame cannot turn validation into unbounded work.
+const MAX_CORPSE_CLAIMS = 8;
+// A claim carries at most one guaranteed item plus one ordinary item today (requestCorpseLoot's own
+// shape) -- capped a little above that so a future second guaranteed reward does not need a wire
+// bump.
+const MAX_CORPSE_ITEMS_PER_CLAIM = 6;
+// A little above world/corpseLoot.js's own MAX_CONCURRENT_CORPSES server-side cap, the same
+// headroom-over-the-server-cap relationship MAX_WIRE_DROPS keeps over enemyDrops.js's own ceiling.
+const MAX_WIRE_CORPSES = 16;
+
+function decodeCorpseItem(item, field) {
+  if (item === null || typeof item !== 'object' || Array.isArray(item)) fail(`${field} must be an object`);
+  const id = requireString(item.id, `${field}.id`, CORPSE_CLAIM_ITEM_ID_MAX_LENGTH);
+  if (id.length === 0) fail(`${field}.id must not be empty`);
+  const kind = requireString(item.kind, `${field}.kind`, 16);
+  if (!CORPSE_LOOT_KINDS.includes(kind)) {
+    fail(`${field}.kind must be one of ${CORPSE_LOOT_KINDS.join(', ')}, got ${JSON.stringify(kind)}`);
+  }
+  if (kind === 'coin') {
+    const amount = requireInteger(item.amount, `${field}.amount`);
+    if (amount < 1) fail(`${field}.amount must be >= 1, got ${amount}`);
+    if (amount > MAX_CORPSE_COIN_AMOUNT) {
+      fail(`${field}.amount may be at most ${MAX_CORPSE_COIN_AMOUNT}, got ${amount}`);
+    }
+    return { id, kind, amount, guaranteed: Boolean(item.guaranteed), taken: Boolean(item.taken) };
+  }
+  const itemId = requireString(item.itemId, `${field}.itemId`, ITEM_ID_MAX_LENGTH);
+  if (itemId.length === 0) fail(`${field}.itemId must not be empty`);
+  return {
+    id, kind, itemId, guaranteed: Boolean(item.guaranteed), taken: Boolean(item.taken),
+  };
+}
+
+function decodeCorpseClaim(claim, field) {
+  if (claim === null || typeof claim !== 'object' || Array.isArray(claim)) fail(`${field} must be an object`);
+  const heroId = requireString(claim.heroId, `${field}.heroId`);
+  if (heroId.length === 0) fail(`${field}.heroId must not be empty`);
+  if (!Array.isArray(claim.items)) fail(`${field}.items must be an array`);
+  if (claim.items.length > MAX_CORPSE_ITEMS_PER_CLAIM) {
+    fail(`${field}.items may contain at most ${MAX_CORPSE_ITEMS_PER_CLAIM} entries`);
+  }
+  if (claim.items.length === 0) fail(`${field}.items must not be empty`);
+  return {
+    heroId,
+    items: claim.items.map((item, index) => decodeCorpseItem(item, `${field}.items[${index}]`)),
+  };
+}
+
+function decodeCorpse(corpse, index) {
+  const field = `encounter.corpses[${index}]`;
+  if (corpse === null || typeof corpse !== 'object' || Array.isArray(corpse)) fail(`${field} must be an object`);
+  const id = requireString(corpse.id, `${field}.id`, CORPSE_ID_MAX_LENGTH);
+  if (id.length === 0) fail(`${field}.id must not be empty`);
+  if (!Array.isArray(corpse.claims)) fail(`${field}.claims must be an array`);
+  if (corpse.claims.length > MAX_CORPSE_CLAIMS) {
+    fail(`${field}.claims may contain at most ${MAX_CORPSE_CLAIMS} entries`);
+  }
+  return {
+    id,
+    x: requireFiniteNumber(corpse.x, `${field}.x`),
+    z: requireFiniteNumber(corpse.z, `${field}.z`),
+    claims: corpse.claims.map((claim, claimIndex) => decodeCorpseClaim(claim, `${field}.claims[${claimIndex}]`)),
+  };
+}
+
+function decodeCorpses(corpses) {
+  if (corpses === undefined) return [];
+  if (!Array.isArray(corpses)) fail('encounter.corpses must be an array');
+  if (corpses.length > MAX_WIRE_CORPSES) fail(`encounter.corpses may contain at most ${MAX_WIRE_CORPSES} entries`);
+  const ids = new Set();
+  return corpses.map((corpse, index) => {
+    const decoded = decodeCorpse(corpse, index);
+    if (ids.has(decoded.id)) fail(`encounter.corpses contains duplicate id ${JSON.stringify(decoded.id)}`);
+    ids.add(decoded.id);
+    return decoded;
+  });
+}
+
 // GP3: Village Supplies, shared once for the whole simulation rather than per-hero -- unlike
 // `rewards` above (net/gameServer.mjs's own createRewardCoordinator draws this same shared-vs-per-
 // guest line: coinsFor/shardsFor stay personal provenance, this is the communal spendable total).
@@ -850,6 +984,7 @@ function decodeEncounter(encounter) {
     rewards: decodeRewards(encounter.rewards),
     loot: decodeLoot(encounter.loot),
     drops: decodeDrops(encounter.drops),
+    corpses: decodeCorpses(encounter.corpses),
     village: decodeVillage(encounter.village),
     siege: decodeSiege(encounter.siege),
   };
@@ -891,6 +1026,7 @@ const EMPTY_ENCOUNTER = Object.freeze({
   rewards: Object.freeze({}),
   loot: Object.freeze({ spawned: false, collected: Object.freeze({}) }),
   drops: Object.freeze([]),
+  corpses: Object.freeze([]),
   village: Object.freeze({ coins: 0, shards: 0, workshopOwned: false }),
   siege: EMPTY_SIEGE,
 });
@@ -962,6 +1098,16 @@ export function collectLootMessage(pickupId) {
 
 export function collectDropMessage(dropId) {
   return { v: PROTOCOL_VERSION, type: 'collect-drop', dropId };
+}
+
+export function collectCorpseItemMessage(corpseId, claimItemId) {
+  return {
+    v: PROTOCOL_VERSION, type: 'collect-corpse-item', corpseId, claimItemId,
+  };
+}
+
+export function collectCorpseAllMessage(corpseId) {
+  return { v: PROTOCOL_VERSION, type: 'collect-corpse-all', corpseId };
 }
 
 export function villageUpgradePurchaseMessage(upgradeId) {

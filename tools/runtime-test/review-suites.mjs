@@ -94,6 +94,11 @@ export const HARNESSES = {
   // never about how it looks. Its captures are the human evidence; its exit code is not a claim anyone
   // has looked at them.
   'drive-helmet-vertical': { gate: true, why: 'the Silverguard Helmet vertical played end to end: mid-session grant, the acquisition card and its POWER move, EQUIP NOW mounts it, truthful Hero screen, and a reload that restores the worn Helmet without replaying the ceremony' },
+  // #87's client presenter. This is a real browser gate: the harness's opt-in test seam fixes only
+  // which item ids sit on the personal claim. The kill, contributor eligibility, corpse spawn, claim,
+  // wire, touch interactions, presenter, collection round trip, final-item receipt, toast and Hero
+  // button pulse all stay real. A non-zero exit therefore means the player-facing loop did not prove.
+  'drive-corpse-loot': { gate: true, why: 'personal corpse loot client presenter, end to end and fully gating: a real fought kill spawns a real personal claim (contents fixtured through net/gameServerCore.mjs\'s opt-in guaranteedCorpseItemIds, so no unseeded gear roll decides whether this gate can run), then real touch dispatch drives glow/prompt -> panel -> individual TAKE -> Take All on the last item -> acquired-item toast and Hero-button pulse. No best-effort tier: a red run is a real regression' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -111,6 +116,6 @@ export const SUITES = {
     'review-studio', 'review-studio-library', 'review-owner-annotations', 'drive-hero-screen', 'drive-cart-loot',
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
-    'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect',
+    'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect', 'drive-corpse-loot',
   ],
 };

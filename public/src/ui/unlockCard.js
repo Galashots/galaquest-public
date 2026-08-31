@@ -171,7 +171,7 @@ export const SHOULDER_ICON_SVG = `
 export const UNLOCK_CARD_CSS = `
       #unlock-card-layer {
         position: absolute; inset: 0; display: grid; place-items: center;
-        opacity: 0; transition: opacity 200ms ease-out;
+        opacity: 0; visibility: hidden; transition: opacity 200ms ease-out;
         pointer-events: none; touch-action: none;
         /* The card's accent, ONE colour driving the border, burst and icon. Defaults to the Wildwood
            teal so the weapon ceremony is unchanged (GP1-C1); show() overrides it per reward -- G1-C3's
@@ -181,7 +181,11 @@ export const UNLOCK_CARD_CSS = `
         --burst: ${wildwoodAlpha('45%')};
         --burst-soft: ${wildwoodAlpha('35%')};
       }
-      #unlock-card-layer[data-shown="true"] { opacity: 1; }
+      /* visibility is the ownership boundary, not merely a paint detail. The card deliberately
+         restores pointer-events below so a visible ceremony can receive its own taps; without
+         visibility:hidden on the closed layer, that child remains the hit-test target while the
+         whole ceremony is opacity:0 and steals touches from unrelated UI beneath it. */
+      #unlock-card-layer[data-shown="true"] { opacity: 1; visibility: visible; }
       /* The light-burst: one radial pulse behind the card on entry, in the reward's accent --
          'forwards' so it ends gone rather than snapping back. Decorative only (aria-hidden). */
       #unlock-burst {

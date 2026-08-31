@@ -112,6 +112,22 @@ import {
   stepEnemyDrops,
 } from './world/enemyDrops.js';
 import { createEnemyDropsPresenter } from './world/enemyDropsPresenter.js';
+// #87: the CLIENT half of personal corpse loot. world/corpseLoot.js's own law and
+// net/gameServerCore.mjs's own corpsesSnapshot are unchanged by this file -- this only reads what the
+// server already put on the wire (see corpseLootPresenter.js's own header for why that reading is
+// still where per-player isolation is provable client-side, twice over).
+import {
+  corpseLootPanelViewModel,
+  corpsesToGlowFor,
+  dismissLootPanelForCombat,
+  nearestLootableCorpse,
+  newlyTakenItems,
+} from './world/corpseLootPresenter.js';
+import { CORPSE_COIN_KIND } from './world/corpseLoot.js';
+import { createCorpseLootGlowPresenter } from './world/corpseLootGlowPresenter.js';
+import {
+  createCorpseLootInteract, createCorpseLootPanel, createCorpseLootToastLayer,
+} from './ui/corpseLootPanel.js';
 import {
   coinMultiplierForStreak, createStreakState, registerKill as registerStreakKill, stepStreak,
   streakStillActive,
@@ -1032,6 +1048,24 @@ async function bootstrap() {
   // presenter itself is shared by both modes: it only ever reads whatever drops array it is handed.
   let dropsState = createEnemyDropsState();
   const dropsPresenter = createEnemyDropsPresenter(scene);
+  // #87: personal corpse loot's own physical presenter -- server-authoritative only (there is no
+  // offline corpse-loot state, see net client's own sendCollectCorpseItem/All comment), so this only
+  // ever reads serverEncounter.corpses. `previousCorpses` starts null rather than [] on purpose:
+  // world/corpseLootPresenter.js's own newlyTakenItems treats null/undefined as "no baseline yet" and
+  // suppresses arrivals, so a hero who reconnects onto an already-resolved claim never gets a
+  // retroactive toast for gear they took last session. That guard has to be re-armed every time this
+  // hero goes offline, not only at bootstrap: an IN-PAGE reconnect (net/client.js's own
+  // reconnectTimer) never reloads this module, so a snapshot taken right before the blip would
+  // otherwise sit here as a stale baseline keyed to the old, now-dead heroId. The corpse-loot loop
+  // below resets it back to null the instant this hero is not online, so the first snapshot after any
+  // reconnect is always treated as a fresh "no baseline yet" welcome, exactly like bootstrap.
+  const corpseGlowPresenter = createCorpseLootGlowPresenter(scene);
+  let previousCorpses = null;
+  // This hero's own body as of the last snapshot, for the combat-dismissal diff below. Re-armed to
+  // null wherever previousCorpses is, and for the identical reason: a reconnect mints a fresh heroId,
+  // and a stale body kept across that blip would compare two different heroes' hit points.
+  let previousSelfBody = null;
+  let heroButtonLootPulseTimer = null;
   // Offline-only: world/enemyDrops.js's own lifeId is deliberately non-durable ("used only to keep
   // this kill's drop ids distinct... never persisted or checked for durable idempotency"), so a
   // fresh minter local to drops is correct -- it does not need to correlate with the mark/XP minter's
@@ -1174,6 +1208,36 @@ async function bootstrap() {
   const unlockCard = createUnlockCard(document);
   gameSurface.appendChild(bossBar.element);
   gameSurface.appendChild(unlockCard.element);
+
+  // #87: the corpse loot prompt/panel/toast. Same "appended after everything else so it paints over
+  // the HUD" placement as bossBar/unlockCard just above.
+  const corpseLootPanel = createCorpseLootPanel(document, {
+    onCollectItem: (claimItemId) => {
+      const corpseId = corpseLootPanel.currentCorpseId();
+      if (corpseId) net.sendCollectCorpseItem(corpseId, claimItemId);
+    },
+    onCollectAll: () => {
+      const corpseId = corpseLootPanel.currentCorpseId();
+      if (corpseId) net.sendCollectCorpseAll(corpseId);
+    },
+  });
+  // The corpse this hero is currently close enough to open -- set every frame by the loot loop below,
+  // read back only when the prompt is actually tapped (main.js's own onOpen callback), the same
+  // "compute every frame, act only on the click" split #workshop-interact's own renderWorkshopInteract
+  // keeps against heroScreen.open().
+  let promptCorpseId = null;
+  const corpseLootInteract = createCorpseLootInteract(document, {
+    onOpen: () => {
+      if (!promptCorpseId || !serverEncounter?.corpses) return;
+      const corpse = serverEncounter.corpses.find((c) => c.id === promptCorpseId);
+      if (!corpse || net.selfId == null) return;
+      corpseLootPanel.show(corpse.id, corpseLootPanelViewModel(corpse, net.selfId));
+    },
+  });
+  const corpseLootToastLayer = createCorpseLootToastLayer(document);
+  gameSurface.appendChild(corpseLootInteract.element);
+  gameSurface.appendChild(corpseLootPanel.element);
+  gameSurface.appendChild(corpseLootToastLayer.element);
 
   const bannerElement = document.querySelector('#banner');
   let bannerTimer = null;
@@ -4860,6 +4924,117 @@ async function bootstrap() {
           if (collected.accepted) dropsState = collected.state;
         }
       }
+    }
+
+    // ── #87: PERSONAL CORPSE LOOT ───────────────────────────────────────────────────────────
+    //
+    // Server-authoritative only, deliberately: world/corpseLoot.js is a server-side module with no
+    // offline mirror (see net client's own sendCollectCorpseItem/All comment for why -- there is no
+    // shared world to keep a personal claim in while offline). Everything below reads
+    // serverEncounter.corpses and nothing else; this is a presenter, never an awarder -- the actual
+    // grant happens on the server the moment it accepts collect-corpse-item/-all
+    // (net/gameServerCore.mjs's own applyClaimCorpseItem/applyClaimAllCorpseLoot), and this loop only
+    // ever finds out about it on the NEXT snapshot, the same one-way "server owns physical truth,
+    // client presents it" split every other reward here already keeps.
+    if (runtime.hero && netStatus === 'online' && net.selfId != null) {
+      const corpses = serverEncounter?.corpses ?? [];
+      const heroId = net.selfId;
+
+      corpseGlowPresenter.update(deltaSeconds, corpsesToGlowFor(heroId, corpses));
+
+      // The single nearest corpse this hero can actually still loot -- offered by the prompt, opened
+      // by a tap. Hidden while the panel is already open: a second "LOOT" prompt behind an open panel
+      // would be a control a thumb cannot see to avoid.
+      const nearest = corpseLootPanel.isOpen()
+        ? null : nearestLootableCorpse(heroId, corpses, player.position);
+      promptCorpseId = nearest?.id ?? null;
+      corpseLootInteract.show(nearest != null);
+
+      // Keep an open panel live against the actual snapshot -- a sibling's simultaneous claim, this
+      // hero's own click landing, or the corpse itself finally retiring (every eligible hero resolved)
+      // all show up here without the panel needing its own copy of the rule. A corpse that vanished
+      // out from under an open panel (fully resolved, or CORPSE_LOOT_EXPIRE_SECONDS ran out while a
+      // child was mid-read) closes the panel rather than showing a frozen, wrong list.
+      // COMBAT PRE-EMPTS THE MODAL. The panel may stay up while it is safe; the moment the fight
+      // actually reaches this hero it has to give the game back. Without this the child is frozen
+      // inside a full-screen overlay -- no walking, no swinging -- while the wolf that respawned on
+      // this very corpse bites them to death, and is then left holding live TAKE buttons for a body
+      // they are now metres away from, every tap silently refused on reach. Measured hosted at
+      // 946857f; world/corpseLootPresenter.js's own dismissLootPanelForCombat carries the full
+      // argument and the numbers, and states why progression/runeChests.js's heroInCombat is the
+      // right PRINCIPLE here but the wrong helper.
+      //
+      // Dismiss only. The claim is server-side truth and is not touched: nothing is awarded, nothing
+      // is equipped, no item is resolved, and every remaining personal item stays exactly as untaken
+      // as it was -- so the hero walks back, taps Loot again, and finishes. The panel has no onClose
+      // handler at all (see its construction above), which is what makes that free.
+      const selfBody = serverEncounter?.heroes?.[heroId] ?? null;
+      if (corpseLootPanel.isOpen()) {
+        const openCorpseId = corpseLootPanel.currentCorpseId();
+        const openCorpse = corpses.find((corpse) => corpse.id === openCorpseId);
+        if (dismissLootPanelForCombat(previousSelfBody, selfBody)) corpseLootPanel.close();
+        else if (openCorpse) corpseLootPanel.render(openCorpse.id, corpseLootPanelViewModel(openCorpse, heroId));
+        else corpseLootPanel.close();
+      }
+      previousSelfBody = selfBody;
+
+      // The short acquired-item confirmation, plus "visible movement toward the inventory/Hero
+      // destination" (#87's own required outcome list) -- fires off a SNAPSHOT DIFF, so it fires
+      // identically whether this hero tapped TAKE, tapped Take All, or a resend from a flaky
+      // connection landed a beat late; never for an item this hero's client already knew was taken.
+      const arrivals = newlyTakenItems(previousCorpses, corpses, heroId);
+      if (arrivals.length > 0) {
+        const heroButtonRect = document.querySelector('#hero-button')?.getBoundingClientRect();
+        const destination = heroButtonRect
+          ? { x: heroButtonRect.left + heroButtonRect.width / 2, y: heroButtonRect.top + heroButtonRect.height / 2 }
+          : null;
+        for (const arrival of arrivals) {
+          // #87: a claim now pays COINS as well as gear, and a coin arrival has to reach the HUD the
+          // same way a ground coin's own arrival flight does -- by advancing coinsDisplayed and
+          // popping the counter. The background Village sync further down cannot do it: it only ever
+          // runs for the cart's own pickups, so before this the child collected coins, watched the
+          // server credit them, and saw their coin counter sit unchanged. "It went into my inventory"
+          // is half of what #87 asks a child to understand, and a number that does not move does not
+          // say it.
+          if (arrival.kind === CORPSE_COIN_KIND) {
+            corpseLootToastLayer.announce(`+ ${arrival.amount} coins`, destination);
+            coinsDisplayed += arrival.amount;
+            renderLootHud();
+            popLootHud(COIN_KIND);
+            audio.play(COIN_PICKUP_RECIPE_NAME);
+            continue;
+          }
+          const name = itemDef(arrival.itemId)?.name ?? 'Gear';
+          corpseLootToastLayer.announce(`+ ${name}`, destination);
+          audio.play(GEAR_PICKUP_RECIPE_NAME);
+        }
+        const heroButtonElement = document.querySelector('#hero-button');
+        if (heroButtonElement) {
+          heroButtonElement.dataset.lootPulse = 'true';
+          window.clearTimeout(heroButtonLootPulseTimer);
+          heroButtonLootPulseTimer = window.setTimeout(() => {
+            heroButtonElement.dataset.lootPulse = 'false';
+          }, 260);
+        }
+      }
+      previousCorpses = corpses;
+    } else {
+      corpseGlowPresenter.update(deltaSeconds, []);
+      previousSelfBody = null;
+      if (promptCorpseId !== null) {
+        promptCorpseId = null;
+        corpseLootInteract.show(false);
+      }
+      // Correction: this hero is not online (offline, still connecting, or mid in-page-reconnect
+      // between a dropped socket and a fresh 'welcome') -- null out the diff baseline here too, not
+      // only at bootstrap. A reconnect mints a NEW heroId (net/gameServerCore.mjs's own addPlayer)
+      // and net/gameServerCore.mjs's own reassignCorpseClaims moves any live claim onto it, so a
+      // baseline snapshot captured under the OLD heroId can never find that claim again --
+      // newlyTakenItems would then see the reassigned claim's already-taken items as a brand new
+      // arrival and replay a false "+ Item" toast for gear this hero collected before the blip. Going
+      // through this same "no baseline yet" state every time re-arms the exact bootstrap guard the
+      // comment above documents, rather than only ever priming it once per page load.
+      previousCorpses = null;
     }
 
     // ── G2/G3: THE SIEGE ────────────────────────────────────────────────────────────────────

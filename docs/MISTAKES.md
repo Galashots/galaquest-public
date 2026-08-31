@@ -90,6 +90,7 @@ vocabulary. A new entry adds its row in the same commit.
 | GQ-023 | One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire. | net, tests |
 | — | A skinned body goes where its BONES go, not where its geometry box says. | code, visual, harness |
 | — | A shared readiness promise must not await one optional body. | code, harness |
+| — | An instrument spends the lifetime of the subject it is measuring. | harness, evidence |
 
 ---
 
@@ -1708,3 +1709,82 @@ kills a real enemy over a real WebSocket, collects through the real decode path,
 socket, playerId, and position all survive; tools/runtime-test/drive-drop-collect.mjs stands the
 same watch in the real browser with CDP Network-level socket evidence.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — An instrument spends the lifetime of the subject it is measuring.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-30
+**Rule:** GQ-021 says to write a harness's numbers in the units the subject advances in. This is the
+next question, and it is not the same one: **how long does the subject EXIST?** A budget can be a
+correct wall-clock deadline, derived from a real constant, and still be wrong — because it was sized
+against the other budgets in the file rather than against the life of the thing being observed. When
+the subject has a finite lifetime (a corpse claim, a ground drop, a knockdown, a session token), every
+wait is drawn from that lifetime, so no wait may be budgeted longer than what remains, and a phase
+with work after it must reserve what that work needs. Mechanised as `subjectLifetime` in
+`tools/runtime-test/automation-timing.mjs` (pinned by `test/automation-timing.test.mjs`): route every
+deadline through `budgetFor` and no composition of retries can outlive the subject.
+**And print the remaining life at every phase.** This is the half that cost the most. A run that has
+outlived its subject produces assertions that are all individually TRUE and collectively meaningless,
+and nothing in the output says so.
+**Incident (2026-08-30, `drive-corpse-loot` at `a20fcd7`).** Six red checks: the individual TAKE hit
+`CANVAS#game-canvas`, no toast, no Hero pulse, rows unchanged, Take All identically, the panel never
+confirmed. Every one was a true statement about a corpse that had expired 8.6 seconds earlier —
+188.6s from corpse to tap against `CORPSE_LOOT_EXPIRE_SECONDS` of 180. Every gameplay assertion that
+ran *inside* the claim's life passed, including the panel standing open with a named, hit-testable
+TAKE button when the corpse was 87.6s old, less than half its life. A child taps that in a second;
+this harness took 101 more. Where it went, at a measured ~400ms per hosted CDP read: ~50s in a
+knockdown poll written as 60 iterations of a large eval plus `sleep(500)`, waiting on a 2-second
+`RESPAWN_SECONDS`; ~60s in ONE recovery re-approach carrying a flat 60s deadline; ~30s in three
+`for (i<25) { eval; sleep(200) }` polls waiting on a ~1s round trip; and 123s in two receipt loops
+confirming collects that had already failed.
+**What made it expensive was the diagnosis, not the fix.** Three hosted cycles were spent reading
+that cascade as an interaction bug — an intercepting overlay, a stale prompt precondition, an
+unseeded roll — and each of those three was a real defect that really was found and really was fixed.
+That is what made the wrong theory so durable: it kept being partly right. The run now gates on
+having finished inside the lifetime it was measuring, so the next occurrence says so in one line.
+**Corollary — a throttle is not a model of a loaded runner, and believing it is closes the
+investigation early.** The file claimed `GALAQUEST_CPU_THROTTLE=6` "reproduces something near the
+hosted judging regime", and the PR body offered "1x, 6x, 12x (harsher than hosted)" as evidence.
+Measured: at 12x the whole post-corpse sequence takes 13.2s against hosted's 188.6s — fourteen times
+faster, not harsher — and at 20x and 40x the client cannot boot inside 30s, a failure hosted has
+never shown. CPU throttling scales the RENDERER while server-side timers keep real wall-clock time,
+and it slows boot and fight uniformly where contention does not. It reproduces starvation. It cannot
+reproduce elapsed time, which is the axis this defect lived on.
+**Corollary, and the second head of the same incident — a recovery path can be a guaranteed no-op,
+and it looks exactly like a slow one.** With the budgets fixed the same harness went red again, and
+this time every tap landed on the real button (`hitIsTarget:true`, `clickLanded:true`) and the
+server refused all three on reach. The loot panel is a MODAL: `inset: 0`, `pointer-events: auto`
+while shown, over a full-screen backdrop whose pointerdown is stopped from reaching `#game`. So
+while it is open it owns the movement stick, and the retry's `approachCorpse` — stick touches
+dispatched into that backdrop — could never move anybody. Two recoveries moved the hero zero metres
+and burned their whole budget proving nothing. **Before writing a recovery that acts on the world,
+ask what owns the input while the thing you are recovering FROM is on screen.** The harness now
+closes the panel, walks, and reopens it — what a child does — and prints what owns the stick point
+while the panel is open, so the coupling is never inferred again.
+**And the thing that displaced the hero turned out to be the real defect — RESOLVED, and the way it
+was reached is the lesson.** `wolf-1` respawns at its authored home 10s after death, which is where
+it died, which is where its corpse is. So looting happens inside a live re-fight, against a modal
+that has taken away movement and attack: 10 damage per bite every 2.6s into 30 HP is three bites,
+and the hero opened the panel on hp 20. He collected the first item correctly and was dead before
+the second round trip finished.
+
+**Two harness defects had to be removed before that sentence could be trusted**, and each one looked
+like the answer while it stood. The first was the budget problem above. The second was an approach
+target of 1.2m that the product never asks for — the real radius is 2.5m and the hosted walk report
+read `startMetres: 1.376`, so the hero was *already* lootable and the instrument was spending the
+wolf's respawn window walking closer for no reason. Only with both gone did a clean measurement
+exist: kill → first TAKE 9.8s with zero screenshot time inside it, first TAKE passing, Take All lost
+to a death. **A product conclusion drawn while the instrument still has a known artifact in it is a
+guess wearing a number.** The Production Director refused the first two attempts to call this a
+product blocker, correctly, on exactly that ground.
+
+The fix reuses `progression/runeChests.js`'s own law — that module's `heroInCombat` exists because
+"a child who backs over a chest while a wolf is on them gets a maths question over a frozen hero and
+keeps taking bites they can no longer answer" — but deliberately **not** its helper: that one gates
+OPENING on proximity, and a proximity rule here would make a corpse the wolf respawns on top of
+permanently unlootable. `world/corpseLootPresenter.js`'s `dismissLootPanelForCombat` gates STAYING
+OPEN on real damage or going down. **Share the sentence, not the code, when the failure is identical
+and the trigger is not.**
+**The general form:** ask what the subject's clock RATE is (GQ-021), and then ask how much of the
+subject is LEFT. An instrument that consumes what it observes has to report the consumption, or its
+own thoroughness becomes the failure.
+**Foreknowledge helped:** no. GQ-021 was read, cited in this file's own comments, and correctly
+applied to every rate in it — while the lifetime question went unasked.
