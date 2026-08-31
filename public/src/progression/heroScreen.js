@@ -1,44 +1,71 @@
-// The Hero screen: GP1's whole UI surface, kept out of main.js on purpose -- the architecture
-// doctrine (GalaQuest_Gameplay_Expansion_Stream_Plan section 5) singles main.js out as a conflict
-// hotspot the asset stream is also touching, and this feature is big enough (five slots, an owned-
-// item strip, a comparison card, open/close, a camera dolly handoff) that inlining it would have
-// meant a real chunk of main.js's own growth. main.js only ever calls createHeroScreen() once and
-// feeds it a state object each frame, the same "pure logic, main.js does the wiring" split
-// rewards/hud.js's pipsForMarks already uses -- just large enough this time to own its DOM binding
-// too, rather than leaving forty lines of querySelector calls in main.js.
+// The Hero screen: the gear surface a child compares on and equips from, kept out of main.js on
+// purpose -- the architecture doctrine (GalaQuest_Gameplay_Expansion_Stream_Plan section 5) singles
+// main.js out as a conflict hotspot the asset stream is also touching, and this feature is big
+// enough (five slots, an inventory grid, a comparison card, open/close, a hero preview handoff) that
+// inlining it would have meant a real chunk of main.js's own growth. main.js calls createHeroScreen()
+// once and feeds it a state object each frame.
 //
 // heroScreenViewModel is pure (no DOM) and unit tested directly. createHeroScreen is the DOM half,
-// exercised only through the browser and tools/runtime-test/drive-hero-screen.mjs -- the same split
-// AGENTS.md's "Playtests are mandatory" draws between a rule you can prove without a screen and one
-// you can only prove by looking at it.
+// exercised through the browser and tools/runtime-test/drive-hero-screen.mjs -- the same split
+// between a rule you can prove without a screen and one you can only prove by looking at it.
+//
+// ── #88: WHAT CHANGED HERE, AND WHY THE OLD SHAPE WAS WRONG ────────────────────────────────────
+//
+// This surface used to be: tap an item to select it, then find a separate EQUIP button and tap that.
+// A Checkpoint 0 player-fair session against main@de9f253 photographed the result -- every item, in
+// every slot and in the owned strip, drawn as one identical grey rounded rectangle, and a comparison
+// card that said "WEAPON DAMAGE 10" with no art, no rarity, and no POWER.
+//
+// #88 replaces the interaction and the presentation together:
+//
+//   FIRST TAP on an unequipped item SELECTS it and opens the comparison. It does NOT equip.
+//   SECOND TAP on that same item (or on its comparison card) EQUIPS it.
+//   There is NO separate Equip button. It is gone from this file and from index.html.
+//   A tap on an item that is ALREADY WORN selects it and never takes it off.
+//
+// The two-tap rule lives in the DOM half rather than the view model because it is about EVENTS, not
+// state: "is this the second tap" is answerable only from what the presenter last painted, which is
+// exactly what `lastView` is. The view model's job is to say whether an item is ARMED -- selected,
+// owned, and not already worn -- and the click handler turns that into compare-or-equip.
+//
+// WHY NOT A LONG-PRESS, A DOUBLE-TAP, OR A DRAG: a long-press is invisible to a child who has never
+// been told about it, a double-tap has to race a 300ms timer against the single-tap it also has to
+// serve, and a drag needs precision a five-year-old's thumb does not have. Two ordinary taps with a
+// visibly different state in between is the only one of the four where the screen itself can say
+// what the next tap will do -- which is why the card carries that sentence.
 
 import {
   DEFAULT_EQUIPPED_ITEM_IDS,
   ITEM_DEFS,
   WEAPON_SLOT,
   damageFor,
-  damageReductionPercentFor,
   itemDef,
 } from './items.js';
-// P2: the RESOLVED hero, and the number a child brags about. Imported rather than passed as loose
+// The RESOLVED hero, and the number a child brags about. Imported rather than passed as loose
 // numbers so this surface cannot be handed a level and a POWER that disagree with each other.
-// damageReductionPercentForEquipment is what makes the POWER comparison DEFENCE-aware in G1-C3: a
-// helmet's worth is a change in incoming damage, and swapping only its slot is how the card asks
-// "what would wearing this do to POWER" without re-deriving the rest of the hero.
 import { damageReductionPercentForEquipment, resolvedHeroDamage } from './heroStats.js';
 import { formatPower, powerFor } from './power.js';
+// #88's single art/rarity authority. Imported, never restated (GQ-007): the acquisition ceremony,
+// the inventory grid, the equipped slot and the comparison card all draw one item from one row, so
+// they cannot disagree about what a Silverguard Helmet looks like.
+import { itemIconSvgFor, itemIconUrlFor, rarityFor, rarityLabelFor, rarityRankFor } from './itemArt.js';
+// The comparison itself, including the sidegrade rule. This module paints what gearCompare decides
+// and decides none of it -- see that file's header for why a verdict a child reads as "yes, put it
+// on" belongs somewhere `node --test` can interrogate.
+import { gearComparison } from './gearCompare.js';
+// The one piece of DOM that draws an item's picture, shared with the acquisition ceremony and the
+// corpse-loot receipt. See ui/itemArtView.js for why it is not three copies.
+import { clearItemArt, paintItemArt } from '../ui/itemArtView.js';
 // A plain numeric hex constant, not a three.js Color or a DOM value -- safe to import into a
 // browser-only UI module with zero new coupling. Reusing it (rather than a second guess at "what
-// colour is the Wildwood Blade") is what keeps the item card's swatch agreeing with the planted prop
-// a child already saw in Rowan's clearing.
+// colour is the Wildwood Blade") is what keeps the accent agreeing with the planted prop a child
+// already saw in Rowan's clearing.
 import { WILDWOOD_COLOR } from '../world/wildwoodBlade.js';
 
 const SLOT_DEFS = Object.freeze([
   { id: WEAPON_SLOT, label: 'Weapon' },
   // A slot is locked exactly when the catalogue defines NO item for it -- decided from ITEM_DEFS
-  // below, never from a hand-maintained "which slots work" list that could drift from it. G1-C1's
-  // Shield and G1-C3's Helmet are now real items, so those two slots unlock automatically; shoulders
-  // and chest stay locked until their first item ships, with nothing here to change when it does.
+  // below, never from a hand-maintained "which slots work" list that could drift from it.
   { id: 'shield', label: 'Shield' },
   { id: 'helmet', label: 'Helmet' },
   { id: 'shoulders', label: 'Shoulders' },
@@ -46,23 +73,20 @@ const SLOT_DEFS = Object.freeze([
 ]);
 
 // The slots the catalogue has at least one item for. Derived from ITEM_DEFS so adding an item to a
-// slot unlocks it with no second edit here (the promise SLOT_DEFS' comment makes, made real).
+// slot unlocks it with no second edit here.
 const SLOTS_WITH_ITEMS = Object.freeze(new Set(Object.values(ITEM_DEFS).map((def) => def.slot)));
 
-// One swatch per item id, standing in for real gear art the same way world/wildwoodBlade.js's own
-// planted prop does -- GQ-002 risk kept low by sourcing the one colour that already exists elsewhere
-// rather than inventing a second definition of it. Numeric hex (three.js's own colour shape) is the
-// source of truth; the DOM's CSS string is derived from it below, not defined a second time.
+// One accent per item id. Retained alongside the rendered portraits in itemArt.js because they
+// answer different questions: the PNG is what the item looks like, the accent is what colour the
+// glow, the slot ring and the acquisition card take -- and a UI cannot sample a colour out of an
+// image it has not loaded yet. Numeric hex (three.js's own colour shape) is the source of truth; the
+// CSS string is derived from it below, not defined a second time.
 const ITEM_SWATCH_HEX = Object.freeze({
   starter_sword: 0xb9c2cc,
   wildwood_blade: WILDWOOD_COLOR,
-  // G1-C3: the two defensive items, in the blue-steel the running-game Helmet and Shield actually
-  // read as. swatchFor is exported and reused by the acquisition ceremony (main.js hands it to
-  // ui/unlockCard as the card's accent), so the card that grants the Helmet, the owned strip and the
-  // slot all glow the same colour rather than three guesses at what silver is (the single-source rule
-  // WILDWOOD_COLOR already gives the Blade).
   shield_ironwood: 0x6f7d8c,
   helmet_silverguard: 0xaebfd1,
+  shoulder_silverguard: 0x9aa6b4,
 });
 const NEUTRAL_SWATCH_HEX = 0x8a97a6;
 
@@ -74,23 +98,35 @@ export function swatchFor(itemId) {
   return `#${swatchHexFor(itemId).toString(16).padStart(6, '0')}`;
 }
 
+/** The art fields every drawable item carries, in one place so a slot, a grid cell and a comparison
+ *  portrait cannot each assemble a different subset of them. */
+function artFor(itemId) {
+  return {
+    swatch: swatchFor(itemId),
+    iconUrl: itemIconUrlFor(itemId),
+    iconSvg: itemIconSvgFor(itemId),
+    rarity: rarityFor(itemId),
+    rarityRank: rarityRankFor(itemId),
+    rarityLabel: rarityLabelFor(itemId),
+  };
+}
+
 /**
  * Pure. Turns { equippedWeaponId, equippedItemIds, ownedItemIds, selectedItemId } into everything the
  * DOM binder below needs to paint a frame -- no querySelector, no three.js, testable with node --test.
  *
- * equippedItemIds is the whole equipped-per-slot map (G1-C3), so the Shield and Helmet slots read the
- * truth rather than a lock; equippedWeaponId, still accepted for the pre-C3 callers, is folded into
- * that map's weapon slot as its authority.
+ * equippedItemIds is the whole equipped-per-slot map, so every slot reads the truth rather than a
+ * lock; equippedWeaponId, still accepted for older callers, is folded into that map's weapon slot as
+ * its authority.
  *
  * selectedItemId may be stale (an id no longer owned, or none chosen yet) -- resolved down to the
  * equipped weapon in that case, the same "always a safe fallback, never a blank card" discipline
  * progression/state.js's equippedWeaponIdFromRewards already uses for the wire field it reads.
  *
- * @param stats the RESOLVED Hero stats from progression/heroStats.js -- `{ level, maxHp, heroDamage }`.
- *   Optional: a caller with none yet (pre-welcome) gets no identity panel rather than a made-up one,
- *   which is the same "absent is not zero" posture the wire's own optional fields take. When present
- *   it is the SAME object the fight is being fed, so this screen cannot print a hero the combat rules
- *   have not agreed to (docs/MISTAKES.md GQ-013, one layer out from where it was first found).
+ * @param stats the RESOLVED Hero stats from progression/heroStats.js. Optional: a caller with none
+ *   yet (pre-welcome) gets no identity panel rather than a made-up one. When present it is the SAME
+ *   object the fight is being fed, so this screen cannot print a hero the combat rules have not
+ *   agreed to (docs/MISTAKES.md GQ-013).
  */
 export function heroScreenViewModel({
   equippedWeaponId,
@@ -99,12 +135,6 @@ export function heroScreenViewModel({
   selectedItemId,
   stats = null,
 }) {
-  // The whole equipped-per-slot map, defaulted the same way progression/state.js defaults the wire's
-  // field, so a caller that still passes only equippedWeaponId (the pre-C3 shape) gets the truthful
-  // baseline Shield in its slot rather than an empty one. equippedWeaponId, when given, is the
-  // authority for the weapon slot -- a caller that passes it expects THAT weapon equipped, not the
-  // default the map would otherwise carry, so it is folded in rather than left to disagree with the
-  // rest of the screen.
   const equipped = { ...DEFAULT_EQUIPPED_ITEM_IDS, ...equippedItemIds };
   if (typeof equippedWeaponId === 'string') equipped[WEAPON_SLOT] = equippedWeaponId;
   const equippedWeapon = equipped[WEAPON_SLOT];
@@ -113,27 +143,35 @@ export function heroScreenViewModel({
   const selectedDef = itemDef(resolvedSelectedId);
   const equippedDamage = damageFor(equippedWeapon);
 
-  // Whether an item is the one currently worn in ITS slot -- the equipped weapon, the equipped
-  // shield, the equipped helmet. One helper so the strip, the card and the slot row all agree.
+  // Whether an item is the one currently worn in ITS slot. One helper so the grid, the card and the
+  // slot row all agree.
   const isEquippedInSlot = (def) => def !== null && equipped[def.slot] === def.id;
 
-  // The owned strip: every item this child actually owns and the catalogue defines, weapon or gear.
-  // No longer weapon-only (GP1-C1) -- G1-C3 earns a Helmet, and a child who tapped "Later" reaches
-  // the owned strip to put it on. Not a new inventory system: the SAME strip, no longer filtered to
-  // one slot, so the durable equip flow main.js already runs for weapons now carries a helmet too.
+  // The inventory: every item this child actually owns and the catalogue defines.
+  //
+  // `armed` is #88's whole interaction in one boolean: selected, owned, and not already worn --
+  // therefore the next tap on it equips. The DOM half reads this rather than re-deriving
+  // "selected && !equipped" at the click site, so the sentence the card prints ("TAP AGAIN TO
+  // EQUIP") and the behaviour the click performs come from the same field. A card that promised one
+  // and did the other is the defect this shape exists to make impossible.
   const items = ownedItemIds
     .map((id) => itemDef(id))
     .filter((def) => def !== null)
-    .map((def) => ({
-      id: def.id,
-      name: def.name,
-      slot: def.slot,
-      damage: def.damage ?? null,
-      damageReductionPercent: def.damageReductionPercent ?? null,
-      swatch: swatchFor(def.id),
-      equipped: isEquippedInSlot(def),
-      selected: def.id === resolvedSelectedId,
-    }));
+    .map((def) => {
+      const equippedHere = isEquippedInSlot(def);
+      const selected = def.id === resolvedSelectedId;
+      return {
+        id: def.id,
+        name: def.name,
+        slot: def.slot,
+        damage: def.damage ?? null,
+        damageReductionPercent: def.damageReductionPercent ?? null,
+        equipped: equippedHere,
+        selected,
+        armed: selected && !equippedHere,
+        ...artFor(def.id),
+      };
+    });
 
   const slots = SLOT_DEFS.map((slot) => {
     const locked = !SLOTS_WITH_ITEMS.has(slot.id);
@@ -143,17 +181,24 @@ export function heroScreenViewModel({
       label: slot.label,
       locked,
       filled: equippedDef !== null,
+      itemId: equippedDef?.id ?? null,
       name: equippedDef?.name ?? null,
       swatch: equippedDef ? swatchFor(equippedDef.id) : null,
+      iconUrl: equippedDef ? itemIconUrlFor(equippedDef.id) : null,
+      iconSvg: equippedDef ? itemIconSvgFor(equippedDef.id) : null,
+      rarity: equippedDef ? rarityFor(equippedDef.id) : null,
+      // The slot the selected item WOULD go into, so the screen can show a child where the thing
+      // they are looking at belongs before they commit to it. This is the cheapest possible answer
+      // to "what would this replace" and it costs no extra tap.
+      isTarget: selectedDef !== null && selectedDef.slot === slot.id && !isEquippedInSlot(selectedDef),
     };
   });
 
-  // P2: WHO THIS HERO IS, from the resolved stats rather than from the catalogue.
+  // WHO THIS HERO IS, from the resolved stats rather than from the catalogue.
   //
   // `damage` here is the hero's RESOLVED blow -- weapon plus what their level added to the arm --
   // not the sword's catalogue number. A screen that printed the sword's 10 beside a hero who hits
-  // for 12 would be true about the item and false about the child, which is the version of GQ-013
-  // that is hardest to notice because every individual number is correct.
+  // for 12 would be true about the item and false about the child.
   const identity = stats ? {
     level: stats.level,
     maxHp: stats.maxHp,
@@ -162,32 +207,40 @@ export function heroScreenViewModel({
     powerText: formatPower(powerFor(stats)),
   } : null;
 
-  // What equipping the selected item would do to this hero's POWER.
+  // #88's comparison, in full: portrait, rarity, stat rows with deltas, POWER before/after, and a
+  // truthful verdict that obeys the contract's sidegrade rule. One call, so the card and any future
+  // surface that wants the same answer share the arithmetic.
+  const compare = selectedDef === null ? null : gearComparison({
+    candidateItemId: selectedDef.id,
+    equippedItemIds: equipped,
+    stats,
+  });
+
+  // ── THE TWO PRE-#88 FIELDS, NOW DERIVED RATHER THAN COMPUTED TWICE ────────────────────────────
   //
-  // The DRAMATIC before/delta/after equip ceremony is G1-C3's for the Helmet, explicitly; what this
-  // surface owes is a truthful delta ready for it. Computed by swapping ONLY the selected item's slot
-  // into the equipped map and re-resolving -- so a weapon moves the arm and a helmet moves the
-  // defence, each holding the rest of the hero still (the "hold the body, move only the slot" rule
-  // the weapon path already had, generalised so a defensive item's worth reads honestly rather than
-  // as a POWER drop when a weapon is compared while the Helmet is on). Null without stats: a POWER
-  // change needs a hero to happen to, and inventing one would be worse than saying nothing.
-  const powerComparison = (identity && selectedDef && !isEquippedInSlot(selectedDef))
-    ? (() => {
-      const afterEquipped = { ...equipped, [selectedDef.slot]: selectedDef.id };
-      const after = powerFor({
-        maxHp: stats.maxHp,
-        heroDamage: resolvedHeroDamage(stats.level, afterEquipped[WEAPON_SLOT]),
-        damageReductionPercent: damageReductionPercentForEquipment(afterEquipped),
-      });
-      return {
-        from: identity.power,
-        to: after,
-        delta: after - identity.power,
-        fromText: formatPower(identity.power),
-        toText: formatPower(after),
-        deltaText: `${after - identity.power < 0 ? '-' : '+'}${formatPower(Math.abs(after - identity.power))}`,
-      };
-    })()
+  // `comparison` and `powerComparison` are the shapes this module already published and other code
+  // and tests already read. They are kept -- but they are now READ OFF `compare` instead of being
+  // calculated a second time here. That is the GQ-007 point: two independent derivations of "what
+  // would this swap do to POWER" is exactly how a card and a ceremony start disagreeing by a
+  // rounding step, and the fix is one arithmetic with two views of it, not two arithmetics that
+  // happen to match today.
+  const comparison = (compare && selectedDef.slot === WEAPON_SLOT && !compare.isEquipped)
+    ? {
+      fromDamage: equippedDamage,
+      toDamage: selectedDef.damage,
+      isUpgrade: selectedDef.damage > equippedDamage,
+    }
+    : null;
+
+  const powerComparison = (compare && compare.power && !compare.isEquipped)
+    ? {
+      from: compare.power.before,
+      to: compare.power.after,
+      delta: compare.power.delta,
+      fromText: compare.power.beforeText,
+      toText: compare.power.afterText,
+      deltaText: compare.power.deltaText,
+    }
     : null;
 
   return {
@@ -198,37 +251,31 @@ export function heroScreenViewModel({
       id: selectedDef.id,
       name: selectedDef.name,
       slot: selectedDef.slot,
-      // The item's OWN stat, by kind: a weapon carries damage, a defensive item carries incoming
-      // damage reduction. Both are the catalogue's numbers (GQ-007), read by the card to print the
-      // right stat line for whichever slot the selection belongs to.
       damage: selectedDef.damage ?? null,
       damageReductionPercent: selectedDef.damageReductionPercent ?? null,
-      swatch: swatchFor(selectedDef.id),
       isEquipped: isEquippedInSlot(selectedDef),
+      // #88's interaction, restated on the selection itself so the card can decide what sentence to
+      // print without walking `items`.
+      armed: !isEquippedInSlot(selectedDef),
+      ...artFor(selectedDef.id),
     },
-    // The DAMAGE arrow line, weapons only -- a helmet has no damage to compare, so its worth is the
-    // POWER move below. Null when the selected weapon IS the equipped one: a same-item card has no
-    // arrow to draw.
-    comparison: (selectedDef && selectedDef.slot === WEAPON_SLOT && !isEquippedInSlot(selectedDef))
-      ? { fromDamage: equippedDamage, toDamage: selectedDef.damage, isUpgrade: selectedDef.damage > equippedDamage }
-      : null,
+    compare,
+    comparison,
     powerComparison,
   };
 }
 
+// ── THE DOM HALF ────────────────────────────────────────────────────────────────────────────────
+
 /**
- * The DOM half. Queries its elements once from `root` (defaults to document, injectable for a
- * future test that wants a detached fragment), wires clicks straight to the callbacks it is given,
- * and exposes render()/open()/close()/isOpen() -- main.js calls render() every frame the screen is
- * open (cheap: five slots and a handful of buttons, nothing three.js-scale) and open()/close() off
- * the hero button and the close button's own tap, plus main.js's own escape hatch if it ever needs
- * one (e.g. a future pause-on-blur rule).
+ * Queries its elements once from `root`, wires clicks straight to the callbacks it is given, and
+ * exposes render()/open()/close()/isOpen().
  *
- * @param options.onSelect(itemId)  an item in the owned strip was tapped
- * @param options.onEquip(itemId)   EQUIP was tapped for the currently selected item
- * @param options.onOpenChange(open)  fires after open()/close() actually change the shown state,
- *   so main.js can gate movement input and hand the camera to/from the preview dolly without
- *   polling isOpen() every frame.
+ * @param options.onSelect(itemId)            an item was tapped for the first time -- compare it.
+ * @param options.onEquip(itemId, context)    the ARMED item was tapped again -- equip it. `context`
+ *   carries `{ sourceElement, slotElement }` so main.js can fly the icon from where the child
+ *   touched it to where it lands, without this module owning an animation.
+ * @param options.onOpenChange(open)          fires after open()/close() change the shown state.
  */
 export function createHeroScreen(options = {}) {
   const root = options.root ?? document;
@@ -241,10 +288,14 @@ export function createHeroScreen(options = {}) {
   const closeButton = root.querySelector('#hero-screen-close');
   const slotsEl = root.querySelector('#hero-slots');
   const itemListEl = root.querySelector('#hero-item-list');
+  const cardEl = root.querySelector('#hero-item-card');
+  const cardArtEl = root.querySelector('#hero-card-art');
   const nameEl = root.querySelector('#hero-item-name');
-  const damageEl = root.querySelector('#hero-item-damage');
-  const compareEl = root.querySelector('#hero-item-compare');
-  const equipButton = root.querySelector('#hero-equip-button');
+  const rarityEl = root.querySelector('#hero-item-rarity');
+  const verdictEl = root.querySelector('#hero-item-verdict');
+  const statsEl = root.querySelector('#hero-compare-stats');
+  const powerEl = root.querySelector('#hero-compare-power');
+  const actionEl = root.querySelector('#hero-compare-action');
   const identityEl = root.querySelector('#hero-identity');
   const identityLevelEl = root.querySelector('#hero-identity-level-value');
   const identityPowerEl = root.querySelector('#hero-identity-power-value');
@@ -255,6 +306,11 @@ export function createHeroScreen(options = {}) {
   // The last view() this presenter was handed, so a click handler (which fires between frames, not
   // during a render() call) can read "what item is this button for" without re-deriving it.
   let lastView = null;
+  // itemId -> its button. RECONCILED, not rebuilt: main.js renders every frame the screen is open,
+  // and tearing the grid down each frame would (a) restart every portrait's decode, and (b) destroy
+  // the element the flight animation needs a stable rect for -- an item that is replaced between the
+  // tap and the animation has no on-screen position to fly from.
+  const itemEls = new Map();
 
   function setShown(next) {
     if (shown === next) return;
@@ -264,89 +320,167 @@ export function createHeroScreen(options = {}) {
     onOpenChange(shown);
   }
 
-  function renderSlots(slots) {
-    slotsEl.querySelectorAll('.hero-slot').forEach((el, index) => {
-      const slot = slots[index];
-      if (!slot) return;
-      el.dataset.locked = String(slot.locked);
-      el.dataset.filled = String(slot.filled);
-      el.style.setProperty('--slot-swatch', slot.swatch ?? 'transparent');
-      const nameSpan = el.querySelector('.hero-slot-name');
-      // Filled -> the worn item's name; unlocked-but-empty -> the slot's own label (an empty "Helmet"
-      // slot reads as a helmet slot, the way the locked slots already show theirs); locked -> nothing
-      // but the lock glyph. The weapon slot is always filled, so it is unchanged.
-      if (nameSpan) nameSpan.textContent = slot.filled ? slot.name : (slot.locked ? '' : slot.label);
-    });
+  /** The equipped slot's element, so a caller can fly an icon into it. Public via the returned API
+   *  rather than reached for with a querySelector in main.js: where a slot lives is this module's
+   *  business. */
+  function slotElement(slotId) {
+    return slotsEl.querySelector(`.hero-slot[data-slot="${slotId}"]`) ?? null;
   }
 
-  // A screen-reader stat for one owned item, by kind: a weapon says its damage, a defensive item its
-  // incoming-damage reduction, so the strip announces the Helmet honestly rather than "damage
-  // undefined".
+  function itemElement(itemId) {
+    return itemEls.get(itemId) ?? null;
+  }
+
+  function renderSlots(slots) {
+    for (const slot of slots) {
+      const el = slotElement(slot.id);
+      if (!el) continue;
+      el.dataset.locked = String(slot.locked);
+      el.dataset.filled = String(slot.filled);
+      el.dataset.rarity = slot.rarity ?? '';
+      el.dataset.target = String(slot.isTarget);
+      el.style.setProperty('--slot-swatch', slot.swatch ?? 'transparent');
+      const art = el.querySelector('.hero-slot-art');
+      if (art) {
+        if (slot.filled) paintItemArt(art, slot);
+        else clearItemArt(art);
+      }
+      const nameSpan = el.querySelector('.hero-slot-name');
+      // Filled -> the worn item's name; unlocked-but-empty -> the slot's own label (an empty
+      // "Helmet" slot reads as a helmet slot); locked -> nothing but the lock glyph.
+      if (nameSpan) nameSpan.textContent = slot.filled ? slot.name : (slot.locked ? '' : slot.label);
+    }
+  }
+
+  // A screen-reader stat for one owned item, by kind, so the grid announces a helmet honestly
+  // rather than "damage undefined".
   function itemAriaStat(item) {
     if (item.slot === WEAPON_SLOT) return `damage ${item.damage}`;
-    if (item.damageReductionPercent !== null) return `${item.damageReductionPercent}% damage reduction`;
+    if (item.damageReductionPercent !== null) return `${item.damageReductionPercent}% armor`;
     return 'gear';
   }
 
-  function renderItemList(items) {
-    itemListEl.innerHTML = '';
-    for (const owned of items) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'hero-item';
-      item.dataset.itemId = owned.id;
-      item.dataset.selected = String(owned.selected);
-      item.dataset.equipped = String(owned.equipped);
-      item.style.setProperty('--slot-swatch', owned.swatch);
-      item.setAttribute('aria-label', `${owned.name}, ${itemAriaStat(owned)}${owned.equipped ? ', equipped' : ''}`);
-      item.innerHTML = `<span class="hero-item-swatch" aria-hidden="true"></span>`
-        + `<span class="hero-item-label">${owned.name}</span>`
-        + (owned.equipped ? '<span class="hero-item-equipped-tag">EQUIPPED</span>' : '');
-      item.addEventListener('click', () => onSelect(owned.id));
-      itemListEl.appendChild(item);
-    }
+  function buildItemButton(item) {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'hero-item';
+    el.dataset.itemId = item.id;
+    const art = document.createElement('span');
+    art.className = 'hero-item-art item-art';
+    const label = document.createElement('span');
+    label.className = 'hero-item-label';
+    const tag = document.createElement('span');
+    tag.className = 'hero-item-tag';
+    el.append(art, label, tag);
+    // #88's two-tap rule, at the only place that can know whether this is the second tap: an ARMED
+    // item equips, anything else selects. An item that is already worn therefore falls to the
+    // `else` and is merely re-selected -- which is the requirement that "an accidental second tap
+    // on an ALREADY EQUIPPED slot must NOT unequip it", satisfied by construction rather than by a
+    // guard someone has to remember to keep.
+    el.addEventListener('click', () => {
+      const current = lastView?.items?.find((candidate) => candidate.id === item.id) ?? null;
+      if (current?.armed) {
+        onEquip(item.id, { sourceElement: el, slotElement: slotElement(current.slot) });
+      } else {
+        onSelect(item.id);
+      }
+    });
+    return el;
   }
 
-  function renderCard(selected, comparison, powerComparison) {
-    if (!selected) {
-      nameEl.textContent = '';
-      damageEl.textContent = '';
-      compareEl.textContent = '';
-      equipButton.disabled = true;
-      equipButton.dataset.shown = 'false';
+  function renderItemList(items) {
+    const seen = new Set();
+    for (const item of items) {
+      seen.add(item.id);
+      let el = itemEls.get(item.id);
+      if (!el) {
+        el = buildItemButton(item);
+        itemEls.set(item.id, el);
+      }
+      el.dataset.selected = String(item.selected);
+      el.dataset.equipped = String(item.equipped);
+      el.dataset.armed = String(item.armed);
+      el.dataset.rarity = item.rarity;
+      el.style.setProperty('--slot-swatch', item.swatch);
+      el.setAttribute(
+        'aria-label',
+        `${item.name}, ${item.rarityLabel}, ${itemAriaStat(item)}`
+        + `${item.equipped ? ', equipped' : ''}${item.armed ? ', tap again to equip' : ''}`,
+      );
+      paintItemArt(el.querySelector('.hero-item-art'), item);
+      el.querySelector('.hero-item-label').textContent = item.name;
+      el.querySelector('.hero-item-tag').textContent = item.equipped ? 'WORN' : '';
+    }
+    // Drop anything no longer owned, then re-append in view order so the DOM order matches the
+    // model's without rebuilding the nodes.
+    for (const [itemId, el] of itemEls) {
+      if (seen.has(itemId)) continue;
+      el.remove();
+      itemEls.delete(itemId);
+    }
+    for (const item of items) itemListEl.appendChild(itemEls.get(item.id));
+  }
+
+  function statRow(row) {
+    const el = document.createElement('div');
+    el.className = 'hero-compare-row';
+    el.dataset.direction = row.direction;
+    el.innerHTML = `<span class="hero-compare-row-label">${row.label}</span>`
+      + `<span class="hero-compare-row-from">${row.currentText}</span>`
+      + '<span class="hero-compare-row-arrow" aria-hidden="true">→</span>'
+      + `<span class="hero-compare-row-to">${row.candidateText}</span>`
+      + (row.deltaText ? `<span class="hero-compare-row-delta">${row.deltaText}</span>` : '');
+    return el;
+  }
+
+  function renderCard(compare) {
+    if (!compare) {
+      cardEl.dataset.shown = 'false';
       return;
     }
-    nameEl.textContent = selected.name;
-    // The item's stat by kind. "WEAPON DAMAGE", not "DAMAGE", since P2 put the HERO's resolved damage
-    // on the same screen and the two were caught disagreeing about subjects in a capture. A defensive
-    // item has no damage, so it reads its own line -- "DAMAGE REDUCTION 10%" -- rather than borrowing
-    // the weapon's and printing "WEAPON DAMAGE undefined".
-    damageEl.textContent = selected.slot === WEAPON_SLOT
-      ? `WEAPON DAMAGE ${selected.damage}`
-      : `DAMAGE REDUCTION ${selected.damageReductionPercent ?? 0}%`;
-    if (comparison) {
-      // The stat delta, and -- when a hero is known -- what it would do to the one number the child
-      // actually reads. Two lines rather than one because they answer different questions and the
-      // contract's sidegrade rule depends on both being visible.
-      compareEl.textContent = powerComparison
-        ? `${comparison.fromDamage} → ${comparison.toDamage} DAMAGE · POWER ${powerComparison.deltaText}`
-        : `${comparison.fromDamage} → ${comparison.toDamage} DAMAGE`;
-      // Read off the POWER change when there is one, because POWER is the game's official
-      // single-number estimate of readiness and a two-stat item can be a legitimate sidegrade the
-      // damage line alone would mislabel as strictly better.
-      compareEl.dataset.upgrade = String(
-        powerComparison ? powerComparison.delta > 0 : comparison.isUpgrade,
-      );
-    } else if (powerComparison) {
-      // A defensive item has no DAMAGE arrow, so the POWER move IS the comparison -- the same
-      // before → after POWER the acquisition ceremony shows, said on the Gear screen identically.
-      compareEl.textContent = `${powerComparison.fromText} → ${powerComparison.toText} POWER`;
-      compareEl.dataset.upgrade = String(powerComparison.delta > 0);
+    cardEl.dataset.shown = 'true';
+    cardEl.dataset.verdict = compare.verdict;
+    cardEl.dataset.rarity = compare.candidate.rarity;
+    cardEl.dataset.armed = String(!compare.isEquipped);
+    cardEl.style.setProperty('--slot-swatch', swatchFor(compare.candidate.id));
+
+    paintItemArt(cardArtEl, compare.candidate);
+    nameEl.textContent = compare.candidate.name;
+    rarityEl.textContent = compare.candidate.rarityLabel;
+    // The verdict as a WORD, not only as the attribute the stylesheet colours from. "Is this better"
+    // is the question the first tap asked, and an answer only a CSS rule can read is not an answer.
+    if (verdictEl) verdictEl.textContent = compare.verdictLabel;
+
+    statsEl.innerHTML = '';
+    for (const row of compare.stats) statsEl.appendChild(statRow(row));
+    statsEl.hidden = compare.stats.length === 0;
+
+    // POWER: the before -> delta -> after shape #41 asks for, on the surface where a child is
+    // deciding. The delta is the loud element because it is the answer to the question they asked
+    // by tapping; the before and after are there so the number has a scale.
+    if (compare.power && !compare.isEquipped) {
+      powerEl.hidden = false;
+      powerEl.dataset.direction = compare.power.delta > 0 ? 'up' : (compare.power.delta < 0 ? 'down' : 'same');
+      powerEl.innerHTML = '<span class="hero-compare-power-label">POWER</span>'
+        + `<span class="hero-compare-power-from">${compare.power.beforeText}</span>`
+        + '<span class="hero-compare-power-arrow" aria-hidden="true">→</span>'
+        + `<span class="hero-compare-power-to">${compare.power.afterText}</span>`
+        + `<span class="hero-compare-power-delta">${compare.power.deltaText}</span>`;
     } else {
-      compareEl.textContent = '';
+      powerEl.hidden = true;
     }
-    equipButton.dataset.shown = String(!selected.isEquipped);
-    equipButton.disabled = selected.isEquipped;
+
+    // THE SENTENCE THAT MAKES THE GESTURE DISCOVERABLE. A two-tap interaction nobody is told about
+    // is a two-tap interaction nobody performs -- and a child who cannot read still learns it,
+    // because the first tap visibly changes the card and this line changes with it.
+    //
+    // The worn case does NOT repeat "WEARING IT" here. That is what the verdict badge above already
+    // says, and a Checkpoint 1 player-fair capture showed the two of them within a couple of
+    // centimetres of each other -- the same statement twice, in the one place on the card whose job
+    // is to describe the next tap. So the worn case teaches the loop instead, which is the thing a
+    // child holding only their starting gear actually needs to know.
+    actionEl.textContent = compare.isEquipped ? 'TAP ANOTHER ITEM TO COMPARE' : 'TAP AGAIN TO EQUIP';
+    actionEl.dataset.armed = String(!compare.isEquipped);
   }
 
   function renderIdentity(identity) {
@@ -366,23 +500,27 @@ export function createHeroScreen(options = {}) {
     renderSlots(view.slots);
     renderItemList(view.items);
     renderIdentity(view.identity ?? null);
-    renderCard(view.selected, view.comparison, view.powerComparison ?? null);
+    renderCard(view.compare ?? null);
   }
 
-  // A TOGGLE, because that is what a button in the top-right corner of a phone means.
-  //
-  // This was `setShown(true)` -- open-only -- and the Owner found it with his son on a real iPhone:
-  // tapping #hero-button again did nothing, so the only way out was to find the small X. On a
-  // phone, the control that opened a panel is the control a person expects to close it, and a child
-  // who cannot read has no other way to guess.
-  //
-  // setShown already no-ops when the state is unchanged, and the mutual-exclusion in main.js's
-  // onOpenChange only fires on OPEN, so toggling shut cannot disturb the other panel. The explicit
-  // X stays: it is a second, obvious way out, not the only one.
+  // A TOGGLE, because that is what a button in the top-right corner of a phone means. This was
+  // open-only, and the Owner found it with his son on a real iPhone: tapping #hero-button again did
+  // nothing, so the only way out was to find the small X. The explicit X stays: a second, obvious
+  // way out, not the only one.
   button.addEventListener('click', () => setShown(!shown));
   closeButton.addEventListener('click', () => setShown(false));
-  equipButton.addEventListener('click', () => {
-    if (lastView?.selected && !lastView.selected.isEquipped) onEquip(lastView.selected.id);
+
+  // The card is the second tap target for the same act. #88 asks for "tapping the already-selected
+  // inventory item/card again equips it" -- the card is often the larger, closer thing under a
+  // child's thumb once they have read it, and making them travel back to a small grid cell to
+  // confirm is the administration this package exists to remove.
+  cardEl.addEventListener('click', () => {
+    const selected = lastView?.selected;
+    if (!selected || !selected.armed) return;
+    onEquip(selected.id, {
+      sourceElement: itemEls.get(selected.id) ?? cardEl,
+      slotElement: slotElement(selected.slot),
+    });
   });
 
   return {
@@ -390,5 +528,7 @@ export function createHeroScreen(options = {}) {
     open() { setShown(true); },
     close() { setShown(false); },
     isOpen() { return shown; },
+    slotElement,
+    itemElement,
   };
 }

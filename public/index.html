@@ -95,6 +95,15 @@
          The inactive sibling button goes with them: while Hero owns the screen the map button is not
          an escape, it is the thing that was covering the X. The ACTIVE panel keeps its own toggle
          (so the button that opened it still closes it) and its own X. */
+      /* THE ENEMY NAMEPLATES GO TOO, and they were the loudest thing left. Measured, not guessed:
+         the #88 landscape capture at 1024x768 shows a live "Wolf Lv 1" card drawn straight across
+         the Helmet slot and into the inventory grid, and the Checkpoint 0 portrait capture shows one
+         sitting on the hero's FACE inside his own showcase. #enemy-nameplates is a full-viewport
+         `inset: 0` layer that tracks world positions, so it has no idea a panel is up -- and the
+         world keeps simulating underneath by design, so those cards keep MOVING while a child is
+         trying to read a stat. Same rule, same reason, same list as every other competing HUD
+         element above. */
+      #game[data-hero-screen-open="true"] #enemy-nameplates,
       #game[data-hero-screen-open="true"] #minimap,
       #game[data-hero-screen-open="true"] #objective-pointer,
       #game[data-hero-screen-open="true"] #objective-marker,
@@ -876,105 +885,383 @@
         background: transparent; color: #fff; font-size: 1.1rem; line-height: 1; padding: 0;
         touch-action: none;
       }
-      /* One box per slot, gold-ringed and named when filled, dim and lock-glyphed when GP1 has no
-         item to put there yet -- section 8's five slots, only Weapon interactive today. */
+      /* ── #88 / #89: THE GEAR SURFACE ──────────────────────────────────────────────────────────
+         One visual language, stated once here and used by every gear element below, so a slot, a
+         grid cell and the comparison portrait read as the same object at three sizes.
+
+         The palette is #89's brief taken literally -- dark iron for the frames, worn leather for the
+         panels, warm parchment for body text, and the repo's existing gold (#f2b33d) kept as the
+         reward/ownership accent it already means everywhere else in this game. Nothing here
+         introduces a web font: a fantasy heading is built from weight, letter-spacing and colour,
+         because a font file is a network dependency this repository does not take, and a heading
+         that fails to load is worse than one that was never fancy. */
+      #hero-screen {
+        --iron: #2b3340;
+        --iron-light: #4a5567;
+        --leather: #241c16;
+        --parchment: #efe3cd;
+        --gold: #f2b33d;
+        --gain: #6ddc8b;
+        --loss: #ff8b7a;
+      }
+      /* Rarity lives in the FRAME, never in the art (#88). Two custom properties per tier, so every
+         frame -- slot, grid cell, portrait -- takes its border and glow from one place, and a
+         stronger tier is genuinely a stronger treatment rather than a different hue at the same
+         intensity. */
+      [data-rarity="common"]   { --rarity-edge: #8d9099; --rarity-glow: rgb(141 144 153 / 0%);  --rarity-ink: #c9ccd3; }
+      [data-rarity="uncommon"] { --rarity-edge: #5fbf72; --rarity-glow: rgb(95 191 114 / 32%);  --rarity-ink: #8fe3a1; }
+      [data-rarity="rare"]     { --rarity-edge: #4d9bec; --rarity-glow: rgb(77 155 236 / 42%);  --rarity-ink: #8dc4ff; }
+      [data-rarity="epic"]     { --rarity-edge: #b168e8; --rarity-glow: rgb(177 104 232 / 50%); --rarity-ink: #d3a2ff; }
+      [data-rarity="legendary"]{ --rarity-edge: #f5a03c; --rarity-glow: rgb(245 160 60 / 58%);  --rarity-ink: #ffd08a; }
+
+      /* The art host. Its two children are STACKED, not swapped: the inline silhouette is drawn
+         first and hidden by progression/heroScreen.js only once the PNG has actually decoded, so a
+         slow or missing portrait degrades to a shape instead of a hole. */
+      .item-art { position: relative; display: block; }
+      .item-art .item-art-image,
+      .item-art .item-art-fallback {
+        position: absolute; inset: 0; display: grid; place-items: center;
+      }
+      .item-art .item-art-image { width: 100%; height: 100%; object-fit: contain; }
+      .item-art .item-art-fallback { color: var(--rarity-ink, #c9ccd3); opacity: 0.85; }
+      .item-art .item-art-fallback svg { width: 72%; height: 72%; }
+
+      /* One box per slot: a dark iron plate, rarity-edged when filled, lock-glyphed when the
+         catalogue has nothing to put there yet. */
       .hero-slot {
-        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
-        width: 4.4rem; height: 4.4rem; padding: 0.3rem;
-        border: 2px solid rgb(242 179 61 / 55%); border-radius: 0.6rem;
-        background: rgb(12 20 31 / 78%); color: #fff;
-        font: 700 0.68rem/1.1 system-ui, sans-serif; text-align: center;
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem;
+        width: 4.6rem; height: 4.9rem; padding: 0.25rem;
+        border: 2px solid var(--rarity-edge, var(--iron-light)); border-radius: 0.55rem;
+        background: linear-gradient(180deg, rgb(43 51 64 / 92%), rgb(20 25 33 / 94%));
+        box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 0.7rem var(--rarity-glow, transparent);
+        color: var(--parchment);
+        font: 700 0.62rem/1.1 system-ui, sans-serif; text-align: center;
       }
-      .hero-slot::before {
-        content: ''; width: 1.4rem; height: 1.4rem; border-radius: 0.3rem;
-        background: var(--slot-swatch, transparent);
+      .hero-slot-art { width: 2.6rem; height: 2.6rem; }
+      .hero-slot[data-filled="false"] .hero-slot-art { opacity: 0; }
+      .hero-slot[data-locked="true"] { border-color: rgb(255 255 255 / 16%); opacity: 0.5; }
+      .hero-slot[data-locked="true"] .hero-slot-art { opacity: 1; }
+      .hero-slot[data-locked="true"] .hero-slot-art::after {
+        content: '🔒'; position: absolute; inset: 0; display: grid; place-items: center;
+        font-size: 1.1rem;
       }
-      .hero-slot[data-locked="true"] {
-        border-color: rgb(255 255 255 / 22%); opacity: 0.55;
+      /* WHERE THE SELECTED ITEM WOULD GO. A pulsing gold ring on the destination slot, so "what
+         would this replace" is answered before the child commits -- and so the icon that flies there
+         after the second tap is flying somewhere they were already looking. */
+      .hero-slot[data-target="true"] {
+        border-color: var(--gold);
+        animation: hero-slot-target 1.1s ease-in-out infinite;
       }
-      .hero-slot[data-locked="true"]::before { content: '🔒'; background: none; font-size: 1.1rem; }
-      .hero-slot-label { opacity: 0.8; }
-      #hero-slots {
-        position: absolute; display: flex; gap: 0.5rem; pointer-events: auto;
+      @keyframes hero-slot-target {
+        0%, 100% { box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 0.4rem rgb(242 179 61 / 35%); }
+        50%      { box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 1.1rem rgb(242 179 61 / 85%); }
       }
+      /* THE ARRIVAL. ui/gearFlight.js sets this for ~0.7s when an icon lands here, so the flight
+         ends on something happening rather than on the icon simply ceasing to exist. */
+      .hero-slot[data-just-equipped="true"] {
+        animation: hero-slot-land 640ms ease-out 1;
+      }
+      @keyframes hero-slot-land {
+        0%   { transform: scale(1);    box-shadow: 0 0 0 rgb(242 179 61 / 0%); }
+        35%  { transform: scale(1.14); box-shadow: 0 0 1.4rem rgb(242 179 61 / 95%); }
+        100% { transform: scale(1);    box-shadow: 0 0 0.7rem var(--rarity-glow, transparent); }
+      }
+      .hero-slot-label { opacity: 0.75; }
+      /* "Silverguard Shoulders" is two long words in a 4.6rem box, and the Checkpoint 2 capture
+         shows it overflowing its slot and printing across the item's own portrait. The name is the
+         least load-bearing thing in a slot -- the ART says which item this is -- so it is the thing
+         that gets clipped, on two lines, rather than being allowed to cover the picture. */
+      .hero-slot-name {
+        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+        overflow: hidden; max-width: 100%; overflow-wrap: anywhere;
+      }
+      #hero-slots { position: absolute; display: flex; gap: 0.45rem; pointer-events: auto; }
+
+      /* THE INVENTORY GRID. auto-fill rather than a fixed column count, so one rule serves a phone
+         in portrait and a narrow landscape rail; 4.6rem cells because that clears the 44px tap floor
+         ui/tapTargets.js pins with room for a thumb that lands a centimetre off.
+         A GRID, not the pre-#88 horizontally scrolling strip: a strip hides everything past the
+         third item behind a gesture a child has no reason to try, and the moment gear becomes
+         frequent -- which is the whole point of #44 -- a hidden inventory is an unused one. */
       #hero-item-list {
-        display: flex; gap: 0.5rem; overflow-x: auto; pointer-events: auto;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr));
+        gap: 0.45rem; align-content: start; overflow-y: auto; pointer-events: auto;
+        padding: 0.5rem; border-radius: 0.7rem;
+        background: linear-gradient(180deg, rgb(36 28 22 / 88%), rgb(22 17 13 / 92%));
+        border: 2px solid rgb(90 68 48 / 70%);
+        box-shadow: inset 0 1px 0 rgb(255 220 170 / 10%);
       }
       .hero-item {
-        flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
-        width: 4.6rem; padding: 0.4rem 0.3rem; border-radius: 0.5rem;
-        border: 2px solid rgb(255 255 255 / 30%); background: rgb(12 20 31 / 78%); color: #fff;
-        font: 700 0.65rem/1.15 system-ui, sans-serif; text-align: center;
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+        min-height: 5.4rem; padding: 0.35rem 0.2rem; border-radius: 0.5rem;
+        border: 2px solid var(--rarity-edge, #8d9099);
+        background: linear-gradient(180deg, rgb(43 51 64 / 92%), rgb(18 23 30 / 94%));
+        box-shadow: 0 0 0.55rem var(--rarity-glow, transparent);
+        color: var(--parchment);
+        font: 700 0.6rem/1.1 system-ui, sans-serif; text-align: center;
       }
-      .hero-item[data-selected="true"] { border-color: #f2b33d; background: rgb(242 179 61 / 18%); }
-      .hero-item-swatch {
-        display: block; width: 1.6rem; height: 1.6rem; border-radius: 0.35rem;
-        background: var(--slot-swatch, #8a97a6);
+      .hero-item-art { width: 2.9rem; height: 2.9rem; }
+      .hero-item-label { display: block; }
+      .hero-item-tag { color: var(--gold); font-size: 0.52rem; letter-spacing: 0.06em; min-height: 0.7em; }
+      /* SELECTED, and then ARMED -- two visibly different states, because the whole interaction
+         rests on a child being able to see that the first tap did something. A selection that looks
+         like a hover is a selection nobody notices, and then the second tap never happens. */
+      .hero-item[data-selected="true"] {
+        border-color: var(--gold);
+        background: linear-gradient(180deg, rgb(242 179 61 / 26%), rgb(60 44 20 / 92%));
       }
-      .hero-item-equipped-tag { color: #f2b33d; font-size: 0.55rem; letter-spacing: 0.05em; }
-      /* P2: the Hero screen's own identity panel -- Level and POWER prominently, per the contract's
-         "prominently on the Hero/equipment surface", with the two REAL combat stats under them.
-         Positioned per orientation below, beside the slots, so it reads as part of the same header
-         band rather than as a fourth floating dock. */
+      .hero-item[data-armed="true"] {
+        box-shadow: 0 0 0 2px rgb(242 179 61 / 55%), 0 0 0.9rem rgb(242 179 61 / 55%);
+        transform: translateY(-2px);
+      }
+      .hero-item[data-equipped="true"]::after {
+        content: ''; position: absolute; inset: -2px; border-radius: 0.5rem;
+        border: 2px solid var(--gold); opacity: 0.55; pointer-events: none;
+      }
+
+      /* WHO THIS HERO IS -- Level and POWER prominently, per the contract's "prominently on the
+         Hero/equipment surface", with the two REAL combat stats under them. */
       #hero-identity {
         display: flex; flex-direction: column; gap: 0.15rem; pointer-events: none;
-        padding: 0.5rem 0.75rem; border-radius: 0.6rem;
-        background: rgb(12 20 31 / 85%); color: #fff; text-align: center;
+        padding: 0.5rem 0.8rem; border-radius: 0.6rem;
+        background: linear-gradient(180deg, rgb(36 28 22 / 92%), rgb(18 14 11 / 94%));
+        border: 2px solid rgb(90 68 48 / 70%);
+        color: var(--parchment); text-align: center;
         font-variant-numeric: tabular-nums;
       }
-      #hero-identity-level { font: 800 0.75rem/1 system-ui, sans-serif; letter-spacing: 0.12em; opacity: 0.8; }
+      #hero-identity-level { font: 800 0.72rem/1 system-ui, sans-serif; letter-spacing: 0.14em; opacity: 0.8; }
       #hero-identity-power {
         display: inline-flex; align-items: baseline; justify-content: center; gap: 0.25rem;
-        color: #ffd76e; font: 900 1.5rem/1.1 system-ui, sans-serif;
+        color: #ffd76e; font: 900 1.6rem/1.1 system-ui, sans-serif;
         text-shadow: 0 0 0.5rem rgb(242 179 61 / 45%);
       }
       #hero-identity-power .hero-identity-power-icon::after { content: '\26A1'; font-size: 1.1rem; }
-      #hero-identity-power .hero-identity-power-label { font-size: 0.6rem; letter-spacing: 0.12em; opacity: 0.7; color: #fff; }
+      #hero-identity-power .hero-identity-power-label { font-size: 0.58rem; letter-spacing: 0.12em; opacity: 0.7; color: var(--parchment); }
       #hero-identity-stats {
         display: flex; gap: 0.7rem; justify-content: center;
-        font: 700 0.65rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; opacity: 0.8;
+        font: 700 0.62rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; opacity: 0.8;
       }
-      #hero-identity-stats span span { font-weight: 900; font-size: 0.8rem; color: #fff; opacity: 1; }
+      /* The POWER delta, rising off the identity panel the instant an equip lands. Absolutely
+         positioned over its parent so it cannot reflow the panel underneath it mid-animation, and
+         pointer-events: none so a child who taps where it happens to be is tapping the game. */
+      /* ABOVE the panel, not inside it. At `top: 0.6rem` the rising "+87" started life directly on
+         top of the lightning glyph and the POWER value it was about -- the Checkpoint 2 capture
+         reads as a collision, not a celebration. It now starts just clear of the panel's top edge
+         and rises away from it, so both numbers are readable for the whole animation. */
+      #hero-power-burst {
+        position: absolute; left: 50%; top: -1.9rem; transform: translateX(-50%);
+        pointer-events: none; opacity: 0;
+        font: 900 1.6rem/1 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+        text-shadow: 0 0 0.6rem rgb(0 0 0 / 75%);
+      }
+      #hero-power-burst[data-direction="up"] { color: #6ddc8b; }
+      #hero-power-burst[data-direction="down"] { color: #ff8b7a; }
+      #hero-power-burst[data-shown="true"] { animation: hero-power-burst 1.4s ease-out 1; }
+      @keyframes hero-power-burst {
+        0%   { opacity: 0; transform: translate(-50%, 0.6rem) scale(0.8); }
+        18%  { opacity: 1; transform: translate(-50%, -0.2rem) scale(1.25); }
+        70%  { opacity: 1; transform: translate(-50%, -1.6rem) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -2.6rem) scale(1); }
+      }
+      /* #hero-identity is the burst's positioning parent. */
+      #hero-identity { position: relative; }
+      #hero-identity-stats span span { font-weight: 900; font-size: 0.78rem; color: #fff; opacity: 1; }
+
+      /* ── THE COMPARISON CARD, ART FIRST ───────────────────────────────────────────────────────
+         Portrait on the left at a size a child can actually recognise, the words to its right. The
+         card is itself the second tap target (progression/heroScreen.js), so it is sized and
+         cursored like the control it is. */
       #hero-item-card {
-        display: flex; flex-direction: column; gap: 0.3rem; pointer-events: auto;
-        padding: 0.6rem 0.8rem; border-radius: 0.6rem;
-        background: rgb(12 20 31 / 85%); color: #fff;
-        min-width: 9rem;
+        display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'art text' 'action action';
+        gap: 0.55rem; align-items: start; pointer-events: auto; cursor: pointer;
+        padding: 0.6rem; border-radius: 0.7rem;
+        background: linear-gradient(180deg, rgb(36 28 22 / 94%), rgb(18 14 11 / 96%));
+        border: 2px solid var(--rarity-edge, var(--iron-light));
+        box-shadow: 0 0 0.9rem var(--rarity-glow, transparent), 0 0.4rem 1.2rem rgb(0 0 0 / 45%);
+        color: var(--parchment);
+        -webkit-tap-highlight-color: transparent;
       }
-      #hero-item-name { font: 800 1rem/1.2 system-ui, sans-serif; }
-      #hero-item-damage { font: 700 0.85rem/1.2 system-ui, sans-serif; opacity: 0.85; }
-      /* Child-readable "1 -> 2 DAMAGE" (section 8's own worked example). Gold when it is an upgrade
-         -- the only comparison GP1 can produce, since a strictly worse owned weapon is not a case
-         this item table has, but the flag is read rather than assumed so that stays true by
-         construction, not by luck (see hero-screen.test.mjs's own sabotage case for this). */
-      #hero-item-compare { font: 800 1.15rem/1.2 system-ui, sans-serif; color: #f2b33d; min-height: 1.2em; }
-      #hero-equip-button {
-        margin-top: 0.2rem; padding: 0.5rem 0.8rem; border-radius: 0.4rem; border: none;
-        background: #f2b33d; color: #182331; font: 800 0.85rem/1 system-ui, sans-serif; letter-spacing: 0.05em;
+      #hero-item-card[data-shown="false"] { display: none; }
+      /* THE PORTRAIT, AND ONE RULE ABOUT IT: rarity may colour the FRAME and never the ART.
+         #88 is explicit -- "rarity is communicated through the icon border/frame rather than
+         changing the item identity/art itself" -- and the first draft of this rule broke it with an
+         `inset` box-shadow, which is drawn INSIDE the box and therefore over the item. The capture
+         showed the Uncommon Wildwood Blade rendered green, which is a different sword. The glow is
+         now an OUTER shadow: the same strength of treatment, on the frame, where it belongs.
+         Sized at 6.4rem so the art is the largest single element on the card -- #88 asks for
+         "strongly item-art-first", and a portrait smaller than its own stat block is text-first with
+         a picture attached. */
+      #hero-card-art {
+        grid-area: art; width: 6.4rem; height: 6.4rem; border-radius: 0.5rem;
+        border: 2px solid var(--rarity-edge, var(--iron-light));
+        background: radial-gradient(circle at 50% 40%, rgb(58 66 80 / 70%), rgb(16 20 27 / 92%));
+        box-shadow: 0 0 0.8rem var(--rarity-glow, transparent);
       }
-      #hero-equip-button[data-shown="false"] { display: none; }
-      #hero-equip-button:disabled { opacity: 0.5; }
-      /* Landscape (section 8): slots left, hero preview centre (the live game canvas, clear), item
-         list + card right. Portrait: header top, slots as a row just under it, list + card docked to
-         the bottom -- the preview lives in the clear band between, which is the tallest single gap
-         available once both docks are pinned to an edge instead of the middle. */
+      #hero-card-text { grid-area: text; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+      #hero-item-name { font: 800 1.05rem/1.15 system-ui, sans-serif; color: #fff; }
+      #hero-card-heading { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+      #hero-item-rarity {
+        font: 800 0.6rem/1 system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase;
+        color: var(--rarity-ink, #c9ccd3);
+      }
+      /* THE ANSWER TO THE QUESTION THE TAP ASKED. Rarity says what KIND of thing this is; the
+         verdict says whether to put it on -- and until this element existed that answer lived only
+         in a data attribute the stylesheet coloured from, readable by CSS and by nobody else. It is
+         a WORD as well as a colour, for the same reason each stat delta carries an explicit sign. */
+      #hero-item-verdict {
+        font: 900 0.6rem/1 system-ui, sans-serif; letter-spacing: 0.14em;
+        padding: 0.2rem 0.4rem; border-radius: 0.3rem;
+      }
+      #hero-item-card[data-verdict="upgrade"] #hero-item-verdict { background: rgb(109 220 139 / 22%); color: var(--gain); }
+      #hero-item-card[data-verdict="downgrade"] #hero-item-verdict { background: rgb(255 139 122 / 20%); color: var(--loss); }
+      #hero-item-card[data-verdict="sidegrade"] #hero-item-verdict { background: rgb(255 255 255 / 12%); color: #ffd76e; }
+      #hero-item-card[data-verdict="equipped"] #hero-item-verdict { background: rgb(255 255 255 / 10%); color: var(--parchment); }
+      #hero-compare-stats { display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.15rem; }
+      /* `hidden` IS A HINT, NOT A GUARANTEE, AND THIS IS WHERE IT LOST. The user-agent stylesheet
+         says `[hidden] { display: none }`, and an id rule that sets `display: flex` beats it on
+         specificity -- so progression/heroScreen.js setting `powerEl.hidden = true` did nothing at
+         all. Measured: the Checkpoint 2 capture shows a card reading WEARING IT with a stale
+         "POWER 1,000 -> 1,087 +87" still under it, which is a delta for a swap that has already
+         happened. Restated explicitly for both rows rather than trusting the UA rule. */
+      #hero-compare-stats[hidden], #hero-compare-power[hidden] { display: none; }
+      .hero-compare-row {
+        display: grid; grid-template-columns: 4.2rem auto auto auto 1fr; gap: 0.3rem; align-items: baseline;
+        font: 700 0.72rem/1.3 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+      }
+      .hero-compare-row-label { letter-spacing: 0.1em; opacity: 0.65; font-size: 0.6rem; }
+      .hero-compare-row-from { opacity: 0.6; }
+      .hero-compare-row-arrow { opacity: 0.5; }
+      .hero-compare-row-to { font-weight: 900; color: #fff; }
+      /* GREEN IS UP, RED IS DOWN -- and the arrow and the explicit sign carry the same information
+         as the colour, because about one boy in twelve cannot tell those two hues apart and a delta
+         that is ONLY a colour is a delta he cannot read. */
+      .hero-compare-row-delta { font-weight: 900; }
+      .hero-compare-row[data-direction="up"] .hero-compare-row-delta { color: var(--gain); }
+      .hero-compare-row[data-direction="down"] .hero-compare-row-delta { color: var(--loss); }
+      .hero-compare-row[data-direction="same"] .hero-compare-row-delta { opacity: 0.5; }
+
+      /* THE POWER LINE: before -> after with the delta loudest, which is #41's own worked shape. */
+      /* NO WRAP. The 1024x768 capture broke "POWER 2,000 -> 1,000 -1,000" across two lines, which
+         leaves the delta -- the one number the child asked for by tapping -- alone on a line with no
+         label in front of it. */
+      #hero-compare-power {
+        display: flex; align-items: baseline; gap: 0.28rem; flex-wrap: nowrap; margin-top: 0.25rem;
+        font: 800 0.85rem/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+        white-space: nowrap; min-width: 0;
+      }
+      /* If a future POWER is long enough to overrun even the widened card, the row gives up its
+         least informative parts first -- the word POWER, then the "before" -- rather than clipping
+         the delta. min-width: 0 on a flex child is what actually permits that; without it a flex
+         item refuses to shrink below its content and overflows the parent instead. */
+      #hero-compare-power .hero-compare-power-label {
+        font-size: 0.58rem; letter-spacing: 0.14em; opacity: 0.7;
+        min-width: 0; overflow: hidden; text-overflow: clip;
+      }
+      #hero-compare-power .hero-compare-power-delta { flex: 0 0 auto; }
+      #hero-compare-power .hero-compare-power-from { opacity: 0.6; }
+      #hero-compare-power .hero-compare-power-arrow { opacity: 0.5; }
+      #hero-compare-power .hero-compare-power-to { font-weight: 900; font-size: 1.05rem; color: #ffd76e; }
+      #hero-compare-power .hero-compare-power-delta { font-weight: 900; font-size: 0.95rem; }
+      #hero-compare-power[data-direction="up"] .hero-compare-power-delta { color: var(--gain); }
+      #hero-compare-power[data-direction="down"] .hero-compare-power-delta { color: var(--loss); }
+      #hero-compare-power[data-direction="same"] .hero-compare-power-delta { opacity: 0.5; }
+
+      /* THE SENTENCE THAT TEACHES THE GESTURE. Full width, gold, and shaped like a button on
+         purpose -- it is not one (the whole card is the target), but a child reads an affordance
+         from a shape, and this one tells the truth about what the next tap does. */
+      #hero-compare-action {
+        grid-area: action; margin-top: 0.15rem; padding: 0.5rem;
+        min-height: 44px; display: grid; place-items: center;
+        border-radius: 0.45rem; text-align: center;
+        font: 900 0.82rem/1 system-ui, sans-serif; letter-spacing: 0.1em;
+      }
+      #hero-compare-action[data-armed="true"] {
+        background: linear-gradient(180deg, #f7c65c, #e09a24); color: #1c1409;
+        box-shadow: 0 0 0.8rem rgb(242 179 61 / 45%);
+        animation: hero-action-breathe 1.6s ease-in-out infinite;
+      }
+      /* A WEAKER ITEM MAY STILL BE EQUIPPED -- and it must be, because the child's agency over their
+         own loadout is the point of a compare step existing at all. What changes is that the game
+         stops SELLING it: the same control, same size, same position, same words, in plain iron
+         instead of celebratory gold, and not breathing. The contract forbids labelling something
+         better because one stat rose; a glowing gold "TAP AGAIN TO EQUIP" over a red WEAKER badge is
+         that same contradiction expressed in colour rather than in words. */
+      #hero-item-card[data-verdict="downgrade"] #hero-compare-action[data-armed="true"],
+      #hero-item-card[data-verdict="sidegrade"] #hero-compare-action[data-armed="true"] {
+        background: linear-gradient(180deg, #5b6577, #3a4351); color: #f4ecdb;
+        box-shadow: none; animation: none;
+      }
+      #hero-compare-action[data-armed="false"] {
+        background: rgb(255 255 255 / 8%); color: var(--parchment); opacity: 0.75;
+      }
+      @keyframes hero-action-breathe {
+        0%, 100% { filter: brightness(1); }
+        50%      { filter: brightness(1.14); }
+      }
+      /* One reduced-motion block for the whole surface, rather than a clause beside each animation:
+         a child (or an adult) who has asked the platform for less movement should not have to hope
+         every future addition here remembered to check. */
+      @media (prefers-reduced-motion: reduce) {
+        .hero-slot[data-target="true"] { animation: none; box-shadow: 0 0 0.9rem rgb(242 179 61 / 70%); }
+        .hero-slot[data-just-equipped="true"] { animation: none; box-shadow: 0 0 1.2rem rgb(242 179 61 / 85%); }
+        #hero-compare-action[data-armed="true"] { animation: none; }
+      }
+
+      /* ── THE FLYING ICON (ui/gearFlight.js) ───────────────────────────────────────────────────
+         Appended to #game, positioned in viewport coordinates, and removed by its own animation's
+         finish handler. Styled here rather than injected, so the whole gear surface's appearance is
+         legible in one file. */
+      .gear-flight {
+        position: fixed; z-index: 40; pointer-events: none;
+        border-radius: 0.5rem; border: 2px solid var(--flight-edge, #f2b33d);
+        background: radial-gradient(circle at 50% 40%, rgb(70 82 100 / 85%), rgb(16 20 27 / 95%));
+        box-shadow: 0 0 1rem rgb(242 179 61 / 65%);
+      }
+      .gear-flight .item-art-image, .gear-flight .item-art-fallback {
+        position: absolute; inset: 0; display: grid; place-items: center;
+      }
+      .gear-flight .item-art-image { width: 100%; height: 100%; object-fit: contain; }
+      .gear-flight .item-art-fallback { color: #dfe6ef; }
+      .gear-flight .item-art-fallback svg { width: 72%; height: 72%; }
+
+      /* ── LAYOUT ───────────────────────────────────────────────────────────────────────────────
+         #89 asks for the hero on the left, equipped slots near the hero, inventory to the right. The
+         hero preview is the LIVE game render filling the viewport (render/heroPreview.js), so "hero
+         on the left" is expressed by what is docked where rather than by moving a camera: the worn
+         gear and the hero's identity own the left rail, the inventory and the card own the right. In
+         portrait there is no left and right to give, so the same reading order becomes
+         top-to-bottom -- worn gear, who you are, the hero himself, then what you could put on. */
       @media (orientation: landscape) {
         #hero-slots { top: 4.5rem; left: 0.75rem; flex-direction: column; }
-        /* Bottom-left, under the slot column: the one corner both docks leave clear in landscape,
-           and directly opposite the item card so a child comparing a weapon can see what they
-           currently ARE without their thumb crossing the preview. */
         #hero-identity { position: absolute; left: 0.75rem; bottom: 0.75rem; }
-        #hero-item-list { position: absolute; right: 0.75rem; bottom: 8.5rem; top: 4.5rem; flex-direction: column; width: 5.4rem; }
-        #hero-item-card { position: absolute; right: 0.75rem; bottom: 0.75rem; }
+        #hero-item-list {
+          position: absolute; right: 0.75rem; top: 4.5rem; width: 11rem; max-height: calc(100% - 16rem);
+        }
+        /* 22rem, not 18. Measured off the 1024x768 capture: at 18rem the card's text column is
+           about 10.4rem once the 6.4rem portrait and the gaps are taken out, and the POWER row --
+           "POWER 2,000 -> 1,000 -1,000", which must not wrap -- is wider than that, so the delta was
+           clipped at the card's right edge. The delta is the number the child asked for by tapping;
+           it is the last thing that may be allowed off-screen. */
+        #hero-item-card { position: absolute; right: 0.75rem; bottom: 0.75rem; width: 22rem; }
       }
       @media (orientation: portrait) {
         #hero-slots { top: 4.5rem; left: 0.75rem; right: 0.75rem; flex-direction: row; justify-content: center; flex-wrap: wrap; }
-        /* Directly under the slot row and above the preview band, centred: in portrait the eye
-           travels top-to-bottom, so "who you are" belongs between the gear you are wearing and the
-           gear you are choosing. */
-        #hero-identity { position: absolute; top: 9.6rem; left: 0.75rem; right: 0.75rem; }
-        #hero-item-list { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 6.5rem; }
-        #hero-item-card { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; }
+        #hero-identity { position: absolute; top: 10rem; left: 0.75rem; right: 0.75rem; }
+        /* The grid sits at the bottom and the card ABOVE it -- deliberately that order. The card
+           explains the item the child just tapped IN the grid, so a card that covered the grid would
+           hide its own subject, and comparing a second item would mean dismissing the explanation to
+           reach it. */
+        /* A FIXED two-row height, not a max-height. With max-height the grid shrank to its content
+           (one row today) while the card above it stayed pinned at a constant offset, leaving a band
+           of dead screen between the two -- visible in the 768x1024 capture. A fixed height puts the
+           slack INSIDE the inventory instead of between the panels, which also reads correctly: an
+           inventory with room in it is what an inventory looks like. It scrolls past two rows. */
+        #hero-item-list {
+          position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; height: 11rem;
+        }
+        #hero-item-card { position: absolute; left: 0.75rem; right: 0.75rem; bottom: 12.25rem; }
       }
       /* GP3: the Village Board. Same gold-accent/dark-pill family as the Hero screen just above --
          this repo's own "warm gold = reward/ownership" colour doctrine, so a child reads the two
@@ -1424,7 +1711,7 @@
          `none`, not `manipulation`, for all of these: nothing here needs the browser's own panning
          or pinch-to-zoom gesture, only clicks. */
       #hero-screen-header, #hero-screen-close, #hero-slots, .hero-slot, #hero-item-list, .hero-item,
-      #hero-item-card, #hero-equip-button,
+      #hero-item-card, #hero-compare-action,
       #village-board-header, #village-board-close, #village-board-nodes, .village-board-node,
       #village-board-detail, #village-board-upgrade-button,
       #profile-gate, #profile-gate-panel, #profile-gate-header, #profile-gate-close,
@@ -1642,11 +1929,11 @@
         <!-- Five slots, always. Populated/locked by progression/heroScreen.js's renderSlots -- see
              its own header comment for why only the first (Weapon) is interactive in GP1. -->
         <div id="hero-slots">
-          <div class="hero-slot" data-slot="weapon"><span class="hero-slot-name hero-slot-label"></span></div>
-          <div class="hero-slot" data-slot="shield"><span class="hero-slot-name hero-slot-label">Shield</span></div>
-          <div class="hero-slot" data-slot="helmet"><span class="hero-slot-name hero-slot-label">Helmet</span></div>
-          <div class="hero-slot" data-slot="shoulders"><span class="hero-slot-name hero-slot-label">Shoulders</span></div>
-          <div class="hero-slot" data-slot="chest" data-locked="true"><span class="hero-slot-label">Chest</span></div>
+          <div class="hero-slot" data-slot="weapon"><span class="hero-slot-art item-art" aria-hidden="true"></span><span class="hero-slot-name hero-slot-label"></span></div>
+          <div class="hero-slot" data-slot="shield"><span class="hero-slot-art item-art" aria-hidden="true"></span><span class="hero-slot-name hero-slot-label">Shield</span></div>
+          <div class="hero-slot" data-slot="helmet"><span class="hero-slot-art item-art" aria-hidden="true"></span><span class="hero-slot-name hero-slot-label">Helmet</span></div>
+          <div class="hero-slot" data-slot="shoulders"><span class="hero-slot-art item-art" aria-hidden="true"></span><span class="hero-slot-name hero-slot-label">Shoulders</span></div>
+          <div class="hero-slot" data-slot="chest" data-locked="true"><span class="hero-slot-art item-art" aria-hidden="true"></span><span class="hero-slot-label">Chest</span></div>
         </div>
         <!-- Owned-item strip. Rebuilt per render() by progression/heroScreen.js -- both v0 items
              ship owned (progression/items.js), so this always shows the Starter Sword and the
@@ -1667,13 +1954,33 @@
             <span class="hero-identity-stat"><span id="hero-identity-hp">30</span> MAX HP</span>
             <span class="hero-identity-stat"><span id="hero-identity-damage">10</span> DAMAGE</span>
           </div>
+          <!-- #41's before -> delta -> after, delivered as a rising delta over the POWER it just
+               changed. Not a modal: it takes no pointer events and blocks nothing, which is how the
+               contract's ceremony-collision rule is honoured rather than merely acknowledged (see
+               main.js's showEquipPowerBurst). -->
+          <div id="hero-power-burst" aria-hidden="true"></div>
         </div>
-        <div id="hero-item-list" role="listbox" aria-label="Owned weapons"></div>
-        <div id="hero-item-card">
-          <div id="hero-item-name"></div>
-          <div id="hero-item-damage"></div>
-          <div id="hero-item-compare"></div>
-          <button id="hero-equip-button" type="button" data-shown="false">EQUIP</button>
+        <!-- #88: the INVENTORY. A grid rather than a one-line strip: a strip that scrolls
+             horizontally hides everything past the third item behind a gesture a child has no
+             reason to try, and the moment gear becomes frequent (which is the whole point of #44)
+             a hidden inventory is an inventory nobody uses. -->
+        <div id="hero-item-list" role="listbox" aria-label="Your gear"></div>
+        <!-- #88: the COMPARISON, item-art first. No EQUIP button -- deliberately, and it is the one
+             removal in this file worth stating plainly: the second tap on the item or on this card
+             IS the equip, so a button would be a third way to do the same thing and a fourth thing
+             for a thumb to miss. #hero-compare-action prints what the next tap will do. -->
+        <div id="hero-item-card" data-shown="false" role="button" tabindex="0" aria-label="Selected gear. Tap again to equip.">
+          <div id="hero-card-art" class="item-art" aria-hidden="true"></div>
+          <div id="hero-card-text">
+            <div id="hero-item-name"></div>
+            <div id="hero-card-heading">
+              <span id="hero-item-rarity"></span>
+              <span id="hero-item-verdict"></span>
+            </div>
+            <div id="hero-compare-stats"></div>
+            <div id="hero-compare-power" hidden></div>
+          </div>
+          <div id="hero-compare-action"></div>
         </div>
       </div>
       <!-- GP3: the Village Board -- a strategic popup map, not an economy spreadsheet (see

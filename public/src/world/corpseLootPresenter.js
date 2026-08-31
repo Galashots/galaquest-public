@@ -22,6 +22,9 @@ import { CORPSE_COIN_KIND, CORPSE_LOOT_INTERACT_RADIUS_METERS } from './corpseLo
 import {
   HELMET_SLOT, SHIELD_SLOT, SHOULDERS_SLOT, WEAPON_SLOT, itemDef,
 } from '../progression/items.js';
+// #88's single art/rarity authority -- imported, never restated (GQ-007), so this receipt
+// cannot disagree with the inventory about what an item looks like.
+import { itemIconSvgFor, itemIconUrlFor, rarityFor } from '../progression/itemArt.js';
 
 export { CORPSE_LOOT_INTERACT_RADIUS_METERS };
 
@@ -127,7 +130,17 @@ export function corpseLootPanelViewModel(corpse, heroId) {
       id: item.id,
       itemId: item.itemId,
       name: def?.name ?? 'Mystery Gear',
+      // The slot emoji is now the FALLBACK, not the answer. `art` carries the same rendered portrait
+      // the inventory and the acquisition ceremony draw (progression/itemArt.js), so the item a child
+      // takes out of a corpse is visibly the item that turns up in their bag. Null for an unknown id,
+      // which keeps this panel's existing "a pool entry we have not been told about still renders"
+      // guarantee intact.
       icon: (def && SLOT_ICONS[def.slot]) ?? GENERIC_GEAR_ICON,
+      art: def === null ? null : {
+        iconUrl: itemIconUrlFor(def.id),
+        iconSvg: itemIconSvgFor(def.id),
+      },
+      rarity: def === null ? null : rarityFor(def.id),
       guaranteed: item.guaranteed,
       taken: item.taken,
     };

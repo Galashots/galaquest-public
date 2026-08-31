@@ -8101,6 +8101,526 @@
       "related_asset_ids": []
     },
     {
+      "asset_id": "gear.icon.helmet-silverguard",
+      "display_name": "Silverguard Helmet Icon",
+      "asset_kind": "texture",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/items/helmet_silverguard.png",
+          "git_blob_oid": "4771be384e81e3a363f6a32c502baaf414fc44df"
+        }
+      ],
+      "source": {
+        "path": "public/assets/items/helmet_silverguard.png",
+        "sha256": "d74ee30c7229f4cba273cee62428d336a2f29b0fcc0c71c8ec778a8536f4d23b",
+        "size_bytes": 27950,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 27950,
+        "mesh_count": "N/A",
+        "primitive_count": "N/A",
+        "vertex_count": "N/A",
+        "triangle_count": "N/A",
+        "material_count": "N/A",
+        "skin_count": "N/A",
+        "joint_count": "N/A",
+        "animation_clip_count": "N/A"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/helmet_silverguard.png"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
+    },
+    {
+      "asset_id": "gear.icon.shield-ironwood",
+      "display_name": "Ironwood Shield Icon",
+      "asset_kind": "texture",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/items/shield_ironwood.png",
+          "git_blob_oid": "32121c6ef0737b8936455826d2f77fbf301e9810"
+        }
+      ],
+      "source": {
+        "path": "public/assets/items/shield_ironwood.png",
+        "sha256": "5d7de3775db33d7a1c6711dce24a124aa39e526449d23064562ec41ee397234d",
+        "size_bytes": 34376,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 34376,
+        "mesh_count": "N/A",
+        "primitive_count": "N/A",
+        "vertex_count": "N/A",
+        "triangle_count": "N/A",
+        "material_count": "N/A",
+        "skin_count": "N/A",
+        "joint_count": "N/A",
+        "animation_clip_count": "N/A"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/shield_ironwood.png"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
+    },
+    {
+      "asset_id": "gear.icon.shoulder-silverguard",
+      "display_name": "Silverguard Shoulders Icon",
+      "asset_kind": "texture",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/items/shoulder_silverguard.png",
+          "git_blob_oid": "dc0d11b9a2a23a7f4cca856dc4c11e3e1d2f37c0"
+        }
+      ],
+      "source": {
+        "path": "public/assets/items/shoulder_silverguard.png",
+        "sha256": "52d02350c5ae2698ac07240c63149b17d01029ee9b93237dd7804f79c7f337a3",
+        "size_bytes": 26689,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 26689,
+        "mesh_count": "N/A",
+        "primitive_count": "N/A",
+        "vertex_count": "N/A",
+        "triangle_count": "N/A",
+        "material_count": "N/A",
+        "skin_count": "N/A",
+        "joint_count": "N/A",
+        "animation_clip_count": "N/A"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/shoulder_silverguard.png"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
+    },
+    {
+      "asset_id": "gear.icon.starter-sword",
+      "display_name": "Starter Sword Icon",
+      "asset_kind": "texture",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/items/starter_sword.png",
+          "git_blob_oid": "5455e0ce2fc037b7a51aa82d6078a482b4ef4e23"
+        }
+      ],
+      "source": {
+        "path": "public/assets/items/starter_sword.png",
+        "sha256": "6826b2ca31d13599c7ec601a1c0e2bd1adcaa7b2d54aba864f197d6bd2ac8be4",
+        "size_bytes": 13762,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 13762,
+        "mesh_count": "N/A",
+        "primitive_count": "N/A",
+        "vertex_count": "N/A",
+        "triangle_count": "N/A",
+        "material_count": "N/A",
+        "skin_count": "N/A",
+        "joint_count": "N/A",
+        "animation_clip_count": "N/A"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/starter_sword.png"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
+    },
+    {
+      "asset_id": "gear.icon.wildwood-blade",
+      "display_name": "Wildwood Blade Icon",
+      "asset_kind": "texture",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/items/wildwood_blade.png",
+          "git_blob_oid": "67fa0a679a13ad490c44b04989c75ed66201685d"
+        }
+      ],
+      "source": {
+        "path": "public/assets/items/wildwood_blade.png",
+        "sha256": "028da88303f66e581865b9643fde746dda4249d1b5d85d759ce8b65de0d5b514",
+        "size_bytes": 14649,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 14649,
+        "mesh_count": "N/A",
+        "primitive_count": "N/A",
+        "vertex_count": "N/A",
+        "triangle_count": "N/A",
+        "material_count": "N/A",
+        "skin_count": "N/A",
+        "joint_count": "N/A",
+        "animation_clip_count": "N/A"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "N/A",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/wildwood_blade.png"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
+    },
+    {
       "asset_id": "gear.lantern.belt",
       "display_name": "Belt Lantern",
       "asset_kind": "gear",

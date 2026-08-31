@@ -62,6 +62,28 @@ with no arm sleeve), and it is consistently generic fantasy-armour language. A t
 full engineering tree for named franchises, characters and recognisable properties returned **no
 matches** in any gear-generation record. On that evidence these assets are treated as original work.
 
+## Item icons — renders of the gear above
+
+`public/assets/items/*.png`
+
+Rendered by `tools/assets/render-item-icons.mjs` from the gear GLBs listed in the table above, in
+this repository, with no third-party input. Each icon is a **derivative of exactly one asset already
+covered here**, so it carries that asset's basis and nothing new: an icon of `shield_ironwood.glb`
+rests on the same owner-directed paid-plan Meshy generation the mesh does. The renders add no
+external art, texture, brush, font or reference.
+
+Two mappings are not one-to-one with the item id, and are recorded here rather than inferred from a
+filename (a filename states a role, not a provenance):
+
+| Icon | Rendered from |
+| --- | --- |
+| `starter_sword.png` | `sword_ironwood.glb` — the Starter Sword has no standalone mesh (the hero's body mesh carries its blade), so this is a **stand-in**, not that item's own model |
+| `wildwood_blade.png` | `candidates/sword_wildwood_w1a.glb` — the candidate mesh, which is also the model the running game mounts for this weapon |
+
+These renders are **provisional**: they establish exact identity with the in-game model, not the
+polished illustrated portrait #88 asks for. Replacing one is a file drop at the same path; no code
+changes. Final illustrated item art is UNKNOWN pending the Owner's art lane.
+
 ## Beacon Warden — owner-created, generated on a paid plan
 
 `public/assets/enemies/beacon_warden.glb`
