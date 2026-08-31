@@ -71,9 +71,12 @@ Two defects were found by *running* it, both now regression-tested:
    them: a villager and the Keeper are both `a person` until the marker above his head distinguishes
    him, because that is the information a player has.
 
-**Known gap, stated rather than papered over:** `see` is a frustum test, not an occlusion test. An
-enemy directly behind a building is reported as visible. A finding that depends on the agent having
-seen something through a wall is not evidence.
+**Known gap, stated rather than papered over:** non-enemy scene characters and ground drops still use
+frustum projection rather than an occlusion test. A villager, pet, or ground drop behind solid
+geometry can therefore be reported as visible when its projected point is inside the camera frustum.
+Enemy observations are stricter: they require a visibly rendered nameplate and fail closed when that
+label is absent. A finding that depends on a non-enemy scene entity or drop having been seen through
+an occluder is not evidence.
 
 ### `playtest-session.mjs` — the protocol
 
