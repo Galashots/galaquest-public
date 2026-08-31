@@ -203,7 +203,7 @@ export function installPlayerViewSource() {
     // behind a building with no visible label is absent rather than leaked to the agent. The card's
     // name and rectangle are ordinary player-visible pixels, so the nameplate can speak for itself
     // without handing over its backing enemy id, hp, or world coordinates. Other literal visible
-    // nameplate text remains in `read`, not as privileged structured entity state.
+    // nameplate text remains in the read channel, not as privileged structured entity state.
     const see = [];
     for (const plate of document.querySelectorAll('.enemy-nameplate')) {
       if (typeof plate.checkVisibility === 'function'
