@@ -56,7 +56,7 @@ know this, right now, by looking and listening?*
 | `health` | `healthy` / `hurt` / `critical` / `down` — never a number |
 | `read` | text actually on screen: visible, opaque, inside the viewport, ancestors included |
 | `see` | entities the camera is pointing at: a kind, a screen position, a distance bucket |
-| `heard` | sounds since the last look, as events rather than a running total |
+| `heard` | anonymous sound events since the last look — never internal recipe/event names |
 | `spoken` | read-aloud lines |
 
 Enemy hp, drop contents, server state and scene-node names never appear at any spelling.
@@ -120,6 +120,10 @@ Three constraints worth knowing about:
   projecting the underlying encounter snapshot. A missing label therefore fails closed as absent;
   its on-screen name and position can be reported, but its world position, health, and id stay
   private. Literal on-screen card text remains in `read`, not structured enemy state.
+- **Sound identity.** The runtime's `audioDebug()` recipe keys are internal harness truth, so the
+  player view uses them only to detect that one or more sounds actually scheduled, then emits
+  anonymous `a sound` events. It never tells the agent semantic labels such as `level-up` or
+  `victory-sting` that a child would not literally hear as words.
 
 ## Oracles
 

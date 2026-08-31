@@ -254,12 +254,14 @@ test('text laid out off-canvas is not readable', () => {
   assert.deepEqual(view.read, ['Coins 3']);
 });
 
-test('sounds are reported once, as events since the last look, not as a running total', () => {
+test('sounds are reported once without leaking privileged engine recipe names', () => {
   const context = makeContext({});
   runInNewContext(installPlayerViewSource(), context);
   const first = JSON.parse(runInNewContext(READ_PLAYER_VIEW, context));
   const second = JSON.parse(runInNewContext(READ_PLAYER_VIEW, context));
-  assert.deepEqual(first.heard, ['wolf-bite', 'wolf-bite']);
+  assert.deepEqual(first.heard, ['a sound', 'a sound']);
+  assert.doesNotMatch(JSON.stringify(first), /wolf-bite/,
+    'audioDebug recipe names are harness truth and must not cross the player-fair boundary');
   assert.deepEqual(second.heard, [], 'the same two bites must not be heard again on the next look');
 });
 

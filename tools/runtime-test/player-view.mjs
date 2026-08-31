@@ -275,15 +275,19 @@ export function installPlayerViewSource() {
       });
     }
 
-    // WHAT WAS HEARD SINCE THE LAST LOOK. Recipe names are the engine's vocabulary, not a child's,
-    // but they are what the ear actually got and renaming them here would be inventing a fiction
-    // about the audio design. They go through as-is.
+    // WHAT WAS HEARD SINCE THE LAST LOOK. audioDebug() is a harness-truth seam and its recipe keys
+    // are privileged engine vocabulary (for example `level-up` or `victory-sting`), not words a
+    // child's ears receive. Use it only to count successfully scheduled sound events, then discard
+    // the recipe identities. A future audio-perception layer may distinguish sounds from the audio
+    // itself; this first player-fair boundary must not smuggle semantic event labels through debug.
     const triggered = (r.audioDebug() || {}).triggered || {};
     const heard = [];
+    let heardCount = 0;
     for (const name of Object.keys(triggered)) {
       const delta = (triggered[name] || 0) - (heardBefore[name] || 0);
-      for (let i = 0; i < delta && i < 8; i += 1) heard.push(name);
+      if (delta > 0) heardCount += delta;
     }
+    for (let i = 0; i < Math.min(heardCount, 8); i += 1) heard.push('a sound');
     heardBefore = { ...triggered };
 
     const spokenAll = window.__gqSpoken || [];
