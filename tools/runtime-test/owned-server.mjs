@@ -30,7 +30,10 @@
  */
 
 import { spawn } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
 import { createServer as createProbeServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -39,6 +42,47 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
  *  harnesses never disagree about who they are; it is a display name, not an identity -- the durable
  *  profile id is still minted per device and per clear. */
 const HARNESS_HERO_NAME = 'Harness';
+
+const isolatedRewardStorePath = () => join(
+  mkdtempSync(join(tmpdir(), 'galaquest-owned-server-')),
+  'rewards.db',
+);
+
+/**
+ * Select the reward-store law for a harness-owned server.
+ *
+ * Omission is intentionally safe: ordinary tests and harnesses receive a fresh OS-temp store.
+ * Reaching the family's ordinary store requires the named `useRealRewardStore` opt-in, and that
+ * opt-in is intentionally incompatible with supplying any other store path.
+ */
+const pathWithin = (directory, path) => {
+  const pathFromDirectory = relative(directory, path);
+  return pathFromDirectory === '' || (!pathFromDirectory.startsWith('..') && !isAbsolute(pathFromDirectory));
+};
+
+export function selectOwnedRewardStore({
+  rewardStorePath,
+  useRealRewardStore = false,
+  repoRoot = REPO_ROOT,
+} = {}) {
+  if (typeof useRealRewardStore !== 'boolean') {
+    throw new TypeError('useRealRewardStore must be a boolean');
+  }
+  if (useRealRewardStore && rewardStorePath !== undefined) {
+    throw new Error('cannot combine rewardStorePath with useRealRewardStore');
+  }
+  if (useRealRewardStore) return { kind: 'real', rewardStorePath: null };
+  if (rewardStorePath !== undefined) {
+    if (typeof rewardStorePath !== 'string' || rewardStorePath.length === 0) {
+      throw new TypeError('rewardStorePath must be a non-empty string when supplied');
+    }
+    if (pathWithin(resolve(repoRoot, 'data'), resolve(repoRoot, rewardStorePath))) {
+      throw new Error('rewardStorePath cannot point under the repository data directory');
+    }
+    return { kind: 'explicit', rewardStorePath };
+  }
+  return { kind: 'temporary', rewardStorePath: isolatedRewardStorePath() };
+}
 
 /**
  * The URL a harness must navigate to in order to land IN THE GAME.
@@ -126,6 +170,7 @@ export async function startOwnedServer({
   candidates = PORT_CANDIDATES,
   quiet = false,
   rewardStorePath,
+  useRealRewardStore = false,
   // #87: item ids every eligible hero's corpse claim carries unconditionally, so a harness can reach
   // a real personal claim without waiting on an unseeded gear roll. Passed straight through to
   // server.mjs's own GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS (see its comment for the full argument);
@@ -133,6 +178,7 @@ export async function startOwnedServer({
   guaranteedCorpseItemIds,
   repoRoot = REPO_ROOT,
 } = {}) {
+  const selectedRewardStore = selectOwnedRewardStore({ rewardStorePath, useRealRewardStore, repoRoot });
   let port = null;
   for (const candidate of candidates) {
     // eslint-disable-next-line no-await-in-loop
@@ -147,15 +193,20 @@ export async function startOwnedServer({
 
   // cwd is the repo root, so the server serves THIS checkout's public/ and runs THIS checkout's
   // net/gameServer.mjs. That is the half of the 5201 problem content hashes could not catch.
+  // An inherited GALAQUEST_REWARD_STORE_PATH must not weaken the safe omission law. The only route
+  // to the ordinary data/rewards.db is the explicit useRealRewardStore option above.
+  const serverEnvironment = { ...process.env };
+  delete serverEnvironment.GALAQUEST_REWARD_STORE_PATH;
   const child = spawn(process.execPath, ['server.mjs', String(port)], {
     cwd: repoRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
-    // Unset (inherited real data/rewards.db) unless a caller passes rewardStorePath -- e.g. a harness
-    // proving something durable and never-reversed, like Workshop I ownership, that must not land in
-    // the children's real save. See server.mjs's own comment on GALAQUEST_REWARD_STORE_PATH.
+    // Normal callers always get the selected isolated/explicit path. The null real-store selection
+    // intentionally leaves this unset so server.mjs uses its ordinary family-save default.
     env: {
-      ...process.env,
-      ...(rewardStorePath ? { GALAQUEST_REWARD_STORE_PATH: rewardStorePath } : {}),
+      ...serverEnvironment,
+      ...(selectedRewardStore.rewardStorePath
+        ? { GALAQUEST_REWARD_STORE_PATH: selectedRewardStore.rewardStorePath }
+        : {}),
       ...(guaranteedCorpseItemIds?.length
         ? { GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS: guaranteedCorpseItemIds.join(',') }
         : {}),
@@ -252,6 +303,7 @@ export async function startOwnedServer({
     origin,
     url,
     child,
+    rewardStore: selectedRewardStore,
     kill,
     get exited() { return exited; },
   };
