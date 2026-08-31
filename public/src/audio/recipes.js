@@ -30,6 +30,13 @@ export const RECIPES = Object.freeze({
     Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.12, gainPeak: 0.35 }),
   ]),
 
+  // Level-5 special: a broader, brighter launch than a routine swing, kept short so the player can
+  // immediately see the burst do its work rather than waiting through a ceremony before impact.
+  'special-whoosh': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.18, gainPeak: 0.5 }),
+    Object.freeze({ type: 'tone', startSeconds: 0, durationSeconds: 0.2, frequencyStart: 260, frequencyEnd: 620, gainPeak: 0.38 }),
+  ]),
+
   // wolf-hit: a noise crack for the initial contact, layered with a short low tone drop for weight --
   // the WoW/Unity "hit flash" research in feedback.js is about the visual; this is its audio twin.
   impact: Object.freeze([
@@ -37,6 +44,11 @@ export const RECIPES = Object.freeze({
     Object.freeze({
       type: 'tone', startSeconds: 0, durationSeconds: 0.12, frequencyStart: 180, frequencyEnd: 70, gainPeak: 0.7,
     }),
+  ]),
+
+  'special-impact': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.08, gainPeak: 0.72 }),
+    Object.freeze({ type: 'tone', startSeconds: 0, durationSeconds: 0.28, frequencyStart: 220, frequencyEnd: 880, gainPeak: 0.58 }),
   ]),
 
   // hero-hurt: duller and longer than impact -- a low tone sagging further, plus a soft noise body, so
@@ -428,6 +440,9 @@ export const EVENT_RECIPE_MAP = Object.freeze({
   swing: 'whoosh',
   'swing-missed': null,
   'swing-dropped': null,
+  'special-start': 'special-whoosh',
+  'special-hit': 'special-impact',
+  'special-missed': null,
   'wolf-hit': 'impact',
   'wolf-defeated': 'victory-sting',
   'hero-hurt': 'thud',

@@ -61,11 +61,30 @@
         transition: transform 90ms ease-out, background-color 90ms ease-out;
       }
       #attack-button[data-pressed="true"] { background: rgb(226 122 84 / 78%); transform: scale(0.94); }
+      #special-button {
+        position: absolute; right: 1.25rem; bottom: 8.25rem; width: 108px; min-height: 58px;
+        display: grid; place-items: center; gap: 0.15rem;
+        border: 2px solid rgb(159 255 192 / 80%); border-radius: 1.2rem;
+        background: rgb(53 137 92 / 72%); color: #fff;
+        font: 900 0.88rem/1 system-ui, sans-serif; letter-spacing: 0.06em;
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        transition: transform 90ms ease-out, background-color 90ms ease-out, opacity 120ms ease-out;
+      }
+      #special-button-state { font-size: 0.67rem; letter-spacing: 0.12em; opacity: 0.9; }
+      #special-button[data-unlocked="false"] { background: rgb(47 60 65 / 72%); border-color: rgb(255 255 255 / 38%); opacity: 0.72; }
+      #special-button[data-ready="false"] { filter: saturate(0.6); opacity: 0.58; }
+      #special-button[data-pressed="true"] { transform: scale(0.94); background: rgb(116 208 142 / 92%); }
+      #special-button[data-feedback="hit"] { animation: special-button-pulse 620ms ease-out 1; }
+      @keyframes special-button-pulse {
+        0% { box-shadow: 0 0 0 0 rgb(159 255 192 / 85%); }
+        45% { box-shadow: 0 0 0 0.8rem rgb(159 255 192 / 0%); }
+        100% { box-shadow: 0 0 0 0 rgb(159 255 192 / 0%); }
+      }
       /* GP1: hidden, not merely disabled, while the Hero screen is open -- main.js's own onOpenChange
          sets this, matched by the SAME frame-loop input gate (heroScreenOpen) that force-zeroes
          movement and attack, so this is belt-and-braces the same way #attack-button[data-ready] is:
          a visual promise checked by real logic, not the only thing enforcing it. */
-      #touch-stick[data-suspended="true"], #attack-button[data-suspended="true"] {
+      #touch-stick[data-suspended="true"], #attack-button[data-suspended="true"], #special-button[data-suspended="true"] {
         opacity: 0; pointer-events: none; transition: opacity 150ms ease-out;
       }
       /* Found by looking at a real capture (hero-screen-portrait-open.png): the slots row and
@@ -750,7 +769,7 @@
         .enemy-nameplate-level, .enemy-nameplate-danger { font-size: 0.53rem; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #attack-button, #attack-button::after, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-health[data-regen="true"], #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, .xp-toast, #loot-hud .loot-count, #streak-meter, #streak-meter[data-pulse="true"], #streak-meter[data-pulse="tier"], #workshop-interact, #objective-marker-glyph { transition: none; animation: none; }
+        #attack-button, #attack-button::after, #special-button, #banner, #hero-hurt-flash, #hero-down-veil, #hero-down-bar::after, #hero-health, #hero-health .health-fill, #hero-health[data-regen="true"], #hero-progress, #hero-progress .xp-fill, #lantern-marks, #lantern-marks .mark, #keeper-speech, #quest-objective, .damage-number, .xp-toast, #loot-hud .loot-count, #streak-meter, #streak-meter[data-pulse="true"], #streak-meter[data-pulse="tier"], #workshop-interact, #objective-marker-glyph { transition: none; animation: none; }
         /* THE CEREMONY STILL HAPPENS UNDER REDUCED MOTION -- it just stops moving.
            The contract's requirement is that "essential Level/HP/POWER information must remain
            legible when motion is reduced; animation is enhancement, not the only communication
@@ -1127,7 +1146,8 @@
          Nothing on screen had ever said the words WASD, Space, drag or scroll, so the hint takes
          the space the stick vacates rather than being one more thing competing for a corner. */
       #game[data-pointer="mouse"] #touch-stick,
-      #game[data-pointer="mouse"] #attack-button { display: none; }
+      #game[data-pointer="mouse"] #attack-button,
+      #game[data-pointer="mouse"] #special-button { display: none; }
       #desktop-keys {
         position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%);
         margin: 0; padding: 0.4rem 0.7rem;
@@ -1609,8 +1629,9 @@
       <div id="runtime-status" role="status" data-debug="false" data-fault="false">loading hero…</div>
       <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
+      <button id="special-button" type="button" data-thumb-surface data-ready="false" data-unlocked="false" aria-label="Wildwood Burst, unlocks at level 5"><span>BURST</span><span id="special-button-state">LV 5</span></button>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
-      <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · look <b>drag</b> · zoom <b>scroll</b></p>
+      <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · burst <b>K</b> · look <b>drag</b> · zoom <b>scroll</b></p>
       <div id="objective-pointer" data-shown="false" aria-hidden="true">
         <span id="objective-pointer-arrow">➤</span>
         <span id="objective-pointer-distance"></span>

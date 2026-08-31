@@ -10,8 +10,11 @@ import {
 import {
   canAttack,
   canHeroAttack,
+  canSpecialAttack,
+  canHeroSpecialAttack,
   createEncounterState,
   requestAttack,
+  requestSpecialAttack,
   // GP1-C5: the hero's own down time, so the "you are coming back" bar finishes exactly when he
   // stands up. Imported rather than restated -- a bar that promises 2s while the rules take 3 is
   // worse than no bar, and this is precisely the "one number, one home" case GQ-007 names.
@@ -19,6 +22,11 @@ import {
   stepEncounter,
   requestSoloHeroHeal,
 } from './combat/encounter.js';
+import {
+  SPECIAL_ATTACK_NAME,
+  SPECIAL_ATTACK_SECONDS,
+  SPECIAL_ATTACK_UNLOCK_LEVEL,
+} from './combat/specialAttack.js';
 import { createEncounterFeedback, healthReadout, isOutOfCombatRegenRise } from './combat/feedback.js';
 import { ENEMY_KINDS, killXpForKind } from './combat/enemyStats.js';
 import { createAudioEngine } from './audio/engine.js';
@@ -285,6 +293,7 @@ const EMPTY_SERVER_ENCOUNTER = Object.freeze({
 // on those same four fields.
 const DEFAULT_HERO_VIEW = Object.freeze({
   hp: HERO_MAX_HP, swingSeconds: -1, cooldown: 0, downSeconds: -1, protectionSeconds: 0,
+  specialSeconds: -1, specialCooldown: 0,
 });
 // Shared with net/gameServer.mjs through the zone data both sides import (Phase R2, GQ-007). These
 // used to be two hand-written copies of `{ x: 2.5, z: 8 }` kept equal by a human noticing, because
@@ -327,6 +336,7 @@ const canvas = document.querySelector('#game-canvas');
 const status = document.querySelector('#runtime-status');
 const perfHud = document.querySelector('#perf-hud');
 const attackButtonElement = document.querySelector('#attack-button');
+const specialButtonElement = document.querySelector('#special-button');
 
 // Y/Task F2: debug-only HUD, off by default -- see index.html's #perf-hud[data-debug] comment for
 // why. Read once at startup, not reactively: this is a boot-time opt-in for a runtime-test harness's
@@ -737,6 +747,19 @@ async function bootstrap() {
     document.querySelector('#touch-stick-knob'),
   );
   const attack = createAttackInput(attackButtonElement);
+  const specialAttack = createAttackInput(specialButtonElement);
+  const specialButtonStateElement = document.querySelector('#special-button-state');
+  function renderSpecialButton(hero, level, ready) {
+    const unlocked = level >= SPECIAL_ATTACK_UNLOCK_LEVEL;
+    specialButtonElement.dataset.unlocked = String(unlocked);
+    if (!unlocked) specialButtonStateElement.textContent = `LV ${SPECIAL_ATTACK_UNLOCK_LEVEL}`;
+    else if ((hero.specialSeconds ?? -1) >= 0) specialButtonStateElement.textContent = 'FIRING';
+    else if ((hero.specialCooldown ?? 0) > 0) specialButtonStateElement.textContent = `${Math.ceil(hero.specialCooldown)}s`;
+    else specialButtonStateElement.textContent = ready ? 'READY' : 'WAIT';
+    specialButtonElement.setAttribute('aria-label', unlocked
+      ? `${SPECIAL_ATTACK_NAME} ${specialButtonStateElement.textContent}`
+      : `${SPECIAL_ATTACK_NAME}, unlocks at level ${SPECIAL_ATTACK_UNLOCK_LEVEL}`);
+  }
   // THE OPENING SHOT. The camera used to default to heading 0 -- looking due north, up the empty
   // lane toward the wolf. A child's very first frame was a green field, five unlit lamp posts, and
   // the Keeper cropped in half at the bottom-right corner because the camera stood almost on top of
@@ -872,6 +895,7 @@ async function bootstrap() {
       if (open) villageBoard?.close();
       touchStickElement.dataset.suspended = String(open);
       attackButtonElement.dataset.suspended = String(open);
+      specialButtonElement.dataset.suspended = String(open);
       // index.html's own [data-hero-screen-open] rules hide keeper-speech/quest-objective while
       // this is open -- found by looking at a real capture where the slots row and Aldric's speech
       // bubble collided at spawn, which is exactly where a child is standing the first time they'd
@@ -916,6 +940,7 @@ async function bootstrap() {
       if (open) heroScreen.close();
       touchStickElement.dataset.suspended = String(open);
       attackButtonElement.dataset.suspended = String(open);
+      specialButtonElement.dataset.suspended = String(open);
       gameSurface.dataset.villageBoardOpen = String(open);
     },
   });
@@ -930,6 +955,7 @@ async function bootstrap() {
       if (open) { heroScreen.close(); villageBoard?.close(); }
       touchStickElement.dataset.suspended = String(open);
       attackButtonElement.dataset.suspended = String(open);
+      specialButtonElement.dataset.suspended = String(open);
       // Suppressed the instant the card closes (answered OR dismissed) so a hero still standing
       // inside CHEST_COLLECT_RADIUS_METERS does not have the card instantly reopen under their own
       // thumb -- see runeChestCardSuppressed's own declaration comment for the guard this drives.
@@ -2579,6 +2605,7 @@ async function bootstrap() {
       // be drivable behind a screen that is asking whose game this is.
       touchStickElement.dataset.suspended = String(open);
       attackButtonElement.dataset.suspended = String(open);
+      specialButtonElement.dataset.suspended = String(open);
       // And the same HUD-hiding attribute, for a reason a capture made obvious: a dimmed backdrop
       // still leaves the health readout and the objective looking tappable, and behind a modal they are not.
       gameSurface.dataset.profileGateOpen = String(open);
@@ -2817,6 +2844,7 @@ async function bootstrap() {
 
   // A whiff pulses the attack button instead of touching the wolf at all -- see combat/feedback.js.
   let missPulseTimer = null;
+  let specialPulseTimer = null;
   function pulseMiss() {
     attackButtonElement.dataset.feedback = 'miss';
     window.clearTimeout(missPulseTimer);
@@ -2827,6 +2855,12 @@ async function bootstrap() {
     missPulseTimer = window.setTimeout(() => { delete attackButtonElement.dataset.feedback; }, 420);
   }
 
+  function pulseSpecial() {
+    specialButtonElement.dataset.feedback = 'hit';
+    window.clearTimeout(specialPulseTimer);
+    specialPulseTimer = window.setTimeout(() => { delete specialButtonElement.dataset.feedback; }, 620);
+  }
+
   // One place where a rule event becomes something a young player can see. Kept separate from the
   // rules on purpose: encounter.js must stay importable by a node server with no DOM. Built with
   // createEncounterFeedback() so a new event type raised by encounter.js throws here at startup
@@ -2835,6 +2869,10 @@ async function bootstrap() {
   const onEncounterEvent = createEncounterFeedback({
     // The arm swing already playing is the feedback for a swing starting; nothing else needed yet.
     swing() {},
+    'special-start'() {
+      pulseSpecial();
+      banner(`NEW POWER: ${SPECIAL_ATTACK_NAME}!`, 2400, `New power: ${SPECIAL_ATTACK_NAME}.`);
+    },
     'swing-missed'() { pulseMiss(); },
     // Going down mid-swing already produces the hurt flash and the "You went down" banner from the
     // same frame's hero-hurt/hero-down events. The dropped swing needs no extra signal of its own;
@@ -2853,6 +2891,16 @@ async function bootstrap() {
       // event.damage, not a hardcoded 1 -- see WOLF_DAMAGE_PER_HIT's own comment in encounter.js.
       popDamageNumber(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, event.damage);
     },
+    'special-hit'(event) {
+      const enemy = enemyById(event.enemyId);
+      enemyPresenters.get(event.enemyId)?.flashHit?.();
+      if (!enemy) return;
+      impactBursts.burst({
+        x: enemy.x, y: WOLF_SPARK_HEIGHT_METERS, z: enemy.z, kind: 'special',
+      });
+      popDamageNumber(enemy.x, WOLF_SPARK_HEIGHT_METERS, enemy.z, event.damage);
+    },
+    'special-missed'() { pulseMiss(); },
     // GP1-C5: the kill is a COMPOSITION, and the pieces were always here -- they just never added up
     // to one moment. Same frame: the defeat flash turns the wolf the colour of the light it stole
     // (not the white a plain hit uses), a ring of that same light blows outward far wider and slower
@@ -3221,6 +3269,24 @@ async function bootstrap() {
      *  reason heroDownShown is: a claim about what is on screen has to be answerable from what is
      *  on screen, not from the rules layer that is still a round trip behind it. */
     swingSecondsShown: () => swingSecondsShown,
+    specialState: () => {
+      const hero = netStatus === 'online' && net.selfId !== null
+        ? (serverEncounter?.heroes?.[net.selfId] ?? DEFAULT_HERO_VIEW)
+        : encounterState.hero;
+      const level = heroStatsThisFrame.level;
+      return {
+        id: 'wildwood-burst',
+        name: SPECIAL_ATTACK_NAME,
+        unlockLevel: SPECIAL_ATTACK_UNLOCK_LEVEL,
+        unlocked: level >= SPECIAL_ATTACK_UNLOCK_LEVEL,
+        ready: level >= SPECIAL_ATTACK_UNLOCK_LEVEL
+          && (hero.specialCooldown ?? 0) <= 0
+          && (hero.specialSeconds ?? -1) < 0
+          && hero.downSeconds < 0,
+        cooldown: hero.specialCooldown ?? 0,
+        active: (hero.specialSeconds ?? -1) >= 0,
+      };
+    },
     // GP1-C5: how many impact rings are on screen this instant, so a harness can prove a blow
     // produced a visible event rather than only that the rules said it landed.
     impactBurstsLive: () => impactBursts.liveCount(),
@@ -3790,6 +3856,12 @@ async function bootstrap() {
       // originate a touch) would still swing the sword with an overlay open.
       const tappedAttack = attack.takeAttack() && !anyOverlayOpen;
       const pressedAttack = keyboard.takeAttack() && !anyOverlayOpen;
+      const tappedSpecial = specialAttack.takeAttack() && !anyOverlayOpen;
+      const pressedSpecial = keyboard.takeSpecial() && !anyOverlayOpen;
+      const outsideSpecialArena = Math.hypot(
+        player.position.x - VILLAGE.BEACON_ARENA.at[0],
+        player.position.z - VILLAGE.BEACON_ARENA.at[1],
+      ) > VILLAGE.BEACON_ARENA.radiusMeters;
       // Two commands, in the order a player produces them: the button press, then the clock. Events
       // from both are collected and dispatched together below, which is the order this loop has
       // always used -- the presenters are updated to the newest state first, then told what changed.
@@ -3808,13 +3880,20 @@ async function bootstrap() {
         const ownHeroId = net.selfId;
         const canSwing = ownHeroId !== null && serverEncounter !== null
           && canHeroAttack(serverEncounter, ownHeroId);
+        const canBurst = ownHeroId !== null && serverEncounter !== null
+          && outsideSpecialArena
+          && canHeroSpecialAttack(serverEncounter, ownHeroId, heroStatsThisFrame.level);
         attack.setReady(canSwing);
+        specialAttack.setReady(canBurst);
+        renderSpecialButton(ownHero, heroStatsThisFrame.level, canBurst);
         if ((tappedAttack || pressedAttack) && canSwing) {
           net.sendAttack();
           // Presentation only: the clip starts on the button press, not on the server's ack, so a
           // thumb sees the sword move immediately. Handed off to the server's own swingSeconds (in
           // `hero` below) below the moment it confirms.
           predictedSwingSeconds = 0;
+        } else if ((tappedSpecial || pressedSpecial) && canBurst) {
+          net.sendSpecial();
         } else if (predictedSwingSeconds >= 0) {
           predictedSwingSeconds += deltaSeconds;
         }
@@ -3850,7 +3929,16 @@ async function bootstrap() {
           encounterState = asked.state;
           events.push(...asked.events);
         }
+        if (tappedSpecial || pressedSpecial) {
+          const asked = requestSpecialAttack(encounterState, heroStatsThisFrame.level, nextCommandId++);
+          encounterState = asked.state;
+          events.push(...asked.events);
+        }
         attack.setReady(canAttack(encounterState));
+        const canBurst = outsideSpecialArena
+          && canSpecialAttack(encounterState, heroStatsThisFrame.level);
+        specialAttack.setReady(canBurst);
+        renderSpecialButton(encounterState.hero, heroStatsThisFrame.level, canBurst);
 
         // The fight runs off the same predicted position the hero is drawn at, so a swing lands where
         // the child sees themselves standing rather than where the server last heard from them.
@@ -3872,6 +3960,7 @@ async function bootstrap() {
           // so an offline child's level is worth the same max HP an online child's is.
           maxHp: heroStatsThisFrame.maxHp,
           damageReductionPercent: heroStatsThisFrame.damageReductionPercent,
+          heroLevel: heroStatsThisFrame.level,
           // THE SAME QUESTION net/gameServer.mjs asks per player, asked here for the offline hero
           // and answered by the same function against the same RANGER_CLAIM radius. A child playing
           // with no socket gets the identical sanctuary; two answers to "may the wolf have this
@@ -4109,7 +4198,11 @@ async function bootstrap() {
       const swingSecondsForClip = netStatus === 'online' && hero.swingSeconds < 0 && predictedSwingSeconds >= 0
         ? predictedSwingSeconds
         : hero.swingSeconds;
-      swingSecondsShown = swingSecondsForClip;
+      const specialSwingSeconds = (hero.specialSeconds ?? -1) >= 0
+        ? Math.min(SWING_SECONDS, (hero.specialSeconds / SPECIAL_ATTACK_SECONDS) * SWING_SECONDS)
+        : -1;
+      const actionSecondsForClip = specialSwingSeconds >= 0 ? specialSwingSeconds : swingSecondsForClip;
+      swingSecondsShown = actionSecondsForClip;
       // Between locomotion (the base pose) and the swing (the top priority): reactions write over
       // the stride, and an active swing writes over a reaction, which is the mechanical half of
       // the owner's attack-takes-precedence rule -- reactClips.js's trigger gate is the other half.
@@ -4140,13 +4233,13 @@ async function bootstrap() {
       // rendered skeleton rather than asking whether a flag was set.
       const reactionDeltaSeconds = frameDeltaMs === null ? 0 : frameDeltaMs / 1000;
       if (heroIsDown) {
-        swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
+        swing?.update(actionSecondsForClip, SWING_SECONDS, deltaSeconds);
         reactions?.update(reactionDeltaSeconds, hero);
       } else {
         reactions?.update(reactionDeltaSeconds, hero);
         // AFTER locomotion.update(), which is what writes the walk pose. The swing is an offset on
         // top of that pose, so running it first would be overwritten the same frame.
-        swing?.update(swingSecondsForClip, SWING_SECONDS, deltaSeconds);
+        swing?.update(actionSecondsForClip, SWING_SECONDS, deltaSeconds);
       }
       enemyPresenters.update(deltaSeconds, encounterState.enemies);
       enemyNameplates.update(encounterState.enemies, {

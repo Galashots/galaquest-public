@@ -114,6 +114,16 @@ test('the attack key still queues a swing outside a text field', () => {
   assert.equal(keyboard.takeAttack(), false, 'takeAttack is an edge, taken once');
 });
 
+test('the K key queues the special once and prevents page scrolling', () => {
+  const target = fakeWindow();
+  const keyboard = createKeyboardInput(target);
+  const event = keyEvent('KeyK', { tagName: 'BODY' });
+  target.dispatch('keydown', event);
+  assert.equal(event.wasPrevented(), true);
+  assert.equal(keyboard.takeSpecial(), true);
+  assert.equal(keyboard.takeSpecial(), false, 'takeSpecial is an edge, taken once');
+});
+
 test('keysToScreenVector still normalises diagonals (unchanged by the focus guard)', () => {
   const vector = keysToScreenVector(new Set(['KeyW', 'KeyD']));
   assert.ok(Math.abs(vector.x - Math.SQRT1_2) < 1e-12);

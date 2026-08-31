@@ -23,6 +23,7 @@ import {
   claimSatchelMessage,
   claimCharmMessage,
   searchCartMessage,
+  specialMessage,
   villageUpgradePurchaseMessage,
 } from './protocol.js';
 import { createSnapshotBuffer } from './interpolation.js';
@@ -78,6 +79,7 @@ export function createNetClient(options = {}) {
   // (`${playerId}:${seq}` inside applyAttack), so sharing a counter would only make the two
   // streams harder to read on the wire for no protection either one needs.
   let attackSequence = 0;
+  let specialSequence = 0;
   let lastSentAtMs = -Infinity;
   let lastSentMagnitude = 0;
   let latestSelf = null;
@@ -112,6 +114,7 @@ export function createNetClient(options = {}) {
     socket.addEventListener('open', () => {
       sequence = 0;
       attackSequence = 0;
+      specialSequence = 0;
       lastSentAtMs = -Infinity;
       lastSentMagnitude = 0;
       send(joinMessage(options.name ?? 'player', guestId));
@@ -222,6 +225,11 @@ export function createNetClient(options = {}) {
   function sendAttack() {
     if (status !== 'online') return false;
     return send(attackMessage(attackSequence += 1));
+  }
+
+  function sendSpecial() {
+    if (status !== 'online') return false;
+    return send(specialMessage(specialSequence += 1));
   }
 
   /**
@@ -389,6 +397,7 @@ export function createNetClient(options = {}) {
   return {
     setIntent,
     sendAttack,
+    sendSpecial,
     sendEquip,
     sendRestoreProfile,
     sendSearchCart,
