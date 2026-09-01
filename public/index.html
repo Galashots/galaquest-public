@@ -62,19 +62,32 @@
       }
       #attack-button[data-pressed="true"] { background: rgb(226 122 84 / 78%); transform: scale(0.94); }
       #special-button {
-        position: absolute; right: 1.25rem; bottom: 8.25rem; width: 108px; min-height: 58px;
+        position: absolute; right: 1.25rem; bottom: 8.25rem; width: 108px; min-height: 72px;
+        padding: 0.35rem 0.3rem;
         display: grid; place-items: center; gap: 0.15rem;
         border: 2px solid rgb(159 255 192 / 80%); border-radius: 1.2rem;
         background: rgb(53 137 92 / 72%); color: #fff;
         font: 900 0.88rem/1 system-ui, sans-serif; letter-spacing: 0.06em;
         touch-action: none; user-select: none; -webkit-user-select: none;
-        transition: transform 90ms ease-out, background-color 90ms ease-out, opacity 120ms ease-out;
+        transition: transform 90ms ease-out, background-color 90ms ease-out, opacity 120ms ease-out, box-shadow 160ms ease-out;
       }
-      #special-button-state { font-size: 0.67rem; letter-spacing: 0.12em; opacity: 0.9; }
+      /* This is the one secondary aspiration cue, not a second card: before Level 5 it says what the
+         locked Burst is and gives the real XP distance; after Level 5 the same control says it is
+         unlocked. The three short lines stay inside the existing lower-right action band. */
+      #special-button-name { font-size: 0.72rem; letter-spacing: 0.08em; white-space: nowrap; }
+      #special-button-state { font-size: 0.62rem; letter-spacing: 0.08em; opacity: 0.95; }
+      #special-button-aspiration { font-size: 0.59rem; letter-spacing: 0.05em; opacity: 0.82; font-variant-numeric: tabular-nums; }
+      #special-button[data-aspiration-state="unlocked"] #special-button-aspiration { color: #b9ffca; }
       #special-button[data-unlocked="false"] { background: rgb(47 60 65 / 72%); border-color: rgb(255 255 255 / 38%); opacity: 0.72; }
       #special-button[data-ready="false"] { filter: saturate(0.6); opacity: 0.58; }
       #special-button[data-pressed="true"] { transform: scale(0.94); background: rgb(116 208 142 / 92%); }
+      #special-button[data-aspiration-transition="true"] { animation: special-aspiration-unlock 900ms ease-out 1; }
       #special-button[data-feedback="hit"] { animation: special-button-pulse 620ms ease-out 1; }
+      @keyframes special-aspiration-unlock {
+        0% { box-shadow: 0 0 0 0 rgb(159 255 192 / 0%); }
+        28% { box-shadow: 0 0 0 0.65rem rgb(159 255 192 / 45%); }
+        100% { box-shadow: 0 0 0 0 rgb(159 255 192 / 0%); }
+      }
       @keyframes special-button-pulse {
         0% { box-shadow: 0 0 0 0 rgb(159 255 192 / 85%); }
         45% { box-shadow: 0 0 0 0.8rem rgb(159 255 192 / 0%); }
@@ -455,6 +468,16 @@
         pointer-events: none; touch-action: none;
       }
       #quest-objective[data-shown="true"] { opacity: 1; }
+      #quest-objective::before {
+        content: 'NOW'; display: inline-block; margin-right: 0.45rem;
+        color: #f2b33d; font-size: 0.62rem; letter-spacing: 0.12em; vertical-align: 0.08em;
+      }
+      #quest-objective[data-changed="true"] { animation: guidance-now-change 520ms ease-out 1; }
+      @keyframes guidance-now-change {
+        0% { box-shadow: 0 0 0 0 rgb(242 179 61 / 0%); }
+        30% { box-shadow: 0 0 0 0.35rem rgb(242 179 61 / 26%); }
+        100% { box-shadow: 0 0 0 0 rgb(242 179 61 / 0%); }
+      }
       /* ── P2: THE LEVEL-UP CEREMONY ────────────────────────────────────────────────────────────
          The strongest routine progression celebration in the game, and it had to stop being a banner
          -- see its own markup comment for the capture that settled that.
@@ -1442,6 +1465,7 @@
         font: 600 0.78rem/1.2 system-ui, sans-serif; white-space: nowrap;
         pointer-events: none; touch-action: none;
       }
+      #desktop-aspiration { color: #ffd76e; }
       /* Hidden by default rather than shown by default: the attribute is set by main.js at startup,
          and a tablet must never flash a line about a keyboard it does not have while that runs. */
       #desktop-keys { display: none; }
@@ -1916,9 +1940,16 @@
       <div id="runtime-status" role="status" data-debug="false" data-fault="false">loading hero…</div>
       <div id="perf-hud" aria-live="polite" data-debug="false">loading hero…</div>
       <div id="touch-stick" data-thumb-surface aria-label="Movement stick"><div id="touch-stick-knob"></div></div>
-      <button id="special-button" type="button" data-thumb-surface data-ready="false" data-unlocked="false" aria-label="Wildwood Burst, unlocks at level 5"><span>BURST</span><span id="special-button-state">LV 5</span></button>
+      <!-- #118: the existing Burst control is also the one small longer-horizon aspiration cue. It
+           stays a real control, but while locked it gives the child a truthful level/XP target and
+           after unlock it returns to the ability's ordinary READY/FIRING/cooldown readout. -->
+      <button id="special-button" type="button" data-thumb-surface data-ready="false" data-unlocked="false" data-aspiration-state="unknown" data-progression-known="false" aria-label="Wildwood Burst progress is syncing">
+        <span id="special-button-name">WILDWOOD BURST</span>
+        <span id="special-button-state">SYNCING</span>
+        <span id="special-button-aspiration"></span>
+      </button>
       <button id="attack-button" type="button" data-thumb-surface aria-label="Attack">ATTACK</button>
-      <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · burst <b>K</b> · look <b>drag</b> · zoom <b>scroll</b></p>
+      <p id="desktop-keys">move <b>WASD</b> · swing <b>Space</b> · burst <b>K</b> · look <b>drag</b> · zoom <b>scroll</b> · <span id="desktop-aspiration">syncing progression…</span></p>
       <div id="objective-pointer" data-shown="false" aria-hidden="true">
         <span id="objective-pointer-arrow">➤</span>
         <span id="objective-pointer-distance"></span>
