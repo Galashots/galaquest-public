@@ -32,7 +32,7 @@ import { ENEMY_KINDS, enemyStatsForLevel, isSupportedEnemyLevel } from '../comba
 export const PROTOCOL_VERSION = 4;
 
 export const MESSAGE_TYPES = [
-  'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'equip', 'search-cart', 'collect-loot',
+  'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'special', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
   'restore-profile',
   // R1: kill drops -- the same client->server, no-business-rule-here shape 'collect-loot' already
@@ -229,6 +229,12 @@ export function decode(text) {
       const seq = requireInteger(raw.seq, 'seq');
       if (seq < 0) fail(`seq must be >= 0, got ${seq}`);
       return { v: PROTOCOL_VERSION, type: 'attack', seq };
+    }
+
+    case 'special': {
+      const seq = requireInteger(raw.seq, 'seq');
+      if (seq < 0) fail(`seq must be >= 0, got ${seq}`);
+      return { v: PROTOCOL_VERSION, type: 'special', seq };
     }
 
     // Client -> server only, same direction as 'attack'. Shape validation only -- whether itemId
@@ -530,6 +536,20 @@ function decodeHeroes(heroes) {
         fail(`encounter.heroes[${id}].protectionSeconds must be >= 0, got ${protectionSeconds}`);
       }
       result[id].protectionSeconds = protectionSeconds;
+    }
+    if (hero.specialSeconds !== undefined) {
+      result[id].specialSeconds = requireFiniteNumber(
+        hero.specialSeconds, `encounter.heroes[${id}].specialSeconds`,
+      );
+    }
+    if (hero.specialCooldown !== undefined) {
+      const specialCooldown = requireFiniteNumber(
+        hero.specialCooldown, `encounter.heroes[${id}].specialCooldown`,
+      );
+      if (specialCooldown < 0) {
+        fail(`encounter.heroes[${id}].specialCooldown must be >= 0, got ${specialCooldown}`);
+      }
+      result[id].specialCooldown = specialCooldown;
     }
   }
   return result;
@@ -1057,6 +1077,10 @@ export function inputMessage(seq, dirX, dirZ, magnitude, run) {
 
 export function attackMessage(seq) {
   return { v: PROTOCOL_VERSION, type: 'attack', seq };
+}
+
+export function specialMessage(seq) {
+  return { v: PROTOCOL_VERSION, type: 'special', seq };
 }
 
 export function restoreProfileMessage(facts) {

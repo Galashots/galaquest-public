@@ -64,6 +64,9 @@
 export const ENCOUNTER_EVENT_TYPES = Object.freeze([
   'swing',
   'swing-missed',
+  'special-start',
+  'special-hit',
+  'special-missed',
   // Raised when the hero goes down with a swing already in flight. Added 2026-08-13, and this list
   // is how it announced itself: the source-scanning test failed the moment encounter.js started
   // raising it, which is precisely the drift the list exists to catch.

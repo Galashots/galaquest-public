@@ -7,6 +7,7 @@ const MOVEMENT_KEYS = new Set([
 // harness and every debugging session runs on a keyboard and needs to be able to throw a punch.
 // Space is preventDefault-ed because otherwise it scrolls the page.
 const ATTACK_KEYS = new Set(['Space', 'KeyJ']);
+const SPECIAL_KEYS = new Set(['KeyK']);
 
 // A NAME A CHILD TYPED HAD LETTERS GO MISSING, and this is why: KeyW/A/S/D and Space are movement
 // and swing everywhere else in this game, so this module preventDefault-ed and recorded them on
@@ -39,14 +40,16 @@ export function keysToScreenVector(keys) {
 export function createKeyboardInput(target = window) {
   const keys = new Set();
   let attackPending = false;
+  let specialPending = false;
   const onKeyDown = (event) => {
     // Ignored ENTIRELY, before anything else here runs -- see isEditableTarget's own comment. A
     // child naming their hero must get every letter, including W/A/S/D and Space.
     if (isEditableTarget(event.target)) return;
-    if (MOVEMENT_KEYS.has(event.code) || ATTACK_KEYS.has(event.code)) event.preventDefault();
+    if (MOVEMENT_KEYS.has(event.code) || ATTACK_KEYS.has(event.code) || SPECIAL_KEYS.has(event.code)) event.preventDefault();
     // An edge, not a level: `repeat` is true while a key is held, and without this guard leaning on
     // the space bar would request a swing every frame.
     if (ATTACK_KEYS.has(event.code) && !event.repeat) attackPending = true;
+    if (SPECIAL_KEYS.has(event.code) && !event.repeat) specialPending = true;
     keys.add(event.code);
   };
   const onKeyUp = (event) => {
@@ -56,7 +59,7 @@ export function createKeyboardInput(target = window) {
     if (isEditableTarget(event.target)) return;
     keys.delete(event.code);
   };
-  const onBlur = () => { keys.clear(); attackPending = false; };
+  const onBlur = () => { keys.clear(); attackPending = false; specialPending = false; };
 
   target.addEventListener('keydown', onKeyDown);
   target.addEventListener('keyup', onKeyUp);
@@ -73,6 +76,12 @@ export function createKeyboardInput(target = window) {
     takeAttack() {
       if (!attackPending) return false;
       attackPending = false;
+      return true;
+    },
+    /** True once per K key press, the desktop parity for the touch BURST control. */
+    takeSpecial() {
+      if (!specialPending) return false;
+      specialPending = false;
       return true;
     },
     dispose() {

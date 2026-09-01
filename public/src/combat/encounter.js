@@ -4,6 +4,14 @@ import { resolveIncomingDamage } from './damage.js';
 import {
   ENEMY_KINDS, enemyStatsForLevel, isSupportedEnemyLevel, respawnSecondsForKind, wolfStatsForLevel,
 } from './enemyStats.js';
+import {
+  SPECIAL_ATTACK_COOLDOWN_SECONDS,
+  SPECIAL_ATTACK_CONTACT_SECONDS,
+  SPECIAL_ATTACK_SECONDS,
+  canUseSpecialAttack,
+  specialAttackDamageFor,
+  specialAttackTargets,
+} from './specialAttack.js';
 
 // E1 replaces the old mutable `wolf` slot with one canonical `enemies` collection. Every ordinary
 // enemy carries a stable enemyId plus a kind discriminator, its own patrol cursor, and its own
@@ -315,7 +323,19 @@ function stepTowards(mover, target, speed, deltaSeconds) {
 }
 
 function heroCanAttack(hero) {
-  return hero.downSeconds < 0 && hero.swingSeconds < 0 && hero.cooldown <= 0;
+  return hero.downSeconds < 0 && hero.swingSeconds < 0
+    && (hero.specialSeconds ?? -1) < 0 && hero.cooldown <= 0;
+}
+
+function hideSpecialFields(hero) {
+  for (const [name, value] of [
+    ['specialSeconds', hero.specialSeconds ?? -1],
+    ['specialCooldown', hero.specialCooldown ?? 0],
+    ['specialLanded', hero.specialLanded ?? false],
+  ]) {
+    Object.defineProperty(hero, name, { enumerable: false, writable: true, value });
+  }
+  return hero;
 }
 
 function isReplayId(commandId, lastCommandId) {
@@ -323,7 +343,7 @@ function isReplayId(commandId, lastCommandId) {
 }
 
 function freshHero() {
-  return {
+  return hideSpecialFields({
     hp: HERO_MAX_HP,
     maxHp: HERO_MAX_HP,
     swingSeconds: -1,
@@ -339,7 +359,7 @@ function freshHero() {
     regenIdleSeconds: 0,
     regenRemainderHp: 0,
     lastCommandId: null,
-  };
+  });
 }
 
 function reconcileMaxHp(hero, wanted) {
@@ -399,7 +419,13 @@ function publishParty(state, enemies, heroes) {
 }
 
 function publishHero(hero) {
-  const published = { ...hero };
+  const published = {
+    ...hero,
+    specialSeconds: hero.specialSeconds,
+    specialCooldown: hero.specialCooldown,
+    specialLanded: hero.specialLanded,
+  };
+  hideSpecialFields(published);
   Object.defineProperty(published, 'protectionSeconds', {
     enumerable: false,
     value: hero.protectionSeconds ?? 0,
@@ -454,7 +480,7 @@ export function createEncounterState(options = {}) {
     enemies,
     heroSpawn: clonePoint(options.heroSpawn ?? { x: 0, z: 0 }),
     recoverySanctuary: cloneSanctuary(options.recoverySanctuary),
-    hero: {
+    hero: hideSpecialFields({
       hp: HERO_MAX_HP,
       maxHp: HERO_MAX_HP,
       swingSeconds: -1,
@@ -464,7 +490,7 @@ export function createEncounterState(options = {}) {
       protectionSeconds: 0,
       regenIdleSeconds: 0,
       regenRemainderHp: 0,
-    },
+    }),
   });
 }
 
@@ -475,6 +501,15 @@ export function canAttack(state) {
 export function canHeroAttack(state, heroId) {
   const hero = state.heroes[heroId];
   return hero ? heroCanAttack(hero) : false;
+}
+
+export function canSpecialAttack(state, level) {
+  return canUseSpecialAttack({ ...state.hero, level });
+}
+
+export function canHeroSpecialAttack(state, heroId, level) {
+  const hero = state.heroes[heroId];
+  return hero ? canUseSpecialAttack({ ...hero, level }) : false;
 }
 
 export function addHero(state, heroId) {
@@ -500,7 +535,13 @@ export function requestPartyAttack(state, heroId, commandId = null) {
   if (!existing) return { state, events: [], accepted: false };
   if (isReplayId(commandId, existing.lastCommandId)) return { state, events: [], accepted: false };
 
-  const hero = { ...existing, lastCommandId: commandId ?? null };
+  const hero = {
+    ...existing,
+    specialSeconds: existing.specialSeconds,
+    specialCooldown: existing.specialCooldown,
+    specialLanded: existing.specialLanded,
+    lastCommandId: commandId ?? null,
+  };
   const events = [];
   let accepted = false;
   if (heroCanAttack(hero)) {
@@ -508,6 +549,38 @@ export function requestPartyAttack(state, heroId, commandId = null) {
     hero.swingLanded = false;
     events.push(withHeroId({ type: 'swing' }, heroId));
     accepted = true;
+  }
+
+  return {
+    state: publishParty(
+      state,
+      enemiesFromLegacyState(state),
+      { ...state.heroes, [heroId]: hero },
+    ),
+    events,
+    accepted,
+  };
+}
+
+export function requestPartySpecialAttack(state, heroId, level, commandId = null) {
+  const existing = state.heroes[heroId];
+  if (!existing) return { state, events: [], accepted: false };
+  if (isReplayId(commandId, existing.lastCommandId)) return { state, events: [], accepted: false };
+
+  const hero = {
+    ...existing,
+    specialSeconds: existing.specialSeconds,
+    specialCooldown: existing.specialCooldown,
+    specialLanded: existing.specialLanded,
+    lastCommandId: commandId ?? null,
+  };
+  const events = [];
+  const accepted = canUseSpecialAttack({ ...hero, level });
+  if (accepted) {
+    hero.specialSeconds = 0;
+    hero.specialCooldown = SPECIAL_ATTACK_COOLDOWN_SECONDS;
+    hero.specialLanded = false;
+    events.push(withHeroId({ type: 'special-start' }, heroId));
   }
 
   return {
@@ -746,7 +819,15 @@ export function stepParty(state, command = {}) {
   };
   const heroIds = Object.keys(state.heroes).sort(compareStableIds);
   const heroes = {};
-  for (const heroId of heroIds) heroes[heroId] = { ...state.heroes[heroId] };
+  for (const heroId of heroIds) {
+    const source = state.heroes[heroId];
+    heroes[heroId] = hideSpecialFields({
+      ...source,
+      specialSeconds: source.specialSeconds,
+      specialCooldown: source.specialCooldown,
+      specialLanded: source.specialLanded,
+    });
+  }
   const enemies = enemiesFromLegacyState(state);
   const events = [];
 
@@ -759,6 +840,7 @@ export function stepParty(state, command = {}) {
 
     reconcileMaxHp(hero, cmd?.maxHp);
     hero.cooldown = Math.max(0, hero.cooldown - deltaSeconds);
+    hero.specialCooldown = Math.max(0, (hero.specialCooldown ?? 0) - deltaSeconds);
     hero.protectionSeconds = Math.max(0, (hero.protectionSeconds ?? 0) - deltaSeconds);
 
     if (hero.downSeconds >= 0) {
@@ -801,7 +883,49 @@ export function stepParty(state, command = {}) {
       }
     }
 
-    if (hero.swingSeconds >= 0) {
+    if (hero.specialSeconds >= 0) {
+      hero.specialSeconds += deltaSeconds;
+      const droppedIt = hero.downSeconds >= 0;
+      if (droppedIt) {
+        hero.specialSeconds = -1;
+        hero.specialLanded = false;
+        events.push(withHeroId({ type: 'special-missed' }, heroId));
+      }
+
+      const contactReached = !droppedIt && hero.specialSeconds >= SPECIAL_ATTACK_CONTACT_SECONDS;
+      if (contactReached && !hero.specialLanded) {
+        hero.specialLanded = true;
+        const damage = specialAttackDamageFor(
+          Number.isFinite(cmd?.heroDamage) ? cmd.heroDamage : BASE_HERO_DAMAGE,
+        );
+        const targets = specialAttackTargets(enemies, position, heading);
+        if (targets.length === 0) {
+          events.push(withHeroId({ type: 'special-missed' }, heroId));
+        } else {
+          for (const target of targets) {
+            target.hp -= damage;
+            target.modeSeconds = 0;
+            events.push(enemyEvent({
+              type: 'special-hit', remaining: Math.max(0, target.hp), damage,
+            }, target, heroId));
+            if (target.hp <= 0) {
+              target.mode = 'dying';
+              events.push(enemyEvent({ type: 'wolf-defeated' }, target, heroId));
+              healTheStanding(heroes, heroIds, events);
+            } else {
+              target.mode = 'hit';
+            }
+          }
+        }
+      }
+
+      if (hero.specialSeconds >= SPECIAL_ATTACK_SECONDS) {
+        hero.specialSeconds = -1;
+        hero.specialLanded = false;
+      }
+    }
+
+    if (hero.swingSeconds >= 0 && (hero.specialSeconds ?? -1) < 0) {
       hero.swingSeconds += deltaSeconds;
       const droppedIt = hero.downSeconds >= 0;
       if (droppedIt) {
@@ -876,6 +1000,9 @@ function toPartyState(state) {
         // comment), so it has to be re-attached by name here -- the spread above cannot see it.
         // regenIdleSeconds/regenRemainderHp are plain fields on state.hero and need no such repair.
         protectionSeconds: state.hero.protectionSeconds ?? 0,
+        specialSeconds: state.hero.specialSeconds ?? -1,
+        specialCooldown: state.hero.specialCooldown ?? 0,
+        specialLanded: state.hero.specialLanded ?? false,
         lastCommandId: null,
       },
     },
@@ -898,6 +1025,9 @@ function heroFromParty(hero) {
     swingSeconds: hero.swingSeconds,
     cooldown: hero.cooldown,
     swingLanded: hero.swingLanded,
+    specialSeconds: hero.specialSeconds ?? -1,
+    specialCooldown: hero.specialCooldown ?? 0,
+    specialLanded: hero.specialLanded ?? false,
     downSeconds: hero.downSeconds,
     // Plain, enumerable fields -- unlike protectionSeconds just below, regen bookkeeping has to
     // survive the ordinary `{...state.hero}` spread this module uses everywhere a hero is threaded
@@ -913,6 +1043,7 @@ function heroFromParty(hero) {
     enumerable: false,
     value: hero.protectionSeconds ?? 0,
   });
+  hideSpecialFields(published);
   return published;
 }
 
@@ -936,6 +1067,16 @@ function publishSolo(state, commandId, partyState) {
 export function requestAttack(state, commandId = null) {
   if (isReplayId(commandId, state.lastCommandId)) return { state, events: [], accepted: false };
   const result = requestPartyAttack(toPartyState(state), SOLO_HERO_ID, null);
+  return {
+    state: publishSolo(state, commandId, result.state),
+    events: result.events.map(stripHeroId),
+    accepted: result.accepted,
+  };
+}
+
+export function requestSpecialAttack(state, level, commandId = null) {
+  if (isReplayId(commandId, state.lastCommandId)) return { state, events: [], accepted: false };
+  const result = requestPartySpecialAttack(toPartyState(state), SOLO_HERO_ID, level, null);
   return {
     state: publishSolo(state, commandId, result.state),
     events: result.events.map(stripHeroId),
@@ -971,6 +1112,8 @@ export function stepEncounter(state, command = {}) {
     heroTargetable = true,
     wolfHostile = true,
     attack = false,
+    special = false,
+    heroLevel = 1,
   } = command;
 
   if (isReplayId(commandId, state.lastCommandId)) return { state, events: [] };
@@ -981,6 +1124,11 @@ export function stepEncounter(state, command = {}) {
     const attacked = requestPartyAttack(partyState, SOLO_HERO_ID, null);
     partyState = attacked.state;
     events.push(...attacked.events.map(stripHeroId));
+  }
+  if (special) {
+    const used = requestPartySpecialAttack(partyState, SOLO_HERO_ID, heroLevel, null);
+    partyState = used.state;
+    events.push(...used.events.map(stripHeroId));
   }
 
   const stepped = stepParty(partyState, {
@@ -1013,8 +1161,15 @@ export function createEncounter(options = {}) {
     get hero() { return state.hero; },
     get state() { return state; },
     canAttack() { return canAttack(state); },
+    canSpecialAttack(level) { return canSpecialAttack(state, level); },
     requestAttack() {
       const result = requestAttack(state, nextCommandId++);
+      state = result.state;
+      pending.push(...result.events);
+      return result.accepted;
+    },
+    requestSpecialAttack(level) {
+      const result = requestSpecialAttack(state, level, nextCommandId++);
       state = result.state;
       pending.push(...result.events);
       return result.accepted;

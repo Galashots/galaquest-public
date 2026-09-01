@@ -18,6 +18,7 @@ import {
   removeHero,
   requestHeroHeal,
   requestPartyAttack,
+  requestPartySpecialAttack,
   separateFromEnemies,
   stepParty,
 } from '../public/src/combat/encounter.js';
@@ -1026,6 +1027,7 @@ export function createSimulation(options = {}) {
   // that function's own commandId replay guard (which alone would not catch an OUT-OF-ORDER
   // replay, only an exact repeat of the most recent commandId).
   const lastAttackSeq = new Map();
+  const lastSpecialSeq = new Map();
 
   // GP2: the shared physical cart, one for the whole simulation -- same shared-world-state shape
   // the ordinary encounter collection already is above, just for a different piece of shared world truth. Lives here
@@ -1162,7 +1164,8 @@ export function createSimulation(options = {}) {
   // swings nobody threw. World events (a wolf dying, a seal bursting, the Beacon catching) carry no
   // such restriction: everyone present should hear those, whichever fight they are standing in.
   const WOLF_BODY_EVENTS = new Set([
-    'swing', 'swing-missed', 'swing-dropped', 'hero-hurt', 'hero-down', 'hero-respawned', 'hero-healed',
+    'swing', 'swing-missed', 'swing-dropped', 'special-start', 'special-hit', 'special-missed',
+    'hero-hurt', 'hero-down', 'hero-respawned', 'hero-healed',
   ]);
   const SIEGE_BODY_EVENTS = new Set([
     'siege-swing', 'siege-swing-missed', 'siege-swing-dropped', 'warden-hurt-hero',
@@ -1199,6 +1202,7 @@ export function createSimulation(options = {}) {
   function removePlayer(id) {
     const removed = players.delete(id);
     lastAttackSeq.delete(id);
+    lastSpecialSeq.delete(id);
     encounterState = removeHero(encounterState, id);
     arenaByPlayer.delete(id);
     // Clears wolf.targetId's siege equivalent too (world/beaconSiege.js's removeSiegeHero), so a
@@ -1241,6 +1245,23 @@ export function createSimulation(options = {}) {
       return siegeResult.accepted;
     }
     const result = requestPartyAttack(encounterState, id, `${id}:${seq}`);
+    encounterState = result.state;
+    if (result.events.length > 0) pendingEvents.push(...result.events);
+    return result.accepted;
+  }
+
+  /** A decoded `special` message, applied immediately like an ordinary attack. The first authored
+   * special is deliberately an ordinary-enemy-field power proof; the Beacon has its own one-button
+   * siege rules and does not silently inherit a new ability from this package. */
+  function applySpecial(id, message) {
+    const player = players.get(id);
+    if (!player || arenaOf(id) === SIEGE_ARENA || inBeaconArena(player)) return false;
+    const seq = message.seq;
+    const last = lastSpecialSeq.get(id) ?? -1;
+    if (seq <= last) return false;
+    lastSpecialSeq.set(id, seq);
+    const stats = heroStatsFor(id);
+    const result = requestPartySpecialAttack(encounterState, id, stats.level, `${id}:special:${seq}`);
     encounterState = result.state;
     if (result.events.length > 0) pendingEvents.push(...result.events);
     return result.accepted;
@@ -1664,6 +1685,8 @@ export function createSimulation(options = {}) {
         cooldown: roundToWire(source.cooldown),
         downSeconds: roundToWire(source.downSeconds),
         protectionSeconds: roundToWire(source.protectionSeconds ?? 0),
+        specialSeconds: roundToWire(source.specialSeconds ?? -1),
+        specialCooldown: roundToWire(source.specialCooldown ?? 0),
       };
     }
     return {
@@ -1851,6 +1874,7 @@ export function createSimulation(options = {}) {
     removePlayer,
     applyInput,
     applyAttack,
+    applySpecial,
     applySearchCart,
     applyCollectLoot,
     applyCollectDrop,
@@ -1998,6 +2022,12 @@ export function attachGameServer(httpServer, options = {}) {
         if (!client.data.playerId) throw new ProtocolError('attack before join');
         // Applied the instant it arrives, not batched to the tick -- see applyAttack's comment.
         simulation.applyAttack(client.data.playerId, message);
+        return;
+      }
+
+      if (message.type === 'special') {
+        if (!client.data.playerId) throw new ProtocolError('special before join');
+        simulation.applySpecial(client.data.playerId, message);
         return;
       }
 
