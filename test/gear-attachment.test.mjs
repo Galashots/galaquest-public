@@ -377,6 +377,22 @@ test('the two shoulder anchors are independent -- mounting one never disturbs th
   assert.notEqual(left.id, right.id);
 });
 
+test('red-capable: the live gameplay shoulder seat keeps the two pauldrons readable', () => {
+  // R1-C0 found the original foundry seat technically mounted but overlapping in the running-game
+  // projection.  These are the R1-C1 bind-frame bake values from the live Hero probe: a symmetric
+  // 0.02 m outward seat, with scale and mirror orientation deliberately unchanged.  This numeric
+  // guard catches a regression to the source-only values; visual acceptance still belongs to the
+  // exact-head running-game captures.
+  const expected = {
+    left: [19.38003, 104.49998, 1.83117],
+    right: [-19.91265, 104.87607, 1.76593],
+  };
+  for (const side of ['left', 'right']) {
+    const spec = RIGID_SILVERGUARD_SHOULDER_BY_SIDE[side].restRelativeToHeroRoot;
+    assert.deepEqual(spec.position.map((value) => Number(value.toFixed(5))), expected[side]);
+  }
+});
+
 test('attachSilverguardShoulder throws a clear error when the rig has no arm bone for that side', () => {
   const hero = new THREE.Group();
   hero.name = 'hero';
