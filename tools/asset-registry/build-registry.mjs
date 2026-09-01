@@ -115,6 +115,10 @@ for (const asset of evidence.runtime_assets) {
   const isCandidate = asset.lifecycle === 'QUALIFYING';
   const recordGates = gates();
   if (asset.asset_kind === 'texture') recordGates.structural = gate('N/A');
+  // An asset introduced after the evidence snapshot cannot be recovered from the shared snapshot
+  // commit, so it declares its own immutable per-asset ref. Defaulting to the snapshot ref for an
+  // asset that did not exist there would record a recovery coordinate that resolves to nothing.
+  const assetGitRef = asset.git_ref ?? evidence.snapshot.runtime_git_ref;
   add({
     asset_id: asset.asset_id,
     display_name: asset.display_name,
@@ -125,7 +129,8 @@ for (const asset of evidence.runtime_assets) {
     custody_locations: [{
       kind: 'GIT',
       durable: true,
-      git_ref: evidence.snapshot.runtime_git_ref,
+      git_ref: assetGitRef,
+      git_commit_sha: assetGitRef,
       repo_path: asset.path,
       git_blob_oid: gitBlobOid(bytes),
     }],
@@ -138,10 +143,11 @@ for (const asset of evidence.runtime_assets) {
     provider: { task_ids: [], context_alias: null },
     structural_metrics: metrics(bytes.length, asset.asset_kind),
     rights: rights(),
-    parent_asset_id: null,
-    derivative_of: null,
+    related_asset_ids: asset.derivative_of ? [asset.derivative_of] : [],
+    parent_asset_id: asset.derivative_of ?? null,
+    derivative_of: asset.derivative_of ?? null,
     qualification_gates: recordGates,
-    evidence_refs: [`registry-evidence:runtime-assets`, `git:${evidence.snapshot.runtime_git_ref}:${asset.path}`],
+    evidence_refs: [`registry-evidence:runtime-assets`, `git:${assetGitRef}:${asset.path}`],
     notes: isCandidate ? 'Candidate identity is registered without runtime promotion.' : 'Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.',
   });
 }
