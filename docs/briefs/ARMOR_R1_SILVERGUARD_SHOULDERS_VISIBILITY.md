@@ -27,7 +27,7 @@ never received the Helmet's live WebGL confirmation as a causal lead, not a conc
 - If fit is causal, solve it against the live Hero/bind-pose/running-game seam rather than copying
   stale source-only measurements or hand-tuning unexplained constants.
 - Preserve local Hero, Hero preview, sibling/remote, equip/unequip, and reload/reconnect visual truth.
-- Add the smallest red-capable test/runtime proof needed to keep this exact failure from returning.
+- Add the smallest red-capable test and runtime proof needed to keep this exact failure from returning.
 - Capture portrait and landscape running-game evidence at the final exact head.
 
 ## Explicit exclusions
