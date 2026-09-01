@@ -7,6 +7,8 @@ import test from 'node:test';
 import {
   DEFAULT_EQUIPPED_WEAPON_ID,
   DEFAULT_OWNED_ITEM_IDS,
+  HELMET_SILVERGUARD_ID,
+  SHIELD_IRONWOOD_ID,
   STARTER_SWORD_ID,
   WILDWOOD_BLADE_ID,
   damageFor,
@@ -30,36 +32,53 @@ const GRANTED = { equippedWeaponId: DEFAULT_EQUIPPED_WEAPON_ID, ownedItemIds: [S
 // Same discipline test/feedback.test.mjs's "index.html draws exactly HERO_MAX_HP hearts" uses: the
 // markup is hand-written, not generated, so this is what makes the coupling between it and the view
 // model's own 5-slot list safe rather than merely commented.
-test('index.html hardcodes exactly the 5 GP1 slots, weapon unlocked and the rest locked', () => {
+test('index.html hardcodes the 5 slots; weapon/shield/helmet/shoulders unlocked, chest locked (R1)', () => {
   const source = readFileSync(resolve(repoRoot, 'public/index.html'), 'utf8');
   const slotIds = [...source.matchAll(/class="hero-slot" data-slot="(\w+)"/g)].map((m) => m[1]);
   assert.deepEqual(slotIds, ['weapon', 'shield', 'helmet', 'shoulders', 'chest']);
-  assert.ok(!/data-slot="weapon"[^>]*data-locked/.test(source), 'the weapon slot must not be locked');
-  for (const id of ['shield', 'helmet', 'shoulders', 'chest']) {
-    const re = new RegExp(`data-slot="${id}"[^>]*data-locked="true"`);
-    assert.ok(re.test(source), `${id} must render locked in GP1`);
+  // The four slots the catalogue now has items for (weapon, Shield, Helmet, R1's Shoulders) must not
+  // be statically locked -- renderSlots drives them live, and a stale lock glyph would flash before
+  // the first frame. Shoulders moved into this group the moment SHOULDER_SILVERGUARD_ID shipped in
+  // progression/items.js; this pin moved with it rather than staying a stale G1-C3 snapshot.
+  for (const id of ['weapon', 'shield', 'helmet', 'shoulders']) {
+    assert.ok(!new RegExp(`data-slot="${id}"[^>]*data-locked`).test(source), `${id} must not render locked`);
   }
+  // Chest remains the one slot with genuinely no item defined anywhere in the catalogue.
+  assert.ok(new RegExp('data-slot="chest"[^>]*data-locked="true"').test(source), 'chest must render locked');
 });
 
-test('five slots always render, only the weapon slot is unlocked in GP1', () => {
+test('five slots render; weapon/shield/helmet/shoulders unlock from the catalogue, chest stays locked', () => {
   const view = heroScreenViewModel({ ...BASE, selectedItemId: null });
   assert.equal(view.slots.length, 5);
-  const weaponSlot = view.slots.find((s) => s.id === 'weapon');
-  assert.equal(weaponSlot.locked, false);
-  assert.equal(weaponSlot.filled, true);
-  assert.equal(weaponSlot.name, 'Starter Sword');
-  for (const slot of view.slots) {
-    if (slot.id === 'weapon') continue;
-    assert.equal(slot.locked, true, `${slot.id} must be locked in GP1`);
-    assert.equal(slot.filled, false);
-  }
+  const byId = Object.fromEntries(view.slots.map((s) => [s.id, s]));
+  assert.equal(byId.weapon.locked, false);
+  assert.equal(byId.weapon.filled, true);
+  assert.equal(byId.weapon.name, 'Starter Sword');
+  // The baseline Shield is a real, equipped item, so its slot is truthful rather than a lock -- the
+  // hero visibly carries it in the running game, and the screen must not deny that (G1-C3).
+  assert.equal(byId.shield.locked, false);
+  assert.equal(byId.shield.filled, true);
+  assert.equal(byId.shield.name, 'Ironwood Shield');
+  // The Helmet slot unlocks because a helmet item now exists, but a fresh player has none equipped:
+  // unlocked-and-empty, not locked, and not filled.
+  assert.equal(byId.helmet.locked, false);
+  assert.equal(byId.helmet.filled, false);
+  // R1: the Shoulders slot unlocks the same way Helmet did -- a real item (Silverguard Shoulders)
+  // now exists for it, so SLOTS_WITH_ITEMS (derived from ITEM_DEFS, never a hand-kept list) reports
+  // it unlocked automatically. A fresh player owns none, so unlocked-and-empty, not filled.
+  assert.equal(byId.shoulders.locked, false);
+  assert.equal(byId.shoulders.filled, false);
+  // Chest remains the one slot with genuinely no item defined anywhere in the catalogue.
+  assert.equal(byId.chest.locked, true, 'chest must stay locked (no item defined)');
+  assert.equal(byId.chest.filled, false);
 });
 
-test('GP1-C1: a fresh (non-granted) player sees ONLY the starter sword in the strip -- the Blade is not there to tap', () => {
+test('G1-C3: the owned strip shows every owned item -- a fresh player has the starter sword AND the baseline Shield, but not the Blade', () => {
   const view = heroScreenViewModel({ ...BASE, selectedItemId: null });
-  assert.equal(view.weapons.length, 1);
-  assert.equal(view.weapons[0].id, STARTER_SWORD_ID);
-  assert.ok(!view.weapons.some((w) => w.id === WILDWOOD_BLADE_ID));
+  const ids = view.items.map((i) => i.id);
+  assert.ok(ids.includes(STARTER_SWORD_ID), 'the starter sword is owned');
+  assert.ok(ids.includes(SHIELD_IRONWOOD_ID), 'the baseline Shield is owned and now appears in the strip');
+  assert.ok(!ids.includes(WILDWOOD_BLADE_ID), 'the Blade is not owned by a fresh player and is not there to tap');
 });
 
 test('GP1-C1: trying to select an unowned item (e.g. a stale button, or a hand-crafted id) is not possible -- it falls back to equipped', () => {
@@ -70,11 +89,10 @@ test('GP1-C1: trying to select an unowned item (e.g. a stale button, or a hand-c
   assert.equal(view.comparison, null, 'an unowned selection must never produce a comparison card');
 });
 
-test('once granted (GP1-C1 fixture shape), both weapons appear in the strip, with equipped/selected flagged independently', () => {
+test('once granted, both weapons appear in the strip, with equipped/selected flagged independently', () => {
   const view = heroScreenViewModel({ ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID });
-  assert.equal(view.weapons.length, 2);
-  const starter = view.weapons.find((w) => w.id === STARTER_SWORD_ID);
-  const blade = view.weapons.find((w) => w.id === WILDWOOD_BLADE_ID);
+  const starter = view.items.find((w) => w.id === STARTER_SWORD_ID);
+  const blade = view.items.find((w) => w.id === WILDWOOD_BLADE_ID);
   assert.equal(starter.equipped, true);
   assert.equal(starter.selected, false);
   assert.equal(blade.equipped, false);
@@ -223,7 +241,7 @@ test('every existing field survives the identity being added', () => {
   const withStats = heroScreenViewModel({ ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID, stats: LEVELLED });
   const without = heroScreenViewModel({ ...GRANTED, selectedItemId: WILDWOOD_BLADE_ID });
   assert.deepEqual(withStats.slots, without.slots);
-  assert.deepEqual(withStats.weapons, without.weapons);
+  assert.deepEqual(withStats.items, without.items);
   assert.deepEqual(withStats.selected, without.selected);
   assert.deepEqual(withStats.comparison, without.comparison);
 });

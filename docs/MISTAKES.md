@@ -22,6 +22,76 @@ line. Entries with many hits and no help get rewritten or deleted, not promoted.
 names a test file that actually exists, every `GQ-NNN` ID is unique and never reused, and every
 `RULE` entry at 3+ hits carries a stated reason it isn't enforced.
 
+## Index — skim or search; do not read this ledger end to end
+
+This file is a ledger, not startup reading. Route in through this index: skim it, or search by tag
+or title fragment, then read only the entries the task touches. Tags come from a fixed vocabulary —
+`code`, `tests`, `harness`, `evidence`, `visual`, `gameplay`, `net`, `persistence`, `ci`, `docs`,
+`assets` — so a grep for a tag is reliable. `test/mistakes-ledger.test.mjs` keeps this index honest:
+every row matches a real entry heading below, every entry has a row, and every tag is from the
+vocabulary. A new entry adds its row in the same commit.
+
+| ref | lesson | tags |
+|---|---|---|
+| GQ-007 | Never restate a constant. Import it. | code |
+| GQ-008 | A harness that navigates to the game must start from a known guest. | harness |
+| GQ-009 | A diagnostic that partitions events by harness timestamp measures the harness, not the system. | harness, evidence |
+| GQ-001 | A harness tuned against a local fight embeds the absence of latency everywhere. | harness, net |
+| GQ-002 | A stale file header is a lie the file tells about itself. | code, docs |
+| GQ-003 | A test-count or CI-shape claim written in a document goes stale immediately. | docs, ci |
+| — | Watch for one constant doing two jobs. | code |
+| — | Assert the property, not the mechanism. | tests |
+| — | A name-fragment lookup needs a uniqueness test. | code, tests |
+| — | Green checks are not a look at the game. | evidence, visual |
+| — | Source, vendor, and review names are not runtime identifiers. | assets, harness |
+| — | A discovery endpoint must only advertise capabilities it can actually execute. | code, evidence |
+| — | A cross-check whose expected and actual values come from the same expression proves nothing. | tests |
+| — | A selftest must tear down every Chrome target/server/process it creates, unconditionally. | harness |
+| — | A reported per-pose measurement that never changes across genuinely different poses is measuring the wrong state. | evidence, visual |
+| — | A hand-rolled schema interpreter only enforces the keywords it has actually been exercised against. | code, tests |
+| — | A documented claim about a commit is not evidence until it's run. | evidence |
+| — | A proof that was not committed did not happen. | evidence |
+| — | A durable event id must outlive the process that minted it. | persistence, net |
+| — | Hydration restores state; it must not replay the ceremony that created it. | persistence, gameplay |
+| GQ-019 | Automation timeouts are wall-clock budgets, not sample counts — and the fix for that has its own floor. | harness |
+| GQ-022 | An instrument is not evidence until it has been shown to fail. | evidence, tests |
+| — | A NEW FAILURE against a base is not evidence that this commit caused it. | ci, evidence |
+| GQ-021 | A harness written in wall-clock time is driving something that advances in rendered frames. | harness, net |
+| GQ-020 | A presentational class is an identity. Reusing it for the look makes every reader that queries it wrong. | code |
+| — | The maximum of a set is biased toward the set with more samples in it. | evidence |
+| — | A measurement has to be taken in a frame where only the thing under test can move it. | evidence, harness |
+| — | Making one beat of a harness work can break the next one, because they share a world. | harness |
+| — | A sentinel that means "no value" will happily do arithmetic, and can carry a check over its own bar. | code, tests |
+| — | A clamp that protects one subsystem silently degrades every other one sharing the clock. | code, gameplay |
+| — | Evidence may name a commit only after executing from that exact clean commit. | evidence, ci |
+| GQ-010 | A capture is only evidence if the subject is actually in the frame. So is a measurement. | evidence, visual |
+| — | A wall-clock budget waiting on simulated time must account for the frame clamp. | harness |
+| — | A one-time ceremony fired off a server edge plays to whoever happens to be looking. | net, gameplay |
+| — | Two one-shot payoffs whose triggers overlap in space fire on the same frame, and cancel each other. | gameplay |
+| GQ-011 | Two simulations of the same thing are not one thing, however carefully you pick between them. | code, net |
+| GQ-012 | A presenter that ticks inside someone else's gate is invisible for reasons its own file cannot explain. | code, visual |
+| GQ-013 | A reward the rules never read is a lie with a ceremony attached. | gameplay |
+| GQ-014 | An identity derived from mutable state is not an identity. | code, persistence |
+| GQ-015 | A test that hand-feeds a pure function proves the function, not where its inputs come from. | tests |
+| — | A status a document holds on someone else's behalf goes stale with no commit to catch it. | docs |
+| — | Nothing under `test/` loads `main.js`, so a bootstrap-fatal edit passes the whole gate. | tests, ci |
+| — | A factory that ignores unknown options turns a typo into a silent redirection to production state. | code, tests |
+| GQ-016 | Booting the app mints an identity, so a harness that seeds one must do it before the first boot. | harness |
+| GQ-017 | Changing a type is not done when the tests pass. The readers are not all in one directory. | code |
+| — | A change detector must key on the thing it measures, not on the thing it is named after. | tests |
+| GQ-018 | A test that derives its probe input from the constant under test cannot fail on that constant. | tests |
+| — | Prove the instrument can see a known-good case before believing what it says about the product. | evidence, tests |
+| — | A trigger radius a child's approach ends AT is decided by drift, not by the child. | gameplay, net |
+| — | A render change whose whole purpose is how something LOOKS cannot be judged from a container with no GPU. | visual, ci |
+| — | A sabotage that does not go red is a finding about the test, not a pass. | tests |
+| — | Before adding a field to a protocol, read what the producer already publishes. | net |
+| — | A scripted edit that is not asserted is a change you have not made. | harness |
+| — | An instrument that covers a subset reports on the subset, and reads as covering the whole. | evidence, tests |
+| GQ-023 | One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire. | net, tests |
+| — | A skinned body goes where its BONES go, not where its geometry box says. | code, visual, harness |
+| — | A shared readiness promise must not await one optional body. | code, harness |
+| — | An instrument spends the lifetime of the subject it is measuring. | harness, evidence |
+
 ---
 
 ### GQ-007 — Never restate a constant. Import it.
@@ -1559,3 +1629,162 @@ landed on before checking the badge, so a wrong address costs one line rather th
 `ci-diff.py --sha` reads `/commits/{sha}/check-runs`, which returns every check on a commit whatever
 workflow raised it. The file mode still exists and now prints "one workflow only" beside its answer.
 **Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A skinned body goes where its BONES go, not where its geometry box says.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-28 (BW1, the real Beacon Warden GLB)
+**Rule:** For a skinned mesh, `Box3.setFromObject` reports the geometry box under the MESH's matrix.
+The vertices are actually placed by the skeleton. When those two disagree the box is the one lying,
+so any claim about where a rigged character IS must be read off a bone. Two corollaries earned the
+same day: `Box3` on a freshly cloned, not-yet-parented hierarchy measures STALE world matrices unless
+you `updateMatrixWorld(true)` first; and a self-correcting measurement (`target / measured`) is only
+as honest as the thing it measured -- it will confidently converge on the wrong answer and show no
+symptom, because the formula agrees with itself.
+**Incidents:** BW1 integrated the owner's rigged Warden GLB. `prepareWardenRoot` measured the fresh
+clone before updating its matrices, read 0.023 m instead of the authored 2.3 (a clean factor of 100
+out of the Armature's own 0.01 scale), and derived a scale of **113x instead of 1.13x**. The creature
+was skinned to a head height of **155.95 m**, somewhere off camera. Nothing threw. No console error
+was logged. `renderer.info` reported all 3,898 triangles submitted every frame, and `Box3` over the
+finished group still answered a reassuring 2.46 m while the bones were two orders of magnitude away.
+The whole `drive-beacon-siege.mjs` run -- seals, wake, boss bar, phases, death, the Beacon catching,
+"no console errors" -- passed **ALL CHECKS against a boss nobody could see**, because every assertion
+in it asked about STATE and none asked whether there was a body in the world. It was caught by opening
+the captures, which is the only reason it was caught at all (see GQ-010).
+**Prevention that landed with it:** the presenter's `getState()` now publishes the `Head` BONE's world
+height, `main.js` republishes it as `wardenHeadMeters`, and the siege harness asserts a sane band --
+verified red-capable by restoring the bug, which produced `head bone at 155.95 m against a 2.6 m
+Warden` while `wardenBuilt` stayed happily true.
+**Not enforced because:** reproducing it needs GLTFLoader and a real skinned draw, so the check lives
+in the browser harness rather than in `node --test`; the ledger's ENFORCED rung wants a file in
+`test/` and this one honestly cannot be.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A shared readiness promise must not await one optional body.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-28 (BW1, the real Beacon Warden GLB)
+**Rule:** `zone.ready` is not "this presenter is ready", it is "EVERY presenter in this zone is
+ready" -- so anything awaited inside it becomes a prerequisite for things that have nothing to do
+with it. A body that the world can survive without must not be awaited there. Build it synchronously
+and let it attach itself when it lands, the way the keeper, the villagers and Rowan already degrade
+to nothing. The blast radius of an await is the whole promise, not the line it is written on.
+**Incidents:** BW1 replaced the procedural Warden with a 618 KB GLB and had `world/zoneLoader.js`
+await `buildWarden`. `drive-old-beacon.mjs` then failed its reload phase with `built false, stirring
+false, glow null` -- **the Old Beacon**, a landmark with nothing to do with the Warden, dark because
+the Warden's texture was still downloading. The unit gate did not see it (no browser) and
+`drive-beacon-siege.mjs` did not see it (it waits for the fight, by which time everything has
+loaded). Only the full browser matrix did, and only on three harnesses that never mention the boss.
+**Causality, established rather than assumed:** the same harness passes 65/65 on the package base and
+failed on the package head, and an A/B run with the package's OTHER change (Warden collision)
+disabled still failed -- which ruled the collision out and left the await. That is the shape the
+ledger's own "a NEW FAILURE against a base is not evidence that this commit caused it" entry asks
+for, run in the direction that actually convicts.
+**Not enforced because:** the defect is a latency ordering, not a state a static check can read --
+the code is correct in isolation and only wrong because of what else shares its promise. The
+existing browser matrix is the instrument that catches it.
+**Foreknowledge helped:** not yet recorded.
+
+### GQ-023 — One value crossing a wire in both directions must be validated by ONE cap; and a test suite that never runs the decoder proves nothing about the wire.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-27
+**Rule:** When the same physical id travels server->client in one message and client->server in
+another, both decoders must read the SAME limit constant -- a copied number, or a neighbouring
+constant reused because the ids "look similar", is two facts free to disagree. And every layer of
+testing that hands the value to the business module directly (fold tests, `sim.applyX(...)` server
+tests) leaves the decode seam unexercised: a decoder that rejects 100% of production traffic stays
+green everywhere until a human plays the game.
+**Incident (2026-08-27, PR #80, found by Owner playtest + Sol review):** world/enemyDrops.js mints
+`drop:<enemyId>:<randomUUID>:<index>` -- 50 chars minimum, 56 for `frost-wolf-*`. The outbound leg
+(`encounter.drops[].id`) already used DROP_ID_MAX_LENGTH (96); the inbound `collect-drop` decoder
+reused PICKUP_ID_MAX_LENGTH (48) "exactly as village-upgrade-purchase does", against cart tokens
+like `cart-loot:shard:1` that are a different shape entirely. Every legitimate pickup therefore
+died in decode; gameServerCore turns a ProtocolError into a 1008 close; the client silently
+reconnects as a NEW player seated at {0,0}. The child experiences: kill a wolf, walk at your coins,
+teleport to spawn -- with a screen blink as the world rebuilds. It shipped through 2,049 green
+tests and a fully green 34-job behavioural matrix, because the drop tests bypass decode and no
+harness watched the SOCKET across a pickup.
+**The tell:** the defect was visible in the file itself as a comment justifying the reuse -- the
+mistaken assumption was written down and reviewable long before it was executable. A reused cap
+deserves one sentence proving the NEW id's maximum against it, with the longest real producer named.
+**Repairs:** one shared DROP_ID_MAX_LENGTH for both legs (protocolCore.js);
+test/collect-drop-wire.test.mjs round-trips ids minted by the real requestEnemyDrop for every
+authored enemy and pins both caps equal at the boundary; test/collect-drop-connection.test.mjs
+kills a real enemy over a real WebSocket, collects through the real decode path, and asserts the
+socket, playerId, and position all survive; tools/runtime-test/drive-drop-collect.mjs stands the
+same watch in the real browser with CDP Network-level socket evidence.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — An instrument spends the lifetime of the subject it is measuring.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-08-30
+**Rule:** GQ-021 says to write a harness's numbers in the units the subject advances in. This is the
+next question, and it is not the same one: **how long does the subject EXIST?** A budget can be a
+correct wall-clock deadline, derived from a real constant, and still be wrong — because it was sized
+against the other budgets in the file rather than against the life of the thing being observed. When
+the subject has a finite lifetime (a corpse claim, a ground drop, a knockdown, a session token), every
+wait is drawn from that lifetime, so no wait may be budgeted longer than what remains, and a phase
+with work after it must reserve what that work needs. Mechanised as `subjectLifetime` in
+`tools/runtime-test/automation-timing.mjs` (pinned by `test/automation-timing.test.mjs`): route every
+deadline through `budgetFor` and no composition of retries can outlive the subject.
+**And print the remaining life at every phase.** This is the half that cost the most. A run that has
+outlived its subject produces assertions that are all individually TRUE and collectively meaningless,
+and nothing in the output says so.
+**Incident (2026-08-30, `drive-corpse-loot` at `a20fcd7`).** Six red checks: the individual TAKE hit
+`CANVAS#game-canvas`, no toast, no Hero pulse, rows unchanged, Take All identically, the panel never
+confirmed. Every one was a true statement about a corpse that had expired 8.6 seconds earlier —
+188.6s from corpse to tap against `CORPSE_LOOT_EXPIRE_SECONDS` of 180. Every gameplay assertion that
+ran *inside* the claim's life passed, including the panel standing open with a named, hit-testable
+TAKE button when the corpse was 87.6s old, less than half its life. A child taps that in a second;
+this harness took 101 more. Where it went, at a measured ~400ms per hosted CDP read: ~50s in a
+knockdown poll written as 60 iterations of a large eval plus `sleep(500)`, waiting on a 2-second
+`RESPAWN_SECONDS`; ~60s in ONE recovery re-approach carrying a flat 60s deadline; ~30s in three
+`for (i<25) { eval; sleep(200) }` polls waiting on a ~1s round trip; and 123s in two receipt loops
+confirming collects that had already failed.
+**What made it expensive was the diagnosis, not the fix.** Three hosted cycles were spent reading
+that cascade as an interaction bug — an intercepting overlay, a stale prompt precondition, an
+unseeded roll — and each of those three was a real defect that really was found and really was fixed.
+That is what made the wrong theory so durable: it kept being partly right. The run now gates on
+having finished inside the lifetime it was measuring, so the next occurrence says so in one line.
+**Corollary — a throttle is not a model of a loaded runner, and believing it is closes the
+investigation early.** The file claimed `GALAQUEST_CPU_THROTTLE=6` "reproduces something near the
+hosted judging regime", and the PR body offered "1x, 6x, 12x (harsher than hosted)" as evidence.
+Measured: at 12x the whole post-corpse sequence takes 13.2s against hosted's 188.6s — fourteen times
+faster, not harsher — and at 20x and 40x the client cannot boot inside 30s, a failure hosted has
+never shown. CPU throttling scales the RENDERER while server-side timers keep real wall-clock time,
+and it slows boot and fight uniformly where contention does not. It reproduces starvation. It cannot
+reproduce elapsed time, which is the axis this defect lived on.
+**Corollary, and the second head of the same incident — a recovery path can be a guaranteed no-op,
+and it looks exactly like a slow one.** With the budgets fixed the same harness went red again, and
+this time every tap landed on the real button (`hitIsTarget:true`, `clickLanded:true`) and the
+server refused all three on reach. The loot panel is a MODAL: `inset: 0`, `pointer-events: auto`
+while shown, over a full-screen backdrop whose pointerdown is stopped from reaching `#game`. So
+while it is open it owns the movement stick, and the retry's `approachCorpse` — stick touches
+dispatched into that backdrop — could never move anybody. Two recoveries moved the hero zero metres
+and burned their whole budget proving nothing. **Before writing a recovery that acts on the world,
+ask what owns the input while the thing you are recovering FROM is on screen.** The harness now
+closes the panel, walks, and reopens it — what a child does — and prints what owns the stick point
+while the panel is open, so the coupling is never inferred again.
+**And the thing that displaced the hero turned out to be the real defect — RESOLVED, and the way it
+was reached is the lesson.** `wolf-1` respawns at its authored home 10s after death, which is where
+it died, which is where its corpse is. So looting happens inside a live re-fight, against a modal
+that has taken away movement and attack: 10 damage per bite every 2.6s into 30 HP is three bites,
+and the hero opened the panel on hp 20. He collected the first item correctly and was dead before
+the second round trip finished.
+
+**Two harness defects had to be removed before that sentence could be trusted**, and each one looked
+like the answer while it stood. The first was the budget problem above. The second was an approach
+target of 1.2m that the product never asks for — the real radius is 2.5m and the hosted walk report
+read `startMetres: 1.376`, so the hero was *already* lootable and the instrument was spending the
+wolf's respawn window walking closer for no reason. Only with both gone did a clean measurement
+exist: kill → first TAKE 9.8s with zero screenshot time inside it, first TAKE passing, Take All lost
+to a death. **A product conclusion drawn while the instrument still has a known artifact in it is a
+guess wearing a number.** The Production Director refused the first two attempts to call this a
+product blocker, correctly, on exactly that ground.
+
+The fix reuses `progression/runeChests.js`'s own law — that module's `heroInCombat` exists because
+"a child who backs over a chest while a wolf is on them gets a maths question over a frozen hero and
+keeps taking bites they can no longer answer" — but deliberately **not** its helper: that one gates
+OPENING on proximity, and a proximity rule here would make a corpse the wolf respawns on top of
+permanently unlootable. `world/corpseLootPresenter.js`'s `dismissLootPanelForCombat` gates STAYING
+OPEN on real damage or going down. **Share the sentence, not the code, when the failure is identical
+and the trigger is not.**
+**The general form:** ask what the subject's clock RATE is (GQ-021), and then ask how much of the
+subject is LEFT. An instrument that consumes what it observes has to report the consumption, or its
+own thoroughness becomes the failure.
+**Foreknowledge helped:** no. GQ-021 was read, cited in this file's own comments, and correctly
+applied to every rate in it — while the lifetime question went unasked.

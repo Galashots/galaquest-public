@@ -6,6 +6,7 @@ import test from 'node:test';
 import * as THREE from '../public/vendor/three.module.min.js';
 import { HERO_URL, normaliseCharacterMaterial } from '../public/src/character/hero.js';
 import { WOLF_URL } from '../public/src/enemies/wolf.js';
+import { WARDEN_URL } from '../public/src/enemies/warden.js';
 import { KEEPER } from '../public/src/world/zones/village.js';
 
 // zoneLoader.js resolves a zone data module's `model` fields by prefixing 'assets/' -- see its own
@@ -178,6 +179,11 @@ const ACTIVE_LOAD_PATHS = [
   { url: HERO_URL, source: 'hero.js loadHero()' },
   { url: WOLF_URL, source: 'wolf.js loadWolf()' },
   { url: KEEPER_URL, source: 'zoneLoader.js loadKeeper()' },
+  // BW1: the Beacon Warden's real body. Same Meshy export defects as the hero and the wolf,
+  // and cured the same way -- enemies/warden.js's prepareWardenRoot runs every material
+  // through normaliseCharacterMaterial(), so the assertions above prove the cure rather
+  // than this file merely tolerating the defect.
+  { url: WARDEN_URL, source: 'warden.js buildWarden()' },
 ];
 
 // Shipped .glb files that are measured, today, to declare this defect but sit on no runtime load

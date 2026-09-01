@@ -15,9 +15,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { isKnownItem, isKnownWeapon } from '../public/src/progression/items.js';
+import {
+  DEFAULT_EQUIPPED_ITEM_IDS,
+  isKnownItem,
+} from '../public/src/progression/items.js';
 import {
   DURABLE_FACT_TYPES,
+  isClientRestorableProfileFact,
+  isEquipmentFact,
+  latestEquippedItemIds,
   latestEquippedWeaponId,
   parseXpFactAmount,
   totalXpFromFacts,
@@ -32,7 +38,7 @@ import {
 // act of paying changes, an in-memory counter that a page load resets, an index over whichever store
 // is readable now, and a stamp applied when a fact was first SEEN -- which cannot tell an older equip
 // delivered late from a newer one, because it is measuring delivery. See docs/MISTAKES.md GQ-014.
-// Only 'weapon-equipped' carries it; every other award type is additive and needs no order at all.
+// Equip facts carry it; every other award type is additive and needs no order at all.
 //
 // v4, Stage 1: one nullable `origin` column, naming WHO ATTESTED the row. NULL -- every row ever
 // written before this and every row since that the server itself adjudicated -- means the server
@@ -217,7 +223,7 @@ export function openRewardStore(path) {
   //
   // A handful of rows per guest, so fetching them all costs nothing worth a second definition.
   const equipFactsStmt = db.prepare(
-    "SELECT id, value, rev FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped' "
+    "SELECT id, type, value, rev FROM reward_events WHERE guest_id = ? AND type IN ('weapon-equipped', 'gear-equipped') "
     + 'ORDER BY rowid ASC',
   );
   // GP1-C1: ownership is a SET (has this guest ever been granted item X), unlike equip's latest-wins
@@ -265,18 +271,25 @@ export function openRewardStore(path) {
   // to mint an identity itself (a caller that supplied none), so that a server-minted equip still
   // lands ABOVE the guest's existing history rather than colliding with the middle of it.
   const maxEquipRevStmt = db.prepare(
-    "SELECT MAX(rev) AS m FROM reward_events WHERE guest_id = ? AND type = 'weapon-equipped'",
+    "SELECT MAX(rev) AS m FROM reward_events WHERE guest_id = ? AND type IN ('weapon-equipped', 'gear-equipped')",
   );
 
+  // H1: shared-world reads consume only server-adjudicated currency. `origin IS NULL` is the durable
+  // meaning of server authority in schema v4 (including every pre-v4 server row); client-attested
+  // rows may remain readable as personal provenance but can never spend physical loot for everyone.
   const creditedLootIdsStmt = db.prepare(
-    "SELECT id FROM reward_events WHERE type IN ('coin-earned', 'shard-earned')",
+    "SELECT id FROM reward_events WHERE type IN ('coin-earned', 'shard-earned') AND origin IS NULL",
   );
   // GP3: Village Supplies' whole read side -- ALSO not guest-scoped, for the reason the GP3 brief's
   // "economy ruling" gives (section 2.1): who physically picked a coin off the ground stays personal
-  // (coinsFor/shardsFor above), but what the Village can spend is communal. Deliberately the exact
-  // COUNT(*) shape coinsFor/shardsFor already use, just without the "AND guest_id = ?" clause.
-  const totalCoinsEarnedStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE type = 'coin-earned'");
-  const totalShardsEarnedStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE type = 'shard-earned'");
+  // (coinsFor/shardsFor above), but what the Village can spend is communal. H1 additionally requires
+  // that communal authority come from the server, never from a client-restored row.
+  const totalCoinsEarnedStmt = db.prepare(
+    "SELECT COUNT(*) AS c FROM reward_events WHERE type = 'coin-earned' AND origin IS NULL",
+  );
+  const totalShardsEarnedStmt = db.prepare(
+    "SELECT COUNT(*) AS c FROM reward_events WHERE type = 'shard-earned' AND origin IS NULL",
+  );
   // GP3: a village-upgrade row's mere existence IS ownership, by the brief's own ruling (section
   // 2.3) -- there is no separate mutable balance to drift from it. `id` is already the table's own
   // PRIMARY KEY, so this is an existence check on it; `type` is checked too only so a caller passing
@@ -326,11 +339,22 @@ export function openRewardStore(path) {
     if (typeof award.eventId !== 'string' || award.eventId.length === 0) {
       throw new Error('reward store apply() requires a non-empty eventId');
     }
-    if (award.type === 'weapon-equipped' && !isKnownWeapon(award.value)) {
+    // H1 defence in depth: restoreProfileFacts filters this boundary before batching, but the store
+    // must not rely on one caller forever. A client-attested row may recover personal history only;
+    // it may neither author shared currency nor reserve shared-world/another-profile identities.
+    if (award.origin === 'client' && !isClientRestorableProfileFact(award, award.guestId)) {
+      throw new Error(
+        `reward store apply() refuses client-restored fact ${JSON.stringify(award.type)} under eventId ${JSON.stringify(award.eventId)}`,
+      );
+    }
+    if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isKnownItem(award.value)) {
       // Business-rule validation, the same layer net/protocol.js's decodeRewards leaves to its
       // caller -- the wire only checks SHAPE (a string), the store is what refuses to durably record
       // a weapon id nobody defined, whether that came from a stale client or a bug upstream of here.
-      throw new Error(`reward store apply() got an unknown weapon id ${JSON.stringify(award.value)}`);
+      throw new Error(`reward store apply() got an unknown ${award.type === 'weapon-equipped' ? 'weapon' : 'equipment'} id ${JSON.stringify(award.value)}`);
+    }
+    if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isEquipmentFact(award)) {
+      throw new Error(`reward store apply() got an invalid slot for ${award.type} item ${JSON.stringify(award.value)}`);
     }
     if (award.type === 'gear-owned' && !isKnownItem(award.value)) {
       throw new Error(`reward store apply() got an unknown item id ${JSON.stringify(award.value)}`);
@@ -428,7 +452,10 @@ export function openRewardStore(path) {
       ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
       // Absent for everything the server adjudicated, which is almost everything -- see the v4 note.
       ...(row.origin ? { origin: row.origin } : {}),
-    }));
+    })).filter((fact) => (
+      fact.type !== 'weapon-equipped'
+      && fact.type !== 'gear-equipped'
+    ) || isEquipmentFact(fact));
   }
 
   function maxEquipRevFor(guestId) {
@@ -474,10 +501,22 @@ export function openRewardStore(path) {
   function equippedWeaponFor(guestId) {
     return latestEquippedWeaponId(equipFactsStmt.all(guestId).map((row) => ({
       eventId: row.id,
-      type: 'weapon-equipped',
+      type: row.type,
       value: row.value ?? undefined,
       ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
     }))) ?? null;
+  }
+
+  function equippedItemsFor(guestId) {
+    return {
+      ...DEFAULT_EQUIPPED_ITEM_IDS,
+      ...latestEquippedItemIds(equipFactsStmt.all(guestId).map((row) => ({
+        eventId: row.id,
+        type: row.type,
+        value: row.value ?? undefined,
+        ...(Number.isInteger(row.rev) ? { rev: row.rev } : {}),
+      }))),
+    };
   }
 
   /** Every item this guest has been durably granted, NOT including the starter sword (see this
@@ -525,6 +564,7 @@ export function openRewardStore(path) {
     satchelTakenFor,
     charmEarnedFor,
     equippedWeaponFor,
+    equippedItemsFor,
     ownedItemIdsFor,
     coinsFor,
     shardsFor,

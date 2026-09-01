@@ -40,7 +40,7 @@ import * as THREE from '../public/vendor/three.module.min.js';
 import { loadRigScene } from '../tools/foundry/glb_anim_scene.mjs';
 import { createLocomotionController } from '../public/src/character/locomotion.js';
 import { createReactionAnimator } from '../public/src/character/reactClips.js';
-import { createClipSwingAnimator } from '../public/src/character/swingClip.js';
+import { SWING_RELEASE_SECONDS, createClipSwingAnimator } from '../public/src/character/swingClip.js';
 import { SWING_SECONDS } from '../public/src/combat/encounter.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -177,9 +177,16 @@ test('the frame the swing stops while down shows the death pose, not a standing 
   );
 });
 
-test('the ordinary attack-from-standing case recovers on the next frame', () => {
+test('the ordinary attack-from-standing case recovers within one release blend', () => {
   // Never goes down, so this exercises the UNCHANGED (reactions, then swing) ordering -- attack still
   // takes precedence over a mere hit flinch, and the pose still returns to locomotion alone.
+  //
+  // "Recovers on the next frame" was this test's original name, and it was pinning the MECHANISM:
+  // action.stop() plus locomotion's rewrite made the very next frame identical to the control. The
+  // release blend (swingClip.js's SWING_RELEASE_SECONDS) deliberately spends one crossfade carrying
+  // the follow-through out, so the frame this measures from moved by that window. The PROPERTY is
+  // unchanged and still what this asserts: once the release has nothing left to say, the pose is
+  // exactly what locomotion alone would produce -- no residue, no accumulation.
   const { root, animations, jointNames } = loadRigScene(HERO_GLB);
   const locomotion = createLocomotionController(root, animations);
   const reactions = createReactionAnimator(root, animations);
@@ -199,8 +206,9 @@ test('the ordinary attack-from-standing case recovers on the next frame', () => 
     swing.update(swingSeconds, SWING_SECONDS, FRAME);
     controlLocomotion.update(FRAME, 0);
 
-    // Two frames after the swing ends, a locomotion-only control and the real thing should agree.
-    if (index > 30 + steps + 1) {
+    // One full release window (plus a settle frame) after the swing ends, a locomotion-only
+    // control and the real thing should agree exactly.
+    if (index > 30 + steps + Math.ceil(SWING_RELEASE_SECONDS / FRAME) + 1) {
       const difference = maxJointDifference(
         poseOf(root, jointNames),
         poseOf(control.root, control.jointNames),

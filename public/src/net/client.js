@@ -8,6 +8,9 @@ import {
   INPUT_SEND_HZ,
   ProtocolError,
   attackMessage,
+  collectCorpseAllMessage,
+  collectCorpseItemMessage,
+  collectDropMessage,
   collectLootMessage,
   decode,
   encode,
@@ -20,6 +23,7 @@ import {
   claimSatchelMessage,
   claimCharmMessage,
   searchCartMessage,
+  specialMessage,
   villageUpgradePurchaseMessage,
 } from './protocol.js';
 import { createSnapshotBuffer } from './interpolation.js';
@@ -75,6 +79,7 @@ export function createNetClient(options = {}) {
   // (`${playerId}:${seq}` inside applyAttack), so sharing a counter would only make the two
   // streams harder to read on the wire for no protection either one needs.
   let attackSequence = 0;
+  let specialSequence = 0;
   let lastSentAtMs = -Infinity;
   let lastSentMagnitude = 0;
   let latestSelf = null;
@@ -109,6 +114,7 @@ export function createNetClient(options = {}) {
     socket.addEventListener('open', () => {
       sequence = 0;
       attackSequence = 0;
+      specialSequence = 0;
       lastSentAtMs = -Infinity;
       lastSentMagnitude = 0;
       send(joinMessage(options.name ?? 'player', guestId));
@@ -221,6 +227,11 @@ export function createNetClient(options = {}) {
     return send(attackMessage(attackSequence += 1));
   }
 
+  function sendSpecial() {
+    if (status !== 'online') return false;
+    return send(specialMessage(specialSequence += 1));
+  }
+
   /**
    * Send an equip request. Same online-only guard as sendAttack -- offline there is no socket, and
    * progression/state.js's own offline fallback applies the choice locally instead of calling this.
@@ -268,6 +279,33 @@ export function createNetClient(options = {}) {
   function sendCollectLoot(pickupId) {
     if (status !== 'online') return false;
     return send(collectLootMessage(pickupId));
+  }
+
+  /** R1: the same shape and reasoning as sendCollectLoot, for the dynamic kill-drop pickups
+   *  world/enemyDrops.js spawns -- online-only (there is no shared drop to collect offline; the
+   *  offline fallback runs its own local copy of the same rules instead), no sequence number, and a
+   *  resend of the same dropId is naturally idempotent server-side (requestCollectEnemyDrop rejects an
+   *  already-collected id outright, the identical "first request wins" rule requestCollectLoot uses). */
+  function sendCollectDrop(dropId) {
+    if (status !== 'online') return false;
+    return send(collectDropMessage(dropId));
+  }
+
+  /** #87: ask the server to take ONE named item off this hero's own corpse claim. Same online-only
+   *  guard and no-sequence-number reasoning as sendCollectDrop -- there is no offline corpse-loot
+   *  state to collect from at all (world/corpseLoot.js is server-side-only, see its own header), and
+   *  a resend of the same (corpseId, claimItemId) is naturally idempotent server-side
+   *  (world/corpseLoot.js's own requestClaimCorpseItem rejects an already-taken item outright). */
+  function sendCollectCorpseItem(corpseId, claimItemId) {
+    if (status !== 'online') return false;
+    return send(collectCorpseItemMessage(corpseId, claimItemId));
+  }
+
+  /** #87: `Take All` -- the same shape and reasoning as sendCollectCorpseItem, for every item this
+   *  hero's own claim on one corpse still has untaken. */
+  function sendCollectCorpseAll(corpseId) {
+    if (status !== 'online') return false;
+    return send(collectCorpseAllMessage(corpseId));
   }
 
   /** G4: ask Rowan for the Wildwood Blade. NO PAYLOAD AT ALL -- every fact that decides whether the
@@ -359,6 +397,7 @@ export function createNetClient(options = {}) {
   return {
     setIntent,
     sendAttack,
+    sendSpecial,
     sendEquip,
     sendRestoreProfile,
     sendSearchCart,
@@ -367,6 +406,9 @@ export function createNetClient(options = {}) {
     sendClaimCharm,
     sendClaimHollow,
     sendCollectLoot,
+    sendCollectDrop,
+    sendCollectCorpseItem,
+    sendCollectCorpseAll,
     sendVillageUpgradePurchase,
     reconcile,
     // Remote players only: self is drawn from the local prediction, which is always more current.

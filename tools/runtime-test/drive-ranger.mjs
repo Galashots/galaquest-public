@@ -38,21 +38,21 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 // The game URL a harness must land on. Imported rather than hand-built: this file spawns its
 // own server on a fixed port and so never saw startOwnedServer's `?hero=`, which is exactly how
 // it went red when the profile gate landed -- straight onto the naming question, world behind a
 // modal, input suspended. See owned-server.mjs's gameUrlFor.
-import { gameUrlFor } from './owned-server.mjs';
+import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 import { pollUntilDeadline } from './automation-timing.mjs';
 import {
   metresOrUnknown, readWatchSource, READ_WALK, startWalk, startWatch, STOP_WALK, stopWatchSource,
   waitForSample,
 } from './in-page-driver.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
 import { LODGE, RANGER, RANGER_CLAIM } from '../../public/src/world/zones/village.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { KEEPER_WAVE_RADIUS_METERS } from '../../public/src/world/zoneLoader.js';
 import { HERO_MAX_HP } from '../../public/src/combat/encounter.js';
 // The charm's worth, imported rather than typed as `+ 1`: it is a Hero stat since P2, and a harness
@@ -97,7 +97,19 @@ function assertBudget(where) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const deadlineAfter = (ms) => Date.now() + ms;
-const STICK_PX = 46;
+// DERIVED, not retyped (GQ-007): a hand-typed 46 here went stale against input/touch.js's own
+// STICK_RADIUS_PX when the 2026-08-27 speed-up grew the stick to 64px. A deflection metred against
+// the wrong radius is a different magnitude on the real stick, which is a different speed law --
+// exactly the class drive-village.mjs measured when its "fine" legs started running.
+const STICK_PX = STICK_RADIUS_PX;
+// THE SANCTUARY LEGS WALK (drive-village.mjs's own derivation: a push at exactly RUN_DEFLECTION is
+// the speed law's WALK_SPEED). This is about INPUT QUANTIZATION, not caution: at the ~2fps the
+// throttled sanctuary phase renders, each input packet integrates a whole half-second frame, so one
+// packet at RUN_SPEED is a 1.8m server-side step -- BIGGER than the 1.6m arrival ring. Measured at
+// 09836d3: five run-speed sprints latched 0.04-0.82m from Wren and every one was thrown 2-5m past
+// her by the next packet, 19 snaps, settled 5.54m. At WALK_SPEED the quantum is ~0.85m, which
+// lands and STAYS inside the ring.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -241,6 +253,16 @@ const STATE_EXPR = `JSON.stringify((() => {
     // anything, so the hero's own facing is not a question this harness has to ask.
     heading: r.follow.heading,
     netStatus: r.netState().status,
+    // THE AUTHORITATIVE BODY, not just the rendered one. At 12x throttle the client's predicted
+    // hero can render metres ahead of where the server actually has him -- and the server's copy
+    // is the one the wolf bites and the one the sanctuary rule measures. A walk judged on
+    // heroPos alone "arrives", releases, and then snaps back to an authority still standing out
+    // in wolf country (measured hosted at c545f48: rendered latched 0.23m from Wren, authority
+    // never came, the child was mauled to 0 at ~5m).
+    serverPos: (() => {
+      const net = r.netState();
+      return net.serverSelf ? [net.serverSelf.x, net.serverSelf.z] : null;
+    })(),
     zone: r.zoneDebug(),
     guestId: r.guestId(),
     rewards: (() => {
@@ -409,11 +431,16 @@ const HELD_APPROACH_SLACK_METRES = 3;
 // at spawn and starts the walk again. Hosted, that is what "and the banner names the place" was
 // reading when it reported "You went down…". Holding the stick makes the crossing cost
 // distance-over-speed instead of one pulse per round trip; the pulsed leg then places him exactly.
-async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis, stickPx = STICK_PX) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
-  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin));
+  // `releaseOnArrival`, already proven in drive-village.mjs. Without it, the thumb stays down for a
+  // poll interval plus a CDP round trip after the in-page latch, and a stick at full deflection
+  // RUNS through that gap -- which on this file's throttled sanctuary phase is exactly the
+  // overshoot-then-snap slide that walked a latched-at-0.03m hero back out to 3.55m.
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin,
+    { releaseOnArrival: true }));
   await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
-  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - STICK_PX }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - stickPx }]);
   let walk;
   try {
     walk = await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
@@ -437,10 +464,17 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
   }
   const deadline = deadlineAfter(maxMillis);
   while (Date.now() < deadline) {
-    const dx = targetX - last.heroPos[0];
-    const dz = targetZ - last.heroPos[1];
+    // Steer and judge from AUTHORITY (drive-cart-loot.mjs's own pattern): rendered-only arrival is
+    // how this file's sanctuary phase "arrived" at Wren while the server still had the hero metres
+    // out in the wolf's range. Rendered must be inside too before stopping, so the recorder's own
+    // frames (which read the rendered body) agree the walk ended where it says.
+    const authority = last.serverPos ?? last.heroPos;
+    const dx = targetX - authority[0];
+    const dz = targetZ - authority[1];
     const distance = Math.hypot(dx, dz);
-    if (distance <= stopWithin) break;
+    const renderedDistance = Math.hypot(targetX - last.heroPos[0], targetZ - last.heroPos[1]);
+    if (distance <= stopWithin && renderedDistance <= stopWithin) break;
+    if (distance === 0) break;
     const nx = dx / distance;
     const nz = dz / distance;
     const cos = Math.cos(last.heading);
@@ -474,18 +508,14 @@ async function boot(label, { withSatchel, cpuThrottle = 1 }) {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-ranger-'));
   const storePath = join(dir, 'rewards.db');
   const guestId = seedGuest(storePath, label, { withSatchel });
-  const port = 5204;
-  const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
-  const server = spawn(process.execPath, [serverPath, String(port)], {
-    env: { ...process.env, GALAQUEST_REWARD_STORE_PATH: storePath },
-    stdio: 'ignore',
-    detached: true,
-  });
-  console.log(`  harness-owned server on http://127.0.0.1:${port}/ (pid ${server.pid})`);
-  await sleep(2500);
+  // OWNED BY THE SHARED MODULE -- see the same note in drive-beacon-siege.mjs. This file spawned its
+  // own server on a fixed 5204 and tore it down four separate times with `process.kill(-server.pid)`,
+  // a POSIX process-group kill that throws on Windows into an empty catch. Four phases each leaked a
+  // server, and the fixed port meant the next phase attached to the previous phase's world.
+  const server = await startOwnedServer({ rewardStorePath: storePath });
 
   const tab = await openTab(768, 1024, { cpuThrottle });
-  const origin = `http://127.0.0.1:${port}`;
+  const { origin } = server;
   // GQ-008: CLEAR STORAGE BEFORE THE FIRST NAVIGATION. The automation profile is persistent, so a
   // harness that simply navigates inherits whatever gq-guest-id the last run left behind and quietly
   // plays as somebody else's save. Clearing needs the origin to exist, so: navigate once to
@@ -571,7 +601,7 @@ async function phaseArrival() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
@@ -646,7 +676,7 @@ async function phaseCharm() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
@@ -695,7 +725,7 @@ async function phaseLodge() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 
@@ -723,8 +753,80 @@ async function phaseSanctuary() {
   const { tab, server } = await boot('sanctuary', { withSatchel: false, cpuThrottle: SANCTUARY_THROTTLE });
   try {
     await pollUntil(tab, (state) => state.ranger?.rangerHere === true, 25000);
+    // The walk-up gets its own recording, for DIAGNOSTICS: which of the four faults a bad approach
+    // was. It is not the verdict window -- see below.
+    await startApproachRecorder(tab, 'wren-approach');
+    // HELD THE WHOLE WAY IN, at the WALK deflection. Held, because a pulsed walk crosses the
+    // wolf's band at an effective ~1.2 m/s with dead gaps on a 2fps runner -- how the 7b3913d run
+    // arrived at hp 6 and died parked at 3.66m, outside the sanctuary and inside the band. Walk
+    // deflection, because of the input-quantization ejection FINE_STICK_PX's own comment measures:
+    // a run-speed packet at this frame rate is a 1.8m step that cannot STAY inside the 1.6m ring.
+    // A continuous 1.7 m/s still outruns the wolf's 1.15 and crosses the band in about three
+    // seconds -- one bite window at worst, against a full bar.
+    await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS, FINE_STICK_PX);
+    // SETTLE-TOLERANT, before the stand begins rather than instead of judging it: verify the walk's
+    // own return position actually HELD, and re-approach (bounded, cheap against the budget) if
+    // prediction reconciliation slid the hero back out after the latch. This is the exact failure
+    // the hosted run measured -- "closest 0.03m ... ended 3.55m ... 6 snap(s)": latched essentially
+    // on top of Wren, then settled outside her radius before the conversation was recorded.
+    // releaseOnArrival above removes the mechanism; this loop is the belt for the suspenders, the
+    // same pair drive-old-beacon.mjs wears at Rowan. The assertions below are untouched.
+    // Judged from AUTHORITY: the sanctuary rule and the wolf both measure the server's copy of the
+    // hero, so a settle that only checks the rendered body can pronounce the child safe while the
+    // server still has him out in the aggro band.
+    const wrenAway = (sample) => {
+      const body = sample.serverPos ?? sample.heroPos;
+      return Math.hypot(body[0] - RANGER.at[0], body[1] - RANGER.at[1]);
+    };
+    let stood = await state(tab);
+    for (let retry = 0; retry < 4 && wrenAway(stood) > 1.6; retry += 1) {
+      // WAIT OUT A KNOCKDOWN, THEN HEAL TO FULL, THEN SPRINT. Both waits matter and the second was
+      // the missing one (measured at 7c533cf: five sprints, every one of them latching 0.23-1.31m
+      // from Wren, and the child still ended the phase standing at spawn). A wolf bite is 10 of the
+      // hero's 30hp and a 2fps crossing of the band eats one or two of them, so a retry launched at
+      // the hp the LAST crossing left over is a retry that gets knocked down mid-band -- and the
+      // respawn puts the hero back at spawn, farther away than the sprint started. Spawn sits
+      // inside RECOVERY_SANCTUARY's own no-hostility bubble, so waiting there for out-of-combat
+      // regen to hand back the full bar is safe by the game's own rules, and a full-hp hero
+      // survives the crossing's worst case with a bite to spare.
+      // eslint-disable-next-line no-await-in-loop
+      await pollUntil(tab, (s) => Number(s.healthCurrentDrawn) > 0, 25000);
+      // ...but ONLY where the heal can actually happen. A hero parked mid-band (the settle fling
+      // leaves him ~3.5m out) regenerates nothing while a wolf chews on him -- there the right
+      // move is the 2m hop into the sanctuary NOW, at whatever hp is left. Near spawn (>4.5m from
+      // Wren) he is inside the recovery bubble and the wait is safe.
+      // eslint-disable-next-line no-await-in-loop
+      stood = await state(tab);
+      if (wrenAway(stood) > 4.5) {
+        // eslint-disable-next-line no-await-in-loop
+        await pollUntil(tab, (s) => Number(s.healthCurrentDrawn) >= HERO_MAX_HP, 30000);
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await heldLegToward(tab, RANGER.at[0], RANGER.at[1], 1.6, 15000, FINE_STICK_PX);
+      // eslint-disable-next-line no-await-in-loop
+      stood = await state(tab);
+    }
+    const walkUp = await approachStory(tab, 'wren-approach');
+    console.log(`    walk-up: ${walkUp.summary} · settled ${wrenAway(stood).toFixed(2)}m (authority)`);
+
+    // LET THE JOURNEY'S COST COME BACK BEFORE THE STAND IS JUDGED. The sanctuary is 3m around Wren
+    // (RANGER_CLAIM -- test/wren-sanctuary.test.mjs's "exactly RANGER_CLAIM and not a centimetre
+    // further"), not the whole road in: at this frame rate the authoritative hero can be bitten,
+    // even knocked down, while the walk fights to bring him through the wolf's band. Both endings
+    // hand the health back on their own -- out-of-combat regen inside the sanctuary, or the
+    // respawn's own hp = maxHp -- so this waits, bounded, for the full bar and then asks the real
+    // question. It does NOT soften the assertions: a sanctuary that fails to protect the stand
+    // still fails them with the real numbers printed.
+    await pollUntil(tab, (s) => s.healthCurrentDrawn === HERO_MAX_HP, 45_000);
+
+    // THE VERDICT WINDOW IS THE STAND, so the recorder for it starts once the child is actually
+    // standing there. The first version started one recorder before the walk and judged everything
+    // it caught, which asked a different question than this phase's own name: on a 12x-throttled
+    // runner the walk itself is most of the frames, so a clean stand could still "fail" on frames
+    // recorded mid-journey -- and a wolf nick taken OUT on the road (legitimate country, outside
+    // the sanctuary being ruled on) could fail "kept every hit point while she TALKED". The
+    // walk-up's own dangers are the arrival phase's assertions, made from its own recording above.
     await startApproachRecorder(tab, 'wren-sanctuary');
-    await walkToward(tab, RANGER.at[0], RANGER.at[1], 1.6, WALK_BUDGET_MS);
 
     // Stand there. No input at all -- this is a child listening, which is exactly the posture the
     // defect punished.
@@ -766,7 +868,7 @@ async function phaseSanctuary() {
     check(tab.consoleErrors.length === 0, 'no console errors', tab.consoleErrors.slice(0, 3).join(' | '));
   } finally {
     await tab.close().catch(() => {});
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 

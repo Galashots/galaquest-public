@@ -32,19 +32,21 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 // The game URL a harness must land on. Imported rather than hand-built: this file spawns its
 // own server on a fixed port and so never saw startOwnedServer's `?hero=`, which is exactly how
 // it went red when the profile gate landed -- straight onto the naming question, world behind a
 // modal, input suspended. See owned-server.mjs's gameUrlFor.
-import { gameUrlFor } from './owned-server.mjs';
+import { gameUrlFor, startOwnedServer } from './owned-server.mjs';
 import { GUEST_ID_STORAGE_KEY, sanitizeGuestId } from '../../public/src/net/guestId.js';
 import { COLD_SEALS, OLD_BEACON, WILDWOOD_GATE } from '../../public/src/world/zones/village.js';
 import { SEAL_EXTRA_REACH_METERS, WARDEN_MAX_HP } from '../../public/src/world/beaconSiege.js';
 import { BEACON_TOTAL_HEIGHT_METERS } from '../../public/src/world/oldBeacon.js';
+import { WARDEN_HEIGHT_METERS } from '../../public/src/enemies/warden.js';
 import { ATTACK_REACH, isWithinStrike } from '../../public/src/combat/encounter.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
+import { startWalk, STOP_WALK } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = '.local/runtime-test/';
@@ -112,7 +114,9 @@ function assertBudget(where) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const deadlineAfter = (ms) => Date.now() + ms;
-const STICK_PX = 46;
+// DERIVED, not retyped (GQ-007): a hand-typed 46 went stale when the 2026-08-27 speed-up grew
+// input/touch.js's STICK_RADIUS_PX to 64px -- see drive-village.mjs's identical constant.
+const STICK_PX = STICK_RADIUS_PX;
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -429,17 +433,18 @@ async function run() {
   const dir = mkdtempSync(join(tmpdir(), 'galaquest-siege-'));
   const storePath = join(dir, 'rewards.db');
   const guestId = seedUnlockedGuest(storePath, 'portrait');
-  const port = 5203;
-  const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
-  const server = spawn(process.execPath, [serverPath, String(port)], {
-    env: { ...process.env, GALAQUEST_REWARD_STORE_PATH: storePath },
-    stdio: 'ignore', detached: true,
-  });
-  console.log(`  harness-owned server on http://127.0.0.1:${port}/ (pid ${server.pid})`);
-  await sleep(2500);
+  // OWNED BY THE SHARED MODULE, not hand-rolled here. This file used to spawn its own server on a
+  // FIXED 5203 and tear it down with `process.kill(-server.pid)` -- a POSIX process-GROUP kill that
+  // does not exist on Windows, where it throws and the empty catch swallowed it. The server then
+  // outlived the run, and because the port was fixed, the NEXT run attached to the stale server and
+  // its stale reward store and died reporting "the seeded guest did not take": a setup defect
+  // wearing a product defect's clothes. owned-server.mjs already solves every part of that -- a port
+  // pool instead of a squatted fixed port, a kill() that verifies the port is actually free again,
+  // and a process-level 'exit' net underneath it that process.exit() cannot skip.
+  const server = await startOwnedServer({ rewardStorePath: storePath });
 
   const tab = await openTab(768, 1024);
-  const origin = `http://127.0.0.1:${port}`;
+  const { origin } = server;
   try {
     // GQ-008: CLEAR STORAGE BEFORE THE FIRST NAVIGATION. The automation profile is persistent, so a
     // harness that simply navigates inherits whatever gq-guest-id the last run left behind and
@@ -486,6 +491,17 @@ async function run() {
     check(arrived.beaconFound === true, 'the child reaches the Old Beacon', `at ${JSON.stringify(arrived.heroPos.map((n) => +n.toFixed(1)))}`);
     check(arrived.siege?.sealsBuilt === 3, 'three cold seals stand around its base', `built ${arrived.siege?.sealsBuilt}`);
     check(arrived.siege?.wardenBuilt === true, 'and something is kneeling beside it');
+    // AND IT IS ACTUALLY A BODY A CHILD CAN SEE. wardenBuilt only says the presenter exists, and
+    // that is not the same claim: BW1's first integration scaled the real GLB 113x and skinned it to
+    // roughly 150 m in the air, where wardenBuilt stayed true, the boss bar still tracked, the whole
+    // fight still played, and every check in this harness passed against an invisible boss. The head
+    // BONE's world height is the cheapest thing that could have caught it -- it is read from the live
+    // scene graph, so it disagrees with a bad scale instead of restating it.
+    const headMeters = arrived.siege?.wardenHeadMeters;
+    check(typeof headMeters === 'number' && headMeters > 1 && headMeters < WARDEN_HEIGHT_METERS + 0.5,
+      'and its body is really standing in the world, at a height a child could look up at',
+      `head bone at ${typeof headMeters === 'number' ? headMeters.toFixed(2) : headMeters} m `
+      + `against a ${WARDEN_HEIGHT_METERS} m Warden`);
     check(/cold seal/i.test(arrived.objective), 'the chip names the seals rather than asking a question', JSON.stringify(arrived.objective));
 
     // AND THE ARROW AGREES WITH THE CHIP. "N cold seals left" is one of only two objectives whose
@@ -650,21 +666,47 @@ async function run() {
     const fightDeadline = deadlineAfter(Math.min(FIGHT_BUDGET_MS, Math.max(30000, msLeft())));
     let shotPhase2 = false;
     let last = bossBar;
-    while (Date.now() < fightDeadline && !last.siege.beaconLit) {
-      const w = last.siege.warden;
-      if (Math.hypot(last.heroPos[0] - w.x, last.heroPos[1] - w.z) > 1.6) {
-        await walkToward(tab, w.x, w.z, 1.5, 12000);
+    // THE FIGHT HOLD, ported from drive-marks.mjs where it was probed live. The walk-face-wait-tap
+    // cycle above this fight used per-swing cost several CDP round trips, and hosted at d4e6041 it
+    // spent SEVEN MINUTES against the Warden without landing a single blow (overhead hp still 120).
+    // Instead: the stick stays HELD into the Warden for the whole fight while the in-page walk
+    // (stopWithin 0, so it never latches) re-aims it at the LIVE warden position every frame, and
+    // the attack taps ride on top as a second touch point. Facing is continuously warden-ward
+    // because the hero never stops moving toward it; a knockdown needs no handling, because the
+    // respawned hero walks himself back on the same hold. The held deflection is the WALK push
+    // (RUN_DEFLECTION exactly), so the per-frame input quantum orbits contact inside ATTACK_REACH.
+    // CDP semantics, MEASURED: touchEnd's touchPoints are the points BEING RELEASED, so the tap's
+    // touchEnd lists the attack point alone and the final release names the stick.
+    const stickOrigin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+    const FIGHT_STICK_POINT = () => ({
+      x: stickOrigin.x, y: stickOrigin.y - Math.round(STICK_PX * RUN_DEFLECTION), id: 1,
+    });
+    const attackBox = await tab.page.eval(`JSON.stringify((() => {
+      const r = document.querySelector('#attack-button').getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })())`).then(JSON.parse);
+    await tab.page.eval(startWalk(`(() => {
+      const w = window.__galaQuestRuntime.zoneSiegeState().warden;
+      return { x: w.x, z: w.z };
+    })()`, 0));
+    await touch(tab, 'touchStart', [{ x: stickOrigin.x, y: stickOrigin.y, id: 1 }]);
+    await touch(tab, 'touchMove', [FIGHT_STICK_POINT()]);
+    try {
+      while (Date.now() < fightDeadline && !last.siege.beaconLit) {
+        await touch(tab, 'touchStart', [FIGHT_STICK_POINT(), { x: attackBox.x, y: attackBox.y, id: 2 }]);
+        await sleep(60);
+        await touch(tab, 'touchEnd', [{ x: attackBox.x, y: attackBox.y, id: 2 }]);
+        await sleep(250);
+        last = await state(tab);
+        if (!shotPhase2 && last.siege.warden.phase >= 2) {
+          shotPhase2 = true;
+          check(true, 'the Warden reaches a second phase', `hp ${last.siege.warden.hp}/${WARDEN_MAX_HP}`);
+          await shot(tab, 'portrait-05-phase-two');
+        }
       }
-      await faceHero(tab, w.x, w.z, ATTACK_REACH);
-      await waitUntilSwingReady(tab);
-      await tapAttack(tab);
-      await sleep(250);
-      last = await state(tab);
-      if (!shotPhase2 && last.siege.warden.phase >= 2) {
-        shotPhase2 = true;
-        check(true, 'the Warden reaches a second phase', `hp ${last.siege.warden.hp}/${WARDEN_MAX_HP}`);
-        await shot(tab, 'portrait-05-phase-two');
-      }
+    } finally {
+      await tab.page.eval(STOP_WALK);
+      await touch(tab, 'touchEnd', [FIGHT_STICK_POINT()]);
     }
     check(last.siege.beaconLit === true, 'the Warden falls and the Old Beacon CATCHES',
       `warden ${last.siege.warden.mode} hp ${last.siege.warden.hp}, beaconLit ${last.siege.beaconLit}`);
@@ -701,7 +743,7 @@ async function run() {
     const errors = await tab.page.eval(`JSON.stringify(window.__galaQuestConsoleErrors ?? [])`).then(JSON.parse);
     check(errors.length === 0, 'no console errors across the whole siege', errors.slice(0, 2).join(' | '));
   } finally {
-    try { process.kill(-server.pid); } catch { /* already gone */ }
+    await server.kill();
   }
 }
 

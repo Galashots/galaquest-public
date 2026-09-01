@@ -416,14 +416,19 @@ test('two brothers with different bodies are healed to their OWN ceilings', () =
     B: { position: { x: 0.3, z: -1 }, heading: 0 },
   };
   state = stepParty(state, { deltaSeconds: STEP, heroes }).state;
-  // Wound both, then let a kill heal them.
+  // Wound both, then let a kill heal them. E1's `enemies[]` is the sole ordinary-enemy authority,
+  // so the fixture edits that entity instead of the derived `.wolf` compatibility view.
+  const ordinaryWolf = state.enemies.find((enemy) => enemy.kind === 'wolf');
+  assert.ok(ordinaryWolf, 'fixture needs the ordinary Wolf');
   state = {
     ...state,
     heroes: {
       A: { ...state.heroes.A, hp: 1 },
       B: { ...state.heroes.B, hp: 1 },
     },
-    wolf: { ...state.wolf, hp: 1 },
+    enemies: state.enemies.map((enemy) => (
+      enemy.enemyId === ordinaryWolf.enemyId ? { ...enemy, hp: 1 } : enemy
+    )),
   };
   state = requestPartyAttack(state, 'A', 'kill-1').state;
   for (let elapsed = 0; elapsed < 0.6; elapsed += STEP) {

@@ -320,26 +320,39 @@ async function heldWalkToward(page, targetX, targetZ, stopWithin, maxMillis) {
 // not close the rest at the metre-a-second it manages there. Looping converges without a tuned
 // number: the held leg covers whatever distance is left quickly, the pulsed leg places him exactly,
 // and if the release carried him past the mark the next pass simply walks him back.
+// JUDGED ON SETTLED READINGS ONLY. The previous shape let the pulsed leg's own optimistic
+// mid-stride reading end the loop -- pulseWalkToward breaks on the first sample with both bodies
+// inside the ring -- and took the "has the hero actually stopped there" poll only AFTER the loop
+// had already committed to its answer. Hosted at fda0cf4 that read as: loop exits believing both
+// bodies inside 0.75m, the settle poll then reports the AUTHORITATIVE hero at rest 2.20m out
+// (rendered 0.73m -- a prediction the server never honoured), and `walking reaches the keeper`
+// fails with the two keeper-line checks behind it. The file's own header already carries the
+// e68cf54 ancestor of this failure (hero 1.35m, server 2.06m). So the loop now settles FIRST and
+// judges only stopped, reconciled pairs of bodies: an optimistic reading can start another pass,
+// but it can no longer end the approach.
 async function walkToward(page, targetX, targetZ, stopWithin, maxMillis) {
   const deadline = deadlineAfter(maxMillis);
-  let last = await state(page);
   let passes = 0;
   const awayFrom = (at) => Math.hypot(targetX - at[0], targetZ - at[1]);
+  const settle = () => pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
+  let last = await settle();
   while (Date.now() < deadline) {
     const away = Math.max(awayFrom(last.heroPos), awayFrom(last.serverPos ?? last.heroPos));
     if (away <= stopWithin) break;
     passes += 1;
     if (away > stopWithin + HELD_APPROACH_SLACK_METRES) {
       // eslint-disable-next-line no-await-in-loop
-      last = await heldWalkToward(page, targetX, targetZ, stopWithin, deadline - Date.now());
+      await heldWalkToward(page, targetX, targetZ, stopWithin, deadline - Date.now());
     }
     // eslint-disable-next-line no-await-in-loop
-    last = await pulseWalkToward(page, targetX, targetZ, stopWithin,
+    await pulseWalkToward(page, targetX, targetZ, stopWithin,
       Math.max(1500, (deadline - Date.now()) / 2));
+    // Captures downstream must not be taken mid-stride, and neither may the loop's own verdict.
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(200);
+    // eslint-disable-next-line no-await-in-loop
+    last = await settle();
   }
-  // Captures downstream must not be taken mid-stride.
-  await sleep(200);
-  last = await pollUntil(page, (next) => next.serverPos !== null && next.serverSpeed === 0);
   console.log(`  approach: ${passes} pass(es), rendered `
     + `${metresOrUnknown(awayFrom(last.heroPos))} and server `
     + `${metresOrUnknown(awayFrom(last.serverPos ?? last.heroPos))} from the target`);
@@ -387,7 +400,7 @@ const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
   await setHeadingToward(page, treeX, treeZ);
   await shot(page, 'fresh-dark-tree');
 
-  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 20000);
+  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 45000);
   check('fresh guest: walking reaches the keeper',
     withinWaveRadius(approached),
     `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}, `
@@ -446,9 +459,9 @@ const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
   // the line goes away and returns, and it should read ITSELF this time with no second tap. Out and
   // back rather than a forced state change, because "the line changed" is exactly what main.js
   // watches for and a child gets there by walking.
-  await walkToward(page, keeperX + KEEPER_GREET_REARM_RADIUS_METERS + 4, keeperZ, 1.5, 20000);
+  await walkToward(page, keeperX + KEEPER_GREET_REARM_RADIUS_METERS + 4, keeperZ, 1.5, 45000);
   await pollUntil(page, (s) => s.keeperLine.shown !== 'true');
-  await walkToward(page, keeperX, keeperZ, 0.75, 20000);
+  await walkToward(page, keeperX, keeperZ, 0.75, 45000);
   const returned = await pollUntil(page, (s) => s.keeperLine.shown === 'true');
   const afterReturn = await pollUntilDeadline(spokenSoFar, (lines) => lines.length > 1,
     { intervalMs: 100, timeoutMs: 6000 });
@@ -506,7 +519,7 @@ const withinWaveRadius = (at) => [at.heroPos, at.serverPos].every(
   await setHeadingToward(page, treeX, treeZ);
   await shot(page, 'unlocked-lit-tree');
 
-  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 20000);
+  const approached = await walkToward(page, keeperX, keeperZ, 0.75, 45000);
   check('unlocked guest: walking reaches the keeper',
     withinWaveRadius(approached),
     `hero ${JSON.stringify(approached.heroPos)}, server ${JSON.stringify(approached.serverPos)}, `

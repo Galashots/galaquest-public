@@ -44,11 +44,21 @@ const STEP = 1 / 60;
  * full hearts part-way through. (The first draft of this file did exactly that, and every expected
  * hp was wrong for reasons that had nothing to do with the heal.) The realistic end-to-end path,
  * bites and all, is covered by the solo test at the bottom.
+ *
+ * E1 moved ordinary-enemy authority to `enemies[]`. This fixture therefore edits the canonical
+ * Wolf entity instead of the derived `.wolf` compatibility view; writing the view would create two
+ * contradictory truths in a hand-built state and would no longer be a valid fixture.
  */
 function killTheWolf(state, heroesCommand, killerId) {
+  const wolf = state.enemies.find((enemy) => enemy.kind === 'wolf');
+  assert.ok(wolf, 'fixture needs the ordinary Wolf');
   state = {
     ...state,
-    wolf: { ...state.wolf, hp: 1, mode: 'idle', modeSeconds: 0, biteCooldown: 99 },
+    enemies: state.enemies.map((enemy) => (
+      enemy.enemyId === wolf.enemyId
+        ? { ...enemy, hp: 1, mode: 'idle', modeSeconds: 0, biteCooldown: 99 }
+        : enemy
+    )),
   };
   const seen = [];
   for (let elapsed = 0; elapsed < 5; elapsed += STEP) {
@@ -192,9 +202,17 @@ test('the solo API heals too, and its published hero carries exactly the agreed 
   // trip through the party engine (test/encounter-seam.test.mjs). Before that it was seeded, dropped
   // on the first tick, and re-granted on every tick after -- so the old list pinned an omission
   // rather than a shape.
+  //
+  // `regenIdleSeconds`/`regenRemainderHp` joined it with out-of-combat regen (R1's density package).
+  // This file's own header argues passive regen would be illegible on its own -- and it still is, on
+  // its own; that is why the two features stack rather than one replacing the other (see
+  // combat/encounter.js's own OUT_OF_COMBAT_REGEN_* comment). Both are private bookkeeping a
+  // presenter has no reason to read, but they are real fields the fight now owns, and this pin's job
+  // is to catch an ACCIDENTAL new field -- a deliberate one, added in the same commit as the feature,
+  // updates the pin rather than defeating it.
   assert.deepEqual(
     Object.keys(encounter.state.hero).sort(),
-    ['cooldown', 'downSeconds', 'hp', 'maxHp', 'swingLanded', 'swingSeconds'],
+    ['cooldown', 'downSeconds', 'hp', 'maxHp', 'regenIdleSeconds', 'regenRemainderHp', 'swingLanded', 'swingSeconds'],
   );
 });
 

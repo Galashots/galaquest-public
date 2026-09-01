@@ -64,6 +64,9 @@
 export const ENCOUNTER_EVENT_TYPES = Object.freeze([
   'swing',
   'swing-missed',
+  'special-start',
+  'special-hit',
+  'special-missed',
   // Raised when the hero goes down with a swing already in flight. Added 2026-08-13, and this list
   // is how it announced itself: the source-scanning test failed the moment encounter.js started
   // raising it, which is precisely the drift the list exists to catch.
@@ -231,6 +234,32 @@ export function burstScaleMeters(elapsedSeconds, durationSeconds, startMeters, e
 export function burstOpacity(elapsedSeconds, durationSeconds) {
   if (!(durationSeconds > 0) || !(elapsedSeconds >= 0) || elapsedSeconds >= durationSeconds) return 0;
   return (1 - elapsedSeconds / durationSeconds) ** 2;
+}
+
+// ── R1: THE REGEN CUE ────────────────────────────────────────────────────────────────────────────
+//
+// combat/encounter.js's own out-of-combat regen (OUT_OF_COMBAT_REGEN_HP_PER_SECOND) deliberately
+// raises no event -- its own comment names why: the frozen ENCOUNTER_EVENT_TYPES table above would
+// have to grow, and main.js's dispatcher would have to grow with it, for a passive tick nobody asked
+// to be told about individually. So the hearts HUD reads it off the hp DIFF instead, the same "diff
+// the published state" discipline world/cartLoot.js's own header already uses for a different reason.
+//
+// The one trick worth a name: telling a REGEN rise apart from a KILL heal (VICTORY_HEAL_HP, 10) or a
+// heart pickup (world/enemyDrops.js's HEART_HEAL_HP, 20) using only the two hp numbers, with no event
+// coordination at all. It works because of a real constant elsewhere: main.js clamps its own frame
+// delta to 0.1s (`Math.min((timestamp - previousTimestamp) / 1000, 0.1)`), and
+// OUT_OF_COMBAT_REGEN_HP_PER_SECOND is 4 -- so the MOST hp regen can bank and apply between two
+// rendered frames is 4 * 0.1 = 0.4, which floors to a whole-point rise of AT MOST 1. Every other heal
+// this game has ever paid is 10 or more. A rise of exactly 1 can therefore only ever be regen; nothing
+// else in this game hands out one single hit point.
+export const REGEN_RISE_HP = 1;
+
+/** Whether a hp rise between two frames is shaped like out-of-combat regen (see above) rather than a
+ *  kill heal or a heart pickup -- a caller pulses a subtle cue for this and nothing louder, so a real
+ *  heal's own event-driven pop is never doubled up with a second, unrelated flourish. */
+export function isOutOfCombatRegenRise(previousHp, nextHp) {
+  if (!Number.isFinite(previousHp) || !Number.isFinite(nextHp)) return false;
+  return nextHp - previousHp === REGEN_RISE_HP;
 }
 
 // prefers-reduced-motion still needs the STATE change -- index.html's own reduced-motion rule zeroes

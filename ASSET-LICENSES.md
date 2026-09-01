@@ -63,6 +63,53 @@ with no arm sleeve), and it is consistently generic fantasy-armour language. A t
 full engineering tree for named franchises, characters and recognisable properties returned **no
 matches** in any gear-generation record. On that evidence these assets are treated as original work.
 
+## Item icons — renders of the gear above
+
+`public/assets/items/*.png`
+
+Rendered by `tools/assets/render-item-icons.mjs` from the gear GLBs listed in the table above, in
+this repository, with no third-party input. Each icon is a **derivative of exactly one asset already
+covered here**, so it carries that asset's basis and nothing new: an icon of `shield_ironwood.glb`
+rests on the same owner-directed paid-plan Meshy generation the mesh does. The renders add no
+external art, texture, brush, font or reference.
+
+Two mappings are not one-to-one with the item id, and are recorded here rather than inferred from a
+filename (a filename states a role, not a provenance):
+
+| Icon | Rendered from |
+| --- | --- |
+| `starter_sword.png` | `sword_ironwood.glb` — the Starter Sword has no standalone mesh (the hero's body mesh carries its blade), so this is a **stand-in**, not that item's own model |
+| `wildwood_blade.png` | `candidates/sword_wildwood_w1a.glb` — the candidate mesh, which is also the model the running game mounts for this weapon |
+
+These renders are **provisional**: they establish exact identity with the in-game model, not the
+polished illustrated portrait #88 asks for. Replacing one is a file drop at the same path; no code
+changes. Final illustrated item art is UNKNOWN pending the Owner's art lane.
+
+## Beacon Warden — owner-created, generated on a paid plan
+
+`public/assets/enemies/beacon_warden.glb`
+
+Optimized production derivative of an owner-directed paid-plan Meshy generation. The provider source
+is `Meshy_AI_Thornbound_Warlock_biped.zip` (SHA-256
+`56448250399a3078a4ed4ef79a66fdd6c2cfedabbee0ee46f674e087abca8c1c`, 19,938,516 bytes, dated
+2026-08-27), three per-motion rigged GLBs held in the owner's external Drive archive; the large source
+is deliberately not committed. The derivative — 618,224 bytes, SHA-256
+`17177d6bb6b2556cefa0f8c7747613492bcd14b8068a8ed7438d5ed996ce8a7d` — merges those three clips onto one
+body and recompresses the atlas, using `tools/foundry/merge_clips.mjs` and
+`tools/budget/recompress_glb.py`. **No new generation was performed and no credits were spent**
+producing it; the provider balance was 662 before and after.
+
+Basis is the same as the character and gear sections above: owner-directed generation on a paid Meshy
+plan, redistribution resting on the owner's rights in that generated output together with the
+paid-plan terms in force at generation time. **Not CC0.**
+
+The shipped file is named for its ROLE while the provider source is named "Thornbound Warlock"; the
+owner confirmed on 2026-08-28 that this asset is the Beacon Warden, and a source or vendor name is not
+a runtime identifier. It is loaded by `public/src/enemies/warden.js` and now replaces the procedural
+stand-in body in the running encounter. Structural, budget and running-game evidence are recorded in
+[`docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md`](docs/briefs/BW1_BEACON_WARDEN_REAL_GLB.md); **owner
+visual acceptance in the running game remains a separate, outstanding gate.**
+
 ## Candidate bank held outside this repository
 
 Some owner-directed paid-plan Meshy output is deliberately **not** stored in Git. It is still project

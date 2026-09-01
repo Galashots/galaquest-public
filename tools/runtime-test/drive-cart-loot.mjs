@@ -37,19 +37,32 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { CAMP, CART_SEARCH, ROWAN } from '../../public/src/world/zones/village.js';
+import { STICK_RADIUS_PX } from '../../public/src/input/touch.js';
+import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { CART_LOOT_TABLE, COIN_KIND, pickupWorldPosition } from '../../public/src/world/cartLoot.js';
+import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import {
   deadlineAfter,
   movementPulseMillis,
   pollUntilDeadline,
 } from './automation-timing.mjs';
 import { startOwnedServer } from './owned-server.mjs';
+import { READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 const PORTRAIT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
 const LANDSCAPE = { width: 1024, height: 768, deviceScaleFactor: 1, mobile: true };
-const STICK_PX = 56;
+// DERIVED, not retyped (GQ-007): a hand-typed 56 here went stale when the 2026-08-27 speed-up grew
+// input/touch.js's own STICK_RADIUS_PX to 64px -- see drive-village.mjs's identical constant for
+// the full autopsy of what a deflection metred against the wrong radius does to the speed law.
+const STICK_PX = STICK_RADIUS_PX;
+// THE FINE LEG WALKS (drive-village.mjs's own trick, same derivation): a push at exactly
+// RUN_DEFLECTION is the speed law's own boundary where groundSpeedForInput returns WALK_SPEED.
+// On a hosted runner painting ~3fps, per-pulse unobserved travel is one-or-two frames of held
+// stick -- 1.2-2.4m at RUN_SPEED but 0.6-1.1m at WALK_SPEED -- and the Rowan approach below has a
+// hard ceiling on how far it may overshoot before it walks INTO the cart's own search trigger.
+const FINE_STICK_PX = STICK_PX * RUN_DEFLECTION;
 // favicon.ico: this harness's OWN blank-page trick for pinning localStorage before the real
 // navigation (see navigateFresh) always 404s, the same accepted exception drive-relight.mjs
 // documents. lantern_belt.glb: the pre-existing, disclosed gear-track gap every harness in this
@@ -79,21 +92,38 @@ function freshStorePath(label) {
  * would triple its length to prove something play-fight.mjs already proves on its own. Instead this
  * seeds a fresh guest directly into THIS PHASE'S OWN isolated store (net/rewardStore.mjs's own
  * idempotent apply(), the exact convention drive-relight.mjs already established for this file), the
- * same way a returning guest who fought that fight in an earlier session would arrive here. A
- * brand-new randomUUID() guestId every run/phase, never reused: the store's own idempotency is by
+ * same way a returning guest who fought that fight in an earlier session would arrive here. The
+ * fixture includes the P2 XP fact awarded alongside the Lantern latch; omitting it would describe
+ * an impossible post-Lantern player. A brand-new randomUUID() guestId every run/phase, never reused:
+ * the store's own idempotency is by
  * eventId, not guestId, and this file's whole subject is a pickup that can only ever be durably
  * credited to the FIRST guestId that claims it (see net/gameServer.mjs's applyLootAward) -- reusing a
  * guestId across runs would silently poison every later run's ability to prove the credit actually
  * landed, even though the in-memory collect (a fresh server every phase) would still look fine.
  */
 function seedUnlockedGuest(storePath, label) {
-  const guestId = `gp2-cart-loot-${label}-${randomUUID()}`;
+  return seedUnlockedGuestId(storePath, `gp2-cart-loot-${label}-${randomUUID()}`);
+}
+
+/** The same seed against an id the CALLER already knows -- the two-client phase grants to the id
+ *  the app actually minted (drive-two-clients' own "let the app mint its own child, then grant to
+ *  that child" doctrine) rather than pinning one, so it needs the id-taking half on its own. */
+function seedUnlockedGuestId(storePath, guestId) {
   const store = openRewardStore(storePath);
   for (let i = 1; i <= 3; i += 1) {
     store.apply({ guestId, type: 'mark-earned', eventId: `gp2-fixture:mark:${guestId}:${i}` });
   }
-  store.apply({ guestId, type: 'lantern-unlocked', eventId: `gp2-fixture:unlock:${guestId}` });
-  const seeded = store.marksFor(guestId) === 3 && store.unlockedFor(guestId);
+  const lanternEventId = `gp2-fixture:unlock:${guestId}`;
+  store.apply({ guestId, type: 'lantern-unlocked', eventId: lanternEventId });
+  store.apply({
+    guestId,
+    type: 'xp-earned',
+    eventId: `xp:${lanternEventId}`,
+    value: String(LANTERN_UNLOCK_XP),
+  });
+  const seeded = store.marksFor(guestId) === 3
+    && store.unlockedFor(guestId)
+    && store.xpFor(guestId) === LANTERN_UNLOCK_XP;
   store.close();
   if (!seeded) throw new Error(`seeding ${guestId} did not take`);
   return guestId;
@@ -202,7 +232,7 @@ async function openTab(expectedPlayers = 1) {
   };
 }
 
-async function navigateFresh(tab, origin, url, viewport, guestId) {
+async function navigateFresh(tab, origin, url, viewport, guestId, { clearOrigin = true } = {}) {
   // The on-screen stick sits at a FIXED FRACTION of the viewport (index.html's own CSS), not a fixed
   // pixel -- a stick origin computed from one orientation's dimensions lands off-screen in the other.
   // Measured: landscape's first run touched down at (138, 881) on a 1024x768 page and the hero never
@@ -216,10 +246,18 @@ async function navigateFresh(tab, origin, url, viewport, guestId) {
   // is still needed before pinning the guestId -- navigate once to establish it, THEN set, THEN
   // navigate for real. Same sequence drive-relight.mjs uses to pin a pre-seeded guestId before
   // main.js's first read of it.
-  await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
+  // The clear is skippable because it is only safe while this tab is ALONE on the origin. The
+  // two-client phase clears once for the run instead -- a per-tab clear there wipes whatever the
+  // other, already-running tab has written, and the profile keyring's own storage-event heal then
+  // races the second boot's read (drive-two-clients' "the clear belongs to the RUN" lesson).
+  if (clearOrigin) {
+    await tab.page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'local_storage' });
+  }
   await tab.page.send('Page.navigate', { url: `${origin}/favicon.ico` });
   await sleep(300);
-  await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+  if (guestId !== null) {
+    await tab.page.eval(`localStorage.setItem('gq-guest-id', ${JSON.stringify(guestId)})`);
+  }
   await tab.page.send('Page.navigate', { url });
   let ready = false;
   for (let i = 0; i < 60 && !ready; i += 1) {
@@ -286,7 +324,7 @@ const touch = (tab, type, points) => tab.page.send('Input.dispatchTouchEvent', {
 /** Real touch-stick movement toward a fixed world point -- see drive-village.mjs's own walkToward
  *  for the screen<->world derivation this is copied from verbatim. Stick origin is a FRACTION of
  *  THIS tab's own viewport, not a shared constant (see navigateFresh's comment). */
-async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
+async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis, stickPx = STICK_PX) {
   const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
   let last = await state(tab);
   const deadline = deadlineAfter(maxMillis);
@@ -311,7 +349,7 @@ async function walkToward(tab, targetX, targetZ, stopWithin, maxMillis) {
     await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
     try {
       // eslint-disable-next-line no-await-in-loop
-      await touch(tab, 'touchMove', [{ x: origin.x + sx * STICK_PX, y: origin.y - sy * STICK_PX }]);
+      await touch(tab, 'touchMove', [{ x: origin.x + sx * stickPx, y: origin.y - sy * stickPx }]);
       // eslint-disable-next-line no-await-in-loop
       await sleep(movementPulseMillis(Math.max(0, distance - stopWithin)));
     } finally {
@@ -332,6 +370,29 @@ async function shot(tab, name) {
   console.log(`  captured cart-loot-${name}.png`);
 }
 
+/** A held leg at a caller-chosen deflection, with the in-page driver doing the steering: startWalk
+ *  re-aims the camera toward the target every frame, latches arrival only once BOTH the rendered
+ *  and the authoritative hero are inside the ring, and (releaseOnArrival) lifts the thumb in the
+ *  page on the latch frame. That last part is the point: a pulsed leg's release costs a sleep plus
+ *  a CDP round trip during which the SERVER hero keeps walking in the held direction -- and on the
+ *  Rowan approach that tail is measured (2c77492, landscape) carrying the authoritative hero from
+ *  the arrival ring into the cart's own 2.4m search trigger, bursting the loot before the "SEARCH
+ *  before interaction" snapshot ran. In-page release leaves one frame of coast at most. */
+async function heldLegToward(tab, targetX, targetZ, stopWithin, maxMillis, stickPx = STICK_PX) {
+  const origin = { x: tab.viewport.width * 0.18, y: tab.viewport.height * 0.86 };
+  await tab.page.eval(startWalk(`({ x: ${targetX}, z: ${targetZ} })`, stopWithin,
+    { releaseOnArrival: true }));
+  await touch(tab, 'touchStart', [{ x: origin.x, y: origin.y }]);
+  await touch(tab, 'touchMove', [{ x: origin.x, y: origin.y - stickPx }]);
+  try {
+    return await pollUntilDeadline(() => tab.page.eval(READ_WALK).then(JSON.parse),
+      (next) => next?.arrived, { intervalMs: 150, timeoutMs: maxMillis });
+  } finally {
+    await touch(tab, 'touchEnd', []);
+    await tab.page.eval(STOP_WALK);
+  }
+}
+
 /** Walk to the camp, then to Rowan (latches campFound + rowanMet -- both read straight off
  *  zoneTrailState() rather than assumed from distance, since the cart's own trigger is gated on
  *  BOTH and a harness that merely walked close without confirming the flags latched would silently
@@ -342,7 +403,31 @@ async function reachCampAndRowan(tab) {
   const afterCamp = await pollUntil(tab, (s) => s.campFound === true, { timeoutMs: 3000 });
   if (!afterCamp.campFound) throw new Error(`campFound never latched -- hero at ${JSON.stringify(afterCamp.heroPos)}`);
 
-  await walkToward(tab, ROWAN.at[0], ROWAN.at[1], 1.2, 20000);
+  // THE ROWAN LEG HAS A HARD OVERSHOOT CEILING, and the 2026-08-27 speed-up spent most of it: Rowan
+  // stands only ~3.8m from the cart whose search trigger (2.4m) the caller's own "SEARCH before
+  // interaction" check requires to be UNTOUCHED -- so a hero who blows more than ~1.4m past Rowan
+  // heading in from the camp has already searched the cart, and this run's "before" state arrives
+  // pre-spoiled (measured hosted at b096b0e: collected already held 2 coins + 1 shard before the
+  // check ran). Two defences, both derived rather than tuned:
+  //   - aim at a point nudged from Rowan TOWARD the camp, so the whole 1.2m arrival ring sits on
+  //     the far side from the cart while every stop inside it stays within Rowan's own 2m speech
+  //     radius (KEEPER_WAVE_RADIUS_METERS -- what actually latches rowanMet);
+  //   - close at FINE_STICK_PX, the speed law's own WALK_SPEED push, halving what one frame of
+  //     held-stick latency travels on a 3fps runner.
+  const towardCampX = CAMP.at[0] - ROWAN.at[0];
+  const towardCampZ = CAMP.at[1] - ROWAN.at[1];
+  const towardCampLength = Math.hypot(towardCampX, towardCampZ) || 1;
+  const standoff = 0.6;
+  const waypointX = ROWAN.at[0] + (towardCampX / towardCampLength) * standoff;
+  const waypointZ = ROWAN.at[1] + (towardCampZ / towardCampLength) * standoff;
+  // HELD, IN-PAGE, AT WALK SPEED -- not pulsed. The pulsed version of this leg still pre-searched
+  // the cart hosted (2c77492, landscape): each pulse's release tail let the server hero keep
+  // walking west, and 1.86m past the waypoint IS the trigger. The held leg latches and releases in
+  // the page instead; the pulsed walker below is only the fallback when it could not arrive at all.
+  const fineLeg = await heldLegToward(tab, waypointX, waypointZ, 1.2, 20000, FINE_STICK_PX);
+  if (!fineLeg?.arrived) {
+    await walkToward(tab, waypointX, waypointZ, 1.2, 8000, FINE_STICK_PX);
+  }
   const afterRowan = await pollUntil(tab, (s) => s.rowanMet === true, { timeoutMs: 3000 });
   if (!afterRowan.rowanMet) throw new Error(`rowanMet never latched -- hero at ${JSON.stringify(afterRowan.heroPos)}`);
 }
@@ -471,8 +556,16 @@ async function runSingleClientPhase(viewport, phaseLabel) {
     check(`${phaseLabel}: the SEARCH trigger fired (cartSearched latched)`, spawned.cartSearched === true,
       JSON.stringify({ campFound: spawned.campFound, rowanMet: spawned.rowanMet, heroPos: spawned.heroPos }));
     check(`${phaseLabel}: searching bursts the loot into the world`, spawned.loot.spawned === true);
+    // POLLED, not read off the spawn sample: `loot.spawned` is server state and flips the tick the
+    // trigger fires, but the jolt is scheduled by the CLIENT's own next frame when it notices
+    // cartSearched -- on a 3fps runner that frame is hundreds of milliseconds after the poll above
+    // returned. Measured at 7b3913d (landscape): the tally read {thud:1, keeper-greeting:1} at the
+    // spawn sample and cart-jolt:1 two log lines later. The bounded poll still fails a jolt that
+    // genuinely never schedules, with the real tally printed.
+    const jolted = await pollUntil(tab, (s) => (s.audio.triggered['cart-jolt'] ?? 0) >= 1,
+      { timeoutMs: 5000 });
     check(`${phaseLabel}: the cart's own jolt sound was scheduled`,
-      (spawned.audio.triggered['cart-jolt'] ?? 0) >= 1, JSON.stringify(spawned.audio.triggered));
+      (jolted.audio.triggered['cart-jolt'] ?? 0) >= 1, JSON.stringify(jolted.audio.triggered));
 
     // A short burst of frames right after the transition, while the toss/burst animation is still
     // playing -- the closest practical "video" evidence a screenshot-only harness can produce.
@@ -531,12 +624,34 @@ console.log('\n=== two-client double-collect proof ===');
   try {
     // Seeded inside the try -- see runSingleClientPhase's own comment on why a throw here must still
     // reach the finally below.
+    //
+    // TWO TABS, ONE DEVICE, TWO CHILDREN -- BY NAME, NOT BY RACE. Both tabs used to load the same
+    // `?hero=Harness` with different pinned guest ids, and that only produced two heroes while the
+    // profile keyring's two-tab lost-update bug was still open: tab B's boot read an empty keyring,
+    // missed A's `Harness` profile, and minted its own. Once the keyring healed itself (the
+    // storage-event reconcile in progression/profiles.js), B's boot correctly FOUND the profile
+    // named Harness and adopted it -- same name on one device IS the same child, which is
+    // adoptNamedHero's documented contract -- and this phase's first check failed against working
+    // code. So: distinct names, the same way drive-two-clients.mjs opens its sibling tab, and B's
+    // rewards are granted to the id the app actually minted, then reloaded in (that file's own
+    // "let the app mint its own child, then grant to that child" doctrine). The run-level clear
+    // below replaces navigateFresh's per-tab clear, which is only safe for a tab alone on the
+    // origin -- B's clear used to wipe the keyring A was standing on.
+    await a.page.send('Storage.clearDataForOrigin', { origin: server.origin, storageTypes: 'local_storage' });
+    const siblingUrl = server.url.replace('hero=Harness', 'hero=Sibling');
+    if (siblingUrl === server.url) throw new Error(`expected ?hero=Harness in ${server.url}`);
     const guestIdA = seedUnlockedGuest(storePath, 'two-client-a');
-    const guestIdB = seedUnlockedGuest(storePath, 'two-client-b');
-    await navigateFresh(a, server.origin, server.url, PORTRAIT, guestIdA);
-    await navigateFresh(b, server.origin, server.url, PORTRAIT, guestIdB);
+    await navigateFresh(a, server.origin, server.url, PORTRAIT, guestIdA, { clearOrigin: false });
+    // A has booted and folded the pinned legacy id into its profile; drop the pin so a stale copy
+    // can never be folded a second time into whichever tab boots next on an unlucky keyring read.
+    await a.page.eval("localStorage.removeItem('gq-guest-id')");
+    await navigateFresh(b, server.origin, siblingUrl, PORTRAIT, null, { clearOrigin: false });
+    const guestIdB = (await state(b)).guestId;
     check('two-client: A and B are two DIFFERENT heroes, not one tab double-counted',
-      (await state(a)).guestId !== (await state(b)).guestId);
+      (await state(a)).guestId !== guestIdB);
+    // B's unlock seed, against the id B actually turned out to be, made durable by a reload.
+    seedUnlockedGuestId(storePath, guestIdB);
+    await navigateFresh(b, server.origin, siblingUrl, PORTRAIT, null, { clearOrigin: false });
     await front(a);
     await reachCampAndRowan(a);
     await front(b);

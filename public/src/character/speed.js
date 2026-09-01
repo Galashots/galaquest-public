@@ -7,9 +7,20 @@
 //
 // Pure functions only. Nothing in this file may import anything.
 
-export const WALK_SPEED = 1.4;
-export const RUN_SPEED = 2.8;
-export const RUN_THRESHOLD = 2.0;
+// RAISED 2026-08-27, after the second child playtest: the continuous curve below (2026-08-15) fixed
+// the WALK/RUN cliff, but both speeds were still just slow -- two kids on real iPads described the
+// hero as "sluggish" even at full stick deflection, which is a different complaint from the one that
+// curve fixed. 1.4/2.8 -> 1.7/3.6, a bigger jump for the run than the walk, since the run is the
+// deliberate the-kid-really-means-it push and has more room to reward it.
+export const WALK_SPEED = 1.7;
+export const RUN_SPEED = 3.6;
+// RUN_THRESHOLD is DERIVED, not retyped, so it keeps the SAME fractional position along the
+// WALK_SPEED..RUN_SPEED range that it held before this speed-up -- 0.6 m/s over the old 1.4 WALK_SPEED,
+// out of the old 1.4 m/s WALK_SPEED..RUN_SPEED span, i.e. 3/7 of the way up. Retyping a bare 2.0 here
+// would have silently moved the point on the STICK where the run clip triggers (it used to fire at a
+// ~0.78 push, see RUN_DEFLECTION's own comment) without anyone changing the stick at all.
+const RUN_THRESHOLD_FRACTION = 3 / 7;
+export const RUN_THRESHOLD = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * RUN_THRESHOLD_FRACTION;
 
 // HOW FAR THE STICK HAS TO GO TO MEAN "RUN". Lives here, with the speed law it is part of, and is
 // imported by input/touch.js rather than declared there (GQ-007) -- the curve below needs it, and
@@ -35,14 +46,15 @@ export const RUN_DEFLECTION = 0.62;
  * Now the stick reaches WALK_SPEED at RUN_DEFLECTION and then climbs to RUN_SPEED at the rim, with
  * no jump anywhere:
  *
- *     push  0.25 -> 0.56 m/s     (was 0.35)
- *     push  0.50 -> 1.13 m/s     (was 0.70)
- *     push  0.62 -> 1.40 m/s     (was 0.87)   <- walk speed, at the run boundary
- *     push  0.80 -> 1.86 m/s     (was 1.12)
- *     push  1.00 -> 2.80 m/s     (was 2.80)   <- unchanged, which is older players' "fine"
+ *     push  0.25 -> 0.69 m/s     (was 0.56 before the 2026-08-27 speed-up, 0.35 before the curve)
+ *     push  0.50 -> 1.37 m/s     (was 1.13, 0.70)
+ *     push  0.62 -> 1.70 m/s     (was 1.40, 0.87)   <- walk speed, at the run boundary
+ *     push  0.80 -> 2.60 m/s     (was 1.86, 1.12)
+ *     push  1.00 -> 3.60 m/s     (was 2.80, 2.80)
  *
- * So the top speed older players were happy with is untouched, and the middle of the stick -- where
- * younger players's thumb actually sits -- roughly doubles. Nobody has to be taught anything.
+ * 2026-08-27 raised WALK_SPEED and RUN_SPEED again (see their own comment) -- this table is the
+ * SHAPE of the curve, which that change did not touch: every push still lands at the same FRACTION
+ * of the way from WALK_SPEED to RUN_SPEED it did before, only the two endpoints moved.
  *
  * `run` still does real work rather than being ignored in favour of magnitude alone, and it has to:
  * the KEYBOARD reports magnitude 1 with run false for a plain WASD walk (input/keyboard.js puts run

@@ -1,4 +1,5 @@
 import * as THREE from '../../vendor/three.module.min.js';
+import { clone as cloneSkinned } from '../../vendor/utils/SkeletonUtils.js';
 import { normaliseCharacterMaterial } from '../character/hero.js';
 import {
   flashIntensity,
@@ -22,6 +23,7 @@ export const WOLF_URL = 'assets/enemies/wolf.glb';
 export const WOLF_CLIP_FOR_MODE = Object.freeze({
   idle: 'idle',
   walk: 'walk',
+  returning: 'walk',
   bite: 'bite',
   hit: 'hit',
   dying: 'death',
@@ -142,15 +144,24 @@ export function wolfSparkTarget(mode, hp = WOLF_MAX_HP, maxHp = WOLF_MAX_HP) {
   return WOLF_SPARK_LAST_HIT_STRENGTH + (1 - WOLF_SPARK_LAST_HIT_STRENGTH) * remaining;
 }
 
-export async function loadWolf() {
-  const gltf = await loadGLB(WOLF_URL);
-  const root = setLayer(gltf.scene, CHARACTER);
+function prepareWolfRoot(source) {
+  // loadGLB caches the GLTF scene. E1 can present more than one stable ordinary enemy, so every
+  // presenter needs its own skinned hierarchy AND its own materials. SkeletonUtils gives the rig
+  // independent bones; cloning materials prevents one Wolf's hit flash/dissolve from tinting every
+  // other Wolf that happens to share the same cached atlas/material objects. Geometry and textures
+  // stay shared, which is both safe and the cheap path.
+  const root = setLayer(cloneSkinned(source), CHARACTER);
   root.name = 'wolf';
   root.scale.setScalar(WOLF_SCALE);
   root.traverse((object) => {
     if (!object.isMesh) return;
     object.castShadow = false;
     object.receiveShadow = false;
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => material?.clone?.() ?? material);
+    } else if (object.material?.clone) {
+      object.material = object.material.clone();
+    }
     // The same two export defects the hero had, and the wolf has both: emissiveFactor [1,1,1] with
     // an emissiveTexture that is the base colour atlas again (both glTF textures resolve to image
     // source 0), and metallicFactor/roughnessFactor omitted so glTF defaults each to 1.0. Left
@@ -167,7 +178,27 @@ export async function loadWolf() {
       }
     }
   });
-  return { animations: gltf.animations ?? [], failed: Boolean(gltf.userData?.loadError), root };
+  return root;
+}
+
+export async function loadWolfFactory() {
+  const gltf = await loadGLB(WOLF_URL);
+  const animations = gltf.animations ?? [];
+  const failed = Boolean(gltf.userData?.loadError);
+  return Object.freeze({
+    failed,
+    create() {
+      return { animations, root: prepareWolfRoot(gltf.scene) };
+    },
+  });
+}
+
+// Kept as the simple one-Wolf loader for existing callers/tests. The implementation now comes from
+// the same factory C3 uses for keyed presenters, so one Wolf and several Wolves cannot drift into
+// different scale/material/animation preparation paths.
+export async function loadWolf() {
+  const factory = await loadWolfFactory();
+  return { ...factory.create(), failed: factory.failed };
 }
 
 /**
@@ -177,6 +208,55 @@ export async function loadWolf() {
  * encounter.js, whose constants were measured from these clips, so the animation cannot disagree
  * with the rules -- and encounter.js stays importable by a node server that has no three.js.
  */
+// ---------------------------------------------------------------------------
+// The drawn wolf, unstuck from the snapshot clock (2026-08-28)
+// ---------------------------------------------------------------------------
+//
+// Online, this presenter is fed `published.enemies` straight off the latest server snapshot --
+// authoritative truth that changes at SNAPSHOT_HZ (10 Hz), while the render loop draws at up to
+// 60fps. Writing wolf.x/heading into the root directly therefore held every wolf frozen for ~6
+// render frames and then stepped it, ~0.2m and a heading jerk at a time at wolf speed. The hero
+// does not move like that -- net/interpolation.js smooths every player between snapshots -- so the
+// wolves read as stiff, stop-motion creatures next to him. That asymmetry, not the clips, is most
+// of the "wolves feel stiff" playtest note. Offline the sim steps per frame, but a wolf reversing
+// at its leash edge still snaps its heading in one tick (encounter.js sets heading with atan2, no
+// turn rate), which is the same read.
+//
+// The fix is drawn-state easing, HERE, in the presenter, and deliberately not upstream: encounter
+// state is what combat gates (heroInCombat's aggro ranges, strike arcs) read, and GQ-021's whole
+// arc is what happens when presentation timing quietly becomes rules timing. The authoritative
+// wolf is untouched; only the drawn body approaches it exponentially. The nameplate projects from
+// the drawn position too (main.js asks via drawnPosition()), so the bar stays on the body instead
+// of leading it by a snapshot.
+//
+// TAU is sized against the snapshot clock: one 10 Hz step is ~93% absorbed before the next arrives
+// (1 - e^(-0.1/0.037)), so motion is continuous but the drawn wolf never lags authority by more
+// than a few centimetres at wolf speed -- far inside every harness bar that reads a wolf position.
+// The SNAP guard is for legitimate discontinuities (a respawn across the map): easing through one
+// would slide a dead wolf's body to its new spawn in plain sight, so anything over a body length
+// snaps the way it always did.
+export const DRAWN_EASE_TAU_SECONDS = 0.037;
+export const DRAWN_SNAP_METERS = 2;
+
+/** Fraction of the remaining gap the drawn state closes this frame. Pure; pinned by tests. */
+export function drawnApproachFactor(deltaSeconds, tau = DRAWN_EASE_TAU_SECONDS) {
+  // No elapsed time closes none of the gap -- main.js calls update(0, ...) for an initial paint,
+  // and a zero-dt frame must hold the drawn pose, not teleport it. A degenerate tau means easing
+  // is effectively off, and landing exactly is the honest reading of that.
+  if (!(deltaSeconds > 0)) return 0;
+  if (!(tau > 0)) return 1;
+  return 1 - Math.exp(-deltaSeconds / tau);
+}
+
+/** Shortest-arc partial turn from one heading toward another. Pure; pinned by tests. */
+export function approachHeading(from, to, factor) {
+  const twoPi = Math.PI * 2;
+  let gap = (to - from) % twoPi;
+  if (gap > Math.PI) gap -= twoPi;
+  if (gap < -Math.PI) gap += twoPi;
+  return from + gap * factor;
+}
+
 export function createWolfPresenter(root, animations) {
   const mixer = new THREE.AnimationMixer(root);
   const actions = new Map();
@@ -193,6 +273,8 @@ export function createWolfPresenter(root, animations) {
 
   let currentName = null;
   let currentAction = null;
+  // Where the wolf is DRAWN, distinct from where the encounter says it IS -- see the easing header.
+  let drawn = null;
 
   // Each material's OWN emissive colour, captured once so a flash can lerp back to whatever that
   // actually is rather than assuming black. Right now normaliseCharacterMaterial forces every wolf
@@ -231,7 +313,7 @@ export function createWolfPresenter(root, animations) {
   let sparkSeconds = 0;
 
   function tickSpark(deltaSeconds, wolf) {
-    const target = wolfSparkTarget(wolf.mode, wolf.hp) * WOLF_SPARK_STRENGTH;
+    const target = wolfSparkTarget(wolf.mode, wolf.hp, wolf.maxHp) * WOLF_SPARK_STRENGTH;
     if (sparkStrength !== target) {
       const step = WOLF_SPARK_FADE_PER_SECOND * deltaSeconds;
       sparkStrength = Math.abs(target - sparkStrength) <= step
@@ -314,8 +396,19 @@ export function createWolfPresenter(root, animations) {
   return {
     /** @param wolf the encounter's wolf state: { x, z, heading, mode } */
     update(deltaSeconds, wolf) {
-      root.position.set(wolf.x, 0, wolf.z);
-      root.rotation.y = wolf.heading;
+      // Drawn-state easing -- see the header above createWolfPresenter. First frame and any jump
+      // past DRAWN_SNAP_METERS land exactly; everything else approaches.
+      if (drawn === null
+        || Math.hypot(wolf.x - drawn.x, wolf.z - drawn.z) > DRAWN_SNAP_METERS) {
+        drawn = { x: wolf.x, z: wolf.z, heading: wolf.heading };
+      } else {
+        const factor = drawnApproachFactor(deltaSeconds);
+        drawn.x += (wolf.x - drawn.x) * factor;
+        drawn.z += (wolf.z - drawn.z) * factor;
+        drawn.heading = approachHeading(drawn.heading, wolf.heading, factor);
+      }
+      root.position.set(drawn.x, 0, drawn.z);
+      root.rotation.y = drawn.heading;
       const wanted = WOLF_CLIP_FOR_MODE[wolf.mode] ?? 'idle';
       // Restart on re-entry into a one-shot mode, so a second bite or a second stagger reads.
       play(wanted, ONE_SHOT_CLIPS.has(wanted) && wolf.modeSeconds < deltaSeconds * 2);
@@ -323,6 +416,12 @@ export function createWolfPresenter(root, animations) {
       tickFlash(deltaSeconds);
       tickPresence(deltaSeconds, wolf);
       tickSpark(deltaSeconds, wolf);
+    },
+    /** The eased position the body is actually drawn at, for anything that must sit ON the body
+     *  (the nameplate) rather than at the authoritative point it is approaching. Null until the
+     *  first update has drawn anything at all. */
+    drawnPosition() {
+      return drawn === null ? null : { x: drawn.x, z: drawn.z };
     },
     /** Call when encounter.js raises wolf-hit. A quick white flash -- see FLASH_COLOR above. */
     flashHit() {

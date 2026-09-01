@@ -15,11 +15,15 @@ export const WHEEL_ZOOM_PER_NOTCH = 0.0015;
 // does not nudge the view.
 export const DRAG_DEADZONE_PX = 4;
 
-// The movement stick owns the lower-left of the screen, deliberately smaller than a quadrant: the
-// owner's words were "the lower left area... I don't wanna say quadrant because it's not the full
-// quadrant". Everything outside it is camera.
-export const STICK_REGION_WIDTH_FRACTION = 0.4;
-export const STICK_REGION_HEIGHT_FRACTION = 0.4;
+// The movement stick owns the lower-left of the screen -- big enough that the stick appears wherever
+// a kid's thumb actually lands, the way Roblox's own mobile scheme does, rather than a kid having to
+// find a small fixed circle first. Grown from 0.4/0.4 after the second child playtest: two children
+// missed the old region often enough (a thumb landing a little high, or a little right, got no stick
+// at all) that "smaller than a quadrant" cost more control than it protected. Still short of the full
+// lower-left quadrant (0.5/0.5) on both axes, and specifically short of the bottom-right corner on the
+// width axis, so the attack button's own corner is never claimed by the stick.
+export const STICK_REGION_WIDTH_FRACTION = 0.45;
+export const STICK_REGION_HEIGHT_FRACTION = 0.55;
 
 export function isInStickRegion(x, y, width, height) {
   return x <= width * STICK_REGION_WIDTH_FRACTION
@@ -40,6 +44,35 @@ export function pinchSeparation(a, b) {
 export function zoomFactorForPinch(startSeparation, currentSeparation) {
   if (!(startSeparation > 0) || !(currentSeparation > 0)) return 1;
   return startSeparation / currentSeparation;
+}
+
+// THE UN-CLOSEABLE MENU CLASS OF BUG. The playtest's own report: the Hero screen and the Village
+// Board could not be closed on a real iPad, and the family had to kill the app. This module's ONLY
+// veto used to be isStickPointer -- so any other pointerdown on #game, including one on a full-screen
+// overlay's own X button, was adopted as a camera-drag (or, while the Hero screen is open, a
+// Hero-preview-turntable-drag) candidate. A tap always has a little natural finger travel, and once
+// that travel crosses DRAG_DEADZONE_PX the world/preview spins UNDERNEATH the very button a child is
+// trying to press -- main.js already worked around this one leaf button at a time before this
+// existed (keeperSpeechSpeakElement and workshopInteractElement both carry their own
+// `pointerdown -> event.stopPropagation()`, with a comment explaining exactly this), which means
+// every NEW button had to remember the same line or inherit the same trap. hero-screen-close and
+// village-board-close did not.
+//
+// Fixed here, once, generically: this module now refuses to adopt a pointer that landed on any
+// native interactive control, or inside a UI surface tagged [data-thumb-surface]/[data-ui-surface].
+// [data-ui-surface] is stamped on an overlay's ROOT (#hero-screen, #village-board-screen,
+// #profile-gate in index.html), not on each piece of its chrome -- closest() still finds it from any
+// descendant that actually received the event. The overlay's own deliberately click-through middle
+// (index.html's own comment on #hero-screen: dragging the empty centre turns the Hero preview's
+// turntable) is untouched by this, because pointer-events: none there means the DOM target of that
+// tap was never inside the overlay's root in the first place -- it lands on #game/the canvas, same
+// as it always did.
+export function isInteractiveUiTarget(event) {
+  const target = event?.target;
+  if (!target || typeof target.closest !== 'function') return false;
+  return target.closest(
+    'button, input, textarea, select, a, label, [data-thumb-surface], [data-ui-surface]',
+  ) !== null;
 }
 
 export function createCameraGesture(surface, follow, options = {}) {
@@ -66,7 +99,7 @@ export function createCameraGesture(surface, follow, options = {}) {
   }
 
   function onPointerDown(event) {
-    if (isStickPointer(event)) return;
+    if (isStickPointer(event) || isInteractiveUiTarget(event)) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (pointers.size === 2) {

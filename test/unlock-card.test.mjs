@@ -44,7 +44,7 @@ test('the comparison line is items.js\'s own numbers in the Hero screen\'s exact
   const to = damageFor(WILDWOOD_BLADE_ID);
   const state = unlockCardState(wildwoodMoment());
   assert.equal(state.comparison, `${from} → ${to} DAMAGE`);
-  // The same arrow-line pattern heroScreen.js's renderCard paints into #hero-item-compare -- the
+  // The same arrow-line pattern heroScreen.js's renderCard paints into its comparison rows -- the
   // ceremony and the Gear screen a child opens ten seconds later must say it identically.
   assert.match(state.comparison, /^\d+ → \d+ DAMAGE$/);
 });
@@ -97,6 +97,19 @@ test('the card\'s accent is derived from WILDWOOD_COLOR, and the CSS is reduced-
   const derived = `#${WILDWOOD_COLOR.toString(16).padStart(6, '0')}`;
   assert.ok(UNLOCK_CARD_CSS.includes(derived), `UNLOCK_CARD_CSS must carry ${derived}`);
   assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(UNLOCK_CARD_CSS), 'reduced motion must be handled in CSS');
+});
+
+test('a closed unlock card is absent from hit-testing even though its visible card accepts taps', () => {
+  assert.match(
+    UNLOCK_CARD_CSS,
+    /#unlock-card-layer\s*\{[^}]*visibility:\s*hidden;/s,
+    'opacity alone does not remove a child with pointer-events:auto from browser hit-testing',
+  );
+  assert.match(
+    UNLOCK_CARD_CSS,
+    /#unlock-card-layer\[data-shown="true"\]\s*\{[^}]*visibility:\s*visible;/s,
+    'the ceremony must restore visibility only while its own shown state is true',
+  );
 });
 
 test('the ceremony auto-dismisses around 4.5s -- short enough to stay a moment, not a modal wall', () => {

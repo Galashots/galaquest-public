@@ -52,8 +52,8 @@ test('REWARD_EVENT_TYPES is exactly the durable facts the reward coordinator ann
   assert.deepEqual(
     [...REWARD_EVENT_TYPES].sort(),
     [
-      'charm-earned', 'coin-earned', 'gear-owned', 'lantern-unlocked',
-      'mark-earned', 'satchel-taken', 'shard-earned',
+      'charm-earned', 'coin-earned', 'gear-equipped', 'gear-owned',
+      'lantern-unlocked', 'mark-earned', 'satchel-taken', 'shard-earned',
       // P2: the Lantern unlock is worth a level now, and the XP that pays for it is announced with
       // its durable id for the same reason currency is -- so the device journals the fact rather
       // than receiving a total it cannot deduplicate.

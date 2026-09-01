@@ -56,7 +56,11 @@ export const HIT_BURST_COLOR = 0xfff2c4;
 /** The stolen light itself, so a kill is unmistakably a different EVENT and not a bigger hit. */
 export const KILL_BURST_COLOR = WOLF_SPARK_COLOR;
 
-const POOL_SIZE = 4;
+const POOL_SIZE = 8;
+export const SPECIAL_BURST_COLOR = 0x9fffc0;
+export const SPECIAL_BURST_SECONDS = 0.58;
+export const SPECIAL_BURST_START_METERS = 0.55;
+export const SPECIAL_BURST_END_METERS = 3.8;
 
 /** Exported so the "a kill is not a bigger hit" claim can be asserted rather than trusted -- see
  *  test/impact-burst.test.mjs. Frozen; nothing is expected to reach in and retune it at runtime. */
@@ -78,6 +82,13 @@ export const BURST_PROFILES = Object.freeze({
     seconds: KILL_BURST_SECONDS,
     startMeters: KILL_BURST_START_METERS,
     endMeters: KILL_BURST_END_METERS,
+    profile: 'lamp',
+  }),
+  special: Object.freeze({
+    color: SPECIAL_BURST_COLOR,
+    seconds: SPECIAL_BURST_SECONDS,
+    startMeters: SPECIAL_BURST_START_METERS,
+    endMeters: SPECIAL_BURST_END_METERS,
     profile: 'lamp',
   }),
 });

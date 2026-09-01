@@ -284,8 +284,25 @@ check('a partial push walks', walking.speed > 0 && walking.mode === 'walk',
   `speed=${walking.speed.toFixed(2)} mode=${walking.mode} status="${walking.status}"`);
 check('a partial push is slower than full speed', walking.speed < 2.8,
   `speed=${walking.speed.toFixed(2)}`);
-check('the hero actually moves', Math.hypot(walking.px - before.px, walking.pz - before.pz) > 0.05,
-  `moved ${Math.hypot(walking.px - before.px, walking.pz - before.pz).toFixed(3)} units`);
+// POLLED UNTIL A FRAME HAS ACTUALLY PAINTED THE MOVEMENT, not read once on a wall-clock schedule.
+// Position only advances when the page renders a frame, and hosted at 2c8ba29 this runner recorded
+// 59 of 59 frame gaps over budget and painted essentially nothing inside the fixed window -- the
+// one-shot read measured 0.018 units off a hero whose own status line was walking at 1.73 m/s, and
+// who reached full run speed two checks later in the same log. The stick is still held, so a hero
+// who CAN move will have moved within the budget on any machine that paints at all; a hero who
+// genuinely cannot move still fails. This is the same starvation regime the wall-clock speed
+// diagnostic above already refuses to judge, applied to the half of the claim that CAN be judged:
+// eventually, not at a rate.
+let movedBy = Math.hypot(walking.px - before.px, walking.pz - before.pz);
+const moveDeadline = Date.now() + 10_000;
+while (movedBy <= 0.05 && Date.now() < moveDeadline) {
+  // eslint-disable-next-line no-await-in-loop
+  await sleep(300);
+  // eslint-disable-next-line no-await-in-loop
+  const later = await state();
+  movedBy = Math.hypot(later.px - before.px, later.pz - before.pz);
+}
+check('the hero actually moves', movedBy > 0.05, `moved ${movedBy.toFixed(3)} units`);
 await shot('02-walking.png');
 
 // Full deflection -> run.

@@ -257,7 +257,8 @@ test('the coordinator hands the pair to the store as ONE batch, not two applies'
   // whether the pair was written in one transaction or in two lucky writes. What can regress is
   // somebody splitting the batch back apart, and that is visible in the source (the same technique
   // test/feedback.test.mjs uses to pin ENCOUNTER_EVENT_TYPES against encounter.js's own text).
-  const source = readFileSync(new URL('../net/gameServer.mjs', import.meta.url), 'utf8')
+  // E1 C2's gameServer.mjs is a compatibility adapter; the implementation authority is the core.
+  const source = readFileSync(new URL('../net/gameServerCore.mjs', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
   const body = /function applyLanternUnlock\([\s\S]*?\n  \}/.exec(source);

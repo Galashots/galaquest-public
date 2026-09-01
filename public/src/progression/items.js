@@ -3,11 +3,9 @@
 // imports files under public/src/ directly (see e.g. its own import of rewards/marks.js), so anything
 // the server needs to validate against has to stay framework-free to be importable there at all.
 //
-// GP1 scope only: weapon slot, two items. The Hero screen (GalaQuest_Gameplay_Expansion_Stream_Plan
-// section 8) explicitly wants a small, data-driven Hero surface rather than a 30-slot inventory --
-// Shield/Helmet/Shoulders/Chest slots exist in the UI as empty/locked placeholders (ui/heroScreen.js)
-// with no items defined here yet. Add a definition here the moment a real one is needed; do not
-// pre-populate slots nobody can fill.
+// G1 keeps the catalogue small and data-driven: the shipping starter/Blade weapons plus the truthful
+// baseline Shield and the first earned Helmet. This is item authority, not an inventory UI or loot
+// table; slots that have no real G1 item remain absent.
 //
 // Damage values are read off this file, never restated (GQ-007) -- by the Hero screen's comparison
 // card, by progression/heroStats.js when it adds what a hero's LEVEL is worth on top, and through
@@ -26,9 +24,20 @@
 // because a preserved promise nobody checks is a promise until the next re-tune.
 
 export const WEAPON_SLOT = 'weapon';
+export const SHIELD_SLOT = 'shield';
+export const HELMET_SLOT = 'helmet';
+// R1: the first kill-drop gear slot. heroScreen.js's own SLOTS_WITH_ITEMS is derived from ITEM_DEFS
+// (not a hand-kept slot list), so this slot auto-unlocks in the Hero screen the instant an item
+// exists for it below -- no separate UI change required for a new slot to appear.
+export const SHOULDERS_SLOT = 'shoulders';
+
+export const EQUIPMENT_SLOTS = Object.freeze([WEAPON_SLOT, SHIELD_SLOT, HELMET_SLOT, SHOULDERS_SLOT]);
 
 export const STARTER_SWORD_ID = 'starter_sword';
 export const WILDWOOD_BLADE_ID = 'wildwood_blade';
+export const SHIELD_IRONWOOD_ID = 'shield_ironwood';
+export const HELMET_SILVERGUARD_ID = 'helmet_silverguard';
+export const SHOULDER_SILVERGUARD_ID = 'shoulder_silverguard';
 
 export const ITEM_DEFS = Object.freeze({
   [STARTER_SWORD_ID]: Object.freeze({
@@ -50,12 +59,38 @@ export const ITEM_DEFS = Object.freeze({
     name: 'Wildwood Blade',
     damage: 20,
   }),
+  [SHIELD_IRONWOOD_ID]: Object.freeze({
+    id: SHIELD_IRONWOOD_ID,
+    slot: SHIELD_SLOT,
+    name: 'Ironwood Shield',
+    damageReductionPercent: 0,
+  }),
+  [HELMET_SILVERGUARD_ID]: Object.freeze({
+    id: HELMET_SILVERGUARD_ID,
+    slot: HELMET_SLOT,
+    name: 'Silverguard Helmet',
+    damageReductionPercent: 10,
+  }),
+  // R1: the first item a kill drop can grant, not a claim ceremony -- see world/enemyDrops.js's own
+  // gear pool. shield_ironwood is deliberately NOT raised alongside this one: G1's own
+  // damageReductionPercent: 0 is a pinned "truthful baseline" (test/progression-g1-c1.test.mjs), and
+  // R1 does not have standing to re-tune a G1 decision in passing.
+  [SHOULDER_SILVERGUARD_ID]: Object.freeze({
+    id: SHOULDER_SILVERGUARD_ID,
+    slot: SHOULDERS_SLOT,
+    name: 'Silverguard Shoulders',
+    damageReductionPercent: 8,
+  }),
 });
 
 export const DEFAULT_EQUIPPED_WEAPON_ID = STARTER_SWORD_ID;
+export const DEFAULT_EQUIPPED_ITEM_IDS = Object.freeze({
+  [WEAPON_SLOT]: DEFAULT_EQUIPPED_WEAPON_ID,
+  [SHIELD_SLOT]: SHIELD_IRONWOOD_ID,
+});
 
-// GP1-C1 (the 2026-08-16 engagement/reward quality-gate review): a fresh player owns ONLY the
-// starter sword. The Wildwood Blade becomes owned exclusively through GP9's authored reward
+// G1-C1: a fresh player owns the starter sword and truthful baseline Shield. The Wildwood Blade
+// becomes owned exclusively through GP9's authored reward
 // ceremony -- shipping it pre-owned, as GP1's first draft did to exercise the compare/equip UI
 // before that ceremony existed, would let a normal player equip a weapon they never earned. A
 // harness or explicit dev fixture that needs to exercise the owned-Blade path grants it durably
@@ -63,7 +98,7 @@ export const DEFAULT_EQUIPPED_WEAPON_ID = STARTER_SWORD_ID;
 // tools/runtime-test/drive-relight.mjs seeds marks for its own fixture guest) rather than reading
 // this constant differently -- this IS the real default for every code path, test and production
 // alike.
-export const DEFAULT_OWNED_ITEM_IDS = Object.freeze([STARTER_SWORD_ID]);
+export const DEFAULT_OWNED_ITEM_IDS = Object.freeze([STARTER_SWORD_ID, SHIELD_IRONWOOD_ID]);
 
 export function itemDef(itemId) {
   return ITEM_DEFS[itemId] ?? null;
@@ -78,8 +113,16 @@ export function isKnownWeapon(itemId) {
   return def !== null && def.slot === WEAPON_SLOT;
 }
 
+export function isKnownEquipment(itemId) {
+  return itemDef(itemId) !== null;
+}
+
 export function damageFor(itemId) {
   return itemDef(itemId)?.damage ?? null;
+}
+
+export function damageReductionPercentFor(itemId) {
+  return itemDef(itemId)?.damageReductionPercent ?? 0;
 }
 
 /**

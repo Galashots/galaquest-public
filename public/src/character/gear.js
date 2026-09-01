@@ -439,9 +439,31 @@ export const RIGID_WILDWOOD_BLADE_CANDIDATE = Object.freeze({
     // no matter when in the loop it happens to be called. See that function's own comment for why
     // calling skeleton.pose() directly is NOT the fix (it visibly shrinks the whole character on this
     // rig -- confirmed directly, not assumed).
-    position: Object.freeze([-69.7551, 91.67212, -7.1324]),
-    quaternion: Object.freeze([0.803156021057, -0.448527140425, -0.106576043911, -0.377366343235]),
-    scale: Object.freeze([59.92, 59.92, 59.92]),
+    //
+    // RE-SOLVED 2026-08-28 against the RUNNING GAME (Issue #82). The 2026-08-16 value above was
+    // solved and screenshot-verified in Character Studio, but in the live game the blade was nearly
+    // flat and edge-on through the torso, so the hand read as EMPTY -- the Owner's playtest report.
+    // The old grip seat was about 0.055m from the RightHand bone; the defect was its orientation,
+    // not a 0.243m grip offset. The Studio showcase pose and camera made that bad pitch look almost
+    // seated, which is how it passed visual acceptance (GQ-010: flags/one-pose captures are not
+    // gameplay pixels).
+    // This value was produced by the same geometry solve (grip-frac 0.45, shipping-sword-matched
+    // direction/length/seat) run against window.__galaQuestRuntime, then baked through THIS
+    // function's own inversion (rest = rigRoot.matrixWorld^-1 * bindPoseMatrixWorld * local) so the
+    // attach below reconstructs it exactly -- no skeleton.pose() roundtrip, whose bind frame is NOT
+    // the boneInverses bind frame this function reads. Note the old value ALSO measured a 0.055m
+    // grip seat -- its defect was pure orientation (blade pitch 26.9 degrees vs the shipping
+    // sword's 68.8; this value measures 63.9) -- so the drive-hero-screen regression asserts the
+    // pitch, not just the seat. Verified by running-game screenshots at gameplay framing, world and
+    // Hero screen, on a fresh reload.
+    // The blade-axis sign is flipped relative to the raw shipping-sword bbox measurement: the
+    // guard-nearest-anchor heuristic picks the wrong end on the live-game ironwood mesh, and the
+    // unflipped solve held the blade tip-up through the chest. Flipped, the presentation matches
+    // the shipping sword's own (tip down-forward from the fist at idle) -- judged from running-game
+    // captures of both swords, not from the heuristic.
+    position: Object.freeze([-61.7927, 89.96901, 19.44264]),
+    quaternion: Object.freeze([0.637740055228, -0.502196269715, -0.53841711913, 0.22625988259]),
+    scale: Object.freeze([59.92007, 59.92008, 59.92008]),
   }),
 });
 
@@ -488,6 +510,75 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
   return { id: RIGID_WILDWOOD_BLADE_CANDIDATE.id, anchor, bone, gear: bladeRoot };
 }
 
+// ---------------------------------------------------------------------------
+// G1-C3: the Silverguard Helmet (progression-g1-first-visible-armor)
+// ---------------------------------------------------------------------------
+//
+// The first piece of earned armour. Mounted on the Head bone the same independently-loaded-GLB way
+// the belt lantern is -- a separate file, loaded only when THIS child equips the helmet, never baked
+// into the hero's own merged atlas. Anatomy occlusion (hair/ears hidden while equipped) is handled
+// by main.js calling hero.setAnatomyCoverage; this module only owns the geometry.
+export const SILVERGUARD_HELMET_BONE_NAME = 'Head';
+export const SILVERGUARD_HELMET_URL = 'assets/gear/helmet_silverguard.glb';
+export const SILVERGUARD_HELMET_ID = 'helmet_silverguard';
+
+// What an open-face helmet hides so the hair and ears do not poke through it -- the shipping
+// Silverguard's own occlusion, stated here with the rest of its geometry authority rather than
+// borrowed from the studio's Dawnwarden candidate profile (gearFitProfiles.js), which happens to
+// hide the same two regions but is a different, owner-locked mesh. main.js and net/remotes.js both
+// import THIS when they toggle coverage for the local hero and for siblings; the region names are
+// validated against the baked anatomy by hero.setAnatomyCoverage at the seam (it throws on an
+// unknown region), so a typo here cannot pass silently.
+export const SILVERGUARD_HELMET_HIDES_ANATOMY = Object.freeze(['hair', 'ears']);
+
+export const RIGID_SILVERGUARD_HELMET = Object.freeze({
+  id: SILVERGUARD_HELMET_ID,
+  boneName: SILVERGUARD_HELMET_BONE_NAME,
+  restRelativeToHeroRoot: Object.freeze({
+    // Measured 2026-08-25 by tools/runtime-test/fit-helmet.mjs --up 0.12 --fwd 0.01 --height 0.26,
+    // baked from the live game the same bind-frame way the sword, shield and lantern were. The Head
+    // bone sits at the base of the skull, not its centre, so the seat is raised 0.12m to cap the
+    // crown rather than swallow the face; height 0.26m matches the head and leaves the face open, the
+    // open-face read the anatomy occlusion (hair/ears) is authored for. Judged in head-framed captures
+    // from four angles: crown covered, face clear, no clip through the shoulders, Shield unregressed.
+    position: Object.freeze([-0.4735, 122.46235, 1.66404]),
+    quaternion: Object.freeze([-0.084336314711, 0.000883790884, 0.006155776196, 0.9964179401]),
+    scale: Object.freeze([32.71, 32.71, 32.71]),
+  }),
+});
+
+/**
+ * Mount an already-loaded Silverguard helmet root onto the hero's Head bone -- the same
+ * independently-loaded-GLB pattern attachBeltLantern uses. Unlike the Tier 2 gear baked into the
+ * atlas, this is loaded and parented in only when a child equips the helmet, not at hero load time.
+ */
+export function attachSilverguardHelmet(heroRoot, helmetRoot) {
+  const rigRoot = requiredObject(heroRoot, RIG_ROOT_NAME, 'rig root');
+  const bone = heroRoot.getObjectByName(RIGID_SILVERGUARD_HELMET.boneName);
+  if (!bone) {
+    throw new Error(`Cannot attach the Silverguard Helmet: missing bone ${RIGID_SILVERGUARD_HELMET.boneName}.`);
+  }
+  if (!bone.isBone) {
+    throw new Error(`Cannot attach the Silverguard Helmet: ${RIGID_SILVERGUARD_HELMET.boneName} is not a Bone.`);
+  }
+
+  heroRoot.updateMatrixWorld(true);
+
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
+
+  const restRelativeToHeroRoot = matrixFromRestTransform(RIGID_SILVERGUARD_HELMET.restRelativeToHeroRoot);
+  const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
+  const local = new THREE.Matrix4().copy(bindMatrixWorld).invert().multiply(world);
+  const anchor = new THREE.Group();
+  anchor.name = rigidAnchorName(RIGID_SILVERGUARD_HELMET.id, RIGID_SILVERGUARD_HELMET.boneName);
+  local.decompose(anchor.position, anchor.quaternion, anchor.scale);
+
+  bone.add(anchor);
+  anchor.add(helmetRoot);
+
+  return { id: RIGID_SILVERGUARD_HELMET.id, anchor, bone, gear: helmetRoot };
+}
+
 // The reward is a LANTERN, and it shipped dark. Looked at in the running game at the plaza camera
 // (.local/runtime-test/moment-13-after-closer.png) it reads as a small grey box on the hero's hip:
 // the one thing the whole quest is for, and nothing about it says light. One additive sprite fixes
@@ -499,6 +590,108 @@ export function attachWildwoodBladeCandidate(heroRoot, bladeRoot) {
 const BELT_LANTERN_GLOW_COLOR = 0xffc477;
 const BELT_LANTERN_GLOW_LOCAL_SIZE = 0.024;
 const BELT_LANTERN_GLOW_STRENGTH = 0.85;
+
+// ---------------------------------------------------------------------------
+// R1: the Silverguard Shoulders (kill-drop gear, progression/items.js's SHOULDER_SILVERGUARD_ID)
+// ---------------------------------------------------------------------------
+//
+// Mounted the same independently-loaded-GLB, bind-pose-bone way attachSilverguardHelmet is: a
+// separate file, loaded only when this child equips the piece, never baked into the hero's own merged
+// atlas. TWO instances of the SAME file, one per arm -- test/glb-budget.test.mjs's own Tier 3 fixture
+// prices exactly this arrangement ("shoulder_silverguard.glb, worn twice, mirrored") at one atlas and
+// two primitives, which together with the helmet, sword and shield still lands the fully-equipped
+// hero at exactly six draw calls, the contract's own cap. Checked BEFORE writing this, not assumed --
+// see that test file.
+//
+// THE FIT NUMBERS are not derived here; they are read from docs/foundry/gear/tier3/fit_measured.json,
+// the Meshy/Blender pipeline's own output for this exact asset (docs/foundry/gear/tier3_fit.json is
+// the human-authored brief that JSON was measured against: LeftArm/RightArm bones, the right pauldron
+// the SAME mesh as the left mirrored by a negative X scale rather than a second generation). That file
+// already expresses `restRelativeToHeroRoot_gltfAxes` in the exact root-relative
+// {position, quaternion, scale} shape matrixFromRestTransform below expects -- the same convention
+// every other RIGID_* table in this file already uses -- so the numbers are copied rather than
+// re-derived, per AGENTS.md's "Look before you derive": a foundry tool that already measured this
+// mesh against this rig is a better source than a fresh guess.
+//
+// HONEST CAVEAT, because this game's own visual-acceptance rule (AGENTS.md, "running-game pixels are
+// final appearance authority") means a measurement is not the same thing as a verified fit: the
+// helmet's own equivalent foundry number (docs/foundry/gear/tier3_fit.json's own "helmet" entry, world
+// height 0.5) was superseded once already by tools/runtime-test/fit-helmet.mjs's LIVE, in-game
+// measurement (RIGID_SILVERGUARD_HELMET's own scale ended up 32.71, not the foundry pass's naive
+// figure) -- because the foundry tool assumes the source mesh's own natural bounding size is exactly
+// 1.0 unit, which does not always hold for a shipped export. No WebGL is available in this sandbox to
+// run the equivalent live check on the shoulders (see this repo's own hard rule on that), so these
+// numbers are the best available MEASURED source -- real geometry against the real rig, not a guess --
+// but are pending the same live confirmation the helmet's foundry pass eventually needed. If a running-
+// game capture ever shows the pauldrons floating, oversized, or clipping the head, re-solve with
+// tools/runtime-test/fit-helmet.mjs's own technique (a live bind-pose measurement) rather than
+// hand-tuning these numbers by eye.
+export const SILVERGUARD_SHOULDER_URL = 'assets/gear/shoulder_silverguard.glb';
+export const SILVERGUARD_SHOULDER_ID = 'shoulder_silverguard';
+
+export const RIGID_SILVERGUARD_SHOULDER_BY_SIDE = Object.freeze({
+  left: Object.freeze({
+    boneName: 'LeftArm',
+    restRelativeToHeroRoot: Object.freeze({
+      position: Object.freeze([18.48353385925293, 102.73785400390625, 1.5291625261306763]),
+      quaternion: Object.freeze([0, 0, 0, 1]),
+      scale: Object.freeze([21, 21, 52.499996185302734]),
+    }),
+  }),
+  // The SAME mesh as the left, mirrored by a negative scale rather than generated twice -- the
+  // foundry brief's own reasoning (tier3_fit.json's "shoulderR" entry), and the reason
+  // test/glb-budget.test.mjs prices this pair at one atlas.
+  right: Object.freeze({
+    boneName: 'RightArm',
+    restRelativeToHeroRoot: Object.freeze({
+      position: Object.freeze([-19.133033752441406, 103.05963897705078, 1.4613072872161865]),
+      quaternion: Object.freeze([1, -0, -0, 0]),
+      scale: Object.freeze([-21, -21, -52.499996185302734]),
+    }),
+  }),
+});
+
+/** The name the shoulders' own rigid anchors get, one per side -- distinct from the catalogue's own
+ *  `shoulder_silverguard` item id (progression/items.js), which names ONE owned/equipped thing while
+ *  this names TWO mounted meshes. character/weaponLoadout.js's own rigidAnchorName precedent is what
+ *  every other gear anchor in this file already keys by; this is the same idea for a two-anchor item. */
+export function silverguardShoulderAnchorId(side) {
+  if (side !== 'left' && side !== 'right') throw new TypeError(`unknown shoulder side: ${JSON.stringify(side)}`);
+  return `${SILVERGUARD_SHOULDER_ID}_${side}`;
+}
+
+/**
+ * Mount one already-loaded Silverguard Shoulder root onto the hero's LeftArm or RightArm bone -- the
+ * same independently-loaded-GLB, bind-pose pattern attachSilverguardHelmet uses (see its own comment
+ * for the bindPoseMatrixWorld reasoning: this mount is lazy, well after the AnimationMixer's first
+ * update, so reading the LIVE bone here would bake whatever pose happened to be playing into the
+ * anchor permanently).
+ */
+export function attachSilverguardShoulder(heroRoot, shoulderRoot, side) {
+  const spec = RIGID_SILVERGUARD_SHOULDER_BY_SIDE[side];
+  if (!spec) throw new TypeError(`unknown shoulder side: ${JSON.stringify(side)}`);
+  const rigRoot = requiredObject(heroRoot, RIG_ROOT_NAME, 'rig root');
+  const bone = heroRoot.getObjectByName(spec.boneName);
+  if (!bone) {
+    throw new Error(`Cannot attach the Silverguard Shoulder (${side}): missing bone ${spec.boneName}.`);
+  }
+  if (!bone.isBone) {
+    throw new Error(`Cannot attach the Silverguard Shoulder (${side}): ${spec.boneName} is not a Bone.`);
+  }
+
+  heroRoot.updateMatrixWorld(true);
+  const bindMatrixWorld = bindPoseMatrixWorld(heroRoot, bone);
+  const restRelativeToHeroRoot = matrixFromRestTransform(spec.restRelativeToHeroRoot);
+  const world = new THREE.Matrix4().multiplyMatrices(rigRoot.matrixWorld, restRelativeToHeroRoot);
+  const local = new THREE.Matrix4().copy(bindMatrixWorld).invert().multiply(world);
+  const anchor = new THREE.Group();
+  anchor.name = rigidAnchorName(silverguardShoulderAnchorId(side), spec.boneName);
+  local.decompose(anchor.position, anchor.quaternion, anchor.scale);
+
+  bone.add(anchor);
+  anchor.add(shoulderRoot);
+  return { id: silverguardShoulderAnchorId(side), anchor, bone, gear: shoulderRoot };
+}
 
 function lightTheLantern(lanternRoot) {
   const box = new THREE.Box3().setFromObject(lanternRoot);

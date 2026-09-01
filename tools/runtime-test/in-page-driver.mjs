@@ -54,6 +54,34 @@ const WATCH_STORE = 'window.__gqWatch';
 const WALK_STATE = 'window.__gqWalk';
 
 /**
+ * JavaScript source for the opening authored Wolf.
+ *
+ * The runtime is collection-shaped. Ordinary-fight harnesses follow the stable `wolf-1` identity
+ * in the current five-Wolf world; an intentional single-Wolf fixture remains valid regardless of
+ * its fixture id. A multi-Wolf world without exactly one requested identity fails loudly rather
+ * than silently changing which entity the evidence follows.
+ */
+export function authoredWolfSource(runtimeExpression = 'window.__galaQuestRuntime', preferredEnemyId = 'wolf-1') {
+  const requestedId = JSON.stringify(preferredEnemyId);
+  return `(() => {
+  const encounter = ${runtimeExpression}.encounterState();
+  const wolves = Array.isArray(encounter?.enemies)
+    ? encounter.enemies.filter((enemy) => enemy?.kind === 'wolf')
+    : [];
+  if (wolves.length === 0) {
+    throw new Error('expected an authored Wolf, found none');
+  }
+  if (wolves.length === 1) return wolves[0];
+  const matches = wolves.filter((enemy) => enemy?.enemyId === ${requestedId});
+  if (matches.length !== 1) {
+    throw new Error('expected exactly one authored Wolf with enemyId ' + ${requestedId}
+      + ', found ' + matches.length + ' among ' + wolves.length);
+  }
+  return matches[0];
+})()`;
+}
+
+/**
  * Record `sampleExpression` once per rendered frame, under `key`.
  *
  * @param key               names this recording; starting a second under the same key stops the first.

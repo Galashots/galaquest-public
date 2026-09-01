@@ -231,7 +231,9 @@ test('GP1-C1: a fresh guested hero cannot equip the Blade -- it is not owned unt
     const rewards = createRewardCoordinator({ rewardStorePath: path });
     const a = sim.addPlayer('a', meleeSpot());
     rewards.join(a.id, 'guest-equip-unowned');
-    assert.throws(() => rewards.applyEquip(a.id, WILDWOOD_BLADE_ID), /does not own/i);
+    // Issue #82: an ownership miss is a clean refusal now (return, not throw) -- see applyEquip's
+    // own comment. The property this test pins is unchanged: nothing equips.
+    assert.deepEqual(rewards.applyEquip(a.id, WILDWOOD_BLADE_ID), { accepted: false });
     assert.equal(rewards.rewardsFor([a.id])[a.id].equippedWeaponId, DEFAULT_EQUIPPED_WEAPON_ID,
       'a rejected equip must not have changed anything');
     rewards.close();
@@ -349,7 +351,11 @@ test('GP1-C1: an ephemeral hero cannot equip the Blade -- there is no durable pa
     // rather than only asserting the resulting throw, so a future change that silently makes grants
     // "work" for ephemeral connections is caught even if applyEquip's own check is ever loosened.
     rewards.grantOwnership(a.id, WILDWOOD_BLADE_ID);
-    assert.throws(() => rewards.applyEquip(a.id, WILDWOOD_BLADE_ID), /does not own/i);
+    // Issue #82: the ownership miss is a clean refusal now, not a throw. The property is unchanged:
+    // the ephemeral hero still cannot end up holding the Blade.
+    assert.deepEqual(rewards.applyEquip(a.id, WILDWOOD_BLADE_ID), { accepted: false });
+    assert.equal(rewards.rewardsFor([a.id])[a.id].equippedWeaponId, DEFAULT_EQUIPPED_WEAPON_ID,
+      'the ephemeral hero must still hold the default weapon');
     rewards.close();
   } finally {
     cleanupTempDb(dir);

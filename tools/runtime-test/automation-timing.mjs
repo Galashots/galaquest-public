@@ -68,3 +68,41 @@ export function movementPulseMillis(distanceMeters, {
   const scaled = distance * finiteMillis(msPerMeter, 55);
   return Math.min(upper, Math.max(lower, Math.round(scaled)));
 }
+
+/**
+ * Track something that is DYING while the harness works on it, and budget waits against what it has
+ * left rather than against a constant typed here.
+ *
+ * `pollUntilDeadline` above fixes one half of the hosted-latency problem: a loop must be bounded by
+ * elapsed time, not by a sample count. This fixes the other half, which drive-corpse-loot found the
+ * expensive way at a20fcd7. Every one of that run's budgets was already a wall-clock deadline and
+ * every gameplay assertion it reached passed -- and it still went red, because the budgets were
+ * sized against each other and not against the subject. One re-approach was allowed sixty seconds
+ * of a claim that only lives a hundred and eighty, so the choreography outlived the corpse and the
+ * final tap landed on a body that had already expired.
+ *
+ * The rule this encodes: a wait can never be budgeted longer than the subject has left to live, and
+ * a phase that still has work after it must reserve the time that work needs. `budgetFor` is
+ * therefore the only way a caller should turn "I would like N milliseconds" into a real deadline.
+ */
+export function subjectLifetime({ bornAtMillis, lifetimeSeconds, now = Date.now } = {}) {
+  const born = finiteMillis(bornAtMillis, now());
+  const lifetime = Math.max(0, finiteMillis(lifetimeSeconds * 1000, 0));
+  const remainingMillis = () => Math.max(0, born + lifetime - now());
+  return {
+    remainingMillis,
+    /** Seconds spent so far, rounded the way a log line wants to read. */
+    elapsedSeconds: () => Math.round((now() - born) / 100) / 10,
+    expired: () => remainingMillis() <= 0,
+    /**
+     * The largest wait this phase may actually take: what it wanted, what the subject has left, and
+     * what the phases after it still need, whichever is smallest. Never negative -- a caller that
+     * passes this straight to deadlineAfter must get "no time at all", not a deadline in the past
+     * that reads as an enormous one.
+     */
+    budgetFor: (wantedMillis, { reserveMillis = 0 } = {}) => Math.max(
+      0,
+      Math.min(finiteMillis(wantedMillis, 0), remainingMillis() - Math.max(0, finiteMillis(reserveMillis, 0))),
+    ),
+  };
+}

@@ -6,6 +6,7 @@ import { networkInterfaces } from 'node:os';
 
 import { attachGameServer } from './net/gameServer.mjs';
 import { handleForgeApiRequest } from './net/forgeApi.mjs';
+import { handleRegistryApiRequest } from './net/registryApi.mjs';
 
 export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -40,6 +41,11 @@ export function createRuntimeServer() {
       // into the real Three.js inspection scene without exposing the Meshy credential to the browser.
       // handleForgeApiRequest returns false for every non-Forge URL, preserving the existing runtime.
       if (await handleForgeApiRequest(request, response)) return;
+
+      // Studio Library (#92 STUDIO-V2A): a read-only, same-origin passthrough of the canonical
+      // asset registry, augmented with a live "can this checkout actually serve these bytes"
+      // check. See net/registryApi.mjs's own header for why this is not a second asset database.
+      if (await handleRegistryApiRequest(request, response)) return;
 
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         response.writeHead(405, { allow: 'GET, HEAD' });
@@ -121,5 +127,21 @@ if (entrypoint === resolve(fileURLToPath(import.meta.url))) {
   // would durably and irreversibly "buy" it in the children's real save. See data/README.md's own
   // "tests must never open a store at a path under data/" rule, extended here to this harness layer.
   const rewardStorePath = process.env.GALAQUEST_REWARD_STORE_PATH || undefined;
-  startRuntimeServer(port, { rewardStorePath });
+  // #87: GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS carries the identical opt-in discipline as
+  // GALAQUEST_REWARD_STORE_PATH immediately above, and is unset for every real invocation -- the
+  // family's own `node server.mjs 5201` never sets it, no npm script sets it, and the only writer
+  // anywhere in the tree is tools/runtime-test/owned-server.mjs on behalf of one harness.
+  //
+  // WHY IT EXISTS. drive-corpse-loot.mjs has to reach a REAL personal corpse claim before it can
+  // prove anything about the presenter, and a corpse only carries gear when an unseeded server dice
+  // roll says so (world/enemyDrops.js: 20% on a frost-wolf, 0% on a common wolf). The hosted matrix
+  // job spent its entire budget re-killing an enemy waiting for that roll and went red having never
+  // once opened the loot panel it exists to test. This hands the server a fixed item list instead,
+  // so the corpse itself, the claim, the wire, the presenter, and the collect path all stay real and
+  // only the DICE stop being a coin flip a CI gate has to sit through.
+  //
+  // Unset -> the empty list -> net/gameServerCore.mjs behaves exactly as it did before this existed.
+  const guaranteedCorpseItemIds = (process.env.GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS ?? '')
+    .split(',').map((itemId) => itemId.trim()).filter((itemId) => itemId.length > 0);
+  startRuntimeServer(port, { rewardStorePath, guaranteedCorpseItemIds });
 }

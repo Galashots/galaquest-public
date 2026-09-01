@@ -284,6 +284,39 @@ async function selectItem(itemId) {
   return false;
 }
 
+/**
+ * #88's equip gesture, as a helper, because it is now TWO taps and the second one only means
+ * "equip" if the first one actually landed.
+ *
+ * The old harness said `selectItem(id)` then clicked a separate #hero-equip-button, and the comment
+ * beside those calls explained why: "the equip button acts on whatever is currently selected, so a
+ * fixed sleep here equips the PREVIOUS selection whenever the re-render is slower than the guess."
+ * That hazard did not go away with the button -- it moved. A blind second tap on an item that has
+ * not yet rendered as ARMED is read as a first tap and merely selects, so the harness would then be
+ * asserting an equip that never happened.
+ *
+ * So this waits for the DOM to actually say `data-armed="true"` before sending the second tap. That
+ * is the same fact the click handler itself reads, which is what makes the wait a synchronisation
+ * rather than a guess.
+ */
+async function equipItem(itemId) {
+  if (!(await selectItem(itemId))) return false;
+  for (let i = 0; i < 20; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const armed = await page.eval(
+      `document.querySelector('[data-item-id="${itemId}"]')?.dataset.armed === 'true'`,
+    );
+    if (armed === true || armed === 'true') {
+      // eslint-disable-next-line no-await-in-loop
+      await clickSelector(`[data-item-id="${itemId}"]`);
+      return true;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(100);
+  }
+  return false;
+}
+
 async function heroRuntimeState() {
   return page.eval(`JSON.stringify({
     open: window.__galaQuestRuntime.heroScreenOpen(),
@@ -417,50 +450,168 @@ check('the Blade-fixture guest sees the granted Blade in the strip, so there is 
 check('and the starter sword is still equipped, because owning is not equipping',
   online.equipped === STARTER_SWORD_ID, JSON.stringify(online));
 
-await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
-// POLL FOR THE TEXT, rather than reading 100ms after the click and calling an empty string a defect.
-// Selecting an item re-renders the card, and on a software-rendered runner that is not instant. The
-// old fixed 100ms read reported "" and the four checks after it inherited the blame -- the same
-// read-too-early shape that made drive-recovery report an empty lantern row.
+// ── #88: FIRST TAP COMPARES. IT MUST NOT EQUIP. ──────────────────────────────────────────────
 //
-// BOUNDED AT TWO SECONDS, deliberately, because the bound is what keeps this a race detector rather
-// than a way of waiting until it passes: a card that is still blank two seconds after a child tapped
-// an item is a defect, and this will still say so.
-let compareText = '';
-for (let i = 0; i < 20 && compareText.trim() === ''; i += 1) {
+// This is the load-bearing law of the whole package and the one a regression would be quietest
+// about: an implementation that equips on the first tap still passes every "is it equipped
+// afterwards" check further down, because it IS equipped afterwards -- just one tap too early. So
+// the first tap is asserted for what it must NOT have done, before the second one is sent.
+await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
+await sleep(250);
+const afterFirstTap = await heroRuntimeState();
+check('#88: the FIRST tap on an unequipped item does NOT equip it',
+  afterFirstTap.equipped === STARTER_SWORD_ID, JSON.stringify(afterFirstTap));
+
+// POLL FOR THE CARD, rather than reading 100ms after the click and calling an empty string a
+// defect. Selecting an item re-renders the card, and on a software-rendered runner that is not
+// instant. BOUNDED AT TWO SECONDS, deliberately, because the bound is what keeps this a race
+// detector rather than a way of waiting until it passes: a card that is still blank two seconds
+// after a child tapped an item is a defect, and this will still say so.
+let cardText = '';
+for (let i = 0; i < 20 && cardText.trim() === ''; i += 1) {
   // eslint-disable-next-line no-await-in-loop
   await sleep(100);
   // eslint-disable-next-line no-await-in-loop
-  compareText = await page.eval("document.querySelector('#hero-item-compare').textContent");
+  cardText = await page.eval("document.querySelector('#hero-item-card').textContent");
 }
-// DERIVED, NOT TYPED. This pinned the literal string `1 → 2 DAMAGE` -- the plan's own worked example
-// -- and P2 falsified it twice over in one commit: the catalogue was rescaled to 10/20, and the card
-// gained the POWER clause the Hero surface owes the contract. A harness that hard-codes a rendered
-// string is the reader GQ-017 is about: one directory gets swept, the other keeps asserting the old
-// world. Both halves are now read off the same authorities the screen itself renders from.
-const expectedCompare = `${damageFor(STARTER_SWORD_ID)} → ${damageFor(WILDWOOD_BLADE_ID)} DAMAGE`;
-check('selecting the Wildwood Blade shows the catalogue\'s own comparison and what it does to POWER',
-  compareText.replace(/\s+/g, ' ').trim().startsWith(expectedCompare)
-    && /POWER \+/.test(compareText),
-  JSON.stringify(compareText));
+const cardShown = await page.eval("document.querySelector('#hero-item-card').dataset.shown");
+check('#88: the first tap opens the comparison card', cardShown === 'true', String(cardShown));
+
+// DERIVED, NOT TYPED. An earlier version of this pinned the literal rendered string `1 → 2 DAMAGE`
+// and P2 falsified it twice in one commit. Both halves are read off the same authorities the screen
+// itself renders from, so a re-tune moves the expectation with the game.
+const compareRow = await page.eval(
+  "JSON.stringify([...document.querySelectorAll('#hero-compare-stats .hero-compare-row')]"
+  + '.map((el) => ({'
+  + " key: el.querySelector('.hero-compare-row-label').textContent,"
+  + " from: el.querySelector('.hero-compare-row-from').textContent,"
+  + " to: el.querySelector('.hero-compare-row-to').textContent,"
+  + ' direction: el.dataset.direction })))',
+).then(JSON.parse);
+const damageRow = compareRow.find((row) => row.key === 'DAMAGE') ?? null;
+check('#88: the comparison shows the catalogue\'s own current-vs-selected DAMAGE',
+  damageRow !== null
+    && damageRow.from === String(damageFor(STARTER_SWORD_ID))
+    && damageRow.to === String(damageFor(WILDWOOD_BLADE_ID))
+    && damageRow.direction === 'up',
+  JSON.stringify(compareRow));
+
+const powerLine = await page.eval(
+  "JSON.stringify({ hidden: document.querySelector('#hero-compare-power').hidden,"
+  + " direction: document.querySelector('#hero-compare-power').dataset.direction,"
+  + " text: document.querySelector('#hero-compare-power').textContent })",
+).then(JSON.parse);
+check('#41: the card carries a truthful POWER before -> after with a positive delta for a real upgrade',
+  powerLine.hidden === false && powerLine.direction === 'up' && /\+/.test(powerLine.text),
+  JSON.stringify(powerLine));
+
+const verdict = await page.eval("document.querySelector('#hero-item-card').dataset.verdict");
+check('#88: a real upgrade is labelled an upgrade', verdict === 'upgrade', String(verdict));
+
+// THE ART. The Checkpoint 0 defect was that every item drew one identical grey square, so this
+// asserts a portrait actually resolved -- naturalWidth is the only honest test of "the image
+// loaded", because an <img> with a broken src is still an <img> in the DOM.
+const portrait = await page.eval(
+  "(() => { const img = document.querySelector('#hero-card-art .item-art-image');"
+  + " return JSON.stringify({ present: !!img, src: img ? new URL(img.src).pathname : null,"
+  + " loaded: img ? img.naturalWidth > 0 : false,"
+  // The silhouette BEHIND the portrait must be hidden once the portrait is up. It is drawn in the
+  // rarity ink, so a fallback left lit tints the item -- which is #88's "rarity must not change the
+  // art" broken by a load-event race that only shows up on a repaint of a cached image. Asserted,
+  // because "the PNG loaded" and "the PNG is what you can see" are different claims.
+  + " fallbackHidden: document.querySelector('#hero-card-art .item-art-fallback')?.hidden === true }); })()",
+).then(JSON.parse);
+check('#88: the comparison shows a real rendered item portrait, not a coloured square',
+  portrait.present && portrait.loaded && portrait.src.endsWith(`${WILDWOOD_BLADE_ID}.png`),
+  JSON.stringify(portrait));
+check('#88: and the rarity-tinted fallback silhouette is hidden behind it, not tinting the item',
+  portrait.fallbackHidden === true, JSON.stringify(portrait));
+
+const armedAction = await page.eval(
+  "JSON.stringify({ text: document.querySelector('#hero-compare-action').textContent,"
+  + " armed: document.querySelector('#hero-compare-action').dataset.armed })",
+).then(JSON.parse);
+check('#88: the card says out loud what the next tap will do, which is what makes the gesture discoverable',
+  armedAction.armed === 'true' && /TAP AGAIN/i.test(armedAction.text), JSON.stringify(armedAction));
+
+// The destination slot is signposted BEFORE the child commits, so "what would this replace" costs
+// no extra tap.
+const targetSlot = await page.eval(
+  "document.querySelector('[data-slot=\"weapon\"]').dataset.target",
+);
+check('#88: the slot the selected item would fill is marked as the target', targetSlot === 'true',
+  String(targetSlot));
+
 await shot('portrait-compare');
 
-await clickSelector('#hero-equip-button');
+// ── #88: THE SECOND TAP EQUIPS. THERE IS NO EQUIP BUTTON. ────────────────────────────────────
+const equipButtonGone = await page.eval("String(document.querySelector('#hero-equip-button') === null)");
+check('#88: there is no separate Equip button on this surface any more', equipButtonGone === 'true',
+  equipButtonGone);
+
+await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
 // Waits on the showcase's own accent too, not just `equipped` -- the server round trip that flips
 // `equipped` and the next rAF frame's heroPreview.update() call are two separate async events that
 // can land a frame apart, so a predicate checking `equipped` alone can catch a snapshot where the
-// reward mirror has already updated but the preview has not repainted yet (observed directly against
-// the marker this accent replaced: `equipped` correct, colour still the pre-equip one).
+// reward mirror has already updated but the preview has not repainted yet.
 const equipped = await pollUntil(heroRuntimeState,
   (s) => s.equipped === WILDWOOD_BLADE_ID && s.preview.accentHex === swatchFor(WILDWOOD_BLADE_ID),
   { timeoutMs: 4000 });
-check('tapping EQUIP actually equips the Wildwood Blade, confirmed off the server mirror',
+check('#88: the SECOND tap on the same item equips it, confirmed off the server mirror',
   equipped.equipped === WILDWOOD_BLADE_ID, JSON.stringify(equipped));
 const slotName = await page.eval("document.querySelector('[data-slot=\"weapon\"] .hero-slot-name').textContent");
 check('the weapon slot itself now shows the equipped item\'s name', slotName === 'Wildwood Blade', slotName);
+const slotArt = await page.eval(
+  "(() => { const img = document.querySelector('[data-slot=\"weapon\"] .item-art-image');"
+  + ' return JSON.stringify({ present: !!img, loaded: img ? img.naturalWidth > 0 : false,'
+  + ' src: img ? new URL(img.src).pathname : null }); })()',
+).then(JSON.parse);
+check('#88: the equipped slot shows the item\'s own portrait, so the swap is visible where it landed',
+  slotArt.present && slotArt.loaded && slotArt.src.endsWith(`${WILDWOOD_BLADE_ID}.png`),
+  JSON.stringify(slotArt));
 check('GP1-C3: equipping the Blade turns the showcase\'s kicker lights the Blade\'s own colour',
   equipped.preview.active === true && equipped.preview.accentHex === swatchFor(WILDWOOD_BLADE_ID),
   JSON.stringify(equipped.preview));
+
+// ── #88: THE REPLACED ITEM CAME BACK. IT WAS NOT DESTROYED. ──────────────────────────────────
+//
+// The requirement is "never destroy it, never duplicate it, never silently drop it", and the
+// cheapest way to break it is a swap implemented as "remove the old id, add the new one". Asserted
+// on the rendered grid rather than on a store read, because what the child can see is the claim.
+const stripAfterEquip = await page.eval(
+  "JSON.stringify([...document.querySelectorAll('.hero-item')].map((el) => el.dataset.itemId))",
+).then(JSON.parse);
+check('#88: the replaced Starter Sword is still in the inventory after the swap -- not destroyed',
+  stripAfterEquip.filter((id) => id === STARTER_SWORD_ID).length === 1,
+  JSON.stringify(stripAfterEquip));
+check('#88: and the newly equipped Blade appears exactly once -- not duplicated',
+  stripAfterEquip.filter((id) => id === WILDWOOD_BLADE_ID).length === 1,
+  JSON.stringify(stripAfterEquip));
+
+// ── #88: AN ACCIDENTAL TAP ON WHAT YOU ARE WEARING MUST NOT TAKE IT OFF. ─────────────────────
+//
+// Two more taps on the now-equipped Blade. The first re-selects it; the second is exactly the
+// gesture that equipped it a moment ago, which is why this is the tap most likely to be repeated by
+// a child who does not yet trust that it worked. Neither may unequip.
+await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
+await sleep(250);
+await clickSelector(`[data-item-id="${WILDWOOD_BLADE_ID}"]`);
+await sleep(400);
+const afterRepeatTaps = await heroRuntimeState();
+check('#88: repeatedly tapping the item you are already wearing never unequips it',
+  afterRepeatTaps.equipped === WILDWOOD_BLADE_ID, JSON.stringify(afterRepeatTaps));
+const wornAction = await page.eval("document.querySelector('#hero-compare-action').textContent");
+check('#88: and the card stops offering the equip gesture once the item is worn',
+  !/TAP AGAIN/i.test(wornAction) && /COMPARE/i.test(wornAction), String(wornAction));
+
+// A tap on the equipped SLOT is likewise inert. #88 allows an unequip, but only as "a separate
+// small deliberate action" -- so the big obvious slot must not be it.
+await clickSelector('[data-slot="weapon"]').catch(() => {});
+await sleep(300);
+const afterSlotTap = await heroRuntimeState();
+check('#88: tapping the equipped slot itself does not unequip either',
+  afterSlotTap.equipped === WILDWOOD_BLADE_ID, JSON.stringify(afterSlotTap));
+
 await shot('portrait-equipped');
 
 await clickSelector('#hero-screen-close');
@@ -522,16 +673,27 @@ await shot('landscape-open');
 await clickSelector(`[data-item-id="${STARTER_SWORD_ID}"]`);
 await sleep(100);
 await shot('landscape-compare');
-const landscapeCompare = await page.eval("document.querySelector('#hero-item-compare').textContent");
-// The other direction, and the POWER clause has to follow it: the contract's sidegrade rule says a
-// change that lowers overall POWER must not be labelled as strictly better, so a downgrade reads with
-// a MINUS. Same derivation as the upgrade above.
-const expectedDowngrade = `${damageFor(WILDWOOD_BLADE_ID)} → ${damageFor(STARTER_SWORD_ID)} DAMAGE`;
-check('landscape: selecting the Starter Sword while the Blade is equipped shows a DOWNGRADE comparison',
-  landscapeCompare.replace(/\s+/g, ' ').trim().startsWith(expectedDowngrade)
-    && /POWER -/.test(landscapeCompare), JSON.stringify(landscapeCompare));
+// The other direction. The contract's sidegrade rule says a change that lowers overall POWER must
+// not be labelled as strictly better, so this reads the card's own verdict and its POWER direction
+// rather than a rendered string -- a downgrade must say so in the attribute the CSS colours from,
+// not merely somewhere in the text.
+const landscapeCompare = await page.eval(
+  "JSON.stringify({ verdict: document.querySelector('#hero-item-card').dataset.verdict,"
+  + " powerDirection: document.querySelector('#hero-compare-power').dataset.direction,"
+  + " damageFrom: document.querySelector('.hero-compare-row .hero-compare-row-from')?.textContent,"
+  + " damageTo: document.querySelector('.hero-compare-row .hero-compare-row-to')?.textContent,"
+  + " damageDirection: document.querySelector('.hero-compare-row')?.dataset.direction })",
+).then(JSON.parse);
+check('landscape: selecting the Starter Sword while the Blade is equipped reads as a DOWNGRADE, never an upgrade',
+  landscapeCompare.verdict === 'downgrade'
+    && landscapeCompare.powerDirection === 'down'
+    && landscapeCompare.damageDirection === 'down'
+    && landscapeCompare.damageFrom === String(damageFor(WILDWOOD_BLADE_ID))
+    && landscapeCompare.damageTo === String(damageFor(STARTER_SWORD_ID)),
+  JSON.stringify(landscapeCompare));
 
-await clickSelector('#hero-equip-button');
+check('landscape: the second tap equips the Starter Sword back',
+  (await equipItem(STARTER_SWORD_ID)) === true, 'the armed state never rendered within 2s');
 // Same reasoning as the equip-to-Blade poll above: wait for the accent, not just `equipped`.
 const revertedToStarter = await pollUntil(heroRuntimeState,
   (s) => s.equipped === STARTER_SWORD_ID && s.preview.accentHex === swatchFor(STARTER_SWORD_ID),
@@ -632,12 +794,13 @@ await page.send('Emulation.setDeviceMetricsOverride', PORTRAIT);
 await sleep(300);
 
 // ── equip the Blade and watch the hand ──
-// selectItem, not click-and-hope: the equip button acts on whatever is currently selected, so a
-// fixed sleep here equips the PREVIOUS selection whenever the re-render is slower than the guess.
-// This pair passed on some runs and not others for exactly that reason.
-check('GP1-C4: the Wildwood Blade is actually SELECTED before the equip button is tapped',
-  (await selectItem(WILDWOOD_BLADE_ID)) === true, 'selection did not land within 2s');
-await clickSelector('#hero-equip-button');
+// equipItem, not click-and-hope: under #88 the equip is the SECOND tap, and a blind second tap on
+// an item that has not yet rendered as armed is read as a first tap and merely selects. equipItem
+// waits on the same data-armed fact the click handler reads. (The pre-#88 version of this hazard was
+// identical in shape: a fixed sleep equipped the PREVIOUS selection whenever the re-render was
+// slower than the guess, and this pair passed on some runs and not others for exactly that reason.)
+check('GP1-C4: the Wildwood Blade is compared and then equipped by the second tap',
+  (await equipItem(WILDWOOD_BLADE_ID)) === true, 'the armed state never rendered within 2s');
 // Waits on the MESH, not on the equip mirror: the server round trip that flips `equipped`, the GLB
 // download and the frame that first draws the new anchor are three separate async events, and only
 // the last one is what a child sees.
@@ -650,6 +813,86 @@ check('GP1-C4: equipping the Wildwood Blade puts the ACTUAL Wildwood mesh in his
   JSON.stringify(bladeMesh));
 check('GP1-C4: and the Ironwood sword is gone -- exactly one sword, not two in one fist',
   bladeMesh.shipping.visible === false && bladeMesh.visibleSwords === 1, JSON.stringify(bladeMesh));
+
+// GP1-C4 / Issue #82: the Blade must actually READ AS HELD, not merely be mounted+visible.
+// `candidate.mounted && candidate.visible` stayed green for twelve days while the baked rest
+// transform laid the blade nearly HORIZONTAL through the torso, edge-on to the gameplay camera --
+// an EMPTY HAND at gameplay framing (the Owner's #82 playtest report). Flags are not pixels
+// (GQ-010, docs/MISTAKES.md); this measures the mount itself. The grip point and tip are found the
+// same way fit-wildwood-blade.mjs solves them (crossguard = widest cross-section bucket along the
+// longest local axis, grip 45% of the way from the guard toward the pommel extreme), so the checks
+// assert the fit tool's own contract. Two properties, measured red-capable against the exact #82
+// value before the bars were chosen:
+//   - grip seat: the grip sits 0.055m past the RightHand bone (the shipping sword's documented
+//     seat, gear.js). Bar 0.12m. NOT red against #82 on its own -- the broken value ALSO seated
+//     its grip at 0.055m (measured 2026-08-28) and was wrong purely in orientation. Kept because
+//     it is the cheap half of the contract and catches the other failure mode (a mount solved off
+//     the hand entirely, the 2026-08-16 near-the-head placeholder class).
+//   - blade pitch: grip-to-tip must drop at least 45 degrees below horizontal, the presentation
+//     convention the shipping sword carries at idle (gear.js: 68.8 degrees; this mount measures
+//     63.9). The #82 defect measured 26.9 degrees -- near-horizontal, buried in the chest -- so a
+//     45-degree bar sits ~18 degrees from both sides. Measured at the same idle the shipping
+//     convention was solved against (IDLE_ARM_SETTLE); a swing mid-measurement would move it, but
+//     this phase measures before any attack input.
+const gripSeat = await page.eval(`(() => {
+  const hero = window.__galaQuestRuntime.hero;
+  hero.updateMatrixWorld(true);
+  const anchor = hero.getObjectByName('InterimAdapter_${WILDWOOD_BLADE_CANDIDATE_ID}_RightHand');
+  if (!anchor) return { error: 'no candidate anchor' };
+  const V = anchor.position.constructor;
+  let mesh = null; anchor.traverse((o) => { if (!mesh && o.isMesh) mesh = o; });
+  if (!mesh) return { error: 'no candidate mesh' };
+  const gearInv = anchor.children[0].matrixWorld.clone().invert();
+  const rel = gearInv.multiply(mesh.matrixWorld);
+  const pos = mesh.geometry.attributes.position;
+  const verts = [];
+  for (let i = 0; i < pos.count; i += 1) verts.push(new V(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(rel));
+  const lmin = new V(Infinity, Infinity, Infinity); const lmax = new V(-Infinity, -Infinity, -Infinity);
+  for (const v of verts) { lmin.min(v); lmax.max(v); }
+  const size = lmax.clone().sub(lmin); const dims = [size.x, size.y, size.z];
+  const axis = dims.indexOf(Math.max(...dims));
+  const perp = [0, 1, 2].filter((i) => i !== axis);
+  const BUCKETS = 24;
+  const a0 = lmin.getComponent(axis); const span = (lmax.getComponent(axis) - a0) || 1;
+  const buckets = Array.from({ length: BUCKETS }, () => ({ p: [Infinity, Infinity, -Infinity, -Infinity], n: 0, sum: 0 }));
+  for (const v of verts) {
+    const b = buckets[Math.max(0, Math.min(BUCKETS - 1, Math.floor((v.getComponent(axis) - a0) / span * BUCKETS)))];
+    const p0 = v.getComponent(perp[0]); const p1 = v.getComponent(perp[1]);
+    b.p[0] = Math.min(b.p[0], p0); b.p[1] = Math.min(b.p[1], p1);
+    b.p[2] = Math.max(b.p[2], p0); b.p[3] = Math.max(b.p[3], p1);
+    b.n += 1; b.sum += v.getComponent(axis);
+  }
+  const areas = buckets.map((b) => (b.n ? (b.p[2] - b.p[0]) * (b.p[3] - b.p[1]) : 0));
+  const peak = areas.indexOf(Math.max(...areas));
+  const peakVal = buckets[peak].n ? buckets[peak].sum / buckets[peak].n : a0 + (peak + 0.5) / BUCKETS * span;
+  const hiltIsMin = Math.abs(peakVal - a0) <= Math.abs(peakVal - (a0 + span));
+  const gripVal = peakVal + ((hiltIsMin ? a0 : a0 + span) - peakVal) * 0.45;
+  const tipVal = hiltIsMin ? a0 + span : a0;
+  let s0 = 0, s1 = 0, n = 0;
+  for (const v of verts) {
+    if (Math.abs(v.getComponent(axis) - gripVal) <= span / BUCKETS * 2) { s0 += v.getComponent(perp[0]); s1 += v.getComponent(perp[1]); n += 1; }
+  }
+  const grip = new V();
+  grip.setComponent(axis, gripVal);
+  grip.setComponent(perp[0], n ? s0 / n : (lmin.getComponent(perp[0]) + lmax.getComponent(perp[0])) / 2);
+  grip.setComponent(perp[1], n ? s1 / n : (lmin.getComponent(perp[1]) + lmax.getComponent(perp[1])) / 2);
+  const tip = new V();
+  tip.setComponent(axis, tipVal);
+  tip.setComponent(perp[0], grip.getComponent(perp[0]));
+  tip.setComponent(perp[1], grip.getComponent(perp[1]));
+  grip.applyMatrix4(anchor.children[0].matrixWorld);
+  tip.applyMatrix4(anchor.children[0].matrixWorld);
+  const bone = new V().setFromMatrixPosition(anchor.parent.matrixWorld);
+  const len = grip.distanceTo(tip) || 1;
+  const pitchDeg = Math.asin(Math.max(-1, Math.min(1, (grip.y - tip.y) / len))) * 180 / Math.PI;
+  return { gripToBoneMeters: +grip.distanceTo(bone).toFixed(4), pitchDeg: +pitchDeg.toFixed(1) };
+})()`);
+check('GP1-C4/#82: the Blade\'s measured grip sits AT the hand bone, not floating off the body',
+  typeof gripSeat.gripToBoneMeters === 'number' && gripSeat.gripToBoneMeters < 0.12,
+  JSON.stringify(gripSeat));
+check('GP1-C4/#82: the Blade hangs tip-DOWN from the fist like the shipping sword, not lying through the torso',
+  typeof gripSeat.pitchDeg === 'number' && gripSeat.pitchDeg > 45,
+  JSON.stringify(gripSeat));
 
 await sleep(400);
 await shot('weapon-wildwood-portrait');
@@ -821,10 +1064,9 @@ await sleep(200);
 // ── switching back ──
 await clickSelector('#hero-button');
 await sleep(200);
-const starterSelected = await selectItem(STARTER_SWORD_ID);
-check('GP1-C4: the Starter Sword is actually SELECTED before the equip button is tapped',
-  starterSelected === true, `selected ${starterSelected}`);
-await clickSelector('#hero-equip-button');
+const starterEquipped = await equipItem(STARTER_SWORD_ID);
+check('GP1-C4: the Starter Sword is compared and then equipped by the second tap',
+  starterEquipped === true, `equipItem -> ${starterEquipped}`);
 const revertedMesh = await pollUntil(weaponMeshState,
   (s) => s.equippedItemId === STARTER_SWORD_ID && s.shipping.visible, { timeoutMs: 8000 });
 check('GP1-C4: switching back to the Starter Sword restores the Ironwood and puts the Blade away',
@@ -903,7 +1145,15 @@ const HOSTILE_CONTEXTS = [
   { name: '4-cottage-edge', stand: [-9.9, -1.5], through: COTTAGE_PROP.at },
   // The control. Nothing to hide behind -- if the framing only looks right when something is in the
   // way, this is the capture that says so.
-  { name: '5-open-field', stand: [2.5, -7.0], through: null },
+  //
+  // MOVED off [2.5, -7.0] when the density push authored wolf-6 at [6, -8]: that put the old stand
+  // 3.64m from a live wolf's home against WOLF_AGGRO_RANGE 6, so the wolf reached the posing hero
+  // mid-phase and knocked him down -- hosted at fda0cf4 the portrait reading passed and the
+  // landscape reading two seconds later measured a FALLEN body (94.9% of frame height, spilling
+  // past the bottom edge, centred 0.705), taking the location-independence check down with it.
+  // The stand below was grid-searched against the authored population: 9.7m from the nearest
+  // enemy home (wolf-6) and 3.7m from the nearest prop, still bare grass.
+  { name: '5-open-field', stand: [-3.5, -10.0], through: null },
 ];
 
 const forwardKey = (type) => page.send('Input.dispatchKeyEvent', {
@@ -987,12 +1237,13 @@ await sleep(200);
 // that CHANGED, not the default.
 await clickSelector('#hero-button');
 await sleep(150);
-// selectItem, not click-and-hope: the equip button acts on whatever is currently selected, so a
-// fixed sleep here equips the PREVIOUS selection whenever the re-render is slower than the guess.
-// This pair passed on some runs and not others for exactly that reason.
-check('GP1-C4: the Wildwood Blade is actually SELECTED before the equip button is tapped',
-  (await selectItem(WILDWOOD_BLADE_ID)) === true, 'selection did not land within 2s');
-await clickSelector('#hero-equip-button');
+// equipItem, not click-and-hope: under #88 the equip is the SECOND tap, and a blind second tap on
+// an item that has not yet rendered as armed is read as a first tap and merely selects. equipItem
+// waits on the same data-armed fact the click handler reads. (The pre-#88 version of this hazard was
+// identical in shape: a fixed sleep equipped the PREVIOUS selection whenever the re-render was
+// slower than the guess, and this pair passed on some runs and not others for exactly that reason.)
+check('GP1-C4: the Wildwood Blade is compared and then equipped by the second tap',
+  (await equipItem(WILDWOOD_BLADE_ID)) === true, 'the armed state never rendered within 2s');
 await pollUntil(heroRuntimeState, (s) => s.equipped === WILDWOOD_BLADE_ID, { timeoutMs: 4000 });
 await clickSelector('#hero-screen-close');
 await sleep(200);

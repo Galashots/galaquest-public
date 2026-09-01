@@ -38,7 +38,9 @@
 // Pure: no DOM, no storage, no clock, no three.js. net/gameServer.mjs already imports files under
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
+import { sanitizeGuestId } from '../net/guestId.js';
 import { LEVEL_ONE, xpToAdvanceFrom } from './levels.js';
+import { EQUIPMENT_SLOTS, itemDef, WEAPON_SLOT } from './items.js';
 
 /** One profile's own earnings. `village-upgrade` and `beacon-lit` are deliberately absent: those are
  *  world facts, not one profile's earnings, and folding them into a personal state would be a
@@ -47,6 +49,7 @@ export const PROFILE_FACT_TYPES = Object.freeze([
   'mark-earned',
   'lantern-unlocked',
   'weapon-equipped',
+  'gear-equipped',
   'gear-owned',
   'coin-earned',
   'shard-earned',
@@ -220,15 +223,132 @@ export function parseXpFactAmount(value) {
   return Number.isSafeInteger(amount) ? amount : null;
 }
 
+function isEquipmentFactType(type) {
+  return type === 'weapon-equipped' || type === 'gear-equipped';
+}
+
+/** The one semantic boundary between an equipment fact's encoding and the item catalogue. */
+export function isSemanticallyValidEquipmentFact(fact) {
+  if (!isEquipmentFactType(fact?.type) || typeof fact.value !== 'string' || fact.value.length === 0) {
+    return false;
+  }
+  const slot = itemDef(fact.value)?.slot;
+  if (fact.type === 'weapon-equipped') return slot === WEAPON_SLOT;
+  return EQUIPMENT_SLOTS.includes(slot) && slot !== WEAPON_SLOT;
+}
+
 /** Whether this is a fact a profile can durably own. Anything else -- a world fact, a transient
  *  combat event, a malformed row recovered from storage -- is refused rather than folded, so a
  *  corrupted journal degrades to "fewer facts" instead of to a wrong number. */
 export function isProfileFact(fact) {
-  return Boolean(
+  const structural = Boolean(
     fact
     && typeof fact.eventId === 'string' && fact.eventId.length > 0
     && typeof fact.type === 'string' && PROFILE_FACT_TYPE_SET.has(fact.type),
   );
+  return structural && (!isEquipmentFactType(fact.type) || isSemanticallyValidEquipmentFact(fact));
+}
+
+// H1: local-first recovery is allowed to trust PERSONAL history, but that trust stops before facts
+// that author the shared world or occupy another profile's durable identity. Currency rows fund the
+// communal Village and determine whether physical loot is already spent, so a device may never
+// restore them. Shared-world ids are reserved outright; profile-scoped ids remain byte-identical
+// for the rightful profile so its local/server copies still reconcile exactly once.
+const CLIENT_RESTORE_REFUSED_TYPES = new Set(['coin-earned', 'shard-earned']);
+const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
+  'cart-loot:',
+  'hollow-cache:',
+  'village-upgrade:',
+  'beacon-lit:',
+]);
+
+// These are current personal durable identity families whose id embeds the owning profile. They are
+// server-authored except equip and the offline Lantern identities, which are minted locally with the
+// same profile id. Keep their ids unchanged for the rightful profile and refuse them for every other
+// profile so one child cannot reserve a sibling's future durable row.
+const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
+  'own:',
+  'satchel:',
+  'charm:',
+  'lantern:',
+  'lantern-unlocked:',
+  'equip:',
+  'xp:lantern:',
+  'xp:lantern-unlocked:',
+  // R1: repeatable combat XP, minted `kill-xp:<guestId>:<enemyId>:<lifeId>` by
+  // net/gameServerCore.mjs's own applyKillXpAward (rewards/killXp.js's fold). Same treatment as
+  // every other personal xp-earned identity above: the profile it names may restore it, another
+  // profile may not reserve it out from under them.
+  'kill-xp:',
+  // Rune chests: minted `rune-chest:<profileId>:<chestId>` by progression/runeChests.js's own
+  // runeChestXpEventId, CLIENT-SIDE ONLY, the same way an offline Lantern unlock is (`lantern-
+  // unlocked:<profileId>` above) -- unlike kill-xp, there is no server-side counterpart that ever
+  // mints a guestId-scoped copy of this fact (runeChests.js's own header: chests are never
+  // server-adjudicated, online or off), so the profile id IS the whole of this fact's durable
+  // identity. Same rule as every profile-scoped prefix here: the named profile may restore it,
+  // nobody else may reserve it out from under them.
+  'rune-chest:',
+]);
+
+// The sentinel rewards/offlineProgress.js stamps every offline-earned event with (its own
+// OFFLINE_HERO_ID). It is NOT a profile id and never can be: it names "there was no server", so a
+// fact carrying it belongs to whichever profile is holding the journal it was written into.
+//
+// Deliberately a local constant rather than an import (docs/MISTAKES.md GQ-007 would prefer the
+// import): rewards/offlineProgress.js imports THIS module, so importing back would close a cycle.
+// test/offline-progress-kill-xp.test.mjs pins the agreement over facts the real offline producer
+// mints, so the two cannot drift apart silently.
+const OFFLINE_JOURNAL_OWNER = 'offline-hero';
+
+// ...and the ONLY profile-scoped families the offline fallback ever stamps with it. Kept narrow on
+// purpose rather than exempting the sentinel everywhere: `own:`, `equip:`, `charm:` and the rest are
+// ownership grants, and a blanket exemption would make `own:offline-hero:<item>` a row any client
+// could hand the restore door. rewards/offlineProgress.js mints exactly two sentinel-owned families
+// -- marks (handled by their own compatibility branch below, which predates this) and kill XP.
+const OFFLINE_SENTINEL_EVENT_ID_PREFIXES = Object.freeze(['kill-xp:']);
+
+function reservedProfileEventOwner(eventId) {
+  for (const prefix of PROFILE_SCOPED_EVENT_ID_PREFIXES) {
+    if (!eventId.startsWith(prefix)) continue;
+    const remainder = eventId.slice(prefix.length);
+    const separator = remainder.indexOf(':');
+    const owner = separator === -1 ? remainder : remainder.slice(0, separator);
+    // The offline sentinel reserves nothing, exactly as it does for marks below.
+    //
+    // The Wi-Fi drops, a child fights on and kills fifteen wolves, levels up, and watches POWER and
+    // max HP rise on the Hero screen. Their journal now holds `kill-xp:offline-hero:<enemy>:<life>`
+    // rows. Reading `offline-hero` as an owner makes it a profile id nobody has, so the restore door
+    // (isClientRestorableProfileFact, which net/gameServerCore.mjs asks before ingesting a client's
+    // journal) refused every one of them, the server republished the pre-outage XP, and the level,
+    // the damage and the hearts all snapped backwards -- the exact "a reward the rules never read"
+    // class this door exists to prevent. Marks shipped with this carve-out; kill XP did not.
+    if (owner === OFFLINE_JOURNAL_OWNER && OFFLINE_SENTINEL_EVENT_ID_PREFIXES.includes(prefix)) return null;
+    return owner;
+  }
+
+  // Marks need one compatibility carve-out. Current server marks are `mark:<guestId>:<lifeId>`, but
+  // older/offline device journals also contain `mark:<label>:<lifeId>` identities such as
+  // `mark:old:one`, and offlineProgress deliberately uses `mark:offline-hero:<lifeId>`. Only a first
+  // segment that is itself a legal guest/profile id is therefore a reserved profile identity.
+  if (!eventId.startsWith('mark:')) return null;
+  const remainder = eventId.slice('mark:'.length);
+  const separator = remainder.indexOf(':');
+  if (separator === -1) return null;
+  const owner = remainder.slice(0, separator);
+  if (owner === OFFLINE_JOURNAL_OWNER) return null;
+  return sanitizeGuestId(owner) === owner ? owner : null;
+}
+
+export function isClientRestorableProfileFact(fact, profileId) {
+  if (!isProfileFact(fact) || typeof profileId !== 'string' || profileId.length === 0) return false;
+  if (CLIENT_RESTORE_REFUSED_TYPES.has(fact.type)) return false;
+  if (SERVER_SHARED_WORLD_EVENT_ID_PREFIXES.some((prefix) => fact.eventId.startsWith(prefix))) return false;
+  const owner = reservedProfileEventOwner(fact.eventId);
+  return owner === null || owner === profileId;
+}
+
+export function isEquipmentFact(fact) {
+  return isProfileFact(fact) && isEquipmentFactType(fact.type);
 }
 
 /**
@@ -299,30 +419,32 @@ function equipOutranks(fact, bestRev, bestEventId) {
  *     so two tabs minting the same millisecond cannot resolve differently on the two sides.
  *   - Among un-revved facts only: the last to arrive, which is the only order they have ever had.
  */
-export function latestEquippedFact(facts) {
-  let bestRev = -1;
-  let bestEventId = null;
-  let best = null;
-  let legacy = null;
-
-  for (const fact of facts) {
-    if (!isProfileFact(fact) || fact.type !== 'weapon-equipped') continue;
-    if (typeof fact.value !== 'string' || fact.value.length === 0) continue;
-
+export function latestEquippedFacts(facts) {
+  const bySlot = new Map();
+  for (const fact of facts ?? []) {
+    if (!isEquipmentFact(fact)) continue;
+    const slot = fact.type === 'weapon-equipped' ? WEAPON_SLOT : itemDef(fact.value).slot;
+    let entry = bySlot.get(slot);
+    if (!entry) {
+      entry = { bestRev: -1, bestEventId: null, best: null, legacy: null };
+      bySlot.set(slot, entry);
+    }
     if (typeof fact.rev === 'number' && Number.isFinite(fact.rev)) {
-      if (equipOutranks(fact, bestRev, bestEventId)) {
-        bestRev = fact.rev;
-        bestEventId = fact.eventId;
-        best = fact;
+      if (equipOutranks(fact, entry.bestRev, entry.bestEventId)) {
+        entry.bestRev = fact.rev;
+        entry.bestEventId = fact.eventId;
+        entry.best = fact;
       }
     } else {
-      // Last one seen wins among the un-revved, which is why this takes arrival order as its input
-      // rather than sorting: there is nothing else about these rows to sort BY.
-      legacy = fact;
+      // Last one seen wins among the un-revved legacy rows, which is the only chronology they have.
+      entry.legacy = fact;
     }
   }
+  return new Map([...bySlot].map(([slot, entry]) => [slot, entry.best ?? entry.legacy]));
+}
 
-  return best ?? legacy;
+export function latestEquippedFact(facts) {
+  return latestEquippedFacts(facts).get(WEAPON_SLOT) ?? null;
 }
 
 /**
@@ -336,6 +458,12 @@ export function latestEquippedFact(facts) {
  */
 export function latestEquippedWeaponId(facts) {
   return latestEquippedFact(facts)?.value ?? null;
+}
+
+export function latestEquippedItemIds(facts) {
+  return Object.fromEntries(
+    [...latestEquippedFacts(facts)].map(([slot, fact]) => [slot, fact.value]),
+  );
 }
 
 function numberOr(value, fallback) {
@@ -353,8 +481,9 @@ function numberOr(value, fallback) {
  * does not move, because the union already collapsed it by eventId.
  *
  * @param facts        any iterable of facts; duplicates and non-profile facts are tolerated.
- * @param defaults.equippedWeaponId  what a hero holds when they have never equipped anything.
+ * @param defaults.equippedWeaponId  compatibility default for the Weapon slot.
  * @param defaults.ownedItemIds      what a hero owns before earning anything (the starter weapon).
+ * @param defaults.equippedItemIds   default item per slot, including baseline equipment.
  */
 export function foldFacts(facts, defaults = {}) {
   const merged = unionFacts(facts);
@@ -387,6 +516,11 @@ export function foldFacts(facts, defaults = {}) {
   return {
     marks,
     lanternUnlocked,
+    equippedItemIds: {
+      ...(defaults.equippedItemIds ?? {}),
+      ...(defaults.equippedWeaponId ? { [WEAPON_SLOT]: defaults.equippedWeaponId } : {}),
+      ...latestEquippedItemIds(merged),
+    },
     equippedWeaponId: latestEquippedWeaponId(merged) ?? defaults.equippedWeaponId ?? null,
     ownedItemIds: [...ownedItemIds],
     coins,

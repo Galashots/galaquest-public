@@ -21,12 +21,24 @@ import {
 
 const roundTrip = (message) => decode(encode(message));
 
-// A minimal but fully-populated encounter block, reused by the tests below. welcome/snapshot both
-// require one under protocol 3, so every existing round-trip that builds those two message types
-// has to supply one -- there is no version of this fixture that predates the bump.
+// A minimal but fully-populated encounter block, reused by the tests below. Protocol v4's
+// breaking E1 change replaces the singular Wolf wire slot with an identified ordinary-enemy
+// collection, so every v4 welcome/snapshot fixture carries the canonical collection shape.
+const WOLF_FIXTURE = {
+  enemyId: 'wolf-1',
+  kind: 'wolf',
+  level: 1,
+  maxHp: 30,
+  x: 2.5,
+  z: 8,
+  heading: 0.1,
+  hp: 2,
+  mode: 'walk',
+  targetId: null,
+};
 const ENCOUNTER_FIXTURE = {
   revision: 5,
-  wolf: { x: 2.5, z: 8, heading: 0.1, hp: 2, mode: 'walk', targetId: null },
+  enemies: [WOLF_FIXTURE],
   heroes: {
     p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 },
     p2: { hp: 1, swingSeconds: 0.2, cooldown: 0.5, downSeconds: 1.4 },
@@ -39,6 +51,14 @@ const ENCOUNTER_FIXTURE = {
   // above -- a fresh cart, not yet searched. See "an encounter block with no loot key at all still
   // decodes" below for the pre-GP2 backward-compatibility case this fixture used to cover.
   loot: { spawned: false, collected: {} },
+  // R1: same "present and empty, matches what a real snapshot always carries" reasoning again --
+  // nothing on the ground until a kill spawns something. See "an encounter block with no drops key
+  // at all still decodes" below for the pre-R1 backward-compatibility case this fixture used to cover.
+  drops: [],
+  // #87: same "present and empty, matches what a real snapshot always carries" reasoning again --
+  // no corpse until a loot-bearing kill spawns one. The pre-#87 backward-compatibility case (no
+  // `corpses` key at all) is covered in test/corpse-loot-wire.test.mjs, not here.
+  corpses: [],
   // GP3: same "present and empty, matches what a real snapshot always carries" reasoning again --
   // nothing earned yet, Workshop I not bought. See "an encounter block with no village key at all
   // still decodes" below for the pre-GP3 backward-compatibility case this fixture used to cover.
@@ -53,9 +73,18 @@ const ENCOUNTER_FIXTURE = {
   },
 };
 
+const withWolf = (overrides) => ({
+  ...ENCOUNTER_FIXTURE,
+  enemies: ENCOUNTER_FIXTURE.enemies.map((enemy) => (
+    enemy.enemyId === WOLF_FIXTURE.enemyId ? { ...enemy, ...overrides } : enemy
+  )),
+});
+
+const ENEMIES_FIXTURE = [WOLF_FIXTURE];
+
 const EVENTS_FIXTURE = [
-  { type: 'wolf-hit', heroId: 'p1', remaining: 1 },
-  { type: 'bite-missed' },
+  { type: 'wolf-hit', enemyId: 'wolf-1', kind: 'wolf', heroId: 'p1', remaining: 1 },
+  { type: 'bite-missed', enemyId: 'wolf-1', kind: 'wolf' },
 ];
 
 test('every builder produces something the decoder accepts unchanged', () => {
@@ -128,7 +157,7 @@ test('a snapshot with an encounter block round-trips intact', () => {
   });
 
   // targetId is string|null on the wire -- exercise the non-null branch too.
-  const targeting = { ...ENCOUNTER_FIXTURE, wolf: { ...ENCOUNTER_FIXTURE.wolf, targetId: 'p1' } };
+  const targeting = withWolf({ targetId: 'p1' });
   assert.deepEqual(roundTrip(snapshotMessage(9, [], targeting, [])).encounter, targeting);
 });
 
@@ -158,8 +187,8 @@ test('a welcome message carries the joining profile durable facts unchanged', ()
   assert.deepEqual(roundTrip(welcome).profileFacts, facts);
 });
 
-test('a wolf.mode outside the known set is rejected', () => {
-  const flying = { ...ENCOUNTER_FIXTURE, wolf: { ...ENCOUNTER_FIXTURE.wolf, mode: 'flying' } };
+test('an enemy mode outside the known set is rejected', () => {
+  const flying = withWolf({ mode: 'flying' });
   assert.throws(() => decode(encode(snapshotMessage(1, [], flying, []))), ProtocolError);
 });
 
@@ -176,12 +205,12 @@ test('version and type are gates, not suggestions', () => {
   assert.throws(() => decode(encode({ v: PROTOCOL_VERSION, type: 'shutdown' })), ProtocolError);
   assert.throws(() => decode(encode({ v: PROTOCOL_VERSION })), ProtocolError);
 
-  // 2 was burned by phase-2-tracer's incompatible handshake (Design ruling 2) and 1 is the old
-  // wire -- both a stale and a rogue tab must fail loudly at decode, naming 3 as what is expected.
-  assert.throws(() => decode(encode({ ...joinMessage('a'), v: 1 })), ProtocolError,
-    /expected 3/);
-  assert.throws(() => decode(encode({ ...joinMessage('a'), v: 2 })), ProtocolError,
-    /expected 3/);
+  // v4 is intentionally breaking: E1 replaced encounter.wolf with encounter.enemies[]. Every
+  // older vocabulary, including v3, must fail loudly rather than being guessed into the new shape.
+  for (const staleVersion of [1, 2, 3]) {
+    assert.throws(() => decode(encode({ ...joinMessage('a'), v: staleVersion })), ProtocolError,
+      /expected 4/);
+  }
 });
 
 test('malformed payloads are rejected before they become game state', () => {
@@ -254,29 +283,23 @@ test('strings are length-capped so a name cannot be a payload', () => {
   assert.throws(() => decode(encode(joinMessage(12))), ProtocolError);
 });
 
-// Task B4.5: enemies/wolf.js's presenter reads wolf.modeSeconds to decide whether a one-shot clip
+// Task B4.5: enemies/wolf.js's presenter reads enemy modeSeconds to decide whether a one-shot clip
 // re-entered mid-mode needs restarting (a second hero's hit landing mid-stagger re-flinches the
 // wolf), and B2's wire block omitted it -- so the re-flinch never fired online. Added here as its
 // own field, present-and-validated rather than defaulted, so the B2-era ENCOUNTER_FIXTURE (which
 // never carried it) keeps round-tripping unedited above.
-test('wolf.modeSeconds rides the wire and round-trips intact', () => {
-  const withModeSeconds = {
-    ...ENCOUNTER_FIXTURE,
-    wolf: { ...ENCOUNTER_FIXTURE.wolf, modeSeconds: 0.734 },
-  };
+test('enemy modeSeconds rides the wire and round-trips intact', () => {
+  const withModeSeconds = withWolf({ modeSeconds: 0.734 });
   const snapshot = snapshotMessage(9, [], withModeSeconds, []);
   assert.deepEqual(roundTrip(snapshot).encounter, withModeSeconds);
-  assert.equal(roundTrip(snapshot).encounter.wolf.modeSeconds, 0.734);
+  assert.equal(roundTrip(snapshot).encounter.enemies[0].modeSeconds, 0.734);
 
   const welcome = welcomeMessage('p1', 3, [], withModeSeconds);
   assert.deepEqual(roundTrip(welcome).encounter, withModeSeconds);
 });
 
-test('a negative wolf.modeSeconds is rejected', () => {
-  const negative = {
-    ...ENCOUNTER_FIXTURE,
-    wolf: { ...ENCOUNTER_FIXTURE.wolf, modeSeconds: -0.001 },
-  };
+test('a negative enemy modeSeconds is rejected', () => {
+  const negative = withWolf({ modeSeconds: -0.001 });
   assert.throws(() => decode(encode(snapshotMessage(1, [], negative, []))), ProtocolError,
     'a negative modeSeconds is not a time-in-mode');
 });
@@ -327,7 +350,7 @@ test('joinMessage ignores an empty-string guestId rather than sending a token th
 test('an encounter block with no rewards key at all still decodes, defaulting to {}', () => {
   const preD3Shape = {
     revision: 5,
-    wolf: { x: 2.5, z: 8, heading: 0.1, hp: 2, mode: 'walk', targetId: null },
+    enemies: ENEMIES_FIXTURE,
     heroes: { p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 } },
   };
   const decoded = decode(encode(welcomeMessage('p1', 3, [], preD3Shape)));
@@ -435,7 +458,7 @@ test('collectLootMessage round-trips and pickupId must be a non-empty, capped st
 test('an encounter block with no loot key at all still decodes, defaulting to not-yet-searched', () => {
   const preGp2Shape = {
     revision: 5,
-    wolf: { x: 2.5, z: 8, heading: 0.1, hp: 2, mode: 'walk', targetId: null },
+    enemies: ENEMIES_FIXTURE,
     heroes: { p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 } },
   };
   const decoded = decode(encode(welcomeMessage('p1', 3, [], preGp2Shape)));
@@ -476,7 +499,7 @@ test('villageUpgradePurchaseMessage round-trips and upgradeId must be a non-empt
 test('an encounter block with no village key at all still decodes, defaulting to nothing earned/bought', () => {
   const preGp3Shape = {
     revision: 5,
-    wolf: { x: 2.5, z: 8, heading: 0.1, hp: 2, mode: 'walk', targetId: null },
+    enemies: ENEMIES_FIXTURE,
     heroes: { p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 } },
   };
   const decoded = decode(encode(welcomeMessage('p1', 3, [], preGp3Shape)));
@@ -497,7 +520,7 @@ test('village rides the wire and round-trips intact -- shared totals plus Worksh
 test('an encounter block with no siege key at all still decodes, defaulting to whole seals and a dormant Warden', () => {
   const preG2Shape = {
     revision: 5,
-    wolf: { x: 2.5, z: 8, heading: 0.1, hp: 2, mode: 'walk', targetId: null },
+    enemies: ENEMIES_FIXTURE,
     heroes: { p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 } },
   };
   const decoded = decode(encode(welcomeMessage('p1', 3, [], preG2Shape)));
@@ -551,7 +574,7 @@ test('the siege block refuses shapes a presenter could not draw', () => {
   assert.throws(
     () => decode(encode(withSiege({ seals: [], warden: { ...goodWarden, modeSeconds: -1 }, beaconLit: false }))),
     ProtocolError,
-    'a negative clock would restart a one-shot clip forever, the same reason wolf.modeSeconds is checked',
+    'a negative clock would restart a one-shot clip forever, the same reason enemy modeSeconds is checked',
   );
   assert.throws(
     () => decode(encode(withSiege({ seals: [{ blows: -1, burst: false }], warden: goodWarden, beaconLit: false }))),

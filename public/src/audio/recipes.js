@@ -30,6 +30,13 @@ export const RECIPES = Object.freeze({
     Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.12, gainPeak: 0.35 }),
   ]),
 
+  // Level-5 special: a broader, brighter launch than a routine swing, kept short so the player can
+  // immediately see the burst do its work rather than waiting through a ceremony before impact.
+  'special-whoosh': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.18, gainPeak: 0.5 }),
+    Object.freeze({ type: 'tone', startSeconds: 0, durationSeconds: 0.2, frequencyStart: 260, frequencyEnd: 620, gainPeak: 0.38 }),
+  ]),
+
   // wolf-hit: a noise crack for the initial contact, layered with a short low tone drop for weight --
   // the WoW/Unity "hit flash" research in feedback.js is about the visual; this is its audio twin.
   impact: Object.freeze([
@@ -37,6 +44,11 @@ export const RECIPES = Object.freeze({
     Object.freeze({
       type: 'tone', startSeconds: 0, durationSeconds: 0.12, frequencyStart: 180, frequencyEnd: 70, gainPeak: 0.7,
     }),
+  ]),
+
+  'special-impact': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.08, gainPeak: 0.72 }),
+    Object.freeze({ type: 'tone', startSeconds: 0, durationSeconds: 0.28, frequencyStart: 220, frequencyEnd: 880, gainPeak: 0.58 }),
   ]),
 
   // hero-hurt: duller and longer than impact -- a low tone sagging further, plus a soft noise body, so
@@ -299,6 +311,76 @@ export const RECIPES = Object.freeze({
     }),
   ]),
 
+  // ── R1: kill drops ────────────────────────────────────────────────────────────────────────────
+  //
+  // Coins reuse coin-chime outright (a coin off a kill is still a coin -- world/enemyDrops.js's own
+  // header is explicit that it is worth exactly the same 1 a cart's coin is). Hearts and gear are new:
+  // main.js plays these directly off world/enemyDropsPresenter.js's own arrival result, the same
+  // "diff the state, do not chase a wire event" discipline coin-chime/shard-resonance already follow
+  // (there is no encounter event behind a drop landing).
+
+  // A heart heals; the recipe has to feel like RECEIVING rather than FINDING. Two warm, SLOW tones a
+  // fourth apart with a soft attack -- deliberately the gentlest thing in this table (gainPeak tops
+  // out at 0.3), opposite in shape from both currency chimes' bright percussive snap.
+  'heart-mend': Object.freeze([
+    Object.freeze({
+      type: 'tone', startSeconds: 0, durationSeconds: 0.3, frequencyStart: 587.33, frequencyEnd: 587.33, gainPeak: 0.24,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.12, durationSeconds: 0.45, frequencyStart: 783.99, frequencyEnd: 783.99, gainPeak: 0.3,
+    }),
+  ]),
+
+  // Gear: a small metallic clink (a short upward tone sweep) plus a noise transient for the sparkle --
+  // distinct from workshop-build's own metal-and-noise pair by being much shorter and having no low
+  // tone underneath it at all (this is a small pickup, not a whole structure resettling).
+  'gear-find': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.05, gainPeak: 0.22 }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.02, durationSeconds: 0.2, frequencyStart: 698.46, frequencyEnd: 1046.5, gainPeak: 0.3,
+    }),
+  ]),
+
+  // ── the hidden learning layer: rune chests ───────────────────────────────────────────────────
+  //
+  // Both directly played -- main.js fires one the instant a tapped answer is judged, the same
+  // "diff the state, do not chase a wire event" reason coin-chime/gear-find already give: there is no
+  // encounter event behind a chest's own judgement at all. NEVER SHAMING is the design brief's own
+  // phrase for the wrong-answer path, so the two are written to be COUSINS rather than a reward and a
+  // penalty -- both warm, both major, the correct one simply bigger.
+
+  // A wrong answer still opens the chest (the brief's own "no wrong door, only a bigger one"): a
+  // gentle two-note rise, the same shape family as heart-mend's own soft receiving chime but pitched
+  // for a chest rather than a heal, so it reads as "here is your loot" rather than as a buzzer.
+  'rune-chest-open': Object.freeze([
+    Object.freeze({
+      type: 'tone', startSeconds: 0, durationSeconds: 0.22, frequencyStart: 466.16, frequencyEnd: 466.16, gainPeak: 0.26,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.16, durationSeconds: 0.32, frequencyStart: 587.33, frequencyEnd: 587.33, gainPeak: 0.3,
+    }),
+  ]),
+
+  // A correct answer: a bright four-note rise, written against level-up's own rising-triad shape as
+  // its family member rather than its twin -- one note higher at the top (A5, past level-up's own G4
+  // ceiling) and a bell-like noise transient under the first note, so "BRILLIANT!" sounds like its own
+  // small fanfare and not a re-pitched copy of the level ceremony it may fire alongside.
+  'rune-chest-brilliant': Object.freeze([
+    Object.freeze({ type: 'noise', startSeconds: 0, durationSeconds: 0.08, gainPeak: 0.18 }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0, durationSeconds: 0.18, frequencyStart: 523.25, frequencyEnd: 523.25, gainPeak: 0.34,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.14, durationSeconds: 0.18, frequencyStart: 659.25, frequencyEnd: 659.25, gainPeak: 0.36,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.28, durationSeconds: 0.2, frequencyStart: 783.99, frequencyEnd: 783.99, gainPeak: 0.38,
+    }),
+    Object.freeze({
+      type: 'tone', startSeconds: 0.42, durationSeconds: 0.5, frequencyStart: 880, frequencyEnd: 880, gainPeak: 0.4,
+    }),
+  ]),
+
   ...SIEGE_RECIPES,
 });
 
@@ -325,6 +407,14 @@ export const BEACON_ARRIVAL_RECIPE_NAME = 'beacon-cold';
 // celebrateLevelUp. A sound hung off the announcement would replay on every reconnect where the
 // device teaches its own facts back and the server announces them straight to it.
 export const LEVEL_UP_RECIPE_NAME = 'level-up';
+// R1: a kill drop's own two new pickups -- same DIRECTLY_PLAYED group as the two GP2 currencies just
+// above, and for the identical reason (no wire event behind either one).
+export const HEART_PICKUP_RECIPE_NAME = 'heart-mend';
+export const GEAR_PICKUP_RECIPE_NAME = 'gear-find';
+// The hidden learning layer's own two ceremony sounds -- judged client-side with no wire event
+// behind either one, the same DIRECTLY_PLAYED reason every entry above it is in this group.
+export const RUNE_CHEST_OPEN_RECIPE_NAME = 'rune-chest-open';
+export const RUNE_CHEST_BRILLIANT_RECIPE_NAME = 'rune-chest-brilliant';
 export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   RELIGHT_RECIPE_NAME,
   KEEPER_GREETING_RECIPE_NAME,
@@ -334,6 +424,10 @@ export const DIRECTLY_PLAYED_RECIPES = Object.freeze([
   WORKSHOP_BUILD_RECIPE_NAME,
   BEACON_ARRIVAL_RECIPE_NAME,
   LEVEL_UP_RECIPE_NAME,
+  HEART_PICKUP_RECIPE_NAME,
+  GEAR_PICKUP_RECIPE_NAME,
+  RUNE_CHEST_OPEN_RECIPE_NAME,
+  RUNE_CHEST_BRILLIANT_RECIPE_NAME,
 ]);
 
 /**
@@ -346,6 +440,9 @@ export const EVENT_RECIPE_MAP = Object.freeze({
   swing: 'whoosh',
   'swing-missed': null,
   'swing-dropped': null,
+  'special-start': 'special-whoosh',
+  'special-hit': 'special-impact',
+  'special-missed': null,
   'wolf-hit': 'impact',
   'wolf-defeated': 'victory-sting',
   'hero-hurt': 'thud',

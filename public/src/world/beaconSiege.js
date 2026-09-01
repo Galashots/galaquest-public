@@ -35,7 +35,9 @@ import {
   SWING_SECONDS,
   BASE_HERO_DAMAGE,
   isWithinStrike,
+  separateFromEnemies,
 } from '../combat/encounter.js';
+import { resolveIncomingDamage } from '../combat/damage.js';
 
 // ---------------------------------------------------------------------------
 // The seals
@@ -192,6 +194,45 @@ export function wardenPhaseFor(hp) {
   if (hp <= WARDEN_MAX_HP * WARDEN_PHASE3_FRACTION) return 3;
   if (hp <= WARDEN_MAX_HP * WARDEN_PHASE2_FRACTION) return 2;
   return 1;
+}
+
+// ── the body, as a thing you cannot walk through ────────────────────────────────────────────────
+//
+// Children walked straight THROUGH the Warden in a real playtest (#79), and the cause was not a
+// wrong number -- it was that no separation rule was ever applied to this fight at all.
+// combat/encounter.js already owns the law (separateFromEnemies) and net/gameServerCore.mjs already
+// runs it every tick against the ordinary enemy collection; the Warden simply is not in that
+// collection, because it belongs to a different engine. So the law is IMPORTED and pointed at the
+// Warden rather than reimplemented here: one rule for "you cannot stand inside a monster", two
+// callers (GQ-011 -- two simulations of the same thing are not one thing).
+//
+// Centre-to-centre, the same convention MIN_BODY_SEPARATION uses for the wolf's 1. The Warden is a
+// far bigger body -- its measured footprint is a little over a metre across once scaled to
+// WARDEN_HEIGHT_METERS -- so 1.6 keeps a child clear of the legs and cloak without planting an
+// invisible wall out at the antler span, which is nearly twice as wide as anything a child can
+// actually collide with.
+//
+// IT MUST STAY UNDER WARDEN_MELEE_RANGE, and that is the constraint worth stating out loud rather
+// than leaving for someone to rediscover: separation pushes the hero OUT, melee range decides what
+// the Warden can reach. Set them equal and the boss is held permanently just past its own reach and
+// can never land a blow again. test/warden.test.mjs pins the inequality.
+export const WARDEN_BODY_SEPARATION_METERS = 1.6;
+
+/**
+ * Push a hero's feet out of the Warden's body.
+ *
+ * Pure and deterministic like every other rule in this file, so the server's authority and the
+ * client's own prediction run the identical function and cannot disagree about where a child ends up.
+ *
+ * A DEAD Warden does not block: the body sinks into the ground and is gone, and leaving a collider
+ * standing on the arena floor after the fight would fence children out of the place they just won.
+ * Everything else blocks, including the dormant kneel -- a huge iron shape crouched over the seals is
+ * exactly the thing #79 says a child must not be able to stroll through.
+ */
+export function separateFromWarden(heroPosition, warden) {
+  const position = { x: heroPosition.x, z: heroPosition.z };
+  if (!warden || warden.mode === 'dead') return position;
+  return separateFromEnemies(position, [warden], WARDEN_BODY_SEPARATION_METERS);
 }
 
 // ---------------------------------------------------------------------------
@@ -688,8 +729,8 @@ function strikeWarden(draft, heroId, events, damage) {
 
 // ── the Warden's own clock ──────────────────────────────────────────────────────────────────────
 
-function hurtHero(hero, heroId, events) {
-  hero.hp -= WARDEN_DAMAGE_PER_HIT;
+function hurtHero(hero, heroId, events, damageReductionPercent) {
+  hero.hp -= resolveIncomingDamage(WARDEN_DAMAGE_PER_HIT, damageReductionPercent);
   // warden-hurt-hero, as distinct from warden-hit: the names are one letter of carelessness away
   // from each other in a lesser scheme, so both say who did what to whom in full. Here heroId is
   // the hero who WAS struck; on warden-hit it is the hero who struck.
@@ -860,7 +901,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
       const position = targetId == null ? null : (commandHeroes[targetId]?.position ?? { x: 0, z: 0 });
       if (target && target.downSeconds < 0
         && isWithinStrike(warden, warden.heading, position, WARDEN_MELEE_RANGE)) {
-        hurtHero(target, targetId, events);
+        hurtHero(target, targetId, events, commandHeroes[targetId]?.damageReductionPercent);
       }
     }
     if (warden.modeSeconds >= WARDEN_OVERHEAD_SECONDS) endAttack(warden);
@@ -877,7 +918,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
         if (hero.downSeconds >= 0) continue;
         const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
         if (isWithinStrike(warden, warden.heading, position, WARDEN_MELEE_RANGE, WARDEN_SWEEP_HALF_ARC_RADIANS)) {
-          hurtHero(hero, heroId, events);
+          hurtHero(hero, heroId, events, commandHeroes[heroId]?.damageReductionPercent);
         }
       }
     }
@@ -895,7 +936,7 @@ function advanceWarden(draft, commandHeroes, events, deltaSeconds) {
         if (hero.downSeconds >= 0) continue;
         const position = commandHeroes[heroId]?.position ?? { x: 0, z: 0 };
         if (Math.hypot(position.x - warden.x, position.z - warden.z) <= WARDEN_PULSE_RANGE) {
-          hurtHero(hero, heroId, events);
+          hurtHero(hero, heroId, events, commandHeroes[heroId]?.damageReductionPercent);
         }
       }
     }
