@@ -20,8 +20,9 @@ The upstream licence headers are intact in these files and must stay intact in a
 
 ## Village props and environment — CC0 1.0
 
-`public/assets/props/village/*.glb` (14 files) and the world set derive from public-domain asset
-packs. Their licences were verified by reading the licence file *inside* each downloaded archive
+`public/assets/props/village/*.glb` (14 files) and `public/assets/world/lantern_tree.glb` derive
+from public-domain asset packs (`public/assets/world/keeper.glb` is **not** in this CC0 set — it is
+paid-plan Meshy output, covered in the Characters section below). Their licences were verified by reading the licence file *inside* each downloaded archive
 rather than trusting a store page, and each archive was recorded by SHA-256 in the engineering
 archive at selection time.
 
@@ -44,7 +45,7 @@ source licence in `NOTICE`.
 
 ## Gear — owner-created, generated on a paid plan
 
-`public/assets/gear/*.glb`
+`public/assets/gear/**/*.glb` (including `candidates/`)
 
 | Asset | Basis |
 | --- | --- |

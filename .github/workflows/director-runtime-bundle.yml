@@ -8,7 +8,16 @@ on:
     branches:
       - main
   pull_request:
+    # A docs-only PR changes nothing the Director can boot; skip the packaging and the artifact
+    # storage it would burn. Same rationale and pattern as full-playtest-matrix.yml. (Markdown under
+    # public/ is copied into the bundle but is never part of the runnable surface.)
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
+
+concurrency:
+  group: bundle-${{ github.ref }}
+  cancel-in-progress: true
 
 # Read-only by design. The job packages the checked-out tree and uploads an Actions artifact; it does
 # not write to the repository, mutate saves, or call any paid provider.
@@ -18,6 +27,7 @@ permissions:
 jobs:
   bundle:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # On pull_request, github.sha is GitHub's temporary merge commit. The Director reviews the PR
     # HEAD, so both checkout and provenance must bind to pull_request.head.sha instead. Push/main and
     # manual runs fall back to the event's own github.sha.

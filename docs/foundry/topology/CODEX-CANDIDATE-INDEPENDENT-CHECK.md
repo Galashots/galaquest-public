@@ -1,5 +1,8 @@
 # Independent check of the Codex candidate
 
+> **HISTORICAL — the candidate trees this check ran against are not in the public repository.**
+> The comparison record stands as provenance; its paths describe the environment at check time.
+
 Codex authored `foundry/candidates/codex/` and ran its own qualification. This is a second,
 independently written harness (`tools/foundry/`) run against the same `.blend`.
 

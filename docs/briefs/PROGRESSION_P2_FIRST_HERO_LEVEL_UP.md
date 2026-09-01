@@ -1,5 +1,9 @@
 # Progression P2 — First Hero Level-Up Vertical
 
+> **STATUS: COMPLETE — merged to `main` via PR #56 (`8e247b2a395e1fe0a2d53ba8eb66d7e55340b8d4`).**
+> This brief is a historical dispatch record. It no longer authorizes work, and its file-ownership
+> and evidence expectations describe the state at dispatch time, not current `main`.
+
 **Task-ID:** `PROG-P2-FIRST-HERO-LEVEL-UP`  
 **Package size:** **L — Vertical**  
 **Worker:** **Claude Execute — single semantic write-worker**  
@@ -229,7 +233,7 @@ The XP meter must visibly complete and roll into the new level rather than telep
 
 Do **not** replay a level-up ceremony merely because an already-earned XP fact is hydrated from local storage or a server welcome on page load/reconnect. Ceremony is for a live transition observed in the current session.
 
-If one award crosses more than one threshold in a future test/fixture, the state must end at the canonical resulting level; P2 need not build an elaborate multi-level cinematic queue unless the real P2 100-XP path requires it.
+If one award crosses more than one threshold in a future test or fixture, the state must end at the canonical resulting level; P2 need not build an elaborate multi-level cinematic queue unless the real P2 100-XP path requires it.
 
 ### Reduced motion
 
@@ -264,7 +268,7 @@ Expected production surfaces include, as required by the implementation:
 - `public/src/net/protocol.js` only for the minimum additive live XP/event/state shape actually required;
 - `public/src/combat/encounter.js` and `public/src/world/beaconSiege.js` for numeric normalization / resolved Hero-damage consumption while preserving purity;
 - `public/src/main.js` for offline/state/UI integration;
-- `public/index.html`, existing CSS/UI modules, `public/src/ui/heroScreen.js`, feedback modules as necessary for Level/XP/POWER/health/ceremony;
+- `public/index.html`, existing CSS/UI modules, `public/src/progression/heroScreen.js` (the file P2 actually created), feedback modules as necessary for Level/XP/POWER/health/ceremony;
 - targeted tests under `test/`;
 - one bounded runtime harness/capture path under `tools/runtime-test/` if no existing harness can deterministically prove the real level-up path.
 

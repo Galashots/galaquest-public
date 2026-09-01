@@ -120,7 +120,7 @@ Required outcome:
 
 A distinct rules mode such as `returning` / `evading` is acceptable. Reuse the existing walk presentation if needed; **do not add an animation or asset requirement to E2**.
 
-The exact leash radius/shape is implementation/tuning, but it must be explicit data/law rather than an incidental side effect of aggro range.
+The exact leash radius/shape is implementation/tuning, but it must be explicit data or law rather than an incidental side effect of aggro range.
 
 ## Death / safe recovery contract
 

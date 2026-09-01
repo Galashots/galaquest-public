@@ -1,5 +1,9 @@
 # Progression P1 — XP / Level Authority
 
+> **STATUS: COMPLETE — merged to `main` via PR #53 (`ee2c5e60a29c6c2e6572ad3d0d0b8d36aff33885`).**
+> This brief is a historical dispatch record. It no longer authorizes work, and its file-ownership
+> and evidence expectations describe the state at dispatch time, not current `main`.
+
 **Task-ID:** `PROG-P1-XP-LEVEL-AUTHORITY`  
 **Package size:** **M — Coupled**  
 **Worker:** **Claude Execute — single write-worker**  

@@ -7,6 +7,12 @@ on:
   push:
   pull_request:
 
+# Superseded runs on the same ref carry no evidence value -- only the newest head's result binds to
+# a reviewable SHA -- so cancel them instead of letting every push queue a duplicate.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Least privilege. The suite reads the checkout and writes nothing back. Fork pull requests get a
 # read-only token regardless; stating it here means the job cannot quietly gain write scope if the
 # repository default ever changes.
@@ -16,6 +22,8 @@ permissions:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    # The suite finishes in well under a minute; a run that takes ten is hung, not slow.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,6 +33,6 @@ jobs:
           # test command for a store player save data depends on. Moving the runner is the cheaper
           # half of that trade. Local development is on 24 already.
           node-version: '24'
-      # Scoped on purpose. A bare `node --test` also sweeps tools/teardown/test/, which needs
-      # Vitest and fails -- pre-existing and unrelated to the runtime.
+      # Scoped on purpose: test/ is the runtime unit suite. Keeping the glob explicit means a future
+      # tool directory that carries its own differently-runnered tests cannot break this gate.
       - run: node --test test/*.test.mjs

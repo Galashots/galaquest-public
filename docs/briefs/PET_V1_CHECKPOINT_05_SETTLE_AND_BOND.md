@@ -1,5 +1,9 @@
 # Pet Companions v1 — Checkpoint 0.5: settle cleanly + feel like a buddy
 
+> **STATUS: HISTORICAL — this checkpoint's implementation landed via PR #33 and the pet lane is
+> currently sequenced behind the progression spine (see #35 and
+> `docs/briefs/PROGRESSION_PROGRAM_DECOMPOSITION_V0.md`).** This brief no longer authorizes work.
+
 **Task-ID:** PET-V1-C05-SETTLE-BOND  
 **Worker:** Luna / Codex — single write-worker  
 **Repository:** `Galashots/galaquest-public`  

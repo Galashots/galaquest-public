@@ -1,5 +1,11 @@
 # What makes a topology template *qualified*
 
+> **HISTORICAL — the candidate bake-off this bar governed is over, and its evidence tree is not in
+> the public repository.** The candidate working trees (`claude`/`codex` under a repo-root
+> `candidates` directory) and the private teardown harness this file names were not ported during the
+> public consolidation. The *criteria* below remain the recorded qualification bar; the *paths and
+> commands* describe the environment at qualification time, not the current public checkout.
+
 The pass/fail bar for the hero's authored topology. Written **before** either candidate was modelled,
 so neither is judged against a target that moved.
 
@@ -125,12 +131,14 @@ transition — to arrive "without substantially changing the overall **C** silho
 4.5-head blockout, superseded by the 3.84 lock, so the clause had lost its baseline as well as never
 having had a threshold.
 
-**Re-anchored by owner decision, 2026-08-10:** the reference silhouette is now
-`docs/foundry/identity/hero_identity_master.png`. **Recorded, not gating** — the same rule as
-everything else in Part 2. Every build records its silhouette delta against the master; no pass mark
+**Re-anchored by owner decision, 2026-08-10:** the reference silhouette is now the hero identity
+master render (**MISSING IN PUBLIC** — the NS-02 gap recorded in
+`docs/GALAQUEST_VISUAL_AUTHORITY.md`; it was never ported into the public tree). **Recorded, not
+gating** — the same rule as everything else in Part 2. Every build records its silhouette delta against the master; no pass mark
 exists until there are real numbers to set one from, and setting one needs the owner's sign-off.
 
-`tools/teardown/src/silhouette.mjs` provides the measurement. Two things it must state rather than
+The private teardown harness's silhouette tool provided the measurement (it was not ported to the
+public repository). Two things it must state rather than
 paper over: the master is an **illustration** and the candidate is a **render of a mesh**, so a
 non-zero delta is expected and is not by itself evidence of anything; and the master is stamped DO NOT
 TRACE, so a small delta is not permission to treat it as geometry.
