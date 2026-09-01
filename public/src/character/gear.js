@@ -603,29 +603,15 @@ const BELT_LANTERN_GLOW_STRENGTH = 0.85;
 // hero at exactly six draw calls, the contract's own cap. Checked BEFORE writing this, not assumed --
 // see that test file.
 //
-// THE FIT NUMBERS are not derived here; they are read from docs/foundry/gear/tier3/fit_measured.json,
-// the Meshy/Blender pipeline's own output for this exact asset (docs/foundry/gear/tier3_fit.json is
-// the human-authored brief that JSON was measured against: LeftArm/RightArm bones, the right pauldron
-// the SAME mesh as the left mirrored by a negative X scale rather than a second generation). That file
-// already expresses `restRelativeToHeroRoot_gltfAxes` in the exact root-relative
-// {position, quaternion, scale} shape matrixFromRestTransform below expects -- the same convention
-// every other RIGID_* table in this file already uses -- so the numbers are copied rather than
-// re-derived, per AGENTS.md's "Look before you derive": a foundry tool that already measured this
-// mesh against this rig is a better source than a fresh guess.
-//
-// HONEST CAVEAT, because this game's own visual-acceptance rule (AGENTS.md, "running-game pixels are
-// final appearance authority") means a measurement is not the same thing as a verified fit: the
-// helmet's own equivalent foundry number (docs/foundry/gear/tier3_fit.json's own "helmet" entry, world
-// height 0.5) was superseded once already by tools/runtime-test/fit-helmet.mjs's LIVE, in-game
-// measurement (RIGID_SILVERGUARD_HELMET's own scale ended up 32.71, not the foundry pass's naive
-// figure) -- because the foundry tool assumes the source mesh's own natural bounding size is exactly
-// 1.0 unit, which does not always hold for a shipped export. No WebGL is available in this sandbox to
-// run the equivalent live check on the shoulders (see this repo's own hard rule on that), so these
-// numbers are the best available MEASURED source -- real geometry against the real rig, not a guess --
-// but are pending the same live confirmation the helmet's foundry pass eventually needed. If a running-
-// game capture ever shows the pauldrons floating, oversized, or clipping the head, re-solve with
-// tools/runtime-test/fit-helmet.mjs's own technique (a live bind-pose measurement) rather than
-// hand-tuning these numbers by eye.
+// The starting fit came from docs/foundry/gear/tier3/fit_measured.json, which measures this exact
+// asset against the LeftArm/RightArm bones and keeps the right pauldron as the SAME mesh mirrored by
+// a negative X scale. R1-C0 then checked that source fit in the running game: the GLB's natural width
+// is 1.0 unit, the material/clone path is healthy, and both anchors mount, but their gameplay
+// projections overlap enough that the pair collapses into one weak upper-body accent. The observed
+// wearing convention is an outside-the-deltoid pauldron seat, not a smaller cap hidden toward the
+// neck. R1-C1 therefore moves each cap symmetrically 0.02 m outward in Hero world space, leaves the
+// measured 0.21 m scale and mirrored orientation untouched, and bakes the result through the live
+// bind-pose bone matrices. These are the resulting root-relative values; they are not hand offsets.
 export const SILVERGUARD_SHOULDER_URL = 'assets/gear/shoulder_silverguard.glb';
 export const SILVERGUARD_SHOULDER_ID = 'shoulder_silverguard';
 
@@ -633,7 +619,7 @@ export const RIGID_SILVERGUARD_SHOULDER_BY_SIDE = Object.freeze({
   left: Object.freeze({
     boneName: 'LeftArm',
     restRelativeToHeroRoot: Object.freeze({
-      position: Object.freeze([18.48353385925293, 102.73785400390625, 1.5291625261306763]),
+      position: Object.freeze([19.38003, 104.49998, 1.83117]),
       quaternion: Object.freeze([0, 0, 0, 1]),
       scale: Object.freeze([21, 21, 52.499996185302734]),
     }),
@@ -644,7 +630,7 @@ export const RIGID_SILVERGUARD_SHOULDER_BY_SIDE = Object.freeze({
   right: Object.freeze({
     boneName: 'RightArm',
     restRelativeToHeroRoot: Object.freeze({
-      position: Object.freeze([-19.133033752441406, 103.05963897705078, 1.4613072872161865]),
+      position: Object.freeze([-19.91265, 104.87607, 1.76593]),
       quaternion: Object.freeze([1, -0, -0, 0]),
       scale: Object.freeze([-21, -21, -52.499996185302734]),
     }),
