@@ -36,12 +36,21 @@ this project relies on.
 
 ## Characters — owner-created, generated on a paid plan
 
-`public/assets/hero/*.glb`, `public/assets/world/keeper.glb`, `public/assets/enemies/wolf.glb`
+`public/assets/hero/*.glb`, `public/assets/world/keeper.glb`, `public/assets/enemies/wolf.glb`,
+`public/assets/characters/wren_ranger.glb`
 
 Produced by the project owner using Meshy under a **paid Meshy plan**, then rigged, retopologised and
 finished in Blender by the owner. Redistribution rests on the owner's rights in that generated output
 together with the paid-plan terms in force at generation time — **not** on CC0 and **not** on the
 source licence in `NOTICE`.
+
+`wren_ranger.glb` is an optimized production derivative of the owner-directed paid-plan candidate
+`wren-ranger-v1` (SHA-256 `5171c4bb...`, 19,150,856 bytes) recovered from the unmerged branch
+`feat/ranger-lodge-expansion`. The derivative — 896,476 bytes, SHA-256
+`f6f776ce47c78fdea20d99593cde200e7b8dcd162f14a17488e5fd93393ef9b8` — was produced by merging the
+base body's idle clip (via `tools/foundry/merge_clips.mjs`), mesh simplification (via
+`@gltf-transform/cli`), and texture recompression (via `tools/budget/recompress_glb.py`). **No new
+generation was performed and no credits were spent.**
 
 ## Gear — owner-created, generated on a paid plan
 
@@ -117,7 +126,9 @@ material and is recorded here so its basis is not lost along with its bytes.
 
 | Group | Where the bytes are | Count | Status |
 | --- | --- | --- | --- |
-| Wren Ranger, Bramble Stalker (base + walk + run each) | external source archive; also reachable on the unmerged branch `feat/ranger-lodge-expansion` | 6 files | candidate |
+| Wren Ranger base (wren-ranger-v1) | external source archive; also reachable on the unmerged branch `feat/ranger-lodge-expansion` | 1 file | **promoted** — production derivative ships as `public/assets/characters/wren_ranger.glb` |
+| Wren Ranger walk + run | external source archive; also reachable on the unmerged branch `feat/ranger-lodge-expansion` | 2 files | qualified-compatible, not shipped (Wren does not locomote) |
+| Bramble Stalker (base + walk + run) | external source archive; also reachable on the unmerged branch `feat/ranger-lodge-expansion` | 3 files | candidate |
 | Enemy Wave 1 rigged candidates | external source archive; also reachable on the unmerged branch `feat/enemy-asset-wave-1` | 13 files | candidate |
 | Seven gear families x five slots | Meshy provider task output; never downloaded | 35 tasks | candidate |
 

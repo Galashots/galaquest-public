@@ -52,7 +52,7 @@ const inferredFacets = (record) => {
   const values = [];
   if (record.provider?.task_ids?.length || record.source?.authority?.includes('meshy')) values.push('meshy');
   if (id.startsWith('prop.village.')) values.push('village', 'world-prop');
-  if (id === 'world.keeper' || id.startsWith('wren-ranger')) values.push('npc');
+  if (id === 'world.keeper' || id.startsWith('wren-ranger') || id.startsWith('npc.')) values.push('npc');
   if (id.startsWith('frog-') || id.startsWith('fox-')) values.push('pet', 'starter-pet');
   if (id.startsWith('hero.')) values.push('hero');
   if (id === 'enemy.beacon_warden') values.push('beacon', 'boss', 'boss-setpiece', 'enemy');

@@ -10961,6 +10961,112 @@
       "notes": "RESOLVED_FROM_PROVIDER_FILENAME. ZIP membership proves four animation-bearing files on one 24-joint rig; it does not prove production qualification."
     },
     {
+      "asset_id": "npc.wren_ranger",
+      "display_name": "Wren Ranger",
+      "asset_kind": "character",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "repo_path": "public/assets/characters/wren_ranger.glb",
+          "git_blob_oid": "603a50e64a14eb7b95db6edcd12ade2e96806527"
+        }
+      ],
+      "source": {
+        "path": "public/assets/characters/wren_ranger.glb",
+        "sha256": "f6f776ce47c78fdea20d99593cde200e7b8dcd162f14a17488e5fd93393ef9b8",
+        "size_bytes": 896476,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 896476,
+        "mesh_count": "UNKNOWN",
+        "primitive_count": "UNKNOWN",
+        "vertex_count": "UNKNOWN",
+        "triangle_count": "UNKNOWN",
+        "material_count": "UNKNOWN",
+        "skin_count": "UNKNOWN",
+        "joint_count": "UNKNOWN",
+        "animation_clip_count": "UNKNOWN"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "parent_asset_id": null,
+      "derivative_of": null,
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/characters/wren_ranger.glb"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "npc"
+      ],
+      "next_action": "NONE",
+      "aliases": [],
+      "related_asset_ids": []
+    },
+    {
       "asset_id": "prop.broken-woodland-cart-intake-v1",
       "display_name": "Broken Woodland Cart",
       "asset_kind": "model",

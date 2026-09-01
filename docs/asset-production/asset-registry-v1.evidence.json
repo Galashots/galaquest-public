@@ -42,7 +42,8 @@
     { "asset_id": "prop.village.tree-crooked", "display_name": "Village Crooked Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/tree-crooked.glb" },
     { "asset_id": "prop.village.tree", "display_name": "Village Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/tree.glb" },
     { "asset_id": "world.keeper", "display_name": "Keeper", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/world/keeper.glb" },
-    { "asset_id": "world.lantern-tree", "display_name": "Lantern Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/world/lantern_tree.glb" }
+    { "asset_id": "world.lantern-tree", "display_name": "Lantern Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/world/lantern_tree.glb" },
+    { "asset_id": "npc.wren_ranger", "display_name": "Wren Ranger", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/characters/wren_ranger.glb" }
   ],
   "provider_reconciliation": {
     "observed_utc": "2026-08-25",

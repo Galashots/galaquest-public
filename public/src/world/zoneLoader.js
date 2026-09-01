@@ -994,10 +994,6 @@ async function loadKeeper(scene, zoneData, counts) {
   // Rowan too, cloned off this SAME load before the Keeper's own root is scaled and moved -- the
   // same ordering reason villagers.js's own comment gives.
   const rowan = zoneData.ROWAN ? buildRowan(scene, gltf, zoneData.ROWAN) : null;
-  // ...and Wren, off the SAME load and for the same ordering reason -- she is built here and hidden,
-  // not built later when the Beacon lights. world/ranger.js's header has the whole argument: a clone
-  // taken after the Keeper's root is scaled and moved would inherit all three of those things.
-  const ranger = zoneData.RANGER ? buildRanger(scene, gltf, zoneData.RANGER) : null;
   const root = setLayer(gltf.scene, CHARACTER);
   root.name = 'keeper';
   root.traverse((object) => {
@@ -1017,7 +1013,15 @@ async function loadKeeper(scene, zoneData, counts) {
   const restingHeading = headingToward(keeperX, keeperZ, heroX, heroZ);
   root.rotation.y = restingHeading;
   scene.add(root);
-  return { ...createKeeperPresenter(root, gltf.animations ?? [], restingHeading, scene), villagers, rowan, ranger };
+  return { ...createKeeperPresenter(root, gltf.animations ?? [], restingHeading, scene), villagers, rowan };
+}
+
+async function loadRanger(scene, zoneData, counts) {
+  if (!zoneData.RANGER) return null;
+  const url = `${ASSET_PREFIX}${zoneData.RANGER.model}`;
+  const gltf = await loadTracked(url, counts);
+  if (!gltf) return null;
+  return buildRanger(scene, gltf, zoneData.RANGER);
 }
 
 /**
@@ -1031,8 +1035,9 @@ export function loadZone(scene, zoneData) {
   const propCache = new Map();
   const ready = (async () => {
     const landmarkCount = zoneData.LANDMARKS.length;
-    const [keeper, ...rest] = await Promise.all([
+    const [keeper, ranger, ...rest] = await Promise.all([
       loadKeeper(scene, zoneData, counts),
+      loadRanger(scene, zoneData, counts),
       ...zoneData.LANDMARKS.map((landmark) => loadLandmark(scene, landmark, counts)),
       ...zoneData.PROPS.map((prop) => loadProp(scene, propCache, prop, counts)),
     ]);
@@ -1119,7 +1124,6 @@ export function loadZone(scene, zoneData) {
     // Same shape again: Rowan rides in on the keeper's own load, so a keeper model that failed to
     // load leaves them null rather than throwing, the same degrade-to-nothing rule villagers follow.
     const rowan = keeper?.rowan ?? null;
-    const ranger = keeper?.ranger ?? null;
     return {
       keeper, tree, lanterns, gate, villagers, rowan, ranger, trailLights, brambles, wildwoodBlade,
       beaconRoadLights, oldBeacon, beaconWaystones, coldSeals, warden, blackthorn, hollow,
