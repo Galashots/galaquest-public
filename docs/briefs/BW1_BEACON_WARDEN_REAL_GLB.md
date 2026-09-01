@@ -309,7 +309,7 @@ the Owner looked, and left open deliberately.
 - **The Warden has no collision today.** Root-caused above to the siege never calling the existing
   `separateFromEnemies`. It belongs to this package's C2 and is recorded so it is not lost if BW1 is
   re-scoped; it is not fixed on this branch while the package is stopped.
-- **`docs/pipeline/briefs/beacon-warden.md`** is recorded in the asset-platform inventory as living
+- **The historical `beacon-warden` pipeline brief is MISSING IN PUBLIC.** The asset-platform inventory records it as living
   only on the unmerged PR #11 branch, hardcoding paths that do not exist. If the Owner confirms a new
   Warden direction, that stale historical brief and the committed art direction in
   `public/src/enemies/warden.js` will disagree with each other; the inventory's `HISTORICAL_ONLY`
