@@ -37,3 +37,15 @@ data/*.db*
 
 # Claude Code agent worktrees (ephemeral, session-local)
 .claude/worktrees/
+
+# Unity project-generated state; keep the project, settings, assets, scripts and tests tracked.
+unity/GalaQuest/Library/
+unity/GalaQuest/Logs/
+unity/GalaQuest/Temp/
+unity/GalaQuest/UserSettings/
+unity/GalaQuest/obj/
+unity/GalaQuest/Builds/
+unity/GalaQuest/MemoryCaptures/
+unity/GalaQuest/Recordings/
+unity/GalaQuest/*.csproj
+unity/GalaQuest/*.sln

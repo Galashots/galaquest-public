@@ -47,7 +47,19 @@ const GUIDANCE_DIRS = [
   'docs/foundry',
   'docs/teardown',
   '.agents/skills',
+  'unity',
 ];
+
+const GENERATED_UNITY_DIRS = new Set([
+  'Library',
+  'Logs',
+  'Temp',
+  'UserSettings',
+  'obj',
+  'Builds',
+  'MemoryCaptures',
+  'Recordings',
+]);
 
 // The visual-authority document is also an explicit gap inventory: it may name a missing reference so
 // readers know the authority is absent. Links in it are still checked. Ordinary runbooks/skills do not
@@ -61,7 +73,7 @@ function walkMarkdown(relDir) {
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
+      if (entry.isDirectory() && !GENERATED_UNITY_DIRS.has(entry.name)) walk(full);
       else if (/\.md$/i.test(entry.name)) out.push(relative(REPO, full).split(sep).join('/'));
     }
   };
