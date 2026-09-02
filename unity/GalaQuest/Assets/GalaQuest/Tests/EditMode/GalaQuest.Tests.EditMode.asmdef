@@ -2,7 +2,8 @@
     "name": "GalaQuest.Tests.EditMode",
     "rootNamespace": "GalaQuest.Tests",
     "references": [
-        "GalaQuest.Runtime"
+        "GalaQuest.Runtime",
+        "GalaQuest.Editor"
     ],
     "includePlatforms": [
         "Editor"

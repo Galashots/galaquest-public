@@ -5,6 +5,8 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace GalaQuest.Editor
 {
@@ -19,6 +21,18 @@ namespace GalaQuest.Editor
                     $"Expected Unity {FoundationDiagnostics.RequiredUnityVersion}, got {Application.unityVersion}.");
             }
 
+            var activeRenderPipeline = GraphicsSettings.currentRenderPipeline;
+            if (activeRenderPipeline == null)
+            {
+                throw new BuildFailedException("The foundation has no active Scriptable Render Pipeline configured.");
+            }
+
+            if (!IsUniversalRenderPipeline(activeRenderPipeline))
+            {
+                throw new BuildFailedException(
+                    $"The foundation requires Universal Render Pipeline, got {activeRenderPipeline.GetType().FullName}.");
+            }
+
             if (!EditorBuildSettings.scenes.Any(scene => scene.enabled && !string.IsNullOrEmpty(scene.path)))
             {
                 throw new BuildFailedException("The foundation has no enabled build scene.");
@@ -26,8 +40,13 @@ namespace GalaQuest.Editor
 
             Debug.Log(
                 $"GalaQuest foundation validation passed: Unity {Application.unityVersion}, " +
-                $"{FoundationDiagnostics.RenderPipelineName}, " +
+                $"{activeRenderPipeline.GetType().Name}, " +
                 $"{EditorBuildSettings.scenes.Count(scene => scene.enabled)} enabled scene(s).");
+        }
+
+        public static bool IsUniversalRenderPipeline(RenderPipelineAsset renderPipeline)
+        {
+            return renderPipeline is UniversalRenderPipelineAsset;
         }
 
         public static void BuildWindows()
