@@ -35,6 +35,47 @@ High-value engagement ingredients include:
 Retention should come from satisfying play and meaningful goals, not deliberately manipulative dark
 patterns.
 
+## Current production north star
+
+**Give the player somewhere new to go, something cool to wear, something different to fight, and something they feel ownership over — fast.**
+
+Fresh 2026-09-02 child-play evidence materially changed the production priority. A child player who had
+become excited by helping create GalaQuest models voluntarily initiated a play session, then immediately
+identified three concrete reasons the current game still runs out of energy: repeated geography, invisible
+or insufficiently visible armor progression, and repeated Wolf combat. That evidence means content breadth
+and visible ownership are now part of the active engagement bottleneck rather than deferred future polish.
+
+Use these principles to judge near-term player-facing work:
+
+- **New places quickly.** Preserve a persistent MMO-like home/hub identity, but connect it to clearly
+  distinct authored adventure zones/levels rather than continuously enlarging one seamless map. Prefer
+  short transitions, strong visual changes, dense meaningful encounters, a clear destination, and a
+  decisive finish/reward beat. Minimize empty traversal. Minecraft Dungeons is a useful pacing/structure
+  reference, not a specification to copy.
+- **Visible gear now.** Armor and equipment must visibly transform the Hero as qualified assets become
+  available. A stat upgrade that the child cannot see leaves major engagement value unused. The production
+  pipeline should make it cheap to qualify, fit, vary, and ship more armor rather than treating visible gear
+  as a late cosmetic layer.
+- **Fight more than Wolves.** Ordinary play needs multiple readable enemy silhouettes and behaviors so
+  combat spaces feel different and Hero/gear growth has different things to overpower. New zones should
+  normally introduce or recombine enemy types rather than reproducing the same encounter population.
+- **Exploit creative ownership.** Child/player participation in inventing pets, enemies, gear, characters,
+  or places is a high-value engagement signal. GalaQuest does not need an in-game creator platform to use
+  this advantage: when player-created concepts are good and production-qualifiable, turning them into real
+  game content can strengthen attachment and desire to return.
+- **Fast before vast.** Prefer one short, exciting, visually distinct authored level over a large empty
+  geography expansion or generalized procedural-world framework. Prove the level loop before building the
+  system for dozens of levels.
+- **Player-facing proof beats infrastructure completion.** Migration, networking, asset tooling, and other
+  engineering foundations matter because they enable better play. Once a technical seam is sufficiently
+  proven, the next deliberate child playtest should contain meaningful new player-visible value rather than
+  knowingly asking players to retest the same exhausted slice.
+
+The current Unity migration should therefore converge on a first genuinely kid-facing slice that combines
+**a new destination + visible armor + multiple enemy types + a clear completion/reward beat**, with pets and
+other personally meaningful content layered in as qualified assets become available. Deliver those outcomes
+through bounded PRs; this north star is not permission to create one giant implementation package.
+
 ## Learning philosophy
 
 Hide the vegetables without hiding the learning outcome from the adults designing the game.
@@ -51,7 +92,7 @@ combat should not remain an optimal leveling strategy merely because the player 
 
 ## Current coordinated progression direction
 
-The current major gameplay/progression direction is a coordinated push across **Hero XP/levels**, **meaningful visible gear progression**, **pet companions**, and **supporting enemy variety** in the existing playable slice. These systems should be designed against one shared progression/scaling and reward contract rather than independently inventing unrelated number economies. This shared design does not imply one giant implementation PR; delivery should use bounded PRs and checkpoints where appropriate.
+The current major gameplay/progression direction is a coordinated push across **Hero XP/levels**, **meaningful visible gear progression**, **pet companions**, **supporting enemy variety**, and **fast-paced destination expansion**. These systems should be designed against one shared progression/scaling and reward contract where applicable rather than independently inventing unrelated number economies. This shared direction does not imply one giant implementation PR; delivery should use bounded PRs and checkpoints where appropriate.
 
 The Hero is the primary source of power. Early levels should arrive very quickly, then lengthen gradually. Every Hero level should increase HP and damage; selected milestone levels may add bounded movement-speed growth. GalaQuest should keep one special-attack slot rather than growing a large hotbar, with the first special attack arriving around Level 5 and future design allowing the player to choose what occupies that slot.
 
@@ -68,7 +109,11 @@ provide forward challenge. The world needs enough ordinary enemy population for 
 feel that growth. Enemy nameplates should clearly communicate name, level, health, and dangerous level gaps;
 high-level threats may be visible early but must not be able to repeatedly farm newly respawned children.
 
-Enemy variety exists to make becoming stronger observable and to support the progression loop. Fresh 2026-09-02 child-play evidence now establishes that the repeated current map is also part of the engagement bottleneck. GalaQuest should pursue **fast-paced expansion into clearly distinct destinations/levels** alongside visible armor and enemy variety rather than simply enlarging one seamless map. The current preferred design lead is an MMO-like persistent hub connected to bounded adventure zones/scenes with quick transitions and little empty traversal; the exact level/teleport structure remains to be proven through bounded Unity work. See #46 and #131.
+World expansion should use **clearly distinct, fast-to-reach destinations/levels** rather than defaulting to
+one ever-larger seamless map. The current preferred design lead is a persistent MMO-like hub connected to
+bounded authored adventure zones/scenes with strong visual identity, different enemy mixes, clear reward
+purposes, decisive endings/transitions, and little empty traversal. The exact portal/gate/teleport structure
+remains to be proven through bounded Unity work. See #46 and #131.
 
 ## Current pet direction
 
@@ -101,6 +146,11 @@ Before generating a fresh armor library, inventory the armor/gear GLBs already i
 them for provenance, fit, materials, runtime performance, and running-game appearance. Integrate assets that
 actually pass those gates. Cheap retexturing/material variants of strong meshes are a valid way to create
 additional loot variety. Use the resulting inventory/gap count to size any later paid asset-production push.
+
+Asset tooling should increasingly optimize for **content throughput**: once a class of asset is qualified,
+make it easier to move additional gear, enemies, pets, NPCs, and environment pieces through the same proven
+source-custody, optimization, Unity-import, prefab, and visual-review lane without weakening provenance or
+running-game acceptance.
 
 ## Decision discipline
 
