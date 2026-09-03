@@ -84,6 +84,17 @@ namespace GalaQuest.Gear.Editor
             if (rig == null)
                 throw new InvalidOperationException("The workbench scene has no GearFitProofRig.");
 
+            // Deactivate anything mounted whose definition has gone. Such an object cannot be toggled
+            // by the per-item pass below and would otherwise photobomb every still.
+            foreach (var orphan in rig.MountedItems())
+            {
+                if (orphan != null && orphan.Definition == null)
+                {
+                    Debug.LogWarning("Deactivating an orphaned mount with no definition: " + orphan.name);
+                    orphan.gameObject.SetActive(false);
+                }
+            }
+
             var items = rig.MountedItems().Where(item => item != null && item.Definition != null).ToList();
             if (items.Count == 0)
                 throw new InvalidOperationException("The workbench scene has no mounted gear items.");

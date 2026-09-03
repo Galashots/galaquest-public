@@ -126,6 +126,12 @@ namespace GalaQuest.Gear.Editor
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Select(AssetDatabase.LoadAssetAtPath<GearItemDefinition>)
                 .Where(asset => asset != null && asset.SourceModel != null)
+                // Never mount a throwaway test definition. The fit-lifecycle test creates one, calls
+                // this builder, then deletes the asset -- which previously left a mounted object in the
+                // SAVED scene with a dangling definition. It rendered in every later capture as a helmet
+                // floating above the Hero's head, and because its definition was gone the capture's
+                // show/hide pass skipped it entirely.
+                .Where(asset => !asset.SemanticId.StartsWith("gear.test.", System.StringComparison.Ordinal))
                 .OrderBy(asset => asset.SemanticId);
 
             foreach (var definition in definitions)

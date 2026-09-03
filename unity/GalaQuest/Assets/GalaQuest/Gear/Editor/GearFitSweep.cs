@@ -128,7 +128,7 @@ namespace GalaQuest.Gear.Editor
             camera.backgroundColor = new Color(0.16f, 0.17f, 0.2f, 1f);
             camera.nearClipPlane = 0.01f;
 
-            var target = rig.HeroRoot.position + Vector3.up * 1.0f;
+            var target = rig.HeroRoot.position + Vector3.up * 0.9f;
             var lines = new List<string>();
 
             try
@@ -146,7 +146,9 @@ namespace GalaQuest.Gear.Editor
                     }
 
                     var label = "shoulders-o" + i;
-                    Render(camera, target, GearReviewViews.View.Front, label, outputDirectory);
+                    // Gameplay framing: a tight head-height crop hid the fact that a 180-degree yaw
+                    // throws this mesh clear of its socket, and a bad orientation was picked from it.
+                    Render(camera, target, GearReviewViews.View.Gameplay, label, outputDirectory);
                     Render(camera, target, GearReviewViews.View.ThreeQuarter, label, outputDirectory);
                     lines.Add(label + " -> euler " + orientation);
                 }

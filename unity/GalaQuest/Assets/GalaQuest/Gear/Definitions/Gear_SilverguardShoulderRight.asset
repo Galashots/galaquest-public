@@ -18,9 +18,9 @@ MonoBehaviour:
   socketId: rightShoulder
   fitClass: 3
   localPosition: {x: 0, y: 0, z: 0}
-  localEulerAngles: {x: 0, y: 180, z: 0}
+  localEulerAngles: {x: 90, y: 0, z: 0}
   localScale: {x: 20.023956, y: 20.023956, z: 20.023956}
   mirrorX: 1
   hidesAnatomy: 
-  fitSource: 2
+  fitSource: 1
   sourceRepoPath: public/assets/gear/shoulder_silverguard.glb
