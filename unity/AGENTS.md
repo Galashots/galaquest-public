@@ -21,6 +21,7 @@ This directory is the Unity production foundation. Keep these rules durable and 
 - Meshy, Blender, DCC, or importer previews may expose defects but do not replace the Unity self-review. Follow `docs/review-guides/asset-visual-review.md` and the `visual-reference-first` skill for comparative reference review.
 - A producer review must state the strongest visual defect/counterargument found. Self-review does not independently accept the producer's own consequential work.
 - Prefer phone-readable stills on the PR/review surface. Large recordings and large raw/source masters may use the Owner-controlled Google Drive custody/review tier, linked from an exact-SHA review manifest; do not bloat Git merely to transport review media.
+- When publishing Unity review evidence to Drive, use only the controlled root and `30_OWNER_REVIEW/00_NEEDS_OWNER_REVIEW` lifecycle defined in `docs/pipeline/google-drive-asset-custody.md`. Keep `.local/unity/review-pack/` as generated local evidence; Drive is the durable transfer/review surface, not a second Unity source tree.
 - Running-game pixels remain the final visual authority. Asset inspection, serialized files, and renders can establish file facts but cannot establish how the game looks.
 
 ## Migration boundaries
