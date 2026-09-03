@@ -17,6 +17,11 @@ This directory is the Unity production foundation. Keep these rules durable and 
 - Unity CLI/MCP may drive the Editor when available. Raw Unity batch-mode fallback must remain possible for CI and for environments without a connected Editor.
 - Compile errors and unexplained Console errors fail validation. A green command is not sufficient if the Editor is in Safe Mode or has unexplained errors.
 - Bind evidence to the exact Git SHA that produced it. The generated evidence root is `.local/unity/review-pack/`; future Owner Review Pack states must be deterministic and explicit.
+- **Every new or materially changed Unity-bound visual asset must be visually self-reviewed in Unity before handoff.** At minimum capture a neutral inspection view and an intended gameplay-framing view; inspect motion in Play Mode when animation, VFX, cloth, deformation, or moving parts matter.
+- Meshy, Blender, DCC, or importer previews may expose defects but do not replace the Unity self-review. Follow `docs/review-guides/asset-visual-review.md` and the `visual-reference-first` skill for comparative reference review.
+- A producer review must state the strongest visual defect/counterargument found. Self-review does not independently accept the producer's own consequential work.
+- Prefer phone-readable stills on the PR/review surface. Large recordings and large raw/source masters may use the Owner-controlled Google Drive custody/review tier, linked from an exact-SHA review manifest; do not bloat Git merely to transport review media.
+- When publishing Unity review evidence to Drive, use only the controlled root and `30_OWNER_REVIEW/00_NEEDS_OWNER_REVIEW` lifecycle defined in `docs/pipeline/google-drive-asset-custody.md`. Keep `.local/unity/review-pack/` as generated local evidence; Drive is the durable transfer/review surface, not a second Unity source tree.
 - Running-game pixels remain the final visual authority. Asset inspection, serialized files, and renders can establish file facts but cannot establish how the game looks.
 
 ## Migration boundaries

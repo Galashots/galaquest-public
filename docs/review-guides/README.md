@@ -1,5 +1,9 @@
 # GalaQuest owner review guides
 
+This directory contains durable review procedures and Owner-authored review packets.
+
+For any new or materially changed player-visible asset, the producing agent must first follow [`asset-visual-review.md`](asset-visual-review.md). Producer self-review is mandatory before handoff and includes critical reference comparison plus Unity inspection for Unity-bound assets. Self-review does not replace independent acceptance or Owner-controlled promotion.
+
 Character Studio Review Mode turns the owner's visual comments into reproducible, repo-linked guidance without an OpenAI API integration.
 
 ## Zero-extra-cost workflow
