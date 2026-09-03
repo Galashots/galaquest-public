@@ -68,7 +68,7 @@ provide forward challenge. The world needs enough ordinary enemy population for 
 feel that growth. Enemy nameplates should clearly communicate name, level, health, and dangerous level gaps;
 high-level threats may be visible early but must not be able to repeatedly farm newly respawned children.
 
-Enemy variety exists to make becoming stronger observable and to support the progression loop, not to justify a large world or content expansion. **Ranger Lodge / Wildwood geography expansion is not the current engagement bottleneck and remains deferred.**
+Enemy variety exists to make becoming stronger observable and to support the progression loop. Fresh 2026-09-02 child-play evidence now establishes that the repeated current map is also part of the engagement bottleneck. GalaQuest should pursue **fast-paced expansion into clearly distinct destinations/levels** alongside visible armor and enemy variety rather than simply enlarging one seamless map. The current preferred design lead is an MMO-like persistent hub connected to bounded adventure zones/scenes with quick transitions and little empty traversal; the exact level/teleport structure remains to be proven through bounded Unity work. See #46 and #131.
 
 ## Current pet direction
 
