@@ -17,9 +17,10 @@ MonoBehaviour:
   sourceModel: {fileID: 919132149155446097, guid: c5d60bfc50486c64689ded10acb1104e, type: 3}
   socketId: head
   fitClass: 1
-  localPosition: {x: -0.0007414737, y: 0.18888, z: -0.058453407}
+  localPosition: {x: -0.00078, y: 0.21754, z: -0.06732}
   localEulerAngles: {x: 180, y: 0, z: 0}
-  localScale: {x: 0.40928584, y: 0.40928584, z: 0.40928584}
+  localScale: {x: 0.40929, y: 0.40929, z: 0.40929}
   mirrorX: 0
   hidesAnatomy: 0000000001000000
+  fitSource: 2
   sourceRepoPath: public/assets/gear/helmet_silverguard.glb

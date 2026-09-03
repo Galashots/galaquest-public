@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using GalaQuest.Gear;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
@@ -20,21 +21,31 @@ namespace GalaQuest.Tests
     /// </summary>
     public sealed class GearAnimationSweepPlayModeTests
     {
-        private const string SceneName = "GearWorkbench";
+        /// <summary>
+        /// Loaded BY PATH, not by build-settings name.
+        ///
+        /// The Gear Workbench is Editor authoring infrastructure, not a player destination. An earlier
+        /// revision registered it as an enabled build scene purely so this test could load it, which
+        /// shipped the authoring scene, the Hero prefab and every gear model into the Windows and WebGL
+        /// players. EditorSceneManager.LoadSceneInPlayMode loads a scene that is not in Build Settings,
+        /// which is why this assembly is Editor-only.
+        /// </summary>
+        private const string ScenePath = "Assets/GalaQuest/Gear/Scenes/GearWorkbench.unity";
         private const int SamplesPerClip = 12;
 
         private static GearFitProofRig FindRig()
         {
             var rig = Object.FindFirstObjectByType<GearFitProofRig>();
-            Assert.That(rig, Is.Not.Null, "The " + SceneName + " scene has no GearFitProofRig.");
+            Assert.That(rig, Is.Not.Null, "The workbench scene has no GearFitProofRig.");
             return rig;
         }
 
         [UnityTest]
         public IEnumerator Workbench_scene_loads_with_hero_sockets_and_mounted_items()
         {
-            var load = SceneManager.LoadSceneAsync(SceneName, LoadSceneMode.Single);
-            Assert.That(load, Is.Not.Null, SceneName + " is not in the build scene list.");
+            var load = EditorSceneManager.LoadSceneAsyncInPlayMode(
+                ScenePath, new LoadSceneParameters(LoadSceneMode.Single));
+            Assert.That(load, Is.Not.Null, ScenePath + " could not be loaded.");
             while (!load.isDone) yield return null;
             yield return null;
 
@@ -69,7 +80,8 @@ namespace GalaQuest.Tests
         [UnityTest]
         public IEnumerator Mounted_fits_never_drift_from_their_authored_values_under_animation()
         {
-            var load = SceneManager.LoadSceneAsync(SceneName, LoadSceneMode.Single);
+            var load = EditorSceneManager.LoadSceneAsyncInPlayMode(
+                ScenePath, new LoadSceneParameters(LoadSceneMode.Single));
             while (!load.isDone) yield return null;
             yield return null;
 

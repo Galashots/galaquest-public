@@ -51,6 +51,10 @@ namespace GalaQuest.Gear
                  "is never pushed outward to wrap it.")]
         [SerializeField] private AnatomyRegion[] hidesAnatomy = new AnatomyRegion[0];
 
+        [Header("Fit lifecycle")]
+        [Tooltip("Where the current fit came from. Owner-authored fits are never auto-reseeded.")]
+        [SerializeField] private GearFitSource fitSource = GearFitSource.Unseeded;
+
         [Header("Provenance")]
         [Tooltip("Repository path of the authoritative source art, for exact-SHA review evidence.")]
         [SerializeField] private string sourceRepoPath = string.Empty;
@@ -66,6 +70,10 @@ namespace GalaQuest.Gear
         public bool MirrorX => mirrorX;
         public AnatomyRegion[] HidesAnatomy => hidesAnatomy;
         public string SourceRepoPath => sourceRepoPath;
+        public GearFitSource FitSource => fitSource;
+
+        /// <summary>An Owner-authored fit is never overwritten by any automatic operation.</summary>
+        public bool IsOwnerAuthored => fitSource == GearFitSource.OwnerAuthored;
 
         public Quaternion LocalRotation => Quaternion.Euler(localEulerAngles);
 
@@ -81,12 +89,41 @@ namespace GalaQuest.Gear
             return false;
         }
 
-        /// <summary>Write a fit authored in the Scene View back into this asset.</summary>
+        /// <summary>
+        /// Write a fit authored in the Scene View back into this asset and mark it Owner-authored.
+        ///
+        /// Once this has been called, no automatic author/rebuild/capture path may overwrite the
+        /// transform. Only the explicit destructive reseed command can, and it says so in its name.
+        /// </summary>
         public void ApplyAuthoredFit(Vector3 position, Vector3 eulerAngles, Vector3 scale)
         {
             localPosition = position;
             localEulerAngles = eulerAngles;
             localScale = scale;
+            fitSource = GearFitSource.OwnerAuthored;
+        }
+
+        /// <summary>
+        /// Write a machine-suggested starting fit. Refuses to touch an Owner-authored fit; callers that
+        /// genuinely intend to discard Owner work must call <see cref="ForceReseedFit"/>.
+        /// </summary>
+        public bool TryApplySeedFit(Vector3 position, Vector3 eulerAngles, Vector3 scale)
+        {
+            if (fitSource == GearFitSource.OwnerAuthored) return false;
+            localPosition = position;
+            localEulerAngles = eulerAngles;
+            localScale = scale;
+            fitSource = GearFitSource.Seeded;
+            return true;
+        }
+
+        /// <summary>Discard whatever is here, including Owner work. Only the destructive command calls this.</summary>
+        public void ForceReseedFit(Vector3 position, Vector3 eulerAngles, Vector3 scale)
+        {
+            localPosition = position;
+            localEulerAngles = eulerAngles;
+            localScale = scale;
+            fitSource = GearFitSource.Seeded;
         }
 
         /// <summary>Editor/authoring seam used when a definition is generated rather than hand-made.</summary>
@@ -106,6 +143,8 @@ namespace GalaQuest.Gear
             fitClass = gearFitClass;
             sourceRepoPath = repoPath;
             hidesAnatomy = coverage ?? new AnatomyRegion[0];
+            // Deliberately does NOT touch localPosition/localEulerAngles/localScale or fitSource.
+            // Ensuring metadata on an existing asset must never disturb an authored fit.
         }
 
         public void SetMirrorX(bool value) => mirrorX = value;

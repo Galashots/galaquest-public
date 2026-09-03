@@ -18,8 +18,9 @@ MonoBehaviour:
   socketId: leftHand
   fitClass: 2
   localPosition: {x: 0, y: 0, z: 0}
-  localEulerAngles: {x: 180, y: 180, z: 0}
-  localScale: {x: 47.068542, y: 47.068542, z: 47.068542}
+  localEulerAngles: {x: 0, y: 0, z: 0}
+  localScale: {x: 47.024567, y: 47.024567, z: 47.024567}
   mirrorX: 0
   hidesAnatomy: 
+  fitSource: 1
   sourceRepoPath: public/assets/gear/shield_ironwood.glb

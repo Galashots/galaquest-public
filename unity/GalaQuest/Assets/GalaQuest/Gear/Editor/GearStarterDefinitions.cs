@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using GalaQuest.Gear;
 using UnityEditor;
 using UnityEngine;
@@ -6,13 +7,20 @@ using UnityEngine;
 namespace GalaQuest.Gear.Editor
 {
     /// <summary>
-    /// Creates the two Checkpoint-A items as ordinary data assets and seeds each with a starting fit.
+    /// Creates the Checkpoint-A items as ordinary data assets and gives a brand-new item a starting fit.
     ///
-    /// This file is authoring convenience for the FIRST two items, not the mounting system. It contains
-    /// no mounting logic and no per-item behaviour: it fills in a GearItemDefinition and lets
-    /// <see cref="GearMounter"/> and <see cref="GearFitValidator"/> do the rest. A third item does not
-    /// need a third entry here -- the Owner can create one from
-    /// Assets &gt; Create &gt; GalaQuest &gt; Gear &gt; Gear Item Definition.
+    /// The split here is load-bearing:
+    ///
+    ///   <see cref="EnsureDefinitions"/> is NON-DESTRUCTIVE. It creates what is missing, refreshes
+    ///   metadata, and seeds a fit only for an item that has never had one. It is what every automatic
+    ///   author/rebuild/capture path calls, so a fit the Owner saved in the Workbench survives them all.
+    ///
+    ///   <see cref="ReseedAllFitsDiscardingOwnerWork"/> is DESTRUCTIVE and says so. It is the only thing
+    ///   that overwrites an Owner-authored transform, nothing automatic calls it, and interactively it
+    ///   asks first.
+    ///
+    /// This file is authoring convenience for the first items, not the mounting system. It contains no
+    /// mounting logic and no per-item behaviour; a third helmet does not need an entry here.
     /// </summary>
     public static class GearStarterDefinitions
     {
@@ -34,133 +42,185 @@ namespace GalaQuest.Gear.Editor
 
         /// <summary>
         /// The Ironwood Shield's shipped world diameter: public/src/character/gear.js mounts it at scale
-        /// 45 under an Armature scaled 0.01, on a GLB whose own bounds are 1.0 units across. Seeding from
-        /// the shipped size keeps the Unity candidate honest rather than inventing a new shield scale.
+        /// 45 under an Armature scaled 0.01, on a GLB whose own bounds are 1.0 units across.
         /// </summary>
         public const float ShieldWorldDiameter = 0.45f;
 
         /// <summary>The Silverguard Shoulder's shipped world height, from docs/foundry/gear/tier3_fit.json.</summary>
         public const float ShoulderWorldHeight = 0.21f;
 
-        [MenuItem("GalaQuest/Gear/Create or reseed starter gear definitions")]
-        public static void CreateOrReseed()
+        private struct Spec
+        {
+            public string AssetPath;
+            public string SemanticId;
+            public string DisplayName;
+            public string ModelPath;
+            public string SocketId;
+            public GearFitClass FitClass;
+            public string SourceRepoPath;
+            public AnatomyRegion[] Coverage;
+            public bool MirrorX;
+            public float TargetWorldSize;
+        }
+
+        private static Spec[] Specs()
+        {
+            return new[]
+            {
+                new Spec
+                {
+                    AssetPath = HelmetPath, SemanticId = "gear.helmet.silverguard",
+                    DisplayName = "Silverguard Helmet", ModelPath = HelmetModelPath,
+                    SocketId = GearSocketIds.Head, FitClass = GearFitClass.Headgear,
+                    SourceRepoPath = "public/assets/gear/helmet_silverguard.glb",
+                    Coverage = new[] { AnatomyRegion.Hair, AnatomyRegion.Ears },
+                    MirrorX = false, TargetWorldSize = 0f,
+                },
+                new Spec
+                {
+                    AssetPath = ShieldPath, SemanticId = "gear.shield.ironwood",
+                    DisplayName = "Ironwood Shield", ModelPath = ShieldModelPath,
+                    SocketId = GearSocketIds.LeftHand, FitClass = GearFitClass.Handheld,
+                    SourceRepoPath = "public/assets/gear/shield_ironwood.glb",
+                    Coverage = new AnatomyRegion[0],
+                    MirrorX = false, TargetWorldSize = ShieldWorldDiameter,
+                },
+                new Spec
+                {
+                    AssetPath = ShoulderLeftPath, SemanticId = "gear.shoulder.silverguard.left",
+                    DisplayName = "Silverguard Shoulder (left)", ModelPath = ShoulderModelPath,
+                    SocketId = GearSocketIds.LeftShoulder, FitClass = GearFitClass.Shoulder,
+                    SourceRepoPath = "public/assets/gear/shoulder_silverguard.glb",
+                    Coverage = new AnatomyRegion[0],
+                    MirrorX = false, TargetWorldSize = ShoulderWorldHeight,
+                },
+                new Spec
+                {
+                    AssetPath = ShoulderRightPath, SemanticId = "gear.shoulder.silverguard.right",
+                    DisplayName = "Silverguard Shoulder (right)", ModelPath = ShoulderModelPath,
+                    SocketId = GearSocketIds.RightShoulder, FitClass = GearFitClass.Shoulder,
+                    SourceRepoPath = "public/assets/gear/shoulder_silverguard.glb",
+                    Coverage = new AnatomyRegion[0],
+                    MirrorX = true, TargetWorldSize = ShoulderWorldHeight,
+                },
+            };
+        }
+
+        /// <summary>
+        /// Safe path: create missing definitions, refresh metadata, and seed a fit only where none has
+        /// ever been established. Never touches an Owner-authored transform.
+        /// </summary>
+        [MenuItem("GalaQuest/Gear/Ensure gear definitions (safe, keeps saved fits)")]
+        public static void EnsureDefinitions()
+        {
+            Ensure(false);
+        }
+
+        /// <summary>
+        /// Destructive path: throw away every fit, including Owner-authored ones, and reseed from the
+        /// machine suggestion. Nothing automatic calls this.
+        /// </summary>
+        [MenuItem("GalaQuest/Gear/DANGER - Discard ALL gear fits and reseed")]
+        public static void ReseedAllFitsDiscardingOwnerWork()
+        {
+            var authored = LoadAll().Count(definition => definition.IsOwnerAuthored);
+            var proceed = Application.isBatchMode || EditorUtility.DisplayDialog(
+                "Discard all gear fits?",
+                "This permanently discards every saved gear fit, including " + authored +
+                " Owner-authored fit(s), and replaces them with machine suggestions.\n\n" +
+                "There is no undo.",
+                "Discard and reseed",
+                "Cancel");
+
+            if (!proceed)
+            {
+                Debug.Log("Gear reseed cancelled; no fits were changed.");
+                return;
+            }
+
+            Ensure(true);
+            Debug.LogWarning("DESTRUCTIVE reseed complete: all gear fits were discarded and regenerated.");
+        }
+
+        private static GearItemDefinition[] LoadAll()
+        {
+            return AssetDatabase.FindAssets("t:GearItemDefinition")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<GearItemDefinition>)
+                .Where(asset => asset != null)
+                .ToArray();
+        }
+
+        private static void Ensure(bool destructive)
         {
             Directory.CreateDirectory(DefinitionsFolder);
 
-            var helmet = EnsureDefinition(
-                HelmetPath,
-                "gear.helmet.silverguard",
-                "Silverguard Helmet",
-                HelmetModelPath,
-                GearSocketIds.Head,
-                GearFitClass.Headgear,
-                "public/assets/gear/helmet_silverguard.glb",
-                new[] { AnatomyRegion.Hair, AnatomyRegion.Ears });
+            var specs = Specs();
+            var definitions = new GearItemDefinition[specs.Length];
 
-            var shield = EnsureDefinition(
-                ShieldPath,
-                "gear.shield.ironwood",
-                "Ironwood Shield",
-                ShieldModelPath,
-                GearSocketIds.LeftHand,
-                GearFitClass.Handheld,
-                "public/assets/gear/shield_ironwood.glb",
-                new AnatomyRegion[0]);
-
-            var shoulderLeft = EnsureDefinition(
-                ShoulderLeftPath,
-                "gear.shoulder.silverguard.left",
-                "Silverguard Shoulder (left)",
-                ShoulderModelPath,
-                GearSocketIds.LeftShoulder,
-                GearFitClass.Shoulder,
-                "public/assets/gear/shoulder_silverguard.glb",
-                new AnatomyRegion[0]);
-
-            var shoulderRight = EnsureDefinition(
-                ShoulderRightPath,
-                "gear.shoulder.silverguard.right",
-                "Silverguard Shoulder (right)",
-                ShoulderModelPath,
-                GearSocketIds.RightShoulder,
-                GearFitClass.Shoulder,
-                "public/assets/gear/shoulder_silverguard.glb",
-                new AnatomyRegion[0]);
-
-            if (shoulderRight != null) shoulderRight.SetMirrorX(true);
+            for (var i = 0; i < specs.Length; i++)
+                definitions[i] = EnsureDefinition(specs[i]);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            SeedFits(helmet, shield, shoulderLeft, shoulderRight);
+            SeedFits(specs, definitions, destructive);
         }
 
-        private static GearItemDefinition EnsureDefinition(
-            string assetPath,
-            string semanticId,
-            string displayName,
-            string modelPath,
-            string socketId,
-            GearFitClass fitClass,
-            string sourceRepoPath,
-            AnatomyRegion[] coverage)
+        private static GearItemDefinition EnsureDefinition(Spec spec)
         {
-            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(spec.ModelPath);
             if (model == null)
             {
-                Debug.LogWarning("Gear source model not imported yet, skipping " + semanticId + ": " + modelPath);
+                Debug.LogWarning("Gear source model not imported, skipping " + spec.SemanticId +
+                                 ": " + spec.ModelPath);
                 return null;
             }
 
-            var definition = AssetDatabase.LoadAssetAtPath<GearItemDefinition>(assetPath);
+            var definition = AssetDatabase.LoadAssetAtPath<GearItemDefinition>(spec.AssetPath);
             var created = definition == null;
             if (created) definition = ScriptableObject.CreateInstance<GearItemDefinition>();
 
-            definition.Configure(semanticId, displayName, model, socketId, fitClass, sourceRepoPath, coverage);
+            // Configure refreshes identity/metadata only. It does not touch the fit or its provenance.
+            definition.Configure(spec.SemanticId, spec.DisplayName, model, spec.SocketId,
+                spec.FitClass, spec.SourceRepoPath, spec.Coverage);
+            definition.SetMirrorX(spec.MirrorX);
 
-            if (created) AssetDatabase.CreateAsset(definition, assetPath);
+            if (created) AssetDatabase.CreateAsset(definition, spec.AssetPath);
             EditorUtility.SetDirty(definition);
             return definition;
         }
 
-        private static void SeedFits(
-            GearItemDefinition helmet,
-            GearItemDefinition shield,
-            GearItemDefinition shoulderLeft,
-            GearItemDefinition shoulderRight)
+        private static void SeedFits(Spec[] specs, GearItemDefinition[] definitions, bool destructive)
         {
             var heroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GearHeroAuthoring.HeroPrefabPath);
             var proxy = AssetDatabase.LoadAssetAtPath<HeadFitProxy>(GearHeroAuthoring.HeadProxyPath);
             if (heroPrefab == null || proxy == null)
             {
-                Debug.LogWarning("GQ_HERO_V1 or the Head Fit Proxy is missing; fits were not seeded.");
+                Debug.LogWarning("GQ_HERO_V1 or the Head Fit Proxy is missing; no fits were seeded.");
                 return;
             }
 
             var hero = (GameObject)PrefabUtility.InstantiatePrefab(heroPrefab);
             try
             {
-                if (helmet != null && helmet.SourceModel != null)
+                for (var i = 0; i < specs.Length; i++)
                 {
-                    var suggestion = GearAutoSeat.SuggestHeadgearFit(hero, helmet, proxy);
-                    helmet.ApplyAuthoredFit(
-                        suggestion.LocalPosition, suggestion.LocalEulerAngles, suggestion.LocalScale);
-                    EditorUtility.SetDirty(helmet);
+                    var definition = definitions[i];
+                    if (definition == null || definition.SourceModel == null) continue;
 
-                    Debug.Log(
-                        "Seeded Silverguard Helmet from the Head Fit Proxy: " +
-                        "scale " + suggestion.LocalScale.x.ToString("F4") +
-                        " x" + suggestion.LocalScale.y.ToString("F4") +
-                        ", widthF " + suggestion.WidthFactor.ToString("F2") +
-                        ", verticalF " + suggestion.VerticalFactor.ToString("F2") +
-                        ", lift steps " + suggestion.LiftSteps +
-                        ", eye line cleared " + suggestion.EyeLineCleared +
-                        ", crown gap " + suggestion.CrownGap.ToString("F4") + " m.");
+                    if (!destructive && definition.FitSource != GearFitSource.Unseeded)
+                    {
+                        Debug.Log("Kept the existing " + definition.FitSource + " fit for " +
+                                  definition.SemanticId + "; nothing was reseeded.");
+                        continue;
+                    }
+
+                    if (definition.FitClass == GearFitClass.Headgear)
+                        SeedHeadgear(hero, definition, proxy, destructive);
+                    else
+                        SeedByWorldSize(hero, definition, specs[i].TargetWorldSize, destructive);
                 }
-
-                SeedByWorldSize(hero, shield, ShieldWorldDiameter);
-                SeedByWorldSize(hero, shoulderLeft, ShoulderWorldHeight);
-                SeedByWorldSize(hero, shoulderRight, ShoulderWorldHeight);
             }
             finally
             {
@@ -170,111 +230,78 @@ namespace GalaQuest.Gear.Editor
             AssetDatabase.SaveAssets();
         }
 
-        /// <summary>
-        /// Seed a non-headgear item at its socket, sized to the world dimension it already ships at.
-        /// Orientation stays identity: that is a visual judgement for the Owner in the Scene View, and
-        /// this deliberately does not guess it.
-        /// </summary>
-        private static void SeedByWorldSize(GameObject hero, GearItemDefinition definition, float targetSize)
+        private static void SeedHeadgear(
+            GameObject hero, GearItemDefinition definition, HeadFitProxy proxy, bool destructive)
         {
-            if (definition == null || definition.SourceModel == null) return;
+            var suggestion = GearAutoSeat.SuggestHeadgearFit(hero, definition, proxy);
 
+            if (destructive)
+                definition.ForceReseedFit(
+                    suggestion.LocalPosition, suggestion.LocalEulerAngles, suggestion.LocalScale);
+            else if (!definition.TryApplySeedFit(
+                         suggestion.LocalPosition, suggestion.LocalEulerAngles, suggestion.LocalScale))
+                return;
+
+            EditorUtility.SetDirty(definition);
+
+            Debug.Log("Seeded " + definition.SemanticId + " from the Head Fit Proxy: " +
+                      "scale " + suggestion.LocalScale.x.ToString("F4") +
+                      " x" + suggestion.LocalScale.y.ToString("F4") +
+                      ", orientation " + suggestion.LocalEulerAngles +
+                      ", widthF " + suggestion.WidthFactor.ToString("F2") +
+                      ", verticalF " + suggestion.VerticalFactor.ToString("F2") +
+                      ", lift steps " + suggestion.LiftSteps +
+                      ", eye line cleared " + suggestion.EyeLineCleared +
+                      ", crown gap " + suggestion.CrownGap.ToString("F4") + " m.");
+        }
+
+        /// <summary>
+        /// Seed a non-headgear item at its socket, sized to the world dimension it already ships at,
+        /// with an IDENTITY rotation.
+        ///
+        /// Orientation is deliberately NOT guessed here. An earlier revision picked whichever orientation
+        /// stood furthest clear of the body, which sounds reasonable for a pauldron and was simply wrong:
+        /// it produced flipped shoulders the Owner rejected on sight. Maximum protrusion is not a
+        /// statement about which way a piece of armour faces.
+        ///
+        /// An honest unsolved starting pose beats a confident wrong one. Orientation for these classes is
+        /// an explicit visual authoring step in the Workbench.
+        /// </summary>
+        private static void SeedByWorldSize(
+            GameObject hero, GearItemDefinition definition, float targetSize, bool destructive)
+        {
             var socket = GearMounter.ResolveSocket(hero.transform, definition.SocketId);
-            var body = hero.GetComponentInChildren<SkinnedMeshRenderer>(true);
-            var bodyVertices = BakeBodyVertices(body);
-
             var item = Object.Instantiate(definition.SourceModel);
             try
             {
-                var bestOrientation = Vector3.zero;
-                var bestScale = 1f;
-                var bestProtrusion = float.NegativeInfinity;
+                item.transform.SetParent(socket.transform, false);
+                item.transform.localPosition = Vector3.zero;
+                item.transform.localRotation = Quaternion.identity;
+                item.transform.localScale = Vector3.one;
 
-                // Orientation is searched, not assumed. Identity is a coin flip after the
-                // GLB -> Blender -> FBX -> Unity axis conversion, and a pauldron that arrives facing
-                // backwards or inboard reads as the #125 "equipped but invisible" defect.
-                foreach (var orientation in GearAutoSeat.OrientationCandidates)
-                {
-                    item.transform.SetParent(socket.transform, false);
-                    item.transform.localPosition = Vector3.zero;
-                    item.transform.localRotation = Quaternion.Euler(orientation);
-                    item.transform.localScale = Vector3.one;
+                var vertices = GearFitValidator.CollectWorldVertices(item);
+                if (vertices.Count == 0) return;
 
-                    var vertices = GearFitValidator.CollectWorldVertices(item);
-                    if (vertices.Count == 0) continue;
+                var bounds = GearFitValidator.BoundsOf(vertices);
+                var widest = Mathf.Max(bounds.size.x, Mathf.Max(bounds.size.y, bounds.size.z));
+                var scale = widest > 1e-5f && targetSize > 0f ? targetSize / widest : 1f;
 
-                    var bounds = GearFitValidator.BoundsOf(vertices);
-                    var widest = Mathf.Max(bounds.size.x, Mathf.Max(bounds.size.y, bounds.size.z));
-                    var scale = widest > 1e-5f ? targetSize / widest : 1f;
+                if (destructive)
+                    definition.ForceReseedFit(Vector3.zero, Vector3.zero, Vector3.one * scale);
+                else if (!definition.TryApplySeedFit(Vector3.zero, Vector3.zero, Vector3.one * scale))
+                    return;
 
-                    item.transform.localScale = Vector3.one * scale;
-                    vertices = GearFitValidator.CollectWorldVertices(item);
-
-                    var protrusion = MaxProtrusion(body, bodyVertices, vertices);
-                    if (protrusion > bestProtrusion)
-                    {
-                        bestProtrusion = protrusion;
-                        bestOrientation = orientation;
-                        bestScale = scale;
-                    }
-                }
-
-                definition.ApplyAuthoredFit(Vector3.zero, bestOrientation, Vector3.one * bestScale);
                 EditorUtility.SetDirty(definition);
 
                 Debug.Log("Seeded " + definition.SemanticId + " at socket '" + definition.SocketId +
-                          "' with scale " + bestScale.ToString("F4") +
-                          ", orientation " + bestOrientation +
-                          ", stands " + bestProtrusion.ToString("F4") + " m clear of the body" +
-                          " for a " + targetSize.ToString("F3") + " m target.");
+                          "' with scale " + scale.ToString("F4") + " for a " +
+                          targetSize.ToString("F3") + " m target, identity rotation " +
+                          "(orientation is an explicit authoring step for this class).");
             }
             finally
             {
                 Object.DestroyImmediate(item);
             }
-        }
-
-        private static Vector3[] BakeBodyVertices(SkinnedMeshRenderer body)
-        {
-            if (body == null || body.sharedMesh == null) return new Vector3[0];
-
-            var baked = new Mesh();
-            try
-            {
-                body.BakeMesh(baked, true);
-                return baked.vertices;
-            }
-            finally
-            {
-                Object.DestroyImmediate(baked);
-            }
-        }
-
-        private static float MaxProtrusion(
-            SkinnedMeshRenderer body,
-            Vector3[] bodyVertices,
-            System.Collections.Generic.List<Vector3> itemWorldVertices)
-        {
-            if (body == null || bodyVertices.Length == 0) return 0f;
-
-            var bodyStride = Mathf.Max(1, bodyVertices.Length / 1200);
-            var itemStride = Mathf.Max(1, itemWorldVertices.Count / 300);
-            var max = 0f;
-
-            for (var i = 0; i < itemWorldVertices.Count; i += itemStride)
-            {
-                var local = body.transform.InverseTransformPoint(itemWorldVertices[i]);
-                var nearest = float.PositiveInfinity;
-                for (var b = 0; b < bodyVertices.Length; b += bodyStride)
-                {
-                    var d = (bodyVertices[b] - local).sqrMagnitude;
-                    if (d < nearest) nearest = d;
-                }
-                var distance = Mathf.Sqrt(nearest);
-                if (distance > max) max = distance;
-            }
-
-            return max;
         }
     }
 }

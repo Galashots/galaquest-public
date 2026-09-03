@@ -38,9 +38,35 @@ namespace GalaQuest.Gear.Editor
         [MenuItem("GalaQuest/Gear/Capture gear review pack")]
         public static void Capture()
         {
+            CaptureInternal(false);
+        }
+
+        /// <summary>
+        /// Capture even though tracked files differ from HEAD. The manifest then records
+        /// exactShaClaim=false and lists what was dirty, so nobody reads it as exact-SHA evidence.
+        /// </summary>
+        public static void CaptureAllowingDirtyTree()
+        {
+            CaptureInternal(true);
+        }
+
+        private static void CaptureInternal(bool allowDirty)
+        {
             var repoRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", ".."));
             var outputDirectory = Path.Combine(repoRoot, OutputRoot.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(outputDirectory);
+
+            var gitSha = RunGit("rev-parse HEAD", repoRoot);
+            var dirty = RunGit("status --porcelain -- unity docs tools public", repoRoot);
+            var isDirty = !string.IsNullOrWhiteSpace(dirty);
+
+            if (isDirty && !allowDirty)
+            {
+                throw new InvalidOperationException(
+                    "Refusing to stamp an exact-SHA review pack from a dirty working tree. " +
+                    "Commit first, or call CaptureAllowingDirtyTree to produce clearly-marked " +
+                    "non-exact evidence.\nDirty tracked paths:\n" + dirty);
+            }
 
             EditorSceneManager.OpenScene(GearWorkbenchWindow.ScenePath, OpenSceneMode.Single);
 
@@ -51,6 +77,14 @@ namespace GalaQuest.Gear.Editor
             var items = rig.MountedItems().Where(item => item != null && item.Definition != null).ToList();
             if (items.Count == 0)
                 throw new InvalidOperationException("The workbench scene has no mounted gear items.");
+
+            // Reapply every fit from its definition before photographing anything.
+            //
+            // The scene serialises the mount transforms it was built with, so a saved scene can be
+            // older than the definitions it was built from -- capture would then show a stale fit while
+            // the manifest claimed to describe the current one. Definitions are the authority; the
+            // scene is a view.
+            ReapplyCurrentFits(rig, items);
 
             var cameraObject = new GameObject("GearReviewCamera");
             var camera = cameraObject.AddComponent<Camera>();
@@ -74,6 +108,7 @@ namespace GalaQuest.Gear.Editor
                 {
                     SetAllVisible(items, false);
                     item.gameObject.SetActive(true);
+                    RefreshCoverage();
 
                     var slug = Slug(item.Definition.SemanticId);
                     foreach (var view in GearReviewViews.All)
@@ -95,7 +130,7 @@ namespace GalaQuest.Gear.Editor
                     captures.Add(RenderView(camera, rig, GearReviewViews.View.ThreeQuarter, label, outputDirectory));
                 }
 
-                WriteManifest(outputDirectory, items, captures);
+                WriteManifest(outputDirectory, items, captures, gitSha, isDirty, dirty);
             }
             finally
             {
@@ -105,9 +140,91 @@ namespace GalaQuest.Gear.Editor
             Debug.Log("Gear review pack captured " + captures.Count + " stills into " + outputDirectory);
         }
 
+        private static void ReapplyCurrentFits(GearFitProofRig rig, IEnumerable<GearMountedItem> items)
+        {
+            foreach (var item in items)
+            {
+                var socket = GearMounter.ResolveSocket(rig.HeroRoot, item.Definition.SocketId);
+                GearMounter.ApplyFit(item.transform, socket, item.Definition);
+            }
+        }
+
+        /// <summary>Read-only git query. Returns an empty string if git is unavailable.</summary>
+        private static string RunGit(string arguments, string workingDirectory)
+        {
+            try
+            {
+                var info = new System.Diagnostics.ProcessStartInfo("git", arguments)
+                {
+                    WorkingDirectory = workingDirectory,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                using (var process = System.Diagnostics.Process.Start(info))
+                {
+                    if (process == null) return string.Empty;
+                    var output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit(15000);
+                    return output.Trim();
+                }
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogWarning("git " + arguments + " failed: " + exception.Message);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Show/hide items, then refresh the anatomy coverage preview so the Hero underneath matches
+        /// what is actually equipped. Without this the helmet is photographed fighting a hairstyle that
+        /// the runtime will hide -- which is how a helmet gets fitted oversized in the first place.
+        /// </summary>
         private static void SetAllVisible(IEnumerable<GearMountedItem> items, bool visible)
         {
             foreach (var item in items) item.gameObject.SetActive(visible);
+            RefreshCoverage();
+        }
+
+        private static void RefreshCoverage()
+        {
+            var preview = UnityEngine.Object.FindFirstObjectByType<AnatomyCoveragePreview>(
+                FindObjectsInactive.Include);
+            if (preview == null)
+            {
+                Debug.LogWarning("ANATOMY: no AnatomyCoveragePreview in the workbench scene.");
+                return;
+            }
+
+            preview.PreviewCoverage = true;
+            if (!preview.IsUsable)
+            {
+                // Probe once; if the map cannot drive this mesh, leave the Hero intact and say so
+                // rather than photographing shredded geometry.
+                preview.Apply(new[] { AnatomyRegion.Hair });
+                if (!preview.IsUsable)
+                {
+                    preview.PreviewCoverage = false;
+                    preview.Restore();
+                    Debug.LogWarning("ANATOMY: coverage preview unavailable - " + preview.ValidationError);
+                    return;
+                }
+            }
+
+            var regions = new List<AnatomyRegion>();
+            foreach (var mount in UnityEngine.Object.FindObjectsByType<GearMountedItem>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (mount.Definition?.HidesAnatomy == null) continue;
+                if (!mount.gameObject.activeInHierarchy) continue;
+                regions.AddRange(mount.Definition.HidesAnatomy);
+            }
+
+            Debug.Log("ANATOMY: applying coverage for " + regions.Count + " declared region(s).");
+            preview.Apply(regions);
         }
 
         private static string RenderView(
@@ -158,7 +275,10 @@ namespace GalaQuest.Gear.Editor
         private static void WriteManifest(
             string outputDirectory,
             IEnumerable<GearMountedItem> items,
-            IEnumerable<string> captures)
+            IEnumerable<string> captures,
+            string gitSha,
+            bool isDirty,
+            string dirtyPaths)
         {
             var proxy = AssetDatabase.LoadAssetAtPath<HeadFitProxy>(GearHeroAuthoring.HeadProxyPath);
             var builder = new StringBuilder();
@@ -167,6 +287,20 @@ namespace GalaQuest.Gear.Editor
             builder.AppendLine("  \"schema\": \"galaquest.unity-gear-review-pack\",");
             builder.AppendLine("  \"schemaVersion\": 1,");
             builder.AppendLine("  \"unityVersion\": \"" + Application.unityVersion + "\",");
+            builder.AppendLine("  \"sourceRepository\": \"Galashots/galaquest-public\",");
+            builder.AppendLine("  \"gitSha\": \"" + gitSha + "\",");
+            builder.AppendLine("  \"exactShaClaim\": " + (isDirty ? "false" : "true") + ",");
+            if (isDirty)
+            {
+                // Character codes rather than escape sequences: this string is assembled by hand into
+                // JSON, and the surrounding quoting is fiddly enough without them.
+                var flattened = dirtyPaths
+                    .Replace((char)92, (char)47)
+                    .Replace((char)34, (char)39)
+                    .Replace((char)13, (char)32)
+                    .Replace((char)10, (char)59);
+                builder.AppendLine("  \"dirtyTrackedPaths\": \"" + flattened + "\",");
+            }
             builder.AppendLine("  \"note\": \"Editor renders. Not running-game evidence: this project has no Unity gameplay/controller seam yet.\",");
             builder.AppendLine("  \"headFitProxy\": {");
             if (proxy != null)

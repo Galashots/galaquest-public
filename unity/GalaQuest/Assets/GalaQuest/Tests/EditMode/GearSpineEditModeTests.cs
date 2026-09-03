@@ -280,5 +280,96 @@ namespace GalaQuest.Tests
                     "upright, re-seed it and update this test with what changed.");
             }
         }
+        /// <summary>
+        /// THE Workbench promise: a fit the Owner saved is never silently thrown away.
+        ///
+        /// Before this, GearBuild.Author -> CreateOrReseed -> SeedFits overwrote authored transforms, so
+        /// AuthorAndCapture reset the manual fit and then photographed the machine guess while reporting
+        /// it as the current fit. This drives the whole normal path -- infrastructure rebuild, definition
+        /// ensure, scene rebuild -- against a deliberately distinctive fit and requires it to come back
+        /// byte-for-byte.
+        /// </summary>
+        [Test]
+        public void Owner_authored_fit_survives_the_normal_author_rebuild_and_capture_path()
+        {
+            var helmet = LoadDefinitions().FirstOrDefault(d => d.SemanticId == "gear.helmet.silverguard");
+            Assert.That(helmet, Is.Not.Null);
+
+            var originalPosition = helmet.LocalPosition;
+            var originalEuler = helmet.LocalEulerAngles;
+            var originalScale = helmet.LocalScale;
+            var originalSource = helmet.FitSource;
+
+            // Deliberately absurd and unmistakable: nothing the seeder would ever produce.
+            var sentinelPosition = new Vector3(0.1234f, 0.5678f, -0.4321f);
+            var sentinelEuler = new Vector3(11f, 22f, 33f);
+            var sentinelScale = new Vector3(0.4444f, 0.3333f, 0.4444f);
+
+            try
+            {
+                helmet.ApplyAuthoredFit(sentinelPosition, sentinelEuler, sentinelScale);
+                EditorUtility.SetDirty(helmet);
+                AssetDatabase.SaveAssets();
+                Assert.That(helmet.IsOwnerAuthored, Is.True, "Saving a fit must mark it Owner-authored.");
+
+                GearHeroAuthoring.RebuildAll();
+                GearStarterDefinitions.EnsureDefinitions();
+                GearWorkbenchSceneBuilder.Build();
+
+                var reloaded = AssetDatabase.LoadAssetAtPath<GearItemDefinition>(
+                    GearStarterDefinitions.HelmetPath);
+                Assert.That(reloaded, Is.Not.Null);
+
+                Assert.That(reloaded.LocalPosition,
+                    Is.EqualTo(sentinelPosition).Using(Vector3EqualityComparer.Instance),
+                    "The normal author/rebuild path overwrote an Owner-authored position.");
+                Assert.That(reloaded.LocalEulerAngles,
+                    Is.EqualTo(sentinelEuler).Using(Vector3EqualityComparer.Instance),
+                    "The normal author/rebuild path overwrote an Owner-authored rotation.");
+                Assert.That(reloaded.LocalScale,
+                    Is.EqualTo(sentinelScale).Using(Vector3EqualityComparer.Instance),
+                    "The normal author/rebuild path overwrote an Owner-authored scale.");
+                Assert.That(reloaded.IsOwnerAuthored, Is.True,
+                    "The fit lost its Owner-authored provenance during a routine rebuild.");
+            }
+            finally
+            {
+                helmet.ForceReseedFit(originalPosition, originalEuler, originalScale);
+                if (originalSource == GearFitSource.OwnerAuthored)
+                    helmet.ApplyAuthoredFit(originalPosition, originalEuler, originalScale);
+                EditorUtility.SetDirty(helmet);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
+        /// <summary>
+        /// The Gear Workbench is Editor authoring infrastructure, not a player destination.
+        ///
+        /// Shipping it would put the authoring scene, the Hero prefab and every gear model into the
+        /// Windows and WebGL players. An earlier revision registered it as an enabled build scene so a
+        /// PlayMode test could load it by name; that test now loads it by path instead.
+        /// </summary>
+        [Test]
+        public void Gear_workbench_scene_is_not_a_player_build_scene()
+        {
+            var shipped = EditorBuildSettings.scenes.Select(scene => scene.path).ToArray();
+
+            Assert.That(shipped, Has.None.EqualTo(GearWorkbenchWindow.ScenePath),
+                "The Gear Workbench must not be a player build scene.");
+
+            // ...and the accepted shared scenes must still be there. Removing one of those by accident
+            // would break Emberworks or the existing migration proofs.
+            foreach (var required in new[]
+                     {
+                         "Assets/GalaQuest/Emberworks/Scenes/EmberworksDeep.unity",
+                         "Assets/GalaQuest/Migration/VisibleArmor/Scenes/VisibleArmorProof.unity",
+                         "Assets/GalaQuest/Migration/Scenes/MigrationProof.unity",
+                     })
+            {
+                Assert.That(shipped, Contains.Item(required),
+                    "Accepted build scene went missing: " + required);
+            }
+        }
+
     }
 }

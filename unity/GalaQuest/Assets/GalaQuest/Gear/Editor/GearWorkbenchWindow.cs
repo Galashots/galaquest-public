@@ -166,6 +166,21 @@ namespace GalaQuest.Gear.Editor
                         : string.Join(", ", definition.HidesAnatomy.Select(region => region.ToString())));
             }
 
+            var coverage = FindCoverage();
+            if (coverage != null)
+            {
+                var preview = EditorGUILayout.Toggle("Preview hidden anatomy", coverage.PreviewCoverage);
+                if (preview != coverage.PreviewCoverage)
+                {
+                    Undo.RecordObject(coverage, "Toggle anatomy coverage preview");
+                    coverage.PreviewCoverage = preview;
+                    ApplyCoverage();
+                }
+
+                if (!string.IsNullOrEmpty(coverage.ValidationError))
+                    EditorGUILayout.HelpBox(coverage.ValidationError, MessageType.Warning);
+            }
+
             var visualizer = FindVisualizer();
             if (visualizer != null)
             {
@@ -296,6 +311,34 @@ namespace GalaQuest.Gear.Editor
             return null;
         }
 
+        private static AnatomyCoveragePreview FindCoverage()
+        {
+            var hero = FindHero();
+            return hero == null ? null : hero.GetComponentInChildren<AnatomyCoveragePreview>(true);
+        }
+
+        /// <summary>
+        /// Hide whatever the currently mounted items declare they cover, so the Owner fits a helmet
+        /// against the head it will actually sit on rather than against a hairstyle that will be hidden.
+        /// </summary>
+        private static void ApplyCoverage()
+        {
+            var coverage = FindCoverage();
+            var hero = FindHero();
+            if (coverage == null || hero == null) return;
+
+            var regions = new List<AnatomyRegion>();
+            foreach (var mount in hero.GetComponentsInChildren<GearMountedItem>(true))
+            {
+                if (mount.Definition?.HidesAnatomy == null) continue;
+                if (!mount.gameObject.activeInHierarchy) continue;
+                regions.AddRange(mount.Definition.HidesAnatomy);
+            }
+
+            coverage.Apply(regions);
+            SceneView.RepaintAll();
+        }
+
         private static HeadFitProxyVisualizer FindVisualizer()
         {
             var hero = FindHero();
@@ -329,6 +372,7 @@ namespace GalaQuest.Gear.Editor
             mounted.AddComponent<GearMountedItem>().Configure(definition);
             Undo.RegisterCreatedObjectUndo(mounted, "Load gear item");
             Selection.activeGameObject = mounted;
+            ApplyCoverage();
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         }
 

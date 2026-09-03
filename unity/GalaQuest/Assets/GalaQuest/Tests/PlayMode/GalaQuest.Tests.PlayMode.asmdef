@@ -18,5 +18,8 @@
     "noEngineReferences": false,
     "optionalUnityReferences": [
         "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
     ]
 }

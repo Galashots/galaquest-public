@@ -14,14 +14,21 @@ namespace GalaQuest.Gear.Editor
     /// </summary>
     public static class GearBuild
     {
-        /// <summary>Regenerate GQ_HERO_V1, the Head Fit Proxy and the workbench scene, and report measurements.</summary>
+        /// <summary>
+        /// Regenerate GQ_HERO_V1, the Head Fit Proxy and the workbench scene, and report measurements.
+        ///
+        /// NON-DESTRUCTIVE by construction: it calls the safe ensure path, so a fit the Owner saved in the
+        /// Workbench survives every rebuild and every review capture. The destructive reseed is a separate
+        /// command that nothing here calls.
+        /// </summary>
         public static void Author()
         {
             GearHeroAuthoring.RebuildAll();
-            GearStarterDefinitions.CreateOrReseed();
+            GearStarterDefinitions.EnsureDefinitions();
             GearWorkbenchSceneBuilder.Build();
             ReportProxy();
             ReportItems();
+            ReportAnatomyCoverage();
         }
 
         /// <summary>Author everything and capture the review pack in one Editor session.</summary>
@@ -29,6 +36,48 @@ namespace GalaQuest.Gear.Editor
         {
             Author();
             GearReviewPack.Capture();
+        }
+
+        /// <summary>
+        /// Report whether the committed Hero anatomy region map can actually drive a Unity coverage
+        /// preview. This is a real open question: the map is face-index data pinned to the shipping GLB
+        /// triangle order, and the GLB -> Blender -> FBX -> Unity path is not obliged to preserve it.
+        /// </summary>
+        public static void ReportAnatomyCoverage()
+        {
+            var heroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GearHeroAuthoring.HeroPrefabPath);
+            var regionMap = AssetDatabase.LoadAssetAtPath<TextAsset>(
+                GearWorkbenchSceneBuilder.AnatomyRegionMapPath);
+
+            if (heroPrefab == null || regionMap == null)
+            {
+                Debug.LogWarning("Anatomy coverage report skipped: hero prefab or region map missing.");
+                return;
+            }
+
+            var hero = (GameObject)PrefabUtility.InstantiatePrefab(heroPrefab);
+            try
+            {
+                var body = hero.GetComponentInChildren<SkinnedMeshRenderer>(true);
+                var unityTriangles = body != null && body.sharedMesh != null
+                    ? body.sharedMesh.triangles.Length / 3
+                    : -1;
+
+                var preview = hero.AddComponent<AnatomyCoveragePreview>();
+                preview.Configure(body, regionMap);
+                preview.PreviewCoverage = true;
+                preview.Apply(new[] { AnatomyRegion.Hair, AnatomyRegion.Ears });
+
+                Debug.Log("ANATOMY COVERAGE: unity hero triangles=" + unityTriangles +
+                          "; usable=" + preview.IsUsable +
+                          "; error=" + (string.IsNullOrEmpty(preview.ValidationError)
+                              ? "none"
+                              : preview.ValidationError));
+            }
+            finally
+            {
+                Object.DestroyImmediate(hero);
+            }
         }
 
         public static void ReportItems()
