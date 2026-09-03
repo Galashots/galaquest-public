@@ -1,0 +1,83 @@
+{
+  "schema": "galaquest.unity-visible-armor-proof",
+  "schemaVersion": 1,
+  "originatingGitSha": "4ee972bcf86cc17c5733a0a4696a267df0b194d1",
+  "sourceRepository": "Galashots/galaquest-public",
+  "sourceCoordinateSystem": "Three.js/glTF right-handed Y-up; Hero root-relative metres",
+  "destinationCoordinateSystem": "Unity left-handed Y-up; root-relative metres",
+  "unitConvention": "metres",
+  "hero": {
+    "semanticId": "hero.player.base",
+    "sourcePath": "public/assets/hero/hero_lod1_ironwood_atlas.glb",
+    "sourceSha256": "082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679",
+    "sourceSizeBytes": 1156840
+  },
+  "gear": {
+    "semanticId": "helmet_silverguard",
+    "sourcePath": "public/assets/gear/helmet_silverguard.glb",
+    "sourceSha256": "9c9b1158cc36d46f8c667d5d90a9960a9988f1d0823ed98730c1f9508c2fc0e5",
+    "sourceSizeBytes": 72824
+  },
+  "fitAuthority": {
+    "runtimeSourcePath": "public/src/character/gear.js",
+    "runtimeSourceSha256": "cd30101f16560e3edc7f0384b2f07281d2c8f41bac6de23a0e8566d411589a7f",
+    "semanticId": "helmet_silverguard",
+    "boneName": "Head",
+    "sourceRigRootName": "Armature",
+    "sourceRigRootScale": [
+      0.009999999776482582,
+      0.009999999776482582,
+      0.009999999776482582
+    ],
+    "sourceHeadPosition": [
+      -0.0032521948612425503,
+      1.104658566708297,
+      0.026949610887308663
+    ],
+    "sourceHeadQuaternion": [
+      0.15227835255560962,
+      0.0053021111882924805,
+      -0.005302196102046388,
+      0.9883092014676261
+    ],
+    "restRelativeToHeroRoot": {
+      "position": [
+        -0.4735,
+        122.46235,
+        1.66404
+      ],
+      "quaternion": [
+        -0.084336314711,
+        0.000883790884,
+        0.006155776196,
+        0.9964179401
+      ],
+      "scale": [
+        32.71,
+        32.71,
+        32.71
+      ]
+    },
+    "foundrySourcePath": "docs/foundry/gear/tier3_fit.json",
+    "foundrySourceSha256": "70ac7851aa5bcfcdd9fde66ffd1a30a425dd8cd55a16bb51be40917d88c531c8",
+    "foundryRecord": {
+      "name": "helmet",
+      "glb": "public/assets/gear/helmet_silverguard.glb",
+      "bone": "Head",
+      "worldHeight": 0.5,
+      "stretch": [
+        1,
+        1,
+        0.857
+      ],
+      "offset": [
+        0,
+        0.032,
+        0.265
+      ],
+      "why": "0.50 wide clears the skull's 0.444 at ear level (z 1.259). The Z squash to 0.857 is what makes it fit at all: at natural proportions the arch apex lands at z 1.32, below his eyes at 1.33. Squashed, the apex sits at 1.360 and the crown at 1.540, just over the head's 1.500."
+    },
+    "measuredSourcePath": "docs/foundry/gear/tier3_fit_measured.json",
+    "measuredSourceSha256": "c61bf4cd4fc72721cd3db4b930cbc7f678b7365dc5383ff0175350630cdb0b74"
+  }
+}
