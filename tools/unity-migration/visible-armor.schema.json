@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GalaQuest Unity visible armor proof",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "originatingGitSha", "sourceRepository", "sourceCoordinateSystem", "destinationCoordinateSystem", "unitConvention", "hero", "gear", "fitAuthority"],
+  "properties": {
+    "schema": { "const": "galaquest.unity-visible-armor-proof" },
+    "schemaVersion": { "const": 1 },
+    "originatingGitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceRepository": { "const": "Galashots/galaquest-public" },
+    "sourceCoordinateSystem": { "type": "string", "minLength": 1 },
+    "destinationCoordinateSystem": { "type": "string", "minLength": 1 },
+    "unitConvention": { "const": "metres" },
+    "hero": { "$ref": "#/$defs/asset" },
+    "gear": { "$ref": "#/$defs/asset" },
+    "fitAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeSourcePath", "runtimeSourceSha256", "semanticId", "boneName", "sourceRigRootName", "sourceRigRootScale", "sourceHeadPosition", "sourceHeadQuaternion", "restRelativeToHeroRoot", "foundrySourcePath", "foundrySourceSha256", "foundryRecord", "measuredSourcePath", "measuredSourceSha256"],
+      "properties": {
+        "runtimeSourcePath": { "const": "public/src/character/gear.js" },
+        "runtimeSourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "semanticId": { "type": "string", "minLength": 1 },
+        "boneName": { "const": "Head" },
+        "sourceRigRootName": { "const": "Armature" },
+        "sourceRigRootScale": { "$ref": "#/$defs/numberArray3" },
+        "sourceHeadPosition": { "$ref": "#/$defs/numberArray3" },
+        "sourceHeadQuaternion": { "$ref": "#/$defs/numberArray4" },
+        "restRelativeToHeroRoot": { "$ref": "#/$defs/transform" },
+        "foundrySourcePath": { "const": "docs/foundry/gear/tier3_fit.json" },
+        "foundrySourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "foundryRecord": { "type": "object" },
+        "measuredSourcePath": { "const": "docs/foundry/gear/tier3_fit_measured.json" },
+        "measuredSourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  },
+  "$defs": {
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticId", "sourcePath", "sourceSha256", "sourceSizeBytes"],
+      "properties": {
+        "semanticId": { "type": "string", "minLength": 1 },
+        "sourcePath": { "type": "string", "minLength": 1 },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceSizeBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "quaternion", "scale"],
+      "properties": {
+        "position": { "$ref": "#/$defs/numberArray3" },
+        "quaternion": { "$ref": "#/$defs/numberArray4" },
+        "scale": { "$ref": "#/$defs/numberArray3" }
+      }
+    },
+    "numberArray3": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+    "numberArray4": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } }
+  }
+}
