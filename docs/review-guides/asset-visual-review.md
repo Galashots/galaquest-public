@@ -92,7 +92,11 @@ Bind the review to the exact state that was inspected. Record, as applicable:
 
 Prefer attaching the most useful still images directly to the PR/review surface so a phone reviewer can inspect them quickly.
 
-For large raw/source assets and large recordings, use the Owner-controlled **Google Drive custody/review tier** when available rather than bloating Git. Link the Drive evidence from the PR or handoff and include an exact-SHA review manifest so the evidence cannot become detached from the state it proves. Google Drive is custody/transfer for large evidence; it does not replace GitHub as repository authority.
+For large raw/source assets and large recordings, use the Owner-controlled **Google Drive custody/review tier** when available rather than bloating Git. `docs/pipeline/google-drive-asset-custody.md` owns the one allowed active root, naming, stage routing, and anti-drift rules. Do not create a new GalaQuest asset root or arbitrary review folder.
+
+When the Owner needs a visual decision, publish a self-contained, phone-readable packet under the canonical `30_OWNER_REVIEW/00_NEEDS_OWNER_REVIEW` queue using the runbook's packet naming and manifest convention. Include the strongest known defect/uncertainty rather than only flattering images. After the decision is ratcheted to the owning GitHub/asset authority, move the packet out of the active queue into `90_REVIEWED_ARCHIVE`.
+
+Link Drive evidence from the PR or handoff and include an exact-SHA review manifest so the evidence cannot become detached from the state it proves. Google Drive is custody/transfer and a fast Owner review surface; it does not replace GitHub as repository authority or promote an asset by itself.
 
 ## Capability gaps are UNKNOWN, not exemptions
 
