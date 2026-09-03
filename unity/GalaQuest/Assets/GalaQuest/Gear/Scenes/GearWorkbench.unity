@@ -119,7 +119,215 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1001 &5340793
+--- !u!1 &639369370
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 639369371}
+  - component: {fileID: 639369374}
+  - component: {fileID: 639369373}
+  - component: {fileID: 639369372}
+  m_Layer: 0
+  m_Name: Silverguard Shoulder (left)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &639369371
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 639369370}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 20.854832, y: 20.854832, z: 20.854832}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1692726580}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &639369372
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 639369370}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
+  definition: {fileID: 11400000, guid: 86203c6aa22d4ce43a9ff722b3588ef1, type: 2}
+--- !u!23 &639369373
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 639369370}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 4611759551533685079, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &639369374
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 639369370}
+  m_Mesh: {fileID: 5461320835613783329, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
+--- !u!1 &1432447506
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1432447507}
+  - component: {fileID: 1432447510}
+  - component: {fileID: 1432447509}
+  - component: {fileID: 1432447508}
+  m_Layer: 0
+  m_Name: Silverguard Shoulder (right)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1432447507
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1432447506}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: -20.023956, y: 20.023956, z: 20.023956}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1692726576}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1432447508
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1432447506}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
+  definition: {fileID: 11400000, guid: 329ed8039c356ba48b925c09fe212992, type: 2}
+--- !u!23 &1432447509
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1432447506}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 4611759551533685079, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &1432447510
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1432447506}
+  m_Mesh: {fileID: 5461320835613783329, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
+--- !u!1001 &1692726573
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -176,88 +384,85 @@ PrefabInstance:
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 5127297692820179602, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1192271062}
+      addedObject: {fileID: 1704119449}
     - targetCorrespondingSourceObject: {fileID: 5422114086577321005, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 447739463}
+      addedObject: {fileID: 639369371}
     - targetCorrespondingSourceObject: {fileID: 3813720816871790016, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1287225742}
-    - targetCorrespondingSourceObject: {fileID: 3813720816871790016, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 2103807198}
+      addedObject: {fileID: 2144263411}
     - targetCorrespondingSourceObject: {fileID: 6677577165391809065, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1973750002}
+      addedObject: {fileID: 1432447507}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 3433155485836542024, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 5340805}
+      addedObject: {fileID: 1692726585}
     - targetCorrespondingSourceObject: {fileID: 3433155485836542024, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 5340804}
+      addedObject: {fileID: 1692726584}
     - targetCorrespondingSourceObject: {fileID: 3433155485836542024, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 5340803}
+      addedObject: {fileID: 1692726583}
     - targetCorrespondingSourceObject: {fileID: 3433155485836542024, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 5340802}
+      addedObject: {fileID: 1692726582}
   m_SourcePrefab: {fileID: 100100000, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
---- !u!1 &5340794 stripped
+--- !u!1 &1692726574 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 3433155485836542024, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!137 &5340795 stripped
+--- !u!137 &1692726575 stripped
 SkinnedMeshRenderer:
   m_CorrespondingSourceObject: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!4 &5340796 stripped
+--- !u!4 &1692726576 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6677577165391809065, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!4 &5340797 stripped
+--- !u!4 &1692726577 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6723749789944904605, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!4 &5340798 stripped
+--- !u!4 &1692726578 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3813720816871790016, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!4 &5340799 stripped
+--- !u!4 &1692726579 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5127297692820179602, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!4 &5340800 stripped
+--- !u!4 &1692726580 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5422114086577321005, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!4 &5340801 stripped
+--- !u!4 &1692726581 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2661297616973257458, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
-  m_PrefabInstance: {fileID: 5340793}
+  m_PrefabInstance: {fileID: 1692726573}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &5340802
+--- !u!114 &1692726582
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5340794}
+  m_GameObject: {fileID: 1692726574}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a05fd7a9dae14c4f93f3a33ba6b07e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearFitProofRig
-  heroRoot: {fileID: 5340801}
+  heroRoot: {fileID: 1692726581}
   headProxy: {fileID: 11400000, guid: 23bfd8428e0875a41934a19b2f27117c, type: 2}
-  animator: {fileID: 5340803}
+  animator: {fileID: 1692726583}
   poseStates:
   - Armature|Armature|running|baselayer
   - Armature|Armature|walking_man|baselayer
@@ -267,14 +472,14 @@ MonoBehaviour:
   - Armature|idle
   - Armature|shield_push
   - Armature|sword_slash
---- !u!95 &5340803
+--- !u!95 &1692726583
 Animator:
   serializedVersion: 7
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5340794}
+  m_GameObject: {fileID: 1692726574}
   m_Enabled: 1
   m_Avatar: {fileID: 0}
   m_Controller: {fileID: 9100000, guid: 4faa259137611514fb522cafea773b20, type: 2}
@@ -289,37 +494,37 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!114 &5340804
+--- !u!114 &1692726584
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5340794}
+  m_GameObject: {fileID: 1692726574}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 692a4930856a3e84da5cdffee9e95d16, type: 3}
   m_Name: 
   m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.AnatomyCoveragePreview
-  body: {fileID: 5340795}
+  body: {fileID: 1692726575}
   regionMap: {fileID: 4900000, guid: 65614ceb422f41542ba9571a8eed03c3, type: 3}
   previewCoverage: 0
---- !u!114 &5340805
+--- !u!114 &1692726585
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5340794}
+  m_GameObject: {fileID: 1692726574}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f991638fe7d14934ea436b723888095c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.HeadFitProxyVisualizer
   proxy: {fileID: 11400000, guid: 23bfd8428e0875a41934a19b2f27117c, type: 2}
-  headBone: {fileID: 5340797}
+  headBone: {fileID: 1692726577}
   showProxy: 1
---- !u!1 &447739462
+--- !u!1 &1704119448
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -327,114 +532,10 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 447739463}
-  - component: {fileID: 447739466}
-  - component: {fileID: 447739465}
-  - component: {fileID: 447739464}
-  m_Layer: 0
-  m_Name: Silverguard Shoulder (left)
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &447739463
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 447739462}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: -0.00000004371139}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 20.854832, y: 20.854832, z: 20.854832}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5340800}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &447739464
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 447739462}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
-  definition: {fileID: 11400000, guid: 86203c6aa22d4ce43a9ff722b3588ef1, type: 2}
---- !u!23 &447739465
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 447739462}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 4611759551533685079, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &447739466
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 447739462}
-  m_Mesh: {fileID: 5461320835613783329, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
---- !u!1 &1192271061
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1192271062}
-  - component: {fileID: 1192271065}
-  - component: {fileID: 1192271064}
-  - component: {fileID: 1192271063}
+  - component: {fileID: 1704119449}
+  - component: {fileID: 1704119452}
+  - component: {fileID: 1704119451}
+  - component: {fileID: 1704119450}
   m_Layer: 0
   m_Name: Ironwood Shield
   m_TagString: Untagged
@@ -442,41 +543,41 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &1192271062
+--- !u!4 &1704119449
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1192271061}
+  m_GameObject: {fileID: 1704119448}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 47.024567, y: 47.024567, z: 47.024567}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 5340799}
+  m_Father: {fileID: 1692726579}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1192271063
+--- !u!114 &1704119450
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1192271061}
+  m_GameObject: {fileID: 1704119448}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
   definition: {fileID: 11400000, guid: 61addc91dfc791a44bae1d574c5e270c, type: 2}
---- !u!23 &1192271064
+--- !u!23 &1704119451
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1192271061}
+  m_GameObject: {fileID: 1704119448}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -519,15 +620,15 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &1192271065
+--- !u!33 &1704119452
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1192271061}
+  m_GameObject: {fileID: 1704119448}
   m_Mesh: {fileID: 5461320835613783329, guid: 0c514916f8cfe7244b3a111fa6d00bd8, type: 3}
---- !u!1 &1263064993
+--- !u!1 &1901311249
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -535,8 +636,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1263064995}
-  - component: {fileID: 1263064994}
+  - component: {fileID: 1901311251}
+  - component: {fileID: 1901311250}
   m_Layer: 0
   m_Name: Workbench Key Light
   m_TagString: Untagged
@@ -544,13 +645,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!108 &1263064994
+--- !u!108 &1901311250
 Light:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263064993}
+  m_GameObject: {fileID: 1901311249}
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 1
@@ -609,13 +710,13 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
---- !u!4 &1263064995
+--- !u!4 &1901311251
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263064993}
+  m_GameObject: {fileID: 1901311249}
   serializedVersion: 2
   m_LocalRotation: {x: 0.07782839, y: 0.9212198, z: -0.29045948, w: 0.24684013}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -624,7 +725,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1266520746
+--- !u!1 &2029244337
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -632,8 +733,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1266520748}
-  - component: {fileID: 1266520747}
+  - component: {fileID: 2029244339}
+  - component: {fileID: 2029244338}
   m_Layer: 0
   m_Name: Workbench Fill Light
   m_TagString: Untagged
@@ -641,13 +742,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!108 &1266520747
+--- !u!108 &2029244338
 Light:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1266520746}
+  m_GameObject: {fileID: 2029244337}
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 1
@@ -706,13 +807,13 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
---- !u!4 &1266520748
+--- !u!4 &2029244339
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1266520746}
+  m_GameObject: {fileID: 2029244337}
   serializedVersion: 2
   m_LocalRotation: {x: 0.122654505, y: -0.3390941, z: 0.044642586, w: 0.93165344}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -721,7 +822,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1287225741
+--- !u!1 &2144263410
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -729,10 +830,10 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1287225742}
-  - component: {fileID: 1287225745}
-  - component: {fileID: 1287225744}
-  - component: {fileID: 1287225743}
+  - component: {fileID: 2144263411}
+  - component: {fileID: 2144263414}
+  - component: {fileID: 2144263413}
+  - component: {fileID: 2144263412}
   m_Layer: 0
   m_Name: Silverguard Helmet
   m_TagString: Untagged
@@ -740,41 +841,41 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &1287225742
+--- !u!4 &2144263411
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1287225741}
+  m_GameObject: {fileID: 2144263410}
   serializedVersion: 2
   m_LocalRotation: {x: 1, y: 0, z: 0, w: -0.00000004371139}
   m_LocalPosition: {x: -0.00081, y: 0.208, z: -0.06437}
   m_LocalScale: {x: 0.40929, y: 0.40929, z: 0.40929}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 5340798}
+  m_Father: {fileID: 1692726578}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1287225743
+--- !u!114 &2144263412
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1287225741}
+  m_GameObject: {fileID: 2144263410}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
   definition: {fileID: 11400000, guid: 206549ff0a0ffba4399ddff19ac50962, type: 2}
---- !u!23 &1287225744
+--- !u!23 &2144263413
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1287225741}
+  m_GameObject: {fileID: 2144263410}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -817,226 +918,18 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &1287225745
+--- !u!33 &2144263414
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1287225741}
-  m_Mesh: {fileID: 5461320835613783329, guid: c5d60bfc50486c64689ded10acb1104e, type: 3}
---- !u!1 &1973750001
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1973750002}
-  - component: {fileID: 1973750005}
-  - component: {fileID: 1973750004}
-  - component: {fileID: 1973750003}
-  m_Layer: 0
-  m_Name: Silverguard Shoulder (right)
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1973750002
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1973750001}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: -0.00000004371139}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: -20.023956, y: 20.023956, z: 20.023956}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5340796}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1973750003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1973750001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
-  definition: {fileID: 11400000, guid: 329ed8039c356ba48b925c09fe212992, type: 2}
---- !u!23 &1973750004
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1973750001}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 4611759551533685079, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &1973750005
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1973750001}
-  m_Mesh: {fileID: 5461320835613783329, guid: 034dbab0118a7b74780261341d9842f9, type: 3}
---- !u!1 &2103807197
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2103807198}
-  - component: {fileID: 2103807201}
-  - component: {fileID: 2103807200}
-  - component: {fileID: 2103807199}
-  m_Layer: 0
-  m_Name: Fit Lifecycle Probe
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2103807198
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2103807197}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0.14415355, y: 0.15538764, z: 0.25997853, w: 0.9420645}
-  m_LocalPosition: {x: 0.1234, y: 0.5678, z: -0.4321}
-  m_LocalScale: {x: 0.4444, y: 0.3333, z: 0.4444}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5340798}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2103807199
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2103807197}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5c2b57495562f4a4ba9b466227f9af71, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearMountedItem
-  definition: {fileID: 11400000, guid: 0d7fb61be767cc74e95fa77c634ec51e, type: 2}
---- !u!23 &2103807200
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2103807197}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 4611759551533685079, guid: c5d60bfc50486c64689ded10acb1104e, type: 3}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &2103807201
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2103807197}
+  m_GameObject: {fileID: 2144263410}
   m_Mesh: {fileID: 5461320835613783329, guid: c5d60bfc50486c64689ded10acb1104e, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1263064995}
-  - {fileID: 1266520748}
-  - {fileID: 5340793}
+  - {fileID: 1901311251}
+  - {fileID: 2029244339}
+  - {fileID: 1692726573}
