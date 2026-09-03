@@ -26,6 +26,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The migration exporter verifies its explicit originating SHA against the checked-out
+          # source authorities. A shallow checkout omits that commit object on pull requests.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           # 24, not 22, because persistence will use the built-in node:sqlite. On 22 that module
