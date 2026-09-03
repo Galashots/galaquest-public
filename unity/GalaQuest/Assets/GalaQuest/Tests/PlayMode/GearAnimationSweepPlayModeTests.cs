@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using GalaQuest.Gear;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
@@ -33,6 +32,24 @@ namespace GalaQuest.Tests
         private const string ScenePath = "Assets/GalaQuest/Gear/Scenes/GearWorkbench.unity";
         private const int SamplesPerClip = 12;
 
+        /// <summary>
+        /// Load the workbench by path without it being a build scene.
+        ///
+        /// The assembly stays platform-agnostic on purpose: adding includePlatforms:[Editor] to get a
+        /// UnityEditor reference reclassifies the whole assembly as EditMode, and these tests then run
+        /// outside play mode and fail on every scene load. UNITY_EDITOR keeps the editor call out of any
+        /// player build instead.
+        /// </summary>
+        private static AsyncOperation LoadWorkbench()
+        {
+#if UNITY_EDITOR
+            return UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(
+                ScenePath, new LoadSceneParameters(LoadSceneMode.Single));
+#else
+            return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
+#endif
+        }
+
         private static GearFitProofRig FindRig()
         {
             var rig = Object.FindFirstObjectByType<GearFitProofRig>();
@@ -43,8 +60,7 @@ namespace GalaQuest.Tests
         [UnityTest]
         public IEnumerator Workbench_scene_loads_with_hero_sockets_and_mounted_items()
         {
-            var load = EditorSceneManager.LoadSceneAsyncInPlayMode(
-                ScenePath, new LoadSceneParameters(LoadSceneMode.Single));
+            var load = LoadWorkbench();
             Assert.That(load, Is.Not.Null, ScenePath + " could not be loaded.");
             while (!load.isDone) yield return null;
             yield return null;
@@ -80,8 +96,7 @@ namespace GalaQuest.Tests
         [UnityTest]
         public IEnumerator Mounted_fits_never_drift_from_their_authored_values_under_animation()
         {
-            var load = EditorSceneManager.LoadSceneAsyncInPlayMode(
-                ScenePath, new LoadSceneParameters(LoadSceneMode.Single));
+            var load = LoadWorkbench();
             while (!load.isDone) yield return null;
             yield return null;
 

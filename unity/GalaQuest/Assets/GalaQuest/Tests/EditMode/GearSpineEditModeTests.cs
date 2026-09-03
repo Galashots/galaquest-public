@@ -292,53 +292,73 @@ namespace GalaQuest.Tests
         [Test]
         public void Owner_authored_fit_survives_the_normal_author_rebuild_and_capture_path()
         {
-            var helmet = LoadDefinitions().FirstOrDefault(d => d.SemanticId == "gear.helmet.silverguard");
-            Assert.That(helmet, Is.Not.Null);
+            // Exercised on a THROWAWAY definition, never on shipped gear.
+            //
+            // The first version of this test applied a sentinel fit to the real Silverguard helmet and
+            // restored it in a finally. When the test threw part-way, the restore threw too and the
+            // shipped asset was left holding sentinel values -- which then went straight into a review
+            // capture. A test that can corrupt production data on failure is not a safe test.
+            const string tempPath = "Assets/GalaQuest/Gear/Definitions/__TempFitLifecycleProbe.asset";
 
-            var originalPosition = helmet.LocalPosition;
-            var originalEuler = helmet.LocalEulerAngles;
-            var originalScale = helmet.LocalScale;
-            var originalSource = helmet.FitSource;
+            GearItemDefinition Probe() =>
+                AssetDatabase.LoadAssetAtPath<GearItemDefinition>(tempPath);
 
-            // Deliberately absurd and unmistakable: nothing the seeder would ever produce.
             var sentinelPosition = new Vector3(0.1234f, 0.5678f, -0.4321f);
             var sentinelEuler = new Vector3(11f, 22f, 33f);
             var sentinelScale = new Vector3(0.4444f, 0.3333f, 0.4444f);
 
             try
             {
-                helmet.ApplyAuthoredFit(sentinelPosition, sentinelEuler, sentinelScale);
-                EditorUtility.SetDirty(helmet);
-                AssetDatabase.SaveAssets();
-                Assert.That(helmet.IsOwnerAuthored, Is.True, "Saving a fit must mark it Owner-authored.");
+                var probe = ScriptableObject.CreateInstance<GearItemDefinition>();
+                probe.Configure("gear.test.fitlifecycle", "Fit Lifecycle Probe",
+                    AssetDatabase.LoadAssetAtPath<GameObject>(GearStarterDefinitions.HelmetModelPath),
+                    GearSocketIds.Head, GearFitClass.RigidGeneric, "n/a", new AnatomyRegion[0]);
+                AssetDatabase.CreateAsset(probe, tempPath);
 
+                probe.ApplyAuthoredFit(sentinelPosition, sentinelEuler, sentinelScale);
+                EditorUtility.SetDirty(probe);
+                AssetDatabase.SaveAssets();
+                Assert.That(Probe().IsOwnerAuthored, Is.True,
+                    "Saving a fit must mark it Owner-authored.");
+
+                // The whole normal automatic path.
                 GearHeroAuthoring.RebuildAll();
                 GearStarterDefinitions.EnsureDefinitions();
                 GearWorkbenchSceneBuilder.Build();
 
-                var reloaded = AssetDatabase.LoadAssetAtPath<GearItemDefinition>(
-                    GearStarterDefinitions.HelmetPath);
-                Assert.That(reloaded, Is.Not.Null);
-
-                Assert.That(reloaded.LocalPosition,
+                var after = Probe();
+                Assert.That(after, Is.Not.Null);
+                Assert.That(after.LocalPosition,
                     Is.EqualTo(sentinelPosition).Using(Vector3EqualityComparer.Instance),
                     "The normal author/rebuild path overwrote an Owner-authored position.");
-                Assert.That(reloaded.LocalEulerAngles,
+                Assert.That(after.LocalEulerAngles,
                     Is.EqualTo(sentinelEuler).Using(Vector3EqualityComparer.Instance),
                     "The normal author/rebuild path overwrote an Owner-authored rotation.");
-                Assert.That(reloaded.LocalScale,
+                Assert.That(after.LocalScale,
                     Is.EqualTo(sentinelScale).Using(Vector3EqualityComparer.Instance),
                     "The normal author/rebuild path overwrote an Owner-authored scale.");
-                Assert.That(reloaded.IsOwnerAuthored, Is.True,
+                Assert.That(after.IsOwnerAuthored, Is.True,
                     "The fit lost its Owner-authored provenance during a routine rebuild.");
             }
             finally
             {
-                helmet.ForceReseedFit(originalPosition, originalEuler, originalScale);
-                if (originalSource == GearFitSource.OwnerAuthored)
-                    helmet.ApplyAuthoredFit(originalPosition, originalEuler, originalScale);
-                EditorUtility.SetDirty(helmet);
+                AssetDatabase.DeleteAsset(tempPath);
                 AssetDatabase.SaveAssets();
+            }
+        }
+
+        /// <summary>Shipped gear definitions must never be left holding test sentinel values.</summary>
+        [Test]
+        public void Shipped_definitions_are_free_of_test_sentinel_values()
+        {
+            foreach (var definition in LoadDefinitions())
+            {
+                Assert.That(definition.SemanticId, Does.Not.StartWith("gear.test."),
+                    "A test definition was left in the project: " + definition.SemanticId);
+                Assert.That(definition.LocalScale,
+                    Is.Not.EqualTo(new Vector3(0.4444f, 0.3333f, 0.4444f))
+                        .Using(Vector3EqualityComparer.Instance),
+                    definition.SemanticId + " still holds the fit-lifecycle sentinel scale.");
             }
         }
 
