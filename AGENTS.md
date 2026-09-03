@@ -48,6 +48,12 @@ If the current directory is not a Git checkout, **do not recursively search the 
 ## Visual and product acceptance
 
 - **Running-game pixels are final appearance authority.** A render, GLB inspection, screenshot of an asset, or machine metric can reject a bad result; none of them can visually accept the running game.
+- **The producer must visually self-review every new or materially changed player-visible asset before handoff.** Do not hand off an asset after only provider/DCC preview, importer success, geometry metrics, or automated tests. Follow `docs/review-guides/asset-visual-review.md` and record the strongest defect or disconfirming comparison you found.
+- For Unity-bound assets, self-review in **Unity** is mandatory once the asset can be imported there: inspect a neutral diagnostic view plus intended gameplay framing; inspect motion in Play Mode when animation/VFX matters. Meshy, Blender, or isolated renders do not replace this step.
+- Before declaring a visual ready, compare it against current GalaQuest authority and, when web/image-search capability is available, multiple attributable comparable references. Prefer official game/studio/publisher material or real-world references over anonymous reposts or AI-image collections. External examples establish conventions/quality bars, not GalaQuest art direction.
+- When the target exists mainly as a verbal brief and no canonical reference settles it, the Production Director may create a **non-canonical generated target reference** for direct comparison. Label what attributes it controls; generated art does not become canon by default.
+- Producer self-review is **not independent acceptance**. A consequential asset still needs the independent/Owner review required by `docs/WORKFLOW.md`; asset promotion into shipped production remains Owner-controlled.
+- Prefer phone-readable stills on the PR/review surface. Large raw/source assets and large recordings belong in the Owner-controlled Google Drive custody/review tier when available, linked back to the exact-SHA PR/evidence manifest rather than committed merely for review.
 - Player-visible changes require human inspection in the running game at gameplay framing and, where useful, inspection scale. Automated harnesses are necessary evidence for behaviour but do not substitute for human visual judgment.
 - **Reference first.** Before deciding how something should look, sit, hang, pose, or be held, inspect real reference images. The owner's GalaQuest reference art outranks external examples. Record the visual convention before tuning numbers.
 - Do not silently change a hero or important character's rig, skeleton, fingers, body, topology, or anatomy to make gear or placement pass. If the defect is in the body/rig rather than the attachment, stop and report it.
@@ -78,6 +84,7 @@ Read these when relevant; do not invent missing private prerequisites:
 - `docs/MISTAKES.md` — durable lessons ledger
 - `docs/WORKFLOW.md` — public branch/PR and verification flow
 - `docs/GALAQUEST_VISUAL_AUTHORITY.md` — visual direction and acceptance
+- `docs/review-guides/asset-visual-review.md` — mandatory producer self-review and comparative visual evidence
 - `docs/pipeline/` — public asset/character pipeline rules
 - `docs/public-playtest.md` — hosted playtest and deployment provenance
 - `docs/teardown/hero_contract.json` — character/gear numeric authority where applicable
