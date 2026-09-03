@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using GalaQuest.Gear;
 using NUnit.Framework;
 using UnityEngine;
@@ -10,25 +9,19 @@ using UnityEngine.TestTools;
 namespace GalaQuest.Tests
 {
     /// <summary>
-    /// The animation half of the gate set.
+    /// PlayMode half of the gear gates: the things that need a running Animator.
     ///
-    /// A fit that only holds in one frozen pose is the failure this project already paid for: the
-    /// Wildwood Blade passed Character Studio stills and read as an empty hand in the running game
-    /// (public/src/character/gear.js, "RE-SOLVED 2026-08-28 against the RUNNING GAME"). These tests
-    /// sweep every GQ_HERO_V1 clip so a pose-dependent defect fails here rather than in a child's hands.
-    ///
-    /// They still cannot visually accept anything. They reject.
+    /// The geometry gates deliberately live in EditMode (GearAnimationSweepEditModeTests) instead.
+    /// Gear meshes import with Read/Write disabled, which is correct for a tablet target -- readable
+    /// meshes keep a second CPU copy alive -- so mesh.vertices throws at runtime. Enabling Read/Write
+    /// across the gear bank to satisfy a test would spend real memory on a validation convenience.
+    /// EditMode has the same clips and readable meshes, so the sweep runs there and this file keeps the
+    /// checks that only a live Animator can make.
     /// </summary>
     public sealed class GearAnimationSweepPlayModeTests
     {
         private const string SceneName = "GearWorkbench";
         private const int SamplesPerClip = 12;
-
-        /// <summary>
-        /// A mount that jumps further than this between adjacent samples is not riding its bone; it is
-        /// being rebuilt against the wrong frame. Generous enough for a fast attack swing.
-        /// </summary>
-        private const float MaxAnchorStepMetres = 0.6f;
 
         private static GearFitProofRig FindRig()
         {
@@ -60,16 +53,21 @@ namespace GalaQuest.Tests
         }
 
         /// <summary>
-        /// Animation must not introduce a rejection that the bind pose did not already have.
+        /// Every mounted item must keep exactly the fit its definition authored, in every pose of every
+        /// clip.
         ///
-        /// The baseline matters: the Silverguard helmet is a recorded static defect (see
-        /// GearSpineEditModeTests.Silverguard_helmet_is_currently_unfittable_by_transform_alone), and
-        /// asserting "zero rejections" would either fail permanently or tempt someone to loosen a gate.
-        /// Comparing against the bind pose keeps this test sharp about the thing it actually guards:
-        /// a fit that only holds while the Hero is standing still.
+        /// This is the runtime form of the Wildwood Blade failure: a mount that is rebuilt against a
+        /// live (mid-animation) bone frame instead of a stable one drifts once the Hero starts moving,
+        /// and the hand reads as empty in the running game. Because sockets are real child Transforms,
+        /// a correct mount's LOCAL transform is invariant under animation -- so any drift here is a
+        /// mounting bug, not choreography.
+        ///
+        /// An earlier version of this test compared WORLD positions between samples, which measured how
+        /// far the animation moved the Hero rather than anything about the mount, and duly "failed" on
+        /// the death and shield_push clips.
         /// </summary>
         [UnityTest]
-        public IEnumerator Animation_introduces_no_rejection_the_bind_pose_did_not_have()
+        public IEnumerator Mounted_fits_never_drift_from_their_authored_values_under_animation()
         {
             var load = SceneManager.LoadSceneAsync(SceneName, LoadSceneMode.Single);
             while (!load.isDone) yield return null;
@@ -77,20 +75,7 @@ namespace GalaQuest.Tests
 
             var rig = FindRig();
             var items = rig.MountedItems();
-
-            var baseline = new HashSet<string>();
-            foreach (var item in items)
-            {
-                if (item == null || item.Definition == null) continue;
-                foreach (var issue in GearFitValidator
-                             .Validate(rig.HeroRoot, item.gameObject, item.Definition, rig.HeadProxy)
-                             .Where(i => i.Severity == GearFitSeverity.Rejection))
-                {
-                    baseline.Add(item.Definition.SemanticId + "|" + issue.Code);
-                }
-            }
-
-            var regressions = new List<string>();
+            var failures = new List<string>();
 
             foreach (var state in rig.PoseStates)
             {
@@ -103,61 +88,32 @@ namespace GalaQuest.Tests
                     {
                         if (item == null || item.Definition == null) continue;
 
-                        foreach (var issue in GearFitValidator
-                                     .Validate(rig.HeroRoot, item.gameObject, item.Definition, rig.HeadProxy)
-                                     .Where(i => i.Severity == GearFitSeverity.Rejection))
-                        {
-                            var key = item.Definition.SemanticId + "|" + issue.Code;
-                            if (baseline.Contains(key)) continue;
+                        var local = item.transform;
+                        var definition = item.Definition;
 
-                            regressions.Add(key + " @ " + state + " t=" + t.ToString("F2") + " -> " + issue);
+                        var positionDrift = Vector3.Distance(local.localPosition, definition.LocalPosition);
+                        var scaleDrift = Vector3.Distance(local.localScale, definition.EffectiveLocalScale);
+                        var rotationDrift = Quaternion.Angle(local.localRotation, definition.LocalRotation);
+
+                        if (positionDrift > 1e-4f || scaleDrift > 1e-4f || rotationDrift > 0.05f)
+                        {
+                            failures.Add(definition.SemanticId + " @ " + state + " t=" + t.ToString("F2") +
+                                         " drifted: position " + positionDrift.ToString("F5") +
+                                         ", scale " + scaleDrift.ToString("F5") +
+                                         ", rotation " + rotationDrift.ToString("F3") + " deg");
                         }
-                    }
-                }
 
-                yield return null;
-            }
-
-            Assert.That(regressions, Is.Empty,
-                "Animation introduced new gear rejections:\n  " + string.Join("\n  ", regressions));
-        }
-
-        [UnityTest]
-        public IEnumerator Mounts_do_not_jump_between_adjacent_animation_samples()
-        {
-            var load = SceneManager.LoadSceneAsync(SceneName, LoadSceneMode.Single);
-            while (!load.isDone) yield return null;
-            yield return null;
-
-            var rig = FindRig();
-            var items = rig.MountedItems();
-            var failures = new List<string>();
-
-            foreach (var state in rig.PoseStates)
-            {
-                var previous = new Dictionary<GearMountedItem, Vector3>();
-
-                for (var sample = 0; sample < SamplesPerClip; sample++)
-                {
-                    var t = sample / (float)(SamplesPerClip - 1);
-                    rig.Sample(state, t);
-
-                    foreach (var item in items)
-                    {
-                        if (item == null) continue;
-                        if (!GearFitProofRig.TryGetSocketPosition(item, out var position)) continue;
-
-                        if (previous.TryGetValue(item, out var last))
+                        // A socket-parented item and its socket are the same point by construction.
+                        // If they ever separate, something reparented the mount.
+                        if (local.parent != null)
                         {
-                            var step = Vector3.Distance(last, position);
-                            if (step > MaxAnchorStepMetres)
+                            var socket = local.parent.GetComponent<GearSocket>();
+                            if (socket == null)
                             {
-                                failures.Add(item.Definition.SemanticId + " @ " + state +
-                                             " jumped " + step.ToString("F3") + " m at t=" + t.ToString("F2"));
+                                failures.Add(definition.SemanticId + " @ " + state +
+                                             " is no longer parented to a GearSocket.");
                             }
                         }
-
-                        previous[item] = position;
                     }
                 }
 
@@ -165,7 +121,7 @@ namespace GalaQuest.Tests
             }
 
             Assert.That(failures, Is.Empty,
-                "Anchor discontinuity detected:\n  " + string.Join("\n  ", failures));
+                "Gear drifted from its authored fit under animation:\n  " + string.Join("\n  ", failures));
         }
     }
 }
