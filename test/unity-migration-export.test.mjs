@@ -5,7 +5,10 @@ import { test } from 'node:test';
 import { buildManifest, deterministicJson } from '../tools/unity-migration/export-bridge.mjs';
 
 const BASE_SHA = '470f989e131497bbfb6c4f27a950f4ade4300896';
+// An intentional change to a pinned source such as speed.js requires regenerating and re-pinning
+// this migration fixture; the failure is an authority-drift signal, not mysterious CI breakage.
 const root = new URL('..', import.meta.url);
+const committedManifestPath = 'unity/GalaQuest/Assets/GalaQuest/Migration/BridgeManifest.json';
 
 function read(path) {
   return readFileSync(new URL(path, root));
@@ -48,6 +51,17 @@ test('re-exporting the same source snapshot is byte-identical', async () => {
   const first = deterministicJson(await buildManifest({ sourceSha: BASE_SHA }));
   const second = deterministicJson(await buildManifest({ sourceSha: BASE_SHA }));
   assert.equal(first, second);
+});
+
+test('committed BridgeManifest.json equals a fresh export for its originating snapshot', async () => {
+  const committedBytes = read(committedManifestPath);
+  const committedManifest = JSON.parse(committedBytes.toString('utf8'));
+  assert.match(committedManifest.originatingGitSha, /^[0-9a-f]{40}$/);
+
+  const freshBytes = Buffer.from(
+    deterministicJson(await buildManifest({ sourceSha: committedManifest.originatingGitSha })),
+  );
+  assert.deepEqual(committedBytes, freshBytes);
 });
 
 test('asset paths and hashes are recomputed from the selected source files', async () => {
