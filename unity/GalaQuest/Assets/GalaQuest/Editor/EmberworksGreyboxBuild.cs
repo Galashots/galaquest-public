@@ -430,7 +430,8 @@ namespace GalaQuest.Editor
         {
             forge.transform.position = new Vector3(3f, 0f, 57f);
             Cylinder("ForgeChamberFloor", forge.transform, new Vector3(0f, 0.2f, 0f), new Vector3(34f, 0.45f, 24f), m["basaltEdge"]);
-            Cube("ForgeBackWall", forge.transform, new Vector3(0f, 7f, 9f), new Vector3(34f, 14f, 1.8f), m["basalt"]);
+            // Sightline cleanup: keep a rear forge wall, but narrow it so the focal region is not swallowed by a dark slab.
+            Cube("ForgeBackWall", forge.transform, new Vector3(0f, 7f, 9f), new Vector3(24f, 14f, 1.8f), m["basalt"]);
             // Sightline cleanup: retain side framing while leaving the forge and Kong-Ore region readable.
             foreach (var x in new[] { -12f, 12f })
             {
