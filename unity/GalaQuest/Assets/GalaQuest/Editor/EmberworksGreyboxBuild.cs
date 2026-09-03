@@ -29,8 +29,8 @@ namespace GalaQuest.Editor
 
         // Reference convention: readable staged dungeons keep cool dark rock as the field, then
         // reserve hot orange light and broad warm masses for danger, reward, and payoff landmarks.
-        private static readonly Color Basalt = new Color(0.075f, 0.09f, 0.13f);
-        private static readonly Color BasaltEdge = new Color(0.17f, 0.20f, 0.26f);
+        private static readonly Color Basalt = new Color(0.09f, 0.105f, 0.15f);
+        private static readonly Color BasaltEdge = new Color(0.20f, 0.23f, 0.30f);
         private static readonly Color Iron = new Color(0.27f, 0.29f, 0.31f);
         private static readonly Color Copper = new Color(0.46f, 0.16f, 0.055f);
         private static readonly Color Ember = new Color(1.45f, 0.12f, 0.015f);
@@ -49,9 +49,9 @@ namespace GalaQuest.Editor
             scene.name = "EmberworksDeep";
 
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.08f, 0.095f, 0.14f);
+            RenderSettings.ambientLight = new Color(0.105f, 0.12f, 0.17f);
             RenderSettings.fog = true;
-            RenderSettings.fogColor = new Color(0.018f, 0.022f, 0.035f);
+            RenderSettings.fogColor = new Color(0.025f, 0.03f, 0.045f);
             RenderSettings.fogMode = FogMode.ExponentialSquared;
             RenderSettings.fogDensity = 0.012f;
 
@@ -120,6 +120,7 @@ namespace GalaQuest.Editor
                 "Role_SmallAggressiveLavaCreature_01",
                 "Role_HeavyPositionalOreGuardian",
                 "LavaExpress_TrackPair",
+                "ExpressLavaGap",
                 "Emberplate_RewardDisplay",
                 "KongOre_BossAnchor",
                 "ForgeRelitState",
@@ -155,6 +156,20 @@ namespace GalaQuest.Editor
                 {
                     throw new BuildFailedException("Emberworks meaningful beats are not ordered with deliberately short traversal.");
                 }
+            }
+
+            var beatX = new[]
+            {
+                FindSceneObject("01_CinderGate_Arrival").transform.position.x,
+                FindSceneObject("02_ImmediateAction_SmallAggressive").transform.position.x,
+                FindSceneObject("03_LavaExpress_Setpiece").transform.position.x,
+                FindSceneObject("04_HeavyEncounter_Positional").transform.position.x,
+                FindSceneObject("05_VisibleReward_Emberplate").transform.position.x,
+                FindSceneObject("06_Climax_ForgeChamber").transform.position.x
+            };
+            if (Mathf.Abs(beatX[1] - beatX[0]) < 3f || Mathf.Abs(beatX[2] - beatX[1]) < 3f)
+            {
+                throw new BuildFailedException("Emberworks spatial revision must include a meaningful route turn before the setpiece.");
             }
 
             var buildScene = EditorBuildSettings.scenes.FirstOrDefault(item => item.path == ScenePath);
@@ -221,8 +236,9 @@ namespace GalaQuest.Editor
                 buildTarget = EditorUserBuildSettings.activeBuildTarget.ToString(),
                 scene = ScenePath,
                 captureState = "fixed-camera-editor-render;primitive-greybox;no-player-traversal",
-                visualConvention = "short staged underground destination: arrival, action, setpiece, contrast encounter, reward, climax, relit payoff",
-                strongestDefect = "The greybox proves composition and pace, but actual child traversal and gameplay readability remain UNKNOWN until a player/controller seam and running-game inspection exist.",
+                visualConvention = "compact staged adventure: offset entry cavern, bent elevated lava bridge, distinct arena, open reward reveal, larger forge payoff",
+                strongestDefect = "Oversized environmental walls and beams still intrude into several review compositions, most severely blocking the Lava Express and Forge focal objects; the spatial route is clearer, but those landmarks are not consistently given an unobstructed read.",
+                gameplayTraversalReadability = "UNKNOWN: no player/controller seam exists for Emberworks, so these are fixed-camera Editor captures rather than running-game traversal evidence.",
                 captures = captures.ToArray()
             };
             File.WriteAllText(Path.Combine(outputRoot, "review-manifest.json"), JsonUtility.ToJson(manifest, true) + "\n");
@@ -274,25 +290,35 @@ namespace GalaQuest.Editor
 
         private static void BuildEnvironment(GameObject environment, Dictionary<string, Material> m)
         {
-            Cube("DeepFloor", environment.transform, new Vector3(0f, -0.25f, 27f), new Vector3(34f, 0.5f, 76f), m["basalt"]);
-            Cube("LeftCavernWall", environment.transform, new Vector3(-17f, 5f, 27f), new Vector3(2f, 11f, 76f), m["basalt"]);
-            Cube("RightCavernWall", environment.transform, new Vector3(17f, 5f, 27f), new Vector3(2f, 11f, 76f), m["basalt"]);
-            Cube("CeilingBeamNorth", environment.transform, new Vector3(0f, 10.5f, 8f), new Vector3(30f, 1f, 1.2f), m["basaltEdge"]);
-            Cube("CeilingBeamMid", environment.transform, new Vector3(0f, 10.5f, 29f), new Vector3(30f, 1f, 1.2f), m["basaltEdge"]);
-            Cube("CeilingBeamForge", environment.transform, new Vector3(0f, 10.5f, 50f), new Vector3(30f, 1f, 1.2f), m["basaltEdge"]);
+            Cube("DeepFloor", environment.transform, new Vector3(0f, -0.25f, 31f), new Vector3(42f, 0.5f, 88f), m["basalt"]);
+            Cube("LeftCavernWall", environment.transform, new Vector3(-21f, 5f, 31f), new Vector3(2f, 11f, 88f), m["basalt"]);
+            Cube("RightCavernWall", environment.transform, new Vector3(21f, 5f, 31f), new Vector3(2f, 11f, 88f), m["basalt"]);
+            Cube("CeilingBeamNorth", environment.transform, new Vector3(0f, 10.5f, 8f), new Vector3(36f, 1f, 1.2f), m["basaltEdge"]);
+            Cube("CeilingBeamMid", environment.transform, new Vector3(4f, 10.5f, 31f), new Vector3(30f, 1f, 1.2f), m["basaltEdge"]);
+            Cube("CeilingBeamForge", environment.transform, new Vector3(3f, 10.5f, 58f), new Vector3(36f, 1f, 1.2f), m["basaltEdge"]);
 
-            foreach (var z in new[] { 5f, 16f, 28f, 41f, 56f })
+            foreach (var z in new[] { 5f, 17f, 29f, 43f, 59f })
             {
                 Cube($"LavaChannelLeft_{z:0}", environment.transform, new Vector3(-12.5f, 0.035f, z), new Vector3(1.4f, 0.08f, 8f), m["ember"]);
                 Cube($"LavaChannelRight_{z:0}", environment.transform, new Vector3(12.5f, 0.035f, z), new Vector3(1.4f, 0.08f, 8f), m["emberSoft"]);
             }
 
-            for (var index = 0; index < 9; index++)
+            var buttresses = new[]
             {
-                var z = 4f + index * 6.5f;
-                Cylinder($"CavernPillarL_{index:00}", environment.transform, new Vector3(-14.5f, 3f, z), new Vector3(1.5f, 6f, 1.5f), m["basaltEdge"]);
-                Cylinder($"CavernPillarR_{index:00}", environment.transform, new Vector3(14.5f, 3f, z + 2.4f), new Vector3(1.5f, 6f, 1.5f), m["basaltEdge"]);
+                new Vector3(-18f, 4f, 8f), new Vector3(18f, 5f, 17f),
+                new Vector3(-18f, 3f, 29f), new Vector3(18f, 4f, 43f),
+                new Vector3(-18f, 5f, 59f), new Vector3(18f, 3f, 68f)
+            };
+            for (var index = 0; index < buttresses.Length; index++)
+            {
+                var scale = buttresses[index].y > 4.5f ? new Vector3(1.8f, 8f, 1.8f) : new Vector3(1.4f, 6f, 1.4f);
+                Cylinder($"CavernButtress_{index:00}", environment.transform, buttresses[index], scale, m["basaltEdge"]);
             }
+            RotatedCube("RouteEntryTurn", environment.transform, new Vector3(-3.5f, 0.06f, 8f), new Vector3(10f, 0.12f, 3f), -35f, m["basaltEdge"]);
+            RotatedCube("RouteActionToExpress", environment.transform, new Vector3(-1f, 0.06f, 19f), new Vector3(12f, 0.12f, 3f), 38f, m["basaltEdge"]);
+            Cube("RouteExpressToHeavy", environment.transform, new Vector3(6f, 0.06f, 30f), new Vector3(3f, 0.12f, 10f), m["basaltEdge"]);
+            RotatedCube("RouteRewardTurn", environment.transform, new Vector3(1.5f, 0.06f, 41f), new Vector3(10f, 0.12f, 3f), -38f, m["basaltEdge"]);
+            Cube("RouteForgeReveal", environment.transform, new Vector3(3f, 0.06f, 51f), new Vector3(3f, 0.12f, 10f), m["basaltEdge"]);
         }
 
         private static void BuildCinderGate(GameObject arrival, Dictionary<string, Material> m)
@@ -313,8 +339,11 @@ namespace GalaQuest.Editor
 
         private static void BuildImmediateAction(GameObject action, Dictionary<string, Material> m)
         {
-            action.transform.position = new Vector3(0f, 0f, 11f);
-            Cylinder("ImmediateActionArena", action.transform, new Vector3(0f, 0.15f, 0f), new Vector3(19f, 0.35f, 19f), m["basaltEdge"]);
+            action.transform.position = new Vector3(-7f, 0f, 13f);
+            Cylinder("ImmediateActionArena", action.transform, new Vector3(0f, 0.15f, 0f), new Vector3(17f, 0.35f, 17f), m["basaltEdge"]);
+            Cube("ImmediateActionCavernBack", action.transform, new Vector3(0f, 3f, 6.5f), new Vector3(16f, 6f, 1.2f), m["basalt"]);
+            Cube("ImmediateActionCavernWingL", action.transform, new Vector3(-7f, 2f, 3f), new Vector3(1.4f, 4f, 7f), m["basaltEdge"]);
+            Cube("ImmediateActionCavernWingR", action.transform, new Vector3(7f, 2f, 3f), new Vector3(1.4f, 4f, 7f), m["basaltEdge"]);
             for (var index = 0; index < 8; index++)
             {
                 var angle = index * Mathf.PI * 0.25f;
@@ -335,34 +364,39 @@ namespace GalaQuest.Editor
 
         private static void BuildLavaExpress(GameObject express, Dictionary<string, Material> m)
         {
-            express.transform.position = new Vector3(0f, 0f, 21f);
-            Cube("ExpressBridge", express.transform, new Vector3(0f, 0.28f, 0f), new Vector3(12f, 0.45f, 15f), m["iron"]);
+            express.transform.position = new Vector3(4f, 0f, 24f);
+            express.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            Cube("ExpressLavaGap", express.transform, new Vector3(0f, 0.03f, 0f), new Vector3(18f, 0.08f, 11f), m["emberSoft"]);
+            Cube("ExpressBridge", express.transform, new Vector3(0f, 1.28f, 0f), new Vector3(5f, 0.45f, 16f), m["iron"]);
+            Cube("ExpressBridgeSupportL", express.transform, new Vector3(-6f, 0.65f, 0f), new Vector3(1.5f, 1.3f, 4f), m["basaltEdge"]);
+            Cube("ExpressBridgeSupportR", express.transform, new Vector3(6f, 0.65f, 0f), new Vector3(1.5f, 1.3f, 4f), m["basaltEdge"]);
             var tracks = Empty("LavaExpress_TrackPair", express.transform, Vector3.zero);
-            Cube("TrackLeft", tracks.transform, new Vector3(-2.5f, 0.55f, 0f), new Vector3(0.32f, 0.25f, 15f), m["copper"]);
-            Cube("TrackRight", tracks.transform, new Vector3(2.5f, 0.55f, 0f), new Vector3(0.32f, 0.25f, 15f), m["copper"]);
+            Cube("TrackLeft", tracks.transform, new Vector3(-1.35f, 1.58f, 0f), new Vector3(0.32f, 0.25f, 15f), m["copper"]);
+            Cube("TrackRight", tracks.transform, new Vector3(1.35f, 1.58f, 0f), new Vector3(0.32f, 0.25f, 15f), m["copper"]);
             for (var index = 0; index < 7; index++)
             {
-                Cube($"TrackTie_{index:00}", express.transform, new Vector3(0f, 0.43f, -6f + index * 2f), new Vector3(7f, 0.22f, 0.42f), m["basaltEdge"]);
+                Cube($"TrackTie_{index:00}", express.transform, new Vector3(0f, 1.48f, -6f + index * 2f), new Vector3(7f, 0.22f, 0.42f), m["basaltEdge"]);
             }
-            var cart = Empty("LavaExpress_CartPlaceholder", express.transform, new Vector3(0f, 1.25f, 1f));
+            Cube("ExpressBridgeGate", express.transform, new Vector3(0f, 4f, 7.5f), new Vector3(10f, 7f, 0.7f), m["basalt"]);
+            var cart = Empty("LavaExpress_CartPlaceholder", express.transform, new Vector3(0f, 2.25f, 1f));
             Cube("CartBed", cart.transform, Vector3.zero, new Vector3(3.8f, 0.7f, 3.2f), m["copper"]);
             Cube("CartFrontShield", cart.transform, new Vector3(0f, 1.1f, -1.2f), new Vector3(3.4f, 1.5f, 0.35f), m["iron"]);
             for (var x = -1.3f; x <= 1.3f; x += 2.6f)
             {
                 Cylinder($"CartWheel_{x:0}", cart.transform, new Vector3(x, -0.5f, -0.9f), new Vector3(0.55f, 0.3f, 0.55f), m["basalt"]);
             }
-            Cube("ExpressLavaDrop", express.transform, new Vector3(0f, 0.03f, 7f), new Vector3(8f, 0.08f, 1.2f), m["ember"]);
-            PointLight("ExpressGlow", express.transform, new Vector3(0f, 2f, 5f), new Color(1f, 0.12f, 0.01f), 8f, 12f);
+            Cube("ExpressLavaDrop", express.transform, new Vector3(0f, 0.08f, 7f), new Vector3(8f, 0.08f, 1.2f), m["ember"]);
+            PointLight("ExpressGlow", express.transform, new Vector3(0f, 3f, 5f), new Color(1f, 0.12f, 0.01f), 10f, 15f);
         }
 
         private static void BuildHeavyEncounter(GameObject heavy, Dictionary<string, Material> m)
         {
-            heavy.transform.position = new Vector3(0f, 0f, 31f);
-            Cylinder("HeavyEncounterArena", heavy.transform, new Vector3(0f, 0.2f, 0f), new Vector3(23f, 0.45f, 23f), m["basaltEdge"]);
-            for (var index = 0; index < 6; index++)
+            heavy.transform.position = new Vector3(6f, 0f, 35f);
+            Cylinder("HeavyEncounterArena", heavy.transform, new Vector3(0f, 0.2f, 0f), new Vector3(18f, 0.45f, 18f), m["basaltEdge"]);
+            for (var index = 0; index < 4; index++)
             {
-                var angle = index * Mathf.PI / 3f;
-                Cylinder($"HeavyArenaPillar_{index:00}", heavy.transform, new Vector3(Mathf.Cos(angle) * 8f, 3f, Mathf.Sin(angle) * 8f), new Vector3(1.2f, 6f, 1.2f), m["iron"]);
+                var angle = Mathf.PI * 0.25f + index * Mathf.PI * 0.5f;
+                Cylinder($"HeavyArenaButtress_{index:00}", heavy.transform, new Vector3(Mathf.Cos(angle) * 7.2f, 2.5f, Mathf.Sin(angle) * 7.2f), new Vector3(1f, 5f, 1f), m["iron"]);
             }
             var guardian = Empty("Role_HeavyPositionalOreGuardian", heavy.transform, new Vector3(0f, 0f, 0f));
             Cube("OreGuardianBody", guardian.transform, new Vector3(0f, 2.3f, 0f), new Vector3(3.6f, 4.6f, 3f), m["basaltEdge"]);
@@ -375,9 +409,9 @@ namespace GalaQuest.Editor
 
         private static void BuildReward(GameObject reward, Dictionary<string, Material> m)
         {
-            reward.transform.position = new Vector3(0f, 0f, 40f);
-            Cylinder("RewardChamberFloor", reward.transform, new Vector3(0f, 0.18f, 0f), new Vector3(18f, 0.35f, 12f), m["basaltEdge"]);
-            var display = Empty("Emberplate_RewardDisplay", reward.transform, new Vector3(-4f, 0f, 0f));
+            reward.transform.position = new Vector3(-3f, 0f, 45f);
+            Cylinder("RewardChamberFloor", reward.transform, new Vector3(0f, 0.18f, 0f), new Vector3(16f, 0.35f, 14f), m["basaltEdge"]);
+            var display = Empty("Emberplate_RewardDisplay", reward.transform, Vector3.zero);
             Cylinder("RewardPedestal", display.transform, new Vector3(0f, 1f, 0f), new Vector3(3.2f, 2f, 3.2f), m["copper"]);
             Cube("EmberplateChest", display.transform, new Vector3(0f, 3f, 0f), new Vector3(2.8f, 2.1f, 1.2f), m["reward"]);
             Cube("EmberplateCore", display.transform, new Vector3(0f, 3f, -0.68f), new Vector3(0.75f, 0.75f, 0.12f), m["ember"]);
@@ -386,43 +420,42 @@ namespace GalaQuest.Editor
             {
                 Sphere($"RewardShoulder_{x:0}", display.transform, new Vector3(x, 3.55f, 0f), Vector3.one * 0.58f, m["reward"]);
             }
-            Cube("RewardFramingL", reward.transform, new Vector3(5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), m["iron"]);
-            Cube("RewardFramingR", reward.transform, new Vector3(9f, 3.5f, 0f), new Vector3(1f, 7f, 1f), m["iron"]);
-            PointLight("RewardLight", reward.transform, new Vector3(-4f, 4f, -2f), new Color(1f, 0.18f, 0.025f), 7f, 12f);
+            Cube("RewardRevealWall", reward.transform, new Vector3(0f, 4.5f, 5f), new Vector3(12f, 9f, 1f), m["basalt"]);
+            PointLight("RewardLight", reward.transform, new Vector3(0f, 4f, -2f), new Color(1f, 0.18f, 0.025f), 9f, 14f);
         }
 
         private static ForgeStateObjects BuildForge(GameObject forge, Dictionary<string, Material> m)
         {
-            forge.transform.position = new Vector3(0f, 0f, 51f);
-            Cylinder("ForgeChamberFloor", forge.transform, new Vector3(0f, 0.2f, 0f), new Vector3(26f, 0.45f, 18f), m["basaltEdge"]);
-            Cube("ForgeBackWall", forge.transform, new Vector3(0f, 6f, 7f), new Vector3(26f, 12f, 1.8f), m["basalt"]);
-            for (var x = -9f; x <= 9f; x += 6f)
+            forge.transform.position = new Vector3(3f, 0f, 57f);
+            Cylinder("ForgeChamberFloor", forge.transform, new Vector3(0f, 0.2f, 0f), new Vector3(34f, 0.45f, 24f), m["basaltEdge"]);
+            Cube("ForgeBackWall", forge.transform, new Vector3(0f, 7f, 9f), new Vector3(34f, 14f, 1.8f), m["basalt"]);
+            for (var x = -12f; x <= 12f; x += 12f)
             {
-                Cube($"ForgeTower_{x:0}", forge.transform, new Vector3(x, 5f, 3f), new Vector3(2.5f, 10f, 2.5f), m["iron"]);
+                Cube($"ForgeTower_{x:0}", forge.transform, new Vector3(x, 6f, 5f), new Vector3(3f, 12f, 3f), m["iron"]);
             }
 
-            var boss = Empty("KongOre_BossAnchor", forge.transform, new Vector3(-5f, 0f, 2f));
+            var boss = Empty("KongOre_BossAnchor", forge.transform, new Vector3(-7f, 0f, 3f));
             Sphere("KongOreMass", boss.transform, new Vector3(0f, 3.1f, 0f), new Vector3(4.8f, 5.8f, 4.5f), m["basalt"]);
             Sphere("KongOreCore", boss.transform, new Vector3(0f, 3.1f, -2.35f), Vector3.one * 0.9f, m["ember"]);
             Cube("KongOreArmL", boss.transform, new Vector3(-4f, 2.3f, 0f), new Vector3(2.2f, 3.6f, 2.2f), m["iron"]);
             Cube("KongOreArmR", boss.transform, new Vector3(4f, 2.3f, 0f), new Vector3(2.2f, 3.6f, 2.2f), m["iron"]);
 
-            var dormant = Empty("ForgeDormantState", forge.transform, new Vector3(0f, 0f, 7f));
-            Cylinder("DormantForgeBasin", dormant.transform, new Vector3(0f, 1.2f, 0f), new Vector3(8f, 2.4f, 8f), m["iron"]);
-            Cylinder("DormantForgeCore", dormant.transform, new Vector3(0f, 2.55f, 0f), new Vector3(3.2f, 0.3f, 3.2f), m["basalt"]);
-            Cube("DormantForgeSmoke", dormant.transform, new Vector3(0f, 5f, 0f), new Vector3(2f, 4f, 2f), m["basalt"]);
+            var dormant = Empty("ForgeDormantState", forge.transform, new Vector3(2f, 0f, 9f));
+            Cylinder("DormantForgeBasin", dormant.transform, new Vector3(0f, 1.2f, 0f), new Vector3(10f, 2.4f, 10f), m["iron"]);
+            Cylinder("DormantForgeCore", dormant.transform, new Vector3(0f, 2.55f, 0f), new Vector3(4.2f, 0.3f, 4.2f), m["basalt"]);
+            Cube("DormantForgeSmoke", dormant.transform, new Vector3(0f, 5f, 0f), new Vector3(2.5f, 4f, 2.5f), m["basalt"]);
 
-            var relit = Empty("ForgeRelitState", forge.transform, new Vector3(0f, 0f, 7f));
-            Cylinder("RelitForgeBasin", relit.transform, new Vector3(0f, 1.2f, 0f), new Vector3(8f, 2.4f, 8f), m["copper"]);
-            Cylinder("RelitForgeCore", relit.transform, new Vector3(0f, 2.7f, 0f), new Vector3(5.5f, 0.5f, 5.5f), m["ember"]);
-            Cube("RelitForgeFlame", relit.transform, new Vector3(0f, 5.8f, 0f), new Vector3(3.5f, 7f, 3.5f), m["ember"]);
-            Cube("RelitForgeWaterfallL", relit.transform, new Vector3(-4f, 4f, 0f), new Vector3(0.7f, 6f, 0.7f), m["emberSoft"]);
-            Cube("RelitForgeWaterfallR", relit.transform, new Vector3(4f, 4f, 0f), new Vector3(0.7f, 6f, 0.7f), m["emberSoft"]);
+            var relit = Empty("ForgeRelitState", forge.transform, new Vector3(2f, 0f, 9f));
+            Cylinder("RelitForgeBasin", relit.transform, new Vector3(0f, 1.2f, 0f), new Vector3(10f, 2.4f, 10f), m["copper"]);
+            Cylinder("RelitForgeCore", relit.transform, new Vector3(0f, 2.7f, 0f), new Vector3(7f, 0.5f, 7f), m["ember"]);
+            Cube("RelitForgeFlame", relit.transform, new Vector3(0f, 6.5f, 0f), new Vector3(5f, 9f, 5f), m["ember"]);
+            Cube("RelitForgeWaterfallL", relit.transform, new Vector3(-5f, 4.5f, 0f), new Vector3(0.9f, 8f, 0.9f), m["emberSoft"]);
+            Cube("RelitForgeWaterfallR", relit.transform, new Vector3(5f, 4.5f, 0f), new Vector3(0.9f, 8f, 0.9f), m["emberSoft"]);
             var lights = new[]
             {
-                PointLight("RelitForgeLight", relit.transform, new Vector3(0f, 5f, 1f), new Color(1f, 0.13f, 0.01f), 14f, 22f),
-                PointLight("RelitForgeLightL", relit.transform, new Vector3(-5f, 3f, 0f), new Color(1f, 0.06f, 0.005f), 8f, 10f),
-                PointLight("RelitForgeLightR", relit.transform, new Vector3(5f, 3f, 0f), new Color(1f, 0.06f, 0.005f), 8f, 10f)
+                PointLight("RelitForgeLight", relit.transform, new Vector3(0f, 6f, 1f), new Color(1f, 0.13f, 0.01f), 18f, 30f),
+                PointLight("RelitForgeLightL", relit.transform, new Vector3(-6f, 4f, 0f), new Color(1f, 0.06f, 0.005f), 12f, 16f),
+                PointLight("RelitForgeLightR", relit.transform, new Vector3(6f, 4f, 0f), new Color(1f, 0.06f, 0.005f), 12f, 16f)
             };
             return new ForgeStateObjects { dormant = dormant, relit = relit, lights = lights };
         }
@@ -440,14 +473,14 @@ namespace GalaQuest.Editor
 
         private static void BuildReviewCameras(Transform root)
         {
-            Camera("ReviewOverviewCamera", root, new Vector3(23f, 34f, -24f), new Vector3(0f, 1f, 29f), 52f);
+            Camera("ReviewOverviewCamera", root, new Vector3(31f, 38f, -25f), new Vector3(0f, 1.5f, 34f), 52f);
             Camera("ReviewCinderGateCamera", root, new Vector3(0f, 5.4f, -10f), new Vector3(0f, 3.6f, 3f), 48f);
-            Camera("ReviewImmediateActionCamera", root, new Vector3(-9f, 8f, 8f), new Vector3(0f, 1.5f, 11f), 50f);
-            Camera("ReviewLavaExpressCamera", root, new Vector3(9f, 7f, 12f), new Vector3(0f, 1.5f, 21f), 50f);
-            Camera("ReviewHeavyEncounterCamera", root, new Vector3(0f, 7f, 23f), new Vector3(0f, 2.5f, 31f), 50f);
-            Camera("ReviewRewardCamera", root, new Vector3(-10f, 6.5f, 33f), new Vector3(-4f, 2.6f, 40f), 48f);
-            Camera("ReviewForgeCamera", root, new Vector3(0f, 8f, 39f), new Vector3(0f, 4f, 56f), 50f);
-            Camera("ReviewCompletionCamera", root, new Vector3(0f, 8f, 39f), new Vector3(0f, 5f, 58f), 50f);
+            Camera("ReviewImmediateActionCamera", root, new Vector3(-16f, 8f, 7f), new Vector3(-7f, 1.5f, 13f), 50f);
+            Camera("ReviewLavaExpressCamera", root, new Vector3(16f, 10f, 16f), new Vector3(4f, 1.8f, 24f), 50f);
+            Camera("ReviewHeavyEncounterCamera", root, new Vector3(6f, 9f, 24f), new Vector3(6f, 2.5f, 35f), 50f);
+            Camera("ReviewRewardCamera", root, new Vector3(-14f, 7f, 35f), new Vector3(-3f, 2.8f, 45f), 48f);
+            Camera("ReviewForgeCamera", root, new Vector3(3f, 11f, 42f), new Vector3(3f, 4.5f, 66f), 50f);
+            Camera("ReviewCompletionCamera", root, new Vector3(3f, 11f, 42f), new Vector3(3f, 5f, 67f), 50f);
         }
 
         private static CameraCapture CaptureCamera(string outputRoot, string cameraName, string filename, string view)
@@ -513,6 +546,13 @@ namespace GalaQuest.Editor
         private static GameObject Cube(string name, Transform parent, Vector3 position, Vector3 scale, Material material)
         {
             return Primitive(name, PrimitiveType.Cube, parent, position, scale, material);
+        }
+
+        private static GameObject RotatedCube(string name, Transform parent, Vector3 position, Vector3 scale, float yaw, Material material)
+        {
+            var cube = Cube(name, parent, position, scale, material);
+            cube.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+            return cube;
         }
 
         private static GameObject Sphere(string name, Transform parent, Vector3 position, Vector3 scale, Material material)
@@ -626,6 +666,7 @@ namespace GalaQuest.Editor
             public string captureState;
             public string visualConvention;
             public string strongestDefect;
+            public string gameplayTraversalReadability;
             public CameraCapture[] captures;
         }
 
