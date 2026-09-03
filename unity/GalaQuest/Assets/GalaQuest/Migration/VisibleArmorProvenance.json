@@ -1,0 +1,235 @@
+{
+  "schema": "galaquest.unity-visible-armor-provenance",
+  "schemaVersion": 1,
+  "sourceRepository": "Galashots/galaquest-public",
+  "sourceGitSha": "4ee972bcf86cc17c5733a0a4696a267df0b194d1",
+  "conversionTool": "Blender",
+  "conversionToolVersion": "4.5.13 LTS",
+  "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+  "conversionOptions": {
+    "axisForward": "-Z",
+    "axisUp": "Y",
+    "applyUnitScale": true,
+    "embedTextures": true,
+    "pathMode": "COPY",
+    "stableMediaRoot": "C:/GalaQuestMigrationSource",
+    "retarget": false,
+    "materialRepair": false
+  },
+  "records": [
+    {
+      "semanticId": "hero.player.base",
+      "displayName": "GalaQuest Hero",
+      "role": "skinned-character",
+      "sourceRepoPath": "public/assets/hero/hero_lod1_ironwood_atlas.glb",
+      "sourceSha256": "082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679",
+      "sourceSizeBytes": 1156840,
+      "sourceInspection": {
+        "nodeCount": 28,
+        "meshCount": 3,
+        "primitiveCount": 3,
+        "materialCount": 1,
+        "imageCount": 1,
+        "imageMimeTypes": [
+          "image/jpeg"
+        ],
+        "materialInputs": [
+          {
+            "name": "Material_1",
+            "baseColorFactor": null,
+            "baseColorTextureIndex": 0,
+            "baseColorImageIndex": 0,
+            "hasMetallicFactor": false,
+            "metallicFactor": null,
+            "hasRoughnessFactor": false,
+            "roughnessFactor": null,
+            "metallicRoughnessTextureIndex": null,
+            "normalTextureIndex": null,
+            "emissiveFactor": [
+              1,
+              1,
+              1
+            ],
+            "emissiveTextureIndex": null,
+            "emissiveImageIndex": null,
+            "alphaMode": "OPAQUE"
+          }
+        ],
+        "skinCount": 1,
+        "jointCount": 24,
+        "bounds": {
+          "min": [
+            -0.6741968393325806,
+            -0.5,
+            -0.21416780352592468
+          ],
+          "max": [
+            0.6762725710868835,
+            1.5001041889190674,
+            0.21288253366947174
+          ],
+          "size": [
+            1.3504694104194641,
+            2.0001041889190674,
+            0.4270503371953964
+          ]
+        },
+        "animations": [
+          {
+            "name": "Armature|running|baselayer",
+            "duration": 0.6666666666666666,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "Armature|walking_man|baselayer",
+            "duration": 1.0416666666666667,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "combat_stance",
+            "duration": 1.6666666666666665,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "sword_slash",
+            "duration": 1.5,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "shield_push",
+            "duration": 2.4,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "hit",
+            "duration": 1.6333333333333333,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "death",
+            "duration": 2.966666666666667,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "idle",
+            "duration": 1.9,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          }
+        ]
+      },
+      "conversionCommand": [
+        "blender",
+        "--background",
+        "--factory-startup",
+        "--python",
+        "tools/blender/convert_glb_to_fbx.py",
+        "--",
+        "public/assets/hero/hero_lod1_ironwood_atlas.glb",
+        "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx",
+        "hero.player.base"
+      ],
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx",
+      "derivativeSha256": "23c161a6a7045987f54b2dae370d02c665d169aefa0c8b6377ca5ee82c893351",
+      "derivativeSizeBytes": 2324204,
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "feca37103dfbd5c3f88c27c1c73bf3dc9f5e6cc54376b01a75f1a5e0bcc85bb5",
+          "sizeBytes": 189187
+        }
+      ]
+    },
+    {
+      "semanticId": "gear.helmet.silverguard",
+      "displayName": "Silverguard Helmet",
+      "role": "static-gear",
+      "sourceRepoPath": "public/assets/gear/helmet_silverguard.glb",
+      "sourceSha256": "9c9b1158cc36d46f8c667d5d90a9960a9988f1d0823ed98730c1f9508c2fc0e5",
+      "sourceSizeBytes": 72824,
+      "sourceInspection": {
+        "nodeCount": 1,
+        "meshCount": 1,
+        "primitiveCount": 1,
+        "materialCount": 1,
+        "imageCount": 1,
+        "imageMimeTypes": [
+          "image/jpeg"
+        ],
+        "materialInputs": [
+          {
+            "name": null,
+            "baseColorFactor": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "baseColorTextureIndex": 0,
+            "baseColorImageIndex": 0,
+            "hasMetallicFactor": true,
+            "metallicFactor": 0,
+            "hasRoughnessFactor": true,
+            "roughnessFactor": 0.8,
+            "metallicRoughnessTextureIndex": null,
+            "normalTextureIndex": null,
+            "emissiveFactor": null,
+            "emissiveTextureIndex": null,
+            "emissiveImageIndex": null,
+            "alphaMode": "OPAQUE"
+          }
+        ],
+        "skinCount": 0,
+        "jointCount": 0,
+        "bounds": {
+          "min": [
+            -0.5,
+            -0.3984380066394806,
+            -0.4609380066394806
+          ],
+          "max": [
+            0.5,
+            0.39648398756980896,
+            0.46679699420928955
+          ],
+          "size": [
+            1,
+            0.7949219942092896,
+            0.9277350008487701
+          ]
+        },
+        "animations": []
+      },
+      "conversionCommand": [
+        "blender",
+        "--background",
+        "--factory-startup",
+        "--python",
+        "tools/blender/convert_glb_to_fbx.py",
+        "--",
+        "public/assets/gear/helmet_silverguard.glb",
+        "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/SilverguardHelmet.fbx",
+        "gear.helmet.silverguard"
+      ],
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/SilverguardHelmet.fbx",
+      "derivativeSha256": "6442e002ba7611d2e8e8f78de509f7ac14ad789b573c0c438372d0310c9563da",
+      "derivativeSizeBytes": 86460,
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/SilverguardHelmet.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "17fafd5070aa9c0a1e736330eca735e74098bd019a801a3d584d6d8585b30fb9",
+          "sizeBytes": 45071
+        }
+      ]
+    }
+  ]
+}
