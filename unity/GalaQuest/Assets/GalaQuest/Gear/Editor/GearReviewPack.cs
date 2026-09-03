@@ -65,8 +65,8 @@ namespace GalaQuest.Gear.Editor
             var changed = RunGit("diff --name-only HEAD -- unity docs tools public", repoRoot);
             var untracked = RunGit(
                 "ls-files --others --exclude-standard -- unity docs tools public", repoRoot);
-            var dirty = string.Join("
-",
+            var dirty = string.Join(
+                ((char)10).ToString(),
                 new[] { changed, untracked }.Where(part => !string.IsNullOrWhiteSpace(part)));
             var isDirty = !string.IsNullOrWhiteSpace(dirty);
 
