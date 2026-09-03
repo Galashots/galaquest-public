@@ -159,6 +159,27 @@ For behaviour changes:
 - do not weaken product behaviour, prediction constants, thresholds, or tests merely to satisfy hosted CI;
 - rerun the affected evidence after the fix.
 
+### Mandatory visual self-review before handoff
+
+For every new or materially changed player-visible asset, **the producer must perform and record a visual self-review before asking anyone else to accept it**. Follow `docs/review-guides/asset-visual-review.md` and the `visual-reference-first` skill.
+
+The minimum review posture is:
+
+1. inspect the relevant accepted GalaQuest visual/runtime authority and Owner-provided references;
+2. when web/image-search capability exists, compare against at least three attributable external examples that genuinely test the convention or quality bar; prefer official game/studio/publisher material or real-world references over anonymous reposts or AI collections;
+3. if the intended target is materially verbal/ambiguous and no canonical reference settles it, use a Production Director-generated **non-canonical target reference** when that would reduce expensive guesswork, explicitly stating what attributes it controls;
+4. for Unity-bound assets, inspect the actual import in Unity at neutral inspection scale **and** intended gameplay framing; inspect motion in Play Mode for animation/VFX/cloth/moving parts;
+5. record the strongest defect, mismatch, or disconfirming comparison found — not only positive observations;
+6. fix, reject, or reforecast material defects before requesting independent review.
+
+A producer's own visual review can prove that the worker looked critically at its output; it cannot independently accept its own consequential implementation.
+
+If Unity, image search, or the generated evidence cannot be accessed, that visual gate is **UNKNOWN**, not waived. Route the missing check to a capable runtime/reviewer before consequential acceptance.
+
+Visual evidence should be easy for the Owner to inspect from a phone. Attach key stills to the PR/review surface when practical. Store large raw/source masters and large recordings in the Owner-controlled Google Drive custody/review tier when available, link them from the exact-SHA PR/handoff, and preserve an exact-SHA evidence manifest. Do not commit large binaries merely to make review convenient.
+
+Do not copy third-party comparison imagery into Git/Drive solely as evidence unless its project custody is cleared; preserve source links/search terms instead.
+
 For player-visible changes:
 
 - inspect the running game personally;
@@ -227,7 +248,7 @@ Before handing off or asking for merge/review:
 1. Run the relevant test suite/harnesses and record their actual outcome.
 2. Push the task branch and refresh the remote head SHA.
 3. Check exact-head hosted CI where it is part of acceptance.
-4. For player-visible work, inspect the actual running-game evidence at that head.
+4. For player-visible work, complete the mandatory producer visual self-review and inspect the actual running-game evidence at that head; do not ask the independent reviewer to discover defects the producer already could have caught.
 5. Review the session for a reusable new failure mode. Update `docs/MISTAKES.md` or another public runbook only when a genuinely new durable lesson was learned; do not duplicate existing rules.
 6. Hand off by public branch/PR, exact SHA, evidence paths/run IDs, and explicit gate states: **PASS / FAIL / UNKNOWN**.
 
