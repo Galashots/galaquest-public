@@ -1,0 +1,329 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1080365922821755088
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3813720816871790016}
+  - component: {fileID: 9078817055379100605}
+  m_Layer: 0
+  m_Name: Socket_head
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3813720816871790016
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1080365922821755088}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6723749789944904605}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &9078817055379100605
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1080365922821755088}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7c2a75f635cd7a46b36a89432a35257, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearSocket
+  socketId: head
+  boneName: Head
+--- !u!1 &1944807443133621399
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5127297692820179602}
+  - component: {fileID: 8536555079196154520}
+  m_Layer: 0
+  m_Name: Socket_leftHand
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5127297692820179602
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1944807443133621399}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7465219459979125224}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8536555079196154520
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1944807443133621399}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7c2a75f635cd7a46b36a89432a35257, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearSocket
+  socketId: leftHand
+  boneName: LeftHand
+--- !u!1 &2288354167178831195
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6677577165391809065}
+  - component: {fileID: 7408244432583847664}
+  m_Layer: 0
+  m_Name: Socket_rightShoulder
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6677577165391809065
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2288354167178831195}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4337546207033226642}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7408244432583847664
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2288354167178831195}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7c2a75f635cd7a46b36a89432a35257, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearSocket
+  socketId: rightShoulder
+  boneName: RightArm
+--- !u!1 &6072499699023946957
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5422114086577321005}
+  - component: {fileID: 4969728857533352206}
+  m_Layer: 0
+  m_Name: Socket_leftShoulder
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5422114086577321005
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6072499699023946957}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3622415358693901047}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4969728857533352206
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6072499699023946957}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7c2a75f635cd7a46b36a89432a35257, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearSocket
+  socketId: leftShoulder
+  boneName: LeftArm
+--- !u!1 &6309259810532022393
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6281511284136202551}
+  - component: {fileID: 5140770559169137685}
+  m_Layer: 0
+  m_Name: Socket_rightHand
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6281511284136202551
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6309259810532022393}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6087591045063056915}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5140770559169137685
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6309259810532022393}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7c2a75f635cd7a46b36a89432a35257, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearSocket
+  socketId: rightHand
+  boneName: RightHand
+--- !u!1001 &2550283584119618841
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      propertyPath: m_Name
+      value: GQ_HERO_V1
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 1234279849924444142, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5422114086577321005}
+    - targetCorrespondingSourceObject: {fileID: 4971310860725525745, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5127297692820179602}
+    - targetCorrespondingSourceObject: {fileID: -131761456609737084, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3813720816871790016}
+    - targetCorrespondingSourceObject: {fileID: 2258100166189598859, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6677577165391809065}
+    - targetCorrespondingSourceObject: {fileID: -639763325267172598, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6281511284136202551}
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+--- !u!4 &3622415358693901047 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1234279849924444142, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+  m_PrefabInstance: {fileID: 2550283584119618841}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &4337546207033226642 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2258100166189598859, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+  m_PrefabInstance: {fileID: 2550283584119618841}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6087591045063056915 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -639763325267172598, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+  m_PrefabInstance: {fileID: 2550283584119618841}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6723749789944904605 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -131761456609737084, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+  m_PrefabInstance: {fileID: 2550283584119618841}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &7465219459979125224 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4971310860725525745, guid: d475b96124aba3548bb4234da29a117c, type: 3}
+  m_PrefabInstance: {fileID: 2550283584119618841}
+  m_PrefabAsset: {fileID: 0}

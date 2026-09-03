@@ -200,9 +200,14 @@
     ]
   },
   "rig": {
-    "deformJointTarget": 30,
+    "skeletonId": "GQ_HERO_V1",
+    "deformJointsActual": 22,
+    "zeroWeightHelperJoints": 2,
     "maxInfluencesPerVertex": 4,
-    "fingerChains": false
+    "fingerChains": false,
+    "twistBones": false,
+    "retiredDeformJointTarget": 30,
+    "note": "The Owner ratified the shipped skeleton and proportions as GQ_HERO_V1 on 2026-09-03 (Issue #44). The historical deformJointTarget of 30 and the unfinished authored-body rebuild are retired as current production requirements; 22 deforming joints plus 2 zero-weight helper joints (head_end, headfront) is the production V1 rig. Do not add finger chains or twist bones speculatively."
   },
   "surface": {
     "baseColourAuthority": "shared-texture-atlas",

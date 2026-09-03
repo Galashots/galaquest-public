@@ -1,0 +1,119 @@
+{
+  "schema": "galaquest.unity-gear-fits",
+  "schemaVersion": 1,
+  "authoringSurface": "Unity 6000.3.23f1 Gear Workbench",
+  "authoringSpace": "Unity left-handed Y-up metres, expressed relative to the named GQ_HERO_V1 socket Transform",
+  "referenceRuntime": {
+    "path": "public/src/character/gear.js",
+    "note": "Three.js remains the shipping client during migration and keeps its own restRelativeToHeroRoot values. This manifest is the Unity-authored source of truth for future gear; it is not automatically converted into gear.js numbers."
+  },
+  "items": [
+    {
+      "semanticId": "gear.shield.ironwood",
+      "displayName": "Ironwood Shield",
+      "socketId": "leftHand",
+      "fitClass": "Handheld",
+      "socketLocalFit": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "eulerAngles": [
+          180,
+          180,
+          0
+        ],
+        "scale": [
+          47.068542,
+          47.068542,
+          47.068542
+        ],
+        "mirrorX": false
+      },
+      "hidesAnatomy": [],
+      "sourceRepoPath": "public/assets/gear/shield_ironwood.glb"
+    },
+    {
+      "semanticId": "gear.helmet.silverguard",
+      "displayName": "Silverguard Helmet",
+      "socketId": "head",
+      "fitClass": "Headgear",
+      "socketLocalFit": {
+        "position": [
+          -0.0007414737,
+          0.18888,
+          -0.058453407
+        ],
+        "eulerAngles": [
+          180,
+          0,
+          0
+        ],
+        "scale": [
+          0.40928584,
+          0.40928584,
+          0.40928584
+        ],
+        "mirrorX": false
+      },
+      "hidesAnatomy": [
+        "hair",
+        "ears"
+      ],
+      "sourceRepoPath": "public/assets/gear/helmet_silverguard.glb"
+    },
+    {
+      "semanticId": "gear.shoulder.silverguard.left",
+      "displayName": "Silverguard Shoulder (left)",
+      "socketId": "leftShoulder",
+      "fitClass": "Shoulder",
+      "socketLocalFit": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "eulerAngles": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          20.854832,
+          20.854832,
+          20.854832
+        ],
+        "mirrorX": false
+      },
+      "hidesAnatomy": [],
+      "sourceRepoPath": "public/assets/gear/shoulder_silverguard.glb"
+    },
+    {
+      "semanticId": "gear.shoulder.silverguard.right",
+      "displayName": "Silverguard Shoulder (right)",
+      "socketId": "rightShoulder",
+      "fitClass": "Shoulder",
+      "socketLocalFit": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "eulerAngles": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          20.023956,
+          20.023956,
+          20.023956
+        ],
+        "mirrorX": true
+      },
+      "hidesAnatomy": [],
+      "sourceRepoPath": "public/assets/gear/shoulder_silverguard.glb"
+    }
+  ]
+}

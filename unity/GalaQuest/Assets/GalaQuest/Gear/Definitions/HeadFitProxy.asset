@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a254c8f3ea64f245a879c9f0a65c8d5, type: 3}
+  m_Name: HeadFitProxy
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.HeadFitProxy
+  crown: {x: -0.0014575287, y: 0.3712971, z: -0.114906535}
+  faceAnchor: {x: 0.0014574467, y: 0.036261734, z: 0.11490699}
+  skullRadius: 0.22132595
+  eyeLine: {x: 0.001610483, y: 0.26341265, z: 0.12697637}
+  eyeClearanceRadius: 0.08
+  maxCrownGap: 0.03
+  derivedFromHeroPath: public/assets/hero/hero_lod1_ironwood_atlas.glb
+  derivedFromHeroSha256: 082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679
+  derivationNote: crown from the head_end helper joint; faceAnchor from the headfront
+    helper joint; skullRadius = 95th-percentile lateral radius of Head-dominated
+    vertices about the head axis, measured on the bind pose. No helmet participated
+    in this measurement.

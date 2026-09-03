@@ -5,7 +5,9 @@
         "GalaQuest.Runtime",
         "GalaQuest.Migration.Runtime",
         "GalaQuest.Migration.Editor",
-        "GalaQuest.Editor"
+        "GalaQuest.Editor",
+        "GalaQuest.Gear.Runtime",
+        "GalaQuest.Gear.Editor"
     ],
     "includePlatforms": [
         "Editor"

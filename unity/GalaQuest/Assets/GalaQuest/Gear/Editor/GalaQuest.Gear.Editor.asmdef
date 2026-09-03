@@ -1,0 +1,18 @@
+{
+    "name": "GalaQuest.Gear.Editor",
+    "rootNamespace": "GalaQuest.Gear.Editor",
+    "references": [
+        "GalaQuest.Gear.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
