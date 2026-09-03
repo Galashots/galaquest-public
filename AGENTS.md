@@ -54,6 +54,8 @@ If the current directory is not a Git checkout, **do not recursively search the 
 - When the target exists mainly as a verbal brief and no canonical reference settles it, the Production Director may create a **non-canonical generated target reference** for direct comparison. Label what attributes it controls; generated art does not become canon by default.
 - Producer self-review is **not independent acceptance**. A consequential asset still needs the independent/Owner review required by `docs/WORKFLOW.md`; asset promotion into shipped production remains Owner-controlled.
 - Prefer phone-readable stills on the PR/review surface. Large raw/source assets and large recordings belong in the Owner-controlled Google Drive custody/review tier when available, linked back to the exact-SHA PR/evidence manifest rather than committed merely for review.
+- **All GalaQuest asset custody/review activity in Google Drive uses the single controlled root and lifecycle in `docs/pipeline/google-drive-asset-custody.md`.** Do not create parallel GalaQuest asset roots, treat Downloads/synced worktrees as authority, or improvise a new Drive hierarchy because the controlled structure is inconvenient.
+- The active Drive Owner queue is for decision-ready packets only. An Owner visual decision in Drive does not itself promote or ship an asset; ratchet the decision into the GitHub/registry authority that owns the asset lifecycle.
 - Player-visible changes require human inspection in the running game at gameplay framing and, where useful, inspection scale. Automated harnesses are necessary evidence for behaviour but do not substitute for human visual judgment.
 - **Reference first.** Before deciding how something should look, sit, hang, pose, or be held, inspect real reference images. The owner's GalaQuest reference art outranks external examples. Record the visual convention before tuning numbers.
 - Do not silently change a hero or important character's rig, skeleton, fingers, body, topology, or anatomy to make gear or placement pass. If the defect is in the body/rig rather than the attachment, stop and report it.
@@ -86,6 +88,7 @@ Read these when relevant; do not invent missing private prerequisites:
 - `docs/GALAQUEST_VISUAL_AUTHORITY.md` — visual direction and acceptance
 - `docs/review-guides/asset-visual-review.md` — mandatory producer self-review and comparative visual evidence
 - `docs/pipeline/` — public asset/character pipeline rules
+- `docs/pipeline/google-drive-asset-custody.md` — single-root Google Drive source custody, working-file, and Owner-review lifecycle
 - `docs/public-playtest.md` — hosted playtest and deployment provenance
 - `docs/teardown/hero_contract.json` — character/gear numeric authority where applicable
 - `ASSET-LICENSES.md` — shipped asset provenance and redistribution basis
