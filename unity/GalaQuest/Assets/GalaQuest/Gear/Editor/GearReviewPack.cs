@@ -57,7 +57,17 @@ namespace GalaQuest.Gear.Editor
             Directory.CreateDirectory(outputDirectory);
 
             var gitSha = RunGit("rev-parse HEAD", repoRoot);
-            var dirty = RunGit("status --porcelain -- unity docs tools public", repoRoot);
+            // Content-level, not `git status`. On a Windows checkout with core.autocrlf=true, status
+            // reports files as modified whose CONTENT is identical to HEAD; treating that as a dirty
+            // tree would make an exact-SHA capture impossible here for no real reason. What matters is
+            // whether tracked content differs, plus any untracked non-ignored file that could have
+            // contributed to the render.
+            var changed = RunGit("diff --name-only HEAD -- unity docs tools public", repoRoot);
+            var untracked = RunGit(
+                "ls-files --others --exclude-standard -- unity docs tools public", repoRoot);
+            var dirty = string.Join("
+",
+                new[] { changed, untracked }.Where(part => !string.IsNullOrWhiteSpace(part)));
             var isDirty = !string.IsNullOrWhiteSpace(dirty);
 
             if (isDirty && !allowDirty)
