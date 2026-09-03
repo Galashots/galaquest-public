@@ -62,8 +62,8 @@ at rest and fold through itself the moment it moves.
 | --- | --- | --- |
 | G11 | Rest pose is **T-pose** | Spec §7. See the note below on what this costs |
 | G12 | Root bone named `Root`, at world origin `(0,0,0)`, on the ground plane, axis-aligned | A root at hip level breaks ground calculations in every engine |
-| G13 | Three-layer bone naming: `DEF_` deform, `CTRL_` control, `MCH_` mechanism. Gear attachment sockets are `MCH_` (owner decision, 2026-08-10) | Makes "30 deform joints" **countable** instead of arguable |
-| G14 | Count of bones with the deform flag set == the contract's `rig.deformJointTarget` (30, whole body; a region claims a documented share) | The contract pins 30; nothing currently checks it |
+| G13 | Three-layer bone naming: `DEF_` deform, `CTRL_` control, `MCH_` mechanism. Gear attachment sockets are `MCH_` (owner decision, 2026-08-10) | Makes the deform-joint count **countable** instead of arguable |
+| G14 | Count of bones with the deform flag set == the contract's `rig.deformJointsActual` (22 for GQ_HERO_V1, plus 2 zero-weight helpers; a region claims a documented share) | The historical target of 30 was retired by Owner decision (Issue #44, 2026-09-03); nothing currently checks the count |
 | G15 | Every deform bone actually has the deform flag set | A bone without it leaves its vertices unanimated and silently orphaned |
 | G16 | Armature scale is unit `(1,1,1)`, applied before rigging | Non-unit scale deforms animation on export |
 | G17 | No vertex has zero total weight | Zero-weight vertices stay behind while the character moves |
