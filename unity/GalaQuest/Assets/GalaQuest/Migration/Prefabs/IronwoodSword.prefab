@@ -1,0 +1,86 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &6945806419991177566
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      propertyPath: m_Name
+      value: IronwoodSword
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 802689643240992166}
+  m_SourcePrefab: {fileID: 100100000, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+--- !u!1 &7828698653949596687 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 8792f878b5de72a46885d40cd4689e90, type: 3}
+  m_PrefabInstance: {fileID: 6945806419991177566}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &802689643240992166
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7828698653949596687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1985241f2dbd8204db0a4710256c4586, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Migration.Runtime::GalaQuest.Migration.MigrationProofAssetIdentity
+  semanticId: gear.sword.ironwood
+  role: static-asset
+  sourceGitSha: 470f989e131497bbfb6c4f27a950f4ade4300896
+  sourceRepoPath: public/assets/gear/sword_ironwood.glb
+  sourceSha256: fb33eff929e28a1eb6dbcb18f7de42bac079405588ee9060031abd0cd8977fe0
+  derivativeRepoPath: unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSword.fbx
+  derivativeSha256: 74c0e53d4864cdec85c6f68bbd1d81d26baa99c9a6f86ca02503730446a1708e

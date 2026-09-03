@@ -27,3 +27,31 @@ The coordinate seam is `GalaQuest.Migration.ThreeToUnityCoordinates`. It maps ri
 Y-up Three.js/glTF meters to left-handed, Y-up Unity meters by reflecting Z for vectors and using
 the matching quaternion `(x, y, -z, -w)` transform. The fixture in the manifest and EditMode tests
 prove the mapping rather than relying on a copied convention.
+
+## Existing-asset FBX intake
+
+`convert-assets.mjs` drives the repository's Blender batch pattern for the two selected assets. It
+discovers `blender` from PATH or accepts `--blender <path>` / `GALAQUEST_BLENDER`; no workstation
+path is written to repository authority. The converter reads the committed Bridge manifest for
+semantic IDs and source hashes, runs `tools/blender/convert_glb_to_fbx.py`, and writes relative-path
+provenance beside the Unity derivatives.
+
+```text
+node tools/unity-migration/convert-assets.mjs --blender <path-to-blender-4.5.13>
+```
+
+The conversion is transfer-only: no retargeting, geometry edits, material repair, Meshy call, or
+Unity importer package is involved. Blender's built-in FBX exporter is the only DCC handoff.
+
+The converter uses `--factory-startup`, `axis_forward=-Z`, `axis_up=Y`, unit-scale application,
+embedded textures, and animation baking only for the rigged Keeper. It stabilizes the native FBX
+writer's randomized object IDs and wall-clock creation header so repeated conversion of the same
+source into the same destination is byte-identical. The provenance `conversionDate` is evidence
+metadata only; it is intentionally excluded from derivative comparisons. The checked-in derivative
+directory is `Assets/GalaQuest/Migration/SourceAssets/Deterministic/`.
+
+`GalaQuest/Migration/Build Asset Intake Proof` configures Unity's native `ModelImporter`, builds
+the two audit-only proof prefabs, and saves `Assets/GalaQuest/Migration/Scenes/MigrationProof.unity`.
+`GalaQuest/Migration/Capture Review Pack` renders the fixed cameras into the ignored
+`.local/unity/review-pack/` directory and writes `review-manifest.json`. The Keeper takes are read
+from the FBX import; the builder never invents or renames historical clip names.

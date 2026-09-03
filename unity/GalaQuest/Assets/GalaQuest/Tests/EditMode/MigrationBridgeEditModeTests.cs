@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using GalaQuest.Editor;
 using GalaQuest.Migration;
 using NUnit.Framework;
@@ -80,6 +83,105 @@ namespace GalaQuest.Tests
             Assert.That(second.GetInstanceID(), Is.EqualTo(firstInstanceId));
             Assert.That(secondJson, Is.EqualTo(firstJson));
             Assert.That(AssetDatabase.FindAssets("t:MigrationBridgeData", new[] { "Assets/GalaQuest/Migration/Generated" }), Has.Length.EqualTo(1));
+        }
+
+        [Test]
+        public void Asset_provenance_parses_and_matches_the_current_source_and_derivative_bytes()
+        {
+            var document = MigrationAssetIntake.ReadAndValidateProvenance();
+            Assert.That(document.records.Select(record => record.semanticId), Is.EquivalentTo(new[]
+            {
+                "gear.sword.ironwood",
+                "world.keeper",
+            }));
+
+            var repositoryRoot = new DirectoryInfo(Application.dataPath).Parent.Parent.Parent.FullName;
+            foreach (var record in document.records)
+            {
+                var sourcePath = Path.Combine(repositoryRoot, record.sourceRepoPath.Replace('/', Path.DirectorySeparatorChar));
+                var derivativePath = Path.Combine(repositoryRoot, record.derivativeRepoPath.Replace('/', Path.DirectorySeparatorChar));
+                Assert.That(File.Exists(sourcePath), Is.True, record.sourceRepoPath);
+                Assert.That(File.Exists(derivativePath), Is.True, record.derivativeRepoPath);
+                Assert.That(HashFile(sourcePath), Is.EqualTo(record.sourceSha256));
+                Assert.That(HashFile(derivativePath), Is.EqualTo(record.derivativeSha256));
+                Assert.That(record.sourceGitSha, Is.EqualTo(document.sourceGitSha));
+                Assert.That(record.conversionOptions.retarget, Is.False);
+                Assert.That(record.conversionOptions.materialRepair, Is.False);
+            }
+
+            var keeper = MigrationAssetIntake.FindRecord(document, "world.keeper");
+            Assert.That(keeper.sourceInspection.animations.Select(animation => animation.name), Is.EquivalentTo(new[]
+            {
+                "talk",
+                "idle",
+                "wave",
+            }));
+            Assert.That(keeper.sourceInspection.animations, Has.Length.EqualTo(3));
+        }
+
+        [Test]
+        public void Native_import_preserves_keeper_skeleton_skin_materials_scale_and_actual_clip_inventory()
+        {
+            var keeper = AssetDatabase.LoadAssetAtPath<GameObject>(MigrationAssetIntake.KeeperModelPath);
+            Assert.That(keeper, Is.Not.Null);
+            Assert.That(keeper.transform.localScale.x, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(keeper.transform.localScale.y, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(keeper.transform.localScale.z, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(keeper.GetComponentsInChildren<Transform>(true).Any(transform => transform.name == "Hips"), Is.True);
+
+            var skinnedMeshes = keeper.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            Assert.That(skinnedMeshes, Has.Length.GreaterThanOrEqualTo(1));
+            Assert.That(skinnedMeshes.All(renderer => renderer.sharedMesh != null), Is.True);
+            Assert.That(skinnedMeshes.All(renderer => renderer.sharedMaterials.Length >= 1), Is.True);
+            Assert.That(skinnedMeshes.Sum(renderer => renderer.localBounds.size.magnitude), Is.InRange(0.01f, 100f));
+            var clips = MigrationAssetIntake.GetActualKeeperClips();
+            Assert.That(clips, Has.Length.EqualTo(3));
+            Assert.That(clips.Select(ClipIdentity).ToHashSet(StringComparer.Ordinal), Is.EquivalentTo(new[]
+            {
+                "talk",
+                "idle",
+                "wave",
+            }));
+
+            var importedMaterials = AssetDatabase.LoadAllAssetsAtPath(MigrationAssetIntake.KeeperModelPath)
+                .OfType<Material>()
+                .ToArray();
+            var importedTextures = AssetDatabase.LoadAllAssetsAtPath(MigrationAssetIntake.KeeperModelPath)
+                .OfType<Texture2D>()
+                .ToArray();
+            Assert.That(importedMaterials, Has.Length.EqualTo(1));
+            Debug.Log($"Keeper native material shader={importedMaterials[0].shader.name} properties={string.Join(",", importedMaterials[0].GetTexturePropertyNames())} textures={importedTextures.Length}");
+            Assert.That(importedTextures, Has.Length.GreaterThanOrEqualTo(1));
+            Assert.That(importedMaterials.Any(material => material.GetTexturePropertyNames()
+                .Any(property => material.GetTexture(property) != null)), Is.True);
+        }
+
+        [Test]
+        public void Proof_assets_have_one_prefab_per_semantic_asset_and_one_proof_scene()
+        {
+            Assert.That(AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/GalaQuest/Migration/Prefabs" }), Has.Length.EqualTo(2));
+            Assert.That(AssetDatabase.FindAssets("t:AnimatorController", new[] { "Assets/GalaQuest/Migration/Generated" }), Has.Length.EqualTo(1));
+            Assert.That(AssetDatabase.FindAssets("t:Scene", new[] { "Assets/GalaQuest/Migration/Scenes" }), Has.Length.EqualTo(1));
+
+            var sword = AssetDatabase.LoadAssetAtPath<GameObject>(MigrationAssetIntake.SwordPrefabPath);
+            var keeper = AssetDatabase.LoadAssetAtPath<GameObject>(MigrationAssetIntake.KeeperPrefabPath);
+            Assert.That(sword.GetComponent<MigrationProofAssetIdentity>().SemanticId, Is.EqualTo("gear.sword.ironwood"));
+            Assert.That(keeper.GetComponent<MigrationProofAssetIdentity>().SemanticId, Is.EqualTo("world.keeper"));
+            Assert.That(keeper.GetComponent<Animator>().runtimeAnimatorController, Is.Not.Null);
+        }
+
+        private static string HashFile(string path)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                return BitConverter.ToString(sha256.ComputeHash(File.ReadAllBytes(path))).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static string ClipIdentity(AnimationClip clip)
+        {
+            var separator = clip.name.LastIndexOf('|');
+            return separator >= 0 ? clip.name.Substring(separator + 1) : clip.name;
         }
     }
 }
