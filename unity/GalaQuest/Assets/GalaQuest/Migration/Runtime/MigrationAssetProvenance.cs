@@ -33,7 +33,17 @@ namespace GalaQuest.Migration
         public string derivativeRepoPath;
         public string derivativeSha256;
         public long derivativeSizeBytes;
+        public MigrationAssetDerivativeFile[] derivativeFiles;
         public string conversionDate;
+    }
+
+    [Serializable]
+    public sealed class MigrationAssetDerivativeFile
+    {
+        public string path;
+        public string kind;
+        public string sha256;
+        public long sizeBytes;
     }
 
     [Serializable]
@@ -44,6 +54,8 @@ namespace GalaQuest.Migration
         public bool applyUnitScale;
         public bool bakeAnimations;
         public bool embedTextures;
+        public string pathMode;
+        public string stableMediaRoot;
         public bool retarget;
         public bool materialRepair;
     }
@@ -55,10 +67,13 @@ namespace GalaQuest.Migration
         public int meshCount;
         public int primitiveCount;
         public int materialCount;
+        public int imageCount;
+        public string[] imageMimeTypes;
         public int skinCount;
         public int jointCount;
         public MigrationSourceBounds bounds;
         public MigrationSourceAnimation[] animations;
+        public MigrationSourceMaterialInput[] materialInputs;
     }
 
     [Serializable]
@@ -76,5 +91,24 @@ namespace GalaQuest.Migration
         public float duration;
         public int channelCount;
         public int drivenNodeCount;
+    }
+
+    [Serializable]
+    public sealed class MigrationSourceMaterialInput
+    {
+        public string name;
+        public float[] baseColorFactor;
+        public int baseColorTextureIndex;
+        public int baseColorImageIndex;
+        public bool hasMetallicFactor;
+        public float metallicFactor;
+        public bool hasRoughnessFactor;
+        public float roughnessFactor;
+        public int metallicRoughnessTextureIndex;
+        public int normalTextureIndex;
+        public float[] emissiveFactor;
+        public int emissiveTextureIndex;
+        public int emissiveImageIndex;
+        public string alphaMode;
     }
 }

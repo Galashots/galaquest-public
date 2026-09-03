@@ -49,6 +49,13 @@ test('provenance source paths, hashes, inspections, and derivative hashes match 
     assert.equal(record.derivativeSha256, sha256(derivativeBytes));
     assert.equal(record.sourceSizeBytes, sourceBytes.length);
     assert.equal(record.derivativeSizeBytes, derivativeBytes.length);
+    assert.equal(record.derivativeFiles.length, record.sourceInspection.imageCount);
+    for (const derivativeFile of record.derivativeFiles) {
+      const textureBytes = read(derivativeFile.path);
+      assert.equal(derivativeFile.kind, 'source-material-texture');
+      assert.equal(derivativeFile.sha256, sha256(textureBytes));
+      assert.equal(derivativeFile.sizeBytes, textureBytes.length);
+    }
     assert.deepEqual(record.sourceInspection, inspectSourceGlb(new URL(record.sourceRepoPath, root)));
     assert.equal(record.sourceGitSha, provenance.sourceGitSha);
     assert.match(record.derivativeRepoPath, /^unity\/GalaQuest\/Assets\/GalaQuest\/Migration\/SourceAssets\/Deterministic\/.+\.fbx$/);
@@ -81,5 +88,7 @@ test('conversion command is a reproducible native Blender FBX handoff', () => {
     assert.equal(record.conversionOptions.axisUp, 'Y');
     assert.equal(record.conversionOptions.applyUnitScale, true);
     assert.equal(record.conversionOptions.embedTextures, true);
+    assert.equal(record.conversionOptions.pathMode, 'COPY');
+    assert.equal(record.conversionOptions.stableMediaRoot, 'C:/GalaQuestMigrationSource');
   }
 });

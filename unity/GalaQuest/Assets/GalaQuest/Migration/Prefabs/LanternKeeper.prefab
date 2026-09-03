@@ -86,7 +86,7 @@ MonoBehaviour:
   sourceRepoPath: public/assets/world/keeper.glb
   sourceSha256: cc4c24233acf527e9b74c575b1afb9321a9c5bd9b3f9487146e2faa71296aae9
   derivativeRepoPath: unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.fbx
-  derivativeSha256: 434835202602ab2ca904efbba90af4f8f0d11a6871686fc287b2060350437ade
+  derivativeSha256: 613056b65d7e10ec7e5f1442878e6a7b6ca8fa4e3dc0de058faa4bf41921f674
 --- !u!95 &4693726924539748228
 Animator:
   serializedVersion: 7

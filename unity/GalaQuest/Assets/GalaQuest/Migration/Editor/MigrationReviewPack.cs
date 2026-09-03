@@ -51,7 +51,7 @@ namespace GalaQuest.Editor
             }
             animator.Play(wave.name, 0, 0.5f);
             animator.Update(0f);
-            captures.Add(CaptureCamera(outputRoot, KeeperThreeQuarterCameraName, "keeper-animation-wave-mid.png", "keeper-3q", wave.name));
+            captures.Add(CaptureCamera(outputRoot, KeeperFrontCameraName, "keeper-animation-wave-mid.png", "keeper-front", wave.name));
 
             var manifest = new MigrationReviewPackManifest
             {

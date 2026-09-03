@@ -104,6 +104,14 @@ namespace GalaQuest.Tests
                 Assert.That(File.Exists(derivativePath), Is.True, record.derivativeRepoPath);
                 Assert.That(HashFile(sourcePath), Is.EqualTo(record.sourceSha256));
                 Assert.That(HashFile(derivativePath), Is.EqualTo(record.derivativeSha256));
+                Assert.That(record.derivativeFiles, Has.Length.EqualTo(record.sourceInspection.imageCount));
+                foreach (var derivativeFile in record.derivativeFiles)
+                {
+                    var texturePath = Path.Combine(repositoryRoot, derivativeFile.path.Replace('/', Path.DirectorySeparatorChar));
+                    Assert.That(File.Exists(texturePath), Is.True, derivativeFile.path);
+                    Assert.That(HashFile(texturePath), Is.EqualTo(derivativeFile.sha256));
+                    Assert.That(derivativeFile.sizeBytes, Is.GreaterThan(0));
+                }
                 Assert.That(record.sourceGitSha, Is.EqualTo(document.sourceGitSha));
                 Assert.That(record.conversionOptions.retarget, Is.False);
                 Assert.That(record.conversionOptions.materialRepair, Is.False);
@@ -117,6 +125,10 @@ namespace GalaQuest.Tests
                 "wave",
             }));
             Assert.That(keeper.sourceInspection.animations, Has.Length.EqualTo(3));
+            Assert.That(keeper.sourceInspection.materialInputs, Has.Length.EqualTo(1));
+            Assert.That(keeper.sourceInspection.materialInputs[0].hasMetallicFactor, Is.False);
+            Assert.That(keeper.sourceInspection.materialInputs[0].emissiveImageIndex,
+                Is.EqualTo(keeper.sourceInspection.materialInputs[0].baseColorImageIndex));
         }
 
         [Test]
@@ -146,8 +158,10 @@ namespace GalaQuest.Tests
             var importedMaterials = AssetDatabase.LoadAllAssetsAtPath(MigrationAssetIntake.KeeperModelPath)
                 .OfType<Material>()
                 .ToArray();
-            var importedTextures = AssetDatabase.LoadAllAssetsAtPath(MigrationAssetIntake.KeeperModelPath)
-                .OfType<Texture2D>()
+            var importedTextures = AssetDatabase.FindAssets("t:Texture2D", new[] { MigrationAssetIntake.KeeperTexturePath })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<Texture2D>)
+                .Where(texture => texture != null)
                 .ToArray();
             Assert.That(importedMaterials, Has.Length.EqualTo(1));
             Debug.Log($"Keeper native material shader={importedMaterials[0].shader.name} properties={string.Join(",", importedMaterials[0].GetTexturePropertyNames())} textures={importedTextures.Length}");

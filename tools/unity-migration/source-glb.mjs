@@ -32,6 +32,29 @@ function sourceBounds(document) {
   return found ? { min, max, size: max.map((value, axis) => value - min[axis]) } : null;
 }
 
+function materialInputs(document) {
+  const imageIndexForTexture = textureIndex => document.textures?.[textureIndex]?.source ?? null;
+  return (document.materials ?? []).map(material => {
+    const pbr = material.pbrMetallicRoughness ?? {};
+    return {
+      name: material.name ?? null,
+      baseColorFactor: pbr.baseColorFactor ?? null,
+      baseColorTextureIndex: pbr.baseColorTexture?.index ?? null,
+      baseColorImageIndex: imageIndexForTexture(pbr.baseColorTexture?.index),
+      hasMetallicFactor: Object.hasOwn(pbr, 'metallicFactor'),
+      metallicFactor: pbr.metallicFactor ?? null,
+      hasRoughnessFactor: Object.hasOwn(pbr, 'roughnessFactor'),
+      roughnessFactor: pbr.roughnessFactor ?? null,
+      metallicRoughnessTextureIndex: pbr.metallicRoughnessTexture?.index ?? null,
+      normalTextureIndex: material.normalTexture?.index ?? null,
+      emissiveFactor: material.emissiveFactor ?? null,
+      emissiveTextureIndex: material.emissiveTexture?.index ?? null,
+      emissiveImageIndex: imageIndexForTexture(material.emissiveTexture?.index),
+      alphaMode: material.alphaMode ?? 'OPAQUE',
+    };
+  });
+}
+
 export function inspectSourceGlb(filePath) {
   const document = readGlbJson(filePath);
   const nodes = document.nodes ?? [];
@@ -60,6 +83,7 @@ export function inspectSourceGlb(filePath) {
     materialCount: (document.materials ?? []).length,
     imageCount: (document.images ?? []).length,
     imageMimeTypes: (document.images ?? []).map(image => image.mimeType ?? null),
+    materialInputs: materialInputs(document),
     skinCount: skins.length,
     jointCount: skins.reduce((sum, skin) => sum + (skin.joints ?? []).length, 0),
     bounds: sourceBounds(document),

@@ -27,6 +27,8 @@ namespace GalaQuest.Editor
         public const string ControllerPath = "Assets/GalaQuest/Migration/Generated/LanternKeeperProof.controller";
         public const string FloorMaterialPath = "Assets/GalaQuest/Migration/Generated/MigrationProofFloor.mat";
         public const string ScenePath = "Assets/GalaQuest/Migration/Scenes/MigrationProof.unity";
+        public const string SwordTexturePath = "Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSwordTextures";
+        public const string KeeperTexturePath = "Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeperTextures";
 
         private const string SwordSemanticId = "gear.sword.ironwood";
         private const string KeeperSemanticId = "world.keeper";
@@ -96,7 +98,8 @@ namespace GalaQuest.Editor
                 if (record == null || string.IsNullOrWhiteSpace(record.semanticId) ||
                     string.IsNullOrWhiteSpace(record.sourceRepoPath) || string.IsNullOrWhiteSpace(record.sourceSha256) ||
                     string.IsNullOrWhiteSpace(record.derivativeRepoPath) || string.IsNullOrWhiteSpace(record.derivativeSha256) ||
-                    record.conversionOptions == null || record.conversionTool != "Blender" ||
+                    record.conversionOptions == null || record.sourceInspection == null || record.derivativeFiles == null ||
+                    record.derivativeFiles.Length != record.sourceInspection.imageCount || record.conversionTool != "Blender" ||
                     record.conversionToolVersion != "4.5.13 LTS")
                 {
                     throw new BuildFailedException("Migration provenance contains an incomplete or incompatible record.");
@@ -113,6 +116,9 @@ namespace GalaQuest.Editor
         {
             ConfigureModelImporter(SwordModelPath, false);
             ConfigureModelImporter(KeeperModelPath, true);
+            ExtractNativeTextures(SwordModelPath, SwordTexturePath);
+            ExtractNativeTextures(KeeperModelPath, KeeperTexturePath);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         public static AnimationClip[] GetActualKeeperClips()
@@ -198,6 +204,22 @@ namespace GalaQuest.Editor
                 Debug.Log($"Migration ModelImporter animation settings: path={path} importAnimation={importer.importAnimation} " +
                     $"defaultClips={importer.defaultClipAnimations.Length} configuredClips={importer.clipAnimations.Length}");
             }
+        }
+
+        private static void ExtractNativeTextures(string modelPath, string textureFolder)
+        {
+            EnsureFolder(textureFolder);
+            if (AssetDatabase.FindAssets("t:Texture2D", new[] { textureFolder }).Length > 0)
+            {
+                return;
+            }
+
+            var importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
+            if (importer == null || !importer.ExtractTextures(textureFolder))
+            {
+                throw new BuildFailedException($"Unity native ModelImporter could not extract embedded textures from {modelPath}.");
+            }
+            Debug.Log($"Migration native texture extraction: model={modelPath} folder={textureFolder}");
         }
 
         private static AnimatorController EnsureKeeperController(AnimationClip[] clips)
@@ -329,7 +351,9 @@ namespace GalaQuest.Editor
             var sword = (GameObject)PrefabUtility.InstantiatePrefab(swordPrefab);
             sword.name = "MigrationProof Ironwood Sword";
             sword.transform.position = new Vector3(-1.4f, 0.5f, 0f);
-            sword.transform.rotation = Quaternion.Euler(0f, 22f, 0f);
+            // Unity's native FBX importer applies the FBX Y-up conversion at the model root;
+            // this explicit quarter-turn restores the source GLB's Y-up inspection orientation.
+            sword.transform.rotation = Quaternion.Euler(90f, 22f, 0f);
 
             var keeper = (GameObject)PrefabUtility.InstantiatePrefab(keeperPrefab);
             keeper.name = "MigrationProof Lantern Keeper";
@@ -343,7 +367,7 @@ namespace GalaQuest.Editor
             light.color = new Color(1f, 0.94f, 0.84f, 1f);
             lightObject.transform.rotation = Quaternion.Euler(46f, -28f, 0f);
 
-            CreateCamera("MigrationProof Sword 3Q Camera", new Vector3(-1.4f, 0.82f, 3.1f), new Vector3(-1.4f, 0.5f, 0f), 34f);
+            CreateCamera("MigrationProof Sword 3Q Camera", new Vector3(-1.4f, 0.82f, 2.5f), new Vector3(-1.4f, 0.5f, 0f), 24f);
             CreateCamera("MigrationProof Keeper Front Camera", new Vector3(0.65f, 0.9f, 3.3f), new Vector3(0.65f, 0.82f, 0f), 32f);
             CreateCamera("MigrationProof Keeper 3Q Camera", new Vector3(3.15f, 1.15f, 2.7f), new Vector3(0.65f, 0.82f, 0f), 34f);
             CreateCamera("MigrationProof Keeper Side Camera", new Vector3(3.6f, 0.88f, 0.05f), new Vector3(0.65f, 0.82f, 0f), 34f);

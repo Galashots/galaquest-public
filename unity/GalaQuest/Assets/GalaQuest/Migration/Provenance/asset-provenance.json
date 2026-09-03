@@ -34,6 +34,8 @@
         "applyUnitScale": true,
         "bakeAnimations": false,
         "embedTextures": true,
+        "pathMode": "COPY",
+        "stableMediaRoot": "C:/GalaQuestMigrationSource",
         "retarget": false,
         "materialRepair": false
       },
@@ -42,6 +44,33 @@
         "meshCount": 1,
         "primitiveCount": 1,
         "materialCount": 1,
+        "imageCount": 1,
+        "imageMimeTypes": [
+          "image/jpeg"
+        ],
+        "materialInputs": [
+          {
+            "name": null,
+            "baseColorFactor": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "baseColorTextureIndex": 0,
+            "baseColorImageIndex": 0,
+            "hasMetallicFactor": true,
+            "metallicFactor": 0,
+            "hasRoughnessFactor": true,
+            "roughnessFactor": 0.8,
+            "metallicRoughnessTextureIndex": null,
+            "normalTextureIndex": null,
+            "emissiveFactor": null,
+            "emissiveTextureIndex": null,
+            "emissiveImageIndex": null,
+            "alphaMode": "OPAQUE"
+          }
+        ],
         "skinCount": 0,
         "jointCount": 0,
         "bounds": {
@@ -64,9 +93,17 @@
         "animations": []
       },
       "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSword.fbx",
-      "derivativeSha256": "74c0e53d4864cdec85c6f68bbd1d81d26baa99c9a6f86ca02503730446a1708e",
-      "derivativeSizeBytes": 152668,
-      "conversionDate": "2026-09-03T01:11:50.513Z"
+      "derivativeSha256": "fafc6ebeb25c51cd309a73e3e02ab4c091d6ab1a5715fcf6943fd08d4b90d646",
+      "derivativeSizeBytes": 152268,
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSword.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "918e990b39632816b95fc714e748413d216f95c7bb47602d02d6d7e8e21f1bb0",
+          "sizeBytes": 111946
+        }
+      ],
+      "conversionDate": "2026-09-03T01:48:40.087Z"
     },
     {
       "semanticId": "world.keeper",
@@ -96,6 +133,8 @@
         "applyUnitScale": true,
         "bakeAnimations": true,
         "embedTextures": true,
+        "pathMode": "COPY",
+        "stableMediaRoot": "C:/GalaQuestMigrationSource",
         "retarget": false,
         "materialRepair": false
       },
@@ -104,6 +143,32 @@
         "meshCount": 1,
         "primitiveCount": 1,
         "materialCount": 1,
+        "imageCount": 1,
+        "imageMimeTypes": [
+          "image/jpeg"
+        ],
+        "materialInputs": [
+          {
+            "name": "Material_1",
+            "baseColorFactor": null,
+            "baseColorTextureIndex": 1,
+            "baseColorImageIndex": 0,
+            "hasMetallicFactor": false,
+            "metallicFactor": null,
+            "hasRoughnessFactor": true,
+            "roughnessFactor": 0.4100847542285919,
+            "metallicRoughnessTextureIndex": null,
+            "normalTextureIndex": null,
+            "emissiveFactor": [
+              1,
+              1,
+              1
+            ],
+            "emissiveTextureIndex": 0,
+            "emissiveImageIndex": 0,
+            "alphaMode": "OPAQUE"
+          }
+        ],
         "skinCount": 1,
         "jointCount": 24,
         "bounds": {
@@ -145,9 +210,17 @@
         ]
       },
       "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.fbx",
-      "derivativeSha256": "434835202602ab2ca904efbba90af4f8f0d11a6871686fc287b2060350437ade",
-      "derivativeSizeBytes": 1497772,
-      "conversionDate": "2026-09-03T01:11:53.642Z"
+      "derivativeSha256": "613056b65d7e10ec7e5f1442878e6a7b6ca8fa4e3dc0de058faa4bf41921f674",
+      "derivativeSizeBytes": 1497228,
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "67729d69c1be4c95443af47a0eef002fd0e6c890d812009a3e81bb5359601483",
+          "sizeBytes": 202601
+        }
+      ],
+      "conversionDate": "2026-09-03T01:48:42.823Z"
     }
   ]
 }

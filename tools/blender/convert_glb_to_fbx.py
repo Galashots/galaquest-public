@@ -16,6 +16,8 @@ import datetime
 
 import bpy
 
+_STABLE_IMAGE_PATHS = {}
+
 
 def install_stable_fbx_ids():
     """Make Blender's FBX object ids independent of Python's per-process hash seed.
@@ -65,6 +67,15 @@ def install_stable_fbx_ids():
         return original_header(root, scene_data, datetime.datetime(1970, 1, 1))
 
     export_fbx_bin.fbx_header_elements = stable_header
+
+    def stable_image_path(image, scene_data):
+        basename = _STABLE_IMAGE_PATHS.get(image.name, os.path.basename(image.filepath))
+        stable_path = f"C:/GalaQuestMigrationSource/{basename}"
+        return stable_path, basename
+
+    # The stock exporter derives both FBX FileName fields from the destination directory. Keep
+    # embedded Content enabled, but replace that one path seam with a fixed synthetic source root.
+    export_fbx_bin._gen_vid_path = stable_image_path
 
 
 def arguments():
@@ -124,7 +135,13 @@ def prepare_embedded_images(destination):
         derivative_path = os.path.join(destination_directory, f"{destination_stem}.texture-{index}.{extension}")
         with open(derivative_path, "wb") as handle:
             handle.write(image.packed_file.data)
-        image.filepath = derivative_path
+        # Blender's FBX exporter serializes an absolute FileName even in STRIP mode. Use a fixed
+        # synthetic source root so the embedded metadata is stable and never leaks a workstation
+        # path; Unity consumes the embedded Content bytes and the adjacent derivative is retained
+        # for explicit provenance and native extraction.
+        basename = os.path.basename(derivative_path)
+        image.filepath = f"C:/GalaQuestMigrationSource/{basename}"
+        _STABLE_IMAGE_PATHS[image.name] = basename
         derivative_paths.append(derivative_path)
         print(f"PREPARED_EMBEDDED_IMAGE name={image.name!r} bytes={len(image.packed_file.data)}")
     return derivative_paths

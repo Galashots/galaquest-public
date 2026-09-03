@@ -8,7 +8,8 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { inspectSourceGlb } from './source-glb.mjs';
 
@@ -83,6 +84,7 @@ function convertOne({ blender, sourceSha, sourceAsset, outDir }) {
   if (!destinationName) throw new Error(`no controlled FBX destination for ${sourceAsset.semanticId}`);
   const source = resolve(ROOT, sourceAsset.sourcePath);
   const destination = resolve(ROOT, outDir, destinationName);
+  const destinationStem = basename(destination, '.fbx');
   if (!existsSync(source)) throw new Error(`missing source asset: ${sourceAsset.sourcePath}`);
   const sourceBytes = readFileSync(source);
   const actualSourceHash = sha256(sourceBytes);
@@ -108,12 +110,33 @@ function convertOne({ blender, sourceSha, sourceAsset, outDir }) {
   // destination is a generated derivative, so clear only this exact prior derivative before
   // each run; source GLBs are never touched.
   rmSync(destination, { force: true });
+  for (const filename of readdirSync(dirname(destination))) {
+    if (filename.startsWith(`${destinationStem}.texture-`)) {
+      rmSync(resolve(dirname(destination), filename), { force: true });
+    }
+  }
   const result = spawnSync(blender, command.slice(1), { cwd: ROOT, encoding: 'utf8', stdio: 'inherit' });
   if (result.error) throw new Error(`${sourceAsset.semanticId}: Blender conversion could not start: ${result.error.message}`);
   if (result.status !== 0) throw new Error(`${sourceAsset.semanticId}: Blender conversion failed (${result.status})`);
   if (!existsSync(destination)) throw new Error(`${sourceAsset.semanticId}: Blender exited without writing ${relative(ROOT, destination)}`);
 
   const derivativeBytes = readFileSync(destination);
+  const derivativeFiles = readdirSync(dirname(destination))
+    .filter(filename => filename.startsWith(`${destinationStem}.texture-`))
+    .sort()
+    .map(filename => {
+      const path = resolve(dirname(destination), filename);
+      const bytes = readFileSync(path);
+      return {
+        path: relative(ROOT, path).replaceAll('\\', '/'),
+        kind: 'source-material-texture',
+        sha256: sha256(bytes),
+        sizeBytes: bytes.length,
+      };
+    });
+  if (derivativeFiles.length !== sourceInspection.imageCount) {
+    throw new Error(`${sourceAsset.semanticId}: expected ${sourceInspection.imageCount} derivative textures, found ${derivativeFiles.length}`);
+  }
   return {
     semanticId: sourceAsset.semanticId,
     displayName: sourceAsset.displayName,
@@ -132,6 +155,8 @@ function convertOne({ blender, sourceSha, sourceAsset, outDir }) {
       applyUnitScale: true,
       bakeAnimations: sourceAsset.structure.hasSkin && sourceAsset.structure.hasAnimation,
       embedTextures: true,
+      pathMode: 'COPY',
+      stableMediaRoot: 'C:/GalaQuestMigrationSource',
       retarget: false,
       materialRepair: false,
     },
@@ -139,6 +164,7 @@ function convertOne({ blender, sourceSha, sourceAsset, outDir }) {
     derivativeRepoPath: relative(ROOT, destination).replaceAll('\\', '/'),
     derivativeSha256: sha256(derivativeBytes),
     derivativeSizeBytes: derivativeBytes.length,
+    derivativeFiles,
     conversionDate: new Date().toISOString(),
   };
 }
