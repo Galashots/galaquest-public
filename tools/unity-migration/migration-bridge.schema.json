@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "galaquest.unity-migration-bridge/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schemaVersion",
+    "bridgeVersion",
+    "originatingGitSha",
+    "sourceRepository",
+    "sourceCoordinateSystem",
+    "destinationCoordinateSystem",
+    "unitConvention",
+    "contracts",
+    "assets",
+    "coordinateFixture"
+  ],
+  "properties": {
+    "schema": { "const": "galaquest.unity-migration-bridge" },
+    "schemaVersion": { "const": 1 },
+    "bridgeVersion": { "const": "0.1.0" },
+    "originatingGitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceRepository": { "const": "Galashots/galaquest-public" },
+    "sourceCoordinateSystem": { "$ref": "#/$defs/coordinateSystem" },
+    "destinationCoordinateSystem": { "$ref": "#/$defs/coordinateSystem" },
+    "unitConvention": { "type": "string", "minLength": 1 },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["movement"],
+      "properties": { "movement": { "$ref": "#/$defs/movement" } }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "coordinateFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "destination"],
+      "properties": {
+        "source": { "$ref": "#/$defs/transform" },
+        "destination": { "$ref": "#/$defs/transform" }
+      }
+    }
+  },
+  "$defs": {
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "handedness", "upAxis", "forwardAxis", "units"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "handedness": { "enum": ["right-handed", "left-handed"] },
+        "upAxis": { "const": "Y" },
+        "forwardAxis": { "enum": ["-Z", "+Z"] },
+        "units": { "const": "meters" }
+      }
+    },
+    "movement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticId", "sourcePath", "sourceSha256", "values"],
+      "properties": {
+        "semanticId": { "const": "movement.speed-law" },
+        "sourcePath": { "const": "public/src/character/speed.js" },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["WALK_SPEED", "RUN_SPEED", "RUN_THRESHOLD", "RUN_DEFLECTION"],
+          "properties": {
+            "WALK_SPEED": { "type": "number" },
+            "RUN_SPEED": { "type": "number" },
+            "RUN_THRESHOLD": { "type": "number" },
+            "RUN_DEFLECTION": { "type": "number" }
+          }
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticId", "displayName", "role", "sourcePath", "sourceSha256", "sourceSizeBytes", "structure", "registryAuthority"],
+      "properties": {
+        "semanticId": { "type": "string", "pattern": "^(?!guid:)[a-z0-9][a-z0-9._-]*$" },
+        "displayName": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["static-asset", "rigged-animated-character"] },
+        "sourcePath": { "type": "string", "minLength": 1 },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceSizeBytes": { "type": "integer", "minimum": 1 },
+        "registryAuthority": { "const": "docs/asset-production/asset-registry-v1.json" },
+        "structure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["meshCount", "primitiveCount", "materialCount", "nodeCount", "skinCount", "jointCount", "animationClipCount", "hasSkin", "hasAnimation"],
+          "properties": {
+            "meshCount": { "type": "integer", "minimum": 0 },
+            "primitiveCount": { "type": "integer", "minimum": 0 },
+            "materialCount": { "type": "integer", "minimum": 0 },
+            "nodeCount": { "type": "integer", "minimum": 0 },
+            "skinCount": { "type": "integer", "minimum": 0 },
+            "jointCount": { "type": "integer", "minimum": 0 },
+            "animationClipCount": { "type": "integer", "minimum": 0 },
+            "hasSkin": { "type": "boolean" },
+            "hasAnimation": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "rotationQuaternion", "scale"],
+      "properties": {
+        "position": { "$ref": "#/$defs/vector3" },
+        "rotationQuaternion": { "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }, { "type": "number" }], "items": false },
+        "scale": { "$ref": "#/$defs/vector3" }
+      }
+    },
+    "vector3": { "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }], "items": false }
+  }
+}

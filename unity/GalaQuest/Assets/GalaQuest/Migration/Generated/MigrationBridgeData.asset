@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8daa1a5c41d5c3147ae965a5432fbdcb, type: 3}
+  m_Name: MigrationBridgeData
+  m_EditorClassIdentifier: GalaQuest.Migration.Runtime::GalaQuest.Migration.MigrationBridgeData
+  schema: galaquest.unity-migration-bridge
+  schemaVersion: 1
+  bridgeVersion: 0.1.0
+  originatingGitSha: 470f989e131497bbfb6c4f27a950f4ade4300896
+  sourceRepository: Galashots/galaquest-public
+  unitConvention: 1 meter in Three.js/glTF becomes 1 Unity unit
+  movement:
+    semanticId: movement.speed-law
+    sourcePath: public/src/character/speed.js
+    sourceSha256: 7d4955a2f73639331ea22f892e3183e195f2b9f96287707f992092e32b2599df
+    walkSpeed: 1.7
+    runSpeed: 3.6
+    runThreshold: 2.5142858
+    runDeflection: 0.62
+  assets:
+  - semanticId: gear.sword.ironwood
+    displayName: Ironwood Sword
+    role: static-asset
+    sourcePath: public/assets/gear/sword_ironwood.glb
+    sourceSha256: fb33eff929e28a1eb6dbcb18f7de42bac079405588ee9060031abd0cd8977fe0
+    sourceSizeBytes: 138764
+    meshCount: 1
+    primitiveCount: 1
+    materialCount: 1
+    nodeCount: 1
+    skinCount: 0
+    jointCount: 0
+    animationClipCount: 0
+    hasSkin: 0
+    hasAnimation: 0
+  - semanticId: world.keeper
+    displayName: Keeper
+    role: rigged-animated-character
+    sourcePath: public/assets/world/keeper.glb
+    sourceSha256: cc4c24233acf527e9b74c575b1afb9321a9c5bd9b3f9487146e2faa71296aae9
+    sourceSizeBytes: 729712
+    meshCount: 1
+    primitiveCount: 1
+    materialCount: 1
+    nodeCount: 26
+    skinCount: 1
+    jointCount: 24
+    animationClipCount: 3
+    hasSkin: 1
+    hasAnimation: 1
