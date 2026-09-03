@@ -237,7 +237,7 @@ namespace GalaQuest.Editor
                 scene = ScenePath,
                 captureState = "fixed-camera-editor-render;primitive-greybox;no-player-traversal",
                 visualConvention = "compact staged adventure: offset entry cavern, bent elevated lava bridge, distinct arena, open reward reveal, larger forge payoff",
-                strongestDefect = "Oversized environmental walls and beams still intrude into several review compositions, most severely blocking the Lava Express and Forge focal objects; the spatial route is clearer, but those landmarks are not consistently given an unobstructed read.",
+                strongestDefect = "Forge dormant still has weak value separation: the unlit basin and focal region sit close to the surrounding basalt, so the dormant state reads less decisively than the relit flame even though both compositions are now unobstructed.",
                 gameplayTraversalReadability = "UNKNOWN: no player/controller seam exists for Emberworks, so these are fixed-camera Editor captures rather than running-game traversal evidence.",
                 captures = captures.ToArray()
             };
@@ -295,7 +295,8 @@ namespace GalaQuest.Editor
             Cube("RightCavernWall", environment.transform, new Vector3(21f, 5f, 31f), new Vector3(2f, 11f, 88f), m["basalt"]);
             Cube("CeilingBeamNorth", environment.transform, new Vector3(0f, 10.5f, 8f), new Vector3(36f, 1f, 1.2f), m["basaltEdge"]);
             Cube("CeilingBeamMid", environment.transform, new Vector3(4f, 10.5f, 31f), new Vector3(30f, 1f, 1.2f), m["basaltEdge"]);
-            Cube("CeilingBeamForge", environment.transform, new Vector3(3f, 10.5f, 58f), new Vector3(36f, 1f, 1.2f), m["basaltEdge"]);
+            // Sightline cleanup: keep the forge structural beam overhead without cutting across the focal read.
+            Cube("CeilingBeamForge", environment.transform, new Vector3(3f, 12.5f, 58f), new Vector3(36f, 0.6f, 1.2f), m["basaltEdge"]);
 
             foreach (var z in new[] { 5f, 17f, 29f, 43f, 59f })
             {
@@ -377,7 +378,8 @@ namespace GalaQuest.Editor
             {
                 Cube($"TrackTie_{index:00}", express.transform, new Vector3(0f, 1.48f, -6f + index * 2f), new Vector3(7f, 0.22f, 0.42f), m["basaltEdge"]);
             }
-            Cube("ExpressBridgeGate", express.transform, new Vector3(0f, 4f, 7.5f), new Vector3(10f, 7f, 0.7f), m["basalt"]);
+            // Sightline cleanup: the gate frames the far end of the bridge, not the player's near-side view.
+            Cube("ExpressBridgeGate", express.transform, new Vector3(0f, 4f, -7.5f), new Vector3(10f, 7f, 0.7f), m["basalt"]);
             var cart = Empty("LavaExpress_CartPlaceholder", express.transform, new Vector3(0f, 2.25f, 1f));
             Cube("CartBed", cart.transform, Vector3.zero, new Vector3(3.8f, 0.7f, 3.2f), m["copper"]);
             Cube("CartFrontShield", cart.transform, new Vector3(0f, 1.1f, -1.2f), new Vector3(3.4f, 1.5f, 0.35f), m["iron"]);
@@ -429,7 +431,8 @@ namespace GalaQuest.Editor
             forge.transform.position = new Vector3(3f, 0f, 57f);
             Cylinder("ForgeChamberFloor", forge.transform, new Vector3(0f, 0.2f, 0f), new Vector3(34f, 0.45f, 24f), m["basaltEdge"]);
             Cube("ForgeBackWall", forge.transform, new Vector3(0f, 7f, 9f), new Vector3(34f, 14f, 1.8f), m["basalt"]);
-            for (var x = -12f; x <= 12f; x += 12f)
+            // Sightline cleanup: retain side framing while leaving the forge and Kong-Ore region readable.
+            foreach (var x in new[] { -12f, 12f })
             {
                 Cube($"ForgeTower_{x:0}", forge.transform, new Vector3(x, 6f, 5f), new Vector3(3f, 12f, 3f), m["iron"]);
             }
