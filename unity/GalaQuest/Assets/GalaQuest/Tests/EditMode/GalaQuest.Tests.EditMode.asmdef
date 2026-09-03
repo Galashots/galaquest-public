@@ -3,6 +3,8 @@
     "rootNamespace": "GalaQuest.Tests",
     "references": [
         "GalaQuest.Runtime",
+        "GalaQuest.Migration.Runtime",
+        "GalaQuest.Migration.Editor",
         "GalaQuest.Editor"
     ],
     "includePlatforms": [

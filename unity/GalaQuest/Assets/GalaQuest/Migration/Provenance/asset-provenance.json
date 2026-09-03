@@ -1,0 +1,226 @@
+{
+  "schema": "galaquest.unity-migration-asset-provenance",
+  "schemaVersion": 1,
+  "sourceRepository": "Galashots/galaquest-public",
+  "sourceGitSha": "470f989e131497bbfb6c4f27a950f4ade4300896",
+  "conversionTool": "Blender",
+  "conversionToolVersion": "4.5.13 LTS",
+  "records": [
+    {
+      "semanticId": "gear.sword.ironwood",
+      "displayName": "Ironwood Sword",
+      "role": "static-asset",
+      "sourceGitSha": "470f989e131497bbfb6c4f27a950f4ade4300896",
+      "sourceRepoPath": "public/assets/gear/sword_ironwood.glb",
+      "sourceSha256": "fb33eff929e28a1eb6dbcb18f7de42bac079405588ee9060031abd0cd8977fe0",
+      "sourceSizeBytes": 138764,
+      "conversionTool": "Blender",
+      "conversionToolVersion": "4.5.13 LTS",
+      "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+      "conversionCommand": [
+        "blender",
+        "--background",
+        "--factory-startup",
+        "--python",
+        "tools/blender/convert_glb_to_fbx.py",
+        "--",
+        "public/assets/gear/sword_ironwood.glb",
+        "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSword.fbx",
+        "gear.sword.ironwood"
+      ],
+      "conversionOptions": {
+        "axisForward": "-Z",
+        "axisUp": "Y",
+        "applyUnitScale": true,
+        "bakeAnimations": false,
+        "embedTextures": true,
+        "pathMode": "COPY",
+        "stableMediaRoot": "C:/GalaQuestMigrationSource",
+        "retarget": false,
+        "materialRepair": false
+      },
+      "sourceInspection": {
+        "nodeCount": 1,
+        "meshCount": 1,
+        "primitiveCount": 1,
+        "materialCount": 1,
+        "imageCount": 1,
+        "imageMimeTypes": [
+          "image/jpeg"
+        ],
+        "materialInputs": [
+          {
+            "name": null,
+            "baseColorFactor": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "baseColorTextureIndex": 0,
+            "baseColorImageIndex": 0,
+            "hasMetallicFactor": true,
+            "metallicFactor": 0,
+            "hasRoughnessFactor": true,
+            "roughnessFactor": 0.8,
+            "metallicRoughnessTextureIndex": null,
+            "normalTextureIndex": null,
+            "emissiveFactor": null,
+            "emissiveTextureIndex": null,
+            "emissiveImageIndex": null,
+            "alphaMode": "OPAQUE"
+          }
+        ],
+        "skinCount": 0,
+        "jointCount": 0,
+        "bounds": {
+          "min": [
+            -0.15820300579071045,
+            -0.5,
+            -0.056641001254320145
+          ],
+          "max": [
+            0.15820300579071045,
+            0.5,
+            0.05737299844622612
+          ],
+          "size": [
+            0.3164060115814209,
+            1,
+            0.11401399970054626
+          ]
+        },
+        "animations": []
+      },
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSword.fbx",
+      "derivativeSha256": "fafc6ebeb25c51cd309a73e3e02ab4c091d6ab1a5715fcf6943fd08d4b90d646",
+      "derivativeSizeBytes": 152268,
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/IronwoodSword.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "918e990b39632816b95fc714e748413d216f95c7bb47602d02d6d7e8e21f1bb0",
+          "sizeBytes": 111946
+        }
+      ],
+      "conversionDate": "2026-09-03T01:48:40.087Z"
+    },
+    {
+      "semanticId": "world.keeper",
+      "displayName": "Keeper",
+      "role": "rigged-animated-character",
+      "sourceGitSha": "470f989e131497bbfb6c4f27a950f4ade4300896",
+      "sourceRepoPath": "public/assets/world/keeper.glb",
+      "sourceSha256": "cc4c24233acf527e9b74c575b1afb9321a9c5bd9b3f9487146e2faa71296aae9",
+      "sourceSizeBytes": 729712,
+      "conversionTool": "Blender",
+      "conversionToolVersion": "4.5.13 LTS",
+      "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+      "conversionCommand": [
+        "blender",
+        "--background",
+        "--factory-startup",
+        "--python",
+        "tools/blender/convert_glb_to_fbx.py",
+        "--",
+        "public/assets/world/keeper.glb",
+        "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.fbx",
+        "world.keeper"
+      ],
+      "conversionOptions": {
+        "axisForward": "-Z",
+        "axisUp": "Y",
+        "applyUnitScale": true,
+        "bakeAnimations": true,
+        "embedTextures": true,
+        "pathMode": "COPY",
+        "stableMediaRoot": "C:/GalaQuestMigrationSource",
+        "retarget": false,
+        "materialRepair": false
+      },
+      "sourceInspection": {
+        "nodeCount": 26,
+        "meshCount": 1,
+        "primitiveCount": 1,
+        "materialCount": 1,
+        "imageCount": 1,
+        "imageMimeTypes": [
+          "image/jpeg"
+        ],
+        "materialInputs": [
+          {
+            "name": "Material_1",
+            "baseColorFactor": null,
+            "baseColorTextureIndex": 1,
+            "baseColorImageIndex": 0,
+            "hasMetallicFactor": false,
+            "metallicFactor": null,
+            "hasRoughnessFactor": true,
+            "roughnessFactor": 0.4100847542285919,
+            "metallicRoughnessTextureIndex": null,
+            "normalTextureIndex": null,
+            "emissiveFactor": [
+              1,
+              1,
+              1
+            ],
+            "emissiveTextureIndex": 0,
+            "emissiveImageIndex": 0,
+            "alphaMode": "OPAQUE"
+          }
+        ],
+        "skinCount": 1,
+        "jointCount": 24,
+        "bounds": {
+          "min": [
+            -0.7636722326278687,
+            -3.2869881039232496e-8,
+            -0.28554728627204895
+          ],
+          "max": [
+            0.7636721134185791,
+            1.6999999284744263,
+            0.28554725646972656
+          ],
+          "size": [
+            1.5273443460464478,
+            1.6999999613443073,
+            0.5710945427417755
+          ]
+        },
+        "animations": [
+          {
+            "name": "talk",
+            "duration": 10.3,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "idle",
+            "duration": 1.9,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          },
+          {
+            "name": "wave",
+            "duration": 1.9666666666666666,
+            "channelCount": 72,
+            "drivenNodeCount": 24
+          }
+        ]
+      },
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.fbx",
+      "derivativeSha256": "613056b65d7e10ec7e5f1442878e6a7b6ca8fa4e3dc0de058faa4bf41921f674",
+      "derivativeSizeBytes": 1497228,
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "67729d69c1be4c95443af47a0eef002fd0e6c890d812009a3e81bb5359601483",
+          "sizeBytes": 202601
+        }
+      ],
+      "conversionDate": "2026-09-03T01:48:42.823Z"
+    }
+  ]
+}

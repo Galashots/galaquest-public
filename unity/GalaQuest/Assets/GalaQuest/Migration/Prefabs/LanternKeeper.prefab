@@ -1,0 +1,111 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &2770654856896314190
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      propertyPath: m_Name
+      value: LanternKeeper
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6137173956074107092}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4693726924539748228}
+  m_SourcePrefab: {fileID: 100100000, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+--- !u!1 &3076589906903877151 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 970c4ecc41881274bbd4c7316421527d, type: 3}
+  m_PrefabInstance: {fileID: 2770654856896314190}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &6137173956074107092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3076589906903877151}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1985241f2dbd8204db0a4710256c4586, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GalaQuest.Migration.Runtime::GalaQuest.Migration.MigrationProofAssetIdentity
+  semanticId: world.keeper
+  role: rigged-animated-character
+  sourceGitSha: 470f989e131497bbfb6c4f27a950f4ade4300896
+  sourceRepoPath: public/assets/world/keeper.glb
+  sourceSha256: cc4c24233acf527e9b74c575b1afb9321a9c5bd9b3f9487146e2faa71296aae9
+  derivativeRepoPath: unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/Deterministic/LanternKeeper.fbx
+  derivativeSha256: 613056b65d7e10ec7e5f1442878e6a7b6ca8fa4e3dc0de058faa4bf41921f674
+--- !u!95 &4693726924539748228
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3076589906903877151}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 6aa5789ec87ced44d8566d88d7f567e3, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

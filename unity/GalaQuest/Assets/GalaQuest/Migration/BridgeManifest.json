@@ -1,0 +1,115 @@
+{
+  "schema": "galaquest.unity-migration-bridge",
+  "schemaVersion": 1,
+  "bridgeVersion": "0.1.0",
+  "originatingGitSha": "470f989e131497bbfb6c4f27a950f4ade4300896",
+  "sourceRepository": "Galashots/galaquest-public",
+  "sourceCoordinateSystem": {
+    "name": "Three.js/glTF",
+    "handedness": "right-handed",
+    "upAxis": "Y",
+    "forwardAxis": "-Z",
+    "units": "meters"
+  },
+  "destinationCoordinateSystem": {
+    "name": "Unity",
+    "handedness": "left-handed",
+    "upAxis": "Y",
+    "forwardAxis": "+Z",
+    "units": "meters"
+  },
+  "unitConvention": "1 meter in Three.js/glTF becomes 1 Unity unit",
+  "contracts": {
+    "movement": {
+      "semanticId": "movement.speed-law",
+      "sourcePath": "public/src/character/speed.js",
+      "sourceSha256": "7d4955a2f73639331ea22f892e3183e195f2b9f96287707f992092e32b2599df",
+      "values": {
+        "WALK_SPEED": 1.7,
+        "RUN_SPEED": 3.6,
+        "RUN_THRESHOLD": 2.5142857142857142,
+        "RUN_DEFLECTION": 0.62
+      }
+    }
+  },
+  "assets": [
+    {
+      "semanticId": "gear.sword.ironwood",
+      "displayName": "Ironwood Sword",
+      "role": "static-asset",
+      "sourcePath": "public/assets/gear/sword_ironwood.glb",
+      "sourceSha256": "fb33eff929e28a1eb6dbcb18f7de42bac079405588ee9060031abd0cd8977fe0",
+      "sourceSizeBytes": 138764,
+      "structure": {
+        "meshCount": 1,
+        "primitiveCount": 1,
+        "materialCount": 1,
+        "nodeCount": 1,
+        "skinCount": 0,
+        "jointCount": 0,
+        "animationClipCount": 0,
+        "hasSkin": false,
+        "hasAnimation": false
+      },
+      "registryAuthority": "docs/asset-production/asset-registry-v1.json"
+    },
+    {
+      "semanticId": "world.keeper",
+      "displayName": "Keeper",
+      "role": "rigged-animated-character",
+      "sourcePath": "public/assets/world/keeper.glb",
+      "sourceSha256": "cc4c24233acf527e9b74c575b1afb9321a9c5bd9b3f9487146e2faa71296aae9",
+      "sourceSizeBytes": 729712,
+      "structure": {
+        "meshCount": 1,
+        "primitiveCount": 1,
+        "materialCount": 1,
+        "nodeCount": 26,
+        "skinCount": 1,
+        "jointCount": 24,
+        "animationClipCount": 3,
+        "hasSkin": true,
+        "hasAnimation": true
+      },
+      "registryAuthority": "docs/asset-production/asset-registry-v1.json"
+    }
+  ],
+  "coordinateFixture": {
+    "source": {
+      "position": [
+        1.25,
+        -2,
+        3.5
+      ],
+      "rotationQuaternion": [
+        0,
+        0.3826834323650898,
+        0,
+        0.9238795325112867
+      ],
+      "scale": [
+        1.2,
+        0.75,
+        2.5
+      ]
+    },
+    "destination": {
+      "position": [
+        1.25,
+        -2,
+        -3.5
+      ],
+      "rotationQuaternion": [
+        0,
+        0.3826834323650898,
+        0,
+        -0.9238795325112867
+      ],
+      "scale": [
+        1.2,
+        0.75,
+        2.5
+      ]
+    }
+  }
+}
