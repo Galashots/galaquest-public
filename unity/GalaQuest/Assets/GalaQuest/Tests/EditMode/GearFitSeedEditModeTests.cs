@@ -504,6 +504,25 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void Neutral_review_pose_restores_source_bones_without_changing_socket_fit()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(GearHeroAuthoring.HeroPrefabPath);
+            var hero = Object.Instantiate(prefab);
+            try
+            {
+                var bone = GearHeroAuthoring.FindDescendant(hero.transform, GearSocketIds.HeadBone);
+                var expected = bone.localRotation;
+                var socket = GearMounter.ResolveSocket(hero.transform, "leftHand");
+                socket.transform.localPosition = new Vector3(0.01f, 0.02f, 0.03f);
+                bone.localRotation = Quaternion.Euler(20f, 30f, 40f);
+                GearReviewPack.ResetToSourcePose(hero.transform);
+                Assert.That(Quaternion.Angle(expected, bone.localRotation), Is.LessThan(0.01f));
+                Assert.That(socket.transform.localPosition, Is.EqualTo(new Vector3(0.01f, 0.02f, 0.03f)));
+            }
+            finally { Object.DestroyImmediate(hero); }
+        }
+
+        [Test]
         public void Review_pose_names_resolve_from_the_real_controller_and_refuse_ambiguity()
         {
             var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(

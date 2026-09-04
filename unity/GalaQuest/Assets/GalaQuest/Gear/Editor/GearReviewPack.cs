@@ -94,6 +94,9 @@ namespace GalaQuest.Gear.Editor
             if (rig == null)
                 throw new InvalidOperationException("The workbench scene has no GearFitProofRig.");
 
+            rig.Animator.enabled = false;
+            ResetToSourcePose(rig.HeroRoot);
+
             if (targetItem != null)
             {
                 foreach (var oldMount in rig.MountedItems().ToArray())
@@ -186,6 +189,22 @@ namespace GalaQuest.Gear.Editor
             }
 
             Debug.Log("Gear review pack captured " + captures.Count + " stills into " + outputDirectory);
+        }
+
+        public static void ResetToSourcePose(Transform heroRoot)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(GearHeroAuthoring.HeroModelPath);
+            if (model == null) throw new InvalidOperationException("Missing Hero source for neutral review pose");
+            foreach (var source in model.GetComponentsInChildren<Transform>(true))
+            {
+                if (source == model.transform) continue;
+                var path = AnimationUtility.CalculateTransformPath(source, model.transform);
+                var target = heroRoot.Find(path);
+                if (target == null) throw new InvalidOperationException("Missing source pose transform: " + path);
+                target.localPosition = source.localPosition;
+                target.localRotation = source.localRotation;
+                target.localScale = source.localScale;
+            }
         }
 
         private sealed class BakedReviewPose : IDisposable
