@@ -2068,6 +2068,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/enemies/beacon_warden.glb",
           "git_blob_oid": "e685e72de7f9fe015f60ab1cd581a1a7a56351df"
         }
@@ -2110,6 +2111,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -2162,8 +2164,7 @@
         "enemy"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "enemy.wolf",
@@ -2177,6 +2178,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/enemies/wolf.glb",
           "git_blob_oid": "09a03f2a08bfb00bb7b82e9692f31df536b3b62c"
         }
@@ -2219,6 +2221,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -2268,8 +2271,7 @@
         "enemy"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "fox-meshy-download-v1",
@@ -7696,6 +7698,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/dawnwarden-helmet-v1.glb",
           "git_blob_oid": "e845209e2b391fd0ff294cca76f5b1376174d3b5"
         }
@@ -7738,6 +7741,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -7785,8 +7789,7 @@
       "notes": "Candidate identity is registered without runtime promotion.",
       "facets": [],
       "next_action": "QUALIFY_NEXT",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.candidate.dawnwarden-sword-v1",
@@ -7800,6 +7803,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/dawnwarden-sword-v1.glb",
           "git_blob_oid": "49a1f806bfd58d4e02147e0520ffa6e1d0a6dc99"
         }
@@ -7842,6 +7846,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -7889,8 +7894,7 @@
       "notes": "Candidate identity is registered without runtime promotion.",
       "facets": [],
       "next_action": "QUALIFY_NEXT",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.candidate.wildwood-sword-w1a",
@@ -7904,6 +7908,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/candidates/sword_wildwood_w1a.glb",
           "git_blob_oid": "b044a77cc1fbc4425b313dc19f3385dd2a0f8969"
         }
@@ -7946,6 +7951,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -7993,8 +7999,7 @@
       "notes": "Candidate identity is registered without runtime promotion.",
       "facets": [],
       "next_action": "QUALIFY_NEXT",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.helmet.silverguard",
@@ -8008,6 +8013,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/helmet_silverguard.glb",
           "git_blob_oid": "8dd321598045826e3fe883047d0777afd3628c80"
         }
@@ -8050,6 +8056,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8097,8 +8104,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.icon.helmet-silverguard",
@@ -8111,7 +8117,8 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704",
+          "git_commit_sha": "172e9e122ef64d1d0714745de597b200c7c46704",
           "repo_path": "public/assets/items/helmet_silverguard.png",
           "git_blob_oid": "4771be384e81e3a363f6a32c502baaf414fc44df"
         }
@@ -8154,6 +8161,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8196,13 +8204,12 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/helmet_silverguard.png"
+        "git:172e9e122ef64d1d0714745de597b200c7c46704:public/assets/items/helmet_silverguard.png"
       ],
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.icon.shield-ironwood",
@@ -8215,7 +8222,8 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704",
+          "git_commit_sha": "172e9e122ef64d1d0714745de597b200c7c46704",
           "repo_path": "public/assets/items/shield_ironwood.png",
           "git_blob_oid": "32121c6ef0737b8936455826d2f77fbf301e9810"
         }
@@ -8258,6 +8266,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8300,13 +8309,12 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/shield_ironwood.png"
+        "git:172e9e122ef64d1d0714745de597b200c7c46704:public/assets/items/shield_ironwood.png"
       ],
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.icon.shoulder-silverguard",
@@ -8319,7 +8327,8 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704",
+          "git_commit_sha": "172e9e122ef64d1d0714745de597b200c7c46704",
           "repo_path": "public/assets/items/shoulder_silverguard.png",
           "git_blob_oid": "dc0d11b9a2a23a7f4cca856dc4c11e3e1d2f37c0"
         }
@@ -8362,6 +8371,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8404,13 +8414,12 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/shoulder_silverguard.png"
+        "git:172e9e122ef64d1d0714745de597b200c7c46704:public/assets/items/shoulder_silverguard.png"
       ],
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.icon.starter-sword",
@@ -8423,7 +8432,8 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704",
+          "git_commit_sha": "172e9e122ef64d1d0714745de597b200c7c46704",
           "repo_path": "public/assets/items/starter_sword.png",
           "git_blob_oid": "5455e0ce2fc037b7a51aa82d6078a482b4ef4e23"
         }
@@ -8466,6 +8476,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8508,13 +8519,12 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/starter_sword.png"
+        "git:172e9e122ef64d1d0714745de597b200c7c46704:public/assets/items/starter_sword.png"
       ],
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.icon.wildwood-blade",
@@ -8527,7 +8537,8 @@
         {
           "kind": "GIT",
           "durable": true,
-          "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704",
+          "git_commit_sha": "172e9e122ef64d1d0714745de597b200c7c46704",
           "repo_path": "public/assets/items/wildwood_blade.png",
           "git_blob_oid": "67fa0a679a13ad490c44b04989c75ed66201685d"
         }
@@ -8570,6 +8581,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8612,13 +8624,12 @@
       },
       "evidence_refs": [
         "registry-evidence:runtime-assets",
-        "git:2ddbd6e2afbd7287df988d4327f8218ff166ed6d:public/assets/items/wildwood_blade.png"
+        "git:172e9e122ef64d1d0714745de597b200c7c46704:public/assets/items/wildwood_blade.png"
       ],
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.lantern.belt",
@@ -8632,6 +8643,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/lantern_belt.glb",
           "git_blob_oid": "f92bd9c273eaabce2bfc2a3ff773bda78e8f6fb2"
         }
@@ -8674,6 +8686,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8721,8 +8734,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.shield.ironwood",
@@ -8736,6 +8748,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/shield_ironwood.glb",
           "git_blob_oid": "e80050172bcca7c67191551bf3ef769f0ead899f"
         }
@@ -8778,6 +8791,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8825,8 +8839,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.shoulder.silverguard",
@@ -8840,6 +8853,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/shoulder_silverguard.glb",
           "git_blob_oid": "a4250090b758b5cb584ad915822d175a6fce2edc"
         }
@@ -8882,6 +8896,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -8929,8 +8944,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.sword.ironwood",
@@ -8944,6 +8958,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/sword_ironwood.glb",
           "git_blob_oid": "796cd5a185fdea25ec2f696832759dd5651c2222"
         }
@@ -8986,6 +9001,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -9033,8 +9049,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "gear.sword.silverguard",
@@ -9048,6 +9063,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/gear/sword_silverguard.glb",
           "git_blob_oid": "5ec366d26cdb22ecda45444c1df1254b0908720b"
         }
@@ -9090,6 +9106,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -9137,8 +9154,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "graveflame-reaper-v1",
@@ -9308,6 +9324,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero.glb",
           "git_blob_oid": "64b52431168670592cc87617a6a3113955a6b5b4"
         }
@@ -9350,6 +9367,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -9399,8 +9417,7 @@
         "hero"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "hero.lod1-6800",
@@ -9414,6 +9431,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero_lod1_6800.glb",
           "git_blob_oid": "506268dfd7401e8fb3bfe0238b1b212d42795798"
         }
@@ -9456,6 +9474,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -9505,8 +9524,7 @@
         "hero"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "hero.lod1-ironwood-atlas",
@@ -9520,6 +9538,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero_lod1_ironwood_atlas.glb",
           "git_blob_oid": "18c7a689f3bcbefdb7148c815d709f10eec14158"
         }
@@ -9562,6 +9581,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -9611,8 +9631,7 @@
         "hero"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "hero.texture.tier3-atlas",
@@ -9626,6 +9645,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/hero/hero_tier3_atlas.jpg",
           "git_blob_oid": "c7191451e670840f797e1f4eed36d1bea9be84c7"
         }
@@ -9668,6 +9688,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -9717,8 +9738,7 @@
         "hero"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "iceback-ogre-v1",
@@ -10961,6 +10981,115 @@
       "notes": "RESOLVED_FROM_PROVIDER_FILENAME. ZIP membership proves four animation-bearing files on one 24-joint rig; it does not prove production qualification."
     },
     {
+      "asset_id": "npc.wren_ranger",
+      "display_name": "Wren Ranger",
+      "asset_kind": "character",
+      "lifecycle": "PRODUCTION",
+      "custody": "IN_GIT",
+      "recoverability": "VERIFIED_FROM_GIT",
+      "custody_locations": [
+        {
+          "kind": "GIT",
+          "durable": true,
+          "git_ref": "8bde5259c27a63bb1396b936fd1852aaa1a6d939",
+          "git_commit_sha": "8bde5259c27a63bb1396b936fd1852aaa1a6d939",
+          "repo_path": "public/assets/characters/wren_ranger.glb",
+          "git_blob_oid": "603a50e64a14eb7b95db6edcd12ade2e96806527"
+        }
+      ],
+      "source": {
+        "path": "public/assets/characters/wren_ranger.glb",
+        "sha256": "f6f776ce47c78fdea20d99593cde200e7b8dcd162f14a17488e5fd93393ef9b8",
+        "size_bytes": 896476,
+        "authority": "runtime-asset-identity-snapshot"
+      },
+      "provider": {
+        "task_ids": [],
+        "context_alias": null
+      },
+      "structural_metrics": {
+        "file_size_bytes": 896476,
+        "mesh_count": "UNKNOWN",
+        "primitive_count": "UNKNOWN",
+        "vertex_count": "UNKNOWN",
+        "triangle_count": "UNKNOWN",
+        "material_count": "UNKNOWN",
+        "skin_count": "UNKNOWN",
+        "joint_count": "UNKNOWN",
+        "animation_clip_count": "UNKNOWN"
+      },
+      "rights": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "license": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        },
+        "usage_rights": {
+          "status": "UNKNOWN",
+          "value": null,
+          "evidence_refs": []
+        }
+      },
+      "related_asset_ids": [
+        "wren-ranger-v1"
+      ],
+      "parent_asset_id": "wren-ranger-v1",
+      "derivative_of": "wren-ranger-v1",
+      "qualification_gates": {
+        "provenance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "structural": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "materials": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "rig": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "animation": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "performance": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "visual": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "runtime": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        },
+        "owner": {
+          "status": "UNKNOWN",
+          "evidence_refs": []
+        }
+      },
+      "evidence_refs": [
+        "registry-evidence:runtime-assets",
+        "git:8bde5259c27a63bb1396b936fd1852aaa1a6d939:public/assets/characters/wren_ranger.glb"
+      ],
+      "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
+      "facets": [
+        "npc"
+      ],
+      "next_action": "NONE",
+      "aliases": []
+    },
+    {
       "asset_id": "prop.broken-woodland-cart-intake-v1",
       "display_name": "Broken Woodland Cart",
       "asset_kind": "model",
@@ -11442,6 +11571,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/cart.glb",
           "git_blob_oid": "bdb4a5b154ce8911ba6af3dd66cfda115e9ac855"
         }
@@ -11484,6 +11614,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -11534,8 +11665,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.fence",
@@ -11549,6 +11679,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/fence.glb",
           "git_blob_oid": "40f991b9c5eb9164cf360841828a490c029b799e"
         }
@@ -11591,6 +11722,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -11641,8 +11773,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.fence-broken",
@@ -11656,6 +11787,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/fence-broken.glb",
           "git_blob_oid": "916ade1316100772e8dfca52de6c1fb8ff90f889"
         }
@@ -11698,6 +11830,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -11748,8 +11881,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.fence-gate",
@@ -11763,6 +11895,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/fence-gate.glb",
           "git_blob_oid": "47fdd93033e19176ffb472aa321a30975a31d47d"
         }
@@ -11805,6 +11938,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -11855,8 +11989,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.house-cottage",
@@ -11870,6 +12003,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/house-cottage.glb",
           "git_blob_oid": "2b77f78ef78d404fd6d67af63a2bfd7da5f6d498"
         }
@@ -11912,6 +12046,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -11962,8 +12097,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.house-longhouse",
@@ -11977,6 +12111,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/house-longhouse.glb",
           "git_blob_oid": "c34181e4ecb0d4261a209a9c87fb4b1521a2f181"
         }
@@ -12019,6 +12154,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12069,8 +12205,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.lantern",
@@ -12084,6 +12219,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/lantern.glb",
           "git_blob_oid": "ce7a11ad335e3cf189d7e44a0fb62456091184c5"
         }
@@ -12126,6 +12262,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12176,8 +12313,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.rock-large",
@@ -12191,6 +12327,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/rock-large.glb",
           "git_blob_oid": "618f6611c8ef0261a3d72c7b4cfeed4094f9c488"
         }
@@ -12233,6 +12370,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12283,8 +12421,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.rock-small",
@@ -12298,6 +12435,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/rock-small.glb",
           "git_blob_oid": "9f3b0bb5436ecba22f92d14827d7f6e4bcea1ff6"
         }
@@ -12340,6 +12478,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12390,8 +12529,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.rock-wide",
@@ -12405,6 +12543,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/rock-wide.glb",
           "git_blob_oid": "52ee142927c071484b78cffdf8678df91ccf8f38"
         }
@@ -12447,6 +12586,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12497,8 +12637,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.stall-bench",
@@ -12512,6 +12651,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/stall-bench.glb",
           "git_blob_oid": "eff3d1d578e3a11516f3b117c9c3477fd76c9a87"
         }
@@ -12554,6 +12694,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12604,8 +12745,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.stall-green",
@@ -12619,6 +12759,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/stall-green.glb",
           "git_blob_oid": "9bd44b9a8e9bd3000647acaa1a8ac1ecf904d88a"
         }
@@ -12661,6 +12802,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12711,8 +12853,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.tree",
@@ -12726,6 +12867,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/tree.glb",
           "git_blob_oid": "4eacaf3ca92626373feedc85a8a86a52de6a248e"
         }
@@ -12768,6 +12910,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12818,8 +12961,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "prop.village.tree-crooked",
@@ -12833,6 +12975,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/props/village/tree-crooked.glb",
           "git_blob_oid": "9f203b0dc7ba0bb35f65a038cb14953d7c8eeb7e"
         }
@@ -12875,6 +13018,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -12925,8 +13069,7 @@
         "world-prop"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "snowfang-marauder-v1",
@@ -14125,6 +14268,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/world/keeper.glb",
           "git_blob_oid": "5b9a9bfa409951ecacecec53e49e7c41e827cc46"
         }
@@ -14167,6 +14311,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -14216,8 +14361,7 @@
         "npc"
       ],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "world.lantern-tree",
@@ -14231,6 +14375,7 @@
           "kind": "GIT",
           "durable": true,
           "git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
+          "git_commit_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
           "repo_path": "public/assets/world/lantern_tree.glb",
           "git_blob_oid": "28f5b16df4d7795e18e29aba7c2fdf31022026df"
         }
@@ -14273,6 +14418,7 @@
           "evidence_refs": []
         }
       },
+      "related_asset_ids": [],
       "parent_asset_id": null,
       "derivative_of": null,
       "qualification_gates": {
@@ -14320,8 +14466,7 @@
       "notes": "Current runtime custody is recorded; qualification gates remain independent and unproven gates stay UNKNOWN.",
       "facets": [],
       "next_action": "NONE",
-      "aliases": [],
-      "related_asset_ids": []
+      "aliases": []
     },
     {
       "asset_id": "wren-ranger-v1",
