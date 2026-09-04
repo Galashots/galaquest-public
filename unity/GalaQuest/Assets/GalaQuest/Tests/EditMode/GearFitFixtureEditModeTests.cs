@@ -490,33 +490,50 @@ namespace GalaQuest.Tests
         // -----------------------------------------------------------------------------------------
 
         [Test]
-        public void The_proof_asset_registration_is_a_valid_record_whatever_its_verdict()
+        public void Registering_an_arbitrary_item_produces_a_valid_record_whatever_its_verdict()
         {
             GearFitFixtureKitAuthoring.EnsureDefinitions();
-            var registration = GearFitAssetRegistrationAuthoring.EnsureSilverguardHelmetRegistration();
 
-            Assert.That(registration.TryValidate(out var error), Is.True, error);
-            Assert.That(registration.FixtureSlot, Is.EqualTo(GearFitFixtureSlot.Helmet));
-            Assert.That(registration.Status, Is.Not.EqualTo(GearFitRegistrationStatus.Unclassified));
+            // Every gear item, through the generic path. No item is named here, because the
+            // registration front end is no longer tied to one.
+            var items = AssetDatabase.FindAssets("t:GearItemDefinition",
+                    new[] { "Assets/GalaQuest/Gear/Definitions" })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<GearItemDefinition>)
+                .Where(item => item != null && item.SourceModel != null)
+                .OrderBy(item => item.SemanticId)
+                .ToArray();
 
-            if (!registration.HasFitScale)
+            Assert.That(items, Is.Not.Empty, "no gear items to register");
+
+            foreach (var item in items)
             {
-                // Silverguard predates this contract and declares no fit cavity. Saying so is the
-                // correct outcome; the failure mode being guarded against is inventing a number.
-                Assert.That(registration.Status, Is.EqualTo(GearFitRegistrationStatus.NeedsAuthoring));
-                Assert.That(registration.UniformNormalizationScale, Is.EqualTo(0f),
-                    "a registration that cannot measure a cavity must not claim a fit scale");
-                return;
-            }
+                var registration = GearFitAssetRegistrationAuthoring.EnsureRegistration(item);
+                Assert.That(registration.TryValidate(out var error), Is.True,
+                    item.SemanticId + ": " + error);
+                Assert.That(registration.Status,
+                    Is.Not.EqualTo(GearFitRegistrationStatus.Unclassified), item.SemanticId);
 
-            Assert.That(registration.PrimaryMeasurementSource,
-                Is.EqualTo(GearFitMeasurementSource.AssetFitCavity));
-            var scale = registration.UniformNormalizationScale;
-            Assert.That(scale, Is.GreaterThan(0f));
-            Assert.That(
-                registration.TargetPrimaryDimensionMetres /
-                registration.MeasuredPrimaryDimensionMetres,
-                Is.EqualTo(scale).Within(1e-4f));
+                if (!registration.HasFitScale)
+                {
+                    // An asset with no declared or authored cavity says so and claims nothing. The
+                    // failure mode guarded against is inventing a number to avoid this state.
+                    Assert.That(registration.Status,
+                        Is.EqualTo(GearFitRegistrationStatus.NeedsAuthoring), item.SemanticId);
+                    Assert.That(registration.UniformNormalizationScale, Is.EqualTo(0f),
+                        item.SemanticId + " claimed a fit scale without a cavity");
+                    continue;
+                }
+
+                Assert.That(registration.PrimaryMeasurementSource,
+                    Is.EqualTo(GearFitMeasurementSource.AssetFitCavity), item.SemanticId);
+                var scale = registration.UniformNormalizationScale;
+                Assert.That(scale, Is.GreaterThan(0f), item.SemanticId);
+                Assert.That(
+                    registration.TargetPrimaryDimensionMetres /
+                    registration.MeasuredPrimaryDimensionMetres,
+                    Is.EqualTo(scale).Within(1e-4f), item.SemanticId);
+            }
         }
 
         // -----------------------------------------------------------------------------------------

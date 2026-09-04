@@ -35,7 +35,9 @@ namespace GalaQuest.Gear.Editor
             if (prefab == null) throw new FileNotFoundException("GQ_HERO_V1 prefab missing.");
 
             var definitions = GearFitFixtureKitAuthoring.EnsureDefinitions();
-            var registration = GearFitAssetRegistrationAuthoring.EnsureSilverguardHelmetRegistration();
+            // The fixture kit no longer hardcodes a proof item. Any registered asset can carry it, and
+            // a bank where nothing is seedable is itself worth showing in the manifest.
+            var registration = GearFitAssetRegistrationAuthoring.LoadRegistrationForProof();
 
             var hero = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             var cameraObject = new GameObject("FitFixtureReviewCamera");
@@ -187,6 +189,19 @@ namespace GalaQuest.Gear.Editor
             }
 
             json.AppendLine("  ],");
+
+            if (registration == null)
+            {
+                // Nothing has been registered yet. Say so rather than implying a proof exists.
+                json.AppendLine("  \"registrationProof\": null,");
+                json.AppendLine("  \"note\": \"No gear asset is registered against the datum contract " +
+                                "yet, so this pack carries fixture evidence only.\",");
+                json.AppendLine("  \"captures\": [");
+                json.AppendLine(string.Join(",\n", captures.Select(c => "    \"" + c + "\"")));
+                json.AppendLine("  ]");
+                json.AppendLine("}");
+                return json.ToString();
+            }
 
             json.AppendLine("  \"registrationProof\": {");
             json.AppendLine("    \"semanticAssetId\": \"" + registration.SemanticAssetId + "\",");

@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99e27739e1e77c341b172c046cd86111, type: 3}
+  m_Name: GearAssetFitProfile_gear_shield_ironwood
+  m_EditorClassIdentifier: GalaQuest.Gear.Editor::GalaQuest.Gear.Editor.GearAssetFitProfile
+  semanticAssetId: gear.shield.ironwood
+  slot: 4
+  rawToCanonicalEuler: {x: 90, y: 0, z: 0}
+  cavitySource: 2
+  cavityCenterInCanonical: {x: 0, y: 0, z: 0}
+  cavitySizeInCanonical: {x: 0.01, y: 0.01, z: 0.0017320508}
+  cavityProvenance: 2
+  cavityNote: 'AUTHORED functional envelope, not a measured cavity. The source art
+    declares no GQ_FIT_CAVITY locator, and a shield encloses no anatomy, so there
+    is no interior shell to measure and none is invented here. What is authored is
+    the DECISION that this board IS the functional envelope for fit purposes; the
+    extents themselves are the board the source mesh presents, in canonical asset
+    space after the raw-to-canonical rotation below. Raw-to-canonical is AUTHORED
+    from a human observation about the source art: the exported board lies flat,
+    with its thinnest axis on raw +Y, so +90 degrees about X stands it upright with
+    its face on canonical +Z (wearer forward). The source FBX is also authored at
+    roughly one centimetre across, which is why normalization against the Hero
+    produces a large uniform scalar; that is a source unit convention, not a fit
+    decision.'
+  landmarks:
+  - landmarkId: ASSET_FIT_GRIP
+    positionInCanonical: {x: 0, y: 0, z: -0.0008660254}
+    provenance: 2
+    note: 'AUTHORED carry convention, stated in words before any number: the Ironwood
+      Shield is a round board with a central boss, and a round centre-boss shield is
+      carried on a centre grip directly behind that boss. So the wearer hand sits at
+      the board centre, on its rear face. In canonical asset space that is x=0, y=0
+      (board centre) and z = -half the board thickness (the rear face, since the
+      board face is on canonical +Z). No grip geometry exists in the source mesh to
+      measure, so this is authored intent and is NOT recorded as a measurement. If
+      the source art later ships a GQ_FIT_GRIP locator, that measured landmark
+      should replace this.'

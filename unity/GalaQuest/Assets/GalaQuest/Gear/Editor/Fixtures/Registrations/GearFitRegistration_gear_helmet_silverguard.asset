@@ -15,32 +15,29 @@ MonoBehaviour:
   semanticAssetId: gear.helmet.silverguard
   sourceRepoPath: public/assets/gear/helmet_silverguard.glb
   fixtureSlot: 0
-  gearFrameId: GQ_HEAD_FRAME
-  functionalLandmarkId: FIT_CROWN
-  rawToCanonicalEuler: {x: 180, y: 0, z: 0}
+  gearFrameId: unassigned
+  functionalLandmarkId: 
+  rawToCanonicalEuler: {x: 0, y: 0, z: 0}
   rawToCanonicalScale: {x: 1, y: 1, z: 1}
   primaryMeasurementSource: 0
   assetCavitySource: 0
-  primaryMetric: 1
+  primaryMetric: 0
   primaryAxis: 0
   measuredPrimaryDimensionMetres: 0
-  targetPrimaryDimensionMetres: 0.34859627
+  targetPrimaryDimensionMetres: 0
   uniformNormalizationScale: 0
   measurementProvenance: 0
   normalizedRenderSizeInFrame: {x: 0, y: 0, z: 0}
   proportionFindings:
-  - gear.helmet.silverguard exposes no trustworthy fit cavity (asset declares no
-    GQ_FIT_CAVITY fit locator) and no authored virtual cavity profile exists for
-    it.
+  - No GearAssetFitProfile exists at Assets/GalaQuest/Gear/Editor/Fixtures/Registrations/GearAssetFitProfile_gear_helmet_silverguard.asset,
+    so this asset declares no fit slot, no raw-to-canonical orientation and no fit
+    cavity. Create that profile and author its fit data. Nothing is inferred from
+    the item's GearFitClass, because different Handheld items obey different fit
+    semantics.
   status: 4
   ownerAuthoredScaleForComparison: 0.40929
-  provenanceNote: 'Raw-to-canonical rotation is AUTHORED: copied from the Owner-authored
-    fit on Assets/GalaQuest/Gear/Definitions/Gear_SilverguardHelmet.asset, which
-    is the human statement of how this source art is oriented. This registration
-    does not modify that fit. NO FIT SCALE IS CLAIMED. gear.helmet.silverguard exposes
-    no trustworthy fit cavity (asset declares no GQ_FIT_CAVITY fit locator) and no
-    authored virtual cavity profile exists for it. Outer render bounds are (1.0000,
-    0.9277, 0.7949) m, but normalizing on those would compare the Hero''s required
-    cavity to this asset''s shell and decoration, so no scale is derived from them.
-    Declare a GQ_FIT_CAVITY locator on the source art, or author a virtual cavity
-    profile, to register this asset.'
+  provenanceNote: NO FIT SCALE IS CLAIMED. No GearAssetFitProfile exists at Assets/GalaQuest/Gear/Editor/Fixtures/Registrations/GearAssetFitProfile_gear_helmet_silverguard.asset,
+    so this asset declares no fit slot, no raw-to-canonical orientation and no fit
+    cavity. Create that profile and author its fit data. Nothing is inferred from
+    the item's GearFitClass, because different Handheld items obey different fit
+    semantics.

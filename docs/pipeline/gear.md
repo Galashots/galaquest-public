@@ -37,6 +37,114 @@ Machine gates REJECT; they never visually accept. Running-game pixels remain fin
 authority, and there is no Unity gameplay/controller seam yet, so Unity Editor renders are inspection
 evidence and must not be reported as gameplay evidence.
 
+## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
+
+Checkpoint A answers WHERE gear attaches. The datum contract answers HOW BIG and WHICH WAY ROUND, in a
+form a machine can check.
+
+Each of the five slots has a `GearFitFixtureDefinition` under `Gear/Editor/Fixtures/Definitions/`,
+measured from GQ_HERO_V1 itself. A fixture states:
+
+- a canonical wearable convention — **+X wearer right, +Y up, +Z forward, 1 Unity unit = 1 metre**;
+- one or more **Gear Frames**, which re-express those canonical axes in an anchor bone's own space so
+  that arbitrary imported bone roll is cancelled once, at authoring time;
+- named **datums** (`FIT_CROWN`, `FIT_GRIP`, `FIT_HEAD_CAVITY`, …), each classified `FunctionalFit`,
+  `KeepClear`, `CollisionWarning`, `ReferenceZone` or `DecorativeExtent`;
+- one **primary measurement** per slot, the only thing normalization may use;
+- **secondary proportion bands** that Warn or Reject an absurd silhouette.
+
+Every contract-critical number is classified `MEASURED`, `AUTHORED` or `DERIVED`. `Unclassified` is a
+hard validation failure: the contract refuses to claim authority for a number nobody has classified.
+
+### The asset side: `GearAssetFitProfile`
+
+A Hero fixture states required NEGATIVE SPACE. An asset's outer mesh bounds are not the same quantity —
+they include shell thickness, rivets and crests — so normalizing on them makes a thicker or more
+decorated helmet scale *down*, which is backwards.
+
+So each registerable item gets a `GearAssetFitProfile` asset beside its registration, holding what the
+asset itself intends to wear:
+
+- the **slot** it is fitted against. This is explicit and is never inferred from `GearFitClass`: a sword
+  and a shield are both `Handheld` and obey entirely different fit semantics;
+- its **raw-to-canonical rotation**, stating how the source art is oriented;
+- its **fit cavity**;
+- named **landmarks** such as `ASSET_FIT_GRIP`.
+
+### Real cavity vs authored virtual fit data
+
+There are exactly two honest ways to get a cavity, and inference is not one of them:
+
+- **`MeasuredFromAssetLocator`** — the source art carries a `GQ_FIT_CAVITY` locator whose bounds ARE the
+  cavity. The artist declared it; the contract measured what they declared. Recorded `MEASURED`.
+- **`AuthoredVirtualCavity`** — a human states the intended envelope because the geometry cannot supply
+  one. Recorded `AUTHORED`, with the reasoning written down in the asset.
+
+There is deliberately no inner-surface detection, wall-thickness heuristic or vertex threshold, because
+each of those turns a guess into a "measurement". Fit locators are excluded from render bounds, so
+silhouette checks judge only what is actually drawn.
+
+### `NeedsAuthoring` is a correct outcome
+
+An asset with no declared cavity and no authored profile registers as **`NeedsAuthoring`** and claims
+**no fit scale at all**. That is honest, not a failure. Do not invent a shell thickness, and do not
+derive an enclosing item's cavity from its exterior, in order to avoid it. The Silverguard Helmet sits
+in this state today: its source art predates the contract and exposes no interior.
+
+### Registering an item
+
+Select its `GearItemDefinition` and run:
+
+- **`GalaQuest > Gear > Register selected gear item against fit contract`** — measures the asset against
+  the fixture its profile names and writes a `GearFitAssetRegistration`, including a single uniform
+  normalization scalar. There is never a per-axis correction: an asset outside a proportion band is
+  reported and corrected in the ASSET, never squashed to fit.
+- **`GalaQuest > Gear > Seed selected gear item from its registration`** — derives the socket-local seed
+  transform and writes it onto the item.
+
+Profiles and registrations are ordinary Unity assets; author them in the Inspector.
+
+### Registration-derived seed
+
+`GearMounter` consumes plain socket-local TRS and knows nothing about fixtures or canonical space, and
+that is deliberate: a shipped build should carry no editor-only concepts. The conversion therefore lives
+in editor authoring, in `GearFitSeedSolver`:
+
+```
+asset raw space --(profile raw-to-canonical)--> canonical
+                --(fixture Gear Frame)--------> anchor bone
+                --(socket inverse)------------> socket-local seed TRS
+```
+
+- **scale** is exactly the registration's uniform scalar;
+- **rotation** is derived so the asset's canonical axes coincide with the Gear Frame, which is what makes
+  bone roll cancel. Never hand-author this Euler; a correct one is usually unintuitive;
+- **position** aligns the asset's own landmark onto the fixture datum that seats it — for a shield,
+  `ASSET_FIT_GRIP` onto `FIT_GRIP`.
+
+If the profile lacks the landmark a slot seats on, the solver **refuses to claim a complete seed** and
+says what needs authoring. It does not invent a landmark position.
+
+A seed never overwrites an Owner-authored fit: `GearItemDefinition.TryApplySeedFit` refuses, and only the
+explicitly-named destructive reseed command can discard human work.
+
+### Machine rejection vs human visual acceptance
+
+Two gates run, and neither accepts anything:
+
+- `GearFitValidator` (runtime) — socket/proxy/anatomy checks. It must NOT gain a dependency on
+  editor-only registration data.
+- `GearFitSeedConsistency` (editor) — does the MOUNTED item agree with its registration? It rejects a
+  canonical basis that disagrees with its Gear Frame, a non-uniform or mismatched scale, a landmark that
+  missed its datum, and extents that disagree with the registered size.
+
+That second gate exists because a shield was once mounted sideways and tilted while the runtime validator
+reported zero findings. A defect no gate can express is a defect that ships.
+
+Both only ever REJECT. Fit visually in the Gear Workbench, inspect front / three-quarter / side /
+gameplay framings, and remember that Unity Editor renders are inspection evidence: running-game pixels
+remain the final appearance authority.
+
 Export the Unity-authored fits with:
 
 ```bash

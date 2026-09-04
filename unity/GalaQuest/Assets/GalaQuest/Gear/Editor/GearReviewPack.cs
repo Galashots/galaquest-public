@@ -132,9 +132,10 @@ namespace GalaQuest.Gear.Editor
                     RefreshCoverage();
 
                     var slug = Slug(item.Definition.SemanticId);
+                    var subject = MountedBounds(item);
                     foreach (var view in GearReviewViews.All)
                     {
-                        captures.Add(RenderView(camera, rig, view, slug, outputDirectory));
+                        captures.Add(RenderView(camera, rig, view, slug, outputDirectory, subject));
                     }
                 }
 
@@ -159,6 +160,17 @@ namespace GalaQuest.Gear.Editor
             }
 
             Debug.Log("Gear review pack captured " + captures.Count + " stills into " + outputDirectory);
+        }
+
+        /// <summary>World bounds of one mounted item's renderers, or null when it draws nothing.</summary>
+        private static Bounds? MountedBounds(GearMountedItem item)
+        {
+            var renderers = item.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return null;
+
+            var bounds = renderers[0].bounds;
+            for (var i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            return bounds;
         }
 
         private static void ReapplyCurrentFits(GearFitProofRig rig, IEnumerable<GearMountedItem> items)
@@ -253,17 +265,31 @@ namespace GalaQuest.Gear.Editor
             GearFitProofRig rig,
             GearReviewViews.View view,
             string label,
-            string outputDirectory)
+            string outputDirectory,
+            Bounds? subject = null)
         {
             var head = GearHeroAuthoring.FindDescendant(rig.HeroRoot, GearSocketIds.HeadBone);
             var target = view == GearReviewViews.View.Gameplay || head == null
                 ? rig.HeroRoot.position + Vector3.up * 0.8f
                 : head.position;
+            var distance = GearReviewViews.DistanceFor(view);
+
+            // Front / three-quarter / side are framed tight on the head. That is right for headgear and
+            // useless for anything else -- a shield on the left hand is simply outside the frame, so
+            // three of the four review angles showed no shield at all. When one item is under review,
+            // aim at THAT item and pull back far enough to contain it. Headgear sits on the head, so
+            // its framings are unchanged.
+            if (view != GearReviewViews.View.Gameplay &&
+                subject.HasValue && subject.Value.size.sqrMagnitude > 0f)
+            {
+                target = subject.Value.center;
+                distance = Mathf.Max(distance, subject.Value.size.magnitude * 1.35f);
+            }
 
             var rotation = GearReviewViews.RotationFor(view);
             camera.fieldOfView = GearReviewViews.FieldOfViewFor(view);
             camera.transform.rotation = rotation;
-            camera.transform.position = target - rotation * Vector3.forward * GearReviewViews.DistanceFor(view);
+            camera.transform.position = target - rotation * Vector3.forward * distance;
 
             var texture = new RenderTexture(StillWidth, StillHeight, 24, RenderTextureFormat.ARGB32);
             var readback = new Texture2D(StillWidth, StillHeight, TextureFormat.RGB24, false);
