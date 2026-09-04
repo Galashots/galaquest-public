@@ -12,31 +12,131 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8c0cb7f024cb8c4f8c505dc3e0b2386, type: 3}
   m_Name: GearFitFixture_Chest
   m_EditorClassIdentifier: GalaQuest.Gear.Editor::GalaQuest.Gear.Editor.GearFitFixtureDefinition
+  contractId: GQ_HERO_V1_GEAR_DATUM
+  contractVersion: V0
+  coordinateConvention: +X = wearer RIGHT; +Y = wearer UP; +Z = wearer FORWARD; 1
+    Unity unit = 1 metre; Unity left-handed, so Cross(right, up) == forward.
+  metresPerUnityUnit: 1
   slot: 2
-  displayName: Chest fit fixture
-  anchorBone: Spine02
-  mirroredAnchorBone: 
-  anchorOffset: {x: 0, y: 0, z: 0}
-  forwardAxis: {x: 0, y: 0, z: 1}
-  upAxis: {x: 0, y: 1, z: 0}
-  outAxis: {x: 1, y: 0, z: 0}
-  innerClearanceCenter: {x: 0, y: 0.12, z: 0.1}
-  innerClearanceSize: {x: 0.48, y: 0.48, z: 0.22}
-  landmarks:
-  - label: front torso shell
-    kind: 2
-    localCenter: {x: 0, y: 0.12, z: 0.12}
-    localSize: {x: 0.46, y: 0.4, z: 0.2}
-  - label: collar / shoulder seam
-    kind: 0
-    localCenter: {x: 0, y: 0.34, z: 0.1}
-    localSize: {x: 0.42, y: 0.1, z: 0.22}
-  - label: arm swing clearance
-    kind: 0
-    localCenter: {x: 0.3, y: 0.08, z: 0.02}
-    localSize: {x: 0.18, y: 0.4, z: 0.24}
-  - label: waist limit
-    kind: 1
-    localCenter: {x: 0, y: -0.17, z: 0.1}
-    localSize: {x: 0.4, y: 0.06, z: 0.2}
+  displayName: Chest fit contract
+  frames:
+  - frameId: GQ_CHEST_FRAME
+    side: 0
+    anchorBone: Spine02
+    originInAnchor: {x: 0, y: 0, z: 0}
+    rightAxisInAnchor: {x: 0.98983705, y: 0.0011325479, z: -0.14220205}
+    upAxisInAnchor: {x: -0.032897323, y: 0.97466695, z: -0.22122848}
+    forwardAxisInAnchor: {x: 0.13834912, y: 0.22365817, z: 0.9647987}
+    provenance: 1
+    provenanceNote: Canonical wearer axes inverse-transformed through the Spine02
+      bind pose, so the frame is independent of that bone's imported roll. Origin
+      is the Spine02 joint, the upper-torso bone a cuirass rides on.
+  datums:
+  - datumId: FIT_CHEST_SHELL
+    displayName: Chest shell
+    role: 1
+    frameId: GQ_CHEST_FRAME
+    localCenter: {x: 0, y: 0.12310621, z: 0}
+    localSize: {x: 0.24037921, y: 0.24621269, z: 0.22961019}
+    provenance: 3
+    sourceJoints:
+    - Spine
+    - Spine01
+    - Spine02
+    - neck
+    provenanceNote: Measured torso width 0.2044 m and depth 0.1936 m from Spine-dominated
+      vertices at the 0.9500 percentile, spanning the measured collar-to-waist joints,
+      plus the authored clearance 0.0180 m per side.
+  - datumId: FIT_COLLAR
+    displayName: Collar
+    role: 1
+    frameId: GQ_CHEST_FRAME
+    localCenter: {x: 0, y: 0.24621256, z: 0.036130104}
+    localSize: {x: 0.19230337, y: 0.03, z: 0.18368815}
+    provenance: 1
+    sourceJoints:
+    - neck
+    provenanceNote: The neck joint. The top edge of a cuirass seats here; above it
+      belongs to the helmet contract, not this one.
+  - datumId: FIT_WAIST
+    displayName: Waist
+    role: 1
+    frameId: GQ_CHEST_FRAME
+    localCenter: {x: 0, y: -0.00000012847381, z: -0.000000025325031}
+    localSize: {x: 0.20432234, y: 0.03, z: 0.19516867}
+    provenance: 1
+    sourceJoints:
+    - Spine02
+    provenanceNote: The lowest spine joint (Spine02 on this rig), found by height
+      rather than by name. A cuirass reaching below this starts fouling the hips.
+  - datumId: REF_CHEST_CENTRE
+    displayName: Chest centre
+    role: 4
+    frameId: GQ_CHEST_FRAME
+    localCenter: {x: 0, y: 0, z: 0.057402547}
+    localSize: {x: 0.12018961, y: 0.098485075, z: 0.03}
+    provenance: 1
+    sourceJoints:
+    - Spine02
+    provenanceNote: Where a chest emblem or boss reads best. Context for the eye;
+      no machine authority.
+  - datumId: WARN_ARM_CLEARANCE_L
+    displayName: Arm clearance left
+    role: 3
+    frameId: GQ_CHEST_FRAME
+    localCenter: {x: -0.12018961, y: 0.12310628, z: 0}
+    localSize: {x: 0.03, y: 0.17234889, z: 0.22961019}
+    provenance: 3
+    sourceJoints:
+    - LeftArm
+    provenanceNote: Wearer-left flank of the shell. Cuirass geometry past this collides
+      with the arm.
+  - datumId: WARN_ARM_CLEARANCE_R
+    displayName: Arm clearance right
+    role: 3
+    frameId: GQ_CHEST_FRAME
+    localCenter: {x: 0.12018961, y: 0.12310628, z: 0}
+    localSize: {x: 0.03, y: 0.17234889, z: 0.22961019}
+    provenance: 3
+    sourceJoints:
+    - RightArm
+    provenanceNote: Wearer-right flank of the shell, mirrored from the same measured
+      torso width.
+  primaryMeasurement:
+    metric: 3
+    sourceDatumId: FIT_CHEST_SHELL
+    axis: 0
+    referenceValueMetres: 0.24037921
+    provenance: 3
+    provenanceNote: A cuirass is uniformly scaled so its wearer-width matches the
+      torso shell width. Width rather than height, because collar-to-waist coverage
+      is a design choice but a cuirass narrower or wider than the torso is simply
+      wrong.
+  secondaryProportionChecks:
+  - checkId: chest_width_to_height
+    numeratorAxis: 0
+    denominatorAxis: 1
+    rejectBelow: 0.55
+    warnBelow: 0.75
+    warnAbove: 1.6
+    rejectAbove: 2.1
+    provenance: 2
+    provenanceNote: A cuirass that fits across the chest but is far too short or
+      long after uniform scaling is reported for correction rather than stretched
+      vertically.
+  - checkId: chest_width_to_depth
+    numeratorAxis: 0
+    denominatorAxis: 2
+    rejectBelow: 0.75
+    warnBelow: 0.9
+    warnAbove: 2.4
+    rejectAbove: 3.2
+    provenance: 2
+    provenanceNote: GQ_HERO_V1 is a stylized build whose torso is nearly square in
+      plan (measured 0.204 m wide by 0.194 m deep), so this band is deliberately
+      wider than a realistic human would need. It still catches a cuirass that is
+      a flat plate or a barrel.
   anatomyHideIntent: 
+  measuredFromPrefabPath: Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab
+  measuredFromSourceRepoPath: public/assets/hero/hero_lod1_ironwood_atlas.glb
+  measuredFromSourceSha256: 082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679

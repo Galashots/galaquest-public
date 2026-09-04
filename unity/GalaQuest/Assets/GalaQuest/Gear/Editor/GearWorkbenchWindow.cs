@@ -119,18 +119,21 @@ namespace GalaQuest.Gear.Editor
 
         private void DrawFixtureSection()
         {
-            EditorGUILayout.LabelField("Fixture kit", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Fit contract", EditorStyles.boldLabel);
             if (!GearFitFixtureOverlay.IsConfigured)
             {
                 EditorGUILayout.HelpBox(
-                    "Open the Workbench scene to show the GQ_HERO_V1 slot fixtures.",
+                    "Open the Workbench scene to show the GQ_HERO_V1 slot contracts.",
                     MessageType.Info);
                 return;
             }
 
             EditorGUILayout.HelpBox(
-                "Scene View calibration only: cyan is inner clearance, green is keep-clear, red is " +
-                "collision warning, and the arrows show front / up / out.",
+                "Arrows are labelled +X RIGHT, +Y UP, +Z FORWARD in wearer space. Cyan is functional " +
+                "fit, green is keep-clear, red is collision warning, purple is decorative extent, " +
+                "amber is reference only, and the yellow span is the primary normalization " +
+                "measurement. Each label carries its provenance. The serialized fixture is the " +
+                "authority; this drawing only shows it.",
                 MessageType.None);
 
             var displayAll = EditorGUILayout.Toggle("Show all slots", GearFitFixtureOverlay.ShowAll);
