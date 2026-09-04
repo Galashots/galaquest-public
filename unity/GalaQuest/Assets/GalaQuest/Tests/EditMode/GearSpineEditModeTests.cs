@@ -298,6 +298,7 @@ namespace GalaQuest.Tests
             // restored it in a finally. When the test threw part-way, the restore threw too and the
             // shipped asset was left holding sentinel values -- which then went straight into a review
             // capture. A test that can corrupt production data on failure is not a safe test.
+            using var production = new GearTestProductionSnapshot();
             const string tempPath = "Assets/GalaQuest/Gear/Definitions/__TempFitLifecycleProbe.asset";
 
             GearItemDefinition Probe() =>

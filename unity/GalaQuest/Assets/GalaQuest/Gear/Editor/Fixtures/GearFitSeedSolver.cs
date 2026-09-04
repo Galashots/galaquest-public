@@ -82,7 +82,7 @@ namespace GalaQuest.Gear.Editor
             GearAssetFitProfile profile,
             GearFitAssetRegistration registration)
         {
-            var seed = new Seed { LocalScale = Vector3.one };
+            var seed = new Seed();
 
             if (heroRoot == null) return Fail(seed, "no hero instance to solve against");
             if (item == null) return Fail(seed, "no gear item definition");
@@ -100,6 +100,31 @@ namespace GalaQuest.Gear.Editor
 
             if (!profile.TryValidate(out var profileError))
                 return Fail(seed, "asset fit profile is invalid: " + profileError);
+
+            if (registration.Status == GearFitRegistrationStatus.Rejected)
+                return Fail(seed, "registration rejected the asset proportions");
+            if (!registration.TryValidate(out var recordError)) return Fail(seed, recordError);
+            if (!fixture.TryValidateContract(heroRoot, out var fixtureError)) return Fail(seed, fixtureError);
+            if (registration.RawToCanonicalScale != Vector3.one)
+                return Fail(seed, "registration raw scale must be identity; source reflection belongs to the item");
+            if (registration.PrimaryMetric != fixture.PrimaryMeasurement.Metric ||
+                registration.PrimaryAxis != fixture.PrimaryMeasurement.Axis)
+                return Fail(seed, "stale registration primary metric/axis");
+            if (item.SemanticId != profile.SemanticAssetId || item.SemanticId != registration.SemanticAssetId)
+                return Fail(seed, "item/profile/registration identity mismatch");
+            if (profile.Slot != fixture.Slot || profile.Slot != registration.FixtureSlot)
+                return Fail(seed, "profile/fixture/registration slot mismatch");
+            if (!GearAssetFitProfile.IsFinite(registration.RawToCanonicalEuler) ||
+                Quaternion.Angle(profile.RawToCanonicalRotation, registration.RawToCanonicalRotation) > 0.01f)
+                return Fail(seed, "stale registration orientation");
+            if (!fixture.TryResolveSeat(item.SocketId, out var boundFrame, out var boundSeat, out var bindingError))
+                return Fail(seed, bindingError);
+            if (registration.GearFrameId != boundFrame.FrameId || registration.FunctionalLandmarkId != boundSeat.DatumId)
+                return Fail(seed, "registration frame/seat mismatch");
+            if (!Mathf.Approximately(registration.TargetPrimaryDimensionMetres, fixture.PrimaryMeasurement.ReferenceValueMetres) ||
+                (profile.CavitySource == GearAssetCavitySource.AuthoredVirtualCavity &&
+                 !Mathf.Approximately(registration.MeasuredPrimaryDimensionMetres, profile.CavitySpan(fixture.PrimaryMeasurement.Axis))))
+                return Fail(seed, "stale registration primary measurement");
 
             seed.SocketId = item.SocketId;
             GearSocket socket;
@@ -163,7 +188,9 @@ namespace GalaQuest.Gear.Editor
             // the asset was just oriented so its canonical axes ARE the frame axes.
             var datumWorld = anchor.TransformPoint(frame.OriginInAnchor) +
                              frameWorldRotation * datum.LocalCenter;
-            var landmarkOffsetWorld = frameWorldRotation * (assetLandmark.PositionInCanonical * scale);
+            var landmarkRaw = Quaternion.Inverse(rawToCanonical) * assetLandmark.PositionInCanonical;
+            if (item.MirrorX) landmarkRaw.x = -landmarkRaw.x;
+            var landmarkOffsetWorld = desiredWorldRotation * (landmarkRaw * scale);
             var gearWorldPosition = datumWorld - landmarkOffsetWorld;
             seed.LocalPosition = socket.transform.InverseTransformPoint(gearWorldPosition);
 
@@ -179,8 +206,7 @@ namespace GalaQuest.Gear.Editor
         }
 
         /// <summary>
-        /// The frame that belongs to this socket's bone. Falls back to the fixture's primary frame for
-        /// single-frame slots, so a paired slot picks the correct side without a left/right branch.
+        /// Resolve only the fixture's explicit socket binding and verify its real bone parent.
         /// </summary>
         public static bool TryResolveFrame(
             Transform heroRoot,
@@ -194,32 +220,16 @@ namespace GalaQuest.Gear.Editor
             anchor = null;
             error = string.Empty;
 
-            var matched = false;
-            foreach (var candidate in fixture.Frames)
-            {
-                if (candidate.AnchorBone != socket.BoneName) continue;
-                frame = candidate;
-                matched = true;
-                break;
-            }
-
-            if (!matched)
-            {
-                if (fixture.Frames.Length == 0)
-                {
-                    error = fixture.Slot + " fixture declares no gear frame";
-                    return false;
-                }
-
-                frame = fixture.PrimaryFrame;
-            }
-
-            anchor = FindDescendant(heroRoot, frame.AnchorBone);
-            if (anchor == null)
-            {
-                error = frame.FrameId + " anchor bone does not resolve on the hero: " + frame.AnchorBone;
-                return false;
-            }
+            if (fixture == null || socket == null)
+            { error = "missing fixture/socket"; return false; }
+            if (!fixture.TryResolveSeat(socket.SocketId, out frame, out _, out error)) return false;
+            if (frame.AnchorBone != socket.BoneName)
+            { error = "socket bone is incompatible with explicit frame"; return false; }
+            var matches = 0;
+            foreach (var candidate in heroRoot.GetComponentsInChildren<Transform>(true))
+                if (candidate.name == frame.AnchorBone) { anchor = candidate; matches++; }
+            if (matches != 1 || socket.transform.parent != anchor)
+            { error = "socket must be parented to the unique frame anchor"; return false; }
 
             return true;
         }

@@ -30,7 +30,7 @@ MonoBehaviour:
   normalizedRenderSizeInFrame: {x: 0.32327187, y: 0.32327184, z: 0.05587818}
   proportionFindings: []
   status: 1
-  ownerAuthoredScaleForComparison: 32.327187
+  ownerAuthoredScaleForComparison: 0
   provenanceNote: 'Registered against Shield as declared by Assets/GalaQuest/Gear/Editor/Fixtures/Registrations/GearAssetFitProfile_gear_shield_ironwood.asset.
     Cavity taken from the authored fit profile for gear.shield.ironwood (AuthoredVirtualCavity):
     AUTHORED functional envelope, not a measured cavity. The source art declares
@@ -46,5 +46,4 @@ MonoBehaviour:
     unit convention, not a fit decision. Fit cavity (0.0100, 0.0100, 0.0017) m gives
     0.0100 m along Up; the Hero requires 0.3233 m, so the single uniform scale is
     32.32719. Outer render bounds (0.0100, 0.0100, 0.0017) m -> (0.3233, 0.3233,
-    0.0559) m are used for silhouette checks only. The Owner-authored uniform scale
-    for this item is 32.32719; the contract computes 100.0 % of it.'
+    0.0559) m are used for silhouette checks only.'

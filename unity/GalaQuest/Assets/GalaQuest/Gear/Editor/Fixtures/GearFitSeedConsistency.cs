@@ -55,10 +55,17 @@ namespace GalaQuest.Gear.Editor
                 return issues;
             }
 
-            if (!registration.HasFitScale)
+            var seed = GearFitSeedSolver.Solve(heroRoot, item, fixture, profile, registration);
+            if (!seed.IsComplete)
             {
-                // A NeedsAuthoring item legitimately has no seed to be consistent with. Saying so is
-                // the honest outcome; it is not a rejection of the mount.
+                issues.Add(new GearFitIssue(GearFitSeverity.Rejection, Codes.Unseedable, seed.Error));
+                return issues;
+            }
+            if (!GearAssetFitProfile.IsFinite(mounted.transform.localPosition) ||
+                !GearAssetFitProfile.IsFinite(mounted.transform.localScale) ||
+                !GearAssetFitProfile.IsFinite(mounted.transform.eulerAngles))
+            {
+                issues.Add(new GearFitIssue(GearFitSeverity.Rejection, Codes.Unseedable, "mounted transform is not finite"));
                 return issues;
             }
 
@@ -89,7 +96,11 @@ namespace GalaQuest.Gear.Editor
             var frameWorldRotation = anchor.rotation * frameLocalRotation;
 
             // --- SCALE ----------------------------------------------------------------------------
-            var scale = item.LocalScale;
+            if (mounted.transform.parent != socket.transform)
+                issues.Add(new GearFitIssue(GearFitSeverity.Rejection, Codes.Unseedable, "mounted parent is not the item socket"));
+            var scale = mounted.transform.localScale;
+            // MirrorX is an explicit source reflection, not a non-uniform fitting correction.
+            if (item.MirrorX) scale.x = -scale.x;
             var expected = registration.UniformNormalizationScale;
             if (Mathf.Abs(scale.x - scale.y) > GearFitSeedSolver.ScaleTolerance ||
                 Mathf.Abs(scale.x - scale.z) > GearFitSeedSolver.ScaleTolerance)
@@ -177,6 +188,15 @@ namespace GalaQuest.Gear.Editor
             }
 
             return issues;
+        }
+
+        public static List<GearFitIssue> CheckCurrent(Transform hero, GameObject mounted, GearItemDefinition item)
+        {
+            var profile = GearFitAssetRegistrationAuthoring.LoadProfile(item.SemanticId);
+            var registration = GearFitAssetRegistrationAuthoring.LoadRegistration(item.SemanticId);
+            var fixture = profile == null ? null : UnityEditor.AssetDatabase.LoadAssetAtPath<GearFitFixtureDefinition>(
+                GearFitFixtureKitAuthoring.PathFor(profile.Slot));
+            return Check(hero, mounted, item, fixture, profile, registration);
         }
 
         /// <summary>Bounding size of the mounted renderers measured along the frame's own axes.</summary>

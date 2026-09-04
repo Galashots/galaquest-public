@@ -15,6 +15,8 @@ MonoBehaviour:
   semanticAssetId: gear.shield.ironwood
   slot: 4
   rawToCanonicalEuler: {x: 90, y: 0, z: 0}
+  orientationProvenance: 2
+  orientationNote: "AUTHORED: source board lies in raw XZ with its thin axis on raw Y; +90 X maps the board normal to canonical forward. See the source observation in cavityNote; not an inferred production rotation."
   cavitySource: 2
   cavityCenterInCanonical: {x: 0, y: 0, z: 0}
   cavitySizeInCanonical: {x: 0.01, y: 0.01, z: 0.0017320508}

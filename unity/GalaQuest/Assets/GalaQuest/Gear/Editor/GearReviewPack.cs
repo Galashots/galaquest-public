@@ -50,10 +50,17 @@ namespace GalaQuest.Gear.Editor
             CaptureInternal(true);
         }
 
-        private static void CaptureInternal(bool allowDirty)
+        public static void CaptureItem(GearItemDefinition item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            CaptureInternal(false, item);
+        }
+
+        private static void CaptureInternal(bool allowDirty, GearItemDefinition targetItem = null)
         {
             var repoRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", ".."));
             var outputDirectory = Path.Combine(repoRoot, OutputRoot.Replace('/', Path.DirectorySeparatorChar));
+            if (targetItem != null) outputDirectory = Path.Combine(outputDirectory, Slug(targetItem.SemanticId));
             Directory.CreateDirectory(outputDirectory);
 
             var gitSha = RunGit("rev-parse HEAD", repoRoot);
@@ -68,6 +75,7 @@ namespace GalaQuest.Gear.Editor
             var dirty = string.Join(
                 ((char)10).ToString(),
                 new[] { changed, untracked }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            if (string.IsNullOrWhiteSpace(gitSha)) throw new InvalidOperationException("Cannot establish capture Git SHA");
             var isDirty = !string.IsNullOrWhiteSpace(dirty);
 
             if (isDirty && !allowDirty)
@@ -83,6 +91,17 @@ namespace GalaQuest.Gear.Editor
             var rig = UnityEngine.Object.FindFirstObjectByType<GearFitProofRig>();
             if (rig == null)
                 throw new InvalidOperationException("The workbench scene has no GearFitProofRig.");
+
+            if (targetItem != null)
+            {
+                foreach (var oldMount in rig.MountedItems().ToArray())
+                    UnityEngine.Object.DestroyImmediate(oldMount.gameObject);
+                var selected = GearMounter.Mount(rig.HeroRoot, targetItem);
+                selected.AddComponent<GearMountedItem>().Configure(targetItem);
+                var findings = GearFitSeedConsistency.CheckCurrent(rig.HeroRoot, selected, targetItem);
+                if (findings.Any(issue => issue.Severity == GearFitSeverity.Rejection))
+                    throw new InvalidOperationException("capture consistency rejection: " + string.Join("; ", findings));
+            }
 
             // Deactivate anything mounted whose definition has gone. Such an object cannot be toggled
             // by the per-item pass below and would otherwise photobomb every still.
@@ -143,13 +162,18 @@ namespace GalaQuest.Gear.Editor
                 SetAllVisible(items, true);
                 foreach (var (state, time) in MotionFrames)
                 {
-                    if (!rig.PoseStates.Contains(state)) continue;
+                    if (!rig.PoseStates.Contains(state))
+                    {
+                        if (targetItem != null) throw new InvalidOperationException("Required review pose missing: " + state);
+                        continue;
+                    }
                     rig.Sample(state, time);
 
                     var label = "motion-" + state + "-" +
                                 time.ToString("F2", CultureInfo.InvariantCulture).Replace('.', 'p');
-                    captures.Add(RenderView(camera, rig, GearReviewViews.View.Gameplay, label, outputDirectory));
-                    captures.Add(RenderView(camera, rig, GearReviewViews.View.ThreeQuarter, label, outputDirectory));
+                    foreach (var view in GearReviewViews.All)
+                        captures.Add(RenderView(camera, rig, view, label, outputDirectory,
+                            targetItem == null ? null : MountedBounds(items[0])));
                 }
 
                 WriteManifest(outputDirectory, items, captures, gitSha, isDirty, dirty);

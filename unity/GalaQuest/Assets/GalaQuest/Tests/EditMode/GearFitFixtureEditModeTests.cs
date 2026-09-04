@@ -19,6 +19,9 @@ namespace GalaQuest.Tests
     /// </summary>
     public sealed class GearFitFixtureEditModeTests
     {
+        private GearTestProductionSnapshot snapshot;
+        [OneTimeSetUp] public void PreserveProduction() => snapshot = new GearTestProductionSnapshot();
+        [OneTimeTearDown] public void RestoreProduction() => snapshot?.Dispose();
         private static readonly Dictionary<GearFitFixtureSlot, string[]> RequiredFunctionalDatums =
             new Dictionary<GearFitFixtureSlot, string[]>
             {
@@ -607,6 +610,7 @@ namespace GalaQuest.Tests
             var helmet = HelmetFixture();
             var bare = GearFitCalibrationAssets.BuildHelmetWithoutCavity();
             var profile = ScriptableObject.CreateInstance<GearAssetFitProfile>();
+            profile.ConfigureOrientation(Vector3.zero, GearFitValueProvenance.Authored, "Calibration axes explicitly authored.");
             try
             {
                 profile.Configure(
@@ -696,6 +700,7 @@ namespace GalaQuest.Tests
         public void A_virtual_cavity_claiming_to_be_measured_is_refused()
         {
             var profile = ScriptableObject.CreateInstance<GearAssetFitProfile>();
+            profile.ConfigureOrientation(Vector3.zero, GearFitValueProvenance.Authored, "Calibration axes explicitly authored.");
             try
             {
                 profile.Configure(
@@ -720,6 +725,7 @@ namespace GalaQuest.Tests
         public void An_asset_cavity_with_unclassified_provenance_is_refused()
         {
             var profile = ScriptableObject.CreateInstance<GearAssetFitProfile>();
+            profile.ConfigureOrientation(Vector3.zero, GearFitValueProvenance.Authored, "Calibration axes explicitly authored.");
             try
             {
                 profile.Configure(

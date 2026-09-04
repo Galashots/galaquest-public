@@ -67,7 +67,9 @@ asset itself intends to wear:
 
 - the **slot** it is fitted against. This is explicit and is never inferred from `GearFitClass`: a sword
   and a shield are both `Handheld` and obey entirely different fit semantics;
-- its **raw-to-canonical rotation**, stating how the source art is oriented;
+- its **raw-to-canonical rotation**, with explicit `Measured`, `Authored` or `Derived` orientation
+  provenance and a non-empty note stating the evidence. Unclassified, nonfinite rotations and blank
+  notes reject. The operator never infers orientation from mesh bounds;
 - its **fit cavity**;
 - named **landmarks** such as `ASSET_FIT_GRIP`.
 
@@ -103,6 +105,48 @@ Select its `GearItemDefinition` and run:
   transform and writes it onto the item.
 
 Profiles and registrations are ordinary Unity assets; author them in the Inspector.
+
+### Explicit socket/frame/seat authority
+
+The fixture serializes `seatBindings`: `socketId`, `frameId`, `seatingDatumId`. The item socket must
+resolve exactly one binding, one compatible frame anchored to the socket's actual bone parent, and
+one `FunctionalFit` datum belonging to that frame. There is no primary-frame or left-side fallback:
+
+- `leftShoulder -> GQ_SHOULDER_L_FRAME -> FIT_SHOULDER_CUP_L`;
+- `rightShoulder -> GQ_SHOULDER_R_FRAME -> FIT_SHOULDER_CUP_R`;
+- `leftHand` in the Shield fixture `-> GQ_SHIELD_FRAME -> FIT_GRIP`.
+
+Profiles answer the seat with `ASSET_` plus that exact datum id. A slot with no binding for the item's
+socket is not seedable. Chest/Bracer fixture visualization does not imply a supported Hero socket.
+Registration records the resolved seat's frame. Before seeding, item/profile/registration identity,
+profile/fixture/registration slot, frame/seat, orientation and primary measurement must agree.
+The normal seed entry point refreshes only that item's registration immediately before derivation.
+
+### One-item headless production
+
+Use the Unity CLI with this existing entry point from the repository root:
+
+```bash
+unity run unity/GalaQuest --timeout 600 -- -executeMethod GalaQuest.Gear.Editor.GearFitSeedBatch.RunOne -gqGearItem gear.shield.ironwood -gqGearReport .local/unity/gear-item-report.json
+```
+
+The report path is relative to the Unity process working directory; use an absolute path when needed.
+The item id must resolve exactly one definition. Missing/duplicate ids fail; there is no all-items
+fallback. This registers/refreshes, derives a seed, preserves Owner-authored fits, and runs runtime
+plus registration-consistency checks against an actual mounted instance. Only the selected definition
+and registration may be saved. `PASS` means no machine rejection, never visual acceptance.
+
+For exact-commit captures, commit the derived data first, then repeat the same invocation with
+`-gqGearCapture` (graphics required; do not use `-nographics`). The capture reuses the review renderer
+with just that item mounted in memory; it does not rebuild or save the shared scene. Output is under
+`.local/unity/review-pack/gear-v1/gear-shield-ironwood/`. Dirty input refuses an exact-SHA claim.
+The packet includes neutral front/three-quarter/side/gameplay framings and required idle/running/attack
+samples; missing required poses fail rather than silently yielding an incomplete packet.
+
+Escalate `NeedsAuthoring`, mismatched/ambiguous records, rejected proportions, unavailable source
+intent, or a visually bad carry despite clean machine checks. Do not move landmarks to conceal a
+carry defect, invent cavities, modify the Hero, or reseed unrelated items. The Silverguard Helmet
+remains `NeedsAuthoring`; its incumbent fit is not a cavity measurement.
 
 ### Registration-derived seed
 
@@ -140,6 +184,10 @@ Two gates run, and neither accepts anything:
 
 That second gate exists because a shield was once mounted sideways and tilted while the runtime validator
 reported zero findings. A defect no gate can express is a defect that ships.
+
+The Workbench **Run checks on current pose** button also invokes the consistency gate, reading the
+mounted transform rather than trusting the definition's saved scale. An unseedable record is reported
+explicitly, not treated as a clean consistency result.
 
 Both only ever REJECT. Fit visually in the Gear Workbench, inspect front / three-quarter / side /
 gameplay framings, and remember that Unity Editor renders are inspection evidence: running-game pixels

@@ -136,6 +136,12 @@ namespace GalaQuest.Gear.Editor
                 throw new System.IO.FileNotFoundException(
                     profile.Slot + " fixture missing; create the fit fixture kit first.");
 
+            if (profile.SemanticAssetId != item.SemanticId)
+                throw new InvalidOperationException("item/profile identity mismatch");
+            if (!profile.TryValidate(out var profileError))
+                return WriteUnseedable(item, profileError);
+            if (!fixture.TryResolveSeat(item.SocketId, out _, out var seat, out var seatError))
+                throw new InvalidOperationException(seatError);
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(item.SourceModel);
             Result result;
             try
@@ -154,7 +160,7 @@ namespace GalaQuest.Gear.Editor
                     // oriented. It is deliberately NOT read from the item's localEulerAngles: that is a
                     // socket-local value and means a different thing.
                     profile.RawToCanonicalEuler,
-                    PrimaryLandmarkFor(fixture),
+                    seat.DatumId,
                     "Registered against " + fixture.Slot + " as declared by " +
                     ProfilePathFor(item.SemanticId) + ".");
             }
@@ -163,7 +169,7 @@ namespace GalaQuest.Gear.Editor
                 UnityEngine.Object.DestroyImmediate(instance);
             }
 
-            return Write(PathFor(item.SemanticId), fixture.Slot, result, item.LocalScale.x);
+            return Write(PathFor(item.SemanticId), fixture.Slot, result, item.IsOwnerAuthored ? item.LocalScale.x : 0f);
         }
 
         [MenuItem("GalaQuest/Gear/Seed selected gear item from its registration")]
@@ -193,7 +199,7 @@ namespace GalaQuest.Gear.Editor
             }
 
             EditorUtility.SetDirty(item);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(item);
             Debug.Log(item.SemanticId + " seeded. " + seed.Note);
         }
 
@@ -204,7 +210,7 @@ namespace GalaQuest.Gear.Editor
         public static GearFitSeedSolver.Seed SolveSeedFor(GearItemDefinition item, out string error)
         {
             error = string.Empty;
-            var registration = LoadRegistration(item.SemanticId);
+            var registration = EnsureRegistration(item);
             var profile = LoadProfile(item.SemanticId);
             if (registration == null)
             {
@@ -255,27 +261,8 @@ namespace GalaQuest.Gear.Editor
                 GearFitRegistrationStatus.NeedsAuthoring, Vector3.zero, new[] { why },
                 item.LocalScale.x, "NO FIT SCALE IS CLAIMED. " + why);
             EditorUtility.SetDirty(asset);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(asset);
             return asset;
-        }
-
-        /// <summary>
-        /// The FunctionalFit datum an incoming asset of this slot seats against.
-        ///
-        /// A slot sizes an asset by its primary measurement but does not necessarily SEAT it there: a
-        /// shield is sized by board height and positioned by its grip. Where a fixture declares an
-        /// explicit seating datum, that wins; otherwise the primary datum is also the seat.
-        /// </summary>
-        private static string PrimaryLandmarkFor(GearFitFixtureDefinition fixture)
-        {
-            foreach (var datum in fixture.Datums)
-            {
-                if (datum.Role != GearFitDatumRole.FunctionalFit) continue;
-                if (!datum.DatumId.EndsWith("_GRIP", StringComparison.Ordinal)) continue;
-                return datum.DatumId;
-            }
-
-            return fixture.PrimaryMeasurement.SourceDatumId;
         }
 
         /// <summary>Persist a computed registration. Public so calibration work can reuse it.</summary>
@@ -321,7 +308,7 @@ namespace GalaQuest.Gear.Editor
                 ownerScaleForComparison,
                 note);
             EditorUtility.SetDirty(asset);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(asset);
             return asset;
         }
 
@@ -371,6 +358,9 @@ namespace GalaQuest.Gear.Editor
             if (fixture == null) throw new ArgumentNullException("fixture");
             if (instance == null) throw new ArgumentNullException("instance");
 
+            if (!fixture.TryGetDatum(landmarkId, out var seat) || !seat.IsFunctional ||
+                !fixture.TryGetFrame(seat.FrameId, out _))
+                throw new InvalidOperationException("registration requires an explicit FunctionalFit seat and frame");
             var primary = fixture.PrimaryMeasurement;
             var rawToCanonical = Quaternion.Euler(rawToCanonicalEuler);
 
@@ -385,7 +375,7 @@ namespace GalaQuest.Gear.Editor
                 {
                     SemanticAssetId = semanticAssetId,
                     SourceRepoPath = sourceRepoPath,
-                    FrameId = fixture.PrimaryFrame.FrameId,
+                    FrameId = seat.FrameId,
                     LandmarkId = landmarkId,
                     RawToCanonicalEuler = rawToCanonicalEuler,
                     MeasurementSource = GearFitMeasurementSource.Unclassified,
@@ -451,7 +441,7 @@ namespace GalaQuest.Gear.Editor
             {
                 SemanticAssetId = semanticAssetId,
                 SourceRepoPath = sourceRepoPath,
-                FrameId = fixture.PrimaryFrame.FrameId,
+                FrameId = seat.FrameId,
                 LandmarkId = landmarkId,
                 RawToCanonicalEuler = rawToCanonicalEuler,
                 MeasurementSource = GearFitMeasurementSource.AssetFitCavity,

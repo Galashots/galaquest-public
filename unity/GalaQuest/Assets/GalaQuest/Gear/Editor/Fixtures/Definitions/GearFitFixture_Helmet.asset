@@ -149,3 +149,7 @@ MonoBehaviour:
   measuredFromPrefabPath: Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab
   measuredFromSourceRepoPath: public/assets/hero/hero_lod1_ironwood_atlas.glb
   measuredFromSourceSha256: 082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679
+  seatBindings:
+  - socketId: head
+    frameId: GQ_HEAD_FRAME
+    seatingDatumId: FIT_HEAD_CAVITY

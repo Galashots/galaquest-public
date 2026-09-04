@@ -308,6 +308,8 @@ namespace GalaQuest.Tests
                         sourceProfile.CavityProvenance, sourceProfile.CavityNote,
                         new GearAssetFitLandmark[0]);
 
+                    stripped.ConfigureOrientation(sourceProfile.RawToCanonicalEuler,
+                        sourceProfile.OrientationProvenance, sourceProfile.OrientationNote);
                     var seed = GearFitSeedSolver.Solve(
                         hero.transform, item, fixture, stripped, registration);
                     Assert.That(seed.IsComplete, Is.False);
@@ -337,6 +339,213 @@ namespace GalaQuest.Tests
                 "the Owner-authored Silverguard fit must survive this package untouched");
         }
 
+        [Test]
+        public void Cross_record_identity_and_orientation_must_reject()
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var copy = Object.Instantiate(profile);
+                try
+                {
+                    var data = new SerializedObject(copy);
+                    data.FindProperty("semanticAssetId").stringValue = "gear.test.wrong";
+                    data.ApplyModifiedPropertiesWithoutUndo();
+                    Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, copy, registration).IsComplete,
+                        Is.False, "mismatched profile identity was accepted");
+                    data.FindProperty("semanticAssetId").stringValue = profile.SemanticAssetId;
+                    data.FindProperty("rawToCanonicalEuler").vector3Value = new Vector3(0, 90, 0);
+                    data.ApplyModifiedPropertiesWithoutUndo();
+                    Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, copy, registration).IsComplete,
+                        Is.False, "stale registration orientation was accepted");
+                }
+                finally { Object.DestroyImmediate(copy); }
+            });
+        }
+
+        [TestCase("leftShoulder", "GQ_SHOULDER_L_FRAME", "FIT_SHOULDER_CUP_L")]
+        [TestCase("rightShoulder", "GQ_SHOULDER_R_FRAME", "FIT_SHOULDER_CUP_R")]
+        public void Paired_socket_resolves_exact_frame_and_seat(string socketId, string frameId, string seatId)
+        {
+            WithShield((hero, ignored, profile, registration, item) =>
+            {
+                var fixture = Fixture(GearFitFixtureSlot.Shoulder);
+                Assert.That(fixture.TryResolveSeat(socketId, out var frame, out var seat, out var error), Is.True, error);
+                Assert.That(frame.FrameId, Is.EqualTo(frameId));
+                Assert.That(seat.DatumId, Is.EqualTo(seatId));
+                item.Configure(ShieldSemanticId, "Scratch right/left proof", item.SourceModel,
+                    socketId, GearFitClass.Shoulder, ShieldModelPath, new AnatomyRegion[0]);
+                profile.Configure(ShieldSemanticId, fixture.Slot, Vector3.zero,
+                    GearAssetCavitySource.AuthoredVirtualCavity, Vector3.zero, Vector3.one,
+                    GearFitValueProvenance.Authored, "Synthetic test envelope, not shoulder production",
+                    new[] { new GearAssetFitLandmark("ASSET_" + seatId, Vector3.zero,
+                        GearFitValueProvenance.Authored, "Synthetic origin seat") });
+                profile.ConfigureOrientation(Vector3.zero, GearFitValueProvenance.Authored, "Synthetic axes");
+                var primary = fixture.PrimaryMeasurement;
+                registration.Configure(ShieldSemanticId, "", fixture.Slot, frameId, seatId,
+                    Vector3.zero, Vector3.one, GearFitMeasurementSource.AssetFitCavity,
+                    GearAssetCavitySource.AuthoredVirtualCavity, primary.Metric, primary.Axis,
+                    1f, primary.ReferenceValueMetres, primary.ReferenceValueMetres,
+                    GearFitValueProvenance.Authored, GearFitRegistrationStatus.Accepted,
+                    Vector3.zero, new string[0], 0f, "Synthetic test record");
+                var seed = GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration);
+                Assert.That(seed.IsComplete, Is.True, seed.Error);
+                Assert.That(seed.DatumId, Is.EqualTo(seatId));
+                item.TryApplySeedFit(seed.LocalPosition, seed.LocalEulerAngles, seed.LocalScale);
+                var mounted = GearMounter.Mount(hero.transform, item);
+                Assert.That(GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration), Is.Empty);
+            });
+        }
+
+        [Test]
+        public void Incompatible_ambiguous_and_cross_frame_bindings_fail_closed()
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                fixture.ConfigureSeatBindings(new GearFitSeatBinding("leftHand", "missing", "FIT_GRIP"));
+                Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration).IsComplete, Is.False);
+                var valid = new GearFitSeatBinding("leftHand", "GQ_SHIELD_FRAME", "FIT_GRIP");
+                fixture.ConfigureSeatBindings(valid, valid);
+                Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration).IsComplete, Is.False);
+                fixture.ConfigureSeatBindings(valid);
+                GearMounter.ResolveSocket(hero.transform, "leftHand").Configure("leftHand", "RightHand");
+                Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration).IsComplete, Is.False);
+            });
+        }
+
+        [TestCase("semanticAssetId")]
+        [TestCase("gearFrameId")]
+        [TestCase("functionalLandmarkId")]
+        public void Stale_registration_identity_frame_or_seat_rejects(string field)
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var data = new SerializedObject(registration);
+                data.FindProperty(field).stringValue = "wrong";
+                data.ApplyModifiedPropertiesWithoutUndo();
+                Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration).IsComplete, Is.False);
+                var mounted = GearMounter.Mount(hero.transform, item);
+                Assert.That(GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration), Is.Not.Empty);
+            });
+        }
+
+        [Test]
+        public void Stale_slot_rejects()
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var data = new SerializedObject(registration);
+                data.FindProperty("fixtureSlot").enumValueIndex = (int)GearFitFixtureSlot.Shoulder;
+                data.ApplyModifiedPropertiesWithoutUndo();
+                Assert.That(GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration).IsComplete, Is.False);
+            });
+        }
+
+        [Test]
+        public void A_seat_on_the_other_side_cannot_answer_the_right_socket()
+        {
+            var fixture = Object.Instantiate(Fixture(GearFitFixtureSlot.Shoulder));
+            try
+            {
+                fixture.ConfigureSeatBindings(new GearFitSeatBinding("rightShoulder",
+                    "GQ_SHOULDER_R_FRAME", "FIT_SHOULDER_CUP_L"));
+                Assert.That(fixture.TryResolveSeat("rightShoulder", out _, out _, out _), Is.False);
+            }
+            finally { Object.DestroyImmediate(fixture); }
+        }
+
+        [Test]
+        public void Real_shield_source_supports_the_recorded_board_axis_observation()
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var source = (GameObject)PrefabUtility.InstantiatePrefab(item.SourceModel);
+                try
+                {
+                    var raw = GearAssetFitProbe.MeasureRenderBounds(source, Quaternion.identity);
+                    Assert.That(raw.y, Is.LessThan(raw.x * 0.25f));
+                    Assert.That(raw.y, Is.LessThan(raw.z * 0.25f));
+                    Assert.That(GearAssetFitProbe.TryMeasureDeclaredCavity(source, Quaternion.identity, out _, out _), Is.False);
+                    Assert.That(profile.OrientationProvenance, Is.EqualTo(GearFitValueProvenance.Authored));
+                    Assert.That(profile.CavitySource, Is.EqualTo(GearAssetCavitySource.AuthoredVirtualCavity));
+                    TestContext.WriteLine("Raw imported Shield bounds: " + raw.ToString("F8"));
+                }
+                finally { Object.DestroyImmediate(source); }
+            });
+        }
+
+        [Test]
+        public void Orientation_requires_classification_finite_rotation_and_note()
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                profile.ConfigureOrientation(Vector3.zero, GearFitValueProvenance.Unclassified, "note");
+                Assert.That(profile.TryValidate(out _), Is.False);
+                profile.ConfigureOrientation(new Vector3(float.NaN, 0, 0), GearFitValueProvenance.Authored, "note");
+                Assert.That(profile.TryValidate(out _), Is.False);
+                profile.ConfigureOrientation(new Vector3(0, float.PositiveInfinity, 0), GearFitValueProvenance.Authored, "note");
+                Assert.That(profile.TryValidate(out _), Is.False);
+                profile.ConfigureOrientation(Vector3.zero, GearFitValueProvenance.Authored, " ");
+                Assert.That(profile.TryValidate(out _), Is.False);
+            });
+        }
+
+        [Test]
+        public void Mounted_scale_is_checked_even_when_definition_is_correct()
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var seed = GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration);
+                item.TryApplySeedFit(seed.LocalPosition, seed.LocalEulerAngles, seed.LocalScale);
+                var mounted = GearMounter.Mount(hero.transform, item);
+                mounted.transform.localScale = Vector3.Scale(seed.LocalScale, new Vector3(1, 0.7f, 1));
+                Assert.That(GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration)
+                    .Any(i => i.Code == GearFitSeedConsistency.Codes.NonUniformScale), Is.True);
+            });
+        }
+
+        [Test]
+        public void One_item_operation_is_bounded_refreshes_and_protects_owner_fit()
+        {
+            using var production = new GearTestProductionSnapshot();
+            const string id = "gear.test.single";
+            const string path = "Assets/GalaQuest/Gear/Definitions/__SingleOperation.asset";
+            var item = ScratchItem();
+            item.Configure(id, "Scratch", item.SourceModel, GearSocketIds.LeftHand, GearFitClass.Handheld,
+                ShieldModelPath, new AnatomyRegion[0]);
+            AssetDatabase.CreateAsset(item, path);
+            var profile = Object.Instantiate(GearFitAssetRegistrationAuthoring.LoadProfile(ShieldSemanticId));
+            var data = new SerializedObject(profile);
+            data.FindProperty("semanticAssetId").stringValue = id;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.CreateAsset(profile, GearFitAssetRegistrationAuthoring.ProfilePathFor(id));
+            var before = GearTestProductionSnapshot.ReadFiles();
+            var report = GearFitSeedBatch.ProcessOne(id);
+            Assert.That(report.status, Is.EqualTo("PASS"), string.Join("; ", report.findings));
+            Assert.That(report.seedApplied, Is.True);
+            profile.ConfigureOrientation(new Vector3(90, 0, 10), GearFitValueProvenance.Authored, "Edited test intent");
+            GearFitSeedBatch.ProcessOne(id);
+            Assert.That(Quaternion.Angle(profile.RawToCanonicalRotation,
+                GearFitAssetRegistrationAuthoring.LoadRegistration(id).RawToCanonicalRotation), Is.LessThan(0.01f));
+            item.ApplyAuthoredFit(Vector3.one, Vector3.zero, Vector3.one);
+            report = GearFitSeedBatch.ProcessOne(id);
+            Assert.That(report.ownerFitProtected, Is.True);
+            Assert.That(report.seedApplied, Is.False);
+            Assert.That(item.LocalPosition, Is.EqualTo(Vector3.one));
+            var after = GearTestProductionSnapshot.ReadFiles();
+            foreach (var pair in before)
+            {
+                if (pair.Key == path || pair.Key == GearFitAssetRegistrationAuthoring.ProfilePathFor(id)) continue;
+                Assert.That(after[pair.Key], Is.EqualTo(pair.Value), "unrelated file changed: " + pair.Key);
+            }
+            var additions = after.Keys.Except(before.Keys).ToArray();
+            Assert.That(additions.All(p => p == GearFitAssetRegistrationAuthoring.PathFor(id) ||
+                p == GearFitAssetRegistrationAuthoring.PathFor(id) + ".meta"), Is.True, string.Join(",", additions));
+            Assert.Throws<System.InvalidOperationException>(() => GearFitSeedBatch.ResolveOne("gear.test.missing"));
+            var duplicate = Object.Instantiate(item);
+            AssetDatabase.CreateAsset(duplicate, "Assets/GalaQuest/Gear/Definitions/__SingleDuplicate.asset");
+            Assert.Throws<System.InvalidOperationException>(() => GearFitSeedBatch.ProcessOne(id));
+        }
+
         // -------------------------------------------------------------------------------------------
         // Packaging
         // -------------------------------------------------------------------------------------------
@@ -361,8 +570,8 @@ namespace GalaQuest.Tests
             System.Action<GameObject, GearFitFixtureDefinition, GearAssetFitProfile,
                 GearFitAssetRegistration, GearItemDefinition> body)
         {
-            var fixture = Fixture(GearFitFixtureSlot.Shield);
-            var profile = GearFitAssetRegistrationAuthoring.LoadProfile(ShieldSemanticId);
+            var fixture = Object.Instantiate(Fixture(GearFitFixtureSlot.Shield));
+            var profile = Object.Instantiate(GearFitAssetRegistrationAuthoring.LoadProfile(ShieldSemanticId));
             Assert.That(profile, Is.Not.Null,
                 "the Ironwood Shield asset fit profile is missing at " +
                 GearFitAssetRegistrationAuthoring.ProfilePathFor(ShieldSemanticId));
@@ -382,6 +591,8 @@ namespace GalaQuest.Tests
                 {
                     Object.DestroyImmediate(item);
                     Object.DestroyImmediate(registration);
+                    Object.DestroyImmediate(fixture);
+                    Object.DestroyImmediate(profile);
                 }
             });
         }
@@ -421,7 +632,7 @@ namespace GalaQuest.Tests
         {
             var item = ScriptableObject.CreateInstance<GearItemDefinition>();
             item.Configure(
-                "gear.test.shield", "Scratch Shield",
+                ShieldSemanticId, "Scratch Shield",
                 AssetDatabase.LoadAssetAtPath<GameObject>(ShieldModelPath),
                 GearSocketIds.LeftHand, GearFitClass.Handheld, ShieldModelPath, new AnatomyRegion[0]);
             return item;
@@ -429,7 +640,7 @@ namespace GalaQuest.Tests
 
         private static GearFitFixtureDefinition Fixture(GearFitFixtureSlot slot)
         {
-            var fixture = GearFitFixtureKitAuthoring.EnsureDefinitions()
+            var fixture = GearFitFixtureKitAuthoring.LoadDefinitions()
                 .FirstOrDefault(definition => definition.Slot == slot);
             Assert.That(fixture, Is.Not.Null, slot + " fixture is missing");
             return fixture;
@@ -458,6 +669,32 @@ namespace GalaQuest.Tests
         private static string Describe(List<GearFitIssue> issues)
         {
             return issues.Count == 0 ? "(no findings)" : string.Join("; ", issues.Select(i => i.ToString()));
+        }
+    }
+}
+
+namespace GalaQuest.Tests
+{
+    internal sealed class GearTestProductionSnapshot : System.IDisposable
+    {
+        private readonly Dictionary<string, byte[]> original = ReadFiles();
+        private readonly byte[] buildSettings = System.IO.File.ReadAllBytes("ProjectSettings/EditorBuildSettings.asset");
+        internal static Dictionary<string, byte[]> ReadFiles() =>
+            System.IO.Directory.GetFiles("Assets/GalaQuest/Gear", "*", System.IO.SearchOption.AllDirectories)
+                .ToDictionary(p => p.Replace('\\', '/'), System.IO.File.ReadAllBytes);
+        public void Dispose()
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                UnityEditor.SceneManagement.NewSceneMode.Single);
+            AssetDatabase.SaveAssets();
+            foreach (var path in ReadFiles().Keys)
+                if (!original.ContainsKey(path)) System.IO.File.Delete(path);
+            foreach (var pair in original)
+                if (!System.IO.File.Exists(pair.Key) || !System.IO.File.ReadAllBytes(pair.Key).SequenceEqual(pair.Value))
+                    System.IO.File.WriteAllBytes(pair.Key, pair.Value);
+            System.IO.File.WriteAllBytes("ProjectSettings/EditorBuildSettings.asset", buildSettings);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
     }
 }
