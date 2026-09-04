@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8c0cb7f024cb8c4f8c505dc3e0b2386, type: 3}
+  m_Name: GearFitFixture_Shoulder
+  m_EditorClassIdentifier: GalaQuest.Gear.Editor::GalaQuest.Gear.Editor.GearFitFixtureDefinition
+  slot: 1
+  displayName: Shoulder fit fixture
+  anchorBone: LeftArm
+  mirroredAnchorBone: RightArm
+  anchorOffset: {x: 0, y: 0, z: 0}
+  forwardAxis: {x: 0, y: 0, z: 1}
+  upAxis: {x: 0, y: 1, z: 0}
+  outAxis: {x: 1, y: 0, z: 0}
+  innerClearanceCenter: {x: 0.1, y: 0.01, z: 0.01}
+  innerClearanceSize: {x: 0.3, y: 0.28, z: 0.3}
+  landmarks:
+  - label: outboard deltoid
+    kind: 2
+    localCenter: {x: 0.11, y: 0.01, z: 0.01}
+    localSize: {x: 0.28, y: 0.25, z: 0.3}
+  - label: arm swing clearance
+    kind: 0
+    localCenter: {x: 0.08, y: -0.17, z: 0.04}
+    localSize: {x: 0.18, y: 0.52, z: 0.18}
+  - label: torso collision
+    kind: 1
+    localCenter: {x: -0.1, y: 0.01, z: 0.01}
+    localSize: {x: 0.18, y: 0.35, z: 0.25}
+  anatomyHideIntent: 

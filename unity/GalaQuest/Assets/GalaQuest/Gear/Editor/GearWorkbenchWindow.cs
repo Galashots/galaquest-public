@@ -91,6 +91,7 @@ namespace GalaQuest.Gear.Editor
                 MessageType.None);
 
             DrawSceneSection();
+            DrawFixtureSection();
             EditorGUILayout.Space();
             DrawItemSection();
             EditorGUILayout.Space();
@@ -114,6 +115,32 @@ namespace GalaQuest.Gear.Editor
             var hero = FindHero();
             EditorGUILayout.LabelField("Hero in scene",
                 hero == null ? "not loaded" : hero.name);
+        }
+
+        private void DrawFixtureSection()
+        {
+            EditorGUILayout.LabelField("Fixture kit", EditorStyles.boldLabel);
+            if (!GearFitFixtureOverlay.IsConfigured)
+            {
+                EditorGUILayout.HelpBox(
+                    "Open the Workbench scene to show the GQ_HERO_V1 slot fixtures.",
+                    MessageType.Info);
+                return;
+            }
+
+            EditorGUILayout.HelpBox(
+                "Scene View calibration only: cyan is inner clearance, green is keep-clear, red is " +
+                "collision warning, and the arrows show front / up / out.",
+                MessageType.None);
+
+            var displayAll = EditorGUILayout.Toggle("Show all slots", GearFitFixtureOverlay.ShowAll);
+            var selected = (GearFitFixtureSlot)EditorGUILayout.EnumPopup(
+                "Solo slot", GearFitFixtureOverlay.SelectedSlot);
+            if (displayAll != GearFitFixtureOverlay.ShowAll || selected != GearFitFixtureOverlay.SelectedSlot)
+            {
+                GearFitFixtureOverlay.ConfigureDisplay(displayAll, selected);
+                SceneView.RepaintAll();
+            }
         }
 
         private void DrawItemSection()

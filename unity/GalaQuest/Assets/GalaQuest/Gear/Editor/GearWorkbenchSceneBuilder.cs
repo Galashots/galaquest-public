@@ -80,6 +80,10 @@ namespace GalaQuest.Gear.Editor
                                  (body == null ? "no Hero SkinnedMeshRenderer" : "no region map at " + AnatomyRegionMapPath));
             }
 
+            // Editor-only calibration overlay. It keys off this excluded authoring scene, never the
+            // shipped Hero prefab or player build scenes.
+            GearFitFixtureKitAuthoring.AttachOverlay(hero);
+
             var controller = BuildPoseController(out var stateNames);
             var animator = hero.GetComponent<Animator>();
             if (animator == null) animator = hero.AddComponent<Animator>();

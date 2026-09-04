@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8c0cb7f024cb8c4f8c505dc3e0b2386, type: 3}
+  m_Name: GearFitFixture_Shield
+  m_EditorClassIdentifier: GalaQuest.Gear.Editor::GalaQuest.Gear.Editor.GearFitFixtureDefinition
+  slot: 4
+  displayName: Shield fit fixture
+  anchorBone: LeftHand
+  mirroredAnchorBone: 
+  anchorOffset: {x: 0, y: 0, z: 0}
+  forwardAxis: {x: 0, y: 0, z: 1}
+  upAxis: {x: 0, y: 1, z: 0}
+  outAxis: {x: 1, y: 0, z: 0}
+  innerClearanceCenter: {x: 0.22, y: 0.02, z: 0.01}
+  innerClearanceSize: {x: 0.56, y: 0.62, z: 0.18}
+  landmarks:
+  - label: grip anchor
+    kind: 2
+    localCenter: {x: 0, y: 0, z: 0}
+    localSize: {x: 0.08, y: 0.1, z: 0.08}
+  - label: front face direction
+    kind: 2
+    localCenter: {x: 0.34, y: 0.02, z: 0.03}
+    localSize: {x: 0.1, y: 0.62, z: 0.62}
+  - label: body / forearm clearance
+    kind: 0
+    localCenter: {x: 0.18, y: 0.02, z: -0.08}
+    localSize: {x: 0.34, y: 0.56, z: 0.12}
+  anatomyHideIntent: 
