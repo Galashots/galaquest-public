@@ -66,6 +66,17 @@ namespace GalaQuest.Tests
         // -----------------------------------------------------------------------------------------
 
         [Test]
+        public void GQ_HERO_V1_model_importer_keeps_gear_frame_transforms_exposed()
+        {
+            var importer = AssetImporter.GetAtPath(GearHeroAuthoring.HeroModelPath) as ModelImporter;
+            Assert.That(importer, Is.Not.Null,
+                "GQ_HERO_V1 ModelImporter is missing at " + GearHeroAuthoring.HeroModelPath);
+            Assert.That(importer.optimizeGameObjects, Is.False,
+                "GQ_HERO_V1 Gear Frames depend on exposed hierarchy Transforms; enabling Optimize " +
+                "Game Objects requires a deliberate gear-contract revalidation.");
+        }
+
+        [Test]
         public void Every_fixture_validates_as_a_contract_against_the_real_hero()
         {
             var definitions = GearFitFixtureKitAuthoring.EnsureDefinitions();
