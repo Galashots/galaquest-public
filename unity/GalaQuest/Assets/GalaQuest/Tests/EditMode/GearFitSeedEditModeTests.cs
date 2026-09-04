@@ -504,6 +504,19 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void Review_pose_names_resolve_from_the_real_controller_and_refuse_ambiguity()
+        {
+            var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(
+                GearWorkbenchSceneBuilder.ControllerPath);
+            var names = controller.layers[0].stateMachine.states.Select(s => s.state.name).ToArray();
+            foreach (var alias in new[] { "idle", "running", "sword_slash", "combat_stance", "shield_push" })
+                Assert.That(names, Does.Contain(GearReviewPack.ResolvePose(names, alias)));
+            Assert.Throws<System.InvalidOperationException>(() => GearReviewPack.ResolvePose(names, "missing"));
+            Assert.Throws<System.InvalidOperationException>(() =>
+                GearReviewPack.ResolvePose(new[] { "A|idle", "B|idle" }, "idle"));
+        }
+
+        [Test]
         public void One_item_operation_is_bounded_refreshes_and_protects_owner_fit()
         {
             using var production = new GearTestProductionSnapshot();

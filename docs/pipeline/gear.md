@@ -141,7 +141,9 @@ For exact-commit captures, commit the derived data first, then repeat the same i
 with just that item mounted in memory; it does not rebuild or save the shared scene. Output is under
 `.local/unity/review-pack/gear-v1/gear-shield-ironwood/`. Dirty input refuses an exact-SHA claim.
 The packet includes neutral front/three-quarter/side/gameplay framings and required idle/running/attack
-samples; missing required poses fail rather than silently yielding an incomplete packet.
+samples, plus combat stance and shield push. Clip aliases resolve to exactly one actual controller
+state, including imported FBX name prefixes; missing/ambiguous poses fail rather than silently
+producing an incomplete packet.
 
 Escalate `NeedsAuthoring`, mismatched/ambiguous records, rejected proportions, unavailable source
 intent, or a visually bad carry despite clean machine checks. Do not move landmarks to conceal a

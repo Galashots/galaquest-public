@@ -29,6 +29,8 @@ namespace GalaQuest.Gear.Editor
         private static readonly (string State, float Time)[] MotionFrames =
         {
             ("idle", 0f),
+            ("combat_stance", 0f),
+            ("shield_push", 0.35f),
             ("running", 0.25f),
             ("running", 0.6f),
             ("sword_slash", 0.35f),
@@ -162,12 +164,8 @@ namespace GalaQuest.Gear.Editor
                 SetAllVisible(items, true);
                 foreach (var (state, time) in MotionFrames)
                 {
-                    if (!rig.PoseStates.Contains(state))
-                    {
-                        if (targetItem != null) throw new InvalidOperationException("Required review pose missing: " + state);
-                        continue;
-                    }
-                    rig.Sample(state, time);
+                    var resolvedState = ResolvePose(rig.PoseStates, state);
+                    rig.Sample(resolvedState, time);
 
                     var label = "motion-" + state + "-" +
                                 time.ToString("F2", CultureInfo.InvariantCulture).Replace('.', 'p');
@@ -184,6 +182,18 @@ namespace GalaQuest.Gear.Editor
             }
 
             Debug.Log("Gear review pack captured " + captures.Count + " stills into " + outputDirectory);
+        }
+
+        /// <summary>Match a reviewed clip alias to one actual controller state; never skip or guess.</summary>
+        public static string ResolvePose(IEnumerable<string> availableStates, string alias)
+        {
+            // Imported FBX names carry Armature namespaces and sometimes a trailing baselayer.
+            // Match a whole name segment, not a substring (idle must not match idle_variant).
+            var matches = availableStates.Where(name => name.Split('|').Contains(alias)).ToArray();
+            if (matches.Length != 1)
+                throw new InvalidOperationException("Review pose '" + alias + "' resolved " + matches.Length +
+                    " controller states; expected exactly one. Available: " + string.Join(", ", availableStates));
+            return matches[0];
         }
 
         /// <summary>World bounds of one mounted item's renderers, or null when it draws nothing.</summary>

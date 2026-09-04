@@ -89,7 +89,7 @@ namespace GalaQuest.Gear.Editor
             var id = Argument(args, "-gqGearItem", true);
             var output = Argument(args, "-gqGearReport", false) ??
                 Path.GetFullPath(Path.Combine(Application.dataPath, "../../../.local/unity/gear-item-report.json"));
-            Report report;
+            var report = new Report { semanticId = id };
             try
             {
                 report = ProcessOne(id);
@@ -102,7 +102,8 @@ namespace GalaQuest.Gear.Editor
             }
             catch (Exception ex)
             {
-                report = new Report { semanticId = id, findings = new[] { ex.Message } };
+                report.status = "FAIL";
+                report.findings = report.findings.Concat(new[] { ex.Message }).ToArray();
             }
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output)));
             File.WriteAllText(output, JsonUtility.ToJson(report, true));
