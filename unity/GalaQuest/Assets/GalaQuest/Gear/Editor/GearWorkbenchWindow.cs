@@ -91,6 +91,7 @@ namespace GalaQuest.Gear.Editor
                 MessageType.None);
 
             DrawSceneSection();
+            DrawFixtureSection();
             EditorGUILayout.Space();
             DrawItemSection();
             EditorGUILayout.Space();
@@ -114,6 +115,35 @@ namespace GalaQuest.Gear.Editor
             var hero = FindHero();
             EditorGUILayout.LabelField("Hero in scene",
                 hero == null ? "not loaded" : hero.name);
+        }
+
+        private void DrawFixtureSection()
+        {
+            EditorGUILayout.LabelField("Fit contract", EditorStyles.boldLabel);
+            if (!GearFitFixtureOverlay.IsConfigured)
+            {
+                EditorGUILayout.HelpBox(
+                    "Open the Workbench scene to show the GQ_HERO_V1 slot contracts.",
+                    MessageType.Info);
+                return;
+            }
+
+            EditorGUILayout.HelpBox(
+                "Arrows are labelled +X RIGHT, +Y UP, +Z FORWARD in wearer space. Cyan is functional " +
+                "fit, green is keep-clear, red is collision warning, purple is decorative extent, " +
+                "amber is reference only, and the yellow span is the primary normalization " +
+                "measurement. Each label carries its provenance. The serialized fixture is the " +
+                "authority; this drawing only shows it.",
+                MessageType.None);
+
+            var displayAll = EditorGUILayout.Toggle("Show all slots", GearFitFixtureOverlay.ShowAll);
+            var selected = (GearFitFixtureSlot)EditorGUILayout.EnumPopup(
+                "Solo slot", GearFitFixtureOverlay.SelectedSlot);
+            if (displayAll != GearFitFixtureOverlay.ShowAll || selected != GearFitFixtureOverlay.SelectedSlot)
+            {
+                GearFitFixtureOverlay.ConfigureDisplay(displayAll, selected);
+                SceneView.RepaintAll();
+            }
         }
 
         private void DrawItemSection()
