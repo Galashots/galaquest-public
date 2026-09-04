@@ -49,3 +49,8 @@ unity/GalaQuest/MemoryCaptures/
 unity/GalaQuest/Recordings/
 unity/GalaQuest/*.csproj
 unity/GalaQuest/*.sln
+
+# Unity Test Framework performance-run artifacts. Generated into Assets/Resources by a test run,
+# never authored, and not part of the project.
+unity/GalaQuest/Assets/Resources/PerformanceTestRun*.json
+unity/GalaQuest/Assets/Resources/PerformanceTestRun*.json.meta

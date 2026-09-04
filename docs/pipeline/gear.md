@@ -1,5 +1,75 @@
 # Gear lane — generated gear, mounted on the hero, judged in the running game
 
+## Which pipeline am I in?
+
+| Question | Answer |
+| --- | --- |
+| Fitting a NEW rigid gear item? | **Unity Gear Production V1** — the next section. This is the only current answer. |
+| Repairing a mount that already ships in the Three.js client? | The LEGACY section at the bottom of this file. |
+| Diagnosing a Three.js runtime gear defect? | The LEGACY section. |
+| Fitting skinned/deformable armour? | Not yet supported. Checkpoint B is not built; do not improvise it. |
+
+
+## Unity is the gear authoring surface from here (Gear Production V1, Checkpoint A)
+
+Rigid gear is now fitted in Unity, not by deriving quaternions in a headless harness. The Three.js
+records in `public/src/character/gear.js` remain the RUNTIME authority for the shipping Three.js client
+and are historical/reference for authoring purposes; do not hand-author new fits there.
+
+The Unity spine lives under `unity/GalaQuest/Assets/GalaQuest/Gear/`:
+
+- **Sockets** — named `GearSocket` Transforms under GQ_HERO_V1's bones, matching the bones this file's
+  Three.js records already use (`Head`, `LeftHand`, `RightHand`, `LeftArm`, `RightArm`).
+- **Items** — one `GearItemDefinition` asset per item: semantic id, source model, socket id, fit class,
+  socket-local TRS, mirror flag, anatomy coverage, source repo path.
+- **Head Fit Proxy** — the headgear clearance envelope, measured from GQ_HERO_V1's own `head_end` and
+  `headfront` helper joints and its Head-weighted vertices. Its eye line is authored, because the Hero's
+  eyes are painted into the atlas and cannot be measured from geometry.
+- **Gear Workbench** — `GalaQuest > Gear > Gear Workbench`. Loads an item, poses the Hero from its own
+  clips, frames front/three-quarter/side/gameplay, runs the machine gates, saves and resets.
+
+Adding another rigid item is **new data, not new code**: import the model, create a
+`GearItemDefinition` (Assets > Create > GalaQuest > Gear), fit it with the normal Scene View gizmos,
+save, and let the shared gates run. There is no per-item C# anywhere in the gear assembly, and
+`GearSpineEditModeTests` fails if an item-named script appears.
+
+Machine gates REJECT; they never visually accept. Running-game pixels remain final appearance
+authority, and there is no Unity gameplay/controller seam yet, so Unity Editor renders are inspection
+evidence and must not be reported as gameplay evidence.
+
+Export the Unity-authored fits with:
+
+```bash
+node tools/unity-migration/export-gear-fits.mjs
+```
+
+That writes `docs/foundry/gear/unity_gear_fits.json` deterministically. It does not synthesise
+`gear.js` numbers: converting a socket-local Unity transform back into Armature-relative Three.js space
+is the coordinate tax this migration exists to stop paying, and doing it silently would hide which
+layer a future defect lives in.
+
+
+---
+
+# LEGACY — Three.js runtime maintenance and reference only
+
+**Everything below this line is the pre-Unity pipeline.** It remains accurate for the Three.js client
+that ships the game today, and it is the right procedure for:
+
+- maintaining or repairing a mount that already ships in `public/src/character/gear.js`;
+- diagnosing a defect in the currently shipping Three.js runtime;
+- reading how an existing accepted fit was reached, and why.
+
+**Do not use any of it to author a NEW rigid gear item.** New rigid gear is fitted in Unity by the
+process at the top of this file. In particular, for new gear do not run the `fit-*.mjs` harnesses as
+the authoritative fit loop, do not move measured transforms into `gear.js`, and do not use the Forge
+authoring/bake loop — those steps exist here to keep the shipping Three.js client maintainable, not
+because they are still how gear is designed.
+
+The knowledge below is deliberately preserved rather than deleted: the carry-convention discipline,
+the reference-anchoring procedure, and the recorded failure modes are all still true, and the Unity
+process at the top inherits them.
+
 Historical proven runs include the cuirass generate-and-fit proof and the shipped belt lantern. Gear is
 where the mesh pipeline meets the live rig: create/qualify the mesh with [props.md](props.md), apply the
 topology/anatomy-coverage gates in [character-armoring.md](character-armoring.md), then use this runbook

@@ -52,9 +52,15 @@ if ($Action -in @('build-windows', 'all')) {
 }
 
 if ($Action -in @('build-webgl', 'all')) {
+    # WebGL cannot use the CLI's built-in 'build' verb: it answers
+    #   "Target WebGL has no built-in command-line build. Pass --execute-method, or use a Unity 6+
+    #    build profile with --profile. Only desktop targets build without them."
+    # and exits 2 without writing a log, which is why this gate has been reporting as
+    # "not completed" rather than failing loudly. Drive it through the project's own
+    # FoundationBuild.BuildWebGL entry point instead, which honours -buildOutput.
     $output = Join-Path $buildRoot 'webgl'
     $log = Join-Path $logRoot 'webgl-build.log'
-    Invoke-Unity @('--no-banner', 'build', $project, '--editor-version', $unityVersion, '--target', 'WebGL', '--output-path', $output, '--log-file', $log, '--provenance-path', (Join-Path $reviewRoot 'webgl-build-provenance.json'), '--args', '-burst-disable-compilation', '--timeout', '900')
+    Invoke-Unity @('--no-banner', 'run', $project, '--editor-version', $unityVersion, '--timeout', '3000', '--', '-nographics', '-logFile', $log, '-executeMethod', 'GalaQuest.Editor.FoundationBuild.BuildWebGL', '-buildOutput', $output)
 }
 
 Write-Output "GalaQuest Unity foundation action '$Action' passed. Evidence is under $localRoot."

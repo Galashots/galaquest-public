@@ -1,0 +1,14 @@
+{
+    "name": "GalaQuest.Gear.Runtime",
+    "rootNamespace": "GalaQuest.Gear",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

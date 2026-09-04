@@ -1,0 +1,89 @@
+{
+  "schema": "galaquest.unity-gear-derivative-provenance",
+  "schemaVersion": 1,
+  "pinnedBlenderVersion": "4.5.13",
+  "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+  "conversionOptions": {
+    "axisForward": "-Z",
+    "axisUp": "Y",
+    "applyUnitScale": true,
+    "embedTextures": true,
+    "pathMode": "COPY",
+    "retarget": false,
+    "materialRepair": false
+  },
+  "records": [
+    {
+      "semanticId": "gear.shield.ironwood",
+      "displayName": "IronwoodShield",
+      "sourceRepoPath": "public/assets/gear/shield_ironwood.glb",
+      "sourceSha256": "f022feb069ebd0a9ddc082c5c5fe79da49346068e3ab59118505fc4c65a311ab",
+      "sourceSizeBytes": 194120,
+      "conversionTool": "Blender",
+      "conversionToolVersion": "5.2.0 LTS",
+      "pinnedBlenderVersion": "4.5.13",
+      "versionDrift": true,
+      "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+      "conversionOptions": {
+        "axisForward": "-Z",
+        "axisUp": "Y",
+        "applyUnitScale": true,
+        "embedTextures": true,
+        "pathMode": "COPY",
+        "retarget": false,
+        "materialRepair": false
+      },
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx",
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx",
+          "kind": "model",
+          "sha256": "5e7e1970c2f5945a8bf0f6af6f9fb71a09c918205883ad6ee7d4f09b8b8d2894",
+          "sizeBytes": 208348
+        },
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "db1d2a85921e3574e8c3e60b2e8b5f90767f6d514ee19ebbb4bc53dd46da614e",
+          "sizeBytes": 168621
+        }
+      ]
+    },
+    {
+      "semanticId": "gear.shoulder.silverguard",
+      "displayName": "SilverguardShoulder",
+      "sourceRepoPath": "public/assets/gear/shoulder_silverguard.glb",
+      "sourceSha256": "b061629ae11f3e0338cb69f7e45fd65ba5498e8fa3577999e7b7e6898a21c582",
+      "sourceSizeBytes": 46472,
+      "conversionTool": "Blender",
+      "conversionToolVersion": "5.2.0 LTS",
+      "pinnedBlenderVersion": "4.5.13",
+      "versionDrift": true,
+      "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+      "conversionOptions": {
+        "axisForward": "-Z",
+        "axisUp": "Y",
+        "applyUnitScale": true,
+        "embedTextures": true,
+        "pathMode": "COPY",
+        "retarget": false,
+        "materialRepair": false
+      },
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/SilverguardShoulder.fbx",
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/SilverguardShoulder.fbx",
+          "kind": "model",
+          "sha256": "8bf5308240c103ed538d915a6caf1f846a0fae456679fb6053bdf12485d66ef8",
+          "sizeBytes": 58604
+        },
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/SilverguardShoulder.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "6098e567f50374c9fe993d1e2ac9889953d764f34bf22fb7bb73f4d772df2ac0",
+          "sizeBytes": 27256
+        }
+      ]
+    }
+  ]
+}

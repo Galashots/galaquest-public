@@ -17,7 +17,7 @@ Plans, handoffs, chat history, provider labels, and comparison packs may explain
 
 - **Proportions:** the contract currently records `proportions.status = owner-locked-final` and `adoptedHeadsTall = 3.84`. Several owner directives inside the same contract remain individually `valueStatus: open`; do not turn those open ranges/directions into arbitrary scalar choices.
 - **Topology:** `topology.status = no-gq-target`. Fixed authored connectivity remains the architectural direction, but no comparison-pack quad ratio or ring count becomes a GQ target by imitation.
-- **Rig:** the contract pins `deformJointTarget = 30`, `maxInfluencesPerVertex = 4`, and `fingerChains = false`. A count is not permission to invent an undocumented socket/bone list.
+- **Rig:** the contract records the ratified `GQ_HERO_V1` skeleton: `deformJointsActual = 22` plus 2 zero-weight helper joints, `maxInfluencesPerVertex = 4`, `fingerChains = false`, `twistBones = false`. The historical `deformJointTarget = 30` is retired (Owner decision, Issue #44, 2026-09-03) and survives only as `retiredDeformJointTarget`. A count is not permission to invent an undocumented socket/bone list.
 - **Surface:** the contract is texture-primary and records a shared-atlas surface contract. Read the actual current values rather than copying numbers into this map.
 - **Animation:** runtime clip identity comes from the actual loaded asset. Provider action ids and donor filenames are source metadata, not shipping identifiers.
 

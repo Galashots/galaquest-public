@@ -1,0 +1,100 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8c0cb7f024cb8c4f8c505dc3e0b2386, type: 3}
+  m_Name: GearFitFixture_Bracer
+  m_EditorClassIdentifier: GalaQuest.Gear.Editor::GalaQuest.Gear.Editor.GearFitFixtureDefinition
+  contractId: GQ_HERO_V1_GEAR_DATUM
+  contractVersion: V0
+  coordinateConvention: +X = wearer RIGHT; +Y = wearer UP; +Z = wearer FORWARD; 1
+    Unity unit = 1 metre; Unity left-handed, so Cross(right, up) == forward.
+  metresPerUnityUnit: 1
+  slot: 3
+  displayName: Bracer fit contract
+  frames:
+  - frameId: GQ_FOREARM_L_FRAME
+    side: 1
+    anchorBone: LeftForeArm
+    originInAnchor: {x: 0, y: 0, z: 0}
+    rightAxisInAnchor: {x: 0.24650313, y: -0.40210584, z: 0.88178635}
+    upAxisInAnchor: {x: -0.5843331, y: -0.78754365, z: -0.19577993}
+    forwardAxisInAnchor: {x: 0.7731696, y: -0.46699646, z: -0.42909566}
+    provenance: 1
+    provenanceNote: Canonical wearer axes inverse-transformed through the LeftForeArm
+      bind pose, so the frame is independent of that bone's imported roll. Origin
+      is the LeftForeArm joint, which is the elbow. Side Left fixes outboard to -X;
+      the axes remain canonical wearer axes.
+  datums:
+  - datumId: FIT_ELBOW
+    displayName: Elbow
+    role: 1
+    frameId: GQ_FOREARM_L_FRAME
+    localCenter: {x: 0, y: 0, z: 0}
+    localSize: {x: 0.062142216, y: 0.062142216, z: 0.062142216}
+    provenance: 1
+    sourceJoints:
+    - LeftForeArm
+    provenanceNote: 'The LeftForeArm joint. The upper limit of a bracer: geometry
+      above it fouls the elbow.'
+  - datumId: FIT_WRIST
+    displayName: Wrist
+    role: 1
+    frameId: GQ_FOREARM_L_FRAME
+    localCenter: {x: -0.06788854, y: -0.13296343, z: -0.078844786}
+    localSize: {x: 0.062142216, y: 0.062142216, z: 0.062142216}
+    provenance: 1
+    sourceJoints:
+    - LeftHand
+    provenanceNote: The LeftHand joint. The lower limit of a bracer.
+  - datumId: FIT_FOREARM_SHELL
+    displayName: Forearm shell
+    role: 1
+    frameId: GQ_FOREARM_L_FRAME
+    localCenter: {x: -0.03394427, y: -0.06648172, z: -0.039422393}
+    localSize: {x: 0.12428443, y: 0.13296343, z: 0.12428443}
+    provenance: 3
+    sourceJoints:
+    - LeftForeArm
+    - LeftHand
+    provenanceNote: Bounds the measured elbow-to-wrist segment (true joint length
+      0.1688 m) with a measured forearm diameter of 0.1043 m plus the authored clearance
+      0.0100 m per side. The Hero binds in an A-pose, so this box is the wearer-space
+      bound of a limb that runs along no single canonical axis; its longest extent
+      (0.1330 m along Up) is the projection of the limb, not its length.
+  primaryMeasurement:
+    metric: 4
+    sourceDatumId: FIT_FOREARM_SHELL
+    axis: 0
+    referenceValueMetres: 0.12428443
+    provenance: 3
+    provenanceNote: 'A bracer is uniformly scaled so its bore matches the forearm.
+      Diameter is chosen over length because the Hero binds in an A-pose: the limb
+      runs along no canonical axis, so any axis-aligned ''length'' would depend on
+      the bind pose, while the measured diameter about the bone axis does not. A
+      bracer of the wrong length reads as a style choice; one of the wrong bore does
+      not fit the arm at all.'
+  secondaryProportionChecks:
+  - checkId: bracer_axial_extent_to_bore
+    numeratorAxis: 1
+    denominatorAxis: 0
+    rejectBelow: 0.4
+    warnBelow: 0.8
+    warnAbove: 4.5
+    rejectAbove: 6.5
+    provenance: 2
+    provenanceNote: A bracer is a tube, not a disc and not a pipe. The lower bound
+      is loose because the A-pose foreshortens the Hero's own forearm box to roughly
+      1.07:1; the band still catches a flat plate or a drainpipe. Outside it the
+      asset is reported, never squashed along its length.
+  anatomyHideIntent: 
+  measuredFromPrefabPath: Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab
+  measuredFromSourceRepoPath: public/assets/hero/hero_lod1_ironwood_atlas.glb
+  measuredFromSourceSha256: 082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679

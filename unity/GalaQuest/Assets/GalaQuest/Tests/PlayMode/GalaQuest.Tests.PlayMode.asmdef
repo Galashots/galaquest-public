@@ -3,7 +3,8 @@
     "rootNamespace": "GalaQuest.Tests",
     "references": [
         "GalaQuest.Runtime",
-        "GalaQuest.Migration.Runtime"
+        "GalaQuest.Migration.Runtime",
+        "GalaQuest.Gear.Runtime"
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

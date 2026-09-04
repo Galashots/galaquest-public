@@ -1,0 +1,119 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8c0cb7f024cb8c4f8c505dc3e0b2386, type: 3}
+  m_Name: GearFitFixture_Shield
+  m_EditorClassIdentifier: GalaQuest.Gear.Editor::GalaQuest.Gear.Editor.GearFitFixtureDefinition
+  contractId: GQ_HERO_V1_GEAR_DATUM
+  contractVersion: V0
+  coordinateConvention: +X = wearer RIGHT; +Y = wearer UP; +Z = wearer FORWARD; 1
+    Unity unit = 1 metre; Unity left-handed, so Cross(right, up) == forward.
+  metresPerUnityUnit: 1
+  slot: 4
+  displayName: Shield fit contract
+  frames:
+  - frameId: GQ_SHIELD_FRAME
+    side: 1
+    anchorBone: LeftHand
+    originInAnchor: {x: 0, y: 0, z: 0}
+    rightAxisInAnchor: {x: 0.07187255, y: -0.3523899, z: 0.93308926}
+    upAxisInAnchor: {x: -0.66223127, y: -0.7164127, z: -0.21955079}
+    forwardAxisInAnchor: {x: 0.7458446, y: -0.6021412, z: -0.28485397}
+    provenance: 1
+    provenanceNote: Canonical wearer axes inverse-transformed through the LeftHand
+      bind pose, so the frame is independent of that bone's imported roll. Origin
+      is the LeftHand joint, which IS the grip. Side Left fixes outboard to -X.
+  datums:
+  - datumId: FIT_GRIP
+    displayName: Grip
+    role: 1
+    frameId: GQ_SHIELD_FRAME
+    localCenter: {x: 0, y: 0, z: 0}
+    localSize: {x: 0.06, y: 0.089999996, z: 0.06}
+    provenance: 1
+    sourceJoints:
+    - LeftHand
+    provenanceNote: The LeftHand joint. A shield is registered by putting its own
+      grip landmark here; this is the one datum on this slot that anatomy, not taste,
+      decides.
+  - datumId: FIT_SHIELD_BOARD
+    displayName: Shield board
+    role: 1
+    frameId: GQ_SHIELD_FRAME
+    localCenter: {x: 0, y: 0, z: 0.025}
+    localSize: {x: 0.21335945, y: 0.32327187, z: 0.05}
+    provenance: 3
+    sourceJoints:
+    - Hips
+    - neck
+    provenanceNote: A shield has no anatomy to measure, so its size is an approved
+      visual range rather than a fit measurement. Height is 0.9500 of the MEASURED
+      hip-to-neck torso length (0.3403 m) and width is 0.6600 of that height, so
+      the convention stays proportional to the Hero instead of being an unexplained
+      constant.
+  - datumId: REF_SHIELD_FACE
+    displayName: Shield face direction
+    role: 4
+    frameId: GQ_SHIELD_FRAME
+    localCenter: {x: 0, y: 0, z: 0.05}
+    localSize: {x: 0.12801567, y: 0.19396313, z: 0.03}
+    provenance: 3
+    sourceJoints: []
+    provenanceNote: The outward face of the board sits on +Z, wearer FORWARD, by
+      definition of the canonical frame. A shield whose front points anywhere else
+      is mis-registered.
+  - datumId: WARN_FOREARM_CLEARANCE
+    displayName: Forearm clearance
+    role: 3
+    frameId: GQ_SHIELD_FRAME
+    localCenter: {x: 0, y: 0, z: -0.104284436}
+    localSize: {x: 0.10667972, y: 0.16163594, z: 0.104284436}
+    provenance: 3
+    sourceJoints:
+    - LeftForeArm
+    provenanceNote: Behind the grip, where the forearm actually is. Uses the measured
+      forearm diameter 0.1043 m. Board geometry reaching back into this intersects
+      the arm.
+  primaryMeasurement:
+    metric: 5
+    sourceDatumId: FIT_SHIELD_BOARD
+    axis: 1
+    referenceValueMetres: 0.32327187
+    provenance: 3
+    provenanceNote: A shield is uniformly scaled so its board height matches the
+      approved visual range, then positioned by putting its grip landmark on FIT_GRIP.
+      Height rather than width, because a shield reads by how much of the wearer
+      it covers.
+  secondaryProportionChecks:
+  - checkId: shield_width_to_height
+    numeratorAxis: 0
+    denominatorAxis: 1
+    rejectBelow: 0.35
+    warnBelow: 0.5
+    warnAbove: 1.15
+    rejectAbove: 1.45
+    provenance: 2
+    provenanceNote: Covers kite through round. A board far outside this is a door
+      or a buckler and needs a human decision, not an automatic aspect correction.
+  - checkId: shield_height_to_thickness
+    numeratorAxis: 1
+    denominatorAxis: 2
+    rejectBelow: 2
+    warnBelow: 3.5
+    warnAbove: 24
+    rejectAbove: 40
+    provenance: 2
+    provenanceNote: A board is thin but not a plane. Catches both a slab and a zero-thickness
+      card. The lower bound is loose because stylized GalaQuest shields are chunky.
+  anatomyHideIntent: 
+  measuredFromPrefabPath: Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab
+  measuredFromSourceRepoPath: public/assets/hero/hero_lod1_ironwood_atlas.glb
+  measuredFromSourceSha256: 082fc24b8fe181a6b428a3226471e56cafbb71edd6cacbfdcfd82651dfa61679
