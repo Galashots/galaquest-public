@@ -165,7 +165,11 @@ namespace GalaQuest.Gear.Editor
                 foreach (var (state, time) in MotionFrames)
                 {
                     var resolvedState = ResolvePose(rig.PoseStates, state);
-                    rig.Sample(resolvedState, time);
+                    var clips = rig.Animator.runtimeAnimatorController.animationClips
+                        .Where(clip => clip.name == resolvedState).Distinct().ToArray();
+                    if (clips.Length != 1) throw new InvalidOperationException("Expected one review clip: " + resolvedState);
+                    // Editor capture samples the clip directly; no runtime state transition or elapsed frame.
+                    clips[0].SampleAnimation(rig.HeroRoot.gameObject, time * clips[0].length);
 
                     var label = "motion-" + state + "-" +
                                 time.ToString("F2", CultureInfo.InvariantCulture).Replace('.', 'p');
@@ -182,6 +186,43 @@ namespace GalaQuest.Gear.Editor
             }
 
             Debug.Log("Gear review pack captured " + captures.Count + " stills into " + outputDirectory);
+        }
+
+        private sealed class BakedReviewPose : IDisposable
+        {
+            private readonly List<(SkinnedMeshRenderer Source, GameObject View, Mesh Mesh)> views =
+                new List<(SkinnedMeshRenderer, GameObject, Mesh)>();
+
+            public BakedReviewPose(Transform root)
+            {
+                try
+                {
+                    foreach (var source in root.GetComponentsInChildren<SkinnedMeshRenderer>())
+                    {
+                        if (!source.enabled || source.sharedMesh == null) continue;
+                        var mesh = new Mesh();
+                        var view = new GameObject("Review pose only");
+                        views.Add((source, view, mesh));
+                        source.BakeMesh(mesh);
+                        view.transform.SetParent(source.transform, false);
+                        view.AddComponent<MeshFilter>().sharedMesh = mesh;
+                        view.AddComponent<MeshRenderer>().sharedMaterials = source.sharedMaterials;
+                        source.enabled = false;
+                    }
+                }
+                catch { Dispose(); throw; }
+            }
+
+            public void Dispose()
+            {
+                foreach (var entry in views)
+                {
+                    entry.Source.enabled = true;
+                    UnityEngine.Object.DestroyImmediate(entry.View);
+                    UnityEngine.Object.DestroyImmediate(entry.Mesh);
+                }
+                views.Clear();
+            }
         }
 
         /// <summary>Match a reviewed clip alias to one actual controller state; never skip or guess.</summary>
@@ -332,7 +373,9 @@ namespace GalaQuest.Gear.Editor
             try
             {
                 camera.targetTexture = texture;
-                camera.Render();
+                // Several stills render within one Editor frame. Explicit CPU baking prevents a
+                // cached GPU skin pose from disagreeing with the newly sampled socket transforms.
+                using (new BakedReviewPose(rig.HeroRoot)) camera.Render();
 
                 RenderTexture.active = texture;
                 readback.ReadPixels(new Rect(0, 0, StillWidth, StillHeight), 0, 0);
