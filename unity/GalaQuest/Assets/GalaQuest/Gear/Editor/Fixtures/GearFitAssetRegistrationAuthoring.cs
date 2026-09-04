@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using GalaQuest.Gear;
 using UnityEditor;
 using UnityEngine;
@@ -8,25 +7,26 @@ using UnityEngine;
 namespace GalaQuest.Gear.Editor
 {
     /// <summary>
-    /// The minimal proof that an arbitrary rigid asset can be registered against a fixture, run on one
-    /// real item: the Silverguard helmet.
+    /// Registers one arbitrary rigid asset against a fixture, comparing LIKE WITH LIKE:
+    ///
+    ///     HERO required fit cavity   <->   ASSET intended fit cavity
+    ///
+    /// not the Hero's required cavity against the asset's outer shell. Outer render bounds are still
+    /// measured, but only to judge silhouette and catch absurd sizes; they cannot reach the fit scale.
     ///
     /// What this demonstrates, end to end and mechanically:
     ///
     ///   1. take a raw imported model nobody authored for this contract;
     ///   2. apply a declared raw-to-canonical rotation, so its axes mean what the contract means;
-    ///   3. measure it along the slot's PRIMARY axis;
-    ///   4. divide to get ONE uniform scale;
+    ///   3. resolve its INTENDED FIT CAVITY -- measured from a locator the asset declares, or
+    ///      authored as a virtual cavity when the geometry cannot supply one honestly;
+    ///   4. divide cavity by cavity to get ONE uniform scale;
     ///   5. judge the resulting silhouette against the slot's secondary proportion bands;
     ///   6. write all of that down, including which parts were measured and which were authored.
     ///
     /// What it deliberately is NOT: a batch importer, a Meshy intake, or a classifier that guesses
     /// which slot an unknown mesh belongs to. Registering a second item means calling Register with a
-    /// second set of arguments, not extending this file.
-    ///
-    /// The Silverguard helmet is a useful proof precisely because it is known-imperfect: it is the
-    /// item whose hand fit has already been the subject of a fit diagnosis, so a contract that quietly
-    /// blessed it would be worthless.
+    /// second set of arguments and a second data asset, not extending this file.
     /// </summary>
     public static class GearFitAssetRegistrationAuthoring
     {
@@ -35,18 +35,31 @@ namespace GalaQuest.Gear.Editor
         public const string SilverguardHelmetDefinitionPath =
             "Assets/GalaQuest/Gear/Definitions/Gear_SilverguardHelmet.asset";
 
+        /// <summary>Optional authored cavity for the proof asset, when a human has declared one.</summary>
+        public const string SilverguardHelmetProfilePath =
+            Folder + "/GearAssetFitProfile_gear_helmet_silverguard.asset";
+
         [MenuItem("GalaQuest/Gear/Register proof asset against fit contract")]
         public static void RegisterProofAsset()
         {
             var registration = EnsureSilverguardHelmetRegistration();
             AssetDatabase.Refresh();
+
+            if (registration.Status == GearFitRegistrationStatus.NeedsAuthoring)
+            {
+                Debug.LogWarning(
+                    registration.SemanticAssetId + " registered as NEEDS AUTHORING: " +
+                    registration.ProvenanceNote);
+                return;
+            }
+
             Debug.Log(
                 "Registered " + registration.SemanticAssetId + " against the " +
-                registration.FixtureSlot + " contract: measured " +
-                registration.MeasuredPrimaryDimensionMetres.ToString("F4") + " m, target " +
-                registration.TargetPrimaryDimensionMetres.ToString("F4") + " m, uniform scale " +
-                registration.UniformNormalizationScale.ToString("F5") + ", status " +
-                registration.Status + ".");
+                registration.FixtureSlot + " contract from its " + registration.AssetCavitySource +
+                ": cavity " + registration.MeasuredPrimaryDimensionMetres.ToString("F4") +
+                " m, target " + registration.TargetPrimaryDimensionMetres.ToString("F4") +
+                " m, uniform scale " + registration.UniformNormalizationScale.ToString("F5") +
+                ", status " + registration.Status + ".");
         }
 
         public static string PathFor(string semanticAssetId)
@@ -61,8 +74,12 @@ namespace GalaQuest.Gear.Editor
         }
 
         /// <summary>
-        /// Register the Silverguard helmet against the Helmet fixture, measuring the real mesh.
-        /// Idempotent: rerunning on the same inputs rewrites the same values.
+        /// Register the Silverguard helmet against the Helmet fixture.
+        ///
+        /// Silverguard is a useful proof precisely because it is known-imperfect, and because its
+        /// source art predates this contract: it carries no fit locator. If no human has authored a
+        /// virtual cavity for it either, this records NEEDS AUTHORING rather than inventing a
+        /// shell-thickness constant to manufacture a number. Idempotent.
         /// </summary>
         public static GearFitAssetRegistration EnsureSilverguardHelmetRegistration()
         {
@@ -71,8 +88,7 @@ namespace GalaQuest.Gear.Editor
                 throw new System.IO.FileNotFoundException(
                     "Proof asset missing: " + SilverguardHelmetDefinitionPath);
             if (item.SourceModel == null)
-                throw new MissingReferenceException(
-                    item.SemanticId + " has no source model to measure.");
+                throw new MissingReferenceException(item.SemanticId + " has no source model to measure.");
 
             var fixture = AssetDatabase.LoadAssetAtPath<GearFitFixtureDefinition>(
                 GearFitFixtureKitAuthoring.PathFor(GearFitFixtureSlot.Helmet));
@@ -80,23 +96,44 @@ namespace GalaQuest.Gear.Editor
                 throw new System.IO.FileNotFoundException(
                     "Helmet fixture missing; create the fit fixture kit first.");
 
-            var result = Register(
-                fixture,
-                item.SemanticId,
-                item.SourceRepoPath,
-                item.SourceModel,
-                // The raw Silverguard mesh is imported nose-down relative to the head socket. That
-                // 180-degree flip is a human observation about the source art, carried over from the
-                // Owner-authored fit on the GearItemDefinition rather than guessed here.
-                item.LocalEulerAngles,
-                "FIT_CROWN",
-                "Raw-to-canonical rotation is AUTHORED: it is copied from the Owner-authored fit on " +
-                SilverguardHelmetDefinitionPath + ", which is the human statement of how this source " +
-                "art is oriented. Everything after that point is MEASURED from the mesh and DERIVED " +
-                "by division. This registration does not modify the Owner-authored fit.");
+            var profile = AssetDatabase.LoadAssetAtPath<GearAssetFitProfile>(SilverguardHelmetProfilePath);
+
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(item.SourceModel);
+            Result result;
+            try
+            {
+                instance.transform.position = Vector3.zero;
+                instance.transform.rotation = Quaternion.identity;
+                instance.transform.localScale = Vector3.one;
+
+                result = Register(
+                    fixture,
+                    item.SemanticId,
+                    item.SourceRepoPath,
+                    instance,
+                    profile,
+                    // The raw Silverguard mesh is imported nose-down relative to the head socket. That
+                    // 180-degree flip is a human observation about the source art, carried over from
+                    // the Owner-authored fit rather than guessed here.
+                    item.LocalEulerAngles,
+                    "FIT_CROWN",
+                    "Raw-to-canonical rotation is AUTHORED: copied from the Owner-authored fit on " +
+                    SilverguardHelmetDefinitionPath + ", which is the human statement of how this " +
+                    "source art is oriented. This registration does not modify that fit.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(instance);
+            }
 
             EnsureFolder();
-            var path = PathFor(item.SemanticId);
+            return Write(PathFor(item.SemanticId), fixture.Slot, result, item.LocalScale.x);
+        }
+
+        /// <summary>Persist a computed registration. Public so calibration work can reuse it.</summary>
+        public static GearFitAssetRegistration Write(
+            string path, GearFitFixtureSlot slot, Result result, float ownerScaleForComparison)
+        {
             var asset = AssetDatabase.LoadAssetAtPath<GearFitAssetRegistration>(path);
             if (asset == null)
             {
@@ -104,33 +141,37 @@ namespace GalaQuest.Gear.Editor
                 AssetDatabase.CreateAsset(asset, path);
             }
 
+            var note = result.Note;
+            if (ownerScaleForComparison > 0f && result.Status != GearFitRegistrationStatus.NeedsAuthoring)
+            {
+                // Recorded next to the contract's own number so the gap is reviewable. NOT used to
+                // tune the contract: doing that would launder an eyeballed fit into a measurement.
+                note += " The Owner-authored uniform scale for this item is " +
+                        ownerScaleForComparison.ToString("F5") + "; the contract computes " +
+                        (result.UniformScale / ownerScaleForComparison).ToString("P1") + " of it.";
+            }
+
             asset.Configure(
                 result.SemanticAssetId,
                 result.SourceRepoPath,
-                fixture.Slot,
+                slot,
                 result.FrameId,
                 result.LandmarkId,
                 result.RawToCanonicalEuler,
                 Vector3.one,
+                result.MeasurementSource,
+                result.CavitySource,
                 result.Metric,
                 result.Axis,
                 result.MeasuredPrimary,
                 result.TargetPrimary,
                 result.UniformScale,
-                GearFitValueProvenance.Measured,
+                result.MeasurementProvenance,
                 result.Status,
-                result.NormalizedSize,
+                result.NormalizedRenderSize,
                 result.Findings,
-                // The Owner already hand-fitted this helmet. Recording their scale next to the
-                // contract's makes the calibration gap a reviewable fact instead of a surprise. It is
-                // NOT used to tune the contract: doing that would launder an eyeballed fit into a
-                // measurement, which is exactly what this contract exists to stop.
-                item.LocalScale.x,
-                result.Note + " The Owner-authored uniform scale for this item is " +
-                item.LocalScale.x.ToString("F5") + ", so the contract sizes it " +
-                (result.UniformScale / item.LocalScale.x).ToString("P1") +
-                " of the hand fit. The contract normalizes helmet OUTER width to the head CAVITY " +
-                "width, which omits shell thickness, so it is expected to run smaller than a hand fit.");
+                ownerScaleForComparison,
+                note);
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssets();
             return asset;
@@ -144,51 +185,98 @@ namespace GalaQuest.Gear.Editor
             public string FrameId;
             public string LandmarkId;
             public Vector3 RawToCanonicalEuler;
+            public GearFitMeasurementSource MeasurementSource;
+            public GearAssetCavitySource CavitySource;
+            public GearFitValueProvenance MeasurementProvenance;
             public GearFitPrimaryMetric Metric;
             public GearFitFrameAxis Axis;
+
+            /// <summary>The asset's intended fit cavity along the primary axis. Drives the scale.</summary>
             public float MeasuredPrimary;
+
             public float TargetPrimary;
             public float UniformScale;
-            public Vector3 RawSizeInCanonical;
-            public Vector3 NormalizedSize;
+
+            /// <summary>Outer render bounds. Silhouette analysis only.</summary>
+            public Vector3 RawRenderSize;
+
+            public Vector3 NormalizedRenderSize;
             public GearFitRegistrationStatus Status;
             public string[] Findings;
             public string Note;
         }
 
         /// <summary>
-        /// Measure a model against a fixture and compute its uniform normalization. Pure computation
-        /// over an instantiated prefab; writes nothing.
+        /// Measure an instantiated asset against a fixture and compute its uniform normalization.
+        /// Pure computation over a live instance the caller owns; writes nothing.
         /// </summary>
         public static Result Register(
             GearFitFixtureDefinition fixture,
             string semanticAssetId,
             string sourceRepoPath,
-            GameObject sourceModel,
+            GameObject instance,
+            GearAssetFitProfile profile,
             Vector3 rawToCanonicalEuler,
             string landmarkId,
             string note)
         {
             if (fixture == null) throw new ArgumentNullException("fixture");
-            if (sourceModel == null) throw new ArgumentNullException("sourceModel");
+            if (instance == null) throw new ArgumentNullException("instance");
 
             var primary = fixture.PrimaryMeasurement;
-            var rawSize = MeasureCanonicalSize(sourceModel, Quaternion.Euler(rawToCanonicalEuler));
-            var measured = GearFitFrame.Component(rawSize, primary.Axis);
+            var rawToCanonical = Quaternion.Euler(rawToCanonicalEuler);
 
+            // Outer bounds are measured FIRST and then deliberately set aside. They describe the
+            // silhouette, and nothing below is allowed to derive a fit scale from them.
+            var renderSize = GearAssetFitProbe.MeasureRenderBounds(instance, rawToCanonical);
+
+            var resolved = ResolveCavity(instance, profile, rawToCanonical, semanticAssetId);
+            if (!resolved.Found)
+            {
+                return new Result
+                {
+                    SemanticAssetId = semanticAssetId,
+                    SourceRepoPath = sourceRepoPath,
+                    FrameId = fixture.PrimaryFrame.FrameId,
+                    LandmarkId = landmarkId,
+                    RawToCanonicalEuler = rawToCanonicalEuler,
+                    MeasurementSource = GearFitMeasurementSource.Unclassified,
+                    CavitySource = GearAssetCavitySource.Unclassified,
+                    MeasurementProvenance = GearFitValueProvenance.Unclassified,
+                    Metric = primary.Metric,
+                    Axis = primary.Axis,
+                    MeasuredPrimary = 0f,
+                    TargetPrimary = primary.ReferenceValueMetres,
+                    UniformScale = 0f,
+                    RawRenderSize = renderSize,
+                    NormalizedRenderSize = Vector3.zero,
+                    Status = GearFitRegistrationStatus.NeedsAuthoring,
+                    Findings = new[] { resolved.Error },
+                    Note = note + " NO FIT SCALE IS CLAIMED. " + resolved.Error +
+                           " Outer render bounds are " + Format(renderSize) + " m, but normalizing on " +
+                           "those would compare the Hero's required cavity to this asset's shell and " +
+                           "decoration, so no scale is derived from them. Declare a " +
+                           GearAssetFitProbe.CavityLocatorName + " locator on the source art, or " +
+                           "author a virtual cavity profile, to register this asset.",
+                };
+            }
+
+            var measured = GearFitFrame.Component(resolved.Size, primary.Axis);
             if (!primary.TryGetUniformScale(measured, out var uniformScale))
                 throw new InvalidOperationException(
-                    semanticAssetId + " measures " + measured.ToString("F5") + " m along " +
+                    semanticAssetId + " has a fit cavity of " + measured.ToString("F5") + " m along " +
                     primary.Axis + "; a uniform normalization scale cannot be computed from that.");
 
-            // UNIFORM SCALE FIRST: one scalar on all three axes, then judge what came out.
-            var normalized = rawSize * uniformScale;
+            // UNIFORM SCALE FIRST: one scalar, derived from cavity-to-cavity, applied to everything.
+            var normalizedRender = renderSize * uniformScale;
 
             var findings = new List<string>();
             var status = GearFitRegistrationStatus.Accepted;
             foreach (var check in fixture.SecondaryProportionChecks)
             {
-                var verdict = check.Evaluate(normalized, out var ratio);
+                // Silhouette checks run on the RENDER bounds: that is the shape a player sees, and it
+                // is the right thing to judge for absurdity. It is simply not the right thing to scale by.
+                var verdict = check.Evaluate(normalizedRender, out var ratio);
                 if (verdict == GearFitProportionVerdict.Pass) continue;
 
                 findings.Add(check.CheckId + " " + verdict.ToString().ToUpperInvariant() + ": " +
@@ -218,58 +306,89 @@ namespace GalaQuest.Gear.Editor
                 FrameId = fixture.PrimaryFrame.FrameId,
                 LandmarkId = landmarkId,
                 RawToCanonicalEuler = rawToCanonicalEuler,
+                MeasurementSource = GearFitMeasurementSource.AssetFitCavity,
+                CavitySource = resolved.Source,
+                MeasurementProvenance = resolved.Provenance,
                 Metric = primary.Metric,
                 Axis = primary.Axis,
                 MeasuredPrimary = measured,
                 TargetPrimary = primary.ReferenceValueMetres,
                 UniformScale = uniformScale,
-                RawSizeInCanonical = rawSize,
-                NormalizedSize = normalized,
+                RawRenderSize = renderSize,
+                NormalizedRenderSize = normalizedRender,
                 Status = status,
                 Findings = findings.ToArray(),
-                Note = note + " Raw canonical size " + Format(rawSize) + " m; after the single uniform " +
-                       "scale " + uniformScale.ToString("F5") + " it is " + Format(normalized) + " m.",
+                Note = note + " " + resolved.Note + " Fit cavity " + Format(resolved.Size) +
+                       " m gives " + measured.ToString("F4") + " m along " + primary.Axis +
+                       "; the Hero requires " + primary.ReferenceValueMetres.ToString("F4") +
+                       " m, so the single uniform scale is " + uniformScale.ToString("F5") +
+                       ". Outer render bounds " + Format(renderSize) + " m -> " +
+                       Format(normalizedRender) + " m are used for silhouette checks only.",
             };
         }
 
-        /// <summary>
-        /// Bounding size of a model's renderers, in canonical axes, after the raw-to-canonical rotation.
-        /// Uses mesh bounds directly rather than a posed bake: this contract only covers RIGID gear.
-        /// </summary>
-        public static Vector3 MeasureCanonicalSize(GameObject sourceModel, Quaternion rawToCanonical)
+        private struct ResolvedCavity
         {
-            var instance = (GameObject)PrefabUtility.InstantiatePrefab(sourceModel);
-            try
+            public bool Found;
+            public Vector3 Size;
+            public GearAssetCavitySource Source;
+            public GearFitValueProvenance Provenance;
+            public string Note;
+            public string Error;
+        }
+
+        /// <summary>
+        /// Geometry the asset itself declares wins; an authored virtual cavity is the fallback for art
+        /// that cannot supply one. Nothing is inferred from wall thickness or vertex thresholds.
+        /// </summary>
+        private static ResolvedCavity ResolveCavity(
+            GameObject instance,
+            GearAssetFitProfile profile,
+            Quaternion rawToCanonical,
+            string semanticAssetId)
+        {
+            if (GearAssetFitProbe.TryMeasureDeclaredCavity(
+                    instance, rawToCanonical, out var declared, out var probeError))
             {
-                instance.transform.position = Vector3.zero;
-                instance.transform.rotation = rawToCanonical;
-                instance.transform.localScale = Vector3.one;
-
-                var filters = instance.GetComponentsInChildren<MeshFilter>(true)
-                    .Where(filter => filter.sharedMesh != null)
-                    .ToArray();
-                if (filters.Length == 0)
-                    throw new MissingReferenceException(
-                        sourceModel.name + " has no mesh to measure; the contract covers rigid gear only.");
-
-                var min = Vector3.one * float.MaxValue;
-                var max = Vector3.one * float.MinValue;
-                foreach (var filter in filters)
+                return new ResolvedCavity
                 {
-                    foreach (var vertex in filter.sharedMesh.vertices)
+                    Found = true,
+                    Size = declared.size,
+                    Source = GearAssetCavitySource.MeasuredFromAssetLocator,
+                    Provenance = GearFitValueProvenance.Measured,
+                    Note = "Cavity MEASURED from the " + GearAssetFitProbe.CavityLocatorName +
+                           " locator the source art declares.",
+                };
+            }
+
+            if (profile != null && profile.HasUsableCavity)
+            {
+                if (!profile.TryValidate(out var profileError))
+                {
+                    return new ResolvedCavity
                     {
-                        var point = filter.transform.TransformPoint(vertex);
-                        min = Vector3.Min(min, point);
-                        max = Vector3.Max(max, point);
-                    }
+                        Found = false,
+                        Error = "asset fit profile is invalid: " + profileError,
+                    };
                 }
 
-                return max - min;
+                return new ResolvedCavity
+                {
+                    Found = true,
+                    Size = profile.CavitySizeInCanonical,
+                    Source = profile.CavitySource,
+                    Provenance = profile.CavityProvenance,
+                    Note = "Cavity taken from the authored fit profile for " + semanticAssetId +
+                           " (" + profile.CavitySource + "): " + profile.CavityNote,
+                };
             }
-            finally
+
+            return new ResolvedCavity
             {
-                UnityEngine.Object.DestroyImmediate(instance);
-            }
+                Found = false,
+                Error = semanticAssetId + " exposes no trustworthy fit cavity (" + probeError +
+                        ") and no authored virtual cavity profile exists for it.",
+            };
         }
 
         private static void EnsureFolder()

@@ -479,25 +479,250 @@ namespace GalaQuest.Tests
         // -----------------------------------------------------------------------------------------
 
         [Test]
-        public void The_proof_asset_registers_against_the_helmet_contract_with_one_uniform_scale()
+        public void The_proof_asset_registration_is_a_valid_record_whatever_its_verdict()
         {
             GearFitFixtureKitAuthoring.EnsureDefinitions();
             var registration = GearFitAssetRegistrationAuthoring.EnsureSilverguardHelmetRegistration();
 
             Assert.That(registration.TryValidate(out var error), Is.True, error);
             Assert.That(registration.FixtureSlot, Is.EqualTo(GearFitFixtureSlot.Helmet));
-            Assert.That(registration.MeasurementProvenance,
-                Is.Not.EqualTo(GearFitValueProvenance.Unclassified));
             Assert.That(registration.Status, Is.Not.EqualTo(GearFitRegistrationStatus.Unclassified));
 
-            // The whole point: one scalar, applied to every axis. If the normalized size is not the
-            // raw size times that single number, something emitted a per-axis correction.
+            if (!registration.HasFitScale)
+            {
+                // Silverguard predates this contract and declares no fit cavity. Saying so is the
+                // correct outcome; the failure mode being guarded against is inventing a number.
+                Assert.That(registration.Status, Is.EqualTo(GearFitRegistrationStatus.NeedsAuthoring));
+                Assert.That(registration.UniformNormalizationScale, Is.EqualTo(0f),
+                    "a registration that cannot measure a cavity must not claim a fit scale");
+                return;
+            }
+
+            Assert.That(registration.PrimaryMeasurementSource,
+                Is.EqualTo(GearFitMeasurementSource.AssetFitCavity));
             var scale = registration.UniformNormalizationScale;
             Assert.That(scale, Is.GreaterThan(0f));
             Assert.That(
                 registration.TargetPrimaryDimensionMetres /
                 registration.MeasuredPrimaryDimensionMetres,
                 Is.EqualTo(scale).Within(1e-4f));
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // Calibration: decoration must not contaminate the functional fit measurement.
+        // -----------------------------------------------------------------------------------------
+
+        [Test]
+        public void Two_helmets_with_the_same_cavity_get_the_same_fit_scale_however_different_outside()
+        {
+            var helmet = HelmetFixture();
+
+            var plain = GearFitCalibrationAssets.BuildPlainHelmet();
+            var decorated = GearFitCalibrationAssets.BuildDecoratedHelmet();
+            try
+            {
+                var a = RegisterCalibration(helmet, "cal.helmet.plain", plain);
+                var b = RegisterCalibration(helmet, "cal.helmet.decorated", decorated);
+
+                Assert.That(a.MeasurementSource, Is.EqualTo(GearFitMeasurementSource.AssetFitCavity));
+                Assert.That(b.MeasurementSource, Is.EqualTo(GearFitMeasurementSource.AssetFitCavity));
+
+                // Same cavity in, same fit scale out. This is the invariant.
+                Assert.That(b.MeasuredPrimary, Is.EqualTo(a.MeasuredPrimary).Within(1e-5f),
+                    "the two calibration helmets are built with an identical functional cavity");
+                Assert.That(b.UniformScale, Is.EqualTo(a.UniformScale).Within(1e-5f),
+                    "decoration changed the fit scale, so outer geometry is contaminating the " +
+                    "functional fit measurement");
+
+                // ...and the exteriors really are different, or the test proves nothing. Under an
+                // outer-bounds algorithm THIS is what would set the scale, and the assertion above
+                // would fail.
+                Assert.That(b.RawRenderSize.x, Is.GreaterThan(a.RawRenderSize.x * 1.2f),
+                    "calibration helmet B is supposed to be materially bulkier than A");
+                Assert.That(b.RawRenderSize.y, Is.GreaterThan(a.RawRenderSize.y * 1.2f),
+                    "calibration helmet B is supposed to carry an exaggerated crest");
+            }
+            finally
+            {
+                GearFitCalibrationAssets.Destroy(plain);
+                GearFitCalibrationAssets.Destroy(decorated);
+            }
+        }
+
+        [Test]
+        public void An_asset_that_declares_no_cavity_needs_authoring_rather_than_an_invented_scale()
+        {
+            var helmet = HelmetFixture();
+            var bare = GearFitCalibrationAssets.BuildHelmetWithoutCavity();
+            try
+            {
+                var result = RegisterCalibration(helmet, "cal.helmet.no_cavity", bare);
+
+                Assert.That(result.Status, Is.EqualTo(GearFitRegistrationStatus.NeedsAuthoring));
+                Assert.That(result.UniformScale, Is.EqualTo(0f));
+                Assert.That(result.MeasurementSource,
+                    Is.Not.EqualTo(GearFitMeasurementSource.RenderBounds),
+                    "outer render bounds must never be promoted into a fit measurement");
+
+                // It still measured the silhouette -- it simply refused to scale by it.
+                Assert.That(result.RawRenderSize.x, Is.GreaterThan(0f));
+            }
+            finally
+            {
+                GearFitCalibrationAssets.Destroy(bare);
+            }
+        }
+
+        [Test]
+        public void An_authored_virtual_cavity_registers_and_is_marked_authored_not_measured()
+        {
+            var helmet = HelmetFixture();
+            var bare = GearFitCalibrationAssets.BuildHelmetWithoutCavity();
+            var profile = ScriptableObject.CreateInstance<GearAssetFitProfile>();
+            try
+            {
+                profile.Configure(
+                    "cal.helmet.virtual",
+                    GearFitFixtureSlot.Helmet,
+                    Vector3.zero,
+                    GearAssetCavitySource.AuthoredVirtualCavity,
+                    Vector3.zero,
+                    GearFitCalibrationAssets.SharedCavitySize,
+                    GearFitValueProvenance.Authored,
+                    "Virtual cavity authored for calibration: the source art exposes no inner shell.",
+                    new GearAssetFitLandmark[0]);
+
+                Assert.That(profile.TryValidate(out var profileError), Is.True, profileError);
+
+                var result = GearFitAssetRegistrationAuthoring.Register(
+                    helmet, "cal.helmet.virtual", string.Empty, bare, profile,
+                    Vector3.zero, "FIT_CROWN", "calibration");
+
+                Assert.That(result.Status, Is.Not.EqualTo(GearFitRegistrationStatus.NeedsAuthoring));
+                Assert.That(result.CavitySource,
+                    Is.EqualTo(GearAssetCavitySource.AuthoredVirtualCavity));
+                Assert.That(result.MeasurementProvenance, Is.EqualTo(GearFitValueProvenance.Authored),
+                    "a virtual cavity is an authored intent and must never be recorded as MEASURED");
+                Assert.That(result.UniformScale, Is.GreaterThan(0f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(profile);
+                GearFitCalibrationAssets.Destroy(bare);
+            }
+        }
+
+        [Test]
+        public void A_declared_cavity_is_recorded_as_measured_and_excluded_from_render_bounds()
+        {
+            var helmet = HelmetFixture();
+            var plain = GearFitCalibrationAssets.BuildPlainHelmet();
+            try
+            {
+                var result = RegisterCalibration(helmet, "cal.helmet.plain", plain);
+
+                Assert.That(result.CavitySource,
+                    Is.EqualTo(GearAssetCavitySource.MeasuredFromAssetLocator));
+                Assert.That(result.MeasurementProvenance, Is.EqualTo(GearFitValueProvenance.Measured));
+                Assert.That(result.MeasuredPrimary,
+                    Is.EqualTo(GearFitCalibrationAssets.SharedCavitySize.x).Within(1e-5f));
+
+                // The cavity locator is authoring metadata. If it leaked into render bounds, the
+                // silhouette checks would be judging a box nobody draws.
+                Assert.That(result.RawRenderSize.x,
+                    Is.EqualTo(GearFitCalibrationAssets.PlainShellSize.x).Within(1e-5f));
+            }
+            finally
+            {
+                GearFitCalibrationAssets.Destroy(plain);
+            }
+        }
+
+        [Test]
+        public void A_registration_measured_from_render_bounds_is_refused()
+        {
+            var registration = ScriptableObject.CreateInstance<GearFitAssetRegistration>();
+            try
+            {
+                registration.Configure(
+                    "cal.helmet.bad", string.Empty, GearFitFixtureSlot.Helmet, "GQ_HEAD_FRAME",
+                    "FIT_CROWN", Vector3.zero, Vector3.one,
+                    // The exact defect being guarded: outer geometry driving the fit scale.
+                    GearFitMeasurementSource.RenderBounds,
+                    GearAssetCavitySource.MeasuredFromAssetLocator,
+                    GearFitPrimaryMetric.HeadFunctionalCavityWidth, GearFitFrameAxis.Right,
+                    0.5f, 0.35f, 0.7f, GearFitValueProvenance.Measured,
+                    GearFitRegistrationStatus.Accepted, Vector3.one, new string[0], 0f, "note");
+
+                Assert.That(registration.TryValidate(out var error), Is.False,
+                    "render bounds were accepted as the primary fit measurement");
+                StringAssert.Contains("AssetFitCavity", error);
+            }
+            finally
+            {
+                Object.DestroyImmediate(registration);
+            }
+        }
+
+        [Test]
+        public void A_virtual_cavity_claiming_to_be_measured_is_refused()
+        {
+            var profile = ScriptableObject.CreateInstance<GearAssetFitProfile>();
+            try
+            {
+                profile.Configure(
+                    "cal.helmet.liar", GearFitFixtureSlot.Helmet, Vector3.zero,
+                    GearAssetCavitySource.AuthoredVirtualCavity,
+                    Vector3.zero, GearFitCalibrationAssets.SharedCavitySize,
+                    GearFitValueProvenance.Measured,
+                    "a virtual cavity dressed up as a measurement",
+                    new GearAssetFitLandmark[0]);
+
+                Assert.That(profile.TryValidate(out var error), Is.False,
+                    "an authored virtual cavity was allowed to call itself MEASURED");
+                StringAssert.Contains("AUTHORED", error);
+            }
+            finally
+            {
+                Object.DestroyImmediate(profile);
+            }
+        }
+
+        [Test]
+        public void An_asset_cavity_with_unclassified_provenance_is_refused()
+        {
+            var profile = ScriptableObject.CreateInstance<GearAssetFitProfile>();
+            try
+            {
+                profile.Configure(
+                    "cal.helmet.unclassified", GearFitFixtureSlot.Helmet, Vector3.zero,
+                    GearAssetCavitySource.AuthoredVirtualCavity,
+                    Vector3.zero, GearFitCalibrationAssets.SharedCavitySize,
+                    GearFitValueProvenance.Unclassified, "no classification",
+                    new GearAssetFitLandmark[0]);
+
+                Assert.That(profile.HasUsableCavity, Is.False);
+                Assert.That(profile.TryValidate(out var error), Is.False);
+                StringAssert.Contains("unclassified", error);
+            }
+            finally
+            {
+                Object.DestroyImmediate(profile);
+            }
+        }
+
+        private static GearFitFixtureDefinition HelmetFixture()
+        {
+            return GearFitFixtureKitAuthoring.EnsureDefinitions()
+                .Single(definition => definition.Slot == GearFitFixtureSlot.Helmet);
+        }
+
+        private static GearFitAssetRegistrationAuthoring.Result RegisterCalibration(
+            GearFitFixtureDefinition fixture, string assetId, GameObject instance)
+        {
+            return GearFitAssetRegistrationAuthoring.Register(
+                fixture, assetId, string.Empty, instance, null, Vector3.zero, "FIT_CROWN",
+                "editor-only calibration geometry");
         }
 
         [Test]

@@ -195,13 +195,19 @@ namespace GalaQuest.Gear.Editor
             json.AppendLine("    \"frame\": \"" + registration.GearFrameId + "\",");
             json.AppendLine("    \"landmark\": \"" + registration.FunctionalLandmarkId + "\",");
             json.AppendLine("    \"rawToCanonicalEuler\": " + Vec(registration.RawToCanonicalEuler) + ",");
-            json.AppendLine("    \"measuredPrimaryMetres\": " +
+            json.AppendLine("    \"primaryMeasurementSource\": \"" +
+                            registration.PrimaryMeasurementSource + "\",");
+            json.AppendLine("    \"assetCavitySource\": \"" + registration.AssetCavitySource + "\",");
+            json.AppendLine("    \"measurementProvenance\": \"" +
+                            registration.MeasurementProvenance + "\",");
+            json.AppendLine("    \"assetFitCavityMetres\": " +
                             N(registration.MeasuredPrimaryDimensionMetres) + ",");
-            json.AppendLine("    \"targetPrimaryMetres\": " +
+            json.AppendLine("    \"heroRequiredCavityMetres\": " +
                             N(registration.TargetPrimaryDimensionMetres) + ",");
             json.AppendLine("    \"uniformNormalizationScale\": " +
                             N(registration.UniformNormalizationScale) + ",");
-            json.AppendLine("    \"normalizedSizeMetres\": " + Vec(registration.NormalizedSizeInFrame) + ",");
+            json.AppendLine("    \"normalizedRenderSizeMetres\": " +
+                            Vec(registration.NormalizedRenderSizeInFrame) + ",");
             json.AppendLine("    \"ownerAuthoredScaleForComparison\": " +
                             N(registration.OwnerAuthoredScaleForComparison) + ",");
             json.AppendLine("    \"contractScaleAsFractionOfOwnerScale\": " +

@@ -19,23 +19,28 @@ MonoBehaviour:
   functionalLandmarkId: FIT_CROWN
   rawToCanonicalEuler: {x: 180, y: 0, z: 0}
   rawToCanonicalScale: {x: 1, y: 1, z: 1}
+  primaryMeasurementSource: 0
+  assetCavitySource: 0
   primaryMetric: 1
   primaryAxis: 0
-  measuredPrimaryDimensionMetres: 1
+  measuredPrimaryDimensionMetres: 0
   targetPrimaryDimensionMetres: 0.34859627
-  uniformNormalizationScale: 0.34859627
-  measurementProvenance: 1
-  status: 1
-  normalizedSizeInFrame: {x: 0.34859627, y: 0.32340497, z: 0.27710685}
-  proportionFindings: []
+  uniformNormalizationScale: 0
+  measurementProvenance: 0
+  normalizedRenderSizeInFrame: {x: 0, y: 0, z: 0}
+  proportionFindings:
+  - gear.helmet.silverguard exposes no trustworthy fit cavity (asset declares no
+    GQ_FIT_CAVITY fit locator) and no authored virtual cavity profile exists for
+    it.
+  status: 4
   ownerAuthoredScaleForComparison: 0.40929
-  provenanceNote: 'Raw-to-canonical rotation is AUTHORED: it is copied from the Owner-authored
+  provenanceNote: 'Raw-to-canonical rotation is AUTHORED: copied from the Owner-authored
     fit on Assets/GalaQuest/Gear/Definitions/Gear_SilverguardHelmet.asset, which
-    is the human statement of how this source art is oriented. Everything after that
-    point is MEASURED from the mesh and DERIVED by division. This registration does
-    not modify the Owner-authored fit. Raw canonical size (1.0000, 0.9277, 0.7949)
-    m; after the single uniform scale 0.34860 it is (0.3486, 0.3234, 0.2771) m. The
-    Owner-authored uniform scale for this item is 0.40929, so the contract sizes
-    it 85.2 % of the hand fit. The contract normalizes helmet OUTER width to the
-    head CAVITY width, which omits shell thickness, so it is expected to run smaller
-    than a hand fit.'
+    is the human statement of how this source art is oriented. This registration
+    does not modify that fit. NO FIT SCALE IS CLAIMED. gear.helmet.silverguard exposes
+    no trustworthy fit cavity (asset declares no GQ_FIT_CAVITY fit locator) and no
+    authored virtual cavity profile exists for it. Outer render bounds are (1.0000,
+    0.9277, 0.7949) m, but normalizing on those would compare the Hero''s required
+    cavity to this asset''s shell and decoration, so no scale is derived from them.
+    Declare a GQ_FIT_CAVITY locator on the source art, or author a virtual cavity
+    profile, to register this asset.'
