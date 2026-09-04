@@ -176,3 +176,25 @@ test('authority remains secret-free and Package B interface-only', () => {
   assert.equal(registry.animation_lab_interface.consumer, 'Package B Animation Lab v1');
   assert.deepEqual(registry.animation_lab_interface.exclusions, ['authoring implementation', 'retarget promotion', 'runtime integration']);
 });
+
+test('records sharing identical bytes stay linked instead of competing as separate logical assets', () => {
+  const byDigest = new Map();
+  for (const record of registry.records) {
+    const digest = record.source.sha256;
+    if (!digest) continue;
+    if (!byDigest.has(digest)) byDigest.set(digest, []);
+    byDigest.get(digest).push(record);
+  }
+
+  for (const [digest, group] of byDigest) {
+    if (group.length < 2) continue;
+    const canonical = group.filter((record) => record.lifecycle !== 'SUPERSEDED');
+    assert.equal(canonical.length, 1, `${digest} must resolve to exactly one canonical identity, got ${group.map((record) => record.asset_id).join(', ')}`);
+    for (const alias of group.filter((record) => record !== canonical[0])) {
+      assert.equal(alias.lifecycle, 'SUPERSEDED', `${alias.asset_id} shares bytes with ${canonical[0].asset_id} and must be SUPERSEDED`);
+      assert.equal(alias.next_action, 'ARCHIVE_ONLY', `${alias.asset_id} is a superseded alias and must not be offered as work`);
+      assert.equal(alias.derivative_of, canonical[0].asset_id, `${alias.asset_id} must point at its canonical identity`);
+      assert.ok(alias.related_asset_ids.includes(canonical[0].asset_id), `${alias.asset_id} must relate to ${canonical[0].asset_id}`);
+    }
+  }
+});
