@@ -71,10 +71,21 @@ namespace GalaQuest.Gear
                     definition.DisplayName + " has a zero component in its authored scale."));
             }
 
-            if (mounted == null || socket == null) return issues;
+            var geometryError = MountedGeometryError(mounted);
+            if (geometryError != null)
+            {
+                issues.Add(new GearFitIssue(GearFitSeverity.Rejection, GearFitIssueCodes.InvalidGeometry, geometryError));
+                return issues;
+            }
+            if (socket == null) return issues;
 
             var itemVertices = CollectWorldVertices(mounted);
-            if (itemVertices.Count == 0) return issues;
+            if (itemVertices.Count == 0)
+            {
+                issues.Add(new GearFitIssue(GearFitSeverity.Rejection, GearFitIssueCodes.InvalidGeometry,
+                    "Mounted item has no measurable vertices"));
+                return issues;
+            }
 
             if (definition.FitClass == GearFitClass.Headgear)
             {
@@ -220,6 +231,29 @@ namespace GalaQuest.Gear
                 if (Application.isPlaying) Object.Destroy(baked);
                 else Object.DestroyImmediate(baked);
             }
+        }
+
+        /// <summary>Rigid production gates require visible triangle geometry they can actually measure.</summary>
+        public static string MountedGeometryError(GameObject mounted)
+        {
+            if (mounted == null) return "No mounted item to validate";
+            var found = false;
+            foreach (var renderer in mounted.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                if (!(renderer is MeshRenderer))
+                    return "Mounted item has an unsupported renderer; rigid fit checks require MeshRenderer geometry";
+                var filter = renderer.GetComponent<MeshFilter>();
+                var mesh = filter == null ? null : filter.sharedMesh;
+                if (mesh == null || mesh.vertexCount == 0 || mesh.subMeshCount == 0)
+                    return "Mounted renderer has missing or empty mesh geometry";
+                var triangles = false;
+                for (var i = 0; i < mesh.subMeshCount; i++)
+                    triangles |= mesh.GetTopology(i) == MeshTopology.Triangles && mesh.GetIndexCount(i) >= 3;
+                if (!triangles) return "Mounted renderer has no supported triangles";
+                found = true;
+            }
+            return found ? null : "Mounted item has no active, enabled rigid mesh renderer";
         }
 
         public static List<Vector3> CollectWorldVertices(GameObject root)

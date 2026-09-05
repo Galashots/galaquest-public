@@ -578,6 +578,88 @@ namespace GalaQuest.Tests
             Assert.Throws<System.InvalidOperationException>(() => GearFitSeedBatch.ProcessOne(id));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Missing_or_empty_mounted_mesh_rejects_in_both_gates(bool emptyMesh)
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var seed = GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration);
+                item.TryApplySeedFit(seed.LocalPosition, seed.LocalEulerAngles, seed.LocalScale);
+                var mounted = GearMounter.Mount(hero.transform, item);
+                var empty = new Mesh();
+                try
+                {
+                    foreach (var filter in mounted.GetComponentsInChildren<MeshFilter>(true))
+                        filter.sharedMesh = emptyMesh ? empty : null;
+                    var runtime = GearFitValidator.Validate(hero.transform, mounted, item, LoadProxy());
+                    var consistency = GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration);
+                    Assert.That(runtime.Any(i => i.Severity == GearFitSeverity.Rejection), Is.True, "runtime accepted no geometry");
+                    Assert.That(consistency.Any(i => i.Severity == GearFitSeverity.Rejection), Is.True, "consistency accepted no geometry");
+                }
+                finally { Object.DestroyImmediate(empty); }
+            });
+        }
+
+        [Test]
+        public void Registration_proportion_warning_survives_one_item_report()
+        {
+            using var production = new GearTestProductionSnapshot();
+            var fixture = Fixture(GearFitFixtureSlot.Shield);
+            var serialized = new SerializedObject(fixture);
+            serialized.FindProperty("secondaryProportionChecks").GetArrayElementAtIndex(0)
+                .FindPropertyRelative("warnAbove").floatValue = 0.9f;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            var report = GearFitSeedBatch.ProcessOne(ShieldSemanticId);
+            var registration = GearFitAssetRegistrationAuthoring.LoadRegistration(ShieldSemanticId);
+            Assert.That(registration.Status, Is.EqualTo(GearFitRegistrationStatus.Warned));
+            Assert.That(report.status, Is.EqualTo("WARN"), "headless report lost registration warning");
+            Assert.That(report.findings.Any(f => f.Contains("shield_width_to_height")), Is.True);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Invisible_or_unsupported_mounted_geometry_rejects(bool unsupported)
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var seed = GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration);
+                item.TryApplySeedFit(seed.LocalPosition, seed.LocalEulerAngles, seed.LocalScale);
+                var mounted = GearMounter.Mount(hero.transform, item);
+                if (unsupported) mounted.AddComponent<SkinnedMeshRenderer>();
+                else foreach (var renderer in mounted.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
+                Assert.That(GearFitValidator.MountedGeometryError(mounted), Is.Not.Null);
+                Assert.That(GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration)
+                    .Any(i => i.Severity == GearFitSeverity.Rejection), Is.True);
+            });
+        }
+
+        [TestCase("missing")]
+        [TestCase("empty")]
+        [TestCase("duplicate")]
+        [TestCase("unknown")]
+        public void Bad_item_arguments_replace_old_success_report(string failure)
+        {
+            var output = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gq-args-" + System.Guid.NewGuid() + ".json");
+            try
+            {
+                System.IO.File.WriteAllText(output, "{\"status\":\"PASS\",\"runId\":\"old\"}");
+                var args = new List<string> { "-gqGearReport", output };
+                if (failure != "missing") args.Add("-gqGearItem");
+                if (failure == "duplicate") args.AddRange(new[] { ShieldSemanticId, "-gqGearItem", ShieldSemanticId });
+                if (failure == "unknown") args.Add("gear.test.absent");
+                var result = GearFitSeedBatch.RunArguments(args.ToArray());
+                var saved = JsonUtility.FromJson<GearFitSeedBatch.Report>(System.IO.File.ReadAllText(output));
+                Assert.That(result.status, Is.EqualTo("FAIL"));
+                Assert.That(saved.status, Is.EqualTo("FAIL"));
+                Assert.That(saved.runId, Is.EqualTo(result.runId).And.Not.EqualTo("old"));
+                Assert.That(saved.startedUtc, Is.Not.Empty);
+                Assert.That(saved.findings, Is.Not.Empty);
+                Assert.That(saved.reportPath, Is.EqualTo(System.IO.Path.GetFullPath(output)));
+            }
+            finally { System.IO.File.Delete(output); }
+        }
+
         // -------------------------------------------------------------------------------------------
         // Packaging
         // -------------------------------------------------------------------------------------------

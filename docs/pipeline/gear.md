@@ -134,7 +134,12 @@ The report path is relative to the Unity process working directory; use an absol
 The item id must resolve exactly one definition. Missing/duplicate ids fail; there is no all-items
 fallback. This registers/refreshes, derives a seed, preserves Owner-authored fits, and runs runtime
 plus registration-consistency checks against an actual mounted instance. Only the selected definition
-and registration may be saved. `PASS` means no machine rejection, never visual acceptance.
+and registration may be saved. Registration proportion warnings remain `WARN` in the combined report
+and Workbench checks. Missing, empty, invisible or unsupported mounted geometry rejects.
+`PASS` means no machine rejection, never visual acceptance. Reports include a unique `runId`, UTC
+start time and actual output path. Missing/duplicate/malformed item arguments write `FAIL` to the
+valid requested report path; a malformed/unwritable report destination uses the default report when
+possible. Always check the exit code and the current run's report, never a previous `PASS` file.
 
 For exact-commit captures, commit the derived data first, then repeat the same invocation with
 `-gqGearCapture` (graphics required; do not use `-nographics`). The capture reuses the review renderer

@@ -12,6 +12,9 @@ namespace GalaQuest.Gear.Editor
         [Serializable]
         public sealed class Report
         {
+            public string runId = Guid.NewGuid().ToString("N");
+            public string startedUtc = DateTime.UtcNow.ToString("O");
+            public string reportPath;
             public string semanticId;
             public string status = "FAIL";
             public bool seedApplied;
@@ -85,19 +88,28 @@ namespace GalaQuest.Gear.Editor
 
         public static void RunOne()
         {
-            var args = Environment.GetCommandLineArgs();
-            var id = Argument(args, "-gqGearItem", true);
-            var output = Argument(args, "-gqGearReport", false) ??
-                Path.GetFullPath(Path.Combine(Application.dataPath, "../../../.local/unity/gear-item-report.json"));
-            var report = new Report { semanticId = id };
+            var report = RunArguments(Environment.GetCommandLineArgs());
+            Debug.Log(JsonUtility.ToJson(report));
+            if (Application.isBatchMode) EditorApplication.Exit(report.status == "PASS" || report.status == "WARN" ? 0 : 1);
+        }
+
+        /// <summary>Same CLI path without terminating the Editor, so malformed invocations can be tested.</summary>
+        public static Report RunArguments(string[] args)
+        {
+            var fallback = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../.local/unity/gear-item-report.json"));
+            var output = fallback;
+            var report = new Report();
             try
             {
-                report = ProcessOne(id);
+                // Resolve the output first: a missing/duplicate item argument still replaces its old report.
+                output = Path.GetFullPath(Argument(args, "-gqGearReport", false) ?? fallback);
+                report.semanticId = Argument(args, "-gqGearItem", true);
+                report = ProcessOne(report.semanticId);
                 if (args.Contains("-gqGearCapture"))
                 {
                     if (report.status != "PASS" && report.status != "WARN")
                         throw new InvalidOperationException("capture refused: item failed machine gates");
-                    GearReviewPack.CaptureItem(ResolveOne(id));
+                    GearReviewPack.CaptureItem(ResolveOne(report.semanticId));
                 }
             }
             catch (Exception ex)
@@ -105,10 +117,26 @@ namespace GalaQuest.Gear.Editor
                 report.status = "FAIL";
                 report.findings = report.findings.Concat(new[] { ex.Message }).ToArray();
             }
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output)));
+            try { WriteReport(output, report); }
+            catch (Exception ex)
+            {
+                report.status = "FAIL";
+                report.findings = report.findings.Concat(new[] { "Report write failed: " + ex.Message }).ToArray();
+                try { WriteReport(fallback, report); }
+                catch (Exception fallbackError)
+                {
+                    report.reportPath = null;
+                    report.findings = report.findings.Concat(new[] { "Fallback report write failed: " + fallbackError.Message }).ToArray();
+                }
+            }
+            return report;
+        }
+
+        private static void WriteReport(string output, Report report)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(output));
+            report.reportPath = output;
             File.WriteAllText(output, JsonUtility.ToJson(report, true));
-            Debug.Log(JsonUtility.ToJson(report));
-            if (Application.isBatchMode) EditorApplication.Exit(report.status == "PASS" || report.status == "WARN" ? 0 : 1);
         }
 
         private static string Argument(string[] args, string key, bool required)

@@ -55,11 +55,26 @@ namespace GalaQuest.Gear.Editor
                 return issues;
             }
 
+            var geometryError = GearFitValidator.MountedGeometryError(mounted);
+            if (geometryError != null)
+            {
+                issues.Add(new GearFitIssue(GearFitSeverity.Rejection, GearFitIssueCodes.InvalidGeometry, geometryError));
+                return issues;
+            }
+
             var seed = GearFitSeedSolver.Solve(heroRoot, item, fixture, profile, registration);
             if (!seed.IsComplete)
             {
                 issues.Add(new GearFitIssue(GearFitSeverity.Rejection, Codes.Unseedable, seed.Error));
                 return issues;
+            }
+            if (registration.Status == GearFitRegistrationStatus.Warned)
+            {
+                var findings = registration.ProportionFindings;
+                if (findings.Length == 0)
+                    issues.Add(new GearFitIssue(GearFitSeverity.Warning, "registration.proportion-warning", "Registration requires proportion review"));
+                foreach (var finding in findings)
+                    issues.Add(new GearFitIssue(GearFitSeverity.Warning, "registration.proportion-warning", finding));
             }
             if (!GearAssetFitProfile.IsFinite(mounted.transform.localPosition) ||
                 !GearAssetFitProfile.IsFinite(mounted.transform.localScale) ||
