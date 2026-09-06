@@ -99,6 +99,19 @@ namespace GalaQuest.Gear.Editor
                  "below is expressed AFTER this rotation.")]
         [SerializeField] private Vector3 rawToCanonicalEuler;
 
+        [SerializeField] private GearFitValueProvenance orientationProvenance;
+        [SerializeField] private string orientationNote = string.Empty;
+        public GearFitValueProvenance OrientationProvenance => orientationProvenance;
+        public string OrientationNote => orientationNote;
+        public void ConfigureOrientation(Vector3 rotation, GearFitValueProvenance provenance, string note)
+        {
+            rawToCanonicalEuler = rotation; orientationProvenance = provenance; orientationNote = note;
+        }
+        public static bool IsFinite(Vector3 v) =>
+            !float.IsNaN(v.x) && !float.IsInfinity(v.x) &&
+            !float.IsNaN(v.y) && !float.IsInfinity(v.y) &&
+            !float.IsNaN(v.z) && !float.IsInfinity(v.z);
+
         [Header("Intended fit cavity (canonical asset space, metres)")]
         [SerializeField] private GearAssetCavitySource cavitySource;
         [SerializeField] private Vector3 cavityCenterInCanonical;
@@ -171,6 +184,12 @@ namespace GalaQuest.Gear.Editor
         {
             if (string.IsNullOrEmpty(semanticAssetId))
                 return Fail("semantic asset id is empty", out error);
+            if (orientationProvenance != GearFitValueProvenance.Measured &&
+                orientationProvenance != GearFitValueProvenance.Authored &&
+                orientationProvenance != GearFitValueProvenance.Derived)
+                return Fail("orientation provenance is unclassified or invalid", out error);
+            if (!IsFinite(rawToCanonicalEuler)) return Fail("orientation is not finite", out error);
+            if (string.IsNullOrWhiteSpace(orientationNote)) return Fail("orientation note is empty", out error);
             if (cavitySource == GearAssetCavitySource.Unclassified)
                 return Fail(semanticAssetId + ": cavity source is unclassified", out error);
             if (cavityProvenance == GearFitValueProvenance.Unclassified)
@@ -191,8 +210,10 @@ namespace GalaQuest.Gear.Editor
                 return Fail(semanticAssetId + ": a virtual cavity must be AUTHORED, not " +
                             cavityProvenance, out error);
 
+            var ids = new System.Collections.Generic.HashSet<string>();
             foreach (var landmark in Landmarks)
             {
+                if (!ids.Add(landmark.LandmarkId)) return Fail("duplicate landmark " + landmark.LandmarkId, out error);
                 if (!landmark.TryValidate(out var landmarkError))
                     return Fail(semanticAssetId + ": " + landmarkError, out error);
             }

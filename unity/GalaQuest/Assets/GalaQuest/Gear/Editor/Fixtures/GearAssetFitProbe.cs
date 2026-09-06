@@ -26,7 +26,7 @@ namespace GalaQuest.Gear.Editor
         public const string CavityLocatorName = "GQ_FIT_CAVITY";
 
         /// <summary>Prefix marking any fit locator, cavity or landmark. Excluded from render bounds.</summary>
-        public const string LocatorPrefix = "GQ_FIT_";
+        public const string LocatorPrefix = GearFitValidator.FitLocatorPrefix;
 
         /// <summary>
         /// Measure the asset-declared cavity, in canonical asset space.
@@ -73,32 +73,30 @@ namespace GalaQuest.Gear.Editor
         /// </summary>
         public static Vector3 MeasureRenderBounds(GameObject instance, Quaternion rawToCanonical)
         {
-            var renderable = new List<Transform>();
-            foreach (var filter in instance.GetComponentsInChildren<MeshFilter>(true))
+            var bounds = default(Bounds);
+            var any = false;
+            // Measure each eligible filter once; do not recursively reintroduce hidden children.
+            foreach (var filter in GearFitValidator.VisibleRigidMeshFilters(instance))
             {
-                if (filter.sharedMesh == null) continue;
-                if (IsLocator(filter.transform)) continue;
-                renderable.Add(filter.transform);
+                foreach (var vertex in filter.sharedMesh.vertices)
+                {
+                    var canonical = rawToCanonical * instance.transform.InverseTransformPoint(
+                        filter.transform.TransformPoint(vertex));
+                    if (!any) bounds = new Bounds(canonical, Vector3.zero);
+                    else bounds.Encapsulate(canonical);
+                    any = true;
+                }
             }
 
-            if (renderable.Count == 0)
+            if (!any)
                 throw new MissingReferenceException(
                     instance.name + " has no renderable mesh; the contract covers rigid gear only.");
 
-            TryMeasure(instance.transform, renderable, rawToCanonical, out var bounds);
             return bounds.size;
         }
 
         /// <summary>Is this transform, or any ancestor, a fit locator rather than rendered gear?</summary>
-        public static bool IsLocator(Transform transform)
-        {
-            for (var current = transform; current != null; current = current.parent)
-            {
-                if (current.name.StartsWith(LocatorPrefix, System.StringComparison.Ordinal)) return true;
-            }
-
-            return false;
-        }
+        public static bool IsLocator(Transform transform) => GearFitValidator.IsFitLocator(transform);
 
         /// <summary>
         /// Named fit landmarks the asset declares, e.g. GQ_FIT_CROWN, in canonical asset space.

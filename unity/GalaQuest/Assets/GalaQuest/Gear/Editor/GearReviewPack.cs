@@ -29,6 +29,8 @@ namespace GalaQuest.Gear.Editor
         private static readonly (string State, float Time)[] MotionFrames =
         {
             ("idle", 0f),
+            ("combat_stance", 0f),
+            ("shield_push", 0.35f),
             ("running", 0.25f),
             ("running", 0.6f),
             ("sword_slash", 0.35f),
@@ -50,10 +52,17 @@ namespace GalaQuest.Gear.Editor
             CaptureInternal(true);
         }
 
-        private static void CaptureInternal(bool allowDirty)
+        public static void CaptureItem(GearItemDefinition item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            CaptureInternal(false, item);
+        }
+
+        private static void CaptureInternal(bool allowDirty, GearItemDefinition targetItem = null)
         {
             var repoRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", ".."));
             var outputDirectory = Path.Combine(repoRoot, OutputRoot.Replace('/', Path.DirectorySeparatorChar));
+            if (targetItem != null) outputDirectory = Path.Combine(outputDirectory, Slug(targetItem.SemanticId));
             Directory.CreateDirectory(outputDirectory);
 
             var gitSha = RunGit("rev-parse HEAD", repoRoot);
@@ -68,6 +77,7 @@ namespace GalaQuest.Gear.Editor
             var dirty = string.Join(
                 ((char)10).ToString(),
                 new[] { changed, untracked }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            if (string.IsNullOrWhiteSpace(gitSha)) throw new InvalidOperationException("Cannot establish capture Git SHA");
             var isDirty = !string.IsNullOrWhiteSpace(dirty);
 
             if (isDirty && !allowDirty)
@@ -83,6 +93,20 @@ namespace GalaQuest.Gear.Editor
             var rig = UnityEngine.Object.FindFirstObjectByType<GearFitProofRig>();
             if (rig == null)
                 throw new InvalidOperationException("The workbench scene has no GearFitProofRig.");
+
+            rig.Animator.enabled = false;
+            ResetToSourcePose(rig.HeroRoot);
+
+            if (targetItem != null)
+            {
+                foreach (var oldMount in rig.MountedItems().ToArray())
+                    UnityEngine.Object.DestroyImmediate(oldMount.gameObject);
+                var selected = GearMounter.Mount(rig.HeroRoot, targetItem);
+                selected.AddComponent<GearMountedItem>().Configure(targetItem);
+                var findings = GearFitSeedConsistency.CheckCurrent(rig.HeroRoot, selected, targetItem);
+                if (findings.Any(issue => issue.Severity == GearFitSeverity.Rejection))
+                    throw new InvalidOperationException("capture consistency rejection: " + string.Join("; ", findings));
+            }
 
             // Deactivate anything mounted whose definition has gone. Such an object cannot be toggled
             // by the per-item pass below and would otherwise photobomb every still.
@@ -132,9 +156,10 @@ namespace GalaQuest.Gear.Editor
                     RefreshCoverage();
 
                     var slug = Slug(item.Definition.SemanticId);
+                    var subject = MountedBounds(item);
                     foreach (var view in GearReviewViews.All)
                     {
-                        captures.Add(RenderView(camera, rig, view, slug, outputDirectory));
+                        captures.Add(RenderView(camera, rig, view, slug, outputDirectory, subject));
                     }
                 }
 
@@ -142,13 +167,18 @@ namespace GalaQuest.Gear.Editor
                 SetAllVisible(items, true);
                 foreach (var (state, time) in MotionFrames)
                 {
-                    if (!rig.PoseStates.Contains(state)) continue;
-                    rig.Sample(state, time);
+                    var resolvedState = ResolvePose(rig.PoseStates, state);
+                    var clips = rig.Animator.runtimeAnimatorController.animationClips
+                        .Where(clip => clip.name == resolvedState).Distinct().ToArray();
+                    if (clips.Length != 1) throw new InvalidOperationException("Expected one review clip: " + resolvedState);
+                    // Editor capture samples the clip directly; no runtime state transition or elapsed frame.
+                    clips[0].SampleAnimation(rig.HeroRoot.gameObject, time * clips[0].length);
 
                     var label = "motion-" + state + "-" +
                                 time.ToString("F2", CultureInfo.InvariantCulture).Replace('.', 'p');
-                    captures.Add(RenderView(camera, rig, GearReviewViews.View.Gameplay, label, outputDirectory));
-                    captures.Add(RenderView(camera, rig, GearReviewViews.View.ThreeQuarter, label, outputDirectory));
+                    foreach (var view in GearReviewViews.All)
+                        captures.Add(RenderView(camera, rig, view, label, outputDirectory,
+                            targetItem == null ? null : MountedBounds(items[0])));
                 }
 
                 WriteManifest(outputDirectory, items, captures, gitSha, isDirty, dirty);
@@ -159,6 +189,82 @@ namespace GalaQuest.Gear.Editor
             }
 
             Debug.Log("Gear review pack captured " + captures.Count + " stills into " + outputDirectory);
+        }
+
+        public static void ResetToSourcePose(Transform heroRoot)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(GearHeroAuthoring.HeroModelPath);
+            if (model == null) throw new InvalidOperationException("Missing Hero source for neutral review pose");
+            foreach (var source in model.GetComponentsInChildren<Transform>(true))
+            {
+                if (source == model.transform) continue;
+                var path = AnimationUtility.CalculateTransformPath(source, model.transform);
+                var target = heroRoot.Find(path);
+                if (target == null) throw new InvalidOperationException("Missing source pose transform: " + path);
+                target.localPosition = source.localPosition;
+                target.localRotation = source.localRotation;
+                target.localScale = source.localScale;
+            }
+        }
+
+        private sealed class BakedReviewPose : IDisposable
+        {
+            private readonly List<(SkinnedMeshRenderer Source, GameObject View, Mesh Mesh)> views =
+                new List<(SkinnedMeshRenderer, GameObject, Mesh)>();
+
+            public BakedReviewPose(Transform root)
+            {
+                try
+                {
+                    foreach (var source in root.GetComponentsInChildren<SkinnedMeshRenderer>())
+                    {
+                        if (!source.enabled || source.sharedMesh == null) continue;
+                        var mesh = new Mesh();
+                        var view = new GameObject("Review pose only");
+                        views.Add((source, view, mesh));
+                        source.BakeMesh(mesh);
+                        view.transform.SetParent(source.transform, false);
+                        view.AddComponent<MeshFilter>().sharedMesh = mesh;
+                        view.AddComponent<MeshRenderer>().sharedMaterials = source.sharedMaterials;
+                        source.enabled = false;
+                    }
+                }
+                catch { Dispose(); throw; }
+            }
+
+            public void Dispose()
+            {
+                foreach (var entry in views)
+                {
+                    entry.Source.enabled = true;
+                    UnityEngine.Object.DestroyImmediate(entry.View);
+                    UnityEngine.Object.DestroyImmediate(entry.Mesh);
+                }
+                views.Clear();
+            }
+        }
+
+        /// <summary>Match a reviewed clip alias to one actual controller state; never skip or guess.</summary>
+        public static string ResolvePose(IEnumerable<string> availableStates, string alias)
+        {
+            // Imported FBX names carry Armature namespaces and sometimes a trailing baselayer.
+            // Match a whole name segment, not a substring (idle must not match idle_variant).
+            var matches = availableStates.Where(name => name.Split('|').Contains(alias)).ToArray();
+            if (matches.Length != 1)
+                throw new InvalidOperationException("Review pose '" + alias + "' resolved " + matches.Length +
+                    " controller states; expected exactly one. Available: " + string.Join(", ", availableStates));
+            return matches[0];
+        }
+
+        /// <summary>World bounds of one mounted item's renderers, or null when it draws nothing.</summary>
+        private static Bounds? MountedBounds(GearMountedItem item)
+        {
+            var renderers = item.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return null;
+
+            var bounds = renderers[0].bounds;
+            for (var i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            return bounds;
         }
 
         private static void ReapplyCurrentFits(GearFitProofRig rig, IEnumerable<GearMountedItem> items)
@@ -253,17 +359,31 @@ namespace GalaQuest.Gear.Editor
             GearFitProofRig rig,
             GearReviewViews.View view,
             string label,
-            string outputDirectory)
+            string outputDirectory,
+            Bounds? subject = null)
         {
             var head = GearHeroAuthoring.FindDescendant(rig.HeroRoot, GearSocketIds.HeadBone);
             var target = view == GearReviewViews.View.Gameplay || head == null
                 ? rig.HeroRoot.position + Vector3.up * 0.8f
                 : head.position;
+            var distance = GearReviewViews.DistanceFor(view);
+
+            // Front / three-quarter / side are framed tight on the head. That is right for headgear and
+            // useless for anything else -- a shield on the left hand is simply outside the frame, so
+            // three of the four review angles showed no shield at all. When one item is under review,
+            // aim at THAT item and pull back far enough to contain it. Headgear sits on the head, so
+            // its framings are unchanged.
+            if (view != GearReviewViews.View.Gameplay &&
+                subject.HasValue && subject.Value.size.sqrMagnitude > 0f)
+            {
+                target = subject.Value.center;
+                distance = Mathf.Max(distance, subject.Value.size.magnitude * 1.35f);
+            }
 
             var rotation = GearReviewViews.RotationFor(view);
             camera.fieldOfView = GearReviewViews.FieldOfViewFor(view);
             camera.transform.rotation = rotation;
-            camera.transform.position = target - rotation * Vector3.forward * GearReviewViews.DistanceFor(view);
+            camera.transform.position = target - rotation * Vector3.forward * distance;
 
             var texture = new RenderTexture(StillWidth, StillHeight, 24, RenderTextureFormat.ARGB32);
             var readback = new Texture2D(StillWidth, StillHeight, TextureFormat.RGB24, false);
@@ -272,7 +392,9 @@ namespace GalaQuest.Gear.Editor
             try
             {
                 camera.targetTexture = texture;
-                camera.Render();
+                // Several stills render within one Editor frame. Explicit CPU baking prevents a
+                // cached GPU skin pose from disagreeing with the newly sampled socket transforms.
+                using (new BakedReviewPose(rig.HeroRoot)) camera.Render();
 
                 RenderTexture.active = texture;
                 readback.ReadPixels(new Rect(0, 0, StillWidth, StillHeight), 0, 0);

@@ -26,6 +26,7 @@ namespace GalaQuest.Gear
     public static class GearFitIssueCodes
     {
         public const string MissingDefinition = "missing-definition";
+        public const string InvalidGeometry = "invalid-mounted-geometry";
         public const string MissingModel = "missing-model";
         public const string MissingSocket = "missing-socket";
         public const string InvalidTransform = "invalid-transform";

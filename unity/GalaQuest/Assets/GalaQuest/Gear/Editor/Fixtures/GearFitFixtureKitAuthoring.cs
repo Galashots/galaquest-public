@@ -696,7 +696,24 @@ namespace GalaQuest.Gear.Editor
                 GearHeroAuthoring.HeroPrefabPath,
                 GearHeroAuthoring.HeroSourceRepoPath,
                 GearHeroAuthoring.HeroSourceSha256);
+            asset.ConfigureSeatBindings(BindingsFor(built.Slot));
             EditorUtility.SetDirty(asset);
+        }
+
+        public static GearFitSeatBinding[] BindingsFor(GearFitFixtureSlot slot)
+        {
+            switch (slot)
+            {
+                case GearFitFixtureSlot.Helmet:
+                    return new[] { new GearFitSeatBinding(GearSocketIds.Head, "GQ_HEAD_FRAME", "FIT_HEAD_CAVITY") };
+                case GearFitFixtureSlot.Shoulder:
+                    return new[] {
+                        new GearFitSeatBinding(GearSocketIds.LeftShoulder, "GQ_SHOULDER_L_FRAME", "FIT_SHOULDER_CUP_L"),
+                        new GearFitSeatBinding(GearSocketIds.RightShoulder, "GQ_SHOULDER_R_FRAME", "FIT_SHOULDER_CUP_R") };
+                case GearFitFixtureSlot.Shield:
+                    return new[] { new GearFitSeatBinding(GearSocketIds.LeftHand, "GQ_SHIELD_FRAME", "FIT_GRIP") };
+                default: return Array.Empty<GearFitSeatBinding>();
+            }
         }
 
         private static void EnsureFolder()

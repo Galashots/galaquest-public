@@ -37,6 +37,219 @@ Machine gates REJECT; they never visually accept. Running-game pixels remain fin
 authority, and there is no Unity gameplay/controller seam yet, so Unity Editor renders are inspection
 evidence and must not be reported as gameplay evidence.
 
+### Covered hair and ears in the Workbench
+
+Mounted items' `HidesAnatomy` declarations drive the normal coverage preview. A helmet covering hair
+and ears hides those supervised regions; disabling/removing it restores the original mesh. Turn off
+**Preview hidden anatomy** only to inspect the covered anatomy. Fit against the intended covered head,
+not the hairstyle. The preview changes a temporary index-buffer copy, never the Hero source or saved fits.
+
+Regenerate the checked-in Unity region map with
+`node tools/unity-migration/export-hero-anatomy-regions.mjs`. The exporter verifies the source GLB hash
+against the supervised region authority. Unity requires a complete, unique UV-triangle correspondence
+before transferring the regions, allowing face reordering/winding and a single V-flip convention.
+Missing or ambiguous correspondence rejects coverage; equal triangle counts are insufficient. Escalate
+an unsupported derivative instead of guessing hair by height or hiding arbitrary faces. This remains
+Workbench inspection evidence, not a Unity gameplay equip implementation.
+
+The qualified Hero importer must enable **Read/Write**: the preview reads UV/index buffers. An
+unreadable mesh rejects coverage rather than throwing repeatedly in the Editor. Keep this requirement
+scoped to the Hero; do not turn on CPU mesh copies for unrelated assets.
+
+The existing supervised `hair` atom includes **hair and scalp**, authored for the Dawnwarden full-helm
+proof. It is not a hair-only cap suitable for every open-face helmet. Silverguard exposes the removed
+scalp boundary with the Owner's current fit and remains an unqualified diagnostic item. Do not enlarge,
+move, or reseed an Owner fit to hide that mismatch. A new coverage atom needs supervised authoring and
+equip/unequip visual review under [character-armoring.md](character-armoring.md); a new full-cover
+helmet must independently prove that it conceals the existing cut boundary. Structural coverage PASS
+does not establish either condition.
+
+## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
+
+Checkpoint A answers WHERE gear attaches. The datum contract answers HOW BIG and WHICH WAY ROUND, in a
+form a machine can check.
+
+Each of the five slots has a `GearFitFixtureDefinition` under `Gear/Editor/Fixtures/Definitions/`,
+measured from GQ_HERO_V1 itself. A fixture states:
+
+- a canonical wearable convention — **+X wearer right, +Y up, +Z forward, 1 Unity unit = 1 metre**;
+- one or more **Gear Frames**, which re-express those canonical axes in an anchor bone's own space so
+  that arbitrary imported bone roll is cancelled once, at authoring time;
+- named **datums** (`FIT_CROWN`, `FIT_GRIP`, `FIT_HEAD_CAVITY`, …), each classified `FunctionalFit`,
+  `KeepClear`, `CollisionWarning`, `ReferenceZone` or `DecorativeExtent`;
+- one **primary measurement** per slot, the only thing normalization may use;
+- **secondary proportion bands** that Warn or Reject an absurd silhouette.
+
+Every contract-critical number is classified `MEASURED`, `AUTHORED` or `DERIVED`. `Unclassified` is a
+hard validation failure: the contract refuses to claim authority for a number nobody has classified.
+
+### The asset side: `GearAssetFitProfile`
+
+A Hero fixture states required NEGATIVE SPACE. An asset's outer mesh bounds are not the same quantity —
+they include shell thickness, rivets and crests — so normalizing on them makes a thicker or more
+decorated helmet scale *down*, which is backwards.
+
+So each registerable item gets a `GearAssetFitProfile` asset beside its registration, holding what the
+asset itself intends to wear:
+
+- the **slot** it is fitted against. This is explicit and is never inferred from `GearFitClass`: a sword
+  and a shield are both `Handheld` and obey entirely different fit semantics;
+- its **raw-to-canonical rotation**, with explicit `Measured`, `Authored` or `Derived` orientation
+  provenance and a non-empty note stating the evidence. Unclassified, nonfinite rotations and blank
+  notes reject. The operator never infers orientation from mesh bounds;
+- its **fit cavity**;
+- named **landmarks** such as `ASSET_FIT_GRIP`.
+
+### Real cavity vs authored virtual fit data
+
+There are exactly two honest ways to get a cavity, and inference is not one of them:
+
+- **`MeasuredFromAssetLocator`** — the source art carries a `GQ_FIT_CAVITY` locator whose bounds ARE the
+  cavity. The artist declared it; the contract measured what they declared. Recorded `MEASURED`.
+- **`AuthoredVirtualCavity`** — a human states the intended envelope because the geometry cannot supply
+  one. Recorded `AUTHORED`, with the reasoning written down in the asset.
+
+There is deliberately no inner-surface detection, wall-thickness heuristic or vertex threshold, because
+each of those turns a guess into a "measurement". Fit locators are excluded from render bounds, so
+silhouette checks judge only what is actually drawn.
+
+### `NeedsAuthoring` is a correct outcome
+
+An asset with no declared cavity and no authored profile registers as **`NeedsAuthoring`** and claims
+**no fit scale at all**. That is honest, not a failure. Do not invent a shell thickness, and do not
+derive an enclosing item's cavity from its exterior, in order to avoid it. The Silverguard Helmet sits
+in this state today: its source art predates the contract and exposes no interior.
+
+### Registering an item
+
+Select its `GearItemDefinition` and run:
+
+- **`GalaQuest > Gear > Register selected gear item against fit contract`** — measures the asset against
+  the fixture its profile names and writes a `GearFitAssetRegistration`, including a single uniform
+  normalization scalar. There is never a per-axis correction: an asset outside a proportion band is
+  reported and corrected in the ASSET, never squashed to fit.
+- **`GalaQuest > Gear > Seed selected gear item from its registration`** — derives the socket-local seed
+  transform and writes it onto the item.
+
+Profiles and registrations are ordinary Unity assets; author them in the Inspector.
+
+### Explicit socket/frame/seat authority
+
+The fixture serializes `seatBindings`: `socketId`, `frameId`, `seatingDatumId`. The item socket must
+resolve exactly one binding, one compatible frame anchored to the socket's actual bone parent, and
+one `FunctionalFit` datum belonging to that frame. There is no primary-frame or left-side fallback:
+
+- `leftShoulder -> GQ_SHOULDER_L_FRAME -> FIT_SHOULDER_CUP_L`;
+- `rightShoulder -> GQ_SHOULDER_R_FRAME -> FIT_SHOULDER_CUP_R`;
+- `leftHand` in the Shield fixture `-> GQ_SHIELD_FRAME -> FIT_GRIP`.
+
+Profiles answer the seat with `ASSET_` plus that exact datum id. A slot with no binding for the item's
+socket is not seedable. Chest/Bracer fixture visualization does not imply a supported Hero socket.
+Registration records the resolved seat's frame. Before seeding, item/profile/registration identity,
+profile/fixture/registration slot, frame/seat, orientation and primary measurement must agree.
+The normal seed entry point refreshes only that item's registration immediately before derivation.
+
+### One-item headless production
+
+Use the Unity CLI with this existing entry point from the repository root:
+
+```bash
+unity run unity/GalaQuest --timeout 600 -- -executeMethod GalaQuest.Gear.Editor.GearFitSeedBatch.RunOne -gqGearItem gear.shield.ironwood -gqGearReport .local/unity/gear-item-report.json
+```
+
+The report path is relative to the Unity process working directory; use an absolute path when needed.
+The item id must resolve exactly one definition. Missing/duplicate ids fail; there is no all-items
+fallback. This registers/refreshes, derives a seed, preserves Owner-authored fits, and runs runtime
+plus registration-consistency checks against an actual mounted instance. Only the selected definition
+and registration may be saved. Registration proportion warnings remain `WARN` in the combined report
+and Workbench checks. Missing, empty, invisible or unsupported mounted geometry rejects.
+`PASS` means no machine rejection, never visual acceptance. Reports include a unique `runId`, UTC
+start time and actual output path. Missing/duplicate/malformed item arguments write `FAIL` to the
+valid requested report path; a malformed/unwritable report destination uses the default report when
+possible. Always check the exit code and the current run's report, never a previous `PASS` file.
+
+For exact-commit captures, commit the derived data first, then repeat the same invocation with
+`-gqGearCapture` (graphics required; do not use `-nographics`). The capture reuses the review renderer
+with just that item mounted in memory; it does not rebuild or save the shared scene. Output is under
+`.local/unity/review-pack/gear-v1/gear-shield-ironwood/`. Dirty input refuses an exact-SHA claim.
+The packet includes neutral front/three-quarter/side/gameplay framings and required idle/running/attack
+samples, plus combat stance and shield push. Clip aliases resolve to exactly one actual controller
+state, including imported FBX name prefixes; missing/ambiguous poses fail rather than silently
+producing an incomplete packet.
+
+Escalate `NeedsAuthoring`, mismatched/ambiguous records, rejected proportions, unavailable source
+intent, or a visually bad carry despite clean machine checks. Do not move landmarks to conceal a
+carry defect, invent cavities, modify the Hero, or reseed unrelated items. The Silverguard Helmet
+remains `NeedsAuthoring`; its incumbent fit is not a cavity measurement.
+
+### Connected Editor validation
+
+The project pins `com.unity.pipeline` and its required Input System dependency in the package
+manifest/lockfile. Keep Unity and URP versions unchanged when setting up this command path.
+
+From the repository root, verify the actual Editor command before starting work:
+
+```bash
+unity command editor_status --project-path unity/GalaQuest --timeout 10 --format json
+unity command run_tests --mode editor --filter AnatomyCoverageEditModeTests --project-path unity/GalaQuest --timeout 180 --format json
+unity command run_tests --mode editor --filter GearFitSeedEditModeTests --project-path unity/GalaQuest --timeout 180 --format json
+```
+
+Before tests, preserve and save any intended Workbench edits: Unity Test Framework asks about dirty
+scenes before execution, and an unanswered native save dialog blocks unattended commands. Coverage
+restores the source mesh during scene serialization and reapplies the preview afterward. Never discard
+an Owner scene or save unrelated dirty assets merely to clear that prompt.
+
+Inspect `data.result.Summary`: transport `success: true` also occurs when tests fail. Require a nonzero
+test count, zero failed/inconclusive tests, and no unexpected skips. A timeout has no test verdict;
+inspect Editor/runner state before retrying rather than repeatedly increasing the timeout. Afterward,
+verify Owner-fit hashes and absence of scratch assets. These tests do not visually qualify a helmet.
+
+### Registration-derived seed
+
+`GearMounter` consumes plain socket-local TRS and knows nothing about fixtures or canonical space, and
+that is deliberate: a shipped build should carry no editor-only concepts. The conversion therefore lives
+in editor authoring, in `GearFitSeedSolver`:
+
+```
+asset raw space --(profile raw-to-canonical)--> canonical
+                --(fixture Gear Frame)--------> anchor bone
+                --(socket inverse)------------> socket-local seed TRS
+```
+
+- **scale** is exactly the registration's uniform scalar;
+- **rotation** is derived so the asset's canonical axes coincide with the Gear Frame, which is what makes
+  bone roll cancel. Never hand-author this Euler; a correct one is usually unintuitive;
+- **position** aligns the asset's own landmark onto the fixture datum that seats it — for a shield,
+  `ASSET_FIT_GRIP` onto `FIT_GRIP`.
+
+If the profile lacks the landmark a slot seats on, the solver **refuses to claim a complete seed** and
+says what needs authoring. It does not invent a landmark position.
+
+A seed never overwrites an Owner-authored fit: `GearItemDefinition.TryApplySeedFit` refuses, and only the
+explicitly-named destructive reseed command can discard human work.
+
+### Machine rejection vs human visual acceptance
+
+Two gates run, and neither accepts anything:
+
+- `GearFitValidator` (runtime) — socket/proxy/anatomy checks. It must NOT gain a dependency on
+  editor-only registration data.
+- `GearFitSeedConsistency` (editor) — does the MOUNTED item agree with its registration? It rejects a
+  canonical basis that disagrees with its Gear Frame, a non-uniform or mismatched scale, a landmark that
+  missed its datum, and extents that disagree with the registered size.
+
+That second gate exists because a shield was once mounted sideways and tilted while the runtime validator
+reported zero findings. A defect no gate can express is a defect that ships.
+
+The Workbench **Run checks on current pose** button also invokes the consistency gate, reading the
+mounted transform rather than trusting the definition's saved scale. An unseedable record is reported
+explicitly, not treated as a clean consistency result.
+
+Both only ever REJECT. Fit visually in the Gear Workbench, inspect front / three-quarter / side /
+gameplay framings, and remember that Unity Editor renders are inspection evidence: running-game pixels
+remain the final appearance authority.
+
 Export the Unity-authored fits with:
 
 ```bash

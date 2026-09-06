@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using GalaQuest.Gear;
 using UnityEditor;
 using UnityEngine;
@@ -32,24 +33,62 @@ namespace GalaQuest.Gear.Editor
     {
         public const string Folder = "Assets/GalaQuest/Gear/Editor/Fixtures/Registrations";
 
-        public const string SilverguardHelmetDefinitionPath =
-            "Assets/GalaQuest/Gear/Definitions/Gear_SilverguardHelmet.asset";
-
-        /// <summary>Optional authored cavity for the proof asset, when a human has declared one.</summary>
-        public const string SilverguardHelmetProfilePath =
-            Folder + "/GearAssetFitProfile_gear_helmet_silverguard.asset";
-
-        [MenuItem("GalaQuest/Gear/Register proof asset against fit contract")]
-        public static void RegisterProofAsset()
+        public static string PathFor(string semanticAssetId)
         {
-            var registration = EnsureSilverguardHelmetRegistration();
+            return Folder + "/GearFitRegistration_" + semanticAssetId.Replace('.', '_') + ".asset";
+        }
+
+        /// <summary>Where an item's asset-side fit profile lives. An ordinary asset; edit it in the Inspector.</summary>
+        public static string ProfilePathFor(string semanticAssetId)
+        {
+            return Folder + "/GearAssetFitProfile_" + semanticAssetId.Replace('.', '_') + ".asset";
+        }
+
+        public static GearFitAssetRegistration LoadRegistration(string semanticAssetId)
+        {
+            return AssetDatabase.LoadAssetAtPath<GearFitAssetRegistration>(PathFor(semanticAssetId));
+        }
+
+        public static GearAssetFitProfile LoadProfile(string semanticAssetId)
+        {
+            return AssetDatabase.LoadAssetAtPath<GearAssetFitProfile>(ProfilePathFor(semanticAssetId));
+        }
+
+        /// <summary>
+        /// A registration for review evidence: the first that actually claims a fit scale, else any
+        /// record at all, else null. Deliberately not tied to a named item.
+        /// </summary>
+        public static GearFitAssetRegistration LoadRegistrationForProof()
+        {
+            var all = AssetDatabase.FindAssets("t:GearFitAssetRegistration", new[] { Folder })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<GearFitAssetRegistration>)
+                .Where(registration => registration != null)
+                .OrderBy(registration => registration.SemanticAssetId)
+                .ToArray();
+
+            foreach (var registration in all)
+                if (registration.HasFitScale) return registration;
+            return all.FirstOrDefault();
+        }
+
+        [MenuItem("GalaQuest/Gear/Register selected gear item against fit contract")]
+        public static void RegisterSelectedItem()
+        {
+            var item = Selection.activeObject as GearItemDefinition;
+            if (item == null)
+            {
+                Debug.LogWarning("Select a GearItemDefinition asset first.");
+                return;
+            }
+
+            var registration = EnsureRegistration(item);
             AssetDatabase.Refresh();
 
             if (registration.Status == GearFitRegistrationStatus.NeedsAuthoring)
             {
                 Debug.LogWarning(
-                    registration.SemanticAssetId + " registered as NEEDS AUTHORING: " +
-                    registration.ProvenanceNote);
+                    registration.SemanticAssetId + " -> NEEDS AUTHORING. " + registration.ProvenanceNote);
                 return;
             }
 
@@ -62,42 +101,47 @@ namespace GalaQuest.Gear.Editor
                 ", status " + registration.Status + ".");
         }
 
-        public static string PathFor(string semanticAssetId)
-        {
-            return Folder + "/GearFitRegistration_" + semanticAssetId.Replace('.', '_') + ".asset";
-        }
-
-        public static GearFitAssetRegistration LoadSilverguardHelmetRegistration()
-        {
-            return AssetDatabase.LoadAssetAtPath<GearFitAssetRegistration>(
-                PathFor("gear.helmet.silverguard"));
-        }
-
         /// <summary>
-        /// Register the Silverguard helmet against the Helmet fixture.
+        /// Register any gear item against the fixture its PROFILE names.
         ///
-        /// Silverguard is a useful proof precisely because it is known-imperfect, and because its
-        /// source art predates this contract: it carries no fit locator. If no human has authored a
-        /// virtual cavity for it either, this records NEEDS AUTHORING rather than inventing a
-        /// shell-thickness constant to manufacture a number. Idempotent.
+        /// The slot comes from <see cref="GearAssetFitProfile.Slot"/> and is never inferred from
+        /// <see cref="GearFitClass"/>: a sword and a shield are both Handheld and obey entirely
+        /// different fit semantics, so guessing from the class would quietly judge one against the
+        /// other's contract. No profile means no declared slot, and that is NeedsAuthoring.
+        ///
+        /// Idempotent: rerunning on unchanged inputs rewrites the same record.
         /// </summary>
-        public static GearFitAssetRegistration EnsureSilverguardHelmetRegistration()
+        public static GearFitAssetRegistration EnsureRegistration(GearItemDefinition item)
         {
-            var item = AssetDatabase.LoadAssetAtPath<GearItemDefinition>(SilverguardHelmetDefinitionPath);
-            if (item == null)
-                throw new System.IO.FileNotFoundException(
-                    "Proof asset missing: " + SilverguardHelmetDefinitionPath);
+            if (item == null) throw new ArgumentNullException("item");
             if (item.SourceModel == null)
                 throw new MissingReferenceException(item.SemanticId + " has no source model to measure.");
 
+            EnsureFolder();
+            var profile = LoadProfile(item.SemanticId);
+
+            if (profile == null)
+            {
+                return WriteUnseedable(
+                    item,
+                    "No GearAssetFitProfile exists at " + ProfilePathFor(item.SemanticId) + ", so this " +
+                    "asset declares no fit slot, no raw-to-canonical orientation and no fit cavity. " +
+                    "Create that profile and author its fit data. Nothing is inferred from the item's " +
+                    "GearFitClass, because different Handheld items obey different fit semantics.");
+            }
+
             var fixture = AssetDatabase.LoadAssetAtPath<GearFitFixtureDefinition>(
-                GearFitFixtureKitAuthoring.PathFor(GearFitFixtureSlot.Helmet));
+                GearFitFixtureKitAuthoring.PathFor(profile.Slot));
             if (fixture == null)
                 throw new System.IO.FileNotFoundException(
-                    "Helmet fixture missing; create the fit fixture kit first.");
+                    profile.Slot + " fixture missing; create the fit fixture kit first.");
 
-            var profile = AssetDatabase.LoadAssetAtPath<GearAssetFitProfile>(SilverguardHelmetProfilePath);
-
+            if (profile.SemanticAssetId != item.SemanticId)
+                throw new InvalidOperationException("item/profile identity mismatch");
+            if (!profile.TryValidate(out var profileError))
+                return WriteUnseedable(item, profileError);
+            if (!fixture.TryResolveSeat(item.SocketId, out _, out var seat, out var seatError))
+                throw new InvalidOperationException(seatError);
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(item.SourceModel);
             Result result;
             try
@@ -112,22 +156,113 @@ namespace GalaQuest.Gear.Editor
                     item.SourceRepoPath,
                     instance,
                     profile,
-                    // The raw Silverguard mesh is imported nose-down relative to the head socket. That
-                    // 180-degree flip is a human observation about the source art, carried over from
-                    // the Owner-authored fit rather than guessed here.
-                    item.LocalEulerAngles,
-                    "FIT_CROWN",
-                    "Raw-to-canonical rotation is AUTHORED: copied from the Owner-authored fit on " +
-                    SilverguardHelmetDefinitionPath + ", which is the human statement of how this " +
-                    "source art is oriented. This registration does not modify that fit.");
+                    // Raw-to-canonical comes from the PROFILE, which states how the source art is
+                    // oriented. It is deliberately NOT read from the item's localEulerAngles: that is a
+                    // socket-local value and means a different thing.
+                    profile.RawToCanonicalEuler,
+                    seat.DatumId,
+                    "Registered against " + fixture.Slot + " as declared by " +
+                    ProfilePathFor(item.SemanticId) + ".");
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(instance);
             }
 
-            EnsureFolder();
-            return Write(PathFor(item.SemanticId), fixture.Slot, result, item.LocalScale.x);
+            return Write(PathFor(item.SemanticId), fixture.Slot, result, item.IsOwnerAuthored ? item.LocalScale.x : 0f);
+        }
+
+        [MenuItem("GalaQuest/Gear/Seed selected gear item from its registration")]
+        public static void SeedSelectedItem()
+        {
+            var item = Selection.activeObject as GearItemDefinition;
+            if (item == null)
+            {
+                Debug.LogWarning("Select a GearItemDefinition asset first.");
+                return;
+            }
+
+            var seed = SolveSeedFor(item, out var error);
+            if (!seed.IsComplete)
+            {
+                Debug.LogWarning(item.SemanticId + " cannot be seeded: " +
+                                 (string.IsNullOrEmpty(seed.Error) ? error : seed.Error));
+                return;
+            }
+
+            if (!item.TryApplySeedFit(seed.LocalPosition, seed.LocalEulerAngles, seed.LocalScale))
+            {
+                Debug.Log(item.SemanticId + " keeps its Owner-authored fit; the derived seed was not " +
+                          "applied. Use the explicit destructive reseed command if you truly intend to " +
+                          "discard Owner work.");
+                return;
+            }
+
+            EditorUtility.SetDirty(item);
+            AssetDatabase.SaveAssetIfDirty(item);
+            Debug.Log(item.SemanticId + " seeded. " + seed.Note);
+        }
+
+        /// <summary>
+        /// Derive the socket-local seed for an item against a throwaway hero instance. Headless-safe,
+        /// so tests and batch commands can use the same path the menu does.
+        /// </summary>
+        public static GearFitSeedSolver.Seed SolveSeedFor(GearItemDefinition item, out string error)
+        {
+            error = string.Empty;
+            var registration = EnsureRegistration(item);
+            var profile = LoadProfile(item.SemanticId);
+            if (registration == null)
+            {
+                error = "no registration; register the item first";
+                return default(GearFitSeedSolver.Seed);
+            }
+
+            var fixture = profile == null
+                ? null
+                : AssetDatabase.LoadAssetAtPath<GearFitFixtureDefinition>(
+                    GearFitFixtureKitAuthoring.PathFor(profile.Slot));
+
+            var heroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GearHeroAuthoring.HeroPrefabPath);
+            if (heroPrefab == null)
+            {
+                error = "GQ_HERO_V1 prefab missing";
+                return default(GearFitSeedSolver.Seed);
+            }
+
+            var hero = (GameObject)PrefabUtility.InstantiatePrefab(heroPrefab);
+            try
+            {
+                return GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(hero);
+            }
+        }
+
+        /// <summary>Record an item that cannot be registered at all, without claiming a scale.</summary>
+        private static GearFitAssetRegistration WriteUnseedable(GearItemDefinition item, string why)
+        {
+            var path = PathFor(item.SemanticId);
+            var asset = AssetDatabase.LoadAssetAtPath<GearFitAssetRegistration>(path);
+            if (asset == null)
+            {
+                asset = ScriptableObject.CreateInstance<GearFitAssetRegistration>();
+                AssetDatabase.CreateAsset(asset, path);
+            }
+
+            asset.Configure(
+                item.SemanticId, item.SourceRepoPath, default(GearFitFixtureSlot), "unassigned",
+                string.Empty, Vector3.zero, Vector3.one,
+                GearFitMeasurementSource.Unclassified, GearAssetCavitySource.Unclassified,
+                GearFitPrimaryMetric.Unclassified, GearFitFrameAxis.Right,
+                0f, 0f, 0f, GearFitValueProvenance.Unclassified,
+                GearFitRegistrationStatus.NeedsAuthoring, Vector3.zero, new[] { why },
+                item.LocalScale.x, "NO FIT SCALE IS CLAIMED. " + why);
+            EditorUtility.SetDirty(asset);
+            AssetDatabase.SaveAssetIfDirty(asset);
+            return asset;
         }
 
         /// <summary>Persist a computed registration. Public so calibration work can reuse it.</summary>
@@ -173,7 +308,7 @@ namespace GalaQuest.Gear.Editor
                 ownerScaleForComparison,
                 note);
             EditorUtility.SetDirty(asset);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(asset);
             return asset;
         }
 
@@ -223,6 +358,9 @@ namespace GalaQuest.Gear.Editor
             if (fixture == null) throw new ArgumentNullException("fixture");
             if (instance == null) throw new ArgumentNullException("instance");
 
+            if (!fixture.TryGetDatum(landmarkId, out var seat) || !seat.IsFunctional ||
+                !fixture.TryGetFrame(seat.FrameId, out _))
+                throw new InvalidOperationException("registration requires an explicit FunctionalFit seat and frame");
             var primary = fixture.PrimaryMeasurement;
             var rawToCanonical = Quaternion.Euler(rawToCanonicalEuler);
 
@@ -237,7 +375,7 @@ namespace GalaQuest.Gear.Editor
                 {
                     SemanticAssetId = semanticAssetId,
                     SourceRepoPath = sourceRepoPath,
-                    FrameId = fixture.PrimaryFrame.FrameId,
+                    FrameId = seat.FrameId,
                     LandmarkId = landmarkId,
                     RawToCanonicalEuler = rawToCanonicalEuler,
                     MeasurementSource = GearFitMeasurementSource.Unclassified,
@@ -303,7 +441,7 @@ namespace GalaQuest.Gear.Editor
             {
                 SemanticAssetId = semanticAssetId,
                 SourceRepoPath = sourceRepoPath,
-                FrameId = fixture.PrimaryFrame.FrameId,
+                FrameId = seat.FrameId,
                 LandmarkId = landmarkId,
                 RawToCanonicalEuler = rawToCanonicalEuler,
                 MeasurementSource = GearFitMeasurementSource.AssetFitCavity,

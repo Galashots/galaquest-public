@@ -496,7 +496,8 @@ namespace GalaQuest.Gear.Editor
 
             if (definition == null || hero == null || mount == null)
             {
-                issues = new List<GearFitIssue>();
+                issues = new List<GearFitIssue> { new GearFitIssue(GearFitSeverity.Rejection,
+                    GearFitSeedConsistency.Codes.Unseedable, "Load the item onto the Hero before running checks") };
                 Debug.LogWarning("Load the item onto the Hero before running checks.");
                 return;
             }
@@ -506,6 +507,7 @@ namespace GalaQuest.Gear.Editor
                 mount.gameObject,
                 definition,
                 visualizer == null ? null : visualizer.Proxy);
+            issues.AddRange(GearFitSeedConsistency.CheckCurrent(hero.transform, mount.gameObject, definition));
 
             Repaint();
         }

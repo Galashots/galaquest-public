@@ -4,6 +4,19 @@ using UnityEngine;
 
 namespace GalaQuest.Gear.Editor
 {
+    [Serializable]
+    public struct GearFitSeatBinding
+    {
+        public string socketId;
+        public string frameId;
+        public string seatingDatumId;
+
+        public GearFitSeatBinding(string socket, string frame, string seat)
+        {
+            socketId = socket; frameId = frame; seatingDatumId = seat;
+        }
+    }
+
     public enum GearFitFixtureSlot
     {
         Helmet,
@@ -52,6 +65,34 @@ namespace GalaQuest.Gear.Editor
 
         [Header("Datums (frame space, metres)")]
         [SerializeField] private GearFitDatum[] datums = Array.Empty<GearFitDatum>();
+
+        [Header("Explicit socket to frame to FunctionalFit seat")]
+        [SerializeField] private GearFitSeatBinding[] seatBindings = Array.Empty<GearFitSeatBinding>();
+        public GearFitSeatBinding[] SeatBindings => seatBindings ?? Array.Empty<GearFitSeatBinding>();
+        public void ConfigureSeatBindings(params GearFitSeatBinding[] bindings) =>
+            seatBindings = bindings ?? Array.Empty<GearFitSeatBinding>();
+
+        public bool TryResolveSeat(string socketId, out GearFitFrame frame, out GearFitDatum datum, out string error)
+        {
+            frame = default; datum = default;
+            var matches = new List<GearFitSeatBinding>();
+            foreach (var binding in SeatBindings)
+                if (binding.socketId == socketId) matches.Add(binding);
+            error = "socket must resolve exactly one explicit frame/seat binding: " + socketId;
+            if (string.IsNullOrWhiteSpace(socketId) || matches.Count != 1) return false;
+            var selected = matches[0];
+            var framesFound = 0; var datumsFound = 0;
+            foreach (var candidate in Frames)
+                if (candidate.FrameId == selected.frameId) { frame = candidate; framesFound++; }
+            foreach (var candidate in Datums)
+                if (candidate.DatumId == selected.seatingDatumId) { datum = candidate; datumsFound++; }
+            error = "binding must name one compatible frame and FunctionalFit seat: " + socketId;
+            if (framesFound != 1 || datumsFound != 1 || !datum.IsFunctional || datum.FrameId != frame.FrameId)
+                return false;
+            if (!frame.TryValidate(out error) || !datum.TryValidate(out error)) return false;
+            error = string.Empty;
+            return true;
+        }
 
         [Header("Normalization")]
         [SerializeField] private GearFitPrimaryMeasurement primaryMeasurement;
