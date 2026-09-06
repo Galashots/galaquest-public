@@ -29,6 +29,9 @@ namespace GalaQuest
             float authoritativeZ,
             float drift,
             int snapped);
+
+        [DllImport("__Internal")]
+        private static extern void GQ_Touch_ConfigureSurface();
 #endif
 
         public static void ReadSelectedProfile(string gameObject, string callback)
@@ -83,6 +86,13 @@ namespace GalaQuest
                 authoritativeZ,
                 drift,
                 snapped ? 1 : 0);
+#endif
+        }
+
+        public static void ConfigureTouchSurface()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            GQ_Touch_ConfigureSurface();
 #endif
         }
     }

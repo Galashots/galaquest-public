@@ -10,6 +10,7 @@ namespace GalaQuest
         [SerializeField] private Transform hero;
 
         private GalaQuestConnectionSession session;
+        private GalaQuestFloatingJoystick floatingJoystick;
         private InputAction moveAction;
         private InputAction sprintAction;
         private Vector2 predicted;
@@ -46,6 +47,7 @@ namespace GalaQuest
 
         private void Awake()
         {
+            floatingJoystick = GetComponent<GalaQuestFloatingJoystick>();
             if (hero != null)
             {
                 heroY = hero.position.y;
@@ -82,13 +84,28 @@ namespace GalaQuest
 
         private void Update()
         {
-            var raw = moveAction?.ReadValue<Vector2>() ?? Vector2.zero;
+            if (floatingJoystick == null) floatingJoystick = GetComponent<GalaQuestFloatingJoystick>();
+            var input = ResolveInput(
+                moveAction?.ReadValue<Vector2>() ?? Vector2.zero,
+                sprintAction?.IsPressed() == true,
+                floatingJoystick != null && floatingJoystick.Active,
+                floatingJoystick != null ? floatingJoystick.Value : Vector2.zero);
+            session?.TrySendMovementIntent(input.Direction, input.Magnitude, input.Run, Time.unscaledTime);
+            StepPrediction(input.Direction, input.Magnitude, input.Run, Time.unscaledDeltaTime);
+            ApplyPendingReconciliation();
+        }
+
+        public static ResolvedMovementInput ResolveInput(
+            Vector2 actionValue,
+            bool actionRun,
+            bool touchActive,
+            Vector2 touchValue)
+        {
+            var raw = touchActive ? touchValue : actionValue;
             var magnitude = Mathf.Clamp01(raw.magnitude);
             var direction = magnitude > 0f ? raw.normalized : Vector2.zero;
-            var run = sprintAction?.IsPressed() == true;
-            session?.TrySendMovementIntent(direction, magnitude, run, Time.unscaledTime);
-            StepPrediction(direction, magnitude, run, Time.unscaledDeltaTime);
-            ApplyPendingReconciliation();
+            var run = touchActive ? magnitude >= GalaQuestMovementLaw.RunDeflection : actionRun;
+            return new ResolvedMovementInput(direction, magnitude, run);
         }
 
         public void StepPrediction(Vector2 direction, float magnitude, bool run, float rawDeltaSeconds)
@@ -161,6 +178,20 @@ namespace GalaQuest
         private void PresentPrediction()
         {
             if (hero != null) hero.position = GalaQuestServerCoordinates.ToUnityPosition(predicted, heroY);
+        }
+
+        public readonly struct ResolvedMovementInput
+        {
+            public ResolvedMovementInput(Vector2 direction, float magnitude, bool run)
+            {
+                Direction = direction;
+                Magnitude = magnitude;
+                Run = run;
+            }
+
+            public Vector2 Direction { get; }
+            public float Magnitude { get; }
+            public bool Run { get; }
         }
     }
 }

@@ -65,6 +65,14 @@ function loadBrowserBridge(storageSeed) {
   const storage = new Map(Object.entries(storageSeed));
   const messages = [];
   const sockets = [];
+  const gestureListeners = [];
+  const canvas = { style: {} };
+  const document = {
+    documentElement: { style: {} },
+    body: { style: {} },
+    querySelector: (selector) => selector === '#unity-canvas' ? canvas : null,
+    addEventListener: (name, listener, options) => gestureListeners.push({ name, listener, options }),
+  };
 
   class FakeWebSocket {
     constructor(url) {
@@ -101,6 +109,7 @@ function loadBrowserBridge(storageSeed) {
     UTF8ToString: (value) => value,
     SendMessage: (gameObject, method, payload) => messages.push({ gameObject, method, payload }),
     WebSocket: FakeWebSocket,
+    document,
     window: {
       location: { protocol: 'http:', host: '127.0.0.1:5201' },
       localStorage: {
@@ -114,7 +123,7 @@ function loadBrowserBridge(storageSeed) {
     'utf8',
   );
   vm.runInNewContext(source, context, { filename: 'GalaQuestBrowserBridge.jslib' });
-  return { bridge: context.LibraryManager.library, messages, sockets, storage };
+  return { bridge: context.LibraryManager.library, messages, sockets, storage, document, canvas, gestureListeners };
 }
 
 const PROFILE_A = 'profile-aaaaaaaa';
@@ -193,4 +202,22 @@ test('browser WebSocket bridge targets same-origin /ws and preserves messages ve
   assert.deepEqual(runtime.messages.at(-1), {
     gameObject: 'GalaQuestRuntime', method: 'OnSocketMessage', payload: welcome,
   });
+});
+
+test('Unity touch surface blocks Safari page gestures without hiding a rescue interaction', () => {
+  const runtime = loadBrowserBridge(familyStorage(PROFILE_A));
+
+  runtime.bridge.GQ_Touch_ConfigureSurface();
+  runtime.bridge.GQ_Touch_ConfigureSurface();
+
+  assert.equal(runtime.canvas.style.touchAction, 'none');
+  assert.equal(runtime.canvas.style.userSelect, 'none');
+  assert.equal(runtime.canvas.style.webkitUserSelect, 'none');
+  assert.equal(runtime.document.documentElement.style.overscrollBehavior, 'none');
+  assert.equal(runtime.document.body.style.overscrollBehavior, 'none');
+  assert.equal(runtime.document.body.style.overflow, 'hidden');
+  assert.deepEqual(runtime.gestureListeners.map(({ name }) => name), [
+    'gesturestart', 'gesturechange', 'gestureend',
+  ]);
+  assert.ok(runtime.gestureListeners.every(({ options }) => options.passive === false));
 });

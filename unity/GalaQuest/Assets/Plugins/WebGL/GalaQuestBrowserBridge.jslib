@@ -1,4 +1,23 @@
 mergeInto(LibraryManager.library, {
+  GQ_Touch_ConfigureSurface: function () {
+    var canvas = document.querySelector('#unity-canvas');
+    if (canvas) {
+      canvas.style.touchAction = 'none';
+      canvas.style.userSelect = 'none';
+      canvas.style.webkitUserSelect = 'none';
+    }
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.overscrollBehavior = 'none';
+    document.body.style.overflow = 'hidden';
+    if (!window.__gqUnityTouchGestureGuard) {
+      var preventGesture = function (event) { event.preventDefault(); };
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
+        document.addEventListener(name, preventGesture, { passive: false });
+      });
+      window.__gqUnityTouchGestureGuard = true;
+    }
+  },
+
   GQ_Profile_ReadSelected: function (gameObjectPtr, callbackPtr) {
     var gameObject = UTF8ToString(gameObjectPtr);
     var callback = UTF8ToString(callbackPtr);

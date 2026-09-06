@@ -15,6 +15,8 @@ namespace GalaQuest
 
         private void Awake()
         {
+            if (GetComponent<GalaQuestFloatingJoystick>() == null)
+                gameObject.AddComponent<GalaQuestFloatingJoystick>();
             profileSource = GetComponent<BrowserSelectedProfileSource>();
             traversal = GetComponent<GalaQuestTraversalController>();
             profileSource.Selected += HandleSelected;
@@ -60,21 +62,11 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            var width = Mathf.Min(460f, Screen.width - 32f);
-            var rect = new Rect(16f, 16f, width, 142f);
+            var width = Mathf.Min(360f, Screen.width - 32f);
+            var rect = new Rect(16f, 16f, width, 66f);
             GUI.Box(rect, string.Empty);
-            GUI.Label(new Rect(32f, 28f, width - 32f, 24f), "EMBERWORKS DEEP · CONNECTED TRAVERSAL CP2");
-            GUI.Label(new Rect(32f, 55f, width - 32f, 22f), $"Hero: {profileName}");
-            GUI.Label(new Rect(32f, 79f, width - 32f, 22f), connectionStatus);
-            if (traversal != null)
-            {
-                var predicted = traversal.PredictedPosition;
-                var authoritative = traversal.AuthoritativePosition;
-                GUI.Label(
-                    new Rect(32f, 103f, width - 32f, 34f),
-                    $"P {predicted.x:F2}, {predicted.y:F2} · A {authoritative.x:F2}, {authoritative.y:F2} · " +
-                    $"drift {traversal.LastDrift:F3}{(traversal.LastReconciliationSnapped ? " · SNAP" : string.Empty)}");
-            }
+            GUI.Label(new Rect(30f, 24f, width - 28f, 22f), $"EMBERWORKS · {profileName}");
+            GUI.Label(new Rect(30f, 48f, width - 28f, 22f), connectionStatus);
         }
 
         private void OnDestroy()
