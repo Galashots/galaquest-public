@@ -21,6 +21,38 @@ namespace GalaQuest.Gear
         /// <summary>An item wider than this multiple of the head diameter is an import/scale accident.</summary>
         public const float MaxHeadDiameterMultiple = 3f;
 
+        public const string FitLocatorPrefix = "GQ_FIT_";
+
+        /// <summary>Authoring-only geometry, including children of a fit locator, is never render authority.</summary>
+        public static bool IsFitLocator(Transform transform)
+        {
+            for (var current = transform; current != null; current = current.parent)
+                if (current.name.StartsWith(FitLocatorPrefix, System.StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        /// <summary>The same visible rigid geometry set for runtime, registration and consistency measurements.</summary>
+        public static IEnumerable<MeshFilter> VisibleRigidMeshFilters(GameObject root)
+        {
+            if (root == null) yield break;
+            foreach (var renderer in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (!renderer.enabled || !renderer.gameObject.activeInHierarchy || IsFitLocator(renderer.transform)) continue;
+                var filter = renderer.GetComponent<MeshFilter>();
+                if (RigidMeshError(filter) == null) yield return filter;
+            }
+        }
+
+        private static string RigidMeshError(MeshFilter filter)
+        {
+            var mesh = filter == null ? null : filter.sharedMesh;
+            if (mesh == null || mesh.vertexCount == 0 || mesh.subMeshCount == 0)
+                return "Mounted renderer has missing or empty mesh geometry";
+            for (var i = 0; i < mesh.subMeshCount; i++)
+                if (mesh.GetTopology(i) == MeshTopology.Triangles && mesh.GetIndexCount(i) >= 3) return null;
+            return "Mounted renderer has no supported triangles";
+        }
+
         public static List<GearFitIssue> Validate(
             Transform heroRoot,
             GameObject mounted,
@@ -240,17 +272,11 @@ namespace GalaQuest.Gear
             var found = false;
             foreach (var renderer in mounted.GetComponentsInChildren<Renderer>(true))
             {
-                if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                if (!renderer.enabled || !renderer.gameObject.activeInHierarchy || IsFitLocator(renderer.transform)) continue;
                 if (!(renderer is MeshRenderer))
                     return "Mounted item has an unsupported renderer; rigid fit checks require MeshRenderer geometry";
-                var filter = renderer.GetComponent<MeshFilter>();
-                var mesh = filter == null ? null : filter.sharedMesh;
-                if (mesh == null || mesh.vertexCount == 0 || mesh.subMeshCount == 0)
-                    return "Mounted renderer has missing or empty mesh geometry";
-                var triangles = false;
-                for (var i = 0; i < mesh.subMeshCount; i++)
-                    triangles |= mesh.GetTopology(i) == MeshTopology.Triangles && mesh.GetIndexCount(i) >= 3;
-                if (!triangles) return "Mounted renderer has no supported triangles";
+                var error = RigidMeshError(renderer.GetComponent<MeshFilter>());
+                if (error != null) return error;
                 found = true;
             }
             return found ? null : "Mounted item has no active, enabled rigid mesh renderer";
@@ -259,10 +285,9 @@ namespace GalaQuest.Gear
         public static List<Vector3> CollectWorldVertices(GameObject root)
         {
             var result = new List<Vector3>();
-            foreach (var filter in root.GetComponentsInChildren<MeshFilter>(true))
+            foreach (var filter in VisibleRigidMeshFilters(root))
             {
                 var mesh = filter.sharedMesh;
-                if (mesh == null) continue;
                 var vertices = mesh.vertices;
                 for (var i = 0; i < vertices.Length; i++)
                     result.Add(filter.transform.TransformPoint(vertices[i]));

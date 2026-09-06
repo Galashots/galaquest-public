@@ -85,6 +85,8 @@ namespace GalaQuest.Gear.Editor
             child.transform.SetParent(parent.transform, false);
             child.transform.localPosition = center;
             child.AddComponent<MeshFilter>().sharedMesh = BuildBoxMesh(size);
+            // Shell/decoration are render geometry; a declared cavity remains metadata only.
+            if (!GearAssetFitProbe.IsLocator(child.transform)) child.AddComponent<MeshRenderer>();
         }
 
         private static Mesh BuildBoxMesh(Vector3 size)

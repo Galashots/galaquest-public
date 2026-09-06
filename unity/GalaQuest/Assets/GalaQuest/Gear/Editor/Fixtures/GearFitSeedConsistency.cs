@@ -222,10 +222,8 @@ namespace GalaQuest.Gear.Editor
             var max = Vector3.one * float.MinValue;
             var any = false;
 
-            foreach (var filter in mounted.GetComponentsInChildren<MeshFilter>(true))
+            foreach (var filter in GearFitValidator.VisibleRigidMeshFilters(mounted))
             {
-                if (filter.sharedMesh == null) continue;
-                if (GearAssetFitProbe.IsLocator(filter.transform)) continue;
                 foreach (var vertex in filter.sharedMesh.vertices)
                 {
                     var inFrame = toFrame * filter.transform.TransformPoint(vertex);

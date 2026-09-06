@@ -646,6 +646,97 @@ namespace GalaQuest.Tests
             });
         }
 
+        [TestCase("disabled")]
+        [TestCase("inactive")]
+        [TestCase("no-renderer")]
+        [TestCase("locator")]
+        public void Hidden_helper_cannot_rescue_swallowed_visible_geometry(string kind)
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var body = hero.GetComponentInChildren<SkinnedMeshRenderer>();
+                var baked = new Mesh();
+                var triangle = new Mesh();
+                var mounted = new GameObject("swallowed scratch item");
+                mounted.transform.SetParent(hero.transform, false);
+                try
+                {
+                    body.BakeMesh(baked, true);
+                    // Exactly on three Hero surface vertices: below the read-clearance threshold.
+                    var bodyStride = Mathf.Max(1, baked.vertexCount / 1500);
+                    triangle.vertices = Enumerable.Range(0, 3).Select(i => i * bodyStride).Select(i =>
+                        mounted.transform.InverseTransformPoint(body.transform.TransformPoint(baked.vertices[i]))).ToArray();
+                    triangle.triangles = new[] { 0, 1, 2 };
+                    mounted.AddComponent<MeshFilter>().sharedMesh = triangle;
+                    mounted.AddComponent<MeshRenderer>();
+                    Assert.That(GearFitValidator.Validate(hero.transform, mounted, item, null)
+                        .Any(i => i.Code == GearFitIssueCodes.DoesNotRead), Is.True, "baseline must reject");
+                    AddHiddenHelper(mounted.transform, kind);
+                    Assert.That(GearFitValidator.MountedGeometryError(mounted), Is.Null,
+                        "the active valid renderer must still pass the existence gate");
+                    Assert.That(GearFitValidator.Validate(hero.transform, mounted, item, null)
+                        .Any(i => i.Code == GearFitIssueCodes.DoesNotRead), Is.True,
+                        "hidden helper must not make swallowed visible geometry read as worn");
+                }
+                finally
+                {
+                    Object.DestroyImmediate(mounted);
+                    Object.DestroyImmediate(triangle);
+                    Object.DestroyImmediate(baked);
+                }
+            });
+        }
+
+        [TestCase("disabled")]
+        [TestCase("inactive")]
+        [TestCase("no-renderer")]
+        [TestCase("locator")]
+        public void Hidden_helper_cannot_inflate_render_bounds(string kind)
+        {
+            var visible = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            try
+            {
+                var expected = GearAssetFitProbe.MeasureRenderBounds(visible, Quaternion.identity);
+                // Deliberately nested under a visible MeshFilter: recursive re-enumeration must not leak it.
+                AddHiddenHelper(visible.transform, kind);
+                Assert.That(Vector3.Distance(GearAssetFitProbe.MeasureRenderBounds(visible, Quaternion.identity),
+                    expected), Is.LessThan(0.0001f));
+            }
+            finally { Object.DestroyImmediate(visible); }
+        }
+
+        [TestCase("disabled")]
+        [TestCase("inactive")]
+        [TestCase("no-renderer")]
+        [TestCase("locator")]
+        public void Hidden_helper_cannot_contaminate_frame_extents(string kind)
+        {
+            WithShield((hero, fixture, profile, registration, item) =>
+            {
+                var seed = GearFitSeedSolver.Solve(hero.transform, item, fixture, profile, registration);
+                Assert.That(seed.IsComplete, Is.True, seed.Error);
+                item.TryApplySeedFit(seed.LocalPosition, seed.LocalEulerAngles, seed.LocalScale);
+                var mounted = GearMounter.Mount(hero.transform, item);
+                Assert.That(GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration)
+                    .Any(i => i.Code == GearFitSeedConsistency.Codes.ExtentsMismatch), Is.False, "baseline");
+                AddHiddenHelper(mounted.GetComponentInChildren<MeshFilter>().transform, kind);
+                Assert.That(GearFitSeedConsistency.Check(hero.transform, mounted, item, fixture, profile, registration)
+                    .Any(i => i.Code == GearFitSeedConsistency.Codes.ExtentsMismatch), Is.False,
+                    "frame extents must describe only the visible shield");
+            });
+        }
+
+        private static void AddHiddenHelper(Transform parent, string kind)
+        {
+            var helper = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            helper.name = kind == "locator" ? GearAssetFitProbe.CavityLocatorName : "hidden helper";
+            helper.transform.SetParent(parent, false);
+            helper.transform.localScale = Vector3.one * 100f;
+            if (kind == "disabled") helper.GetComponent<MeshRenderer>().enabled = false;
+            if (kind == "inactive") helper.SetActive(false);
+            if (kind == "no-renderer") Object.DestroyImmediate(helper.GetComponent<MeshRenderer>());
+        }
+
         [TestCase("missing")]
         [TestCase("empty")]
         [TestCase("duplicate")]
