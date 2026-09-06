@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
+import { promisify } from 'node:util';
+import { brotliDecompress } from 'node:zlib';
 
 import { attachGameServer } from './net/gameServer.mjs';
 import { handleForgeApiRequest } from './net/forgeApi.mjs';
@@ -12,6 +14,7 @@ export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
 export const PUBLIC_DIR = join(HERE, 'public');
 export const UNITY_WEB_BUILD_DIR = join(HERE, 'unity', 'GalaQuest', 'Builds', 'GalaQuestWebGL');
+const decompressBrotli = promisify(brotliDecompress);
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -81,15 +84,20 @@ export function createRuntimeServer(options = {}) {
 
       const body = await readFile(fullPath);
       const unityBrotli = unityPath !== undefined && fullPath.toLowerCase().endsWith('.br');
+      const acceptsBrotli = /(?:^|,)\s*br\s*(?:;|,|$)/i.test(request.headers['accept-encoding'] ?? '');
+      // Browsers only negotiate Brotli on secure contexts. The physical-iPad route is intentionally
+      // plain HTTP on the local Wi-Fi, so serve the same build bytes decompressed when `br` was not
+      // offered instead of handing Safari an encoding it did not agree to decode.
+      const responseBody = unityBrotli && !acceptsBrotli ? await decompressBrotli(body) : body;
       const contentPath = unityBrotli ? fullPath.slice(0, -3) : fullPath;
       const headers = {
         'cache-control': 'no-store',
-        'content-length': body.byteLength,
+        'content-length': responseBody.byteLength,
         'content-type': CONTENT_TYPES[extname(contentPath).toLowerCase()] ?? 'application/octet-stream',
       };
-      if (unityBrotli) headers['content-encoding'] = 'br';
+      if (unityBrotli && acceptsBrotli) headers['content-encoding'] = 'br';
       response.writeHead(200, headers);
-      response.end(request.method === 'HEAD' ? undefined : body);
+      response.end(request.method === 'HEAD' ? undefined : responseBody);
     } catch (error) {
       const notFound = error?.code === 'ENOENT' || error?.code === 'EISDIR';
       response.writeHead(notFound ? 404 : 500, { 'content-type': 'text/plain; charset=utf-8' });

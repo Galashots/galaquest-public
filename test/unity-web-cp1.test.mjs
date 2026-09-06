@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { brotliCompressSync } from 'node:zlib';
 
 import { createRuntimeServer } from '../server.mjs';
 
@@ -13,8 +14,8 @@ async function servingUnityBuild(body) {
   writeFileSync(join(root, 'index.html'), '<canvas id="unity-canvas"></canvas>');
   writeFileSync(join(root, 'Build', 'GalaQuestWebGL.wasm'), Buffer.from([0, 97, 115, 109]));
   writeFileSync(join(root, 'Build', 'GalaQuestWebGL.data'), Buffer.from([1, 2, 3]));
-  writeFileSync(join(root, 'Build', 'GalaQuestWebGL.wasm.br'), Buffer.from([4, 5, 6]));
-  writeFileSync(join(root, 'Build', 'GalaQuestWebGL.framework.js.br'), Buffer.from([7, 8, 9]));
+  writeFileSync(join(root, 'Build', 'GalaQuestWebGL.wasm.br'), brotliCompressSync(Buffer.from([4, 5, 6])));
+  writeFileSync(join(root, 'Build', 'GalaQuestWebGL.framework.js.br'), brotliCompressSync(Buffer.from([7, 8, 9])));
 
   const server = createRuntimeServer({ unityWebBuildDir: root });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -43,12 +44,16 @@ test('the ignored Unity Web build is served under one bounded same-origin path',
     assert.equal(data.status, 200);
     assert.equal(data.headers.get('content-type'), 'application/octet-stream');
 
-    const compressedWasm = await fetch(`${origin}/unity/Build/GalaQuestWebGL.wasm.br`);
+    const compressedWasm = await fetch(`${origin}/unity/Build/GalaQuestWebGL.wasm.br`, {
+      headers: { 'accept-encoding': 'br' },
+    });
     assert.equal(compressedWasm.status, 200);
     assert.equal(compressedWasm.headers.get('content-type'), 'application/wasm');
     assert.equal(compressedWasm.headers.get('content-encoding'), 'br');
 
-    const compressedFramework = await fetch(`${origin}/unity/Build/GalaQuestWebGL.framework.js.br`);
+    const compressedFramework = await fetch(`${origin}/unity/Build/GalaQuestWebGL.framework.js.br`, {
+      headers: { 'accept-encoding': 'br' },
+    });
     assert.equal(compressedFramework.status, 200);
     assert.match(compressedFramework.headers.get('content-type') ?? '', /text\/javascript/);
     assert.equal(compressedFramework.headers.get('content-encoding'), 'br');
@@ -58,6 +63,18 @@ test('the ignored Unity Web build is served under one bounded same-origin path',
       assert.ok(response.status === 403 || response.status === 404, `${path} answered ${response.status}`);
       assert.doesNotMatch(await response.text(), /createRuntimeServer/);
     }
+  });
+});
+
+test('plain-HTTP LAN clients receive usable Unity bytes when they do not negotiate Brotli', async () => {
+  await servingUnityBuild(async (origin) => {
+    const response = await fetch(`${origin}/unity/Build/GalaQuestWebGL.framework.js.br`, {
+      headers: { 'accept-encoding': 'identity' },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-encoding'), null);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from([7, 8, 9]));
   });
 });
 
