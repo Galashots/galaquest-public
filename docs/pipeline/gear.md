@@ -37,6 +37,33 @@ Machine gates REJECT; they never visually accept. Running-game pixels remain fin
 authority, and there is no Unity gameplay/controller seam yet, so Unity Editor renders are inspection
 evidence and must not be reported as gameplay evidence.
 
+### Covered hair and ears in the Workbench
+
+Mounted items' `HidesAnatomy` declarations drive the normal coverage preview. A helmet covering hair
+and ears hides those supervised regions; disabling/removing it restores the original mesh. Turn off
+**Preview hidden anatomy** only to inspect the covered anatomy. Fit against the intended covered head,
+not the hairstyle. The preview changes a temporary index-buffer copy, never the Hero source or saved fits.
+
+Regenerate the checked-in Unity region map with
+`node tools/unity-migration/export-hero-anatomy-regions.mjs`. The exporter verifies the source GLB hash
+against the supervised region authority. Unity requires a complete, unique UV-triangle correspondence
+before transferring the regions, allowing face reordering/winding and a single V-flip convention.
+Missing or ambiguous correspondence rejects coverage; equal triangle counts are insufficient. Escalate
+an unsupported derivative instead of guessing hair by height or hiding arbitrary faces. This remains
+Workbench inspection evidence, not a Unity gameplay equip implementation.
+
+The qualified Hero importer must enable **Read/Write**: the preview reads UV/index buffers. An
+unreadable mesh rejects coverage rather than throwing repeatedly in the Editor. Keep this requirement
+scoped to the Hero; do not turn on CPU mesh copies for unrelated assets.
+
+The existing supervised `hair` atom includes **hair and scalp**, authored for the Dawnwarden full-helm
+proof. It is not a hair-only cap suitable for every open-face helmet. Silverguard exposes the removed
+scalp boundary with the Owner's current fit and remains an unqualified diagnostic item. Do not enlarge,
+move, or reseed an Owner fit to hide that mismatch. A new coverage atom needs supervised authoring and
+equip/unequip visual review under [character-armoring.md](character-armoring.md); a new full-cover
+helmet must independently prove that it conceals the existing cut boundary. Structural coverage PASS
+does not establish either condition.
+
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 
 Checkpoint A answers WHERE gear attaches. The datum contract answers HOW BIG and WHICH WAY ROUND, in a
@@ -154,6 +181,29 @@ Escalate `NeedsAuthoring`, mismatched/ambiguous records, rejected proportions, u
 intent, or a visually bad carry despite clean machine checks. Do not move landmarks to conceal a
 carry defect, invent cavities, modify the Hero, or reseed unrelated items. The Silverguard Helmet
 remains `NeedsAuthoring`; its incumbent fit is not a cavity measurement.
+
+### Connected Editor validation
+
+The project pins `com.unity.pipeline` and its required Input System dependency in the package
+manifest/lockfile. Keep Unity and URP versions unchanged when setting up this command path.
+
+From the repository root, verify the actual Editor command before starting work:
+
+```bash
+unity command editor_status --project-path unity/GalaQuest --timeout 10 --format json
+unity command run_tests --mode editor --filter AnatomyCoverageEditModeTests --project-path unity/GalaQuest --timeout 180 --format json
+unity command run_tests --mode editor --filter GearFitSeedEditModeTests --project-path unity/GalaQuest --timeout 180 --format json
+```
+
+Before tests, preserve and save any intended Workbench edits: Unity Test Framework asks about dirty
+scenes before execution, and an unanswered native save dialog blocks unattended commands. Coverage
+restores the source mesh during scene serialization and reapplies the preview afterward. Never discard
+an Owner scene or save unrelated dirty assets merely to clear that prompt.
+
+Inspect `data.result.Summary`: transport `success: true` also occurs when tests fail. Require a nonzero
+test count, zero failed/inconclusive tests, and no unexpected skips. A timeout has no test verdict;
+inspect Editor/runner state before retrying rather than repeatedly increasing the timeout. Afterward,
+verify Owner-fit hashes and absence of scratch assets. These tests do not visually qualify a helmet.
 
 ### Registration-derived seed
 

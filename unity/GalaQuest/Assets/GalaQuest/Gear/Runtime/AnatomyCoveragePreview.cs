@@ -1,25 +1,17 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+#endif
 
 namespace GalaQuest.Gear
 {
     /// <summary>
-    /// Previews declared anatomy coverage in the Gear Workbench by hiding covered triangles on the Hero.
-    ///
-    /// Why this exists: the Silverguard helmet declares it covers hair and ears, but with the hair still
-    /// rendered the Owner is looking at a helmet fighting a hairstyle that will not be there. Fitting
-    /// around that volume is exactly how a helmet ends up oversized -- it is the mechanism behind the
-    /// original watermelon fit.
-    ///
-    /// This is a PREVIEW, deliberately the smallest possible one. It is not the runtime equip system, it
-    /// does not split the Hero into extra renderers, and it does not touch the shipped mesh asset: it
-    /// clones the mesh once and swaps the triangle index buffer, which is the same one-draw technique
-    /// public/src/character/anatomyOcclusion.js uses.
-    ///
-    /// The region map is face-INDEX data pinned to the shipping GLB's triangle order
-    /// (public/src/character/heroAnatomyRegions.js). If the Unity derivative does not preserve that
-    /// order or that triangle count, this refuses to run rather than deleting arbitrary faces.
+    /// Previews mounted gear coverage on a temporary mesh copy, preserving the source Hero and fits.
+    /// Requires a unique, complete UV-triangle correspondence with the supervised source region map.
+    /// This Workbench preview is not the runtime equip system.
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
@@ -27,18 +19,27 @@ namespace GalaQuest.Gear
     {
         [SerializeField] private SkinnedMeshRenderer body;
         [SerializeField] private TextAsset regionMap;
-        [SerializeField] private bool previewCoverage;
+        // Default to coverage, including older scenes. Showing covered anatomy is diagnostic.
+        [SerializeField] private bool showCoveredAnatomy;
+        [NonSerialized] private int appliedMask = -1;
 
         [NonSerialized] private Mesh originalMesh;
+        [NonSerialized] private SkinnedMeshRenderer originalBody;
         [NonSerialized] private Mesh previewMesh;
         [NonSerialized] private int[] originalTriangles;
         [NonSerialized] private Dictionary<string, int[]> regions;
         [NonSerialized] private string validationError;
+        [NonSerialized] private SkinnedMeshRenderer cachedBody;
+        [NonSerialized] private TextAsset cachedRegionMap;
+        [NonSerialized] private string cachedRegionMapText;
+#if UNITY_EDITOR
+        [NonSerialized] private bool reapplyAfterSceneSave;
+#endif
 
         public bool PreviewCoverage
         {
-            get => previewCoverage;
-            set => previewCoverage = value;
+            get => !showCoveredAnatomy;
+            set { showCoveredAnatomy = !value; appliedMask = -1; }
         }
 
         public string ValidationError => validationError;
@@ -46,6 +47,7 @@ namespace GalaQuest.Gear
 
         public void Configure(SkinnedMeshRenderer skinnedMesh, TextAsset map)
         {
+            Release();
             body = skinnedMesh;
             regionMap = map;
         }
@@ -67,12 +69,10 @@ namespace GalaQuest.Gear
         [Serializable]
         private sealed class RegionFile
         {
+            public int schemaVersion;
+            public int uvQuantization;
+            public string[] sourceTriangleUvKeys;
             public int triangleCount;
-            public string heroSha256;
-            // The exporter nests regions under "regions". An earlier version of this class expected
-            // them at the top level, so JsonUtility quietly produced nulls, the region dictionary came
-            // out empty, and the preview restored the Hero instead of hiding anything -- while the
-            // triangle-count check still reported "usable". Silence like that is worse than a failure.
             public RegionSet regions;
         }
 
@@ -86,6 +86,9 @@ namespace GalaQuest.Gear
                 return false;
             }
 
+            if (!body.sharedMesh.isReadable)
+                return Reject("Hero mesh is not CPU-readable. Coverage requires Read/Write on the qualified Hero importer.");
+
             if (regionMap == null)
             {
                 validationError = "No anatomy region map assigned. Run " +
@@ -93,129 +96,98 @@ namespace GalaQuest.Gear
                 return false;
             }
 
-            var parsed = JsonUtility.FromJson<RegionFile>(regionMap.text);
-            if (parsed == null || parsed.triangleCount <= 0)
-            {
-                validationError = "The anatomy region map could not be parsed.";
-                return false;
-            }
-
+            RegionFile parsed;
+            try { parsed = JsonUtility.FromJson<RegionFile>(regionMap.text); }
+            catch (ArgumentException) { return Reject("The anatomy region map could not be parsed."); }
+            if (parsed == null || parsed.schemaVersion != 2 || parsed.triangleCount <= 0 ||
+                parsed.sourceTriangleUvKeys?.Length != parsed.triangleCount)
+                return Reject("Anatomy coverage requires the version 2 source UV map. Run the anatomy exporter.");
+            originalBody = body;
             originalMesh = body.sharedMesh;
+            if (originalMesh.subMeshCount != 1)
+                return Reject("Coverage requires the qualified single-submesh Hero.");
             originalTriangles = originalMesh.triangles;
-            var unityTriangleCount = originalTriangles.Length / 3;
-
-            if (unityTriangleCount != parsed.triangleCount)
+            if (!AnatomyTriangleCorrespondence.TryResolve(originalMesh.uv, originalTriangles,
+                    parsed.sourceTriangleUvKeys, parsed.uvQuantization, out var mapping, out var error))
+                return Reject(error);
+            if (!MapRegion(parsed.regions?.hair, mapping, out var hair) ||
+                !MapRegion(parsed.regions?.ears, mapping, out var ears))
+                return Reject("Anatomy map requires valid, non-empty supervised hair and ear regions.");
+            if (new HashSet<int>(hair).Overlaps(ears))
+                return Reject("Supervised hair and ear regions must be disjoint.");
+            regions = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase)
             {
-                // Fail loudly instead of hiding arbitrary geometry. If this fires, the derivative no
-                // longer shares the source triangle order and the map must be rebaked, not reindexed.
-                validationError =
-                    "Anatomy region map is pinned to " + parsed.triangleCount +
-                    " triangles but the imported Hero mesh has " + unityTriangleCount +
-                    ". The Unity derivative does not preserve the source triangle order, so coverage " +
-                    "cannot be previewed from this map.";
-                return false;
-            }
-
-            regions = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);
-            if (parsed.regions?.hair?.faces != null) regions["hair"] = parsed.regions.hair.faces;
-            if (parsed.regions?.ears?.faces != null) regions["ears"] = parsed.regions.ears.faces;
-
-            if (regions.Count == 0)
-            {
-                validationError = "The anatomy region map parsed but contained no regions. " +
-                                  "Check that its shape matches AnatomyCoveragePreview.RegionFile.";
-                regions = null;
-                return false;
-            }
-
-            // A matching triangle COUNT is not a matching triangle ORDER.
-            //
-            // The map is face-index data against the shipping GLB's face order. The Unity derivative
-            // has the same 6800 triangles but, as it turns out, not in the same sequence -- applying the
-            // map without this check deletes faces scattered across the face, neck and torso and leaves
-            // the hair untouched. Verified by looking at the render, not inferred.
-            //
-            // Cheap invariant: the faces the map calls "hair" must actually sit in the upper head. If
-            // their centroid is not above the head bone, the order does not match and this map cannot
-            // drive a preview.
-            if (!HairFacesLandOnTheHead(out var reason))
-            {
-                validationError = reason;
-                regions = null;
-                return false;
-            }
-
+                ["hair"] = hair, ["ears"] = ears
+            };
             return true;
         }
 
-        /// <summary>
-        /// Sanity-check that the mapped hair faces actually land on the top of the head.
-        ///
-        /// Compares the centroid of the mapped faces against the mesh bounds: hair should sit well above
-        /// the vertical midpoint and be laterally compact. A shuffled index order scatters the set over
-        /// the whole body, which fails both.
-        /// </summary>
-        private bool HairFacesLandOnTheHead(out string reason)
+        private bool Reject(string reason)
         {
-            reason = null;
-            if (!regions.TryGetValue("hair", out var hairFaces) || hairFaces.Length == 0) return true;
+            validationError = reason;
+            regions = null;
+            Restore();
+            return false;
+        }
 
-            var vertices = originalMesh.vertices;
-            var bounds = originalMesh.bounds;
-
-            var centroid = Vector3.zero;
-            var counted = 0;
-            var stride = Mathf.Max(1, hairFaces.Length / 400);
-
-            for (var i = 0; i < hairFaces.Length; i += stride)
+        private static bool MapRegion(RegionEntry entry, int[] mapping, out int[] faces)
+        {
+            faces = null;
+            if (entry?.faces == null || entry.faceCount <= 0 || entry.faceCount != entry.faces.Length) return false;
+            var seen = new HashSet<int>();
+            faces = new int[entry.faces.Length];
+            for (var i = 0; i < faces.Length; i++)
             {
-                var face = hairFaces[i];
-                if (face < 0 || face * 3 + 2 >= originalTriangles.Length) continue;
-                centroid += vertices[originalTriangles[face * 3]];
-                counted++;
+                var face = entry.faces[i];
+                if (face < 0 || face >= mapping.Length || !seen.Add(face)) return false;
+                faces[i] = mapping[face];
             }
-
-            if (counted == 0) return true;
-            centroid /= counted;
-
-            var heightFraction = Mathf.InverseLerp(bounds.min.y, bounds.max.y, centroid.y);
-            if (heightFraction < 0.75f)
-            {
-                reason =
-                    "The anatomy region map does not match this mesh's triangle ORDER. Its 'hair' faces " +
-                    "average " + (heightFraction * 100f).ToString("F0") + "% of the way up the mesh; " +
-                    "hair should be near the top. The triangle COUNT matches, so the map looks valid " +
-                    "and is not: applying it would delete faces scattered across the body. " +
-                    "The GLB -> Blender -> FBX -> Unity path reorders faces, so this map cannot drive a " +
-                    "Unity preview without being rebaked against the Unity derivative.";
-                return false;
-            }
-
             return true;
+        }
+
+        public void ApplyMountedCoverage()
+        {
+            var hidden = new HashSet<AnatomyRegion>();
+            foreach (var mount in GetComponentsInChildren<GearMountedItem>())
+                if (mount.isActiveAndEnabled && mount.Definition?.HidesAnatomy != null)
+                    foreach (var region in mount.Definition.HidesAnatomy) hidden.Add(region);
+            Apply(hidden);
         }
 
         /// <summary>Hide the named regions, or restore the Hero when the list is empty.</summary>
         public void Apply(IEnumerable<AnatomyRegion> hidden)
         {
-            if (!EnsureLoaded())
-            {
-                if (!string.IsNullOrEmpty(validationError)) Debug.LogWarning(validationError);
-                return;
-            }
+            var currentMapText = regionMap == null ? null : regionMap.text;
+            if (body != cachedBody || regionMap != cachedRegionMap ||
+                !string.Equals(currentMapText, cachedRegionMapText, StringComparison.Ordinal))
+                Release();
 
-            var hide = new HashSet<int>();
-            var applied = new List<string>();
+            if (originalMesh != null && (originalBody != body ||
+                (body != null && body.sharedMesh != originalMesh && body.sharedMesh != previewMesh)))
+                Release(); // A replaced renderer or imported mesh must establish correspondence again.
 
-            if (hidden != null && previewCoverage)
-            {
+            cachedBody = body;
+            cachedRegionMap = regionMap;
+            cachedRegionMapText = currentMapText;
+
+            var mask = 0;
+            if (hidden != null && PreviewCoverage)
                 foreach (var region in hidden)
                 {
-                    var key = region.ToString().ToLowerInvariant();
-                    if (!regions.TryGetValue(key, out var faces)) continue;
-                    foreach (var face in faces) hide.Add(face);
-                    applied.Add(key);
+                    if (region != AnatomyRegion.Hair && region != AnatomyRegion.Ears)
+                    {
+                        Reject("No supervised Unity map for declared anatomy region " + region + ".");
+                        return;
+                    }
+                    mask |= 1 << (int)region;
                 }
-            }
+            if (mask == 0) { Restore(); return; }
+            if (mask == appliedMask && body != null && body.sharedMesh == previewMesh) return;
+            if (!EnsureLoaded()) return;
+
+            var hide = new HashSet<int>();
+            if ((mask & (1 << (int)AnatomyRegion.Hair)) != 0) hide.UnionWith(regions["hair"]);
+            if ((mask & (1 << (int)AnatomyRegion.Ears)) != 0) hide.UnionWith(regions["ears"]);
 
             if (hide.Count == 0)
             {
@@ -238,25 +210,75 @@ namespace GalaQuest.Gear
                 // buffer differs, so this stays one draw.
                 previewMesh = Instantiate(originalMesh);
                 previewMesh.name = originalMesh.name + " (coverage preview)";
-                previewMesh.hideFlags = HideFlags.DontSave;
+                previewMesh.hideFlags = HideFlags.HideAndDontSave;
             }
 
             previewMesh.triangles = kept.ToArray();
-            previewMesh.RecalculateBounds();
+            // Preserve source bounds, vertex, skin and UV buffers; only the copied indices change.
             body.sharedMesh = previewMesh;
 
-            Debug.Log("Anatomy coverage preview hiding " + string.Join(", ", applied) +
-                      " (" + hide.Count + " of " + (originalTriangles.Length / 3) + " triangles).");
+            appliedMask = mask;
         }
 
         public void Restore()
         {
-            if (body != null && originalMesh != null) body.sharedMesh = originalMesh;
+            var targetBody = originalBody != null ? originalBody : body;
+            if (targetBody != null && originalMesh != null && targetBody.sharedMesh == previewMesh)
+                targetBody.sharedMesh = originalMesh;
+            appliedMask = -1;
         }
 
-        private void OnDisable()
+        private void Release()
         {
             Restore();
+            if (previewMesh != null)
+            {
+                if (Application.isPlaying) Destroy(previewMesh);
+                else DestroyImmediate(previewMesh);
+            }
+            previewMesh = null;
+            originalBody = null;
+            originalMesh = null;
+            originalTriangles = null;
+            regions = null;
+            validationError = null;
+            cachedBody = null;
+            cachedRegionMap = null;
+            cachedRegionMapText = null;
         }
+#if UNITY_EDITOR
+        private void OnEnable()
+        {
+            EditorSceneManager.sceneSaving += OnSceneSaving;
+            EditorSceneManager.sceneSaved += OnSceneSaved;
+        }
+
+        private void OnSceneSaving(Scene scene, string path)
+        {
+            if (gameObject.scene != scene || body == null || previewMesh == null ||
+                originalMesh == null || body.sharedMesh != previewMesh) return;
+
+            reapplyAfterSceneSave = PreviewCoverage;
+            body.sharedMesh = originalMesh;
+        }
+
+        private void OnSceneSaved(Scene scene)
+        {
+            if (gameObject.scene != scene || !reapplyAfterSceneSave) return;
+
+            reapplyAfterSceneSave = false;
+            if (isActiveAndEnabled && PreviewCoverage) ApplyMountedCoverage();
+        }
+#endif
+        private void Update() => ApplyMountedCoverage();
+        private void OnDisable()
+        {
+#if UNITY_EDITOR
+            EditorSceneManager.sceneSaving -= OnSceneSaving;
+            EditorSceneManager.sceneSaved -= OnSceneSaved;
+#endif
+            Release();
+        }
+        private void OnDestroy() => Release();
     }
 }

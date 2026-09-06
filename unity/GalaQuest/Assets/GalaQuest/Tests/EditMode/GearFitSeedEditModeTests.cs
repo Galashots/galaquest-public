@@ -605,15 +605,27 @@ namespace GalaQuest.Tests
         public void Registration_proportion_warning_survives_one_item_report()
         {
             using var production = new GearTestProductionSnapshot();
+            // The production Shield may have an Owner-authored pose which correctly rejects
+            // seed consistency. Isolate this warning-only assertion from that mutable fit.
+            const string id = "gear.test.warning";
+            var item = ScratchItem();
+            item.Configure(id, "Scratch warning", item.SourceModel, GearSocketIds.LeftHand,
+                GearFitClass.Handheld, ShieldModelPath, new AnatomyRegion[0]);
+            AssetDatabase.CreateAsset(item, "Assets/GalaQuest/Gear/Definitions/__WarningOperation.asset");
+            var profile = Object.Instantiate(GearFitAssetRegistrationAuthoring.LoadProfile(ShieldSemanticId));
+            var profileData = new SerializedObject(profile);
+            profileData.FindProperty("semanticAssetId").stringValue = id;
+            profileData.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.CreateAsset(profile, GearFitAssetRegistrationAuthoring.ProfilePathFor(id));
             var fixture = Fixture(GearFitFixtureSlot.Shield);
             var serialized = new SerializedObject(fixture);
             serialized.FindProperty("secondaryProportionChecks").GetArrayElementAtIndex(0)
                 .FindPropertyRelative("warnAbove").floatValue = 0.9f;
             serialized.ApplyModifiedPropertiesWithoutUndo();
-            var report = GearFitSeedBatch.ProcessOne(ShieldSemanticId);
-            var registration = GearFitAssetRegistrationAuthoring.LoadRegistration(ShieldSemanticId);
+            var report = GearFitSeedBatch.ProcessOne(id);
+            var registration = GearFitAssetRegistrationAuthoring.LoadRegistration(id);
             Assert.That(registration.Status, Is.EqualTo(GearFitRegistrationStatus.Warned));
-            Assert.That(report.status, Is.EqualTo("WARN"), "headless report lost registration warning");
+            Assert.That(report.status, Is.EqualTo("WARN"), string.Join("; ", report.findings));
             Assert.That(report.findings.Any(f => f.Contains("shield_width_to_height")), Is.True);
         }
 
@@ -801,7 +813,11 @@ namespace GalaQuest.Tests
             UnityEditor.SceneManagement.EditorSceneManager.NewScene(
                 UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
                 UnityEditor.SceneManagement.NewSceneMode.Single);
-            AssetDatabase.SaveAssets();
+            // Flush only the gear records this snapshot restores. A global save would also
+            // serialize unrelated dirty materials/settings from the Owner's Editor session.
+            foreach (var asset in Resources.FindObjectsOfTypeAll<ScriptableObject>())
+                if (original.ContainsKey(AssetDatabase.GetAssetPath(asset)))
+                    AssetDatabase.SaveAssetIfDirty(asset);
             foreach (var path in ReadFiles().Keys)
                 if (!original.ContainsKey(path)) System.IO.File.Delete(path);
             foreach (var pair in original)

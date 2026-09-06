@@ -10,14 +10,14 @@
 // Owner "the hair will be hidden under this helmet" so a helmet is not fitted around hair volume that
 // will not be there.
 //
-// The map is face-INDEX data against a specific triangle order. Whether that order survives the
-// GLB -> Blender -> FBX -> Unity conversion is not assumed here; the Unity side validates the triangle
-// count and the result is judged by looking at it.
+// Source face indices are accompanied by unique UV-triangle keys. Unity requires a complete bijection
+// against its imported mesh before transferring regions; equal triangle counts alone prove nothing.
 //
 // Usage:
 //   node tools/unity-migration/export-hero-anatomy-regions.mjs [--out <path>]
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -49,28 +49,57 @@ export function parseSource(source) {
   return { triangleCount, sha256, assetPath, regions };
 }
 
-function main(argv) {
-  const outIndex = argv.indexOf('--out');
-  const out = outIndex >= 0 ? argv[outIndex + 1] : DEFAULT_OUT;
+export function triangleUvKeys(bytes, triangleCount, quantization = 100000) {
+  if (bytes.readUInt32LE(0) !== 0x46546c67 || bytes.readUInt32LE(4) !== 2) throw new Error('Expected GLB v2');
+  const jsonLength = bytes.readUInt32LE(12);
+  const doc = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
+  const binary = bytes.subarray(28 + jsonLength);
+  const candidates = doc.meshes.flatMap(mesh => mesh.primitives).filter(p => p.attributes.JOINTS_0 != null);
+  if (candidates.length !== 1) throw new Error('Expected exactly one skinned Hero primitive');
+  function accessor(index, width) {
+    const a = doc.accessors[index], view = doc.bufferViews[a.bufferView];
+    if (a.sparse || view.buffer !== 0) throw new Error('Unsupported source accessor');
+    const formats = { 5121: [1, 'readUInt8'], 5123: [2, 'readUInt16LE'], 5125: [4, 'readUInt32LE'], 5126: [4, 'readFloatLE'] };
+    const [size, read] = formats[a.componentType] ?? [];
+    if (!size) throw new Error('Unsupported accessor component');
+    return Array.from({ length: a.count }, (_, i) => Array.from({ length: width }, (_, j) =>
+      binary[read]((view.byteOffset ?? 0) + (a.byteOffset ?? 0) + i * (view.byteStride ?? width * size) + j * size)));
+  }
+  const primitive = candidates[0];
+  const uvs = accessor(primitive.attributes.TEXCOORD_0, 2), indices = accessor(primitive.indices, 1).flat();
+  if (indices.length !== triangleCount * 3) throw new Error('Anatomy source triangle count mismatch');
+  const keys = Array.from({ length: triangleCount }, (_, face) => indices.slice(face * 3, face * 3 + 3)
+    .map(i => {
+      if (!uvs[i]?.every(Number.isFinite)) throw new Error('Missing/nonfinite source UV');
+      return uvs[i].map(v => Math.round(v * quantization)).join(',');
+    }).sort().join(';'));
+  if (new Set(keys).size !== keys.length) throw new Error('Ambiguous source UV triangles; refuse anatomy transfer');
+  return keys;
+}
 
-  const parsed = parseSource(readFileSync(SOURCE, 'utf8'));
-
-  const manifest = {
+export function buildManifest(source, bytes) {
+  const parsed = parseSource(source);
+  if (createHash('sha256').update(bytes).digest('hex') !== parsed.sha256) throw new Error('Hero source hash does not match supervised regions');
+  return {
     schema: 'galaquest.hero-anatomy-regions',
-    schemaVersion: 1,
-    // No timestamp: the same source must export byte-identically.
+    schemaVersion: 2,
     sourceModule: SOURCE,
     heroAssetPath: parsed.assetPath,
     heroSha256: parsed.sha256,
     triangleCount: parsed.triangleCount,
-    note:
-      'Face-index data against the shipping GLB triangle order. Unity uses it to PREVIEW hidden '
-      + 'anatomy in the Gear Workbench; it is not the runtime equip system, and it is only valid while '
-      + 'the Unity derivative preserves the source triangle order.',
-    regions: Object.fromEntries(
-      Object.entries(parsed.regions).map(([name, faces]) => [name, { faceCount: faces.length, faces }]),
-    ),
+    uvQuantization: 100000,
+    sourceTriangleUvKeys: triangleUvKeys(bytes, parsed.triangleCount),
+    note: 'Supervised source regions transferred by a unique complete UV-triangle correspondence. Face order and winding may change; missing/ambiguous correspondence rejects. Source mesh, rig, and texture are unchanged.',
+    regions: Object.fromEntries(Object.entries(parsed.regions).map(([name, faces]) => [name, { faceCount: faces.length, faces }])),
   };
+}
+
+function main(argv) {
+  const outIndex = argv.indexOf('--out');
+  const out = outIndex >= 0 ? argv[outIndex + 1] : DEFAULT_OUT;
+  const source = readFileSync(SOURCE, 'utf8');
+  const parsed = parseSource(source);
+  const manifest = buildManifest(source, readFileSync(`public/${parsed.assetPath.replace(/^\//, '')}`));
 
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, `${JSON.stringify(manifest, null, 2)}\n`);
