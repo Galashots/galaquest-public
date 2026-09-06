@@ -21,6 +21,11 @@ namespace GalaQuest.Editor
     public static class EmberworksGreyboxBuild
     {
         public const string ScenePath = "Assets/GalaQuest/Emberworks/Scenes/EmberworksDeep.unity";
+        public const string RuntimeRootName = "GalaQuestRuntime";
+        public const string RuntimeHeroName = "GalaQuestHero";
+        public const string RuntimeCameraName = "GalaQuestGameplayCamera";
+
+        private const string HeroPrefabPath = "Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab";
 
         private const string RootName = "EmberworksDeep";
         private const string StateName = "EmberworksCompletionState";
@@ -40,6 +45,7 @@ namespace GalaQuest.Editor
         [MenuItem("GalaQuest/Emberworks/Build Greybox")]
         public static void Build()
         {
+            EnsureRegenerationWillNotOverwritePlayableScene();
             EnsureFolder("Assets/GalaQuest/Emberworks");
             EnsureFolder("Assets/GalaQuest/Emberworks/Materials");
             EnsureFolder("Assets/GalaQuest/Emberworks/Scenes");
@@ -85,6 +91,96 @@ namespace GalaQuest.Editor
             AssetDatabase.Refresh();
             Validate();
             UnityEngine.Debug.Log($"Emberworks greybox built: {ScenePath}");
+        }
+
+        [MenuItem("GalaQuest/Emberworks/Build Greybox", true)]
+        public static bool CanBuildGreybox()
+        {
+            return AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath) == null;
+        }
+
+        public static void EnsureRegenerationWillNotOverwritePlayableScene()
+        {
+            if (!CanBuildGreybox())
+            {
+                throw new BuildFailedException(
+                    $"Refusing to regenerate {ScenePath}: the checked-in playable scene is frozen. " +
+                    "Use bounded incremental authoring instead.");
+            }
+        }
+
+        [MenuItem("GalaQuest/Emberworks/Wire U1 CP1 Runtime")]
+        public static void WireU1Cp1Runtime()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var existing = FindSceneObject(RuntimeRootName);
+            if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
+
+            var runtimeRoot = new GameObject(RuntimeRootName);
+            runtimeRoot.AddComponent<BrowserSelectedProfileSource>();
+            runtimeRoot.AddComponent<BrowserWebSocketTransport>();
+            runtimeRoot.AddComponent<GalaQuestGameEntry>();
+
+            var heroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(HeroPrefabPath);
+            if (heroPrefab == null) throw new BuildFailedException($"Missing actual GalaQuest Hero prefab: {HeroPrefabPath}");
+            var hero = (GameObject)PrefabUtility.InstantiatePrefab(heroPrefab, scene);
+            hero.name = RuntimeHeroName;
+            hero.transform.SetParent(runtimeRoot.transform, true);
+            hero.transform.position = new Vector3(0f, 0.25f, 4f);
+            hero.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+            foreach (var otherCamera in UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            {
+                otherCamera.enabled = false;
+            }
+            var cameraObject = new GameObject(RuntimeCameraName);
+            cameraObject.transform.SetParent(runtimeRoot.transform, false);
+            cameraObject.transform.position = new Vector3(0f, 3.4f, -5.5f);
+            cameraObject.transform.rotation = Quaternion.LookRotation(new Vector3(0f, 0.85f, 4f) - cameraObject.transform.position);
+            cameraObject.tag = "MainCamera";
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.fieldOfView = 42f;
+            camera.nearClipPlane = 0.1f;
+            camera.farClipPlane = 160f;
+            cameraObject.AddComponent<AudioListener>();
+
+            var scenes = EditorBuildSettings.scenes.ToList();
+            var emberworks = scenes.FirstOrDefault(item => item.path == ScenePath);
+            scenes.RemoveAll(item => item.path == ScenePath);
+            scenes.Insert(0, new EditorBuildSettingsScene(ScenePath, emberworks == null || emberworks.enabled));
+            EditorBuildSettings.scenes = scenes.ToArray();
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException($"Could not save {ScenePath}.");
+            AssetDatabase.SaveAssets();
+            ValidateU1Cp1Runtime();
+            UnityEngine.Debug.Log($"U1 CP1 runtime wired into existing Emberworks scene: {ScenePath}");
+        }
+
+        [MenuItem("GalaQuest/Emberworks/Validate U1 CP1 Runtime")]
+        public static void ValidateU1Cp1Runtime()
+        {
+            if (SceneManager.GetActiveScene().path != ScenePath)
+            {
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            }
+            var root = FindSceneObject(RuntimeRootName);
+            if (root == null) throw new BuildFailedException($"Missing U1 runtime root: {RuntimeRootName}");
+            if (root.GetComponent<GalaQuestGameEntry>() == null
+                || root.GetComponent<BrowserSelectedProfileSource>() == null
+                || root.GetComponent<BrowserWebSocketTransport>() == null)
+            {
+                throw new BuildFailedException("U1 runtime root is missing entry, selected-profile, or Web transport ownership.");
+            }
+            if (FindSceneObject(RuntimeHeroName) == null) throw new BuildFailedException("The actual GalaQuest Hero is not in Emberworks.");
+            var runtimeCamera = FindSceneObject(RuntimeCameraName)?.GetComponent<Camera>();
+            if (runtimeCamera == null || !runtimeCamera.enabled) throw new BuildFailedException("The U1 gameplay camera is not active.");
+            var enabledScenes = EditorBuildSettings.scenes.Where(item => item.enabled).ToArray();
+            if (enabledScenes.Length == 0 || enabledScenes[0].path != ScenePath)
+            {
+                throw new BuildFailedException("Emberworks Deep is not the Unity player entry scene.");
+            }
+            if (CanBuildGreybox()) throw new BuildFailedException("The playable Emberworks scene is not protected from regeneration.");
         }
 
         [MenuItem("GalaQuest/Emberworks/Validate Greybox")]
