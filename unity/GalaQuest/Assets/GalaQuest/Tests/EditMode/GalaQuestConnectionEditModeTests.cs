@@ -41,6 +41,7 @@ namespace GalaQuest.Tests
             Assert.That(transport.Sent, Has.Count.EqualTo(1));
             StringAssert.Contains("\"type\":\"join\"", transport.Sent[0]);
             StringAssert.Contains("\"guestId\":\"profile-aaaaaaaa\"", transport.Sent[0]);
+            StringAssert.Contains("\"destinationId\":\"emberworks-deep\"", transport.Sent[0]);
 
             transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\"}");
             Assert.That(transport.Sent, Has.Count.EqualTo(2));
@@ -55,6 +56,41 @@ namespace GalaQuest.Tests
             StringAssert.Contains("\"guestId\":\"profile-aaaaaaaa\"", transport.Sent[2]);
             transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p2\"}");
             Assert.That(transport.Sent[3], Is.EqualTo(transport.Sent[1]));
+        }
+
+        [Test]
+        public void MovementIntentIsUnitOrZeroOrderedCadencedAndReleaseIsImmediate()
+        {
+            var transport = new FakeTransport();
+            var session = new GalaQuestConnectionSession(transport);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Aster", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"players\":[]}");
+
+            Assert.That(session.TrySendMovementIntent(new Vector2(3f, 4f), 1.4f, false, 0f), Is.True);
+            Assert.That(session.TrySendMovementIntent(Vector2.right, 1f, false, 0.01f), Is.False);
+            Assert.That(session.TrySendMovementIntent(Vector2.zero, 0f, false, 0.02f), Is.True);
+            Assert.That(session.TrySendMovementIntent(Vector2.zero, 0f, false, 1f), Is.False);
+
+            var moving = JsonUtility.FromJson<InputCapture>(transport.Sent[2]);
+            var stopped = JsonUtility.FromJson<InputCapture>(transport.Sent[3]);
+            Assert.That(moving.seq, Is.EqualTo(1));
+            Assert.That(moving.dirX, Is.EqualTo(0.6f).Within(0.0001f));
+            Assert.That(moving.dirZ, Is.EqualTo(0.8f).Within(0.0001f));
+            Assert.That(moving.magnitude, Is.EqualTo(1f));
+            Assert.That(stopped.seq, Is.EqualTo(2));
+            Assert.That(stopped.dirX, Is.Zero);
+            Assert.That(stopped.dirZ, Is.Zero);
+            Assert.That(stopped.magnitude, Is.Zero);
+        }
+
+        [Serializable]
+        private sealed class InputCapture
+        {
+            public int seq;
+            public float dirX;
+            public float dirZ;
+            public float magnitude;
         }
 
         [Test]
@@ -87,12 +123,18 @@ namespace GalaQuest.Tests
 
             var scene = EditorSceneManager.OpenScene(firstScene.path, OpenSceneMode.Single);
             EmberworksGreyboxBuild.ValidateU1Cp1Runtime();
+            EmberworksGreyboxBuild.ValidateU1Cp2Traversal();
             Assert.That(scene.GetRootGameObjects().Count(root => root.name == "GalaQuestRuntime"), Is.EqualTo(1));
             Assert.That(UnityEngine.Object.FindObjectsByType<GalaQuestGameEntry>(FindObjectsSortMode.None), Has.Length.EqualTo(1));
             Assert.That(UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None).Count(camera => camera.CompareTag("MainCamera")), Is.EqualTo(1));
 
             var hero = GameObject.Find(EmberworksGreyboxBuild.RuntimeHeroName);
             var camera = GameObject.Find(EmberworksGreyboxBuild.RuntimeCameraName).GetComponent<Camera>();
+            var traversal = UnityEngine.Object.FindFirstObjectByType<GalaQuestTraversalController>();
+            var traversalSettings = new SerializedObject(traversal);
+            Assert.That(traversalSettings.FindProperty("inputActions").objectReferenceValue, Is.Not.Null);
+            Assert.That(traversalSettings.FindProperty("hero").objectReferenceValue, Is.EqualTo(hero.transform));
+            Assert.That(camera.GetComponent<GalaQuestGameplayCamera>(), Is.Not.Null);
             var visibleHeroRenderers = hero.GetComponentsInChildren<Renderer>()
                 .Where(renderer => renderer.enabled && renderer.gameObject.activeInHierarchy)
                 .ToArray();
@@ -129,7 +171,7 @@ namespace GalaQuest.Tests
                 Sent.Add(message);
                 return true;
             }
-            public void Close() { }
+            public void Close() => Closed?.Invoke("closed");
             public void Open() => Opened?.Invoke();
             public void Receive(string message) => MessageReceived?.Invoke(message);
             public void CloseFromServer(string reason) => Closed?.Invoke(reason);

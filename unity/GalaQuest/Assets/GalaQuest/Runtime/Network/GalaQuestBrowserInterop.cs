@@ -20,6 +20,15 @@ namespace GalaQuest
 
         [DllImport("__Internal")]
         private static extern void GQ_WebSocket_Close(int connectionId);
+
+        [DllImport("__Internal")]
+        private static extern void GQ_Diagnostics_RecordMovement(
+            float predictedX,
+            float predictedZ,
+            float authoritativeX,
+            float authoritativeZ,
+            float drift,
+            int snapped);
 #endif
 
         public static void ReadSelectedProfile(string gameObject, string callback)
@@ -55,6 +64,25 @@ namespace GalaQuest
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             GQ_WebSocket_Close(connectionId);
+#endif
+        }
+
+        public static void RecordMovement(
+            float predictedX,
+            float predictedZ,
+            float authoritativeX,
+            float authoritativeZ,
+            float drift,
+            bool snapped)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            GQ_Diagnostics_RecordMovement(
+                predictedX,
+                predictedZ,
+                authoritativeX,
+                authoritativeZ,
+                drift,
+                snapped ? 1 : 0);
 #endif
         }
     }

@@ -6,6 +6,7 @@ namespace GalaQuest
     public static class GalaQuestProtocolV4
     {
         public const int Version = 4;
+        public const string EmberworksDeepDestinationId = "emberworks-deep";
 
         public static string Join(GalaQuestSelectedProfile profile)
         {
@@ -14,7 +15,22 @@ namespace GalaQuest
                 v = Version,
                 type = "join",
                 name = profile.DisplayName,
-                guestId = profile.ProfileId
+                guestId = profile.ProfileId,
+                destinationId = EmberworksDeepDestinationId
+            });
+        }
+
+        public static string Input(int sequence, float directionX, float directionZ, float magnitude, bool run)
+        {
+            return JsonUtility.ToJson(new InputMessage
+            {
+                v = Version,
+                type = "input",
+                seq = sequence,
+                dirX = directionX,
+                dirZ = directionZ,
+                magnitude = magnitude,
+                run = run
             });
         }
 
@@ -41,6 +57,22 @@ namespace GalaQuest
             return true;
         }
 
+        public static bool TryReadServerFrame(string json, out GalaQuestServerFrame frame)
+        {
+            frame = null;
+            try
+            {
+                frame = JsonUtility.FromJson<GalaQuestServerFrame>(json);
+            }
+            catch
+            {
+                return false;
+            }
+            return frame != null
+                   && frame.v == Version
+                   && (frame.type == "welcome" || frame.type == "snapshot");
+        }
+
         [Serializable]
         private sealed class JoinMessage
         {
@@ -48,6 +80,19 @@ namespace GalaQuest
             public string type;
             public string name;
             public string guestId;
+            public string destinationId;
+        }
+
+        [Serializable]
+        private sealed class InputMessage
+        {
+            public int v;
+            public string type;
+            public int seq;
+            public float dirX;
+            public float dirZ;
+            public float magnitude;
+            public bool run;
         }
 
         [Serializable]
@@ -57,5 +102,26 @@ namespace GalaQuest
             public string type;
             public string id;
         }
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerFrame
+    {
+        public int v;
+        public string type;
+        public string id;
+        public int tick;
+        public string destinationId;
+        public GalaQuestServerPlayer[] players;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerPlayer
+    {
+        public string id;
+        public float x;
+        public float z;
+        public float heading;
+        public float speed;
     }
 }

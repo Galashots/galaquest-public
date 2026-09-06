@@ -5909,6 +5909,7 @@ GameObject:
   - component: {fileID: 924240715}
   - component: {fileID: 924240717}
   - component: {fileID: 924240716}
+  - component: {fileID: 924240718}
   m_Layer: 0
   m_Name: GalaQuestGameplayCamera
   m_TagString: MainCamera
@@ -5990,6 +5991,19 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
+--- !u!114 &924240718
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 924240714}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4771f1bccd247a0b4694f6536ec5160, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: GalaQuest.Runtime::GalaQuest.GalaQuestGameplayCamera
+  target: {fileID: 277897741}
 --- !u!1 &930190878
 GameObject:
   m_ObjectHideFlags: 0
@@ -10925,7 +10939,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7ac56209a0de46e44a8598db1afac5c6, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: GalaQuest.Runtime::GalaQuest.EmberworksSceneState
   forgeRelit: 0
   dormantForge: {fileID: 1609636101}
@@ -10977,6 +10991,7 @@ GameObject:
   - component: {fileID: 1550097218}
   - component: {fileID: 1550097217}
   - component: {fileID: 1550097216}
+  - component: {fileID: 1550097220}
   m_Layer: 0
   m_Name: GalaQuestRuntime
   m_TagString: Untagged
@@ -11037,6 +11052,20 @@ Transform:
   - {fileID: 924240715}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1550097220
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1550097215}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6569460537f4ca1bbf27902b77a7d67, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: GalaQuest.Runtime::GalaQuest.GalaQuestTraversalController
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  hero: {fileID: 277897741}
 --- !u!1 &1554792950
 GameObject:
   m_ObjectHideFlags: 0

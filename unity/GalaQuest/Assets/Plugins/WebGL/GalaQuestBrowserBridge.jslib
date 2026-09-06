@@ -56,6 +56,20 @@ mergeInto(LibraryManager.library, {
       SendMessage(gameObject, openCallback, String(id));
     };
     socket.onmessage = function (event) {
+      try {
+        var received = JSON.parse(String(event.data));
+        if (received && (received.type === 'welcome' || received.type === 'snapshot')) {
+          var diagnostics = window.__gqUnityCp2Diagnostics || {
+            sentInputs: [], serverFrames: [], reconciliations: []
+          };
+          diagnostics.serverFrames.push(received);
+          if (diagnostics.serverFrames.length > 200) diagnostics.serverFrames.shift();
+          diagnostics.latestServerFrame = received;
+          window.__gqUnityCp2Diagnostics = diagnostics;
+        }
+      } catch (error) {
+        console.warn('[GQ-U1] could not capture server frame diagnostics', error);
+      }
       SendMessage(gameObject, messageCallback, String(event.data));
     };
     socket.onclose = function (event) {
@@ -76,7 +90,22 @@ mergeInto(LibraryManager.library, {
     var state = window.__gqUnitySockets;
     var socket = state && state.sockets[id];
     if (!socket || socket.readyState !== WebSocket.OPEN) return 0;
-    socket.send(UTF8ToString(messagePtr));
+    var message = UTF8ToString(messagePtr);
+    try {
+      var sent = JSON.parse(message);
+      if (sent && sent.type === 'input') {
+        var diagnostics = window.__gqUnityCp2Diagnostics || {
+          sentInputs: [], serverFrames: [], reconciliations: []
+        };
+        diagnostics.sentInputs.push(sent);
+        if (diagnostics.sentInputs.length > 200) diagnostics.sentInputs.shift();
+        diagnostics.latestInput = sent;
+        window.__gqUnityCp2Diagnostics = diagnostics;
+      }
+    } catch (error) {
+      console.warn('[GQ-U1] could not capture input diagnostics', error);
+    }
+    socket.send(message);
     return 1;
   },
 
@@ -85,5 +114,22 @@ mergeInto(LibraryManager.library, {
     var socket = state && state.sockets[id];
     if (!socket) return;
     socket.close(1000, 'Unity client closed');
+  },
+
+  GQ_Diagnostics_RecordMovement: function (predictedX, predictedZ, authoritativeX, authoritativeZ, drift, snapped) {
+    var diagnostics = window.__gqUnityCp2Diagnostics || {
+      sentInputs: [], serverFrames: [], reconciliations: []
+    };
+    var sample = {
+      predicted: { x: predictedX, z: predictedZ },
+      authoritative: { x: authoritativeX, z: authoritativeZ },
+      drift: drift,
+      snapped: snapped === 1,
+      atMs: Date.now()
+    };
+    diagnostics.reconciliations.push(sample);
+    if (diagnostics.reconciliations.length > 200) diagnostics.reconciliations.shift();
+    diagnostics.latestReconciliation = sample;
+    window.__gqUnityCp2Diagnostics = diagnostics;
   }
 });

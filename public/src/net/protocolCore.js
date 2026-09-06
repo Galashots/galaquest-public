@@ -208,11 +208,16 @@ export function decode(text) {
         }
         decoded.guestId = raw.guestId;
       }
+      if (raw.destinationId !== undefined && raw.destinationId !== null) {
+        const destinationId = requireString(raw.destinationId, 'destinationId', 48);
+        if (destinationId.length === 0) fail('destinationId must not be empty');
+        decoded.destinationId = destinationId;
+      }
       return decoded;
     }
 
-    case 'welcome':
-      return {
+    case 'welcome': {
+      const decoded = {
         v: PROTOCOL_VERSION,
         type: 'welcome',
         id: requireString(raw.id, 'id'),
@@ -224,6 +229,11 @@ export function decode(text) {
         // failing, so it is additive within v4 rather than another protocol-version change.
         profileFacts: decodeProfileFacts(raw.profileFacts),
       };
+      if (raw.destinationId !== undefined && raw.destinationId !== null) {
+        decoded.destinationId = requireString(raw.destinationId, 'destinationId', 48);
+      }
+      return decoded;
+    }
 
     case 'attack': {
       const seq = requireInteger(raw.seq, 'seq');
@@ -397,8 +407,8 @@ export function decode(text) {
       };
     }
 
-    case 'snapshot':
-      return {
+    case 'snapshot': {
+      const decoded = {
         v: PROTOCOL_VERSION,
         type: 'snapshot',
         tick: requireInteger(raw.tick, 'tick'),
@@ -406,6 +416,11 @@ export function decode(text) {
         encounter: decodeEncounter(raw.encounter),
         events: decodeEvents(raw.events),
       };
+      if (raw.destinationId !== undefined && raw.destinationId !== null) {
+        decoded.destinationId = requireString(raw.destinationId, 'destinationId', 48);
+      }
+      return decoded;
+    }
 
     case 'leave':
       return { v: PROTOCOL_VERSION, type: 'leave', id: requireString(raw.id, 'id') };
@@ -1058,17 +1073,27 @@ const NO_PROFILE_FACTS = Object.freeze([]);
 
 // Builders, so no call site hand-assembles an object shape the decoder would reject.
 
-export function joinMessage(name, guestId) {
+export function joinMessage(name, guestId, destinationId) {
   const message = { v: PROTOCOL_VERSION, type: 'join', name };
   // Only present when a real guestId is supplied -- an omitted key, not an explicit null/undefined
   // property, so a round trip through decode() stays byte-identical for every pre-D3 caller that
   // never passes a second argument at all.
   if (typeof guestId === 'string' && guestId.length > 0) message.guestId = guestId;
+  if (typeof destinationId === 'string' && destinationId.length > 0) message.destinationId = destinationId;
   return message;
 }
 
-export function welcomeMessage(id, tick, players, encounter = EMPTY_ENCOUNTER, profileFacts = NO_PROFILE_FACTS) {
-  return { v: PROTOCOL_VERSION, type: 'welcome', id, tick, players, encounter, profileFacts };
+export function welcomeMessage(
+  id,
+  tick,
+  players,
+  encounter = EMPTY_ENCOUNTER,
+  profileFacts = NO_PROFILE_FACTS,
+  destinationId,
+) {
+  const message = { v: PROTOCOL_VERSION, type: 'welcome', id, tick, players, encounter, profileFacts };
+  if (typeof destinationId === 'string' && destinationId.length > 0) message.destinationId = destinationId;
+  return message;
 }
 
 export function inputMessage(seq, dirX, dirZ, magnitude, run) {
@@ -1138,8 +1163,16 @@ export function villageUpgradePurchaseMessage(upgradeId) {
   return { v: PROTOCOL_VERSION, type: 'village-upgrade-purchase', upgradeId };
 }
 
-export function snapshotMessage(tick, players, encounter = EMPTY_ENCOUNTER, events = NO_EVENTS) {
-  return { v: PROTOCOL_VERSION, type: 'snapshot', tick, players, encounter, events };
+export function snapshotMessage(
+  tick,
+  players,
+  encounter = EMPTY_ENCOUNTER,
+  events = NO_EVENTS,
+  destinationId,
+) {
+  const message = { v: PROTOCOL_VERSION, type: 'snapshot', tick, players, encounter, events };
+  if (typeof destinationId === 'string' && destinationId.length > 0) message.destinationId = destinationId;
+  return message;
 }
 
 export function leaveMessage(id) {

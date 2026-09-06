@@ -10,6 +10,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
+using UnityEngine.InputSystem;
 
 namespace GalaQuest.Editor
 {
@@ -26,6 +27,7 @@ namespace GalaQuest.Editor
         public const string RuntimeCameraName = "GalaQuestGameplayCamera";
 
         private const string HeroPrefabPath = "Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab";
+        private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
 
         private const string RootName = "EmberworksDeep";
         private const string StateName = "EmberworksCompletionState";
@@ -181,6 +183,48 @@ namespace GalaQuest.Editor
                 throw new BuildFailedException("Emberworks Deep is not the Unity player entry scene.");
             }
             if (CanBuildGreybox()) throw new BuildFailedException("The playable Emberworks scene is not protected from regeneration.");
+        }
+
+        [MenuItem("GalaQuest/Emberworks/Wire U1 CP2 Traversal")]
+        public static void WireU1Cp2Traversal()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var root = FindSceneObject(RuntimeRootName);
+            var hero = FindSceneObject(RuntimeHeroName);
+            var cameraObject = FindSceneObject(RuntimeCameraName);
+            if (root == null || hero == null || cameraObject == null)
+                throw new BuildFailedException("U1 CP1 runtime must be present before CP2 traversal is wired.");
+
+            var actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
+            if (actions == null) throw new BuildFailedException($"Missing GalaQuest Input System asset: {InputActionsPath}");
+            var traversal = root.GetComponent<GalaQuestTraversalController>()
+                            ?? root.AddComponent<GalaQuestTraversalController>();
+            traversal.Configure(actions, hero.transform);
+            var follow = cameraObject.GetComponent<GalaQuestGameplayCamera>()
+                         ?? cameraObject.AddComponent<GalaQuestGameplayCamera>();
+            follow.Configure(hero.transform);
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException($"Could not save {ScenePath}.");
+            AssetDatabase.SaveAssets();
+            ValidateU1Cp2Traversal();
+            UnityEngine.Debug.Log($"U1 CP2 traversal wired into existing Emberworks scene: {ScenePath}");
+        }
+
+        [MenuItem("GalaQuest/Emberworks/Validate U1 CP2 Traversal")]
+        public static void ValidateU1Cp2Traversal()
+        {
+            ValidateU1Cp1Runtime();
+            var root = FindSceneObject(RuntimeRootName);
+            var hero = FindSceneObject(RuntimeHeroName);
+            var cameraObject = FindSceneObject(RuntimeCameraName);
+            var traversal = root?.GetComponent<GalaQuestTraversalController>();
+            if (traversal == null) throw new BuildFailedException("The U1 runtime root has no CP2 traversal owner.");
+            if (UnityEngine.Object.FindObjectsByType<GalaQuestTraversalController>(FindObjectsSortMode.None).Length != 1)
+                throw new BuildFailedException("CP2 requires exactly one traversal/hero spawn owner.");
+            if (cameraObject?.GetComponent<GalaQuestGameplayCamera>() == null)
+                throw new BuildFailedException("The U1 gameplay camera has no CP2 follow behavior.");
+            if (hero == null) throw new BuildFailedException("The actual GalaQuest Hero is not in Emberworks.");
         }
 
         [MenuItem("GalaQuest/Emberworks/Validate Greybox")]
