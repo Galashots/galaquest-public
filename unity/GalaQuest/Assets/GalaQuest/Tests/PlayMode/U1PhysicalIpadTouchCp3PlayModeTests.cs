@@ -11,7 +11,9 @@ namespace GalaQuest.Tests
             var root = new GameObject("CP3 runtime entry test");
             try
             {
+                root.SetActive(false);
                 root.AddComponent<GalaQuestGameEntry>();
+                root.SetActive(true);
                 Assert.That(root.GetComponents<GalaQuestFloatingJoystick>(), Has.Length.EqualTo(1));
                 Assert.That(root.GetComponent<GalaQuestTraversalController>(), Is.Not.Null);
                 Assert.That(root.GetComponent<BrowserSelectedProfileSource>(), Is.Not.Null);
