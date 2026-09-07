@@ -27,7 +27,10 @@
     "balanceBefore": 440,
     "balanceAfterBody": 425,
     "currentBatch": "Owner explicitly approved one textured T2 candidate (15), then one rigging pass (5) only if body usable; total ceiling 20.",
-    "rigStatus": "NOT_SUBMITTED_PENDING_BODY_INSPECTION"
+    "rigStatus": "REJECTED_BEFORE_TASK_CREATION",
+    "rigFailure": "POST /v1/rigging returned HTTP 422: Pose estimation failed, please provide a valid model. No rig task ID returned.",
+    "balanceAfterRigRejection": 425,
+    "observedBatchSpend": 15
   },
   "sourceCustodyFolderId": "1pDLmhuftVVXxfmLKaSr4S6Qcdw4t5MGY",
   "generationInputFolderId": "1WPw3tqbb7gMpmd8QPFVmN2CXAalAi3kK",
@@ -48,7 +51,7 @@
   },
   "custodyVerification": "Drive metadata readback confirmed IDs, names, parent folders and byte counts. Hashes are local measurements; no Drive byte roundtrip has been performed.",
   "rights": "Original generated reference and Owner-authorized paid Meshy API output; not CC0. No production promotion or redistribution acceptance is recorded.",
-  "visualStatus": "Unity diagnostic body inspection in progress; no running-game or Owner asset acceptance.",
+  "visualStatus": "Unity neutral FBX views inspected at yaw 0/45/90/180 using U2EnemyCandidateDiagnostics from fb7b42e02317ab73c6637e0055ade3566d39995d. Face, ears, belly and squat silhouette retained. Flattened hands and narrow knees are the strongest defects. Body judged usable enough for conditional rigging; provider rejected pose estimation. No running-game or Owner asset acceptance.",
   "conventionSource": "https://play.nintendo.com/activities/opinion-polls/minecraft-dungeons-mob-attack-poll/",
   "conventionReview": "Inspected publisher examples: Redstone Golem broad mass and bright face cues; Skeleton Vanguard clear limb/weapon spacing; Royal Guard compact armored silhouette. Used for readability conventions only, not copied identity or voxel styling.",
   "approvedReferenceWeakness": "Fine stone seams may require simplification; neutral reference cannot establish dark-cavern gameplay readability.",

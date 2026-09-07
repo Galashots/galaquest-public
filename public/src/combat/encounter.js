@@ -688,6 +688,11 @@ function enemyIsHostile(enemy, command) {
 }
 
 function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSeconds, command) {
+  const move = (target) => {
+    const wanted = stepTowards(enemy, target, enemy.speed, deltaSeconds);
+    const position = command.moveEnemy?.(enemy, wanted) ?? wanted;
+    return { ...wanted, x: position.x, z: position.z };
+  };
   enemy.modeSeconds += deltaSeconds;
   enemy.biteCooldown = Math.max(0, enemy.biteCooldown - deltaSeconds);
 
@@ -724,7 +729,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
       enemy.biteCooldown = WOLF_ARRIVAL_GRACE_SECONDS;
       return;
     }
-    const moved = stepTowards(enemy, enemy.home, enemy.speed, deltaSeconds);
+    const moved = move(enemy.home);
     enemy.x = moved.x;
     enemy.z = moved.z;
     enemy.heading = moved.heading;
@@ -795,12 +800,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
   }
 
   if (hostile && nearest.distance <= WOLF_AGGRO_RANGE && nearest.distance > WOLF_BITE_RANGE * 0.9) {
-    const moved = stepTowards(
-      enemy,
-      commandHeroes[nearest.heroId]?.position ?? { x: 0, z: 0 },
-      enemy.speed,
-      deltaSeconds,
-    );
+    const moved = move(commandHeroes[nearest.heroId]?.position ?? { x: 0, z: 0 });
     enemy.x = moved.x;
     enemy.z = moved.z;
     enemy.heading = moved.heading;

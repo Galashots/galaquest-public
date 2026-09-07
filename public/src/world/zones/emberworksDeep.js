@@ -9,6 +9,15 @@ export const EMBERWORKS_DEEP_DESTINATION_ID = 'emberworks-deep';
 // Identity mapping to the checked-in Unity scene: server x/z are Unity x/z, in metres.
 export const EMBERWORKS_DEEP_HERO_SPAWN = Object.freeze({ x: 0, z: 4 });
 
+export const EMBERWORKS_DEEP_RECOVERY_SANCTUARY = Object.freeze({
+  at: EMBERWORKS_DEEP_HERO_SPAWN, radiusMeters: 2,
+});
+
+export const EMBERWORKS_DEEP_ENEMIES = Object.freeze([
+  Object.freeze({ enemyId: 'emberworks-gremlin-1', kind: 'lava-gremlin', level: 1,
+    spawn: Object.freeze({ x: -4, z: 9 }), leashRadius: 7 }),
+]);
+
 // Cinder Gate -> immediate-action cavern -> the flat approach to Lava Express.
 export const EMBERWORKS_DEEP_MOVEMENT_BOUNDS = Object.freeze({
   minX: -10,

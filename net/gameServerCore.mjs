@@ -96,6 +96,9 @@ import {
 } from '../public/src/world/movementWorld.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
 import { openRewardStore } from './rewardStore.mjs';
+import {
+  EMBERWORKS_DEEP_ENEMIES, EMBERWORKS_DEEP_RECOVERY_SANCTUARY,
+} from '../public/src/world/zones/emberworksDeep.js';
 import { attachWebSocketServer } from './wsServer.mjs';
 
 // G5: what the Blackthorn Hollow's chest pays. Three, because it is a SECRET and not a quest reward
@@ -1012,16 +1015,16 @@ export function createSimulation(options = {}) {
   // Hero id = player id (Task B3's binding interface). One ordinary-enemy collection for the whole
   // simulation. Production authors the fixed E2 population; `options.enemies` remains a bounded
   // test/config seam for alternate authored collections.
-  const ordinaryEnemyOptions = Array.isArray(options.enemies)
-    ? { enemies: options.enemies }
-    : { enemies: ENEMY_POPULATION };
-  let encounterState = createPartyEncounterState({
-    ...ordinaryEnemyOptions,
-    heroIds: [],
-    heroSpawn: HERO_SPAWN,
-    recoverySanctuary: RECOVERY_SANCTUARY,
-    resetEnemiesOnPartyWipe: options.resetEnemiesOnPartyWipe ?? false,
-  });
+  function createDestinationEncounter() {
+    return createPartyEncounterState({
+      enemies: options.enemies ?? (movementWorld.villageInteractions ? ENEMY_POPULATION : EMBERWORKS_DEEP_ENEMIES),
+      heroIds: [],
+      heroSpawn: movementWorld.heroSpawn,
+      recoverySanctuary: movementWorld.villageInteractions ? RECOVERY_SANCTUARY : EMBERWORKS_DEEP_RECOVERY_SANCTUARY,
+      resetEnemiesOnPartyWipe: options.resetEnemiesOnPartyWipe ?? false,
+    });
+  }
+  let encounterState = createDestinationEncounter();
   // Events accumulate here from both requestPartyAttack (on attack arrival) and stepParty (each
   // tick) and are drained only when a snapshot broadcasts -- Design ruling 7, "events ride
   // snapshots". Nothing here is time-based, so nothing needs `now`.
@@ -1190,7 +1193,9 @@ export function createSimulation(options = {}) {
         + JSON.stringify(movementWorld.destinationId),
       );
     }
+    const changed = requested.destinationId !== movementWorld.destinationId;
     movementWorld = requested;
+    if (changed) encounterState = createDestinationEncounter();
     return movementWorld;
   }
 
@@ -1286,7 +1291,8 @@ export function createSimulation(options = {}) {
   /** Is this player standing in the Beacon's own fight? One definition, three callers (applyAttack,
    *  step, and the claim handlers below), so "which fight am I in" can never be answered two ways. */
   function inBeaconArena(player) {
-    return Math.hypot(player.x - BEACON_ARENA.at[0], player.z - BEACON_ARENA.at[1])
+    return movementWorld.villageInteractions
+      && Math.hypot(player.x - BEACON_ARENA.at[0], player.z - BEACON_ARENA.at[1])
       <= BEACON_ARENA.radiusMeters;
   }
 
@@ -1442,10 +1448,32 @@ export function createSimulation(options = {}) {
         ? Math.min(speed, Math.hypot(player.x - before.x, player.z - before.z) / deltaSeconds) : 0;
     }
 
-    // Emberworks CP2 is traversal only. Returning here is the scope wall that prevents Village
-    // enemies, Beacon/Warden ownership, respawn relocation, loot, and positional claim rules from
-    // adjudicating an invisible second geography behind the Unity scene.
-    if (!movementWorld.villageInteractions) return tick;
+    // Destination combat shares the pure party engine, while Village-only siege/claims/loot
+    // retain their existing geography. No invisible Village population runs in Emberworks.
+    if (!movementWorld.villageInteractions) {
+      const heroes = {};
+      for (const player of players.values()) {
+        const stats = heroStatsFor(player.id);
+        heroes[player.id] = { position: { x: player.x, z: player.z }, heading: player.heading,
+          heroDamage: stats.heroDamage, maxHp: stats.maxHp,
+          damageReductionPercent: stats.damageReductionPercent };
+      }
+      const result = stepParty(encounterState, { deltaSeconds, heroes,
+        moveEnemy: (from, to) => moveMovementWorldPosition(from, to, movementWorld) });
+      encounterState = result.state;
+      pendingEvents.push(...result.events);
+      const respawned = new Set(result.events.filter(e => e.type === 'hero-respawned').map(e => e.heroId));
+      for (const player of players.values()) {
+        if (respawned.has(player.id)) {
+          Object.assign(player, movementWorld.heroSpawn, { heading: 0, speed: 0 });
+          player.input = { ...player.input, magnitude: 0, run: false };
+        } else {
+          const separated = separateFromEnemies(player, encounterState.enemies);
+          Object.assign(player, moveMovementWorldPosition(player, separated, movementWorld));
+        }
+      }
+      return tick;
+    }
 
     // stepParty once per tick with every player's current position/heading (Task B3's binding
     // interface), THEN separate each player from the canonical ordinary-enemy collection (Design

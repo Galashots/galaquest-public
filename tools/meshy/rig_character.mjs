@@ -99,10 +99,11 @@ console.log(`wrote ${outDir}/rigged.glb (${rigged.length} bytes)`);
 // The API may include basic walk/run outputs. Preserve them as source evidence without treating them
 // as accepted gameplay clips; GalaQuest still measures every clip against this exact rig.
 for (const [name, url] of Object.entries(task.result?.basic_animations ?? {})) {
-  if (!name.endsWith('_glb_url') || !url) continue;
+  if (!/_(glb|fbx)_url$/.test(name) || !url) continue;
   const bytes = Buffer.from(await fetch(url).then((res) => {
     if (!res.ok) throw new Error(`${name} download failed: ${res.status}`);
     return res.arrayBuffer();
   }));
-  writeFileSync(`${outDir}/${name.replace(/_glb_url$/, '')}.glb`, bytes);
+  const extension = name.endsWith('_fbx_url') ? 'fbx' : 'glb';
+  writeFileSync(`${outDir}/${name.replace(/_(glb|fbx)_url$/, '')}.${extension}`, bytes);
 }
