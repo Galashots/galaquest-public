@@ -1,0 +1,18 @@
+{
+  "cases": [
+    { "name": "open approach", "from": {"x":0,"z":4}, "to":{"x":2,"z":6}, "expected":{"x":2,"z":6} },
+    { "name": "wing front", "from": {"x":0,"z":10}, "to":{"x":0,"z":18}, "expected":{"x":0,"z":12.15} },
+    { "name": "thin wall westbound", "from": {"x":3,"z":15}, "to":{"x":-3,"z":15}, "expected":{"x":1.05,"z":15} },
+    { "name": "thin wall eastbound", "from": {"x":-3,"z":15}, "to":{"x":3,"z":15}, "expected":{"x":-1.05,"z":15} },
+    { "name": "slide along wing", "from": {"x":3,"z":13}, "to":{"x":0,"z":17}, "expected":{"x":1.05,"z":17} },
+    { "name": "leave contact", "from": {"x":1.05,"z":15}, "to":{"x":3,"z":15}, "expected":{"x":3,"z":15} },
+    { "name": "tangent contact", "from": {"x":1.05,"z":13}, "to":{"x":1.05,"z":18}, "expected":{"x":1.05,"z":18} },
+    { "name": "diagonal corner crossing", "from": {"x":2,"z":11}, "to":{"x":-2,"z":17}, "expected":{"x":1.05,"z":17} },
+    { "name": "cavern back", "from": {"x":-5,"z":16}, "to":{"x":-5,"z":22}, "expected":{"x":-5,"z":18.55} },
+    { "name": "gate pillar", "from": {"x":4,"z":4}, "to":{"x":9,"z":4}, "expected":{"x":5.4,"z":4} },
+    { "name": "pass outside pillar", "from": {"x":0,"z":4}, "to":{"x":7,"z":6}, "expected":{"x":7,"z":6} },
+    { "name": "outer envelope", "from": {"x":9,"z":21}, "to":{"x":12,"z":25}, "expected":{"x":10,"z":22} },
+    { "name": "recover embedded position", "from": {"x":0,"z":16}, "to":{"x":0,"z":16}, "expected":{"x":-1.05,"z":16} },
+    { "name": "two wall corner", "from": {"x":-3,"z":17}, "to":{"x":1,"z":21}, "expected":{"x":-1.05,"z":18.55} }
+  ]
+}

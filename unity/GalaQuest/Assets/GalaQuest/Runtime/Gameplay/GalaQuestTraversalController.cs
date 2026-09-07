@@ -23,6 +23,7 @@ namespace GalaQuest
         private int pendingSnapshots;
 
         public Vector2 PredictedPosition => predicted;
+        public float PredictedMotionSpeed { get; private set; }
         public Vector2 AuthoritativePosition => authoritative;
         public float LastDrift { get; private set; }
         public bool LastReconciliationSnapped { get; private set; }
@@ -43,6 +44,7 @@ namespace GalaQuest
         {
             if (session != null) session.ServerFrameReceived -= ApplyServerFrame;
             session = connectionSession;
+            PredictedMotionSpeed = 0f;
             if (session != null) session.ServerFrameReceived += ApplyServerFrame;
         }
 
@@ -66,6 +68,7 @@ namespace GalaQuest
 
         private void OnDisable()
         {
+            PredictedMotionSpeed = 0f;
             moveAction?.Disable();
             sprintAction?.Disable();
         }
@@ -116,19 +119,23 @@ namespace GalaQuest
 
         public void StepPrediction(Vector2 direction, float magnitude, bool run, float rawDeltaSeconds)
         {
+            PredictedMotionSpeed = 0f;
             if (hero == null || session == null || string.IsNullOrEmpty(session.PlayerId)) return;
             magnitude = Mathf.Clamp01(magnitude);
             var moving = magnitude > 0f && direction.sqrMagnitude > 0f;
             direction = moving ? direction.normalized : Vector2.zero;
             var budget = GalaQuestMovementLaw.PredictionStep(rawDeltaSeconds, predictionBacklog, moving, wasMoving);
             predictionBacklog = budget.BacklogSeconds;
+            var before = predicted;
             if (moving)
             {
                 var speed = GalaQuestMovementLaw.GroundSpeedForInput(magnitude, run);
                 predicted += direction * (speed * budget.DeltaSeconds);
-                predicted = GalaQuestEmberworksMovementWorld.Clamp(predicted);
+                predicted = GalaQuestEmberworksMovementWorld.Move(before, predicted);
                 hero.rotation = GalaQuestServerCoordinates.ToUnityHeading(Mathf.Atan2(direction.x, direction.y));
             }
+            if (budget.DeltaSeconds > 0f)
+                PredictedMotionSpeed = Vector2.Distance(before, predicted) / budget.DeltaSeconds;
             wasMoving = moving;
             PresentPrediction();
         }
@@ -167,7 +174,7 @@ namespace GalaQuest
             var result = GalaQuestMovementLaw.Reconcile(predicted, authoritative, pendingSnapshots);
             if (pendingSnapshots == 0) return result;
             pendingSnapshots = 0;
-            predicted = GalaQuestEmberworksMovementWorld.Clamp(result.Position);
+            predicted = GalaQuestEmberworksMovementWorld.ResolvePosition(result.Position);
             LastDrift = result.Drift;
             LastReconciliationSnapped = result.Snapped;
             PresentPrediction();

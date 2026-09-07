@@ -90,7 +90,7 @@ import {
 // server-only rule.
 import {
   VILLAGE_DESTINATION_ID,
-  clampMovementWorldPosition,
+  moveMovementWorldPosition,
   movementWorldForDestination,
   resolveMovementWorldPosition,
 } from '../public/src/world/movementWorld.js';
@@ -1419,6 +1419,7 @@ export function createSimulation(options = {}) {
   function step(deltaSeconds, nowMs) {
     tick += 1;
     for (const player of players.values()) {
+      const before = { x: player.x, z: player.z };
       const input = player.input;
       const stale = nowMs - input.atMs > staleInputMs;
       const magnitude = stale ? 0 : input.magnitude;
@@ -1434,10 +1435,11 @@ export function createSimulation(options = {}) {
         player.z += input.dirZ * speed * deltaSeconds;
         player.heading = Math.atan2(input.dirX, input.dirZ);
       }
-      const bounded = clampMovementWorldPosition(player, movementWorld);
+      const bounded = moveMovementWorldPosition(before, player, movementWorld);
       player.x = bounded.x;
       player.z = bounded.z;
-      player.speed = speed;
+      player.speed = movementWorld.villageInteractions ? speed : deltaSeconds > 0
+        ? Math.min(speed, Math.hypot(player.x - before.x, player.z - before.z) / deltaSeconds) : 0;
     }
 
     // Emberworks CP2 is traversal only. Returning here is the scope wall that prevents Village

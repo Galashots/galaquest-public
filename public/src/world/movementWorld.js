@@ -7,11 +7,13 @@ import {
   WORLD_LIMIT_NORTH,
 } from './bounds.js';
 import { resolveObstacleCollisions, worldObstacles } from './obstacles.js';
+import { movePlanarPosition, resolvePlanarPosition } from './planarCollision.js';
 import {
   EMBERWORKS_DEEP_DESTINATION_ID,
   EMBERWORKS_DEEP_HERO_SPAWN,
   EMBERWORKS_DEEP_MOVEMENT_BOUNDS,
   EMBERWORKS_DEEP_MOVEMENT_OBSTACLES,
+  EMBERWORKS_DEEP_HERO_CLEARANCE,
 } from './zones/emberworksDeep.js';
 
 export const VILLAGE_DESTINATION_ID = 'village';
@@ -34,6 +36,7 @@ const EMBERWORKS_DEEP_MOVEMENT_WORLD = Object.freeze({
   heroSpawn: EMBERWORKS_DEEP_HERO_SPAWN,
   bounds: EMBERWORKS_DEEP_MOVEMENT_BOUNDS,
   obstacles: EMBERWORKS_DEEP_MOVEMENT_OBSTACLES,
+  planarClearance: EMBERWORKS_DEEP_HERO_CLEARANCE,
   villageInteractions: false,
 });
 
@@ -58,5 +61,13 @@ export function clampMovementWorldPosition({ x, z }, world) {
 }
 
 export function resolveMovementWorldPosition(position, world) {
+  if (world.planarClearance !== undefined)
+    return resolvePlanarPosition(position, world.bounds, world.obstacles, world.planarClearance);
   return clampMovementWorldPosition(resolveObstacleCollisions(position, world.obstacles), world);
+}
+
+export function moveMovementWorldPosition(from, to, world) {
+  if (world.planarClearance !== undefined)
+    return movePlanarPosition(from, to, world.bounds, world.obstacles, world.planarClearance);
+  return clampMovementWorldPosition(to, world);
 }
