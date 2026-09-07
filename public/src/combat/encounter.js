@@ -48,6 +48,26 @@ export const WOLF_BITE_SECONDS = 1.2;
 export const WOLF_BITE_COOLDOWN_SECONDS = 2.6;
 export const WOLF_ARRIVAL_GRACE_SECONDS = 0.6;
 export const WOLF_BITE_CONTACT_SECONDS = 0.45;
+// The gremlin's authored bash reaches its forward contact pose at frame 33 / 50fps.
+// Keep the existing wire mode 'bite'; kind selects its animation and counterplay.
+export const GREMLIN_BASH = Object.freeze({
+  contactSeconds: 0.64,
+  durationSeconds: 1.06,
+  cooldownSeconds: 2.4,
+  reach: 1.45,
+  halfArcRadians: Math.PI * 0.2,
+});
+const ORDINARY_BITE = Object.freeze({
+  contactSeconds: WOLF_BITE_CONTACT_SECONDS,
+  durationSeconds: WOLF_BITE_SECONDS,
+  cooldownSeconds: WOLF_BITE_COOLDOWN_SECONDS,
+  reach: WOLF_BITE_RANGE,
+  halfArcRadians: ATTACK_HALF_ARC_RADIANS,
+});
+
+export function enemyAttackForKind(kind) {
+  return kind === 'lava-gremlin' ? GREMLIN_BASH : ORDINARY_BITE;
+}
 export const STAGGER_SECONDS = 0.667;
 export const DEATH_SECONDS = 1.75;
 export const RESPAWN_SECONDS = 2;
@@ -677,8 +697,7 @@ function nearestTargetableHero(enemy, heroes, heroIds, commandHeroes, recoverySa
   return { heroId: best, distance: bestDistance, dx, dz };
 }
 
-// Every ordinary-enemy kind this game defines is a wolf-family predator (E1/density package), so
-// there is exactly one hostility toggle -- `command.wolfHostile` -- shared by all of them, named for
+// Ordinary enemies retain one hostility toggle -- `command.wolfHostile` -- named for
 // the original single Wolf and never renamed since: renaming a command field a caller/test already
 // keys on is a bigger churn than the density package's own scope. ENEMY_KINDS is imported rather
 // than restated so an unrecognised kind can never quietly read as hostile (GQ-007).
@@ -688,6 +707,7 @@ function enemyIsHostile(enemy, command) {
 }
 
 function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSeconds, command) {
+  const attack = enemyAttackForKind(enemy.kind);
   const move = (target) => {
     const wanted = stepTowards(enemy, target, enemy.speed, deltaSeconds);
     const position = command.moveEnemy?.(enemy, wanted) ?? wanted;
@@ -746,7 +766,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
   }
 
   if (enemy.mode === 'bite') {
-    const contact = enemy.modeSeconds >= WOLF_BITE_CONTACT_SECONDS;
+    const contact = enemy.modeSeconds >= attack.contactSeconds;
     if (contact && !enemy.biteLanded) {
       enemy.biteLanded = true;
       const targetId = enemy.targetId;
@@ -754,7 +774,8 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
       const targetPosition = targetId == null ? null : (commandHeroes[targetId]?.position ?? { x: 0, z: 0 });
       const stillTargetable = targetId == null || commandHeroes[targetId]?.targetable !== false;
       if (target && target.downSeconds < 0 && (target.protectionSeconds ?? 0) <= 0 && stillTargetable
-        && isWithinStrike(enemy, enemy.heading, targetPosition, WOLF_BITE_RANGE)) {
+        && !pointInSanctuary(targetPosition, command.recoverySanctuary)
+        && isWithinStrike(enemy, enemy.heading, targetPosition, attack.reach, attack.halfArcRadians)) {
         target.hp -= resolveIncomingDamage(
           enemy.biteDamage,
           commandHeroes[targetId]?.damageReductionPercent,
@@ -773,7 +794,7 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
         events.push(enemyEvent({ type: 'bite-missed' }, enemy));
       }
     }
-    if (enemy.modeSeconds >= WOLF_BITE_SECONDS) {
+    if (enemy.modeSeconds >= attack.durationSeconds) {
       enemy.mode = 'idle';
       enemy.modeSeconds = 0;
     }
@@ -789,17 +810,17 @@ function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSecond
   }
 
   const hostile = enemyIsHostile(enemy, command);
-  if (hostile && nearest.distance <= WOLF_BITE_RANGE && enemy.biteCooldown === 0) {
+  if (hostile && nearest.distance <= attack.reach && enemy.biteCooldown === 0) {
     enemy.mode = 'bite';
     enemy.modeSeconds = 0;
     enemy.biteLanded = false;
-    enemy.biteCooldown = WOLF_BITE_COOLDOWN_SECONDS;
+    enemy.biteCooldown = attack.cooldownSeconds;
     enemy.heading = Math.atan2(nearest.dx, nearest.dz);
     enemy.targetId = nearest.heroId;
     return;
   }
 
-  if (hostile && nearest.distance <= WOLF_AGGRO_RANGE && nearest.distance > WOLF_BITE_RANGE * 0.9) {
+  if (hostile && nearest.distance <= WOLF_AGGRO_RANGE && nearest.distance > attack.reach * 0.9) {
     const moved = move(commandHeroes[nearest.heroId]?.position ?? { x: 0, z: 0 });
     enemy.x = moved.x;
     enemy.z = moved.z;
