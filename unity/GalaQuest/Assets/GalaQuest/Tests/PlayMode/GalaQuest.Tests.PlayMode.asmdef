@@ -5,7 +5,8 @@
         "GalaQuest.Runtime",
         "GalaQuest.Migration.Runtime",
         "GalaQuest.Gear.Runtime",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework"
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

@@ -11,6 +11,7 @@ namespace GalaQuest
 
         private GalaQuestConnectionSession session;
         private GalaQuestFloatingJoystick floatingJoystick;
+        private GalaQuestGameplayCamera gameplayCamera;
         private InputAction moveAction;
         private InputAction sprintAction;
         private Vector2 predicted;
@@ -85,13 +86,18 @@ namespace GalaQuest
         private void Update()
         {
             if (floatingJoystick == null) floatingJoystick = GetComponent<GalaQuestFloatingJoystick>();
+            if (gameplayCamera == null && Camera.main != null)
+                gameplayCamera = Camera.main.GetComponent<GalaQuestGameplayCamera>();
             var input = ResolveInput(
                 moveAction?.ReadValue<Vector2>() ?? Vector2.zero,
                 sprintAction?.IsPressed() == true,
                 floatingJoystick != null && floatingJoystick.Active,
                 floatingJoystick != null ? floatingJoystick.Value : Vector2.zero);
-            session?.TrySendMovementIntent(input.Direction, input.Magnitude, input.Run, Time.unscaledTime);
-            StepPrediction(input.Direction, input.Magnitude, input.Run, Time.unscaledDeltaTime);
+            var worldDirection = gameplayCamera != null
+                ? gameplayCamera.ToWorldDirection(input.Direction)
+                : input.Direction;
+            session?.TrySendMovementIntent(worldDirection, input.Magnitude, input.Run, Time.unscaledTime);
+            StepPrediction(worldDirection, input.Magnitude, input.Run, Time.unscaledDeltaTime);
             ApplyPendingReconciliation();
         }
 
