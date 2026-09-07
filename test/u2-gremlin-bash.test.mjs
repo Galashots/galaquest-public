@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WOLF_BITE_DAMAGE, createPartyEncounterState, stepParty } from '../public/src/combat/encounter.js';
+import { createSimulation } from '../net/gameServerCore.mjs';
+import { encode, snapshotMessage } from '../public/src/net/protocolCore.js';
+
+test('the wire publishes the same bash geometry and timing used for contact', () => {
+  const sim = createSimulation({ destinationId: 'emberworks-deep' });
+  const frame = snapshotMessage(sim.tick, sim.snapshot(), sim.encounterSnapshot(), [], 'emberworks-deep');
+  const attack = JSON.parse(encode(frame)).encounter.enemies[0].attack;
+  assert.deepEqual(attack, { contactSeconds: .64, durationSeconds: 1.06, cooldownSeconds: 2.4, reach: 1.45, halfArcRadians: Math.PI * .2 });
+});
 
 function windup({ kind = 'lava-gremlin', recoverySanctuary, heroPosition = { x: 0, z: 1.25 }, enemyPosition = { x: 0, z: 0 } } = {}) {
   let state = createPartyEncounterState({

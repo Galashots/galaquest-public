@@ -192,6 +192,17 @@ namespace GalaQuest
         public string mode;
         public float modeSeconds;
         public string targetId;
+        public GalaQuestServerEnemyAttack attack;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerEnemyAttack
+    {
+        public float contactSeconds;
+        public float durationSeconds;
+        public float cooldownSeconds;
+        public float reach;
+        public float halfArcRadians;
     }
 
     [Serializable]

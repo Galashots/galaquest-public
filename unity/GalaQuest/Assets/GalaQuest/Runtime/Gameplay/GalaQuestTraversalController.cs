@@ -21,8 +21,11 @@ namespace GalaQuest
         private bool wasMoving;
         private bool hasAuthoritativePosition;
         private int pendingSnapshots;
+        private bool serverDown;
+        private bool recoveryNeedsNeutral;
 
         public Vector2 PredictedPosition => predicted;
+        public Transform Hero => hero;
         public float PredictedMotionSpeed { get; private set; }
         public Vector2 AuthoritativePosition => authoritative;
         public float LastDrift { get; private set; }
@@ -45,6 +48,8 @@ namespace GalaQuest
             if (session != null) session.ServerFrameReceived -= ApplyServerFrame;
             session = connectionSession;
             PredictedMotionSpeed = 0f;
+            serverDown = false;
+            recoveryNeedsNeutral = false;
             if (session != null) session.ServerFrameReceived += ApplyServerFrame;
         }
 
@@ -96,6 +101,8 @@ namespace GalaQuest
                 sprintAction?.IsPressed() == true,
                 floatingJoystick != null && floatingJoystick.Active,
                 floatingJoystick != null ? floatingJoystick.Value : Vector2.zero);
+            if (!serverDown && input.Magnitude == 0) recoveryNeedsNeutral = false;
+            if (serverDown || recoveryNeedsNeutral) input = new ResolvedMovementInput(Vector2.zero, 0, false);
             var worldDirection = gameplayCamera != null
                 ? gameplayCamera.ToWorldDirection(input.Direction)
                 : input.Direction;
@@ -120,7 +127,8 @@ namespace GalaQuest
         public void StepPrediction(Vector2 direction, float magnitude, bool run, float rawDeltaSeconds)
         {
             PredictedMotionSpeed = 0f;
-            if (hero == null || session == null || string.IsNullOrEmpty(session.PlayerId)) return;
+            if (hero == null || session == null || string.IsNullOrEmpty(session.PlayerId) || serverDown || recoveryNeedsNeutral)
+            { predictionBacklog = 0; wasMoving = false; return; }
             magnitude = Mathf.Clamp01(magnitude);
             var moving = magnitude > 0f && direction.sqrMagnitude > 0f;
             direction = moving ? direction.normalized : Vector2.zero;
@@ -153,6 +161,12 @@ namespace GalaQuest
                 }
             }
             if (self == null) return;
+            if (frame.encounter != null && frame.encounter.heroes.TryGetValue(session.PlayerId, out var combat) && combat != null)
+            {
+                var down = combat.hp <= 0 || combat.downSeconds >= 0;
+                if (down && !serverDown) recoveryNeedsNeutral = true;
+                serverDown = down;
+            }
             authoritative = new Vector2(self.x, self.z);
             if (!hasAuthoritativePosition || frame.type == "welcome")
             {

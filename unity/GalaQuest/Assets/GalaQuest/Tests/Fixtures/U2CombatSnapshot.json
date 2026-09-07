@@ -32,7 +32,14 @@
         "hp": 30,
         "mode": "walk",
         "modeSeconds": 0.1,
-        "targetId": null
+        "targetId": null,
+        "attack": {
+          "contactSeconds": 0.64,
+          "durationSeconds": 1.06,
+          "cooldownSeconds": 2.4,
+          "reach": 1.45,
+          "halfArcRadians": 0.6283185307179586
+        }
       }
     ],
     "heroes": {

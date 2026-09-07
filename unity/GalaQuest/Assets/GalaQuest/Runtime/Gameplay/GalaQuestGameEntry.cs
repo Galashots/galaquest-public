@@ -13,6 +13,7 @@ namespace GalaQuest
         private bool shuttingDown;
         private GalaQuestTraversalController traversal;
         private GalaQuestAttackControl attack;
+        private GalaQuestCombatPresentation combat;
 
         private void Awake()
         {
@@ -22,6 +23,7 @@ namespace GalaQuest
             if (attack == null) attack = gameObject.AddComponent<GalaQuestAttackControl>();
             profileSource = GetComponent<BrowserSelectedProfileSource>();
             traversal = GetComponent<GalaQuestTraversalController>();
+            combat = GetComponent<GalaQuestCombatPresentation>();
             profileSource.Selected += HandleSelected;
             profileSource.Failed += HandleProfileFailure;
         }
@@ -39,6 +41,7 @@ namespace GalaQuest
             session.Disconnected += ScheduleReconnect;
             traversal.BindSession(session);
             attack.BindSession(session);
+            if (combat != null) combat.BindSession(session);
             session.Begin(profile);
         }
 
@@ -86,6 +89,7 @@ namespace GalaQuest
             {
                 traversal?.BindSession(null);
                 if (attack != null) attack.BindSession(null);
+                if (combat != null) combat.BindSession(null);
                 session.StatusChanged -= HandleStatus;
                 session.Disconnected -= ScheduleReconnect;
                 session.Dispose();

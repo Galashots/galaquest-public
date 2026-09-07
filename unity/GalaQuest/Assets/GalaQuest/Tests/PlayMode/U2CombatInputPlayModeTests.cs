@@ -72,6 +72,54 @@ namespace GalaQuest.Tests
             }
         }
 
+        [UnityTest]
+        public IEnumerator RecoveryRequiresReleasingTheHeldMovementThumb()
+        {
+            var touchscreen = InputSystem.AddDevice<Touchscreen>();
+            var root = new GameObject("Recovery input");
+            var hero = new GameObject("Recovery hero");
+            hero.transform.position = new Vector3(0, .25f, 8);
+            root.AddComponent<GalaQuestFloatingJoystick>();
+            var movement = root.AddComponent<GalaQuestTraversalController>();
+            movement.Configure(null, hero.transform);
+            var transport = new FakeTransport();
+            using var session = new GalaQuestConnectionSession(transport);
+            movement.BindSession(session);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Younger", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"players\":[{\"id\":\"p1\",\"x\":0,\"z\":8}]}");
+            try
+            {
+                yield return null; yield return null;
+                var origin = new Vector2(Screen.width * .2f, Screen.height * .25f);
+                BeginTouch(1, origin, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                MoveTouch(1, origin + Vector2.up * 60, screen: touchscreen, queueEventOnly: true);
+                var deadline = Time.realtimeSinceStartup + 2;
+                while (movement.PredictedPosition.y < 8.05f && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.That(movement.PredictedPosition.y, Is.GreaterThan(8.04f));
+                transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"players\":[{\"id\":\"p1\",\"x\":0,\"z\":8}],\"encounter\":{\"heroes\":{\"p1\":{\"hp\":0,\"downSeconds\":0.1}}}}");
+                yield return null;
+                Assert.That(movement.PredictedMotionSpeed, Is.Zero);
+                transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"players\":[{\"id\":\"p1\",\"x\":0,\"z\":4}],\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"downSeconds\":-1}}}}");
+                yield return null; yield return null;
+                Assert.That(movement.PredictedPosition, Is.EqualTo(new Vector2(0, 4)), "held input must not leave the recovery point");
+                EndTouch(1, origin, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                BeginTouch(1, origin, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                MoveTouch(1, origin + Vector2.up * 60, screen: touchscreen, queueEventOnly: true);
+                deadline = Time.realtimeSinceStartup + 2;
+                while (movement.PredictedPosition.y < 4.05f && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.That(movement.PredictedPosition.y, Is.GreaterThan(4.04f));
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(root);
+                UnityEngine.Object.Destroy(hero);
+            }
+        }
+
         private sealed class FakeTransport : IGalaQuestTransport
         {
             public event Action Opened;

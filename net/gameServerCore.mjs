@@ -15,6 +15,7 @@ import {
   HERO_MAX_HP,
   addHero,
   createPartyEncounterState,
+  enemyAttackForKind,
   removeHero,
   requestHeroHeal,
   requestPartyAttack,
@@ -1757,6 +1758,7 @@ export function createSimulation(options = {}) {
         mode: enemy.mode,
         modeSeconds: roundToWire(enemy.modeSeconds),
         targetId: enemy.targetId,
+        attack: enemyAttackForKind(enemy.kind),
       })),
       heroes,
     };

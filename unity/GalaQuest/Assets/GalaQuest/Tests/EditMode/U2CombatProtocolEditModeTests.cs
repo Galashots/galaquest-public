@@ -12,7 +12,8 @@ namespace GalaQuest.Tests
         [Test]
         public void ActualNodeSnapshotPreservesBothHeroRecordsEnemyIdentityAndSwingEvent()
         {
-            // Captured from createSimulation + protocolCore.snapshotMessage at aed8401.
+            // Captured from createSimulation + protocolCore.snapshotMessage, including
+            // the authoritative enemy attack profile added with this presentation slice.
             var json = File.ReadAllText("Assets/GalaQuest/Tests/Fixtures/U2CombatSnapshot.json");
             Assert.That(GalaQuestProtocolV4.TryReadServerFrame(json, out var frame), Is.True);
             Assert.That(frame.destinationId, Is.EqualTo("emberworks-deep"));
@@ -26,6 +27,9 @@ namespace GalaQuest.Tests
             Assert.That(enemy.kind, Is.EqualTo("lava-gremlin"));
             Assert.That(enemy.mode, Is.EqualTo("walk"));
             Assert.That(enemy.hp, Is.EqualTo(30));
+            Assert.That(enemy.attack.reach, Is.EqualTo(1.45f));
+            Assert.That(enemy.attack.contactSeconds, Is.EqualTo(.64f));
+            Assert.That(enemy.attack.halfArcRadians, Is.EqualTo(Mathf.PI * .2f).Within(.0001f));
             Assert.That(frame.events.Single().type, Is.EqualTo("swing"));
             Assert.That(frame.events.Single().heroId, Is.EqualTo("p1"));
         }
