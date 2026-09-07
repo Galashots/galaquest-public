@@ -7,12 +7,13 @@ import * as THREE from '../public/vendor/three.module.min.js';
 import { HERO_URL, normaliseCharacterMaterial } from '../public/src/character/hero.js';
 import { WOLF_URL } from '../public/src/enemies/wolf.js';
 import { WARDEN_URL } from '../public/src/enemies/warden.js';
-import { KEEPER } from '../public/src/world/zones/village.js';
+import { KEEPER, RANGER } from '../public/src/world/zones/village.js';
 
 // zoneLoader.js resolves a zone data module's `model` fields by prefixing 'assets/' -- see its own
 // ASSET_PREFIX constant. Reconstructed here rather than imported so this file keeps naming its
 // active load paths as *_URL constants the same way HERO_URL/WOLF_URL already do.
 const KEEPER_URL = `assets/${KEEPER.model}`;
+const RANGER_URL = `assets/${RANGER.model}`;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ASSET_ROOT = resolve(repoRoot, 'public/assets');
@@ -184,6 +185,7 @@ const ACTIVE_LOAD_PATHS = [
   // through normaliseCharacterMaterial(), so the assertions above prove the cure rather
   // than this file merely tolerating the defect.
   { url: WARDEN_URL, source: 'warden.js buildWarden()' },
+  { url: RANGER_URL, source: 'ranger.js buildRanger()' },
 ];
 
 // Shipped .glb files that are measured, today, to declare this defect but sit on no runtime load

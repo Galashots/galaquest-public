@@ -163,9 +163,50 @@ test('current Git custody paths exist and recorded hashes match', () => {
     assert.ok(existsSync(file), `${record.asset_id} path exists`);
     assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'), record.source.sha256, `${record.asset_id} hash`);
     const location = record.custody_locations.find((candidate) => candidate.kind === 'GIT');
-    assert.equal(location.git_ref, evidence.snapshot.runtime_git_ref);
+    const declared = evidence.runtime_assets.find((asset) => asset.asset_id === record.asset_id);
+    assert.equal(location.git_ref, declared.git_ref ?? evidence.snapshot.runtime_git_ref, `${record.asset_id} git ref`);
     assert.ok(location.git_blob_oid);
+    // The recorded blob OID must be the real Git object hash of the bytes on disk, so the recovery
+    // coordinate identifies the exact shipped file rather than merely naming a plausible commit.
+    const raw = readFileSync(file);
+    const expectedOid = createHash('sha1').update(Buffer.from(`blob ${raw.length}\0`)).update(raw).digest('hex');
+    assert.equal(location.git_blob_oid, expectedOid, `${record.asset_id} blob OID matches its bytes`);
   }
+});
+
+// Returns the file list at a commit, or null when that commit is not in this checkout (CI clones
+// are shallow, so history-based evidence is unavailable there rather than wrong).
+const pathsAtRef = (ref) => {
+  try {
+    return new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', ref], { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).split('\n').filter(Boolean));
+  } catch {
+    return null;
+  }
+};
+
+test('a runtime asset absent from the snapshot commit declares its own recovery ref', (t) => {
+  // Regression guard for a false VERIFIED_FROM_GIT coordinate: an asset added after the evidence
+  // snapshot inherited the shared runtime_git_ref, which cannot recover bytes that did not exist
+  // at that commit. Anything introduced after the snapshot must carry an explicit per-asset ref.
+  const snapshotPaths = pathsAtRef(evidence.snapshot.runtime_git_ref);
+  if (!snapshotPaths) return t.skip('snapshot commit not present in this checkout');
+  for (const asset of evidence.runtime_assets) {
+    if (snapshotPaths.has(asset.path)) continue;
+    assert.ok(asset.git_ref, `${asset.asset_id} is absent from the snapshot commit and must declare its own git_ref`);
+  }
+});
+
+test('every declared per-asset recovery coordinate actually contains its asset', (t) => {
+  const declared = evidence.runtime_assets.filter((asset) => asset.git_ref);
+  if (!declared.length) return t.skip('no per-asset recovery refs declared');
+  let checked = 0;
+  for (const asset of declared) {
+    const atRef = pathsAtRef(asset.git_ref);
+    if (!atRef) continue;
+    assert.ok(atRef.has(asset.path), `${asset.asset_id} coordinate ${asset.git_ref} must contain ${asset.path}`);
+    checked += 1;
+  }
+  if (!checked) t.skip('declared recovery commits not present in this checkout');
 });
 
 test('authority remains secret-free and Package B interface-only', () => {

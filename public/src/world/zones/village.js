@@ -1379,9 +1379,7 @@ export const ROWAN_CLAIM = Object.freeze({
 // village staring down the same line has been told something, and told it without a line of text --
 // the same rule world/blackthornHollow.js's own marker follows.
 export const RANGER = Object.freeze({
-  // Aldric's rig again, cloned and tinted -- the same honest trade ROWAN documents above. We do not
-  // own a fourth NPC model and this is story scaffolding, not Wren's eventual rigging.
-  model: KEEPER.model,
+  model: 'characters/wren_ranger.glb',
   at: Object.freeze([-1.2, 5.0]),
   facing: HOLLOW.at,
 });

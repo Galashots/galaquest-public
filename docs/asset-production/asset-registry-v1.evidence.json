@@ -4,7 +4,7 @@
     "observed_utc": "2026-08-29",
     "package_base_sha": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
     "runtime_git_ref": "2ddbd6e2afbd7287df988d4327f8218ff166ed6d",
-    "notes": "AINV1 observation input. Runtime identity paths were refreshed against the restored live main tree; dated provider observations remain independently dated below."
+    "notes": "AINV1 observation input. Runtime identity paths were refreshed against the restored live main tree; dated provider observations remain independently dated below. runtime_git_ref is the DEFAULT recovery commit for runtime assets that existed at this snapshot. An asset introduced after this snapshot MUST declare its own immutable per-asset git_ref, because the snapshot commit cannot recover bytes that did not yet exist there."
   },
   "runtime_assets": [
     { "asset_id": "enemy.beacon_warden", "display_name": "Beacon Warden", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/enemies/beacon_warden.glb" },
@@ -22,11 +22,11 @@
     { "asset_id": "hero.lod1-6800", "display_name": "Hero LOD1 6800", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/hero/hero_lod1_6800.glb" },
     { "asset_id": "hero.lod1-ironwood-atlas", "display_name": "Hero LOD1 Ironwood Atlas", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/hero/hero_lod1_ironwood_atlas.glb" },
     { "asset_id": "hero.texture.tier3-atlas", "display_name": "Hero Tier 3 Atlas", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/hero/hero_tier3_atlas.jpg" },
-    { "asset_id": "gear.icon.helmet-silverguard", "display_name": "Silverguard Helmet Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/helmet_silverguard.png" },
-    { "asset_id": "gear.icon.shield-ironwood", "display_name": "Ironwood Shield Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/shield_ironwood.png" },
-    { "asset_id": "gear.icon.shoulder-silverguard", "display_name": "Silverguard Shoulders Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/shoulder_silverguard.png" },
-    { "asset_id": "gear.icon.starter-sword", "display_name": "Starter Sword Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/starter_sword.png" },
-    { "asset_id": "gear.icon.wildwood-blade", "display_name": "Wildwood Blade Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/wildwood_blade.png" },
+    { "asset_id": "gear.icon.helmet-silverguard", "display_name": "Silverguard Helmet Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/helmet_silverguard.png", "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704" },
+    { "asset_id": "gear.icon.shield-ironwood", "display_name": "Ironwood Shield Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/shield_ironwood.png", "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704" },
+    { "asset_id": "gear.icon.shoulder-silverguard", "display_name": "Silverguard Shoulders Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/shoulder_silverguard.png", "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704" },
+    { "asset_id": "gear.icon.starter-sword", "display_name": "Starter Sword Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/starter_sword.png", "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704" },
+    { "asset_id": "gear.icon.wildwood-blade", "display_name": "Wildwood Blade Icon", "asset_kind": "texture", "lifecycle": "PRODUCTION", "path": "public/assets/items/wildwood_blade.png", "git_ref": "172e9e122ef64d1d0714745de597b200c7c46704" },
     { "asset_id": "prop.village.cart", "display_name": "Village Cart", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/cart.glb" },
     { "asset_id": "prop.village.fence-broken", "display_name": "Village Broken Fence", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/fence-broken.glb" },
     { "asset_id": "prop.village.fence-gate", "display_name": "Village Fence Gate", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/fence-gate.glb" },
@@ -42,7 +42,8 @@
     { "asset_id": "prop.village.tree-crooked", "display_name": "Village Crooked Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/tree-crooked.glb" },
     { "asset_id": "prop.village.tree", "display_name": "Village Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/props/village/tree.glb" },
     { "asset_id": "world.keeper", "display_name": "Keeper", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/world/keeper.glb" },
-    { "asset_id": "world.lantern-tree", "display_name": "Lantern Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/world/lantern_tree.glb" }
+    { "asset_id": "world.lantern-tree", "display_name": "Lantern Tree", "asset_kind": "model", "lifecycle": "PRODUCTION", "path": "public/assets/world/lantern_tree.glb" },
+    { "asset_id": "npc.wren_ranger", "display_name": "Wren Ranger", "asset_kind": "character", "lifecycle": "PRODUCTION", "path": "public/assets/characters/wren_ranger.glb", "git_ref": "8bde5259c27a63bb1396b936fd1852aaa1a6d939", "derivative_of": "wren-ranger-v1" }
   ],
   "provider_reconciliation": {
     "observed_utc": "2026-08-25",
