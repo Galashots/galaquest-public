@@ -16,7 +16,8 @@ const args = process.argv.slice(2);
 const [inputTaskId, outDir] = args;
 const go = args.includes('--go');
 const height = args.includes('--height') ? Number(args[args.indexOf('--height') + 1]) : 1.7;
-if (!inputTaskId || !outDir || !Number.isFinite(height) || height <= 0) {
+const keyPath = args.includes('--key-file') ? args[args.indexOf('--key-file') + 1] : new URL('../../.local/meshy/api-key.txt', import.meta.url);
+if (!inputTaskId || !outDir || !keyPath || !Number.isFinite(height) || height <= 0) {
   console.error('usage: node tools/meshy/rig_character.mjs <input-task-id> <outdir> [--height 2.2] [--go]');
   process.exit(2);
 }
@@ -30,9 +31,9 @@ if (!go) {
 
 let key;
 try {
-  key = readFileSync(new URL('../../.local/meshy/api-key.txt', import.meta.url), 'utf8').trim();
+  key = readFileSync(keyPath, 'utf8').trim();
 } catch {
-  console.error('Meshy API key not found at .local/meshy/api-key.txt');
+  console.error('Meshy API key file is unavailable');
   process.exit(2);
 }
 if (!key) {
@@ -55,8 +56,10 @@ const balance = () => api('/v1/balance').then((result) => result.balance);
 
 const before = await balance();
 console.log(`balance before: ${before}`);
+mkdirSync(outDir, { recursive: true });
 const { result: taskId } = await api('/v1/rigging', { method: 'POST', body: JSON.stringify(body) });
 console.log(`task: ${taskId}`);
+writeFileSync(`${outDir}/submission.json`, JSON.stringify({ taskId, inputTaskId, before, height }, null, 2));
 let task;
 for (let i = 0; i < 240; i += 1) {
   await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -86,6 +89,11 @@ const rigged = Buffer.from(await fetch(rigUrl).then((res) => {
   return res.arrayBuffer();
 }));
 writeFileSync(`${outDir}/rigged.glb`, rigged);
+if (task.result?.rigged_character_fbx_url) {
+  const response = await fetch(task.result.rigged_character_fbx_url);
+  if (!response.ok) throw new Error(`rigged FBX download failed: ${response.status}`);
+  writeFileSync(`${outDir}/rigged.fbx`, Buffer.from(await response.arrayBuffer()));
+}
 console.log(`wrote ${outDir}/rigged.glb (${rigged.length} bytes)`);
 
 // The API may include basic walk/run outputs. Preserve them as source evidence without treating them

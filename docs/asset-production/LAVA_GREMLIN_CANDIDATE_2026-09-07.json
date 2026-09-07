@@ -1,0 +1,56 @@
+{
+  "schema": "galaquest-candidate-receipt-v1",
+  "assetId": "enemy.emberworks.lava-gremlin",
+  "status": "CANDIDATE_ONLY",
+  "createdUtc": "2026-09-07T19:21:18.659Z",
+  "generationReference": {
+    "status": "Owner approved for generation on 2026-09-07; non-canonical target reference",
+    "controls": [
+      "silhouette",
+      "proportion",
+      "surface palette"
+    ],
+    "bytes": 1214780,
+    "sha256": "57207ed340d5f44ae1cbdef100aa40e74a8976bea70e6faae94729db7da6a54d",
+    "driveFileId": "1dGQ_JGx2d932Olo5IQUBlwgqn056nNJq"
+  },
+  "provider": {
+    "name": "Meshy",
+    "model": "meshy-t2",
+    "modelType": "smart-topology",
+    "bodyTaskId": "01a07d44-22dd-7783-8698-aa17147d3545",
+    "requestedTriangles": 10000,
+    "measuredTriangles": 10565,
+    "textures": true,
+    "requestedPose": "t-pose",
+    "bodyConsumedCredits": 15,
+    "balanceBefore": 440,
+    "balanceAfterBody": 425,
+    "currentBatch": "Owner explicitly approved one textured T2 candidate (15), then one rigging pass (5) only if body usable; total ceiling 20.",
+    "rigStatus": "NOT_SUBMITTED_PENDING_BODY_INSPECTION"
+  },
+  "sourceCustodyFolderId": "1pDLmhuftVVXxfmLKaSr4S6Qcdw4t5MGY",
+  "generationInputFolderId": "1WPw3tqbb7gMpmd8QPFVmN2CXAalAi3kK",
+  "glb": {
+    "bytes": 3265484,
+    "sha256": "80dec302e5ca094d52d528a3116485e83f88b7aba9866b2f5633a89cceeb015b",
+    "driveFileId": "12uzgkxo_QxkxyXabgqvSrGTIg9s8b4oY"
+  },
+  "fbx": {
+    "bytes": 7207244,
+    "sha256": "9aa7bf911ddadac1756afec130ea3e4c5f3f1f92dc819b05c6854915b22a31ba",
+    "driveFileId": "1FtCzizNLCxZ-ZIIphR_GYTaRzPnKsbDJ"
+  },
+  "sourceGeometry": {
+    "meshes": 1,
+    "skins": 0,
+    "animations": 0
+  },
+  "custodyVerification": "Drive metadata readback confirmed IDs, names, parent folders and byte counts. Hashes are local measurements; no Drive byte roundtrip has been performed.",
+  "rights": "Original generated reference and Owner-authorized paid Meshy API output; not CC0. No production promotion or redistribution acceptance is recorded.",
+  "visualStatus": "Unity diagnostic body inspection in progress; no running-game or Owner asset acceptance.",
+  "conventionSource": "https://play.nintendo.com/activities/opinion-polls/minecraft-dungeons-mob-attack-poll/",
+  "conventionReview": "Inspected publisher examples: Redstone Golem broad mass and bright face cues; Skeleton Vanguard clear limb/weapon spacing; Royal Guard compact armored silhouette. Used for readability conventions only, not copied identity or voxel styling.",
+  "approvedReferenceWeakness": "Fine stone seams may require simplification; neutral reference cannot establish dark-cavern gameplay readability.",
+  "relatedIssue": 46
+}

@@ -4,7 +4,7 @@ The public repo contains the guarded paid-generation clients used by the current
 
 These tools are **guarded**:
 
-- `.local/meshy/api-key.txt` is the only key path and remains gitignored;
+- `.local/meshy/api-key.txt` is the default key path and remains gitignored; image/rig clients also accept `--key-file <existing-file>` so an isolated worktree can use an existing credential without copying it;
 - every paid client is a **dry run by default**;
 - only an explicit `--go` creates a Meshy task;
 - balance is read before and after the task;
@@ -21,7 +21,9 @@ node tools/meshy/image_to_3d.mjs tmp/<asset>.png tmp/<asset>-body --polycount 70
 node tools/meshy/image_to_3d.mjs tmp/<asset>.png tmp/<asset>-body --polycount 7000 --go
 ```
 
-The output directory keeps the raw GLB, Meshy task JSON, and returned textures as source evidence. Raw Meshy output does **not** ship.
+Image generation uses Smart Topology T2, with a target of 100–15,000 triangles. Use `--pose t-pose` for a riggable character. The output directory keeps raw GLB/FBX, Meshy task JSON, and returned textures as source evidence. Raw Meshy output does **not** ship.
+
+Image and rig clients persist `submission.json` immediately after receiving a task ID. If polling or downloading fails, recover that same task; do not rerun `--go` to recover an existing submission. The optional key file is read only after `--go`, and its contents are never printed.
 
 ## Rig an accepted humanoid body
 
