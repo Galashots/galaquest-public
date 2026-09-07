@@ -12,6 +12,7 @@ namespace GalaQuest
         private GalaQuestTraversalController traversal;
         private GalaQuestAttackControl attackControl;
         private GalaQuestCombatMotion selfMotion;
+        private GameObject selfWeapon;
         private GalaQuestServerHeroCombat self;
         private GalaQuestCombatAudio sound;
         private float receivedAt;
@@ -62,6 +63,7 @@ namespace GalaQuest
                 session.Disconnected -= ClearViews;
             }
             if (attackControl != null) attackControl.AttackRequested -= PredictAttack;
+            if (selfWeapon != null) Destroy(selfWeapon);
             ClearViews();
             session = value;
             if (session == null) return;
@@ -75,6 +77,7 @@ namespace GalaQuest
             selfMotion = hero.GetComponent<GalaQuestCombatMotion>();
             if (selfMotion == null) selfMotion = hero.gameObject.AddComponent<GalaQuestCombatMotion>();
             selfMotion.Configure(animator, true);
+            if (content.StarterWeapon != null) selfWeapon = GalaQuest.Gear.GearMounter.Mount(hero, content.StarterWeapon);
             sound = GetComponent<GalaQuestCombatAudio>();
             if (sound == null) sound = gameObject.AddComponent<GalaQuestCombatAudio>();
             sound.Configure(content);
@@ -139,6 +142,7 @@ namespace GalaQuest
                     animator.runtimeAnimatorController = content.HeroController;
                     var motion = body.AddComponent<GalaQuestCombatMotion>();
                     motion.Configure(animator, true);
+                    if (content.StarterWeapon != null) GalaQuest.Gear.GearMounter.Mount(body.transform, content.StarterWeapon);
                     actor = new HeroView { Body = body, Motion = motion };
                     companions.Add(player.id, actor);
                 }
@@ -164,7 +168,7 @@ namespace GalaQuest
             }
         }
 
-        private Vector3 Position(float x, float z) => new Vector3(x, traversal.Hero.position.y, z);
+        private Vector3 Position(float x, float z) => GalaQuestGroundSurface.Project(new Vector3(x, traversal.Hero.position.y, z), .01f);
 
         private void RemoveAbsent<T>(Dictionary<string, T> collection, HashSet<string> live, Action<T> release)
         {
@@ -176,6 +180,7 @@ namespace GalaQuest
         private void Update()
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId)) return;
+            traversal.Hero.position = GalaQuestGroundSurface.Project(traversal.Hero.position, .01f);
             var age = Mathf.Clamp(Time.unscaledTime - receivedAt, 0, .15f);
             PresentHero(selfMotion, self, traversal.PredictedMotionSpeed, age, selfHurtUntil, Time.unscaledTime - predictedSwingAt < .25f);
             var blend = 1 - Mathf.Exp(-16 * Time.unscaledDeltaTime);
@@ -201,10 +206,7 @@ namespace GalaQuest
                     {
                         // The authored arena floor is higher than the flat movement
                         // anchor. Project the warning onto the real floor, not inside it.
-                        if (Physics.Raycast(actor.Body.transform.position + Vector3.up * 2f, Vector3.down,
-                            out var ground, 4f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                            && ground.normal.y > .9f)
-                            actor.Telegraph.transform.position = ground.point + Vector3.up * .025f;
+                        actor.Telegraph.transform.position = GalaQuestGroundSurface.Project(actor.Body.transform.position, .025f);
                         var progress = Mathf.Clamp01(clock / state.attack.contactSeconds);
                         actor.Properties.SetColor("_BaseColor", new Color(1, .48f + .18f * progress, .08f, .22f + .28f * progress));
                         actor.TelegraphRenderer.SetPropertyBlock(actor.Properties);

@@ -2,6 +2,7 @@
     "name": "GalaQuest.Runtime",
     "rootNamespace": "GalaQuest",
     "references": [
+        "GalaQuest.Gear.Runtime",
         "Unity.InputSystem"
     ],
     "includePlatforms": [],

@@ -30,9 +30,16 @@ namespace GalaQuest.Tests
                 root = new GameObject("Combined combat test");
                 var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 floor.name = "Raised combat floor";
+                floor.AddComponent<GalaQuestGroundSurface>();
                 floor.transform.SetParent(root.transform);
                 floor.transform.position = new Vector3(-4, .15f, 8);
                 floor.transform.localScale = new Vector3(8, .7f, 8);
+                var decoration = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                decoration.name = "Unmarked decoration is not walkable";
+                decoration.transform.SetParent(root.transform);
+                decoration.transform.position = new Vector3(-4, 1, 7.5f);
+                decoration.transform.localScale = Vector3.one * .25f;
+                decoration.GetComponent<Renderer>().enabled = false;
                 var traversal = root.AddComponent<GalaQuestTraversalController>();
                 traversal.Configure(null, hero.transform);
                 var attack = root.AddComponent<GalaQuestAttackControl>();
@@ -53,8 +60,24 @@ namespace GalaQuest.Tests
                 Assert.That(presentation.EnemyViewCount, Is.EqualTo(1));
                 Assert.That(presentation.RemoteHeroCount, Is.EqualTo(1));
                 Assert.That(presentation.LocalHealth, Is.EqualTo(30));
+                Assert.That(hero.transform.position.y, Is.EqualTo(floor.GetComponent<Collider>().bounds.max.y + .01f).Within(.002f),
+                    "Feet clear the actual floor; an unmarked prop above it is not a floor");
                 Assert.That(hero.GetComponent<Animator>().HasState(0, Animator.StringToHash("slash")), Is.True);
                 Assert.That(hero.GetComponent<GalaQuestCombatMotion>().CurrentState, Is.EqualTo("slash"));
+                var weapon = hero.GetComponentsInChildren<Transform>().Single(item => item.name == "Ironwood sword (starter review)");
+                Assert.That(weapon.parent.name, Is.EqualTo("Socket_rightHand"));
+                var hand = weapon.parent;
+                var handBefore = hand.position;
+                if (Environment.GetEnvironmentVariable("GQ_U2_CAPTURE") == "1")
+                    CaptureWeapon(root, hero, "slash-start");
+                yield return new WaitForSecondsRealtime(.25f);
+                Assert.That(Vector3.Distance(handBefore, hand.position), Is.GreaterThan(.025f), "The native slash actually moves the weapon hand");
+                if (Environment.GetEnvironmentVariable("GQ_U2_CAPTURE") == "1")
+                {
+                    CaptureWeapon(root, hero, "slash-contact");
+                    yield return new WaitForSecondsRealtime(.35f);
+                    CaptureWeapon(root, hero, "slash-recovery");
+                }
                 var enemy = GameObject.Find("Enemy emberworks-gremlin-1");
                 Assert.That(enemy.GetComponentsInChildren<SkinnedMeshRenderer>(), Is.Not.Empty, "actual skinned candidate, not a proxy");
                 var attackArea = enemy.transform.Find("Bash warning");
@@ -132,6 +155,39 @@ namespace GalaQuest.Tests
             Assert.Ignore("Candidate authoring review requires the Editor");
             yield break;
 #endif
+        }
+
+        private static void CaptureWeapon(GameObject root, GameObject hero, string label)
+        {
+            var lightObject = new GameObject("Weapon diagnostic key");
+            lightObject.transform.SetParent(root.transform);
+            var light = lightObject.AddComponent<Light>();
+            light.type = LightType.Directional; light.intensity = 1.6f;
+            light.transform.rotation = Quaternion.Euler(35, -25, 0);
+            var cameraObject = new GameObject("Weapon diagnostic camera");
+            cameraObject.transform.SetParent(root.transform);
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.transform.position = hero.transform.position + new Vector3(2.4f, 1.4f, 3.2f);
+            camera.transform.LookAt(hero.transform.position + Vector3.up * .75f);
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(.22f, .25f, .3f);
+            camera.fieldOfView = 34;
+            var target = new RenderTexture(1000, 800, 24);
+            var old = RenderTexture.active;
+            var pixels = new Texture2D(1000, 800, TextureFormat.RGB24, false);
+            try
+            {
+                camera.targetTexture = target; camera.Render(); RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, 1000, 800), 0, 0); pixels.Apply();
+                var folder = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../.local/m2/weapon-review"));
+                Directory.CreateDirectory(folder); File.WriteAllBytes(Path.Combine(folder, label + ".png"), pixels.EncodeToPNG());
+            }
+            finally
+            {
+                RenderTexture.active = old; camera.targetTexture = null;
+                UnityEngine.Object.DestroyImmediate(target); UnityEngine.Object.DestroyImmediate(pixels);
+                UnityEngine.Object.DestroyImmediate(cameraObject); UnityEngine.Object.DestroyImmediate(lightObject);
+            }
         }
 
         private sealed class FakeTransport : IGalaQuestTransport

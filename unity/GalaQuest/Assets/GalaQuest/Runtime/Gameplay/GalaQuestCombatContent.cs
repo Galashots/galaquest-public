@@ -8,6 +8,7 @@ namespace GalaQuest
     {
         public GameObject HeroPrefab;
         public RuntimeAnimatorController HeroController;
+        public GalaQuest.Gear.GearItemDefinition StarterWeapon;
         public EnemyPrefab[] Enemies = Array.Empty<EnemyPrefab>();
         public Material TelegraphMaterial;
         public AudioClip Swing;

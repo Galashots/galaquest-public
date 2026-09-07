@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using Newtonsoft.Json;
+using GalaQuest.Gear;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.Build;
@@ -90,6 +91,7 @@ namespace GalaQuest.Editor
             var content = ScriptableObject.CreateInstance<GalaQuestCombatContent>();
             content.HeroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab");
             content.HeroController = heroController;
+            content.StarterWeapon = PrepareStarterWeapon(content.HeroPrefab);
             content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab } };
             content.TelegraphMaterial = telegraph;
             content.Swing = Cue("swing"); content.Impact = Cue("impact"); content.Hurt = Cue("hurt");
@@ -102,6 +104,10 @@ namespace GalaQuest.Editor
         public static string PrepareScene(GalaQuestCombatContent content)
         {
             var scene = EditorSceneManager.OpenScene(EmberworksGreyboxBuild.ScenePath, OpenSceneMode.Single);
+            var walkable = new[] { "DeepFloor", "GateThreshold", "RouteEntryTurn", "ImmediateActionArena", "RouteActionToExpress" };
+            foreach (var surface in Object.FindObjectsByType<Collider>(FindObjectsSortMode.None))
+                if (walkable.Contains(surface.name) && surface.GetComponent<GalaQuestGroundSurface>() == null)
+                    surface.gameObject.AddComponent<GalaQuestGroundSurface>();
             // Preserve the cavern's cool field and warm warning accents while making
             // the approved character palette readable at actual fighting distance.
             RenderSettings.ambientLight = new Color(.26f, .30f, .38f);
@@ -160,6 +166,51 @@ namespace GalaQuest.Editor
             var clips = AssetDatabase.LoadAllAssetsAtPath(path).OfType<AnimationClip>().Where(clip => !clip.name.StartsWith("__preview__")).ToArray();
             return clips.SingleOrDefault(clip => clip.name == suffix || clip.name.EndsWith("|" + suffix))
                    ?? throw new BuildFailedException("Missing native clip " + suffix + "; available=" + string.Join(",", clips.Select(clip => clip.name)));
+        }
+
+        private static GearItemDefinition PrepareStarterWeapon(GameObject heroPrefab)
+        {
+            // Candidate carry, using the existing imported Ironwood asset. Reference
+            // convention: grip inside the palm, guard beyond the fist, blade separate
+            // from the leg. See Nintendo's Link/Toon Link/Hero reference sheets and
+            // the accepted GalaQuest carry explanation in public/src/character/gear.js.
+            const string modelPath = "Assets/GalaQuest/Migration/Prefabs/IronwoodSword.prefab";
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+            if (model == null) throw new BuildFailedException("Missing imported Ironwood sword");
+            var hero = Object.Instantiate(heroPrefab);
+            var sword = Object.Instantiate(model);
+            try
+            {
+                hero.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                Clip(HeroSource, "idle").SampleAnimation(hero, 0);
+                var socket = GearMounter.ResolveSocket(hero.transform, GearSocketIds.RightHand);
+                var forearm = hero.GetComponentsInChildren<Transform>().Single(bone => bone.name == "RightForeArm");
+                sword.transform.position = Vector3.zero;
+                var renderers = sword.GetComponentsInChildren<Renderer>();
+                var bounds = renderers[0].bounds;
+                foreach (var renderer in renderers.Skip(1)) bounds.Encapsulate(renderer.bounds);
+                if (bounds.size.y < .9f || bounds.size.y > 1.1f) throw new BuildFailedException("Unexpected imported sword axis or metre scale: " + bounds.size);
+                // The documented source handle point is y=-.43 on the one-metre mesh.
+                // The imported proof prefab restores that mesh's upright orientation.
+                var grip = sword.transform.InverseTransformPoint(new Vector3(bounds.center.x, bounds.min.y + bounds.size.y * .07f, bounds.center.z));
+                var wrist = socket.transform.position;
+                var palm = wrist + (wrist - forearm.position).normalized * .055f;
+                var side = Mathf.Sign(wrist.x);
+                var pitch = 70f * Mathf.Deg2Rad;
+                var outboard = 22f * Mathf.Deg2Rad;
+                var blade = new Vector3(side * Mathf.Sin(outboard) * Mathf.Cos(pitch), -Mathf.Sin(pitch), Mathf.Cos(outboard) * Mathf.Cos(pitch));
+                sword.transform.rotation = Quaternion.FromToRotation(Vector3.up, blade) * sword.transform.rotation;
+                sword.transform.localScale *= .47f / bounds.size.y;
+                sword.transform.position += palm - sword.transform.TransformPoint(grip);
+                sword.transform.SetParent(socket.transform, true);
+                var definition = ScriptableObject.CreateInstance<GearItemDefinition>();
+                definition.Configure("gear.sword.ironwood", "Ironwood sword (starter review)", model,
+                    GearSocketIds.RightHand, GearFitClass.Handheld, "public/assets/gear/sword_ironwood.glb", Array.Empty<AnatomyRegion>());
+                definition.TryApplySeedFit(sword.transform.localPosition, sword.transform.localEulerAngles, sword.transform.localScale);
+                AssetDatabase.CreateAsset(definition, Temporary + "/StarterWeapon.asset");
+                return definition;
+            }
+            finally { Object.DestroyImmediate(sword); Object.DestroyImmediate(hero); }
         }
 
         private static void AddState(AnimatorController controller, string name, AnimationClip clip, float duration = 0)
