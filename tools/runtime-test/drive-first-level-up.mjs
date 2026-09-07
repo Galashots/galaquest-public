@@ -50,6 +50,7 @@ import { RUN_DEFLECTION } from '../../public/src/character/speed.js';
 import { MARKS_TO_UNLOCK } from '../../public/src/rewards/marks.js';
 import { LANTERN_UNLOCK_XP } from '../../public/src/progression/facts.js';
 import { cumulativeXpForLevel } from '../../public/src/progression/levels.js';
+import { SPECIAL_ATTACK_NAME, SPECIAL_ATTACK_UNLOCK_LEVEL } from '../../public/src/combat/specialAttack.js';
 import {
   LEVEL_1_STARTER_STATS, resolvedHeroDamage, resolvedMaxHp,
 } from '../../public/src/progression/heroStats.js';
@@ -100,6 +101,7 @@ const AFTER = {
 // retyped, so a kill-XP re-tune moves these pins with it (GQ-007).
 const WOLF_KILL_XP = killXpForKind('wolf');
 const XP_AFTER_THE_FIGHT = LANTERN_UNLOCK_XP + WOLF_KILL_XP;
+const WILDWOOD_BURST_UNLOCK_XP = cumulativeXpForLevel(SPECIAL_ATTACK_UNLOCK_LEVEL);
 
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -279,6 +281,16 @@ const STATE_EXPR = `(() => {
       xp: text('#hero-xp-text'),
       xpFill: document.querySelector('#hero-xp .xp-fill')?.style.width ?? null,
       power: text('#hero-power-value'),
+      objective: text('#quest-objective'),
+      objectiveShown: document.querySelector('#quest-objective')?.dataset.shown ?? null,
+      objectiveAria: document.querySelector('#quest-objective')?.getAttribute('aria-label') ?? null,
+      aspiration: {
+        name: text('#special-button-name'),
+        state: text('#special-button-state'),
+        progress: text('#special-button-aspiration'),
+        stateAttr: document.querySelector('#special-button')?.dataset.aspirationState ?? null,
+        known: document.querySelector('#special-button')?.dataset.progressionKnown ?? null,
+      },
     },
     banner: document.querySelector('#banner')?.dataset.shown === 'true'
       ? text('#banner') : '',
@@ -376,6 +388,18 @@ try {
       && before.drawn.xp === `0 / ${BEFORE.xpForLevel}`
       && before.drawn.xpFill === '0%',
     `LV ${before.drawn.level}, ${before.drawn.xp}, fill ${before.drawn.xpFill}`);
+  check('BEFORE: the current objective is visibly labelled NOW',
+    before.drawn.objectiveShown === 'true'
+      && before.drawn.objective
+      && before.drawn.objectiveAria === `NOW: ${before.drawn.objective}`,
+    `${before.drawn.objectiveShown} ${before.drawn.objective}`);
+  check('BEFORE: Wildwood Burst is a visible locked aspiration with honest progress',
+    before.drawn.aspiration.name === SPECIAL_ATTACK_NAME
+      && before.drawn.aspiration.stateAttr === 'locked'
+      && before.drawn.aspiration.known === 'true'
+      && before.drawn.aspiration.state === `NEXT · LV ${SPECIAL_ATTACK_UNLOCK_LEVEL}`
+      && before.drawn.aspiration.progress === `0 / ${WILDWOOD_BURST_UNLOCK_XP} XP`,
+    `${before.drawn.aspiration.stateAttr} ${before.drawn.aspiration.state} ${before.drawn.aspiration.progress}`);
   check('BEFORE: the Lantern is not unlocked and the pips are one short',
     arrivedRewards.lanternUnlocked !== true && before.pipsFilled === MARKS_TO_UNLOCK - 1,
     `unlocked ${arrivedRewards.lanternUnlocked}, pips ${before.pipsFilled}`);
@@ -641,6 +665,16 @@ try {
     after.drawn.level === String(AFTER.level)
       && new RegExp(`^${XP_AFTER_THE_FIGHT - LANTERN_UNLOCK_XP} / \\d+$`).test(after.drawn.xp ?? ''),
     `LV ${after.drawn.level}, ${after.drawn.xp}`);
+  check('AFTER: NOW updates with the completed underlying objective state',
+    after.drawn.objectiveShown === 'true'
+      && after.drawn.objective
+      && after.drawn.objective !== before.drawn.objective
+      && after.drawn.objectiveAria === `NOW: ${after.drawn.objective}`,
+    `${before.drawn.objective} -> ${after.drawn.objective}`);
+  check('AFTER: the same locked aspiration advances with the authoritative XP total',
+    after.drawn.aspiration.stateAttr === 'locked'
+      && after.drawn.aspiration.progress === `${after.progress.totalXp} / ${WILDWOOD_BURST_UNLOCK_XP} XP`,
+    `${after.drawn.aspiration.state} ${after.drawn.aspiration.progress}`);
   check(`AFTER: exactly ${XP_AFTER_THE_FIGHT} XP -- one Lantern plus the one kill that finished it`,
     after.progress.totalXp === XP_AFTER_THE_FIGHT, `${after.progress.totalXp} XP`);
   await shot('03-after-level-2');
@@ -734,6 +768,10 @@ try {
   check('RELOAD: the HUD comes back at the level and POWER the child earned',
     reloaded.drawn.level === String(AFTER.level) && reloaded.drawn.power === formatPower(AFTER.power),
     `LV ${reloaded.drawn.level}, POWER ${reloaded.drawn.power}`);
+  check('RELOAD: the aspiration comes back from current progression, not stale DOM text',
+    reloaded.drawn.aspiration.stateAttr === 'locked'
+      && reloaded.drawn.aspiration.progress === `${reloaded.progress.totalXp} / ${WILDWOOD_BURST_UNLOCK_XP} XP`,
+    `${reloaded.drawn.aspiration.state} ${reloaded.drawn.aspiration.progress}`);
   check('RELOAD: the SAME guest came back -- localStorage, not a fresh mint',
     reloaded.guestId === guestId, `${reloaded.guestId}`);
 
