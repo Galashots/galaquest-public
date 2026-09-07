@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace GalaQuest
@@ -7,6 +9,13 @@ namespace GalaQuest
     {
         public const int Version = 4;
         public const string EmberworksDeepDestinationId = "emberworks-deep";
+        private static readonly JsonSerializerSettings FrameJsonSettings = new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.None,
+            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
+            MaxDepth = 32,
+            CheckAdditionalContent = true
+        };
 
         public static string Join(GalaQuestSelectedProfile profile)
         {
@@ -39,6 +48,11 @@ namespace GalaQuest
             return $"{{\"v\":{Version},\"type\":\"restore-profile\",\"facts\":{profile.FactsJson}}}";
         }
 
+        public static string Attack(int sequence)
+        {
+            return JsonUtility.ToJson(new AttackMessage { v = Version, type = "attack", seq = sequence });
+        }
+
         public static bool TryReadWelcome(string json, out string playerId)
         {
             playerId = string.Empty;
@@ -62,15 +76,25 @@ namespace GalaQuest
             frame = null;
             try
             {
-                frame = JsonUtility.FromJson<GalaQuestServerFrame>(json);
+                // JsonUtility silently drops encounter.heroes because its keys are player IDs.
+                // Unity's AOT-compatible Newtonsoft package preserves the actual v4 wire shape.
+                frame = JsonConvert.DeserializeObject<GalaQuestServerFrame>(json, FrameJsonSettings);
             }
-            catch
+            catch (JsonException)
             {
                 return false;
             }
-            return frame != null
-                   && frame.v == Version
-                   && (frame.type == "welcome" || frame.type == "snapshot");
+            if (frame == null || frame.v != Version || (frame.type != "welcome" && frame.type != "snapshot"))
+            {
+                frame = null;
+                return false;
+            }
+            frame.players ??= Array.Empty<GalaQuestServerPlayer>();
+            frame.encounter ??= new GalaQuestServerEncounter();
+            frame.encounter.heroes ??= new Dictionary<string, GalaQuestServerHeroCombat>();
+            frame.encounter.enemies ??= Array.Empty<GalaQuestServerEnemy>();
+            frame.events ??= Array.Empty<GalaQuestServerCombatEvent>();
+            return true;
         }
 
         [Serializable]
@@ -96,6 +120,14 @@ namespace GalaQuest
         }
 
         [Serializable]
+        private sealed class AttackMessage
+        {
+            public int v;
+            public string type;
+            public int seq;
+        }
+
+        [Serializable]
         private sealed class MessageHeader
         {
             public int v;
@@ -112,7 +144,9 @@ namespace GalaQuest
         public string id;
         public int tick;
         public string destinationId;
-        public GalaQuestServerPlayer[] players;
+        public GalaQuestServerPlayer[] players = Array.Empty<GalaQuestServerPlayer>();
+        public GalaQuestServerEncounter encounter = new GalaQuestServerEncounter();
+        public GalaQuestServerCombatEvent[] events = Array.Empty<GalaQuestServerCombatEvent>();
     }
 
     [Serializable]
@@ -123,5 +157,50 @@ namespace GalaQuest
         public float z;
         public float heading;
         public float speed;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerEncounter
+    {
+        public int revision;
+        public GalaQuestServerEnemy[] enemies = Array.Empty<GalaQuestServerEnemy>();
+        public Dictionary<string, GalaQuestServerHeroCombat> heroes = new Dictionary<string, GalaQuestServerHeroCombat>();
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerHeroCombat
+    {
+        public int hp;
+        public int maxHp;
+        public float swingSeconds = -1;
+        public float cooldown;
+        public float downSeconds = -1;
+        public float protectionSeconds;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerEnemy
+    {
+        public string enemyId;
+        public string kind;
+        public int level;
+        public int hp;
+        public int maxHp;
+        public float x;
+        public float z;
+        public float heading;
+        public string mode;
+        public float modeSeconds;
+        public string targetId;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerCombatEvent
+    {
+        public string type;
+        public string heroId;
+        public string enemyId;
+        public string kind;
+        public int remaining;
     }
 }

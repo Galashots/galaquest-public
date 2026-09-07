@@ -12,11 +12,14 @@ namespace GalaQuest
         private string connectionStatus = "Starting Unity Web client...";
         private bool shuttingDown;
         private GalaQuestTraversalController traversal;
+        private GalaQuestAttackControl attack;
 
         private void Awake()
         {
             if (GetComponent<GalaQuestFloatingJoystick>() == null)
                 gameObject.AddComponent<GalaQuestFloatingJoystick>();
+            attack = GetComponent<GalaQuestAttackControl>();
+            if (attack == null) attack = gameObject.AddComponent<GalaQuestAttackControl>();
             profileSource = GetComponent<BrowserSelectedProfileSource>();
             traversal = GetComponent<GalaQuestTraversalController>();
             profileSource.Selected += HandleSelected;
@@ -35,6 +38,7 @@ namespace GalaQuest
             session.StatusChanged += HandleStatus;
             session.Disconnected += ScheduleReconnect;
             traversal.BindSession(session);
+            attack.BindSession(session);
             session.Begin(profile);
         }
 
@@ -81,6 +85,7 @@ namespace GalaQuest
             if (session != null)
             {
                 traversal?.BindSession(null);
+                if (attack != null) attack.BindSession(null);
                 session.StatusChanged -= HandleStatus;
                 session.Disconnected -= ScheduleReconnect;
                 session.Dispose();

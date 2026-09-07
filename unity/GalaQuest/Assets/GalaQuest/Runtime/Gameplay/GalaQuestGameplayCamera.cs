@@ -89,6 +89,7 @@ namespace GalaQuest
                 var id = touch.touchId.ReadValue();
                 if (touchIds.Contains(id) || touchIds.Count >= 2 || !touch.press.wasPressedThisFrame) continue;
                 if (GalaQuestFloatingJoystickState.IsInMovementRegion(touch.position.ReadValue(), viewport)) continue;
+                if (GalaQuestAttackControl.IsInAttackRegion(touch.position.ReadValue(), viewport)) continue;
                 touchIds.Add(id);
             }
 

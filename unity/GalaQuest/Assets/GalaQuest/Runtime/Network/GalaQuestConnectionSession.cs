@@ -10,6 +10,7 @@ namespace GalaQuest
         private bool begun;
         private bool restoredThisConnection;
         private int inputSequence;
+        private int attackSequence;
         private float lastInputSentAt = float.NegativeInfinity;
         private float lastMagnitude;
 
@@ -38,6 +39,7 @@ namespace GalaQuest
         public void Reconnect()
         {
             if (!begun) return;
+            PlayerId = string.Empty;
             StatusChanged?.Invoke($"Reconnecting as {profile.DisplayName}...");
             transport.Connect();
         }
@@ -47,6 +49,7 @@ namespace GalaQuest
             restoredThisConnection = false;
             PlayerId = string.Empty;
             inputSequence = 0;
+            attackSequence = 0;
             lastInputSentAt = float.NegativeInfinity;
             lastMagnitude = 0f;
             if (!transport.Send(GalaQuestProtocolV4.Join(profile)))
@@ -98,16 +101,25 @@ namespace GalaQuest
 
         private void HandleClosed(string detail)
         {
+            PlayerId = string.Empty;
             StatusChanged?.Invoke("Connection interrupted · reconnecting safely");
             Disconnected?.Invoke();
         }
 
         public void Dispose()
         {
+            PlayerId = string.Empty;
+            begun = false;
             transport.Opened -= HandleOpened;
             transport.MessageReceived -= HandleMessage;
             transport.Closed -= HandleClosed;
             transport.Close();
+        }
+
+        public bool TrySendAttackIntent()
+        {
+            if (string.IsNullOrEmpty(PlayerId)) return false;
+            return transport.Send(GalaQuestProtocolV4.Attack(++attackSequence));
         }
     }
 }

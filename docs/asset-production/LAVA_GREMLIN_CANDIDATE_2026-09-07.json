@@ -55,5 +55,28 @@
   "conventionSource": "https://play.nintendo.com/activities/opinion-polls/minecraft-dungeons-mob-attack-poll/",
   "conventionReview": "Inspected publisher examples: Redstone Golem broad mass and bright face cues; Skeleton Vanguard clear limb/weapon spacing; Royal Guard compact armored silhouette. Used for readability conventions only, not copied identity or voxel styling.",
   "approvedReferenceWeakness": "Fine stone seams may require simplification; neutral reference cannot establish dark-cavern gameplay readability.",
-  "relatedIssue": 46
+  "relatedIssue": 46,
+  "localRigCandidate": {
+    "status": "CANDIDATE_ONLY_UNITY_DIAGNOSTICS_PASSED",
+    "authoringSha": "aed840116cfd6dfbfec83ba549fd87dfd238cc6b",
+    "tool": "Blender 5.2.0 LTS; tools/blender/author_gremlin_rig.py --landmark-weights",
+    "sourceGeometryPreserved": "Same source vertex and polygon connectivity after uniform 1.429442122598991 scale to 1.1m and translation to ground; assertions run during authoring. No sculpt, remesh, or material replacement in the derived files.",
+    "weighting": "Blender automatic heat solver left all 8236 vertices unweighted. Replaced by explicitly authored anatomical cross-section weights for this body SHA; largest four influences normalized. Source body unchanged.",
+    "jointCount": 23,
+    "deformJointCount": 21,
+    "nonDeformingMarkers": ["Root", "headfront"],
+    "nativeClipVerification": "Strict PASS: bind-only GLB and animated GLB have identical joint set/order/hierarchy/rest pose. Five native actions: idle, walk, bash, hit, death.",
+    "anatomyMeasurement": "Existing pose_anatomy sweep, 16 samples per idle/walk/bash; face and toe forward axes agree on +Z, node/bind drift 0.00005135 percent. Its human shin/thigh reference flags the deliberate squat 0.79 ratio; this measurement does not accept or reject enemy appearance.",
+    "unityVerification": "Unity 6000.3.23f1 PlayMode: U2EnemyCandidatePlayModeTests passed at aed840116cfd6dfbfec83ba549fd87dfd238cc6b on the actual FBX skin, with all five clips moving, stable world root, invariant limb segment lengths and bounded deformed mesh reach. Captured poses were visually inspected after allowing the GPU skin update.",
+    "importedClipSeconds": {"idle": 2.0, "walk": 0.44, "bash": 1.06, "hit": 0.4, "death": 1.2},
+    "visualLimit": "Flat open hands and tightly pinched knees remain the weakest features. Sampled PlayMode diagnostic poses only; continuous gameplay motion, cavern framing, Owner review and shipping promotion remain open.",
+    "workingFolderId": "11HPc5-BuLMQFu0071tH3MEy-nREMkOfF",
+    "files": [
+      {"name": "lava-gremlin-local-v1.glb", "bytes": 3460348, "sha256": "bbd9a966c9d876da5559a425de8069a155c1f9e82d06e173cdd3046c86f9ff05", "driveFileId": "1O_XUXkKP-gO6fpchEBhS11LBTk_sg6xY"},
+      {"name": "lava-gremlin-local-v1-bind.glb", "bytes": 3373072, "sha256": "df4727f0e5263db2d19aa5979f02380aed237bf2fe5928801aa86a7d40ee207f", "driveFileId": "1UIkX4eYgQib0X39MpWpDXHIb9FqwUM9e"},
+      {"name": "lava-gremlin-local-v1.fbx", "bytes": 4404300, "sha256": "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db", "driveFileId": "1Q1z7p5Dv0JMuHDBnomqPe6NSV6MGJGpI"},
+      {"name": "lava-gremlin-local-v1.blend", "bytes": 3631119, "sha256": "80d19ec5190d53891759b42b98434a8e076142d3fbab08c3079f37a75c658485", "driveFileId": "19rqx4KetHyDHQtGfSSSwHxpurFu03wpp"}
+    ],
+    "custodyVerification": "Fresh working-folder listing confirmed four file IDs, names, sizes and folder membership; listed as not shared. Hashes are local measurements, no Drive byte roundtrip. No Owner queue packet or production registration created."
+  }
 }
