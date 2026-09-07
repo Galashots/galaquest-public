@@ -26,6 +26,44 @@ namespace GalaQuest.Editor
         public const string RuntimeHeroName = "GalaQuestHero";
         public const string RuntimeCameraName = "GalaQuestGameplayCamera";
 
+        [MenuItem("GalaQuest/Emberworks/Repair Cylinder Colliders")]
+        public static void RepairCylinderColliders()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var environment = scene.GetRootGameObjects().Single(item => item.name == RootName);
+            var repaired = 0;
+            foreach (var filter in environment.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (filter.sharedMesh != null && filter.sharedMesh.name == "Cylinder"
+                    && UseCylinderMeshCollider(filter.gameObject)) repaired++;
+            }
+            if (repaired > 0)
+            {
+                EditorSceneManager.MarkSceneDirty(scene);
+                if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException($"Could not save {ScenePath}.");
+            }
+            UnityEngine.Debug.Log($"Repaired {repaired} primitive cylinder colliders without rebuilding Emberworks.");
+        }
+
+        private static bool UseCylinderMeshCollider(GameObject cylinder)
+        {
+            var capsule = cylinder.GetComponent<CapsuleCollider>();
+            if (capsule == null) return false;
+            var mesh = cylinder.GetComponent<MeshFilter>().sharedMesh;
+            var wasEnabled = capsule.enabled;
+            var material = capsule.sharedMaterial;
+            var contactOffset = capsule.contactOffset;
+            UnityEngine.Object.DestroyImmediate(capsule);
+            // A capsule's radius follows the wide X/Z scale, making a thin floor disc
+            // into a tall invisible obstruction. The primitive mesh has the authored shape.
+            var collider = cylinder.AddComponent<MeshCollider>();
+            collider.sharedMesh = mesh;
+            collider.sharedMaterial = material;
+            collider.contactOffset = contactOffset;
+            collider.enabled = wasEnabled;
+            return true;
+        }
+
         private const string HeroPrefabPath = "Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab";
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
 
@@ -724,6 +762,7 @@ namespace GalaQuest.Editor
             primitive.transform.localPosition = position;
             primitive.transform.localScale = scale;
             primitive.GetComponent<Renderer>().sharedMaterial = material;
+            if (type == PrimitiveType.Cylinder) UseCylinderMeshCollider(primitive);
             return primitive;
         }
 

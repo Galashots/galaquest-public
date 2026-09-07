@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using System.Linq;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
@@ -179,6 +181,28 @@ namespace GalaQuest.Tests
             Assert.That(camera.ToWorldDirection(new Vector2(0.3f, 0.4f)).magnitude,
                 Is.EqualTo(0.5f).Within(0.001f));
             Assert.That(camera.ToWorldDirection(Vector2.zero), Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void CanonicalEmberworksEntryDoesNotCollapseCameraIntoHero()
+        {
+            var scene = EditorSceneManager.OpenScene(GalaQuest.Editor.EmberworksGreyboxBuild.ScenePath,
+                OpenSceneMode.Additive);
+            try
+            {
+                var transforms = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>(true));
+                var runtimeHero = transforms.Single(item => item.name == GalaQuest.Editor.EmberworksGreyboxBuild.RuntimeHeroName);
+                var runtimeCamera = scene.GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<GalaQuestGameplayCamera>(true)).Single();
+                Physics.SyncTransforms();
+                runtimeCamera.Configure(runtimeHero);
+                var center = runtimeHero.position + new Vector3(0f, 0.6f, 0f);
+                var hits = Physics.SphereCastAll(center, 0.2f, -runtimeCamera.transform.forward, runtimeCamera.Distance);
+                TestContext.WriteLine(string.Join("; ", hits.Select(hit => $"{hit.collider.name}: distance={hit.distance}; point={hit.point}")));
+                Assert.That(Vector3.Distance(runtimeCamera.transform.position, runtimeHero.position), Is.GreaterThan(3f),
+                    "the actual entry scene must leave enough camera clearance to see the hero and route");
+            }
+            finally { EditorSceneManager.CloseScene(scene, true); }
         }
 
         [Test]
