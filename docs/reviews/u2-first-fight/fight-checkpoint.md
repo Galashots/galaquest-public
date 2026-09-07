@@ -32,6 +32,12 @@ At the current SHA, actual browser stills show the warning above the raised floo
 
 ![Unity PlayMode diagnostic: unresolved open grip in a sampled slash pose](fight-unity-open-grip.png)
 
+A follow-up with the same built client and the documentation-only server head **92fa4ca7649e24fe4ed3075cf91afed6bd7dc603** exercised touch orbit beside the fight wall, then sampled another slash. The orbit exposed the hero and blade sweep without changing camera code. This counters the concern that the wall makes a clear view inaccessible; it does not settle default framing or physical-device comfort. The sample timestamps in the evidence manifest bracket capture rather than proving frame-accurate impact alignment.
+
+![Actual browser: touch orbit beside the fight wall](fight-browser-orbit.png)
+
+![Actual browser: sword sweep after touch orbit](fight-browser-orbit-slash.png)
+
 The strongest unresolved hero defect is the open right hand around the sword hilt. A bounded grip-repair candidate has been proposed to the Owner; permission is pending. The gremlin's flat hands and tight crouched knees also remain candidate limitations. The comparison convention is a hilt enclosed by the hand, guard outside the fist, and blade separated from the leg, based on the GalaQuest item reference and official Nintendo character sheets for [Link](https://www.smashbros.com/en_US/fighter/03.html), [Toon Link](https://www.smashbros.com/en_US/fighter/43.html), and [Hero](https://www.smashbros.com/en_US/fighter/72.html).
 
 ## Remaining acceptance

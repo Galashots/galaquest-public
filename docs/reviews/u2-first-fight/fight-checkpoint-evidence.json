@@ -67,6 +67,7 @@
     ],
     "siblingFinalEnemy": [
       {
+        "enemyId": "emberworks-gremlin-1",
         "hp": 0
       }
     ],
@@ -160,5 +161,67 @@
     "AudioContext and mute routing verified; audible sound quality not reviewed",
     "Sampled stills do not prove continuous animation quality or impact-frame alignment",
     "Hero open grip remains unresolved; repair-candidate permission pending"
-  ]
+  ],
+  "cameraFollowup": {
+    "clientSha": "4c5db35ec1eb1d31f38c21a7495cb58c0405d139",
+    "serverSha": "92fa4ca7649e24fe4ed3075cf91afed6bd7dc603",
+    "sourceDifference": "The server checkout differs from the built client source only in review documentation and images.",
+    "result": "PASS",
+    "cameraStart": {
+      "predicted": {
+        "x": -3.204273223876953,
+        "z": 6.909580707550049
+      },
+      "authoritative": {
+        "x": -3.2019999027252197,
+        "z": 6.909999847412109
+      },
+      "drift": 0.0025686451699584723,
+      "snapped": false,
+      "atMs": 1788819793663
+    },
+    "input": "Real touch drag in the free camera region, then attack-button taps.",
+    "producerObservation": "Orbit beside the fight wall exposes the hero and blade sweep. No camera code change was made.",
+    "motionSamples": [
+      {
+        "targetMs": 60,
+        "capturedAtMs": 202,
+        "swingSecondsBeforeCapture": 0.167
+      },
+      {
+        "targetMs": 250,
+        "capturedAtMs": 402,
+        "swingSecondsBeforeCapture": 0.291
+      },
+      {
+        "targetMs": 520,
+        "capturedAtMs": 668,
+        "swingSecondsBeforeCapture": 0.54
+      },
+      {
+        "targetMs": 800,
+        "capturedAtMs": 956,
+        "swingSecondsBeforeCapture": 0.911
+      },
+      {
+        "targetMs": 1200,
+        "capturedAtMs": 1351,
+        "swingSecondsBeforeCapture": 1.284
+      }
+    ],
+    "limits": "Sample timestamps bracket screenshot capture, not a frame-accurate animation measurement. Desktop Chrome, not physical Safari.",
+    "errors": [],
+    "images": [
+      {
+        "file": "fight-browser-orbit.png",
+        "bytes": 123322,
+        "sha256": "f32fdd74209dd71a68cec2531313823364767015652262a58642376b25497c5f"
+      },
+      {
+        "file": "fight-browser-orbit-slash.png",
+        "bytes": 126362,
+        "sha256": "69c46f1c8b87e1323cc117e4edbd33846e46b98821980aca228acf33b613a54f"
+      }
+    ]
+  }
 }
