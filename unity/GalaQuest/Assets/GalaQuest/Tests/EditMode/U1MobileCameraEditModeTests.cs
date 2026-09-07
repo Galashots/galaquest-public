@@ -18,6 +18,9 @@ namespace GalaQuest.Tests
         public override void Setup()
         {
             base.Setup();
+            // Connection tests can leave the real Emberworks scene active. Keep the
+            // fixture camera out of it before the additive scene checks below.
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             touchscreen = InputSystem.AddDevice<Touchscreen>();
             hero = new GameObject("Camera test hero");
             cameraObject = new GameObject("Camera test view");
