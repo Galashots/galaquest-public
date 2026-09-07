@@ -2083,16 +2083,16 @@ export function attachGameServer(httpServer, options = {}) {
         return;
       }
 
-      if (simulation.destinationId !== VILLAGE_DESTINATION_ID && message.type !== 'restore-profile') {
-        throw new ProtocolError(`${message.type} is unavailable in ${simulation.destinationId}`);
-      }
-
       if (message.type === 'attack') {
         // Same reasoning as input-before-join: refusing is honest, silently dropping is not.
         if (!client.data.playerId) throw new ProtocolError('attack before join');
         // Applied the instant it arrives, not batched to the tick -- see applyAttack's comment.
         simulation.applyAttack(client.data.playerId, message);
         return;
+      }
+
+      if (simulation.destinationId !== VILLAGE_DESTINATION_ID && message.type !== 'restore-profile') {
+        throw new ProtocolError(`${message.type} is unavailable in ${simulation.destinationId}`);
       }
 
       if (message.type === 'special') {

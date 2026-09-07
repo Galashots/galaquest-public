@@ -28,6 +28,11 @@ namespace GalaQuest.Tests
                 var content = (GalaQuestCombatContent)author.GetMethod("Prepare").Invoke(null, null);
                 hero = UnityEngine.Object.Instantiate(content.HeroPrefab, new Vector3(0, .25f, 4), Quaternion.identity);
                 root = new GameObject("Combined combat test");
+                var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.name = "Raised combat floor";
+                floor.transform.SetParent(root.transform);
+                floor.transform.position = new Vector3(-4, .15f, 8);
+                floor.transform.localScale = new Vector3(8, .7f, 8);
                 var traversal = root.AddComponent<GalaQuestTraversalController>();
                 traversal.Configure(null, hero.transform);
                 var attack = root.AddComponent<GalaQuestAttackControl>();
@@ -66,6 +71,8 @@ namespace GalaQuest.Tests
                 Assert.That(presentation.LocalHealth, Is.EqualTo(24));
                 Assert.That(enemy.GetComponent<GalaQuestCombatMotion>().CurrentState, Is.EqualTo("bash"));
                 Assert.That(attackArea.gameObject.activeSelf, Is.True);
+                Assert.That(attackArea.position.y, Is.GreaterThan(floor.GetComponent<Collider>().bounds.max.y),
+                    "An active warning buried under the raised arena is invisible in the browser");
                 frame.tick++;
                 frame.encounter.enemies[0].modeSeconds = .8f;
                 frame.events = Array.Empty<GalaQuestServerCombatEvent>();

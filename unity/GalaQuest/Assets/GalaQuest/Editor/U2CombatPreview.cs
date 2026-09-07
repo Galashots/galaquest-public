@@ -102,6 +102,13 @@ namespace GalaQuest.Editor
         public static string PrepareScene(GalaQuestCombatContent content)
         {
             var scene = EditorSceneManager.OpenScene(EmberworksGreyboxBuild.ScenePath, OpenSceneMode.Single);
+            // Preserve the cavern's cool field and warm warning accents while making
+            // the approved character palette readable at actual fighting distance.
+            RenderSettings.ambientLight = new Color(.26f, .30f, .38f);
+            var fill = Object.FindObjectsByType<Light>(FindObjectsSortMode.None)
+                .Single(light => light.name == "UndergroundFillLight");
+            fill.color = new Color(.72f, .80f, 1f);
+            fill.intensity = 1.2f;
             var root = scene.GetRootGameObjects().Single(item => item.name == EmberworksGreyboxBuild.RuntimeRootName);
             var presentation = root.GetComponent<GalaQuestCombatPresentation>();
             if (presentation == null) presentation = root.AddComponent<GalaQuestCombatPresentation>();

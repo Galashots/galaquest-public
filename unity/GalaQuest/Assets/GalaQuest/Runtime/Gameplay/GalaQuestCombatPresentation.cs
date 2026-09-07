@@ -199,6 +199,12 @@ namespace GalaQuest
                     actor.Telegraph.SetActive(winding);
                     if (winding)
                     {
+                        // The authored arena floor is higher than the flat movement
+                        // anchor. Project the warning onto the real floor, not inside it.
+                        if (Physics.Raycast(actor.Body.transform.position + Vector3.up * 2f, Vector3.down,
+                            out var ground, 4f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                            && ground.normal.y > .9f)
+                            actor.Telegraph.transform.position = ground.point + Vector3.up * .025f;
                         var progress = Mathf.Clamp01(clock / state.attack.contactSeconds);
                         actor.Properties.SetColor("_BaseColor", new Color(1, .48f + .18f * progress, .08f, .22f + .28f * progress));
                         actor.TelegraphRenderer.SetPropertyBlock(actor.Properties);

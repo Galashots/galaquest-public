@@ -9,6 +9,7 @@ import { attachGameServer, createSimulation } from '../net/gameServer.mjs';
 import {
   PROTOCOL_VERSION,
   INPUT_SEND_HZ,
+  attackMessage,
   decode,
   encode,
   inputMessage,
@@ -174,6 +175,22 @@ test('real socket: Emberworks welcome, ordered movement, immediate release, and 
     ));
     assert.equal(stoppedAgain.players[0].z, stopped.players[0].z);
     c.close();
+  });
+});
+
+test('U2 real sockets: both Emberworks children can attack without a policy disconnect', async () => {
+  await withGameServer(async ({ url }) => {
+    const children = [client(url), client(url)];
+    try {
+      await Promise.all(children.map(child => child.open()));
+      children.forEach((child, i) => child.send(joinMessage(`fighter-${i}`, `profile-${i ? 'bbbbbbbb' : 'aaaaaaaa'}`, EMBERWORKS_DEEP_DESTINATION_ID)));
+      const welcomes = await Promise.all(children.map(child => child.waitForMessage(message => message.type === 'welcome')));
+      children.forEach(child => child.send(attackMessage(1)));
+      const frames = await Promise.all(children.map(child => child.waitForMessage(message => message.type === 'snapshot'
+        && welcomes.every(welcome => message.encounter.heroes[welcome.id]?.swingSeconds >= 0))));
+      assert.equal(frames[0].players.length, 2);
+      assert.equal(frames[1].encounter.enemies[0].enemyId, frames[0].encounter.enemies[0].enemyId);
+    } finally { children.forEach(child => child.close()); }
   });
 });
 
