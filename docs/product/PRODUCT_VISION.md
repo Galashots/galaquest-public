@@ -76,6 +76,19 @@ The current Unity migration should therefore converge on a first genuinely kid-f
 other personally meaningful content layered in as qualified assets become available. Deliver those outcomes
 through bounded PRs; this north star is not permission to create one giant implementation package.
 
+## Selected two-level playtest
+
+On 2026-09-07 the Owner selected a simple hub plus two complete Unity browser adventures:
+**Emberworks — Relight the Forge** and **Sunroot Glade — Restore the Spring** (working title),
+targeting 10–15 minutes each. Two physical iPads running Safari are the primary acceptance devices.
+Players may travel independently and meet in one shared ongoing world per destination, with personal
+progress, learning, and rewards. Roblox-style touch camera controls and personalized Alberta Grade 2/5
+math are part of this release.
+
+The [two-level playtest contract](TWO_LEVEL_PLAYTEST_CONTRACT.md) defines its content, checkpoints, and
+completion criteria. Issue #46 owns live progress. This release supersedes earlier uncertainty about
+whether independent destination travel and two complete levels belong in the first playtest.
+
 ## Learning philosophy
 
 Hide the vegetables without hiding the learning outcome from the adults designing the game.
@@ -119,7 +132,11 @@ remains to be proven through bounded Unity work. See #46 and #131.
 
 Pets remain a major engagement surface because they can combine attachment, collection, identity, visible power, progression, rarity, and eventually social play.
 
-Settled direction for the first pet system:
+For the selected two-level playtest, the **green and red worm companions** are the opening pets,
+using a substitutable system so other pets can replace them later. This release decision supersedes
+requiring the three-starter choice before the first playtest; see the playtest contract and Issue #130.
+
+The broader starter-system direction remains:
 
 - a starter pet should be available essentially immediately once the real starter system is built;
 - the player chooses **one of three starters**;
@@ -132,9 +149,9 @@ Settled direction for the first pet system:
 - pets should eventually have nameplates and a small party-style health presence;
 - first-pass pet combat contribution is modest and does not require a separate pet-level grind.
 
-The current wolf companion is a placeholder for the future Fox. New paid pet model generation/rig-tuning is
-deferred until the Hero/gear progression spine is functioning and a separate asset-production package is
-authorized.
+The existing wolf companion is a placeholder for the future Fox. Worm production is selected for the
+two-level release and proceeds through bounded asset-production packages. Specific paid provider work
+still requires Owner authorization under the repository's spending rules.
 
 Pet rarity economy, eggs/hatching, trading/gifting, broader social/economic systems, corpse/body-return death
 friction, and transmog remain product candidates until separately decided and recorded through the
