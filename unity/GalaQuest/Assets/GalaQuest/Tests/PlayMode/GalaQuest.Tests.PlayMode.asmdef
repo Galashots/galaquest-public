@@ -4,7 +4,8 @@
     "references": [
         "GalaQuest.Runtime",
         "GalaQuest.Migration.Runtime",
-        "GalaQuest.Gear.Runtime"
+        "GalaQuest.Gear.Runtime",
+        "Unity.InputSystem"
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

@@ -4,7 +4,8 @@
     "references": [
         "GalaQuest.Runtime",
         "GalaQuest.Migration.Runtime",
-        "Unity.RenderPipelines.Universal.Runtime"
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

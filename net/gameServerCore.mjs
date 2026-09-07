@@ -88,7 +88,12 @@ import {
 // G3 follow-up: the Beacon's own collision, imported the identical "one law, two consumers" way
 // bounds.js's world edge already is -- see world/obstacles.js's own header for why this cannot be a
 // server-only rule.
-import { resolveObstacleCollisions, worldObstacles } from '../public/src/world/obstacles.js';
+import {
+  VILLAGE_DESTINATION_ID,
+  clampMovementWorldPosition,
+  movementWorldForDestination,
+  resolveMovementWorldPosition,
+} from '../public/src/world/movementWorld.js';
 import { MAX_PREDICTION_STEP_SECONDS } from '../public/src/net/prediction.js';
 import { openRewardStore } from './rewardStore.mjs';
 import { attachWebSocketServer } from './wsServer.mjs';
@@ -111,8 +116,6 @@ export const HOLLOW_CACHE_SHARDS = 3;
 // Computed once, not per tick per player: the Village's own blockers never move mid-session, so
 // re-deriving them from zones/village.js on every tick (TICK_HZ below) for every connected child
 // would be pure waste. The pure resolver itself stays a per-call function (it has to -- a hero moves).
-const WORLD_OBSTACLES = worldObstacles();
-
 export const TICK_HZ = 20;
 export const SNAPSHOT_HZ = 10;
 export const TICK_MS = 1000 / TICK_HZ;
@@ -1002,6 +1005,7 @@ export function createSimulation(options = {}) {
   // the odds, or the tables changes -- only whether a test can say which way the coin came down.
   const rng = typeof options.rng === 'function' ? options.rng : Math.random;
   const players = new Map();
+  let movementWorld = movementWorldForDestination(options.destinationId);
   let nextPlayerNumber = 0;
   let tick = 0;
 
@@ -1178,7 +1182,19 @@ export function createSimulation(options = {}) {
     return arenaOf(event.heroId) === arena;
   }
 
-  function addPlayer(name, at = { x: 0, z: 0 }) {
+  function activateDestination(destinationId = VILLAGE_DESTINATION_ID) {
+    const requested = movementWorldForDestination(destinationId);
+    if (players.size > 0 && requested.destinationId !== movementWorld.destinationId) {
+      throw new RangeError(
+        `destination ${JSON.stringify(requested.destinationId)} is incompatible with active destination `
+        + JSON.stringify(movementWorld.destinationId),
+      );
+    }
+    movementWorld = requested;
+    return movementWorld;
+  }
+
+  function addPlayer(name, at = movementWorld.heroSpawn) {
     const id = `p${nextPlayerNumber += 1}`;
     const player = {
       id,
@@ -1414,12 +1430,20 @@ export function createSimulation(options = {}) {
       speed = Math.min(speed, RUN_SPEED);
 
       if (speed > 0 && (input.dirX !== 0 || input.dirZ !== 0)) {
-        player.x = clampToWorldX(player.x + input.dirX * speed * deltaSeconds);
-        player.z = clampToWorldZ(player.z + input.dirZ * speed * deltaSeconds);
+        player.x += input.dirX * speed * deltaSeconds;
+        player.z += input.dirZ * speed * deltaSeconds;
         player.heading = Math.atan2(input.dirX, input.dirZ);
       }
+      const bounded = clampMovementWorldPosition(player, movementWorld);
+      player.x = bounded.x;
+      player.z = bounded.z;
       player.speed = speed;
     }
+
+    // Emberworks CP2 is traversal only. Returning here is the scope wall that prevents Village
+    // enemies, Beacon/Warden ownership, respawn relocation, loot, and positional claim rules from
+    // adjudicating an invisible second geography behind the Unity scene.
+    if (!movementWorld.villageInteractions) return tick;
 
     // stepParty once per tick with every player's current position/heading (Task B3's binding
     // interface), THEN separate each player from the canonical ordinary-enemy collection (Design
@@ -1635,9 +1659,9 @@ export function createSimulation(options = {}) {
       // hero's feet back out of the Beacon and the Lantern Tree here, on the server's own
       // authoritative position -- the one both sides eventually agree on, same as the world edge
       // clamp two lines down.
-      const unstuck = resolveObstacleCollisions(clearOfWarden, WORLD_OBSTACLES);
-      player.x = clampToWorldX(unstuck.x);
-      player.z = clampToWorldZ(unstuck.z);
+      const unstuck = resolveMovementWorldPosition(clearOfWarden, movementWorld);
+      player.x = unstuck.x;
+      player.z = unstuck.z;
     }
 
     return tick;
@@ -1870,6 +1894,7 @@ export function createSimulation(options = {}) {
 
   return {
     players,
+    activateDestination,
     addPlayer,
     removePlayer,
     applyInput,
@@ -1898,6 +1923,9 @@ export function createSimulation(options = {}) {
     announceRewardFacts,
     get tick() {
       return tick;
+    },
+    get destinationId() {
+      return movementWorld.destinationId;
     },
   };
 }
@@ -1972,6 +2000,11 @@ export function attachGameServer(httpServer, options = {}) {
 
       if (message.type === 'join') {
         if (client.data.playerId) throw new ProtocolError('already joined');
+        try {
+          simulation.activateDestination(message.destinationId ?? VILLAGE_DESTINATION_ID);
+        } catch (error) {
+          throw new ProtocolError(error.message);
+        }
         const player = simulation.addPlayer(message.name);
         client.data.playerId = player.id;
         // Hero id = player id (Task B3's binding interface), so the mapping is keyed the same way
@@ -2005,6 +2038,7 @@ export function attachGameServer(httpServer, options = {}) {
         client.send(encode(welcomeMessage(
           player.id, simulation.tick, simulation.snapshot(), encounterSnapshotWithRewards(),
           rewards.profileFactsFor(player.id),
+          simulation.destinationId === VILLAGE_DESTINATION_ID ? undefined : simulation.destinationId,
         )));
         return;
       }
@@ -2015,6 +2049,10 @@ export function attachGameServer(httpServer, options = {}) {
         if (!client.data.playerId) throw new ProtocolError('input before join');
         simulation.applyInput(client.data.playerId, message, now());
         return;
+      }
+
+      if (simulation.destinationId !== VILLAGE_DESTINATION_ID && message.type !== 'restore-profile') {
+        throw new ProtocolError(`${message.type} is unavailable in ${simulation.destinationId}`);
       }
 
       if (message.type === 'attack') {
@@ -2328,7 +2366,11 @@ export function attachGameServer(httpServer, options = {}) {
       const rewardEvents = rewards.processTick(events);
       // One encode for everyone rather than per client.
       ws.broadcast(encode(snapshotMessage(
-        tick, simulation.snapshot(), encounterSnapshotWithRewards(), [...events, ...rewardEvents],
+        tick,
+        simulation.snapshot(),
+        encounterSnapshotWithRewards(),
+        [...events, ...rewardEvents],
+        simulation.destinationId === VILLAGE_DESTINATION_ID ? undefined : simulation.destinationId,
       )));
     }
   }, TICK_MS);
