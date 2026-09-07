@@ -10,7 +10,7 @@ namespace GalaQuest
         public const float MinX = -10f;
         public const float MaxX = 10f;
         public const float MinZ = 3f;
-        public const float MaxZ = 22f;
+        public const float MaxZ = 20f;
         public const float HeroClearance = 0.35f;
 
         // Measured upright collider bounds. Node parity and actual-scene tests guard this seam.
@@ -36,11 +36,11 @@ namespace GalaQuest
                 {
                     var r = solid.Expanded(HeroClearance);
                     if (!(p.x > r.MinX && p.x < r.MaxX && p.y > r.MinZ && p.y < r.MaxZ)) continue;
-                    var distance = p.x - r.MinX;
+                    var distance = r.MinX >= MinX ? p.x - r.MinX : float.PositiveInfinity;
                     var side = 0;
-                    if (r.MaxX - p.x < distance) { distance = r.MaxX - p.x; side = 1; }
-                    if (p.y - r.MinZ < distance) { distance = p.y - r.MinZ; side = 2; }
-                    if (r.MaxZ - p.y < distance) side = 3;
+                    if (r.MaxX <= MaxX && r.MaxX - p.x < distance) { distance = r.MaxX - p.x; side = 1; }
+                    if (r.MinZ >= MinZ && p.y - r.MinZ < distance) { distance = p.y - r.MinZ; side = 2; }
+                    if (r.MaxZ <= MaxZ && r.MaxZ - p.y < distance) side = 3;
                     if (side == 0) p.x = r.MinX;
                     else if (side == 1) p.x = r.MaxX;
                     else if (side == 2) p.y = r.MinZ;

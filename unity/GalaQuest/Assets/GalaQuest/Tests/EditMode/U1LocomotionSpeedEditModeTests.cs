@@ -63,7 +63,7 @@ namespace GalaQuest.Tests
 
         [Test] public void BlockedInputStaysIdleAndSlidingUsesActualDistance()
         {
-            Place(0f, GalaQuestEmberworksMovementWorld.MaxZ);
+            Place(4f, GalaQuestEmberworksMovementWorld.MaxZ);
             movement.StepPrediction(Vector2.up, 1f, true, 0.1f);
             movement.StepPrediction(Vector2.up, 1f, true, 0.1f);
             Assert.That(movement.PredictedMotionSpeed, Is.Zero);

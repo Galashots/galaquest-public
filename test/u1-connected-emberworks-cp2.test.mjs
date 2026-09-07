@@ -111,7 +111,7 @@ test('Emberworks simulation starts at its authored spawn and uses its bounded pl
   player.x = 100;
   player.z = 100;
   sim.step(0, 1000);
-  assert.deepEqual({ x: player.x, z: player.z }, { x: 10, z: 22 });
+  assert.deepEqual({ x: player.x, z: player.z }, { x: 10, z: 20 });
 });
 
 test('Emberworks movement does not run Village enemy, Beacon, Warden, or recovery separation', () => {

@@ -206,6 +206,51 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void CloseWallKeepsEnoughDistanceToReadTheHero()
+        {
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            try
+            {
+                wall.transform.position = hero.transform.position + new Vector3(0f, 1.5f, -0.7f);
+                wall.transform.localScale = new Vector3(5f, 4f, 0.5f);
+                Physics.SyncTransforms();
+                camera.FollowNow();
+                Assert.That(Vector3.Distance(camera.transform.position, hero.transform.position), Is.GreaterThan(3f),
+                    "a nearby wall must not replace the game view with the inside of the hero");
+            }
+            finally { Object.DestroyImmediate(wall); }
+        }
+
+        [Test]
+        public void AccessibleRouteAndOrbitKeepHeroReadable()
+        {
+            var scene = EditorSceneManager.OpenScene(GalaQuest.Editor.EmberworksGreyboxBuild.ScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var roots = scene.GetRootGameObjects();
+                var actor = roots.SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                    .Single(item => item.name == GalaQuest.Editor.EmberworksGreyboxBuild.RuntimeHeroName);
+                var view = roots.SelectMany(root => root.GetComponentsInChildren<GalaQuestGameplayCamera>(true)).Single();
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                foreach (var point in new[] { new Vector2(0f, 4f), new Vector2(0f, 12.15f),
+                    new Vector2(-10f, 10f), new Vector2(-10f, 18.55f),
+                    new Vector2(10f, GalaQuestEmberworksMovementWorld.MaxZ), new Vector2(4f, GalaQuestEmberworksMovementWorld.MaxZ) })
+                foreach (var angle in new[] { 0f, 90f, 180f, 270f })
+                foreach (var elevation in new[] { 10f, 35f, 65f })
+                {
+                    actor.position = new Vector3(point.x, actor.position.y, point.y);
+                    typeof(GalaQuestGameplayCamera).GetField("yaw", flags).SetValue(view, angle);
+                    typeof(GalaQuestGameplayCamera).GetField("pitch", flags).SetValue(view, elevation);
+                    Physics.SyncTransforms();
+                    view.Configure(actor);
+                    Assert.That(Vector3.Distance(view.transform.position, actor.position), Is.GreaterThan(3f),
+                        $"actual route point {point}, yaw {angle}, pitch {elevation}");
+                }
+            }
+            finally { EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        [Test]
         public void ObstructionPullsCameraForwardAndRemovingItRestoresRequestedZoom()
         {
             var requested = camera.Distance;

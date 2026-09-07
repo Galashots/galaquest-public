@@ -178,16 +178,34 @@ namespace GalaQuest
             var center = target.position + LookOffset;
             var rotation = Quaternion.Euler(pitch, yaw, 0f);
             var outward = -(rotation * Vector3.forward);
-            var visibleDistance = distance;
+            var visibleDistance = ClearDistance(center, outward, distance);
+            if (visibleDistance < MinimumDistance)
+            {
+                // Beside a wall, a clear overhead view preserves the hero's silhouette instead
+                // of pushing through its body. Keep the player's yaw/pitch/zoom for open space.
+                var overheadDistance = ClearDistance(center, Vector3.up, Mathf.Min(distance, 6f));
+                if (overheadDistance > visibleDistance)
+                {
+                    outward = Vector3.up;
+                    visibleDistance = overheadDistance;
+                    rotation = Quaternion.Euler(90f, yaw, 0f);
+                }
+            }
+            transform.SetPositionAndRotation(center + outward * visibleDistance, rotation);
+        }
+
+        private float ClearDistance(Vector3 center, Vector3 outward, float requestedDistance)
+        {
+            var visibleDistance = requestedDistance;
             var count = Physics.SphereCastNonAlloc(center, 0.2f, outward, obstructionHits,
-                distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                requestedDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             for (var index = 0; index < count; index++)
             {
                 var hit = obstructionHits[index];
                 if (hit.transform == target || hit.transform.IsChildOf(target)) continue;
                 visibleDistance = Mathf.Min(visibleDistance, Mathf.Max(0.35f, hit.distance - 0.08f));
             }
-            transform.SetPositionAndRotation(center + outward * visibleDistance, rotation);
+            return visibleDistance;
         }
 
         private void ResetTouches()

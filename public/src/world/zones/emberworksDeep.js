@@ -14,7 +14,8 @@ export const EMBERWORKS_DEEP_MOVEMENT_BOUNDS = Object.freeze({
   minX: -10,
   maxX: 10,
   minZ: 3,
-  maxZ: 22,
+  // The raised Express bridge and track ties begin beyond this flat approach.
+  maxZ: 20,
 });
 
 // The greybox primitives carry Unity's default colliders because they were created as primitives,

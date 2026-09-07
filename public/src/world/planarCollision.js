@@ -10,7 +10,12 @@ export function resolvePlanarPosition(position, bounds, solids, clearance) {
     for (const solid of solids) {
       const r = expanded(solid, clearance);
       if (!(p.x > r.minX && p.x < r.maxX && p.z > r.minZ && p.z < r.maxZ)) continue;
-      const distances = [p.x - r.minX, r.maxX - p.x, p.z - r.minZ, r.maxZ - p.z];
+      const distances = [
+        r.minX >= bounds.minX ? p.x - r.minX : Infinity,
+        r.maxX <= bounds.maxX ? r.maxX - p.x : Infinity,
+        r.minZ >= bounds.minZ ? p.z - r.minZ : Infinity,
+        r.maxZ <= bounds.maxZ ? r.maxZ - p.z : Infinity,
+      ];
       const side = distances.indexOf(Math.min(...distances));
       if (side === 0) p.x = r.minX;
       else if (side === 1) p.x = r.maxX;
