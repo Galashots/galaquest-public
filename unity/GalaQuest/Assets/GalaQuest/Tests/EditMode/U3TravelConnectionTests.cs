@@ -66,6 +66,8 @@ namespace GalaQuest.Tests
             Assert.That(session.RequestTravel("home-hub"), Is.True);
             Assert.That(session.DestinationId, Is.EqualTo("home-hub"));
             Assert.That(session.IsTravelling, Is.False);
+            session.AdvanceRecovery(30f);
+            Assert.That(transport.CloseCount, Is.Zero, "A valid arrival cancels the timeout");
             var snapshots = 0;
             session.ServerFrameReceived += frame => snapshots++;
             transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"destinationId\":\"emberworks-deep\"}");
@@ -91,6 +93,61 @@ namespace GalaQuest.Tests
             Assert.That(GalaQuestDestinationMovementWorld.ResolvePosition("home-hub", Vector2.zero), Is.EqualTo(Vector2.zero));
         }
 
+        [Test]
+        public void SupersededSessionClearsPlayWithoutAutomaticallyRetakingTheProfile()
+        {
+            var transport = new Transport();
+            using var session = new GalaQuestConnectionSession(transport);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Aster", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\"}");
+            transport.Drop("{\"code\":4001,\"reason\":\"Profile opened in another session\"}");
+            Assert.That(session.ControlsReady, Is.False);
+            session.Reconnect();
+            Assert.That(transport.ConnectCount, Is.EqualTo(1), "Automatic reconnect must not fight the newer profile connection");
+        }
+
+        [TestCase(null)]
+        [TestCase("{\"v\":4,\"type\":\"destination-changed\",\"id\":\"other\",\"destinationId\":\"home-hub\",\"worldEpoch\":1}")]
+        [TestCase("{\"v\":4,\"type\":\"destination-changed\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":1}")]
+        [TestCase("{\"v\":4,\"type\":\"destination-changed\",\"id\":\"p1\",\"destinationId\":\"home-hub\",\"worldEpoch\":0}")]
+        [TestCase("{\"v\":4,\"type\":\"destination-changed\",\"id\":\"p1\",\"destinationId\":\"home-hub\",\"worldEpoch\":2}")]
+        [TestCase("malformed")]
+        public void MissingOrInvalidArrivalRecoversThroughConfirmedSession(string invalid)
+        {
+            var transport = new Transport();
+            using var session = new GalaQuestConnectionSession(transport);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Aster", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\"}");
+            var disconnected = 0;
+            session.Disconnected += () => disconnected++;
+            Assert.That(session.RequestTravel("home-hub"), Is.True);
+            if (invalid != null) transport.Receive(invalid);
+            Assert.That(session.IsTravelling, Is.True);
+            var tick = typeof(GalaQuestConnectionSession).GetMethod("AdvanceRecovery");
+            Assert.That(tick, Is.Not.Null, "An open socket with no valid travel ack must have bounded recovery");
+            tick.Invoke(session, new object[] { 9f });
+            Assert.That(disconnected, Is.Zero);
+            tick.Invoke(session, new object[] { 2f });
+            Assert.That(disconnected, Is.EqualTo(1));
+            Assert.That(transport.CloseCount, Is.EqualTo(1));
+            Assert.That(session.PlayerId, Is.Empty);
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"stale\"}");
+            transport.Receive("{\"v\":4,\"type\":\"destination-changed\",\"id\":\"p1\",\"destinationId\":\"home-hub\",\"worldEpoch\":1}");
+            session.AdvanceRecovery(30f);
+            Assert.That(session.PlayerId, Is.Empty, "Retired socket frames cannot hydrate recovery");
+            Assert.That(disconnected, Is.EqualTo(1));
+            Assert.That(session.DestinationId, Is.EqualTo("emberworks-deep"));
+            session.Reconnect(); transport.Open();
+            Assert.That(JsonUtility.FromJson<WireMessage>(transport.Sent.Last()).destinationId, Is.EqualTo("emberworks-deep"));
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p2\",\"destinationId\":\"emberworks-deep\"}");
+            session.TrySendMovementIntent(Vector2.zero, 0, false, 12);
+            Assert.That(session.ControlsReady, Is.True);
+            Assert.That(session.TrySendMovementIntent(Vector2.right, 1, false, 13), Is.True);
+            Assert.That(session.TrySendAttackIntent(), Is.True);
+        }
+
         [Serializable]
         private sealed class WireMessage
         {
@@ -109,16 +166,18 @@ namespace GalaQuest.Tests
             public readonly List<string> Sent = new List<string>();
             public Action<string> OnSend;
             public bool FailTravel;
-            public void Connect() { }
+            public int ConnectCount;
+            public void Connect() { ConnectCount++; }
             public bool Send(string text)
             {
                 if (FailTravel && JsonUtility.FromJson<WireMessage>(text).type == "travel") return false;
                 Sent.Add(text); OnSend?.Invoke(text); return true;
             }
-            public void Close() { }
+            public int CloseCount;
+            public void Close() { CloseCount++; }
             public void Open() => Opened?.Invoke();
             public void Receive(string text) => MessageReceived?.Invoke(text);
-            public void Drop() => Closed?.Invoke("test disconnect");
+            public void Drop(string detail = "test disconnect") => Closed?.Invoke(detail);
         }
     }
 }

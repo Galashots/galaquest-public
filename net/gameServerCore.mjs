@@ -2445,7 +2445,7 @@ export function attachGameServer(httpServer, options = {}) {
   function broadcastDestination(destinationId, message) {
     const encodedByEpoch = new Map();
     for (const client of ws.clients) {
-      if (!client.data.playerId || client.data.destinationId !== destinationId) continue;
+      if (client.data.superseded || !client.data.playerId || client.data.destinationId !== destinationId) continue;
       const epoch = client.data.worldEpoch;
       if (!encodedByEpoch.has(epoch)) encodedByEpoch.set(epoch, encode(epoch > 0 ? { ...message, worldEpoch: epoch } : message));
       client.send(encodedByEpoch.get(epoch));

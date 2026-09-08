@@ -21,8 +21,9 @@ for (const file of manifest.files) {
 }
 const suffix = process.argv[3] ?? '';
 const mode = process.argv[4] ?? '--travel';
-assert.ok(['--travel','--progression'].includes(mode),'Use --travel or --progression');
-const progressionMode = mode === '--progression';
+assert.ok(['--travel','--progression','--integrity'].includes(mode),'Use --travel, --progression or --integrity');
+const integrityMode = mode === '--integrity';
+const progressionMode = mode === '--progression' || integrityMode;
 assert.match(suffix, /^[a-z0-9-]*$/);
 const output = resolve(`.local/unity-playtest/browser-${sha.slice(0,7)}${suffix}`);
 mkdirSync(output, { recursive: true });
@@ -279,6 +280,45 @@ try{
     await capture(first,'12-reload-from-device-save');
     checks.reloadSecond=await restorePage(second,'profile-bbbbbbbb',0);
     await capture(second,'13-sibling-still-level-one');
+  }
+
+  if(integrityMode){
+    // Harness-only loss of one destination acknowledgement. Leave WebSocket open and
+    // forward ordinary snapshots: only the Unity session's timeout can recover controls.
+    await first.send('Page.bringToFront');
+    await moveAxis(first,'w','z',4.8);
+    const before=first.id;
+    await first.eval(`(()=>{
+      window.__ackDrop={count:0};
+      const socket=Object.values(window.__gqUnitySockets.sockets)[0],receive=socket.onmessage;
+      socket.onmessage=function(event){
+        if(JSON.parse(event.data).type==='destination-changed'){window.__ackDrop.count++;return;}
+        receive.call(this,event);
+      };
+    })()`);
+    await travelTap(first);
+    await waitFor(()=>first.eval('window.__ackDrop.count'),n=>n===1,'Harness dropped arrival');
+    await capture(first,'14-ack-withheld');
+    const recovered=await waitFor(()=>frame(first),f=>f.destinationId==='home-hub'&&f.players.some(p=>p.id!==before&&p.id!==second.id),'Travel timeout rejoins last confirmed camp',25000,100);
+    first.id=recovered.players.find(p=>p.id!==second.id).id;
+    await moveAxis(first,'d','x',1.4);
+    checks.travelAckRecovery=await sample(first);
+    await capture(first,'15-ack-recovery-controls');
+    await second.send('Page.bringToFront');
+    await moveAxis(second,'w','z',4.8);await travelTap(second);await arrived(second,'emberworks-deep');
+    const supersededId=second.id;
+    const replacement=await createPlayer('profile-bbbbbbbb','Older Review Replacement');
+    await waitFor(()=>frame(first),f=>f.destinationId==='home-hub'&&f.players.some(p=>p.id===replacement.id),'Replacement in camp');
+    await waitFor(()=>second.eval('Object.keys(window.__gqUnitySockets.sockets).length'),n=>n===0,'Superseded socket closed');
+    await delay(4500); // exceeds the existing two-second automatic reconnect delay
+    assert.equal(await second.eval('Object.keys(window.__gqUnitySockets.sockets).length'),0,'Superseded page does not retake the profile');
+    assert.ok(!(await frame(first)).players.some(p=>p.id===supersededId));
+    await replacement.send('Page.bringToFront');
+    await moveAxis(replacement,'w','z',4.8);await travelTap(replacement);await arrived(replacement,'emberworks-deep');
+    assert.deepEqual((await frame(replacement)).players.map(p=>p.id),[replacement.id],'Only the new avatar remains in Emberworks');
+    checks.sameProfileTakeover={supersededId,replacement:await sample(replacement)};
+    await capture(second,'16-superseded-session');
+    await capture(replacement,'17-active-replacement');
   }
 
   const errors=pages.flatMap(p=>p.events.filter(e=>

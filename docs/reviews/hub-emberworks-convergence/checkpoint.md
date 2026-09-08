@@ -45,3 +45,39 @@ Focused post-fix command:
 PASS: 43 tests, zero failures (`.local/convergence/cp1-green.log`). Tests include contribution ->
 live takeover -> combat resolution, one durable XP fact/event for the active identity, and no XP for
 an uninvolved sibling. Required full Node, Unity, browser and hosted gates are pending.
+
+## CP1 full gate and CP2 travel recovery
+
+CP1 commit: `0b640217507f66f68ccc5d4bf39875381b936ed3`. Required local Node suite:
+2303 PASS / 1 FAIL / 3 SKIP. Failure: Windows Lantern-XP temporary-directory cleanup EPERM.
+A Git archive of unmodified CP0 reproduced that same failure (21 PASS / 1 FAIL in
+`.local/convergence/cp0-lantern-repro.log`), separating it from this repair.
+Hosted required unit runs 34234745527 and 34234724099 PASS; Director bundle 34234745503 PASS.
+
+Unity red probe on unchanged baseline session source:
+`Unity.exe -batchmode -nographics -projectPath unity/GalaQuest -buildTarget WebGL -runTests -testPlatform EditMode -testFilter GalaQuest.Tests.U3TravelConnectionTests -testResults .local/convergence/cp2-red.xml -logFile .local/convergence/cp2-red-unity.log`
+Actual result: existing 3 PASS, new 7 FAIL. Six missing/wrong/malformed arrival cases lack bounded
+recovery; the superseded-session case opens a second connection instead of remaining retired.
+Initial cold import/package resolution was slow; tests only became evidence once XML existed.
+
+Correction: ten seconds of unscaled travel wait retires the uncertain socket and signals the
+existing two-second reconnect seam. The requested world never replaces the last confirmed
+DestinationId without a matching player/destination/next-epoch acknowledgement. Recovery rejoins
+that confirmed world and requires neutral input. Supersession close code 4001 clears gameplay
+but suppresses automatic reconnect. Deliberate socket closure detaches old callbacks; late frames
+cannot hydrate recovery. The existing nonblocking status panel carries the messages.
+
+Bridge red probe observed an unwanted close callback; its post-fix bridge/progression run passes
+15 tests. Full Unity EditMode (same command without testFilter, outputs cp2-green.xml and
+cp2-green-unity.log): 196 PASS / 0 FAIL / 1 optional SKIP. This includes the approved grip/scene
+checks and the travel cases. NUnit's top-level Skipped:Ignored includes the optional case; it is
+not a skipped suite. Focused Node/server/bridge/guidance/corpse command:
+`node --test test/u3-independent-travel.test.mjs test/unity-web-cp1.test.mjs test/unity-profile-progression.test.mjs test/reward-wiring.test.mjs test/corpse-loot.test.mjs test/guidance-integrity.test.mjs`
+86 PASS / 0 FAIL (`.local/convergence/cp2-node.log`). A further real-combat test verifies an existing
+corpse claim is transferred intact on live takeover. An invalid destination join cannot evict its
+valid same-profile session. Superseded connections also receive no final settlement broadcast.
+
+CP3 will bind committed inputs to final-head Node/Unity, strict non-development WebGL candidate
+build, real browser integrity flow and hosted evidence. The existing browser driver now supports
+`--integrity`, including a harness-only withheld acknowledgement on an otherwise open socket.
+Physical iPad and independent/Owner acceptance remain separate and are not claimed here.

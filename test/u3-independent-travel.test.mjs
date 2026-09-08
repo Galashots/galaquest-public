@@ -4,9 +4,9 @@ import { createServer } from 'node:http';
 import { attachGameServer, createRewardCoordinator, createSimulation } from '../net/gameServerCore.mjs';
 import { decode, encode, joinMessage, attackMessage, inputMessage } from '../public/src/net/protocolCore.js';
 
-async function withServer(run) {
+async function withServer(run, options = {}) {
   const http = createServer();
-  const game = attachGameServer(http, { rewardStorePath: ':memory:', allowMissingOrigin: true });
+  const game = attachGameServer(http, { rewardStorePath: ':memory:', allowMissingOrigin: true, ...options });
   await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
   const clients = [];
   async function connect(name, destinationId, guestId = `profile-${name}-aaaaaaaa`) {
@@ -220,7 +220,7 @@ test('same profile takeover retires the live old avatar across destinations befo
   });
 });
 
-test('unpublished contribution survives live takeover once, presents only to active profile and preserves corpse claim', async () => {
+test('unpublished contribution survives live takeover once and presents only to the active profile', async () => {
   await withServer(async ({ game, connect }) => {
     const old = await connect('old', 'emberworks-deep', 'profile-credit');
     const sibling = await connect('sibling', 'home-hub', 'profile-isolated');
@@ -247,6 +247,40 @@ test('unpublished contribution survives live takeover once, presents only to act
     assert.equal(active.messages.flatMap(m => m.events ?? []).filter(e => e.type === 'xp-earned' && e.heroId === active.welcome.id).length, 1);
     assert.equal(old.messages.flatMap(m => m.events ?? []).filter(e => e.type === 'xp-earned').length, 0);
     assert.equal(game.rewards.rewardsFor([sibling.welcome.id])[sibling.welcome.id].xp, 0);
-    assert.equal(JSON.stringify(room.corpsesSnapshot()).includes(old.welcome.id), false);
   });
+});
+
+test('invalid same-profile destination cannot evict the valid active session', async () => {
+  await withServer(async ({ game, connect }) => {
+    const active = await connect('active', 'home-hub', 'profile-valid-join');
+    await assert.rejects(connect('invalid', 'not-a-destination', 'profile-valid-join'), /socket closed/);
+    assert.equal(game.simulationFor('home-hub').players.has(active.welcome.id), true);
+    active.send(inputMessage(1, 1, 0, 1, false));
+    await active.wait(m => m.type === 'snapshot' && m.players.some(p => p.id === active.welcome.id && p.x > 0));
+  });
+});
+
+
+test('live takeover reattaches an existing personal corpse claim in the departed destination', async () => {
+  await withServer(async ({ game, connect }) => {
+    const old = await connect('old', 'village', 'profile-corpse-owner');
+    const room = game.simulationFor('village');
+    const body = room.players.get(old.welcome.id);
+    for (let seq = 1; seq <= 25 && room.encounterSnapshot().enemies[0].hp > 0; seq++) {
+      const enemy = room.encounterSnapshot().enemies[0];
+      Object.assign(body, { x: enemy.x, z: enemy.z - 1.3, heading: 0 });
+      room.step(0, Date.now());
+      room.applyAttack(old.welcome.id, attackMessage(seq));
+      for(let tick=0;tick<34;tick++)room.step(.05,Date.now());
+    }
+    const before = room.corpsesSnapshot().find(c => c.claims.some(claim => claim.heroId === old.welcome.id));
+    assert.ok(before, 'actual combat must create a personal corpse claim before reassignment is tested');
+    const active = await connect('active', 'home-hub', 'profile-corpse-owner');
+    const after = room.corpsesSnapshot().find(c => c.id === before.id);
+    assert.ok(after.claims.some(c => c.heroId === active.welcome.id));
+    assert.ok(after.claims.every(c => c.heroId !== old.welcome.id));
+    assert.deepEqual(after.claims.find(c => c.heroId === active.welcome.id).items,
+      before.claims.find(c => c.heroId === old.welcome.id).items);
+    assert.equal(room.players.has(old.welcome.id), false);
+  }, { enemies: [{ enemyId: 'claim-wolf', kind: 'frost-wolf', spawn: { x: 0, z: 8 } }], rng: () => 0 });
 });

@@ -129,6 +129,10 @@ mergeInto(LibraryManager.library, {
     var state = window.__gqUnitySockets;
     var socket = state && state.sockets[id];
     if (!socket) return;
+    // Intentional session recovery owns the disconnect signal. Retire callbacks so a
+    // late old-socket close/message cannot clear or hydrate the replacement connection.
+    socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
+    delete state.sockets[id];
     socket.close(1000, 'Unity client closed');
   },
 

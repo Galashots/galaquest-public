@@ -260,3 +260,15 @@ test('Unity touch surface blocks Safari page gestures without hiding a rescue in
   ]);
   assert.ok(runtime.gestureListeners.every(({ options }) => options.passive === false));
 });
+
+
+test('deliberately closing a Unity socket retires callbacks before safe reconnect', () => {
+  const runtime = loadBrowserBridge(familyStorage(PROFILE_A));
+  const id = runtime.bridge.GQ_WebSocket_Connect('GalaQuestRuntime', 'OnSocketOpen', 'OnSocketMessage', 'OnSocketClose');
+  const old = runtime.sockets[0]; old.open();
+  runtime.messages.length = 0;
+  runtime.bridge.GQ_WebSocket_Close(id);
+  assert.equal(runtime.messages.length, 0, 'session owns intentional recovery; no stale close callback may restart it twice');
+  assert.equal(old.onmessage, null, 'a retired socket cannot feed stale welcome or arrival frames');
+  assert.equal(old.onopen, null);
+});

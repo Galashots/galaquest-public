@@ -15,6 +15,12 @@ namespace GalaQuest
         private float lastMagnitude;
         private string pendingDestination;
         private bool requiresNeutralInput;
+        private float travelWaitSeconds;
+        private bool superseded;
+        private bool interrupted;
+        private bool acceptingFrames;
+        public const float TravelAckTimeoutSeconds = 10f;
+        public bool CanReconnect => begun && !superseded;
 
         public GalaQuestConnectionSession(IGalaQuestTransport transport)
         {
@@ -49,7 +55,9 @@ namespace GalaQuest
 
         public void Reconnect()
         {
-            if (!begun) return;
+            if (!CanReconnect) return;
+            interrupted = false;
+            acceptingFrames = false;
             PlayerId = string.Empty;
             pendingDestination = null;
             StatusChanged?.Invoke($"Reconnecting as {profile.DisplayName}...");
@@ -69,6 +77,9 @@ namespace GalaQuest
 
         private void HandleOpened()
         {
+            if (!CanReconnect) return;
+            interrupted = false;
+            acceptingFrames = true;
             restoredThisConnection = false;
             PlayerId = string.Empty;
             pendingDestination = null;
@@ -93,6 +104,7 @@ namespace GalaQuest
             if (!transport.Send(GalaQuestProtocolV4.Input(++inputSequence, 0, 0, 0, false, WorldEpoch))) return false;
             lastMagnitude = 0;
             pendingDestination = destinationId;
+            travelWaitSeconds = 0f;
             requiresNeutralInput = true;
             TravelStarted?.Invoke();
             StatusChanged?.Invoke("Travelling...");
@@ -105,8 +117,21 @@ namespace GalaQuest
             return true;
         }
 
+        // Called every frame with unscaled time, even while movement is blocked or paused.
+        public void AdvanceRecovery(float deltaSeconds)
+        {
+            if (!IsTravelling) return;
+            travelWaitSeconds += Mathf.Max(0f, deltaSeconds);
+            if (travelWaitSeconds < TravelAckTimeoutSeconds) return;
+            // DestinationId still names the last server-confirmed world. Retire the uncertain
+            // socket and use the existing reconnect seam; no arrival is invented locally.
+            transport.Close();
+            HandleClosed("Travel acknowledgement timed out");
+        }
+
         private void HandleMessage(string message)
         {
+            if (!acceptingFrames) return;
             if (!GalaQuestProtocolV4.TryReadServerFrame(message, out var frame)) return;
             if (frame.type == "welcome")
             {
@@ -163,11 +188,25 @@ namespace GalaQuest
             return true;
         }
 
+        [Serializable]
+        private sealed class CloseDetails { public int code; }
+
         private void HandleClosed(string detail)
         {
+            if (interrupted) return;
+            interrupted = true;
+            acceptingFrames = false;
+            // 4001 is this server's bounded same-profile takeover signal, not a network failure.
+            if (!string.IsNullOrEmpty(detail) && detail.StartsWith("{", StringComparison.Ordinal))
+            {
+                try { superseded = JsonUtility.FromJson<CloseDetails>(detail)?.code == 4001; }
+                catch (ArgumentException) { }
+            }
             PlayerId = string.Empty;
             pendingDestination = null;
-            StatusChanged?.Invoke("Connection interrupted · reconnecting safely");
+            StatusChanged?.Invoke(superseded
+                ? "Profile opened elsewhere · continue in the newer session"
+                : "Connection interrupted · reconnecting safely");
             Disconnected?.Invoke();
         }
 
@@ -176,6 +215,7 @@ namespace GalaQuest
             PlayerId = string.Empty;
             pendingDestination = null;
             begun = false;
+            acceptingFrames = false;
             transport.Opened -= HandleOpened;
             transport.MessageReceived -= HandleMessage;
             transport.Closed -= HandleClosed;

@@ -72,9 +72,15 @@ namespace GalaQuest
             Debug.Log($"[GQ-U1] {status}");
         }
 
+        private void Update() => session?.AdvanceRecovery(Time.unscaledDeltaTime);
+
         private void ScheduleReconnect()
         {
-            if (!shuttingDown) Invoke(nameof(Reconnect), ReconnectDelaySeconds);
+            if (!shuttingDown && session.CanReconnect)
+            {
+                CancelInvoke(nameof(Reconnect));
+                Invoke(nameof(Reconnect), ReconnectDelaySeconds);
+            }
         }
 
         private void Reconnect()

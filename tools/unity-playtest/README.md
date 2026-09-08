@@ -34,3 +34,10 @@ client/server source diff, and retain both SHAs in the report.
 
 Exit success proves the asserted browser behavior. Inspect the generated screenshots separately;
 the driver does not provide visual acceptance or physical iPad Safari performance evidence.
+
+For convergence integrity, use `--integrity` in place of `--progression`. It includes progression,
+then withholds one destination acknowledgement on an open browser socket and proves the Unity
+session reconnects to its last confirmed camp with working movement. It also opens a replacement
+same-profile client in another destination and verifies the superseded page stays retired beyond
+the automatic reconnect interval. ACK interception exists only in this driver; runtime traffic
+has no fault-injection toggle.
