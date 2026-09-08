@@ -281,7 +281,10 @@ try{
     await capture(second,'13-sibling-still-level-one');
   }
 
-  const errors=pages.flatMap(p=>p.events.filter(e=>e.method==='Runtime.exceptionThrown'||(e.method==='Log.entryAdded'&&e.params.entry.level==='error')));
+  const errors=pages.flatMap(p=>p.events.filter(e=>
+    e.method==='Runtime.exceptionThrown'||
+    (e.method==='Log.entryAdded'&&e.params.entry.level==='error')||
+    (e.method==='Runtime.consoleAPICalled'&&e.params.type==='error')));
   writeFileSync(join(output,'report.json'),JSON.stringify({clientSha:sha,serverSha,mode,manifest,origin:server.origin,checks,errors},null,2));
   assert.equal(errors.length,0,'No browser errors');
   console.log(JSON.stringify({sha,output,result:'PASS',checks:Object.keys(checks)}));
