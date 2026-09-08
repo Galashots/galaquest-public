@@ -118,6 +118,20 @@ namespace GalaQuest.Editor
             fill.color = new Color(.72f, .80f, 1f);
             fill.intensity = 1.2f;
             var root = scene.GetRootGameObjects().Single(item => item.name == EmberworksGreyboxBuild.RuntimeRootName);
+            if (content.HeroPrefab.GetComponentsInChildren<Transform>().Any(item => item.name == U2HeroGripPreview.MarkerName))
+            {
+                var localHero = root.GetComponent<GalaQuestTraversalController>().Hero;
+                var localBody = localHero.GetComponentsInChildren<SkinnedMeshRenderer>().Single();
+                var candidateBody = content.HeroPrefab.GetComponentsInChildren<SkinnedMeshRenderer>().Single();
+                if (!localBody.bones.Select(bone => bone.name).SequenceEqual(candidateBody.bones.Select(bone => bone.name))
+                    || !localBody.sharedMesh.bindposes.SequenceEqual(candidateBody.sharedMesh.bindposes)
+                    || !localBody.sharedMesh.vertices.SequenceEqual(candidateBody.sharedMesh.vertices.Take(localBody.sharedMesh.vertexCount)))
+                    throw new BuildFailedException("The scene hero differs from the source used to author the hand candidate");
+                // Retain the local hero object and all camera/traversal bindings.
+                // Only this temporary scene receives the candidate mesh.
+                localBody.sharedMesh = candidateBody.sharedMesh;
+                localBody.localBounds = candidateBody.localBounds;
+            }
             var presentation = root.GetComponent<GalaQuestCombatPresentation>();
             if (presentation == null) presentation = root.AddComponent<GalaQuestCombatPresentation>();
             presentation.Configure(content);
