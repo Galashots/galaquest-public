@@ -49,7 +49,7 @@ Do not create another GalaQuest asset-pipeline root because a task, agent, workt
   90_ARCHIVE_LEGACY/
 ```
 
-### `00_INBOX`
+### [00_INBOX](https://drive.google.com/drive/folders/1Z_Xq4X8x0nwwMXD1bVko-vOTNDCu-X_x)
 
 Landing area for newly acquired or user-created source material that has not yet entered controlled production custody.
 
@@ -59,34 +59,34 @@ Landing area for newly acquired or user-created source material that has not yet
 
 An Inbox file is not an approved source master and is not production-ready merely because it exists here.
 
-### `10_SOURCE_MASTERS`
+### [10_SOURCE_MASTERS](https://drive.google.com/drive/folders/1AC7MPjB02aWDocmdOd4sJYLm-hGaqufm)
 
 Immutable best-known source custody, grouped by asset class. Preserve original provider exports and high-quality source masters here. **Do not overwrite a source master to create a derivative.** Remeshes, FBX conversions, texture edits, rigs, retargets, and optimization experiments belong in `20_PRODUCTION_WORKING` until a later authority deliberately selects a new master.
 
 The repository's provenance/asset registry must remain capable of identifying the source used for shipped derivatives. Drive folder location is custody metadata, not the gameplay semantic identity.
 
-### `20_PRODUCTION_WORKING`
+### [20_PRODUCTION_WORKING](https://drive.google.com/drive/folders/1DjCWtXfdw6vMgkYsRjfL8BMqY0ZijBpq)
 
 Active derived production work: conversion, retopo/remesh, rigging, animation, texture/material work, optimization, and other intermediates. Use one package folder per semantic asset or coherent batch. This is a working surface, not a permanent archive and not evidence of promotion.
 
-### `30_OWNER_REVIEW`
+### [30_OWNER_REVIEW](https://drive.google.com/drive/folders/1Yj-tiSB3hTak2cwqhZLM9pFyxxA03u3r)
 
 The fast visual decision surface.
 
-- `00_NEEDS_OWNER_REVIEW` contains **only decision-ready review packets currently waiting on the Owner**.
-- `90_REVIEWED_ARCHIVE` contains completed review packets retained for traceability after the Owner decision has been captured durably in the appropriate GitHub/asset authority.
+- [00_NEEDS_OWNER_REVIEW](https://drive.google.com/drive/folders/1e25tANpVyjtk7WGYecASjN_4bUnnrND1) contains **only decision-ready review packets currently waiting on the Owner**.
+- [90_REVIEWED_ARCHIVE](https://drive.google.com/drive/folders/18f-xMvPrgKHIWAGBm0emAfayelKU2cyk) contains completed review packets retained for traceability after the Owner decision has been captured durably in the appropriate GitHub/asset authority.
 
 Do not make the Owner hunt through raw provider exports, dozens of near-identical renders, unexplained versions, or a generic production-working folder. The active Owner queue should answer one question quickly: **what needs a decision now?**
 
-### `40_GENERATION_INPUTS`
+### [40_GENERATION_INPUTS](https://drive.google.com/drive/folders/1pwasvvR9kvgXWVu_G59QMI-AFd2Iw_LL)
 
 Source images, briefs, turnarounds, cleared input art, and Production Director-generated non-canonical target references used to create or transform assets. Inputs do not become approved production assets merely by being stored here.
 
-### `50_REFERENCE_LIBRARY`
+### [50_REFERENCE_LIBRARY](https://drive.google.com/drive/folders/1C23DOEBOi9fkNlnmhf4b3jwNnBEb0FcR)
 
 Project-controlled GalaQuest references and other references whose project custody is appropriate. External web/game comparison imagery normally remains linked by source/query in the review note rather than copied into Drive. Rejected explorations do not become future visual authority.
 
-### `90_ARCHIVE_LEGACY`
+### [90_ARCHIVE_LEGACY](https://drive.google.com/drive/folders/1OXrjl0MPLodfs4VtDjput6hdtriq2VtO)
 
 Material deliberately retired or migrated from older active structures. It is not an active production surface.
 
