@@ -194,3 +194,59 @@ test('real sockets: a returning contributor receives earned XP in their current 
     assert.ok(paid.encounter.enemies.every(enemy => enemy.kind !== 'lava-gremlin'));
   });
 });
+
+test('same profile takeover retires the live old avatar across destinations before accepting more gameplay', async () => {
+  await withServer(async ({ game, connect }) => {
+    const old = await connect('old', 'emberworks-deep', 'profile-takeover');
+    const sibling = await connect('sibling', 'home-hub', 'profile-sibling');
+    const oldWire = [...game.ws.clients].find(c => c.data.playerId === old.welcome.id);
+    // Keep the physical connection open to attack authority revocation independently of TCP close.
+    const close = oldWire.close;
+    oldWire.close = () => {};
+    const active = await connect('active', 'home-hub', 'profile-takeover');
+    oldWire.close = close;
+    const count = () => ['emberworks-deep', 'home-hub'].reduce((n, d) => n +
+      [...game.simulationFor(d).players.keys()].filter(id => [old.welcome.id, active.welcome.id].includes(id)).length, 0);
+    assert.equal(count(), 1, 'old baseline leaves two live avatars for one profile');
+    old.send({ ...inputMessage(91, 1, 0, 1, false), worldEpoch: 0 });
+    old.send(attackMessage(91));
+    old.send(joinMessage('revive', 'profile-takeover', 'emberworks-deep'));
+    await active.wait(m => m.type === 'snapshot' && m.tick > active.welcome.tick + 2);
+    assert.equal(count(), 1);
+    assert.equal(game.simulationFor('emberworks-deep').players.has(old.welcome.id), false);
+    assert.equal(game.simulationFor('home-hub').players.has(sibling.welcome.id), true);
+    assert.equal(game.rewards.hasDurableIdentity(old.welcome.id), false);
+    oldWire.close = close;
+  });
+});
+
+test('unpublished contribution survives live takeover once, presents only to active profile and preserves corpse claim', async () => {
+  await withServer(async ({ game, connect }) => {
+    const old = await connect('old', 'emberworks-deep', 'profile-credit');
+    const sibling = await connect('sibling', 'home-hub', 'profile-isolated');
+    const room = game.simulationFor('emberworks-deep');
+    Object.assign(room.players.get(old.welcome.id), { x: -4, z: 7.5, heading: 0 });
+    room.step(0, Date.now());
+    // Queue meaningful real combat work without publishing: takeover must settle this before remapping.
+    room.applyAttack(old.welcome.id, attackMessage(1)); room.step(0.55, Date.now());
+    assert.equal(room.encounterSnapshot().enemies[0].hp, 20);
+    const active = await connect('active', 'home-hub', 'profile-credit');
+    const finisher = await connect('finisher', 'emberworks-deep', 'profile-finisher');
+    const stage = () => {
+      Object.assign(room.players.get(finisher.welcome.id), { x: -4, z: 7.5, heading: 0 });
+      room.step(0, Date.now());
+    };
+    stage(); finisher.send(attackMessage(1));
+    const hit = await finisher.wait(m => m.type === 'snapshot' && m.encounter.enemies[0].hp === 10);
+    await finisher.wait(m => m.type === 'snapshot' && m.tick > hit.tick && m.encounter.heroes[finisher.welcome.id].cooldown === 0 && m.encounter.heroes[finisher.welcome.id].swingSeconds < 0);
+    stage(); finisher.send(attackMessage(2));
+    const paid = await active.wait(m => m.type === 'snapshot' && m.events.some(e => e.type === 'xp-earned' && e.heroId === active.welcome.id));
+    assert.equal(paid.encounter.rewards[active.welcome.id].xp, 20);
+    await active.wait(m => m.type === 'snapshot' && m.tick > paid.tick + 3);
+    assert.equal(game.rewards.profileFactsFor(active.welcome.id).filter(f => f.type === 'xp-earned').length, 1);
+    assert.equal(active.messages.flatMap(m => m.events ?? []).filter(e => e.type === 'xp-earned' && e.heroId === active.welcome.id).length, 1);
+    assert.equal(old.messages.flatMap(m => m.events ?? []).filter(e => e.type === 'xp-earned').length, 0);
+    assert.equal(game.rewards.rewardsFor([sibling.welcome.id])[sibling.welcome.id].xp, 0);
+    assert.equal(JSON.stringify(room.corpsesSnapshot()).includes(old.welcome.id), false);
+  });
+});

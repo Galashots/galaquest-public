@@ -2073,7 +2073,7 @@ export function attachGameServer(httpServer, options = {}) {
 
   const ws = attachWebSocketServer(httpServer, {
     onMessage(client, text) {
-      if (stopped) return;
+      if (stopped || client.data.superseded) return;
       // A ProtocolError thrown here is caught by wsServer, which closes that client with 1008. That
       // is deliberate: a client sending malformed messages is broken or hostile, and either way the
       // simulation should not be guessing what it meant.
@@ -2105,6 +2105,19 @@ export function attachGameServer(httpServer, options = {}) {
         if (typeof message.guestId === 'string' && message.guestId.length > 0) {
           const previousHeroId = heroIdByGuestId.get(message.guestId);
           if (previousHeroId && previousHeroId !== player.id) {
+            // Settle queued combat before moving its contributor ledger. Revoke authority
+            // synchronously; closing TCP alone does not prevent buffered frames or late onClose.
+            for (const previous of ws.clients) {
+              if (previous.data.playerId !== previousHeroId) continue;
+              previous.data.superseded = true;
+              const previousWorld = simulationFor(previous.data.destinationId);
+              publishSimulation(previousWorld);
+              previousWorld.removePlayer(previousHeroId);
+              rewards.leave(previousHeroId);
+              previous.data.playerId = null;
+              broadcastDestination(previousWorld.destinationId, leaveMessage(previousHeroId));
+              previous.close(4001, 'Profile opened in another session');
+            }
             rewards.reassignCombatCredit(previousHeroId, player.id);
             for (const destination of destinations.values()) destination.reassignCorpseClaims(previousHeroId, player.id);
           }
