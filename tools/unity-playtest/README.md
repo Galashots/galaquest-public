@@ -41,3 +41,29 @@ session reconnects to its last confirmed camp with working movement. It also ope
 same-profile client in another destination and verifies the superseded page stays retired beyond
 the automatic reconnect interval. ACK interception exists only in this driver; runtime traffic
 has no fault-injection toggle.
+
+## Session and travel regression checks
+
+When changing profile ownership or travel, run the real-socket server regressions and browser bridge
+checks before rebuilding:
+
+```powershell
+node --test test/u3-independent-travel.test.mjs test/unity-web-cp1.test.mjs test/unity-profile-progression.test.mjs
+```
+
+Run the Unity EditMode connection/travel tests on the WebGL target too. Keep these counterexamples:
+
+- Leave the old same-profile socket open. Prove immediate gameplay revocation independently of TCP
+  closure, then check both different-destination ownership and a same-destination sibling observer.
+  A settlement snapshot must not briefly publish the retired avatar beside its replacement.
+- Contribute before takeover and resolve the fight afterward. Check the active identity's durable
+  fact and presentation, an uninvolved sibling, and existing corpse claims. Settle queued combat
+  before remapping its ledger, while keeping retired bodies out of published state.
+- Withhold or corrupt arrival acknowledgements while the socket remains open. Use an unscaled timer
+  independent of movement/control readiness; recover through the last confirmed destination and
+  existing reconnect seam. Successful acknowledgements must cancel recovery.
+- Retire callbacks on an intentionally closed browser socket. Late messages/close callbacks must
+  not hydrate or clear its replacement. A superseded page must not automatically reclaim the profile.
+
+`--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
+Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.

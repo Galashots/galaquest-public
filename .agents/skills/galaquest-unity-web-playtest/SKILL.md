@@ -34,6 +34,8 @@ description: Build and verify GalaQuest's Unity WebGL client. Use for Unity brow
 - `tools/runtime-test/` is discovered by the legacy Three.js suites. Those launchers do not provide
   Unity builds. Do not place a Unity-only driver there or register it without supplying its actual
   launch prerequisites. Reuse the existing owned-server helper across the two driver surfaces.
+- For session/travel changes, preserve the negative-path checklist in that README: open old sockets,
+  queued contribution, same-room observer snapshots, invalid/missing acknowledgements and retired callbacks.
 - Start isolated browser contexts and clear the owned origin before seeding fixture profiles.
   Exercise real input and close only the browser/server processes owned by the driver.
 
