@@ -47,3 +47,9 @@ The large inward folds from the first drafts are resolved in the inspected Unity
 The browser frames show the sword following the hand and a readable sweep after orbit. The default cavern wall still blocks part of the view, and the environment remains greybox. Physical Safari comfort, audible sound quality and continuous-motion judgment remain open. Owner visual approval for this grip was received on 2026-09-07. The [Owner packet in controlled Drive custody](https://drive.google.com/drive/folders/1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn) includes the defect-exposing angles. The review decision is approved for playtest integration; the original candidate evidence remains tied to its tested source commits.
 
 The [earlier connected fight checkpoint](fight-checkpoint.md) records the broader combat implementation and its previous source SHA.
+
+## Playtest admission
+
+At **113a3623d87fdd94680aea3ba7e00c4d0e2338cc**, the approved mesh/prefab and scene binding are committed. The focused Unity EditMode check passes with no local hand source required. It verifies the scene mesh identity, 24 original bones/bind poses, preserved source hash and original prefab, and approved geometry counts. Hosted [unit run 34175254286](https://github.com/Galashots/galaquest-public/actions/runs/34175254286), [unit run 34175252080](https://github.com/Galashots/galaquest-public/actions/runs/34175252080) and [director bundle 34175254285](https://github.com/Galashots/galaquest-public/actions/runs/34175254285) pass.
+
+The original visual evidence remains at its recorded source commits; this admission changes custody and default asset binding. It does not create new physical-iPad or full-level acceptance. The Owner decision is durable here and in the receipt. Moving the completed Drive packet to the reviewed archive remains administrative follow-up: the connector has no move action, and the browser was signed out.

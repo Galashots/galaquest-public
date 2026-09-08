@@ -58,6 +58,18 @@
       "date": "2026-09-07",
       "statement": "Grip approved good work.",
       "scope": "Integrate the reviewed fixed grip in the playtest; retain the documented base crease and pommel contact as polish items."
+    },
+    "playtestAdmission": {
+      "sourceSha": "113a3623d87fdd94680aea3ba7e00c4d0e2338cc",
+      "unityEditMode": "PASS",
+      "tests": 1,
+      "xmlSha256": "b12cc1dc66b2211c89e254cdfdb575d8443b63157c6d56ef2aac920466ae6bde",
+      "hostedTestRuns": [
+        34175254286,
+        34175252080
+      ],
+      "directorBundleRun": 34175254285,
+      "scope": "Committed prefab and scene use the approved mesh; original source, rig and vertex buffer remain preserved. Prior visual review and Owner decision apply to the unchanged candidate geometry."
     }
   },
   "promotionScope": "Owner-approved fixed grip for the two-level playtest; original source FBX and original Hero prefab preserved.",
