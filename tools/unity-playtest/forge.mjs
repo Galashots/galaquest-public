@@ -85,7 +85,20 @@ const snapshot = page => page.eval(`(()=>{
 })()`);
 const reconciliation = page => page.eval('window.__gqUnityCp2Diagnostics?.latestReconciliation ?? null');
 const forgeFrames = page => page.eval('(window.__gqUnityCp2Diagnostics?.serverFrames??[]).filter(frame=>frame.type==="forge-state")');
-const controls = page => page.eval('window.__gqRuneForgeControls ?? []');
+const controls = async page => {
+  const projected = await page.eval('window.__gqRuneForgeControls ?? []');
+  if (projected.length > 0) return projected;
+  const frames = await forgeFrames(page);
+  if (frames.length === 0 && page.rect) {
+    // Visually measured from the authored dormant Forge framing. This is a bounded
+    // fallback for the one wake-up control; every interaction still enters through
+    // the canvas touch/raycast seam and must produce the authoritative server state.
+    return [{ kind: 'open', value: '',
+      x: page.rect.x + page.rect.width * .50,
+      y: page.rect.y + page.rect.height * .733 }];
+  }
+  return [];
+};
 const key = (page, type, value) => page.send('Input.dispatchKeyEvent', {
   type, key: value, code: value === ' ' ? 'Space' : `Key${value.toUpperCase()}`,
   windowsVirtualKeyCode: value === ' ' ? 32 : value.toUpperCase().charCodeAt(0),
@@ -166,6 +179,7 @@ try {
     await page.send('Page.navigate', { url: `${server.origin}/unity/` });
     await waitFor(() => reconciliation(page), Boolean, `Unity join ${displayName}`, 180000, 1000);
     page.id = await page.eval('window.__gqUnityCp2Diagnostics.serverFrames.find(frame=>frame.type==="welcome").id');
+    page.rect = await page.eval('(()=>{const r=document.querySelector("#unity-canvas").getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()');
     page.profileId = profileId;
     console.log(`Connected ${displayName} ${page.id}`);
     return page;
