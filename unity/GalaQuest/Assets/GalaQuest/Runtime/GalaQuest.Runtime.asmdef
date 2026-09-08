@@ -1,7 +1,10 @@
 {
     "name": "GalaQuest.Runtime",
     "rootNamespace": "GalaQuest",
-    "references": [],
+    "references": [
+        "GalaQuest.Gear.Runtime",
+        "Unity.InputSystem"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

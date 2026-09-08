@@ -22,12 +22,16 @@ function canonicalEncounterForBuilder(encounter) {
   };
 }
 
-export function welcomeMessage(id, tick, players, encounter, profileFacts) {
-  if (encounter === undefined) return coreWelcomeMessage(id, tick, players, encounter, profileFacts);
-  return coreWelcomeMessage(id, tick, players, canonicalEncounterForBuilder(encounter), profileFacts);
+export function welcomeMessage(id, tick, players, encounter, profileFacts, destinationId) {
+  if (encounter === undefined) {
+    return coreWelcomeMessage(id, tick, players, encounter, profileFacts, destinationId);
+  }
+  return coreWelcomeMessage(
+    id, tick, players, canonicalEncounterForBuilder(encounter), profileFacts, destinationId,
+  );
 }
 
-export function snapshotMessage(tick, players, encounter, events) {
-  if (encounter === undefined) return coreSnapshotMessage(tick, players, encounter, events);
-  return coreSnapshotMessage(tick, players, canonicalEncounterForBuilder(encounter), events);
+export function snapshotMessage(tick, players, encounter, events, destinationId) {
+  if (encounter === undefined) return coreSnapshotMessage(tick, players, encounter, events, destinationId);
+  return coreSnapshotMessage(tick, players, canonicalEncounterForBuilder(encounter), events, destinationId);
 }

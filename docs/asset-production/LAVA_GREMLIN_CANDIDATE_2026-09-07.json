@@ -1,0 +1,82 @@
+{
+  "schema": "galaquest-candidate-receipt-v1",
+  "assetId": "enemy.emberworks.lava-gremlin",
+  "status": "CANDIDATE_ONLY",
+  "createdUtc": "2026-09-07T19:21:18.659Z",
+  "generationReference": {
+    "status": "Owner approved for generation on 2026-09-07; non-canonical target reference",
+    "controls": [
+      "silhouette",
+      "proportion",
+      "surface palette"
+    ],
+    "bytes": 1214780,
+    "sha256": "57207ed340d5f44ae1cbdef100aa40e74a8976bea70e6faae94729db7da6a54d",
+    "driveFileId": "1dGQ_JGx2d932Olo5IQUBlwgqn056nNJq"
+  },
+  "provider": {
+    "name": "Meshy",
+    "model": "meshy-t2",
+    "modelType": "smart-topology",
+    "bodyTaskId": "01a07d44-22dd-7783-8698-aa17147d3545",
+    "requestedTriangles": 10000,
+    "measuredTriangles": 10565,
+    "textures": true,
+    "requestedPose": "t-pose",
+    "bodyConsumedCredits": 15,
+    "balanceBefore": 440,
+    "balanceAfterBody": 425,
+    "currentBatch": "Owner explicitly approved one textured T2 candidate (15), then one rigging pass (5) only if body usable; total ceiling 20.",
+    "rigStatus": "REJECTED_BEFORE_TASK_CREATION",
+    "rigFailure": "POST /v1/rigging returned HTTP 422: Pose estimation failed, please provide a valid model. No rig task ID returned.",
+    "balanceAfterRigRejection": 425,
+    "observedBatchSpend": 15
+  },
+  "sourceCustodyFolderId": "1pDLmhuftVVXxfmLKaSr4S6Qcdw4t5MGY",
+  "generationInputFolderId": "1WPw3tqbb7gMpmd8QPFVmN2CXAalAi3kK",
+  "glb": {
+    "bytes": 3265484,
+    "sha256": "80dec302e5ca094d52d528a3116485e83f88b7aba9866b2f5633a89cceeb015b",
+    "driveFileId": "12uzgkxo_QxkxyXabgqvSrGTIg9s8b4oY"
+  },
+  "fbx": {
+    "bytes": 7207244,
+    "sha256": "9aa7bf911ddadac1756afec130ea3e4c5f3f1f92dc819b05c6854915b22a31ba",
+    "driveFileId": "1FtCzizNLCxZ-ZIIphR_GYTaRzPnKsbDJ"
+  },
+  "sourceGeometry": {
+    "meshes": 1,
+    "skins": 0,
+    "animations": 0
+  },
+  "custodyVerification": "Drive metadata readback confirmed IDs, names, parent folders and byte counts. Hashes are local measurements; no Drive byte roundtrip has been performed.",
+  "rights": "Original generated reference and Owner-authorized paid Meshy API output; not CC0. No production promotion or redistribution acceptance is recorded.",
+  "visualStatus": "Unity neutral FBX views inspected at yaw 0/45/90/180 using U2EnemyCandidateDiagnostics from fb7b42e02317ab73c6637e0055ade3566d39995d. Face, ears, belly and squat silhouette retained. Flattened hands and narrow knees are the strongest defects. Body judged usable enough for conditional rigging; provider rejected pose estimation. No running-game or Owner asset acceptance.",
+  "conventionSource": "https://play.nintendo.com/activities/opinion-polls/minecraft-dungeons-mob-attack-poll/",
+  "conventionReview": "Inspected publisher examples: Redstone Golem broad mass and bright face cues; Skeleton Vanguard clear limb/weapon spacing; Royal Guard compact armored silhouette. Used for readability conventions only, not copied identity or voxel styling.",
+  "approvedReferenceWeakness": "Fine stone seams may require simplification; neutral reference cannot establish dark-cavern gameplay readability.",
+  "relatedIssue": 46,
+  "localRigCandidate": {
+    "status": "CANDIDATE_ONLY_UNITY_DIAGNOSTICS_PASSED",
+    "authoringSha": "aed840116cfd6dfbfec83ba549fd87dfd238cc6b",
+    "tool": "Blender 5.2.0 LTS; tools/blender/author_gremlin_rig.py --landmark-weights",
+    "sourceGeometryPreserved": "Same source vertex and polygon connectivity after uniform 1.429442122598991 scale to 1.1m and translation to ground; assertions run during authoring. No sculpt, remesh, or material replacement in the derived files.",
+    "weighting": "Blender automatic heat solver left all 8236 vertices unweighted. Replaced by explicitly authored anatomical cross-section weights for this body SHA; largest four influences normalized. Source body unchanged.",
+    "jointCount": 23,
+    "deformJointCount": 21,
+    "nonDeformingMarkers": ["Root", "headfront"],
+    "nativeClipVerification": "Strict PASS: bind-only GLB and animated GLB have identical joint set/order/hierarchy/rest pose. Five native actions: idle, walk, bash, hit, death.",
+    "anatomyMeasurement": "Existing pose_anatomy sweep, 16 samples per idle/walk/bash; face and toe forward axes agree on +Z, node/bind drift 0.00005135 percent. Its human shin/thigh reference flags the deliberate squat 0.79 ratio; this measurement does not accept or reject enemy appearance.",
+    "unityVerification": "Unity 6000.3.23f1 PlayMode: U2EnemyCandidatePlayModeTests passed at aed840116cfd6dfbfec83ba549fd87dfd238cc6b on the actual FBX skin, with all five clips moving, stable world root, invariant limb segment lengths and bounded deformed mesh reach. Captured poses were visually inspected after allowing the GPU skin update.",
+    "importedClipSeconds": {"idle": 2.0, "walk": 0.44, "bash": 1.06, "hit": 0.4, "death": 1.2},
+    "visualLimit": "Flat open hands and tightly pinched knees remain the weakest features. Sampled PlayMode diagnostic poses only; continuous gameplay motion, cavern framing, Owner review and shipping promotion remain open.",
+    "workingFolderId": "11HPc5-BuLMQFu0071tH3MEy-nREMkOfF",
+    "files": [
+      {"name": "lava-gremlin-local-v1.glb", "bytes": 3460348, "sha256": "bbd9a966c9d876da5559a425de8069a155c1f9e82d06e173cdd3046c86f9ff05", "driveFileId": "1O_XUXkKP-gO6fpchEBhS11LBTk_sg6xY"},
+      {"name": "lava-gremlin-local-v1-bind.glb", "bytes": 3373072, "sha256": "df4727f0e5263db2d19aa5979f02380aed237bf2fe5928801aa86a7d40ee207f", "driveFileId": "1UIkX4eYgQib0X39MpWpDXHIb9FqwUM9e"},
+      {"name": "lava-gremlin-local-v1.fbx", "bytes": 4404300, "sha256": "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db", "driveFileId": "1Q1z7p5Dv0JMuHDBnomqPe6NSV6MGJGpI"},
+      {"name": "lava-gremlin-local-v1.blend", "bytes": 3631119, "sha256": "80d19ec5190d53891759b42b98434a8e076142d3fbab08c3079f37a75c658485", "driveFileId": "19rqx4KetHyDHQtGfSSSwHxpurFu03wpp"}
+    ],
+    "custodyVerification": "Fresh working-folder listing confirmed four file IDs, names, sizes and folder membership; listed as not shared. Hashes are local measurements, no Drive byte roundtrip. No Owner queue packet or production registration created."
+  }
+}

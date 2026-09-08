@@ -1,0 +1,89 @@
+{
+  "assetId": "hero.gq-hero-v1.right-hand-grip",
+  "status": "PLAYTEST_ADMITTED",
+  "ownerAuthorizedCandidateRepair": true,
+  "productionPromotion": true,
+  "source": {
+    "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx",
+    "sha256": "23c161a6a7045987f54b2dae370d02c665d169aefa0c8b6377ca5ee82c893351",
+    "preserved": true,
+    "licenceBasis": "Existing owner-created paid-plan character; see ASSET-LICENSES.md. Not CC0."
+  },
+  "candidate": {
+    "file": "right-hand-grip-v1.json",
+    "sha256": "f22e1c3d00778f43dd9ecdab18c3d628a15815f2e411aa37bf7c42f9cdb3ea64",
+    "bytes": 1511238,
+    "recipe": "tools/assets/author-hero-grip-candidate.py",
+    "tool": "Blender 5.2.0 LTS",
+    "driveFileId": "1RGVYLEKB7aGcDeS7kxr_Dj4zSUDxh2Dz",
+    "driveWorkingFolderId": "1p24sBX3gMc2iIZQyncbIQEfQqjqyysKK",
+    "driveLifecycle": "20_PRODUCTION_WORKING",
+    "newProviderSpend": 0
+  },
+  "geometry": {
+    "sourceUnityVertices": 8247,
+    "sourceTriangles": 6800,
+    "sourceTrianglesReplacedInRightHand": 356,
+    "candidateUnityVertices": 13587,
+    "candidateTriangles": 12140,
+    "originalVertexAndAttributeBuffersPreserved": true,
+    "originalRigBones": 24,
+    "newRigBones": 0,
+    "minimumSampledDeformationJacobianDeterminant": 0.09767697006464005,
+    "trianglesWithOppositeFacingToDifferentialEstimate": 8,
+    "remainingGeometryConcern": "Narrow bevel faces and a crease at the little-finger base remain inspection-scale limitations; metrics do not grant visual acceptance."
+  },
+  "reference": {
+    "authority": "Three Owner-supplied grip photographs, 2026-09-07",
+    "controls": "Four fingers curl around the hilt at different depths; the thumb rests outside near the index finger; preserve palm and finger thickness.",
+    "personalPhotographsPublished": false
+  },
+  "acceptance": {
+    "exploratoryUnityPlayMode": "PASS on the local implementation before its source checkpoint",
+    "exactCommitUnityVerification": {
+      "nativeSourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
+      "sceneSourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "result": "PASS"
+    },
+    "browserVerification": {
+      "clientSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "serverSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "result": "PASS"
+    },
+    "physicalIPadSafari": "UNKNOWN",
+    "ownerVisualAcceptance": "APPROVED_FOR_PLAYTEST",
+    "reviewEvidence": "docs/reviews/u2-first-fight/hand-grip-evidence.json",
+    "ownerReviewFolderId": "1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn",
+    "ownerDecision": {
+      "date": "2026-09-07",
+      "statement": "Grip approved good work.",
+      "scope": "Integrate the reviewed fixed grip in the playtest; retain the documented base crease and pommel contact as polish items."
+    },
+    "playtestAdmission": {
+      "sourceSha": "113a3623d87fdd94680aea3ba7e00c4d0e2338cc",
+      "unityEditMode": "PASS",
+      "tests": 1,
+      "xmlSha256": "b12cc1dc66b2211c89e254cdfdb575d8443b63157c6d56ef2aac920466ae6bde",
+      "hostedTestRuns": [
+        34175254286,
+        34175252080
+      ],
+      "directorBundleRun": 34175254285,
+      "scope": "Committed prefab and scene use the approved mesh; original source, rig and vertex buffer remain preserved. Prior visual review and Owner decision apply to the unchanged candidate geometry."
+    }
+  },
+  "promotionScope": "Owner-approved fixed grip for the two-level playtest; original source FBX and original Hero prefab preserved.",
+  "playtestAssets": [
+    {
+      "path": "unity/GalaQuest/Assets/GalaQuest/Movement/HeroGrip/HeroRightGrip.asset",
+      "bytes": 2333223,
+      "sha256": "0b67d51901ac71713533b86e9e62552ce7ade812b8e25f334c4dfd6365ea4c40"
+    },
+    {
+      "path": "unity/GalaQuest/Assets/GalaQuest/Movement/HeroGrip/HeroRightGrip.prefab",
+      "bytes": 37754,
+      "sha256": "c1d202a02a8cb734a8c636ef0fd3d87310d7cf1c473a106366b7a979acc05954"
+    }
+  ],
+  "authoringEntryPoint": "GalaQuest.Editor.HeroGripAuthoring.AuthorApproved"
+}

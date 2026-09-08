@@ -7,7 +7,9 @@
         "GalaQuest.Migration.Editor",
         "GalaQuest.Editor",
         "GalaQuest.Gear.Runtime",
-        "GalaQuest.Gear.Editor"
+        "GalaQuest.Gear.Editor",
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework"
     ],
     "includePlatforms": [
         "Editor"

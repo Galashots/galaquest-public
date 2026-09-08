@@ -27,6 +27,8 @@ If the current directory is not a Git checkout, **do not recursively search the 
 - Behaviour fixes should have a red-capable reproduction/test before the fix when practical. Do not tune
   gameplay or prediction constants merely to make hosted CI pass.
 - Run relevant tests from the actual checkout. Do not trust stale test counts copied into docs or chat.
+- For Unity WebGL builds and browser regressions, read
+  `.agents/skills/galaquest-unity-web-playtest/SKILL.md` before choosing the build or test surface.
 
 ## Guidance is part of the product
 

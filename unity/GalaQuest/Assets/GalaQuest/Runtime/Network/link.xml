@@ -1,0 +1,12 @@
+<linker>
+  <!-- Runtime v4 DTOs are populated through Newtonsoft reflection in the WebGL IL2CPP build. -->
+  <assembly fullname="GalaQuest.Runtime">
+    <type fullname="GalaQuest.GalaQuestServerFrame" preserve="all" />
+    <type fullname="GalaQuest.GalaQuestServerPlayer" preserve="all" />
+    <type fullname="GalaQuest.GalaQuestServerEncounter" preserve="all" />
+    <type fullname="GalaQuest.GalaQuestServerHeroCombat" preserve="all" />
+    <type fullname="GalaQuest.GalaQuestServerEnemy" preserve="all" />
+    <type fullname="GalaQuest.GalaQuestServerEnemyAttack" preserve="all" />
+    <type fullname="GalaQuest.GalaQuestServerCombatEvent" preserve="all" />
+  </assembly>
+</linker>

@@ -20,7 +20,9 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
 - `server.mjs` — static file server for `public/`, attaches the game server and forge API.
 - `net/gameServerCore.mjs` — **the authoritative server**: simulation, transport attach, wire
   snapshot, and reward-store wiring all live here. Clients send intent; this decides where
-  everyone actually is.
+  everyone actually is. The transport shares connection identity and rewards across destination
+  simulations. `simulationFor(destinationId)` selects a world; acknowledged travel and `worldEpoch`
+  keep old-scene controls out of the new destination.
 - `net/gameServer.mjs` — a thin compatibility adapter over the core for older single-wolf
   fixtures; it re-exports the core and holds no authority of its own. Change the core, not the
   adapter.
