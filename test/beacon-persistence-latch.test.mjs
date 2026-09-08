@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 test('Beacon persistence latch is set only after a durable write actually succeeds', () => {
   const source = readFileSync(new URL('../net/gameServerCore.mjs', import.meta.url), 'utf8');
   const block = source.match(
-    /if \(!beaconLitRecorded && simulation\.beaconIsLit\(\)\) \{([\s\S]*?)\n    \}/,
+    /if \(simulation\.destinationId === VILLAGE_DESTINATION_ID && !beaconLitRecorded && simulation\.beaconIsLit\(\)\) \{([\s\S]*?)\n      \}/,
   )?.[1] ?? '';
 
   assert.ok(block.includes('recordBeaconLit'), 'could not find the Beacon persistence loop');
