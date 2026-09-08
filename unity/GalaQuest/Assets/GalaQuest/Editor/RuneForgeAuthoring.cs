@@ -60,7 +60,7 @@ namespace GalaQuest.Editor
             var hero = Object.FindObjectsByType<Transform>(FindObjectsSortMode.None)
                 .Single(item => item.name == EmberworksGreyboxBuild.RuntimeHeroName);
             var presenter = runtime.GetComponent<GalaQuestRuneForgePresenter>()
-                            ?? throw new BuildFailedException("Rune Forge presenter is not wired into the runtime root.");
+                            ?? runtime.AddComponent<GalaQuestRuneForgePresenter>();
             presenter.Configure(hero, pocket, prize, content.Windup, content.Impact, content.Victory);
             EditorUtility.SetDirty(presenter);
         }
