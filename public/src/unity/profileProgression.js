@@ -1,6 +1,6 @@
 import { createProfileStore } from '../progression/profiles.js';
 import { resolveHeroStats } from '../progression/heroStats.js';
-import { powerFor } from '../progression/power.js';
+import { powerFor, formatPower, powerChange } from '../progression/power.js';
 import { isProfileFact } from '../progression/facts.js';
 
 // Unity owns accepted-frame/player/epoch validation. This adapter only journals the
@@ -27,7 +27,8 @@ export function createUnityProfileProgression(options = {}) {
       status: 'ok', profileId, factsJson: JSON.stringify(profiles.journalFor(profileId)),
       xp: state.xp, level: stats.level,
       xpIntoLevel: stats.levelState.xpIntoLevel, xpForLevel: stats.levelState.xpForLevel,
-      power: powerFor(stats), maxHp: stats.maxHp, heroDamage: stats.heroDamage,
+      power: powerFor(stats), powerText: formatPower(powerFor(stats)),
+      maxHp: stats.maxHp, heroDamage: stats.heroDamage,
       coins: state.coins, marks: state.marks, shards: state.shards,
       ownedItemIds: state.ownedItemIds, equippedItemIds: state.equippedItemIds,
     };
@@ -55,8 +56,10 @@ export function createUnityProfileProgression(options = {}) {
     if (incoming.some(fact => !savedIds.has(fact.eventId)))
       throw new Error('This device could not save new progress. Keep this page open and check device storage.');
     const after = view(profiles, profileId);
+    const power = powerChange(before.power, after.power);
     return {
       ...after,
+      previousPowerText: power.beforeText, powerDeltaText: power.deltaText,
       gainedXp: hydration ? 0 : Math.max(0, after.xp - before.xp),
       gainedCoins: hydration ? 0 : Math.max(0, after.coins - before.coins),
       gainedMarks: hydration ? 0 : Math.max(0, after.marks - before.marks),

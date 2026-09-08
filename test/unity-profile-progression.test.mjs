@@ -33,6 +33,9 @@ test('own live XP is durable, canonical, isolated from the sibling and celebrate
   assert.equal(result.maxHp,35);
   assert.equal(result.heroDamage,12);
   assert.equal(result.power,powerFor(resolveHeroStats({totalXp:100})));
+  assert.equal(result.powerText,'1,400');
+  assert.equal(result.previousPowerText,'1,000');
+  assert.equal(result.powerDeltaText,'+400');
   assert.equal(result.gainedXp,100);
   assert.equal(result.leveledUp,true);
   const replay=bridge.applyFrame(A,'p1',frame);

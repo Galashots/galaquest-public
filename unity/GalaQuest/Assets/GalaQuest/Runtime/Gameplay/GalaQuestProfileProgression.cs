@@ -62,6 +62,9 @@ namespace GalaQuest
         public long xpIntoLevel;
         public long xpForLevel;
         public double power;
+        public string powerText;
+        public string previousPowerText;
+        public string powerDeltaText;
         public int maxHp;
         public int heroDamage;
         public int coins;

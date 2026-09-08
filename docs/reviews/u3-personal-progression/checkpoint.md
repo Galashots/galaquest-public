@@ -17,11 +17,28 @@ Acceptance requires sibling isolation, replay idempotence, restored post-start e
 stale-world messages, hydration without duplicate reward ceremonies, canonical HUD numbers, and
 running-game inspection. Physical iPad Safari acceptance remains an Owner gate.
 
-Learning encounters, gear asset admission/equipment presentation, companion admission, full Emberworks
-content and Sunroot implementation remain sequential follow-ups. The latest personalized curriculum
+Learning encounters, gear asset admission/equipment presentation, companion admission and full Emberworks
+content remain separately scoped first-adventure follow-ups. Sunroot is outside the current goal.
+The latest personalized curriculum
 direction is recorded in Issue #148; this package does not invent learning content or change it.
 No provider spend, asset promotion or merge is implied. The Owner's pause after all hub/Emberworks
 pushes and before any Sunroot implementation remains in force.
+
+### Amended implementation goal: Hub/Camp + Emberworks only
+
+The Owner explicitly amended the earlier two-adventure goal during checkpoint 2. The current
+implementation goal is **Hub/Camp + Emberworks only**, including the current HUD and selected
+first-adventure systems/content. Older persistent goal text does not authorize Sunroot work.
+Continue only work required for a useful, coherent, reviewable Hub + Emberworks experience.
+Do not begin or scaffold Sunroot scenes, enemies,
+encounters, quests, assets, learning content, gameplay systems, or generalization justified only by
+that future adventure. Reuse is appropriate when current Hub/Emberworks work actually requires it.
+
+At a useful integrated checkpoint, stop and provide the exact branch/PR/SHA stack, actual playable
+flow, running Unity/WebGL evidence, remaining physical-iPad/Owner gates, unresolved visual/content/
+product weaknesses, convergence/debt, lessons from Emberworks, and 2–3 materially different next
+options. Wait for Owner direction; Sunroot is not the automatic next package. Merge, PR closure,
+provider spend and asset promotion still require their separate current authority.
 
 ## Initial evidence
 
@@ -60,3 +77,21 @@ Runtime source: **`e662580838d42e88b16b9671b249ff0f3f4012e9`**.
   hosted run. Hosted validation for this checkpoint must be read independently.
 - The new skill passes the skill validator. Generated scaffold line endings were normalized in the
   evidence follow-up. No WebGL build or running-game reward/HUD acceptance is claimed at checkpoint 1.
+
+Hosted required unit run **34185185260 PASS** at evidence head
+`6738142c1d4677adb460767ffd03959c6c4de920` (same runtime source as checkpoint 1).
+
+## Checkpoint 2 presentation convention
+
+Keep GalaQuest's existing top-left hero identity, group health with level progress, use a prominent
+amber POWER number, and reserve the centre/bottom for play and touch controls. Reward and level-up
+notices are brief, non-blocking, personal, and absent during history hydration.
+
+References actually viewed before layout: the current camp screenshot at `931919b`, plus three
+official examples: Square Enix's [parameter bar](https://lds-img.finalfantasyxiv.com/game_manual/eu/24/fd90d3f83bfef48a6723179e0ca88b6f99a402.jpg)
+groups labeled HP and XP; its [full HUD view](https://lds-img.finalfantasyxiv.com/game_manual/eu/d0/54a883f6a4e09446438335793f502e6526a493.jpg)
+keeps identity and supporting information at the perimeter; Nintendo's
+[Age of Calamity fire-rod gameplay](https://www.nintendo.com/au/news-and-articles/a-beginners-guide-to-hyrule-warriors-age-of-calamity/)
+keeps the level/EXP read compact while combat occupies the centre. These establish conventions,
+not GalaQuest art direction. Current generated screenshots remain producer-review work, not accepted
+visuals. Avoid inheriting the reference MMO's dense text or the action game's tiny XP labels.

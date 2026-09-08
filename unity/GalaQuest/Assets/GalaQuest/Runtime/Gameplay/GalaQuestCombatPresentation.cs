@@ -29,6 +29,7 @@ namespace GalaQuest
         public int EnemyViewCount => enemies.Count;
         public int RemoteHeroCount => companions.Count;
         public int LocalHealth => self?.hp ?? 0;
+        public int LocalMaxHealth => self?.maxHp ?? 0;
 
         private sealed class EnemyView
         {
@@ -263,7 +264,8 @@ namespace GalaQuest
             if (self == null) return;
             textStyle ??= new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             textStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 35f), 16, 26);
-            DrawHealth(new Rect(20, 94, 190, 24), self.hp, self.maxHp, new Color(.35f, .86f, .5f));
+            if (GetComponent<GalaQuestHeroHud>() == null)
+                DrawHealth(new Rect(20, 94, 190, 24), self.hp, self.maxHp, new Color(.35f, .86f, .5f));
             if (self.downSeconds >= 0) GUI.Label(new Rect(Screen.width / 2f - 160, Screen.height * .35f, 320, 50), "Back on your feet in a moment", textStyle);
             if (Time.unscaledTime < selfHurtUntil)
             {

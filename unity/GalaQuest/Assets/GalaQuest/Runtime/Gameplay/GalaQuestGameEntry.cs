@@ -17,6 +17,7 @@ namespace GalaQuest
         private GalaQuestCombatPresentation combat;
         private GalaQuestDestinationPresentation destinations;
         private GalaQuestProfileProgression progression;
+        private GalaQuestHeroHud hud;
 
         public void ConfigureInitialDestination(string destinationId) => initialDestination = destinationId;
 
@@ -32,6 +33,9 @@ namespace GalaQuest
             destinations = GetComponent<GalaQuestDestinationPresentation>();
             progression = GetComponent<GalaQuestProfileProgression>();
             if (progression == null) progression = gameObject.AddComponent<GalaQuestProfileProgression>();
+            hud = GetComponent<GalaQuestHeroHud>();
+            if (hud == null) hud = gameObject.AddComponent<GalaQuestHeroHud>();
+            progression.Changed += hud.PresentReward;
             profileSource.Selected += HandleSelected;
             profileSource.Failed += HandleProfileFailure;
         }
@@ -80,19 +84,17 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            var width = Mathf.Min(360f, Screen.width - 32f);
-            var rect = new Rect(16f, 16f, width, 66f);
-            GUI.Box(rect, string.Empty);
             var destination = session?.DestinationId ?? initialDestination;
             var place = destination == GalaQuestProtocolV4.HomeHubDestinationId ? "CAMP" : "EMBERWORKS";
-            GUI.Label(new Rect(30f, 24f, width - 28f, 22f), $"{place} · {profileName}");
-            GUI.Label(new Rect(30f, 48f, width - 28f, 22f), progression?.Error ?? connectionStatus);
+            hud?.Draw(profileName, place, connectionStatus, progression, combat,
+                session != null && !string.IsNullOrEmpty(session.PlayerId) && !session.IsTravelling);
         }
 
         private void OnDestroy()
         {
             shuttingDown = true;
             CancelInvoke();
+            if (progression != null && hud != null) progression.Changed -= hud.PresentReward;
             if (profileSource != null)
             {
                 profileSource.Selected -= HandleSelected;
