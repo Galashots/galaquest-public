@@ -28,9 +28,11 @@ test('Meshy image-to-3D preflight is fully offline unless --go is explicit', () 
     // The preflight only packages bytes into the request. A real PNG is unnecessary for proving the
     // credential/network boundary, and avoiding an image fixture keeps this gate tiny.
     writeFileSync(reference, Buffer.from('offline-reference-fixture'));
-    const result = run('tools/meshy/image_to_3d.mjs', [reference, join(dir, 'out'), '--polycount', '7000']);
+    const result = run('tools/meshy/image_to_3d.mjs', [reference, join(dir, 'out'), '--polycount', '7000',
+      '--pose', 't-pose', '--key-file', join(dir, 'missing-secret')]);
     assertOfflineDryRun(result, 'image-to-3D');
     assert.match(result.stdout, /"target_polycount": 7000/);
+    assert.match(result.stdout, /"pose_mode": "t-pose"/);
     assert.match(result.stdout, /<data uri, \d+ chars>/);
     assert.doesNotMatch(result.stdout, /data:image\/png;base64,[A-Za-z0-9+/=]{8}/,
       'the full image data URI is redacted from logs');
@@ -40,7 +42,8 @@ test('Meshy image-to-3D preflight is fully offline unless --go is explicit', () 
 });
 
 test('Meshy rig preflight is fully offline unless --go is explicit', () => {
-  const result = run('tools/meshy/rig_character.mjs', ['body-task-123', 'tmp/unused', '--height', '2.2']);
+  const result = run('tools/meshy/rig_character.mjs', ['body-task-123', 'tmp/unused', '--height', '2.2',
+    '--key-file', 'missing-secret']);
   assertOfflineDryRun(result, 'rigging');
   assert.match(result.stdout, /"input_task_id": "body-task-123"/);
   assert.match(result.stdout, /"height_meters": 2.2/);

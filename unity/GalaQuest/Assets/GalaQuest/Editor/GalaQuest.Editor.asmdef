@@ -2,9 +2,11 @@
     "name": "GalaQuest.Editor",
     "rootNamespace": "GalaQuest.Editor",
     "references": [
+        "GalaQuest.Gear.Runtime",
         "GalaQuest.Runtime",
         "GalaQuest.Migration.Runtime",
-        "Unity.RenderPipelines.Universal.Runtime"
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

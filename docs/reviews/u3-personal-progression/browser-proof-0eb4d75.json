@@ -1,0 +1,142 @@
+{
+  "clientSha": "0eb4d75d33291c756f5a5de152859f4b554abf98",
+  "serverSha": "0eb4d75d33291c756f5a5de152859f4b554abf98",
+  "capturedAt": "2026-09-08T05:10:48.238Z",
+  "scope": "Two isolated desktop Chrome contexts using real keyboard and emulated touch input",
+  "command": "node tools/unity-playtest/travel.mjs <candidate-build-manifest> -final --progression",
+  "result": "PASS",
+  "browserErrors": 0,
+  "checks": [
+    "camp",
+    "heldArrival",
+    "separated",
+    "wounded",
+    "returned",
+    "siblingArrival",
+    "reunion",
+    "reconnected",
+    "earned",
+    "earnedJournal",
+    "finalCamp",
+    "campEdgeOrbit",
+    "reloadFirst",
+    "reloadSecond"
+  ],
+  "progression": {
+    "earned": {
+      "xp": 115,
+      "level": 2,
+      "power": 1400,
+      "powerText": "1,400",
+      "maxHp": 35,
+      "heroDamage": 12,
+      "gainedXp": 20,
+      "leveledUp": true
+    },
+    "restoredFirst": {
+      "xp": 115,
+      "level": 2,
+      "power": 1400,
+      "powerText": "1,400",
+      "maxHp": 35,
+      "heroDamage": 12,
+      "gainedXp": 0,
+      "leveledUp": false
+    },
+    "restoredSibling": {
+      "xp": 0,
+      "level": 1,
+      "power": 1000,
+      "powerText": "1,000",
+      "maxHp": 30,
+      "heroDamage": 10,
+      "gainedXp": 0,
+      "leveledUp": false
+    }
+  },
+  "journalFacts": 2,
+  "build": {
+    "flavor": "LOCAL_CANDIDATE_REVIEW",
+    "productionPromotion": false,
+    "files": [
+      {
+        "name": "GalaQuestWebGL.data",
+        "bytes": 20228725,
+        "sha256": "abd7417c397f241b0d42af8eaf36c46001e028705d85eb4d5de4381006bf1058"
+      },
+      {
+        "name": "GalaQuestWebGL.framework.js",
+        "bytes": 482116,
+        "sha256": "cf52c9671f0b81d550b54b1548c7e9547065614c2a02258f99b61be92929007d"
+      },
+      {
+        "name": "GalaQuestWebGL.loader.js",
+        "bytes": 26983,
+        "sha256": "53c3337cddcdb49c5e8c30898762f72826a7d671a7665a9dbfb2fc27ca918b9a"
+      },
+      {
+        "name": "GalaQuestWebGL.wasm",
+        "bytes": 55097400,
+        "sha256": "febc291e4cee92f64576bb8db5d6bbd9cdb8f6681fc0f9aaefe0929524ea3706"
+      }
+    ]
+  },
+  "screenshots": [
+    {
+      "name": "level-up-0eb4d75.png",
+      "bytes": 137163,
+      "sha256": "69af87c92934462c18a22a37a747baf4b65f056bb024cd2a223672fdf59ed10e"
+    },
+    {
+      "name": "restored-camp-0eb4d75.png",
+      "bytes": 94530,
+      "sha256": "a75b2fdc0c884bfad754e7a3474a4136dee65a021b16dbf824b4a4391f16a764"
+    },
+    {
+      "name": "sibling-0eb4d75.png",
+      "bytes": 95142,
+      "sha256": "fc97f9310a1194f908e3f7f3277894fd9f149e6773b67f817ceb3118a1e73c83"
+    }
+  ],
+  "physicalIPadAcceptance": "UNKNOWN",
+  "ownerVisualAcceptance": "UNKNOWN",
+  "consoleErrorAudit": {
+    "clientSha": "0eb4d75d33291c756f5a5de152859f4b554abf98",
+    "serverSha": "12cda93c28fb26e8eeeb1e7d601fe184ead73bbf",
+    "capturedAt": "2026-09-08T05:21:40.554Z",
+    "result": "PASS",
+    "checks": [
+      "camp",
+      "heldArrival",
+      "separated",
+      "wounded",
+      "returned",
+      "siblingArrival",
+      "reunion",
+      "reconnected",
+      "earned",
+      "earnedJournal",
+      "finalCamp",
+      "campEdgeOrbit",
+      "reloadFirst",
+      "reloadSecond"
+    ],
+    "browserErrors": 0,
+    "errorChannels": [
+      "Runtime.exceptionThrown",
+      "Log.entryAdded:error",
+      "Runtime.consoleAPICalled:error"
+    ],
+    "runtimeDiff": {
+      "from": "0eb4d75d33291c756f5a5de152859f4b554abf98",
+      "to": "12cda93c28fb26e8eeeb1e7d601fe184ead73bbf",
+      "paths": [
+        "public",
+        "net",
+        "unity",
+        "tools/runtime-test/owned-server.mjs"
+      ],
+      "result": "EMPTY"
+    }
+  }
+}

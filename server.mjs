@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
+import { promisify } from 'node:util';
+import { brotliDecompress } from 'node:zlib';
 
 import { attachGameServer } from './net/gameServer.mjs';
 import { handleForgeApiRequest } from './net/forgeApi.mjs';
@@ -11,9 +13,12 @@ import { handleRegistryApiRequest } from './net/registryApi.mjs';
 export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
 export const PUBLIC_DIR = join(HERE, 'public');
+export const UNITY_WEB_BUILD_DIR = join(HERE, 'unity', 'GalaQuest', 'Builds', 'GalaQuestWebGL');
+const decompressBrotli = promisify(brotliDecompress);
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
+  '.data': 'application/octet-stream',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.html': 'text/html; charset=utf-8',
@@ -23,6 +28,7 @@ const CONTENT_TYPES = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
+  '.wasm': 'application/wasm',
 };
 
 function safePath(requestUrl) {
@@ -34,7 +40,22 @@ function safePath(requestUrl) {
   return full;
 }
 
-export function createRuntimeServer() {
+function safeUnityWebPath(requestUrl, buildRoot) {
+  const pathname = new URL(requestUrl, 'http://runtime.local').pathname;
+  if (pathname !== '/unity' && pathname !== '/unity/' && !pathname.startsWith('/unity/')) {
+    return undefined;
+  }
+
+  const suffix = pathname === '/unity' ? '' : pathname.slice('/unity/'.length);
+  const decoded = decodeURIComponent(suffix);
+  const relative = decoded.length === 0 ? 'index.html' : normalize(decoded).replace(/^[/\\]+/, '');
+  const full = resolve(buildRoot, relative);
+  if (full !== buildRoot && !full.startsWith(buildRoot + sep)) return null;
+  return full;
+}
+
+export function createRuntimeServer(options = {}) {
+  const unityWebBuildDir = resolve(options.unityWebBuildDir ?? UNITY_WEB_BUILD_DIR);
   return createServer(async (request, response) => {
     try {
       // The Asset Forge API is same-origin with the game so generated model bytes can move directly
@@ -53,7 +74,8 @@ export function createRuntimeServer() {
         return;
       }
 
-      const fullPath = safePath(request.url ?? '/');
+      const unityPath = safeUnityWebPath(request.url ?? '/', unityWebBuildDir);
+      const fullPath = unityPath === undefined ? safePath(request.url ?? '/') : unityPath;
       if (!fullPath) {
         response.writeHead(403);
         response.end('forbidden');
@@ -61,12 +83,21 @@ export function createRuntimeServer() {
       }
 
       const body = await readFile(fullPath);
-      response.writeHead(200, {
+      const unityBrotli = unityPath !== undefined && fullPath.toLowerCase().endsWith('.br');
+      const acceptsBrotli = /(?:^|,)\s*br\s*(?:;|,|$)/i.test(request.headers['accept-encoding'] ?? '');
+      // Browsers only negotiate Brotli on secure contexts. The physical-iPad route is intentionally
+      // plain HTTP on the local Wi-Fi, so serve the same build bytes decompressed when `br` was not
+      // offered instead of handing Safari an encoding it did not agree to decode.
+      const responseBody = unityBrotli && !acceptsBrotli ? await decompressBrotli(body) : body;
+      const contentPath = unityBrotli ? fullPath.slice(0, -3) : fullPath;
+      const headers = {
         'cache-control': 'no-store',
-        'content-length': body.byteLength,
-        'content-type': CONTENT_TYPES[extname(fullPath).toLowerCase()] ?? 'application/octet-stream',
-      });
-      response.end(request.method === 'HEAD' ? undefined : body);
+        'content-length': responseBody.byteLength,
+        'content-type': CONTENT_TYPES[extname(contentPath).toLowerCase()] ?? 'application/octet-stream',
+      };
+      if (unityBrotli && acceptsBrotli) headers['content-encoding'] = 'br';
+      response.writeHead(200, headers);
+      response.end(request.method === 'HEAD' ? undefined : responseBody);
     } catch (error) {
       const notFound = error?.code === 'ENOENT' || error?.code === 'EISDIR';
       response.writeHead(notFound ? 404 : 500, { 'content-type': 'text/plain; charset=utf-8' });

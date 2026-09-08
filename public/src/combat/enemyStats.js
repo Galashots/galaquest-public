@@ -51,6 +51,9 @@ const ALPHA_WOLF_LEVEL_STATS = Object.freeze({
 // and combat/encounter.js both need "every kind this game knows about", and two hand-kept copies of
 // that set is exactly the drift this repo's own guidance ledger is about.
 const LEVEL_STATS_BY_KIND = Object.freeze({
+  'lava-gremlin': Object.freeze({
+    1: Object.freeze({ level: 1, maxHp: 30, biteDamage: 6, speed: 1.1 }),
+  }),
   wolf: WOLF_LEVEL_STATS,
   'ember-wolf': EMBER_WOLF_LEVEL_STATS,
   'frost-wolf': FROST_WOLF_LEVEL_STATS,
@@ -89,6 +92,7 @@ export function enemyStatsForLevel(kind, level) {
 // stays wired to this table's 'wolf' row, so every existing reader (including the test that times a
 // Wolf's own respawn) keeps reading the exact same number under the exact same name.
 const ENEMY_KIND_RESPAWN_SECONDS = Object.freeze({
+  'lava-gremlin': 12,
   wolf: 10,
   'ember-wolf': 10,
   'frost-wolf': 12,
@@ -116,6 +120,7 @@ export function respawnSecondsForKind(kind) {
 // worth a full Hero level on its own (progression/levels.js's own BASE_XP_TO_ADVANCE), which is the
 // whole point of a rare, dangerous kill.
 const KILL_XP_BY_KIND = Object.freeze({
+  'lava-gremlin': 20,
   wolf: 20,
   'ember-wolf': 30,
   'frost-wolf': 40,

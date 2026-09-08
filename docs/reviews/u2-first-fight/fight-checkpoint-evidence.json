@@ -1,0 +1,227 @@
+{
+  "sourceSha": "4c5db35ec1eb1d31f38c21a7495cb58c0405d139",
+  "clientSha": "4c5db35ec1eb1d31f38c21a7495cb58c0405d139",
+  "serverSha": "4c5db35ec1eb1d31f38c21a7495cb58c0405d139",
+  "build": {
+    "sourceSha": "4c5db35ec1eb1d31f38c21a7495cb58c0405d139",
+    "buildFlavor": "LOCAL_CANDIDATE_REVIEW",
+    "candidateFbxSha256": "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db",
+    "candidateTextureSha256": "9fb9eb5758673cbc3670ad95d1b2e2b9bf075a0699d68aa119ab334f3847d812",
+    "productionPromotion": false,
+    "sceneRecipe": "U2CombatPreview",
+    "files": [
+      {
+        "name": "GalaQuestWebGL.data.br",
+        "bytes": 9483365,
+        "sha256": "58e138b0198dbfde5ed5817fd4c5f1187df85ea641d1d99682d061df5a32d86c"
+      },
+      {
+        "name": "GalaQuestWebGL.framework.js.br",
+        "bytes": 79874,
+        "sha256": "2d8c67cae90d771b6ba5ba443ee80498d159cf4a404badbdcc789d1c432ce969"
+      },
+      {
+        "name": "GalaQuestWebGL.loader.js",
+        "bytes": 26983,
+        "sha256": "13a776ee1c0ae2bd17defd043fb2dac3ccee43fed2fe0abeb6a65e482ed84371"
+      },
+      {
+        "name": "GalaQuestWebGL.wasm.br",
+        "bytes": 9449997,
+        "sha256": "9e1bb3d03e1c0d345592cb8988c575458e1c0f864f1bda2213e9798ab7320822"
+      }
+    ]
+  },
+  "browser": {
+    "result": "PASS",
+    "environment": "Two isolated Chrome contexts, touch input enabled; desktop Windows. Not physical Safari.",
+    "firstPlayerStrikes": [
+      {
+        "hp": 20,
+        "hero": {
+          "hp": 18,
+          "maxHp": 30,
+          "swingSeconds": -1,
+          "cooldown": 0,
+          "downSeconds": -1,
+          "protectionSeconds": 0,
+          "specialSeconds": -1,
+          "specialCooldown": 0
+        },
+        "mode": "bite"
+      },
+      {
+        "hp": 10,
+        "hero": {
+          "hp": 12,
+          "maxHp": 30,
+          "swingSeconds": -1,
+          "cooldown": 0,
+          "downSeconds": -1,
+          "protectionSeconds": 0,
+          "specialSeconds": -1,
+          "specialCooldown": 0
+        },
+        "mode": "bite"
+      }
+    ],
+    "siblingFinalEnemy": [
+      {
+        "enemyId": "emberworks-gremlin-1",
+        "hp": 0
+      }
+    ],
+    "heldRecovery": {
+      "predicted": {
+        "x": 0,
+        "z": 4
+      },
+      "authoritative": {
+        "x": 0,
+        "z": 4
+      },
+      "drift": 0,
+      "snapped": false,
+      "atMs": 1788819170361
+    },
+    "audio": {
+      "mutedBefore": {
+        "starts": 52,
+        "states": [
+          "running"
+        ]
+      },
+      "mutedAfter": {
+        "starts": 52,
+        "states": [
+          "running"
+        ]
+      },
+      "unmuted": {
+        "starts": 54,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "rejoinedPlayerIds": [
+      "p1",
+      "p3"
+    ],
+    "errors": []
+  },
+  "unityGraphicsPlayMode": {
+    "result": "PASS",
+    "total": 7,
+    "failed": 0,
+    "xmlSha256": "f3fd74ec122a43dbc5b9bd0b9151951438d05215ca2dc801b96ec176ff8e5a06"
+  },
+  "nodeLocal": {
+    "result": "FAIL",
+    "passed": 2285,
+    "failed": 1,
+    "skipped": 3,
+    "exitCode": 1,
+    "knownFailure": "lantern-xp-award.test.mjs temporary-folder rmSync Windows EPERM"
+  },
+  "hosted": [
+    {
+      "id": 34164656694,
+      "result": "PASS"
+    },
+    {
+      "id": 34164654151,
+      "result": "PASS"
+    },
+    {
+      "id": 34164656696,
+      "result": "PASS"
+    }
+  ],
+  "images": [
+    {
+      "file": "fight-browser-warning.png",
+      "bytes": 113908,
+      "sha256": "2feea24ca136238569316bc3b3c069299d117b3999d1245dbb073503afc8288e"
+    },
+    {
+      "file": "fight-browser-strike.png",
+      "bytes": 110926,
+      "sha256": "f41080ea1fea26a9c0830854b6feca2280590a903cd7d119b13357259453556b"
+    },
+    {
+      "file": "fight-unity-open-grip.png",
+      "bytes": 288326,
+      "sha256": "d1820b7e3fcc88246734febfbdaadccb63349484faf28194c83e070fade32944"
+    }
+  ],
+  "limits": [
+    "No Owner acceptance or asset promotion",
+    "No physical-iPad Safari test",
+    "AudioContext and mute routing verified; audible sound quality not reviewed",
+    "Sampled stills do not prove continuous animation quality or impact-frame alignment",
+    "Hero open grip remains unresolved; repair-candidate permission pending"
+  ],
+  "cameraFollowup": {
+    "clientSha": "4c5db35ec1eb1d31f38c21a7495cb58c0405d139",
+    "serverSha": "92fa4ca7649e24fe4ed3075cf91afed6bd7dc603",
+    "sourceDifference": "The server checkout differs from the built client source only in review documentation and images.",
+    "result": "PASS",
+    "cameraStart": {
+      "predicted": {
+        "x": -3.204273223876953,
+        "z": 6.909580707550049
+      },
+      "authoritative": {
+        "x": -3.2019999027252197,
+        "z": 6.909999847412109
+      },
+      "drift": 0.0025686451699584723,
+      "snapped": false,
+      "atMs": 1788819793663
+    },
+    "input": "Real touch drag in the free camera region, then attack-button taps.",
+    "producerObservation": "Orbit beside the fight wall exposes the hero and blade sweep. No camera code change was made.",
+    "motionSamples": [
+      {
+        "targetMs": 60,
+        "capturedAtMs": 202,
+        "swingSecondsBeforeCapture": 0.167
+      },
+      {
+        "targetMs": 250,
+        "capturedAtMs": 402,
+        "swingSecondsBeforeCapture": 0.291
+      },
+      {
+        "targetMs": 520,
+        "capturedAtMs": 668,
+        "swingSecondsBeforeCapture": 0.54
+      },
+      {
+        "targetMs": 800,
+        "capturedAtMs": 956,
+        "swingSecondsBeforeCapture": 0.911
+      },
+      {
+        "targetMs": 1200,
+        "capturedAtMs": 1351,
+        "swingSecondsBeforeCapture": 1.284
+      }
+    ],
+    "limits": "Sample timestamps bracket screenshot capture, not a frame-accurate animation measurement. Desktop Chrome, not physical Safari.",
+    "errors": [],
+    "images": [
+      {
+        "file": "fight-browser-orbit.png",
+        "bytes": 123322,
+        "sha256": "f32fdd74209dd71a68cec2531313823364767015652262a58642376b25497c5f"
+      },
+      {
+        "file": "fight-browser-orbit-slash.png",
+        "bytes": 126362,
+        "sha256": "69c46f1c8b87e1323cc117e4edbd33846e46b98821980aca228acf33b613a54f"
+      }
+    ]
+  }
+}

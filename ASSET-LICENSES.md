@@ -43,6 +43,26 @@ finished in Blender by the owner. Redistribution rests on the owner's rights in 
 together with the paid-plan terms in force at generation time — **not** on CC0 and **not** on the
 source licence in `NOTICE`.
 
+### Unity hero locomotion derivatives
+
+`unity/GalaQuest/Assets/GalaQuest/Movement/Animation/HeroIdle.anim`, `HeroWalk.anim`, and
+`HeroRun.anim` are looping derivatives of the existing Hero FBX's idle, walking, and running clips.
+They retain the source curves and enable looping; no new animation generation or retargeting is used.
+The FBX derives from `public/assets/hero/hero_lod1_ironwood_atlas.glb`, as recorded in
+`unity/GalaQuest/Assets/GalaQuest/Migration/VisibleArmorProvenance.json`; its measured SHA-256 is
+`23c161a6a7045987f54b2dae370d02c665d169aefa0c8b6377ca5ee82c893351`.
+These derivatives carry the character asset's owner-created paid-plan basis above, not CC0.
+`HeroLocomotionAuthoring.Wire` records their reproducible authoring path in the Unity Editor code.
+
+### Unity fixed-grip Hero derivative
+
+`unity/GalaQuest/Assets/GalaQuest/Movement/HeroGrip/` contains the Owner-approved fixed right-hand
+grip mesh and prefab, derived from the same Hero FBX and retaining its 24-bone rig. The hand recipe
+is `tools/assets/author-hero-grip-candidate.py`; Unity admission uses `HeroGripAuthoring.AuthorApproved`.
+The [receipt](docs/asset-production/HERO_RIGHT_GRIP_CANDIDATE_2026-09-07.json) pins source/candidate
+hashes and the Owner's playtest approval. These derivatives inherit the paid-plan character basis
+above, not CC0. The personal grip reference photographs are not redistributed.
+
 ## Gear — owner-created, generated on a paid plan
 
 `public/assets/gear/**/*.glb` (including `candidates/`)

@@ -44,6 +44,16 @@ const ALPHA_WOLF_TINT_COLOR = 0x1c1c22;
 const ALPHA_WOLF_EYE_COLOR = 0xff3b30;
 
 const PRESENTATION_BY_KIND = Object.freeze({
+  // Emberworks' Unity body has its own candidate/qualification path. These are shared label
+  // and colour metadata, not permission to substitute the Village wolf mesh for this creature.
+  'lava-gremlin': Object.freeze({
+    displayName: 'Lava Gremlin',
+    tintColor: 0xffffff,
+    scaleMultiplier: 1,
+    glowEyes: false,
+    eyeColor: null,
+    menacing: false,
+  }),
   wolf: Object.freeze({
     displayName: 'Wolf',
     tintColor: WOLF_TINT_COLOR,

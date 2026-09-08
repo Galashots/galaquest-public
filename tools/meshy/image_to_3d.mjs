@@ -18,7 +18,10 @@ const args = process.argv.slice(2);
 const [imagePath, outDir] = args;
 const go = args.includes('--go');
 const polycount = args.includes('--polycount') ? Number(args[args.indexOf('--polycount') + 1]) : 300;
-if (!imagePath || !outDir || !Number.isFinite(polycount) || polycount <= 0) {
+const keyPath = args.includes('--key-file') ? args[args.indexOf('--key-file') + 1] : new URL('../../.local/meshy/api-key.txt', import.meta.url);
+const pose = args.includes('--pose') ? args[args.indexOf('--pose') + 1] : null;
+if (!imagePath || !outDir || !Number.isFinite(polycount) || polycount < 100 || polycount > 15000
+    || !keyPath || (pose !== null && !['t-pose', 'a-pose'].includes(pose))) {
   console.error('usage: node tools/meshy/image_to_3d.mjs <image.png> <outdir> [--polycount N] [--go]');
   process.exit(2);
 }
@@ -32,6 +35,8 @@ const body = {
   target_polycount: polycount,
   should_texture: true,
   texture_resolution: '2k',
+  target_formats: ['glb', 'fbx'],
+  ...(pose ? { pose_mode: pose } : {}),
 };
 
 console.log(`image: ${basename(imagePath)} (${(imageBytes.length / 1024).toFixed(0)} KiB)`);
@@ -43,9 +48,9 @@ if (!go) {
 
 let key;
 try {
-  key = readFileSync(new URL('../../.local/meshy/api-key.txt', import.meta.url), 'utf8').trim();
+  key = readFileSync(keyPath, 'utf8').trim();
 } catch {
-  console.error('Meshy API key not found at .local/meshy/api-key.txt');
+  console.error('Meshy API key file is unavailable');
   process.exit(2);
 }
 if (!key) {
@@ -68,8 +73,10 @@ const balance = () => api('/v1/balance').then((result) => result.balance);
 
 const before = await balance();
 console.log(`balance before: ${before}`);
+mkdirSync(outDir, { recursive: true });
 const { result: taskId } = await api('/v1/image-to-3d', { method: 'POST', body: JSON.stringify(body) });
 console.log(`task: ${taskId}`);
+writeFileSync(`${outDir}/submission.json`, JSON.stringify({ taskId, before, model: body.ai_model, polycount }, null, 2));
 
 let task;
 for (let i = 0; i < 240; i += 1) {
@@ -101,6 +108,11 @@ const glb = Buffer.from(await fetch(glbUrl).then((res) => {
 }));
 writeFileSync(`${outDir}/${stem}.glb`, glb);
 writeFileSync(`${outDir}/task.json`, JSON.stringify(task, null, 2));
+if (task.model_urls?.fbx) {
+  const response = await fetch(task.model_urls.fbx);
+  if (!response.ok) throw new Error(`FBX download failed: ${response.status}`);
+  writeFileSync(`${outDir}/${stem}.fbx`, Buffer.from(await response.arrayBuffer()));
+}
 
 // Inspect the GLB itself rather than importing into a DCC that may synthesize helper geometry.
 const jsonLen = glb.readUInt32LE(12);
