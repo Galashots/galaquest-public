@@ -1,0 +1,259 @@
+{
+  "clientSha": "6ce52e1cac04b0d66fdf13a62caa6146c59673b5",
+  "serverSha": "3939c64f38475290cde3a3a28f5176d35b98006a",
+  "logs": [
+    {
+      "path": ".local/convergence/cp0-targeted.log",
+      "bytes": 6135,
+      "sha256": "af4fe6b09235a9e5af35059353bbd15628d4cb048553f51a211fca6b296b6d21"
+    },
+    {
+      "path": ".local/convergence/cp1-red.log",
+      "bytes": 3501,
+      "sha256": "737d7d063b52bc9ac3a2637e86cf962057ded92b2501a95afe2861f76dc8ddbf"
+    },
+    {
+      "path": ".local/convergence/cp1-green.log",
+      "bytes": 4702,
+      "sha256": "cc038e34d6a23255b803bbd493437acc11539489867220d0c49da9f1ddbb6cd1"
+    },
+    {
+      "path": ".local/convergence/cp0-lantern-repro.log",
+      "bytes": 3450,
+      "sha256": "e637a152f4a1e5c130dc4ba33d9493bdd71cfa9d97d964a59892f05034bf02df"
+    },
+    {
+      "path": ".local/convergence/cp2-bridge-red.log",
+      "bytes": 1062,
+      "sha256": "a4f6e4368b80f7850e8e25425d20fc8879b274d60587f987330d22075dfc48ed"
+    },
+    {
+      "path": ".local/convergence/cp2-bridge-green.log",
+      "bytes": 1628,
+      "sha256": "89f6153a457dd14b1614590b2e86c8dd1f64147a29938cebfb3b1112be3b8a09"
+    },
+    {
+      "path": ".local/convergence/cp3-same-room-red.log",
+      "bytes": 1330,
+      "sha256": "53b751e089c116b0aad35487f043dda38d1f14084ed7ce5f8b19523203a00573"
+    },
+    {
+      "path": ".local/convergence/cp3-final-focused.log",
+      "bytes": 8979,
+      "sha256": "5b92318abae8a0abbc74b8764bf32c5fe3623e7d8226504234473edb91ce6905"
+    },
+    {
+      "path": ".local/convergence/guidance-final.log",
+      "bytes": 701,
+      "sha256": "866afe418c10ae8463463fddaedf52e2261dedb96f3dae751ebf7df659770a1f"
+    },
+    {
+      "path": ".local/convergence/final-unit.log",
+      "bytes": 208027,
+      "sha256": "38bae1b280d16c0acdabb68ff88eb95a9e0072396e4df8dfa4b4edadeae0cc7a"
+    },
+    {
+      "path": ".local/convergence/cp3-browser.log",
+      "bytes": 529,
+      "sha256": "8ff8c24ff30ccd57227f952aa9d1e8d8c3593331d22c403d1b2cbd24bd125333"
+    },
+    {
+      "path": ".local/convergence/cp3-build.log",
+      "bytes": 402742,
+      "sha256": "229e26f1bdc7732cb018110fd4f44185306e6db6b568425a73b49204136bbd0e"
+    }
+  ],
+  "unity": [
+    {
+      "path": ".local/convergence/cp2-red.xml",
+      "sha256": "ff414dbef9b10252fe0ffda75e332ba738b4aa953de5f692a3d0ae53dd51cdbd",
+      "summary": {
+        "id": "2",
+        "testcasecount": "10",
+        "result": "Failed(Child)",
+        "total": "10",
+        "passed": "3",
+        "failed": "7",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-09-08 14:13:12Z",
+        "end-time": "2026-09-08 14:13:13Z",
+        "duration": "0.2634264"
+      },
+      "travelTests": [
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.FailedTravelSendCanBeRetriedAndHubUsesItsOwnMovementBounds",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.ImmediateArrivalIsNotLostAndLateOldWorldSnapshotsAreIgnored",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(null)",
+          "result": "Failed",
+          "failure": "  An open socket with no valid travel ack must have bounded recovery\n  Expected: not null\n  But was:  null\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"other\\\",\\\"destinationId\\\":\\\"home-hub\\\",\\\"worldEpoch\\\":1}\")",
+          "result": "Failed",
+          "failure": "  An open socket with no valid travel ack must have bounded recovery\n  Expected: not null\n  But was:  null\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"p1\\\",\\\"destinationId\\\":\\\"emberworks-deep\\\",\\\"worldEpoch\\\":1}\")",
+          "result": "Failed",
+          "failure": "  An open socket with no valid travel ack must have bounded recovery\n  Expected: not null\n  But was:  null\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"p1\\\",\\\"destinationId\\\":\\\"home-hub\\\",\\\"worldEpoch\\\":0}\")",
+          "result": "Failed",
+          "failure": "  An open socket with no valid travel ack must have bounded recovery\n  Expected: not null\n  But was:  null\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"p1\\\",\\\"destinationId\\\":\\\"home-hub\\\",\\\"worldEpoch\\\":2}\")",
+          "result": "Failed",
+          "failure": "  An open socket with no valid travel ack must have bounded recovery\n  Expected: not null\n  But was:  null\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"malformed\")",
+          "result": "Failed",
+          "failure": "  An open socket with no valid travel ack must have bounded recovery\n  Expected: not null\n  But was:  null\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.SupersededSessionClearsPlayWithoutAutomaticallyRetakingTheProfile",
+          "result": "Failed",
+          "failure": "  Automatic reconnect must not fight the newer profile connection\n  Expected: 1\n  But was:  2\n"
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.TravelWaitsForArrivalReleasesControlsAndReconnectsToTheAcknowledgedDestination",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "path": ".local/convergence/cp3-editmode.xml",
+      "sha256": "88bbc0b84e5bf5ff11786c768229f8dbcdf8f54799c359f4bcd1937d3083b3b5",
+      "summary": {
+        "id": "2",
+        "testcasecount": "197",
+        "result": "Skipped:Ignored",
+        "total": "197",
+        "passed": "196",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "1",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-09-08 14:17:16Z",
+        "end-time": "2026-09-08 14:17:30Z",
+        "duration": "14.3437541"
+      },
+      "travelTests": [
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.FailedTravelSendCanBeRetriedAndHubUsesItsOwnMovementBounds",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.ImmediateArrivalIsNotLostAndLateOldWorldSnapshotsAreIgnored",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(null)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"other\\\",\\\"destinationId\\\":\\\"home-hub\\\",\\\"worldEpoch\\\":1}\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"p1\\\",\\\"destinationId\\\":\\\"emberworks-deep\\\",\\\"worldEpoch\\\":1}\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"p1\\\",\\\"destinationId\\\":\\\"home-hub\\\",\\\"worldEpoch\\\":0}\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"{\\\"v\\\":4,\\\"type\\\":\\\"destination-changed\\\",\\\"id\\\":\\\"p1\\\",\\\"destinationId\\\":\\\"home-hub\\\",\\\"worldEpoch\\\":2}\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.MissingOrInvalidArrivalRecoversThroughConfirmedSession(\"malformed\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.SupersededSessionClearsPlayWithoutAutomaticallyRetakingTheProfile",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "GalaQuest.Tests.U3TravelConnectionTests.TravelWaitsForArrivalReleasesControlsAndReconnectsToTheAcknowledgedDestination",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "path": ".local/convergence/cp3-preview.xml",
+      "sha256": "d496a57029abeef6f0eae3125649c10da88521200d99f37a31d82fcf2b583a76",
+      "summary": {
+        "id": "2",
+        "testcasecount": "1",
+        "result": "Passed",
+        "total": "1",
+        "passed": "1",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-09-08 14:18:44Z",
+        "end-time": "2026-09-08 14:19:03Z",
+        "duration": "18.9684017"
+      },
+      "travelTests": []
+    }
+  ],
+  "hosted": {
+    "unit": 34241592834,
+    "director-runtime-bundle": 34241592813
+  },
+  "browser": {
+    "result": "PASS",
+    "checks": [
+      "camp",
+      "heldArrival",
+      "separated",
+      "wounded",
+      "returned",
+      "siblingArrival",
+      "reunion",
+      "reconnected",
+      "earned",
+      "earnedJournal",
+      "finalCamp",
+      "campEdgeOrbit",
+      "reloadFirst",
+      "reloadSecond",
+      "travelAckRecovery",
+      "sameProfileTakeover"
+    ],
+    "errors": []
+  }
+}

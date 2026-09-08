@@ -103,3 +103,116 @@ read from the producer's existing local custody; no candidate was created or pro
 The residual correction changes only the server, its regression, and the browser driver/checkpoint.
 Unity/client source remains identical, so browser evidence will record its client and server SHAs
 separately. The integrity driver also exercises touch movement after ACK-loss recovery.
+
+
+## CP3 final integrated runtime evidence
+
+Draft review surface: [PR #152](https://github.com/Galashots/galaquest-public/pull/152), against main.
+Runtime/server and browser-driver head: `3939c64f38475290cde3a3a28f5176d35b98006a`.
+Unity client/build head: `6ce52e1cac04b0d66fdf13a62caa6146c59673b5`.
+The final evidence-only commit is named by the PR's READY FOR INDEPENDENT REVIEW comment;
+it does not change either tested runtime. Do not relabel the client or server evidence as that commit.
+`git diff --name-only 6ce52e1 3939c64` contains only the server, server test, browser driver,
+checkpoint, README and skill. There is no Unity or public client runtime difference.
+
+| Surface | Exact tested source | Result / evidence |
+| --- | --- | --- |
+| CP0 focused baseline | e86d74d | 61 PASS; no integration regression found on tested seams |
+| F1/F2 red sockets | CP0 plus regression probes | Both FAIL; [actual output](profile-red.txt) |
+| F3 Unity red | unchanged CP0 session plus regression probes | 3 PASS, 7 FAIL; [XML result excerpts](evidence.json) |
+| Focused final Node/session/travel/reward/corpse/bridge | 9f6cf56 server source, identical at 3939c64 | 87 PASS, zero FAIL |
+| Guidance after checklist update | 3939c64 | 7 PASS |
+| Full required local Node | 3939c64 | 2307 PASS, 1 known cleanup FAIL, 3 SKIP; 2311 total |
+| Full Unity EditMode, WebGL target | 6ce52e1 | 196 PASS, zero FAIL, 1 opt-in preview SKIP |
+| Opt-in approved grip/scene preview | 6ce52e1 | 1 PASS, zero FAIL, zero SKIP |
+| Strict non-development WebGL | 6ce52e1 | PASS; [manifest and byte hashes](build-manifest-6ce52e1.json) |
+| Real Unity browser integrity | client 6ce52e1 / server 3939c64 | 16 checks PASS, zero errors; [full report](browser-proof-3939c64.json) |
+| Hosted required unit | 3939c64 | [34241592834 PASS](https://github.com/Galashots/galaquest-public/actions/runs/34241592834) |
+| Director runtime bundle | 3939c64 | [34241592813 PASS](https://github.com/Galashots/galaquest-public/actions/runs/34241592813) |
+
+Exact input/merge heads remain recorded in CP0. First merge commit:
+`5c8fc4c834631b2562c304f7ef0b250537321a3c`; second merge is the CP0 head above.
+Latest live refresh still matches main, #146 and #150. #149's independent travel history is retained
+through #150; no conflicting old PR was rewritten. The final PR comment records another live refresh.
+
+The local Node failure is `test/lantern-xp-award.test.mjs`, restart-test temporary directory removal
+at line 219 through close at line 78: Windows EPERM after the assertions. The same unmodified CP0
+archive reproduces it. Local required unit is therefore FAIL, not an all-green claim; hosted required
+unit is PASS. The broad diagnostic matrix is not a required gate: client-head run
+[34237286910](https://github.com/Galashots/galaquest-public/actions/runs/34237286910) failed multiple
+legacy fit/keeper/loot drivers. Their causes remain unclassified in this bounded package; no claim
+that all are pre-existing. Server-head run 34241592746 was still running when this record was written.
+The final PR comment supplies final-head hosted gate results without chasing unrelated fit/content work.
+
+Commands executed from this worktree (Unity project/results/log arguments were resolved to absolute
+paths; executable was Unity 6000.3.23f1):
+
+```powershell
+node --test test/*.test.mjs
+node --test test/u3-independent-travel.test.mjs test/unity-web-cp1.test.mjs test/unity-profile-progression.test.mjs test/reward-wiring.test.mjs test/corpse-loot.test.mjs test/guidance-integrity.test.mjs
+Unity.exe -batchmode -nographics -projectPath unity/GalaQuest -buildTarget WebGL -runTests -testPlatform EditMode -testResults .local/convergence/cp3-editmode.xml -logFile .local/convergence/cp3-editmode.log
+$env:GQ_U2_GRIP_REVIEW='1'
+Unity.exe -batchmode -nographics -projectPath unity/GalaQuest -buildTarget WebGL -runTests -testPlatform EditMode -testFilter GalaQuest.Tests.U2GripPreviewSceneTests -testResults .local/convergence/cp3-preview.xml -logFile .local/convergence/cp3-preview.log
+Remove-Item Env:GQ_U2_GRIP_REVIEW
+$env:GQ_FAST_REVIEW_BUILD='1'
+Unity.exe -batchmode -quit -projectPath unity/GalaQuest -buildTarget WebGL -executeMethod GalaQuest.Editor.U2CombatPreview.BuildWebGL -logFile .local/convergence/cp3-build.log
+$env:GQ_REVIEW_SERVER_SHA='3939c64f38475290cde3a3a28f5176d35b98006a'
+node tools/unity-playtest/travel.mjs .local/m2/preview-build-6ce52e1-fast.json -integrity --integrity
+```
+
+[Evidence index](evidence.json) records local log paths and SHA-256 hashes, XML counts and travel
+case results. Browser output: `.local/unity-playtest/browser-6ce52e1-integrity/`.
+The strict build is an uncompressed BuildTimes review candidate, not a production/performance build.
+Existing candidate FBX, texture and approved hand-grip inputs were hash verified and reused;
+no provider request, newly qualified asset or promotion occurred.
+
+### Defect disposition and disconfirming evidence
+
+- **F1 CLOSED on tested surfaces.** Real sockets reproduce two live cross-destination avatars before
+  correction and one after. An intentionally open superseded socket cannot move, attack or rejoin.
+  Invalid joins cannot evict a valid session. The residual same-room duplicate settlement snapshot
+  failed at 6ce52e1 and now has a passing regression. Real WebGL takeover removes the old avatar,
+  leaves the old page retired beyond its reconnect interval and lets the replacement travel/play.
+- **F2 CLOSED on tested surfaces.** Meaningful contribution -> live takeover -> resolution earns one
+  durable XP fact and one active-connection event, with zero retired presentations and no reward for
+  an uninvolved sibling. Actual corpse claims transfer intact. Existing contributor ledger and reward
+  store are reused. Real touch combat also proves XP 95 -> 115, level 1 -> 2, POWER 1000 -> 1400,
+  sibling XP 0, reconnect persistence and device-journal restoration against an empty replacement store.
+- **F3 CLOSED on tested surfaces.** Six red-capable Unity cases cover absent, malformed, wrong player,
+  wrong destination, stale epoch and unexpected epoch acknowledgements. A ten-second unscaled timeout
+  uses the existing reconnect seam and last confirmed destination. Correct acknowledgements cancel
+  it; retired callbacks cannot replace state. The built browser harness drops an actual arrival ACK
+  while leaving the socket open, then observes a fresh confirmed Camp session within its 25-second
+  bound and proves keyboard plus touch movement. No destination truth is guessed client-side.
+
+### Running-game inspection and remaining weakness
+
+The producer inspected the actual Camp, level-up, edge-orbit, withheld-ACK, recovered-control,
+retired-session and replacement screenshots. [Camp](01-camp-together.png) and
+[level-up](11-level-up.png) retain the accepted hero/grip and progression presentation.
+[Withheld ACK](14-ack-withheld.png) shows the existing upper-left status and neutral controls;
+[recovered touch movement](15-ack-recovery-controls.png) shows it cleared with normal touch regions
+unobstructed. [Retired page](16-superseded-session.png) explicitly directs play to the newer session;
+[replacement](17-active-replacement.png) is usable in Emberworks. A retired page retains a frozen
+local scene, not a live authoritative avatar.
+
+Strongest remaining product weakness: [the Camp edge orbit](10-camp-edge-orbit.png) can become an
+almost top-down view of mostly empty ground, losing destination readability. The convergence remains
+a small greybox slice, not a completed Hub experience. No camera/content tuning was added here.
+The recovery delay (ten seconds plus reconnect) is noticeable and rejoins at the normal destination
+spawn rather than preserving an unconfirmed transient pose. Its purpose is integrity and eventual
+usability when the server is reachable, not seamless/offline travel.
+
+**UNKNOWN / not accepted:** physical iPad Safari touch/re-grab and interruption behavior; optimized
+build performance; browser-level malformed ACK variants (covered by Unity tests); the exact browser
+sequence of contribution followed by takeover before reward (covered by real socket tests, while
+browser combat/reward and takeover are exercised separately); independent and Owner visual/product
+acceptance; causes of broad diagnostic matrix failures. No all-browser-matrix PASS is claimed.
+
+Existing shared branch/PR history is unchanged; only ordinary merges were made on the new branch.
+No existing PR was merged or closed, no provider spend or asset promotion occurred, and the original
+Owner checkout's dirty files remain untouched. No Sunroot, Rune Forge, learning pack, worms, gear,
+MagmaLord helmet or new Emberworks content work occurred. #151 was not a runtime dependency.
+
+Next lane: fresh reviewers perform independent review of PR #152. This producer stops after posting
+READY FOR INDEPENDENT REVIEW; no further implementation package or self-independent acceptance.

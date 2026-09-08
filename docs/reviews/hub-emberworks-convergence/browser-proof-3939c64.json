@@ -1,0 +1,1843 @@
+{
+  "clientSha": "6ce52e1cac04b0d66fdf13a62caa6146c59673b5",
+  "serverSha": "3939c64f38475290cde3a3a28f5176d35b98006a",
+  "mode": "--integrity",
+  "manifest": {
+    "sourceSha": "6ce52e1cac04b0d66fdf13a62caa6146c59673b5",
+    "buildFlavor": "LOCAL_CANDIDATE_REVIEW",
+    "candidateFbxSha256": "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db",
+    "candidateTextureSha256": "9fb9eb5758673cbc3670ad95d1b2e2b9bf075a0699d68aa119ab334f3847d812",
+    "heroGripCandidateSha256": "f22e1c3d00778f43dd9ecdab18c3d628a15815f2e411aa37bf7c42f9cdb3ea64",
+    "heroGripOwnerApprovedForPlaytest": true,
+    "productionPromotion": false,
+    "sceneRecipe": "U2CombatPreview",
+    "fastIteration": true,
+    "optimization": "BuildTimes",
+    "compression": "Disabled",
+    "files": [
+      {
+        "name": "GalaQuestWebGL.data",
+        "bytes": 20228078,
+        "sha256": "f918a0746b23295b724b730ddda6419ea0ea348f71c2963fc7c82accc183ea54"
+      },
+      {
+        "name": "GalaQuestWebGL.framework.js",
+        "bytes": 482207,
+        "sha256": "f9a993b9f631e62e4047531ac6751227b414e5c9aadeeca45d9a03c93bd2d88b"
+      },
+      {
+        "name": "GalaQuestWebGL.loader.js",
+        "bytes": 26983,
+        "sha256": "fd22cb0b7faec4548d261baf96a6b546e7353de4a7e8f6084cbbc4b551d1bea7"
+      },
+      {
+        "name": "GalaQuestWebGL.wasm",
+        "bytes": 55098058,
+        "sha256": "375deffa4d5c4af1780253ac6855aee8c203593f9272b8288fa8133c826f8165"
+      }
+    ]
+  },
+  "origin": "http://127.0.0.1:5202",
+  "checks": {
+    "camp": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 85,
+        "players": [
+          {
+            "id": "p1",
+            "x": -1.494,
+            "z": 0,
+            "heading": -1.571,
+            "speed": 0
+          },
+          {
+            "id": "p2",
+            "x": 1.52,
+            "z": 0,
+            "heading": 1.571,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 87,
+          "enemies": [],
+          "heroes": {
+            "p1": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            },
+            "p2": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p1": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 95
+            },
+            "p2": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 0
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "home-hub"
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": -1.4944243431091309,
+          "z": 0
+        },
+        "authoritative": {
+          "x": -1.49399995803833,
+          "z": 0
+        },
+        "drift": 0.0004715919494628906,
+        "snapped": false,
+        "atMs": 1788879388664
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 14,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false
+      },
+      "audio": {
+        "starts": 0,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "heldArrival": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 12,
+        "players": [
+          {
+            "id": "p1",
+            "x": 0,
+            "z": 4,
+            "heading": 0,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 13,
+          "enemies": [
+            {
+              "enemyId": "emberworks-gremlin-1",
+              "kind": "lava-gremlin",
+              "level": 1,
+              "maxHp": 30,
+              "x": -4,
+              "z": 9,
+              "heading": 0,
+              "hp": 30,
+              "mode": "idle",
+              "modeSeconds": 0.745,
+              "targetId": null,
+              "attack": {
+                "contactSeconds": 0.64,
+                "durationSeconds": 1.06,
+                "cooldownSeconds": 2.4,
+                "reach": 1.45,
+                "halfArcRadians": 0.6283185307179586
+              }
+            }
+          ],
+          "heroes": {
+            "p1": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p1": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 95
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "emberworks-deep",
+        "worldEpoch": 1
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 0,
+          "z": 4
+        },
+        "authoritative": {
+          "x": 0,
+          "z": 4
+        },
+        "drift": 0,
+        "snapped": false,
+        "atMs": 1788879392919
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 60,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false
+      },
+      "audio": {
+        "starts": 0,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "separated": {
+      "v": 4,
+      "type": "snapshot",
+      "tick": 157,
+      "players": [
+        {
+          "id": "p2",
+          "x": 1.52,
+          "z": 0,
+          "heading": 1.571,
+          "speed": 0
+        }
+      ],
+      "encounter": {
+        "revision": 160,
+        "enemies": [],
+        "heroes": {
+          "p2": {
+            "hp": 30,
+            "maxHp": 30,
+            "swingSeconds": -1,
+            "cooldown": 0,
+            "downSeconds": -1,
+            "protectionSeconds": 0,
+            "specialSeconds": -1,
+            "specialCooldown": 0
+          }
+        },
+        "rewards": {
+          "p2": {
+            "marks": 0,
+            "lanternUnlocked": false,
+            "equippedWeaponId": "starter_sword",
+            "equippedItemIds": {
+              "weapon": "starter_sword",
+              "shield": "shield_ironwood"
+            },
+            "ownedItemIds": [
+              "starter_sword",
+              "shield_ironwood"
+            ],
+            "coins": 0,
+            "shards": 0,
+            "satchelCarried": false,
+            "charmOwned": false,
+            "xp": 0
+          }
+        },
+        "loot": {
+          "spawned": false,
+          "collected": {}
+        },
+        "drops": [],
+        "corpses": [],
+        "village": {
+          "coins": 0,
+          "shards": 0,
+          "workshopOwned": false
+        },
+        "siege": {
+          "seals": [
+            {
+              "blows": 0,
+              "burst": false
+            },
+            {
+              "blows": 0,
+              "burst": false
+            },
+            {
+              "blows": 0,
+              "burst": false
+            }
+          ],
+          "warden": {
+            "x": 5.2,
+            "z": 52.6,
+            "heading": 0,
+            "hp": 120,
+            "mode": "dormant",
+            "modeSeconds": 0,
+            "phase": 1,
+            "targetId": null
+          },
+          "beaconLit": false
+        }
+      },
+      "events": [],
+      "destinationId": "home-hub"
+    },
+    "wounded": {
+      "v": 4,
+      "type": "snapshot",
+      "tick": 120,
+      "players": [
+        {
+          "id": "p1",
+          "x": -4.847,
+          "z": 6.918,
+          "heading": 1.826,
+          "speed": 0
+        }
+      ],
+      "encounter": {
+        "revision": 122,
+        "enemies": [
+          {
+            "enemyId": "emberworks-gremlin-1",
+            "kind": "lava-gremlin",
+            "level": 1,
+            "maxHp": 30,
+            "x": -3.884,
+            "z": 6.648,
+            "heading": -1.297,
+            "hp": 20,
+            "mode": "hit",
+            "modeSeconds": 0.064,
+            "targetId": "p1",
+            "attack": {
+              "contactSeconds": 0.64,
+              "durationSeconds": 1.06,
+              "cooldownSeconds": 2.4,
+              "reach": 1.45,
+              "halfArcRadians": 0.6283185307179586
+            }
+          }
+        ],
+        "heroes": {
+          "p1": {
+            "hp": 24,
+            "maxHp": 30,
+            "swingSeconds": 0.566,
+            "cooldown": 0,
+            "downSeconds": -1,
+            "protectionSeconds": 0,
+            "specialSeconds": -1,
+            "specialCooldown": 0
+          }
+        },
+        "rewards": {
+          "p1": {
+            "marks": 0,
+            "lanternUnlocked": false,
+            "equippedWeaponId": "starter_sword",
+            "equippedItemIds": {
+              "weapon": "starter_sword",
+              "shield": "shield_ironwood"
+            },
+            "ownedItemIds": [
+              "starter_sword",
+              "shield_ironwood"
+            ],
+            "coins": 0,
+            "shards": 0,
+            "satchelCarried": false,
+            "charmOwned": false,
+            "xp": 95
+          }
+        },
+        "loot": {
+          "spawned": false,
+          "collected": {}
+        },
+        "drops": [],
+        "corpses": [],
+        "village": {
+          "coins": 0,
+          "shards": 0,
+          "workshopOwned": false
+        },
+        "siege": {
+          "seals": [
+            {
+              "blows": 0,
+              "burst": false
+            },
+            {
+              "blows": 0,
+              "burst": false
+            },
+            {
+              "blows": 0,
+              "burst": false
+            }
+          ],
+          "warden": {
+            "x": 5.2,
+            "z": 52.6,
+            "heading": 0,
+            "hp": 120,
+            "mode": "dormant",
+            "modeSeconds": 0,
+            "phase": 1,
+            "targetId": null
+          },
+          "beaconLit": false
+        }
+      },
+      "events": [
+        {
+          "type": "wolf-hit",
+          "remaining": 20,
+          "damage": 10,
+          "enemyId": "emberworks-gremlin-1",
+          "kind": "lava-gremlin",
+          "level": 1,
+          "heroId": "p1"
+        }
+      ],
+      "destinationId": "emberworks-deep",
+      "worldEpoch": 1
+    },
+    "returned": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 271,
+        "players": [
+          {
+            "id": "p2",
+            "x": 1.52,
+            "z": 0,
+            "heading": 1.571,
+            "speed": 0
+          },
+          {
+            "id": "p1",
+            "x": 0,
+            "z": 0,
+            "heading": 0,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 275,
+          "enemies": [],
+          "heroes": {
+            "p1": {
+              "hp": 24,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            },
+            "p2": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p1": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 95
+            },
+            "p2": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 0
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "home-hub",
+        "worldEpoch": 2
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 0,
+          "z": 0
+        },
+        "authoritative": {
+          "x": 0,
+          "z": 0
+        },
+        "drift": 0,
+        "snapped": false,
+        "atMs": 1788879400010
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 134,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false,
+        "worldEpoch": 1
+      },
+      "audio": {
+        "starts": 10,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "siblingArrival": {
+      "frame": {
+        "v": 4,
+        "type": "destination-changed",
+        "id": "p2",
+        "tick": 184,
+        "players": [
+          {
+            "id": "p2",
+            "x": 0,
+            "z": 4,
+            "heading": 0,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 188,
+          "enemies": [
+            {
+              "enemyId": "emberworks-gremlin-1",
+              "kind": "lava-gremlin",
+              "level": 1,
+              "maxHp": 30,
+              "x": -3.884,
+              "z": 6.648,
+              "heading": -1.297,
+              "hp": 20,
+              "mode": "idle",
+              "modeSeconds": 3.301,
+              "targetId": null,
+              "attack": {
+                "contactSeconds": 0.64,
+                "durationSeconds": 1.06,
+                "cooldownSeconds": 2.4,
+                "reach": 1.45,
+                "halfArcRadians": 0.6283185307179586
+              }
+            }
+          ],
+          "heroes": {
+            "p2": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p2": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 0
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "profileFacts": [],
+        "destinationId": "emberworks-deep",
+        "worldEpoch": 1
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 0,
+          "z": 4
+        },
+        "authoritative": {
+          "x": 0,
+          "z": 4
+        },
+        "drift": 0,
+        "snapped": false,
+        "atMs": 1788879403437
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 56,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false
+      },
+      "audio": {
+        "starts": 0,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "reunion": {
+      "v": 4,
+      "type": "destination-changed",
+      "id": "p1",
+      "tick": 242,
+      "players": [
+        {
+          "id": "p2",
+          "x": 0,
+          "z": 4,
+          "heading": 0,
+          "speed": 0
+        },
+        {
+          "id": "p1",
+          "x": 0,
+          "z": 4,
+          "heading": 0,
+          "speed": 0
+        }
+      ],
+      "encounter": {
+        "revision": 247,
+        "enemies": [
+          {
+            "enemyId": "emberworks-gremlin-1",
+            "kind": "lava-gremlin",
+            "level": 1,
+            "maxHp": 30,
+            "x": -3.884,
+            "z": 6.648,
+            "heading": -1.297,
+            "hp": 20,
+            "mode": "idle",
+            "modeSeconds": 6.824,
+            "targetId": null,
+            "attack": {
+              "contactSeconds": 0.64,
+              "durationSeconds": 1.06,
+              "cooldownSeconds": 2.4,
+              "reach": 1.45,
+              "halfArcRadians": 0.6283185307179586
+            }
+          }
+        ],
+        "heroes": {
+          "p2": {
+            "hp": 30,
+            "maxHp": 30,
+            "swingSeconds": -1,
+            "cooldown": 0,
+            "downSeconds": -1,
+            "protectionSeconds": 0,
+            "specialSeconds": -1,
+            "specialCooldown": 0
+          },
+          "p1": {
+            "hp": 28,
+            "maxHp": 30,
+            "swingSeconds": -1,
+            "cooldown": 0,
+            "downSeconds": -1,
+            "protectionSeconds": 0,
+            "specialSeconds": -1,
+            "specialCooldown": 0
+          }
+        },
+        "rewards": {
+          "p2": {
+            "marks": 0,
+            "lanternUnlocked": false,
+            "equippedWeaponId": "starter_sword",
+            "equippedItemIds": {
+              "weapon": "starter_sword",
+              "shield": "shield_ironwood"
+            },
+            "ownedItemIds": [
+              "starter_sword",
+              "shield_ironwood"
+            ],
+            "coins": 0,
+            "shards": 0,
+            "satchelCarried": false,
+            "charmOwned": false,
+            "xp": 0
+          },
+          "p1": {
+            "marks": 0,
+            "lanternUnlocked": false,
+            "equippedWeaponId": "starter_sword",
+            "equippedItemIds": {
+              "weapon": "starter_sword",
+              "shield": "shield_ironwood"
+            },
+            "ownedItemIds": [
+              "starter_sword",
+              "shield_ironwood"
+            ],
+            "coins": 0,
+            "shards": 0,
+            "satchelCarried": false,
+            "charmOwned": false,
+            "xp": 95
+          }
+        },
+        "loot": {
+          "spawned": false,
+          "collected": {}
+        },
+        "drops": [],
+        "corpses": [],
+        "village": {
+          "coins": 0,
+          "shards": 0,
+          "workshopOwned": false
+        },
+        "siege": {
+          "seals": [
+            {
+              "blows": 0,
+              "burst": false
+            },
+            {
+              "blows": 0,
+              "burst": false
+            },
+            {
+              "blows": 0,
+              "burst": false
+            }
+          ],
+          "warden": {
+            "x": 5.2,
+            "z": 52.6,
+            "heading": 0,
+            "hp": 120,
+            "mode": "dormant",
+            "modeSeconds": 0,
+            "phase": 1,
+            "targetId": null
+          },
+          "beaconLit": false
+        }
+      },
+      "profileFacts": [
+        {
+          "eventId": "review:before-first-level",
+          "type": "xp-earned",
+          "value": "95",
+          "origin": "client"
+        }
+      ],
+      "destinationId": "emberworks-deep",
+      "worldEpoch": 3
+    },
+    "reconnected": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 286,
+        "players": [
+          {
+            "id": "p1",
+            "x": 1.623,
+            "z": 4,
+            "heading": 1.571,
+            "speed": 0
+          },
+          {
+            "id": "p3",
+            "x": 0,
+            "z": 4,
+            "heading": 0,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 293,
+          "enemies": [
+            {
+              "enemyId": "emberworks-gremlin-1",
+              "kind": "lava-gremlin",
+              "level": 1,
+              "maxHp": 30,
+              "x": -3.884,
+              "z": 6.648,
+              "heading": -1.297,
+              "hp": 20,
+              "mode": "idle",
+              "modeSeconds": 10.462,
+              "targetId": null,
+              "attack": {
+                "contactSeconds": 0.64,
+                "durationSeconds": 1.06,
+                "cooldownSeconds": 2.4,
+                "reach": 1.45,
+                "halfArcRadians": 0.6283185307179586
+              }
+            }
+          ],
+          "heroes": {
+            "p1": {
+              "hp": 28,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            },
+            "p3": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p1": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 95
+            },
+            "p3": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 0
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "emberworks-deep"
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 0,
+          "z": 4
+        },
+        "authoritative": {
+          "x": 0,
+          "z": 4
+        },
+        "drift": 0,
+        "snapped": false,
+        "atMs": 1788879410703
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 56,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false
+      },
+      "audio": {
+        "starts": 0,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "earned": {
+      "status": "ok",
+      "profileId": "profile-aaaaaaaa",
+      "factsJson": "[{\"type\":\"xp-earned\",\"eventId\":\"review:before-first-level\",\"value\":\"95\"},{\"type\":\"xp-earned\",\"heroId\":\"p1\",\"eventId\":\"kill-xp:profile-aaaaaaaa:emberworks-gremlin-1:d3bd647f-9999-408c-b584-bbd7ff218798\",\"value\":\"20\"}]",
+      "xp": 115,
+      "level": 2,
+      "xpIntoLevel": 15,
+      "xpForLevel": 150,
+      "power": 1400,
+      "powerText": "1,400",
+      "maxHp": 35,
+      "heroDamage": 12,
+      "coins": 0,
+      "marks": 0,
+      "shards": 0,
+      "ownedItemIds": [
+        "starter_sword",
+        "shield_ironwood"
+      ],
+      "equippedItemIds": {
+        "weapon": "starter_sword",
+        "shield": "shield_ironwood"
+      },
+      "previousPowerText": "1,000",
+      "powerDeltaText": "+400",
+      "gainedXp": 20,
+      "gainedCoins": 0,
+      "gainedMarks": 0,
+      "leveledUp": true,
+      "previousLevel": 1,
+      "previousMaxHp": 30,
+      "previousDamage": 10,
+      "previousPower": 1000
+    },
+    "earnedJournal": [
+      {
+        "type": "xp-earned",
+        "eventId": "review:before-first-level",
+        "value": "95"
+      },
+      {
+        "type": "xp-earned",
+        "heroId": "p1",
+        "eventId": "kill-xp:profile-aaaaaaaa:emberworks-gremlin-1:d3bd647f-9999-408c-b584-bbd7ff218798",
+        "value": "20"
+      }
+    ],
+    "finalCamp": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 607,
+        "players": [
+          {
+            "id": "p1",
+            "x": 0,
+            "z": 0,
+            "heading": 0,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 614,
+          "enemies": [],
+          "heroes": {
+            "p1": {
+              "hp": 27,
+              "maxHp": 35,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p1": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 115
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "home-hub",
+        "worldEpoch": 4
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 0,
+          "z": 0
+        },
+        "authoritative": {
+          "x": 0,
+          "z": 0
+        },
+        "drift": 0,
+        "snapped": false,
+        "atMs": 1788879423200
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 283,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false,
+        "worldEpoch": 3
+      },
+      "audio": {
+        "starts": 32,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "campEdgeOrbit": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 751,
+        "players": [
+          {
+            "id": "p1",
+            "x": 8.527,
+            "z": 2.099,
+            "heading": 1.571,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 758,
+          "enemies": [],
+          "heroes": {
+            "p1": {
+              "hp": 35,
+              "maxHp": 35,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p1": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 115
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "home-hub",
+        "worldEpoch": 4
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 8.533309936523438,
+          "z": 2.099020004272461
+        },
+        "authoritative": {
+          "x": 8.527000427246094,
+          "z": 2.0989999771118164
+        },
+        "drift": 0.007010494824498892,
+        "snapped": false,
+        "atMs": 1788879431993
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 370,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false,
+        "worldEpoch": 4
+      },
+      "audio": {
+        "starts": 32,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "reloadFirst": {
+      "status": "ok",
+      "profileId": "profile-aaaaaaaa",
+      "factsJson": "[{\"type\":\"xp-earned\",\"eventId\":\"review:before-first-level\",\"value\":\"95\"},{\"type\":\"xp-earned\",\"heroId\":\"p1\",\"eventId\":\"kill-xp:profile-aaaaaaaa:emberworks-gremlin-1:d3bd647f-9999-408c-b584-bbd7ff218798\",\"value\":\"20\"}]",
+      "xp": 115,
+      "level": 2,
+      "xpIntoLevel": 15,
+      "xpForLevel": 150,
+      "power": 1400,
+      "powerText": "1,400",
+      "maxHp": 35,
+      "heroDamage": 12,
+      "coins": 0,
+      "marks": 0,
+      "shards": 0,
+      "ownedItemIds": [
+        "starter_sword",
+        "shield_ironwood"
+      ],
+      "equippedItemIds": {
+        "weapon": "starter_sword",
+        "shield": "shield_ironwood"
+      },
+      "previousPowerText": "1,400",
+      "powerDeltaText": "+0",
+      "gainedXp": 0,
+      "gainedCoins": 0,
+      "gainedMarks": 0,
+      "leveledUp": false,
+      "previousLevel": 2,
+      "previousMaxHp": 35,
+      "previousDamage": 12,
+      "previousPower": 1400
+    },
+    "reloadSecond": {
+      "status": "ok",
+      "profileId": "profile-bbbbbbbb",
+      "factsJson": "[]",
+      "xp": 0,
+      "level": 1,
+      "xpIntoLevel": 0,
+      "xpForLevel": 100,
+      "power": 1000,
+      "powerText": "1,000",
+      "maxHp": 30,
+      "heroDamage": 10,
+      "coins": 0,
+      "marks": 0,
+      "shards": 0,
+      "ownedItemIds": [
+        "starter_sword",
+        "shield_ironwood"
+      ],
+      "equippedItemIds": {
+        "weapon": "starter_sword",
+        "shield": "shield_ironwood"
+      },
+      "previousPowerText": "1,000",
+      "powerDeltaText": "+0",
+      "gainedXp": 0,
+      "gainedCoins": 0,
+      "gainedMarks": 0,
+      "leveledUp": false,
+      "previousLevel": 1,
+      "previousMaxHp": 30,
+      "previousDamage": 10,
+      "previousPower": 1000
+    },
+    "travelAckRecovery": {
+      "frame": {
+        "v": 4,
+        "type": "snapshot",
+        "tick": 340,
+        "players": [
+          {
+            "id": "p2",
+            "x": 0,
+            "z": 0,
+            "heading": 0,
+            "speed": 0
+          },
+          {
+            "id": "p3",
+            "x": 3.635,
+            "z": 0,
+            "heading": 1.571,
+            "speed": 0
+          }
+        ],
+        "encounter": {
+          "revision": 344,
+          "enemies": [],
+          "heroes": {
+            "p2": {
+              "hp": 30,
+              "maxHp": 30,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            },
+            "p3": {
+              "hp": 35,
+              "maxHp": 35,
+              "swingSeconds": -1,
+              "cooldown": 0,
+              "downSeconds": -1,
+              "protectionSeconds": 0,
+              "specialSeconds": -1,
+              "specialCooldown": 0
+            }
+          },
+          "rewards": {
+            "p2": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 0
+            },
+            "p3": {
+              "marks": 0,
+              "lanternUnlocked": false,
+              "equippedWeaponId": "starter_sword",
+              "equippedItemIds": {
+                "weapon": "starter_sword",
+                "shield": "shield_ironwood"
+              },
+              "ownedItemIds": [
+                "starter_sword",
+                "shield_ironwood"
+              ],
+              "coins": 0,
+              "shards": 0,
+              "satchelCarried": false,
+              "charmOwned": false,
+              "xp": 115
+            }
+          },
+          "loot": {
+            "spawned": false,
+            "collected": {}
+          },
+          "drops": [],
+          "corpses": [],
+          "village": {
+            "coins": 0,
+            "shards": 0,
+            "workshopOwned": false
+          },
+          "siege": {
+            "seals": [
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              },
+              {
+                "blows": 0,
+                "burst": false
+              }
+            ],
+            "warden": {
+              "x": 5.2,
+              "z": 52.6,
+              "heading": 0,
+              "hp": 120,
+              "mode": "dormant",
+              "modeSeconds": 0,
+              "phase": 1,
+              "targetId": null
+            },
+            "beaconLit": false
+          }
+        },
+        "events": [],
+        "destinationId": "home-hub"
+      },
+      "reconciliation": {
+        "predicted": {
+          "x": 3.5753488540649414,
+          "z": 0
+        },
+        "authoritative": {
+          "x": 3.634999990463257,
+          "z": 0
+        },
+        "drift": 0.06627893447875977,
+        "snapped": false,
+        "atMs": 1788879458920
+      },
+      "input": {
+        "v": 4,
+        "type": "input",
+        "seq": 25,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false
+      },
+      "audio": {
+        "starts": 0,
+        "states": [
+          "running"
+        ]
+      }
+    },
+    "sameProfileTakeover": {
+      "supersededId": "p2",
+      "replacement": {
+        "frame": {
+          "v": 4,
+          "type": "snapshot",
+          "tick": 493,
+          "players": [
+            {
+              "id": "p4",
+              "x": 0,
+              "z": 4,
+              "heading": 0,
+              "speed": 0
+            }
+          ],
+          "encounter": {
+            "revision": 498,
+            "enemies": [
+              {
+                "enemyId": "emberworks-gremlin-1",
+                "kind": "lava-gremlin",
+                "level": 1,
+                "maxHp": 30,
+                "x": -4,
+                "z": 9,
+                "heading": 0,
+                "hp": 30,
+                "mode": "idle",
+                "modeSeconds": 30.641,
+                "targetId": null,
+                "attack": {
+                  "contactSeconds": 0.64,
+                  "durationSeconds": 1.06,
+                  "cooldownSeconds": 2.4,
+                  "reach": 1.45,
+                  "halfArcRadians": 0.6283185307179586
+                }
+              }
+            ],
+            "heroes": {
+              "p4": {
+                "hp": 30,
+                "maxHp": 30,
+                "swingSeconds": -1,
+                "cooldown": 0,
+                "downSeconds": -1,
+                "protectionSeconds": 0,
+                "specialSeconds": -1,
+                "specialCooldown": 0
+              }
+            },
+            "rewards": {
+              "p4": {
+                "marks": 0,
+                "lanternUnlocked": false,
+                "equippedWeaponId": "starter_sword",
+                "equippedItemIds": {
+                  "weapon": "starter_sword",
+                  "shield": "shield_ironwood"
+                },
+                "ownedItemIds": [
+                  "starter_sword",
+                  "shield_ironwood"
+                ],
+                "coins": 0,
+                "shards": 0,
+                "satchelCarried": false,
+                "charmOwned": false,
+                "xp": 0
+              }
+            },
+            "loot": {
+              "spawned": false,
+              "collected": {}
+            },
+            "drops": [],
+            "corpses": [],
+            "village": {
+              "coins": 0,
+              "shards": 0,
+              "workshopOwned": false
+            },
+            "siege": {
+              "seals": [
+                {
+                  "blows": 0,
+                  "burst": false
+                },
+                {
+                  "blows": 0,
+                  "burst": false
+                },
+                {
+                  "blows": 0,
+                  "burst": false
+                }
+              ],
+              "warden": {
+                "x": 5.2,
+                "z": 52.6,
+                "heading": 0,
+                "hp": 120,
+                "mode": "dormant",
+                "modeSeconds": 0,
+                "phase": 1,
+                "targetId": null
+              },
+              "beaconLit": false
+            }
+          },
+          "events": [],
+          "destinationId": "emberworks-deep",
+          "worldEpoch": 1
+        },
+        "reconciliation": {
+          "predicted": {
+            "x": 0,
+            "z": 4
+          },
+          "authoritative": {
+            "x": 0,
+            "z": 4
+          },
+          "drift": 0,
+          "snapped": false,
+          "atMs": 1788879475378
+        },
+        "input": {
+          "v": 4,
+          "type": "input",
+          "seq": 43,
+          "dirX": 0,
+          "dirZ": 0,
+          "magnitude": 0,
+          "run": false
+        },
+        "audio": {
+          "starts": 0,
+          "states": [
+            "running"
+          ]
+        }
+      }
+    }
+  },
+  "errors": []
+}

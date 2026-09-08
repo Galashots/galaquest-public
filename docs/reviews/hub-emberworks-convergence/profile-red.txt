@@ -1,0 +1,39 @@
+✖ same profile takeover retires the live old avatar across destinations before accepting more gameplay (82.4434ms)
+✖ unpublished contribution survives live takeover once, presents only to active profile and preserves corpse claim (5640.7483ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6220.1479
+
+✖ failing tests:
+
+test at test\u3-independent-travel.test.mjs:198:1
+✖ same profile takeover retires the live old avatar across destinations before accepting more gameplay (82.4434ms)
+  AssertionError [ERR_ASSERTION]: old baseline leaves two live avatars for one profile
+  
+  2 !== 1
+  
+      at file:///<checkout>/test/u3-independent-travel.test.mjs:210:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async withServer (file:///<checkout>/test/u3-independent-travel.test.mjs:48:9)
+      at async TestContext.<anonymous> (file:///<checkout>/test/u3-independent-travel.test.mjs:199:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\u3-independent-travel.test.mjs:223:1
+✖ unpublished contribution survives live takeover once, presents only to active profile and preserves corpse claim (5640.7483ms)
+  Error: timed out waiting for m => m.type === 'snapshot' && m.events.some(e => e.type === 'xp-earned' && e.heroId === active.welcome.id); latest={"v":4,"type":"snapshot","tick":90,"players":[{"id":"p2","x":0,"z":0,"heading":0,"speed":0},{"id":"p3","x":0,"z":0,"heading":0,"speed":0}],"encounter":{"revision":92,"enemies":[],"heroes":{"p2":{"hp":30,"swingSeconds":-1,"cooldown":0,"downSeconds":-1,"maxHp":30,"protectionSeconds":0,"specialSeconds":-1,"specialCooldown":0},"p3":{"hp":30,"swingSeconds":-1,"cooldown":0,"downSeconds":-1,"maxHp":30,"protectionSeconds":0,"specialSeconds":-1,"specialCooldown":0}},"rewards":{"p2":{"marks":0,"lanternUnlocked":false,"equippedWeaponId":"starter_sword","ownedItemIds":["starter_sword","shield_ironwood"],"equippedItemIds":{"weapon":"starter_sword","shield":"shield_ironwood"},"coins":0,"shards":0,"xp":0,"satchelCarried":false,"charmOwned":false},"p3":{"marks":0,"lanternUnlocked":false,"equippedWeaponId":"starter_sword","ownedItemIds":["starter_sword","shield_ironwood"],"equippedItemIds":{"weapon":"starter_sword","shield":"shield_ironwood"},"coins":0,"shards":0,"xp":20,"satchelCarried":false,"charmOwned":false}},"loot":{"spawned":false,"collected":{}},"drops":[],"corpses":[],"village":{"coins":0,"shards":0,"workshopOwned":false},"siege":{"seals":[{"blows":0,"burst":false},{"blows":0,"burst":false},{"blows":0,"burst":false}],"warden":{"x":5.2,"z":52.6,"heading":0,"hp":120,"mode":"dormant","modeSeconds":0,"phase":1,"targetId":null},"beaconLit":false}},"events":[],"destinationId":"home-hub"}; events=[]
+      at Timeout.<anonymous> (file:///<checkout>/test/u3-independent-travel.test.mjs:39:49)
+      at listOnTimeout (node:internal/timers:605:17)
+      at process.processTimers (node:internal/timers:541:7)
