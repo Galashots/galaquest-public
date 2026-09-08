@@ -180,6 +180,9 @@ try {
       await tapAt(page, rect.x + rect.width / 2 - 100, rect.y + rect.height - 55);
       await waitFor(() => snapshot(page), value => value?.destinationId === 'emberworks-deep', 'Emberworks arrival');
     }
+    // Clear the right Cinder Gate pillar before moving east. At the arrival z=4 its
+    // expanded collision face is x=5.4, so an axis-first route is physically blocked.
+    await moveAxis(page, 'w', 'z', 6.0);
     await moveAxis(page, 'd', 'x', 7.0);
     await moveAxis(page, 'w', 'z', 16.8);
     await waitFor(() => controls(page), value => value.length > 0, 'Physical Forge controls projected');
