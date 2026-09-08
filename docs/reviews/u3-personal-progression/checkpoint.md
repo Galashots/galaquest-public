@@ -162,3 +162,12 @@ and producer-review checkpoint is ready for review without expanding this PR int
 ![Level and health restored from the device journal](restored-camp-0eb4d75.png)
 
 The [sibling's unchanged level-1 screen](sibling-0eb4d75.png) is a separate capture from the second context.
+
+The closing console audit extends the driver to include `console.error` events as well as uncaught
+exceptions and browser log errors. All **14 checks PASS with zero errors across those three channels**
+using the same client `0eb4d75d33291c756f5a5de152859f4b554abf98` against server/driver
+`12cda93c28fb26e8eeeb1e7d601fe184ead73bbf`. The diff of `public`, `net`, `unity` and the owned-server
+helper between those SHAs is empty; the build hashes are unchanged. The proof manifest records this
+second run separately. Hosted required run
+[34190256240](https://github.com/Galashots/galaquest-public/actions/runs/34190256240) **PASS** at the
+server/driver head. No further runtime correction or build was needed.

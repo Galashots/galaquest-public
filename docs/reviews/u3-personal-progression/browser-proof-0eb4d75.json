@@ -99,5 +99,44 @@
     }
   ],
   "physicalIPadAcceptance": "UNKNOWN",
-  "ownerVisualAcceptance": "UNKNOWN"
+  "ownerVisualAcceptance": "UNKNOWN",
+  "consoleErrorAudit": {
+    "clientSha": "0eb4d75d33291c756f5a5de152859f4b554abf98",
+    "serverSha": "12cda93c28fb26e8eeeb1e7d601fe184ead73bbf",
+    "capturedAt": "2026-09-08T05:21:40.554Z",
+    "result": "PASS",
+    "checks": [
+      "camp",
+      "heldArrival",
+      "separated",
+      "wounded",
+      "returned",
+      "siblingArrival",
+      "reunion",
+      "reconnected",
+      "earned",
+      "earnedJournal",
+      "finalCamp",
+      "campEdgeOrbit",
+      "reloadFirst",
+      "reloadSecond"
+    ],
+    "browserErrors": 0,
+    "errorChannels": [
+      "Runtime.exceptionThrown",
+      "Log.entryAdded:error",
+      "Runtime.consoleAPICalled:error"
+    ],
+    "runtimeDiff": {
+      "from": "0eb4d75d33291c756f5a5de152859f4b554abf98",
+      "to": "12cda93c28fb26e8eeeb1e7d601fe184ead73bbf",
+      "paths": [
+        "public",
+        "net",
+        "unity",
+        "tools/runtime-test/owned-server.mjs"
+      ],
+      "result": "EMPTY"
+    }
+  }
 }
