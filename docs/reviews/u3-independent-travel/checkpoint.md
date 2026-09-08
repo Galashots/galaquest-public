@@ -141,7 +141,7 @@ These are functional travel proofs, not finished-art or physical-iPad acceptance
 
 ![Two heroes in camp with the gate unobscured](camp-together-931919b.png)
 
-The reusable browser driver is `tools/runtime-test/u3-unity-travel.mjs`. Run it from the repository
+The reusable browser driver is `tools/unity-playtest/travel.mjs`. Run it from the repository
 root with a matching candidate-build manifest as its first argument and an optional output suffix
 as its second. `GQ_CHROME_PATH` can override the Windows Chrome executable. It owns isolated browser
 profiles and a temporary server, checks build-file hashes and source identity, and closes its own
@@ -152,3 +152,9 @@ current server head; that does not retroactively change the client evidence.
 The independent-travel implementation checkpoint is complete for desktop browser review. Owner
 iPad acceptance and the broader miniature co-op loop remain open; subsequent packages supply personal
 progression presentation, learning and admitted companions before completing Emberworks.
+
+The evidence-only head `8926a4058f39a84f84430fb48b987ee5dd6b35c7` exposed a harness integration error
+in hosted CI: placing the new driver in the legacy runtime-test directory enrolled it in a suite
+whose runners target the Three.js client and take no Unity build manifest. The driver now lives in
+the separate Unity playtest tools directory, still uses the shared owned-server helper, and explicitly
+clears its isolated browser origin before seeding fixture profiles. No legacy gate was weakened.

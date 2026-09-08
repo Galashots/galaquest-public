@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { startOwnedServer } from './owned-server.mjs';
+import { startOwnedServer } from '../runtime-test/owned-server.mjs';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const manifest = JSON.parse(readFileSync(process.argv[2], 'utf8').replace(/^\uFEFF/, ''));
@@ -108,6 +108,7 @@ try{
     for(const api of ['Runtime.enable','Page.enable','Log.enable'])await p.send(api);
     await p.send('Emulation.setDeviceMetricsOverride',{width:1180,height:820,deviceScaleFactor:1,mobile:false});
     await p.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
+    await p.send('Storage.clearDataForOrigin',{origin:server.origin,storageTypes:'local_storage'});
     await p.send('Page.addScriptToEvaluateOnNewDocument',{source:bootstrap(id,name)});
     await p.send('Page.navigate',{url:`${server.origin}/unity/`});
     await waitFor(()=>sample(p),Boolean,`Unity join ${name}`,180000,1000);
