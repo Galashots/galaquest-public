@@ -50,6 +50,12 @@ the reconnect participation handoff loses the returning child's XP after a real 
 These tests now exercise separate destinations, reunion with a damaged enemy, stale controls,
 HP/cooldown continuity, personal coin restore, scoped XP and protocol validation.
 
-Exact-commit required-gate results will be recorded at the server checkpoint. Unity portals, a visible
-hub, scene transitions, browser visual review and physical iPad evidence are not yet provided by this
-checkpoint. It does not claim the miniature loop or either full adventure complete.
+At **d7285e577dcf9e1ae1e8ccaa48a0cfd3ff0f7fdd**, the seven focused server/guard checks pass and
+the full [hosted unit gate](https://github.com/Galashots/galaquest-public/actions/runs/34174864788) passes.
+The earlier full local run at runtime-equivalent `7b71feec320497a59c40f44b465bbb5bb507b3f8`
+reported 2290 pass, two fail, three skip: a source-text Beacon scanner needed to follow the new
+destination loop (fixed in d7285e5), and the previously observed Windows Lantern-XP temporary-folder
+cleanup hit `EPERM`. The latter occurred during cleanup, not a failed reward assertion.
+
+Unity portals, a visible hub, scene transitions, browser visual review and physical iPad evidence
+are not yet provided by this checkpoint. It does not claim the miniature loop or either full adventure complete.
