@@ -42,3 +42,21 @@ client/server SHAs. The earlier harness placement failure remains documented in 
 
 HUD and built-browser acceptance are checkpoint 2 work. JavaScript VM and Unity EditMode results do
 not yet prove dynamic import or persistence in the shipped WebAssembly client.
+
+## Checkpoint 1 evidence
+
+Runtime source: **`e662580838d42e88b16b9671b249ff0f3f4012e9`**.
+
+- JavaScript adapter/browser bridge: **14 PASS**; guidance: **7 PASS**. Save failures are visible,
+  replay and sibling facts do not award twice, and ordinary frames do no journal work.
+- A short-lived profile-store listener regression was reproduced (three retained listeners after
+  three operations) and fixed by disabling watchers on the fresh per-operation store.
+- Unity EditMode: **189 PASS / 0 FAIL / 1 optional skip**, on the C# files committed at this SHA.
+  The actual full result file contains 190 cases; its top-level `Skipped:Ignored` label includes the
+  optional skipped case and must not be interpreted as the whole suite having been skipped.
+- Full local Node suite at this SHA: **2301 PASS / 1 FAIL / 3 SKIP**. The remaining failure is the
+  existing Windows Lantern XP temporary-directory cleanup `EPERM` (`syscall: rm`), after the test
+  reaches cleanup. The matching earlier travel checkpoint recorded the same failure and a green
+  hosted run. Hosted validation for this checkpoint must be read independently.
+- The new skill passes the skill validator. Generated scaffold line endings were normalized in the
+  evidence follow-up. No WebGL build or running-game reward/HUD acceptance is claimed at checkpoint 1.
