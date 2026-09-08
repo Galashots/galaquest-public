@@ -89,9 +89,10 @@ namespace GalaQuest.Editor
             foreach (var name in new[] { "swing", "impact", "hurt", "victory", "windup" }) WriteCue(name);
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             var content = ScriptableObject.CreateInstance<GalaQuestCombatContent>();
-            content.HeroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab");
+            content.HeroPrefab = HeroGripAuthoring.LoadApproved();
             if (Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1")
-                content.HeroPrefab = U2HeroGripPreview.Prepare(content.HeroPrefab, Temporary);
+                content.HeroPrefab = U2HeroGripPreview.Prepare(AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab"), Temporary);
             content.HeroController = heroController;
             content.StarterWeapon = PrepareStarterWeapon(content.HeroPrefab);
             content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab } };
@@ -169,8 +170,8 @@ namespace GalaQuest.Editor
                     .Select(path => new { name = Path.GetFileName(path), bytes = new FileInfo(path).Length, sha256 = Hash(path) }).ToArray();
                 var manifest = new { sourceSha, buildFlavor = "LOCAL_CANDIDATE_REVIEW", candidateFbxSha256 = CandidateSha,
                     candidateTextureSha256 = Hash(Path.Combine(CandidateDirectory, "../gremlin-body/texture_0_base_color.png")),
-                    heroGripCandidateSha256 = Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1"
-                        ? U2HeroGripPreview.CandidateSha : null,
+                    heroGripCandidateSha256 = U2HeroGripPreview.CandidateSha,
+                    heroGripOwnerApprovedForPlaytest = true,
                     productionPromotion = false, sceneRecipe = "U2CombatPreview", files };
                 var evidencePath = Path.Combine(RepoRoot, ".local/m2/preview-build-" + sourceSha.Substring(0, 7) + ".json");
                 File.WriteAllText(evidencePath, JsonConvert.SerializeObject(manifest, Formatting.Indented));

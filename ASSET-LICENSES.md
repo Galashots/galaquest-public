@@ -54,6 +54,15 @@ The FBX derives from `public/assets/hero/hero_lod1_ironwood_atlas.glb`, as recor
 These derivatives carry the character asset's owner-created paid-plan basis above, not CC0.
 `HeroLocomotionAuthoring.Wire` records their reproducible authoring path in the Unity Editor code.
 
+### Unity fixed-grip Hero derivative
+
+`unity/GalaQuest/Assets/GalaQuest/Movement/HeroGrip/` contains the Owner-approved fixed right-hand
+grip mesh and prefab, derived from the same Hero FBX and retaining its 24-bone rig. The hand recipe
+is `tools/assets/author-hero-grip-candidate.py`; Unity admission uses `HeroGripAuthoring.AuthorApproved`.
+The [receipt](docs/asset-production/HERO_RIGHT_GRIP_CANDIDATE_2026-09-07.json) pins source/candidate
+hashes and the Owner's playtest approval. These derivatives inherit the paid-plan character basis
+above, not CC0. The personal grip reference photographs are not redistributed.
+
 ## Gear — owner-created, generated on a paid plan
 
 `public/assets/gear/**/*.glb` (including `candidates/`)

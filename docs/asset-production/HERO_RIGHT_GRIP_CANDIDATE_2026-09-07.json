@@ -1,8 +1,8 @@
 {
   "assetId": "hero.gq-hero-v1.right-hand-grip",
-  "status": "LOCAL_CANDIDATE_REVIEW",
+  "status": "PLAYTEST_ADMITTED",
   "ownerAuthorizedCandidateRepair": true,
-  "productionPromotion": false,
+  "productionPromotion": true,
   "source": {
     "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx",
     "sha256": "23c161a6a7045987f54b2dae370d02c665d169aefa0c8b6377ca5ee82c893351",
@@ -51,8 +51,27 @@
       "result": "PASS"
     },
     "physicalIPadSafari": "UNKNOWN",
-    "ownerVisualAcceptance": "PENDING",
+    "ownerVisualAcceptance": "APPROVED_FOR_PLAYTEST",
     "reviewEvidence": "docs/reviews/u2-first-fight/hand-grip-evidence.json",
-    "ownerReviewFolderId": "1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn"
-  }
+    "ownerReviewFolderId": "1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn",
+    "ownerDecision": {
+      "date": "2026-09-07",
+      "statement": "Grip approved good work.",
+      "scope": "Integrate the reviewed fixed grip in the playtest; retain the documented base crease and pommel contact as polish items."
+    }
+  },
+  "promotionScope": "Owner-approved fixed grip for the two-level playtest; original source FBX and original Hero prefab preserved.",
+  "playtestAssets": [
+    {
+      "path": "unity/GalaQuest/Assets/GalaQuest/Movement/HeroGrip/HeroRightGrip.asset",
+      "bytes": 2333223,
+      "sha256": "0b67d51901ac71713533b86e9e62552ce7ade812b8e25f334c4dfd6365ea4c40"
+    },
+    {
+      "path": "unity/GalaQuest/Assets/GalaQuest/Movement/HeroGrip/HeroRightGrip.prefab",
+      "bytes": 37754,
+      "sha256": "c1d202a02a8cb734a8c636ef0fd3d87310d7cf1c473a106366b7a979acc05954"
+    }
+  ],
+  "authoringEntryPoint": "GalaQuest.Editor.HeroGripAuthoring.AuthorApproved"
 }

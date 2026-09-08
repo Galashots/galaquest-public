@@ -1,6 +1,6 @@
 # Right-hand grip review candidate
 
-The Owner authorized a bounded repair of the hero's open right hand and supplied three real grip photographs. The candidate curls the fingers around an authored grip axis, with the thumb outside near the index finger. The canonical Hero FBX, prefab, skeleton and animation clips remain unchanged. No asset is promoted by this work.
+The Owner authorized a bounded repair of the hero's open right hand and supplied three real grip photographs. The candidate curls the fingers around an authored grip axis, with the thumb outside near the index finger. The canonical Hero FBX, prefab, skeleton and animation clips remain unchanged. The Owner approved this exact candidate for playtest integration on 2026-09-07: “Grip approved good work.” The documented base crease and pommel contact remain polish items.
 
 The original hand has no finger joints. Simply bending its existing long faces produced inward folds, so the candidate replaces 356 hand triangles with a locally refined surface. The original vertex and attribute buffers remain intact; the replacement interpolates the existing UV coordinates, normals and skin weights. Unity verifies the actual imported position, UV and bone correspondence instead of assuming Blender and Unity share vertex indices. The complete candidate hero has 12,140 triangles and retains the original 24-bone rig.
 
@@ -18,11 +18,11 @@ blender --background --factory-startup --python tools/assets/author-hero-grip-ca
 
 An optional `-- --render` appends neutral diagnostic stills. Outputs go to the ignored `.local/m2/hero-grip-candidate` directory. The recipe checks the source FBX hash and never saves over it. Reproduction of the qualified bytes is checked separately from visual acceptance.
 
-Set `GQ_U2_GRIP_REVIEW=1` when running `U2CombatPreview` to stage the candidate. Otherwise, the preview continues using the canonical hero. The existing local gremlin candidate is also required by the combined fight preview; its [receipt](../../asset-production/LAVA_GREMLIN_CANDIDATE_2026-09-07.json) identifies those inputs.
+The approved mesh and prefab now live in the committed `Movement/HeroGrip` Unity folder. The regular playtest scene uses that mesh, and new scene authoring uses that prefab. `U2CombatPreview` uses the approved asset by default; it no longer requires the local hand JSON. Set `GQ_U2_GRIP_REVIEW=1` only to reproduce the original custody-tier import for diagnostics. The existing local gremlin candidate is also required by the combined fight preview; its [receipt](../../asset-production/LAVA_GREMLIN_CANDIDATE_2026-09-07.json) identifies those inputs.
 
 For graphics-enabled Unity PlayMode review, also set `GQ_U2_REVIEW=1` and `GQ_U2_CAPTURE=1`, then run `U2CombatPresentationPlayModeTests`. The test exercises the native slash, damage, down/recovery and rejoin, and captures both whole-character and hand views. Images are sampled poses, not frame-accurate impact evidence. Close-up cameras use an appropriate near plane; the first exploratory camera clipped through the hand and was corrected.
 
-`U2CombatPreview.BuildWebGL` requires committed source, stages only temporary review assets, records the hand candidate hash in the build manifest, and cleans up its temporary assets. It does not replace the canonical scene or hero.
+`U2CombatPreview.BuildWebGL` requires committed source, stages temporary gremlin review assets, records the hand source hash and approval in the build manifest, and cleans up temporary assets. The gremlin remains a review candidate. `HeroGripAuthoring.AuthorApproved` records the permanent approved hand binding; the source FBX and original Hero prefab remain preserved.
 
 ## Verified checkpoint and Owner review
 
@@ -44,6 +44,6 @@ The native Unity combat test and diagnostic images below were produced at **a5ec
 
 The large inward folds from the first drafts are resolved in the inspected Unity views. The strongest remaining hand concerns are the little-finger base crease, narrow bevel faces and contact with the pommel in close-up. Eight narrow/base triangles oppose the differential-facing estimate; this is not a clean geometry pass. The preview uses a fixed grip pose with the existing hand bone. Finger animation is not added.
 
-The browser frames show the sword following the hand and a readable sweep after orbit. The default cavern wall still blocks part of the view, and the environment remains greybox. Physical Safari comfort, audible sound quality, continuous-motion judgment and Owner visual acceptance remain open. The [Owner packet in controlled Drive custody](https://drive.google.com/drive/folders/1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn) includes the defect-exposing angles. It requests a decision on this grip candidate; production promotion remains false.
+The browser frames show the sword following the hand and a readable sweep after orbit. The default cavern wall still blocks part of the view, and the environment remains greybox. Physical Safari comfort, audible sound quality and continuous-motion judgment remain open. Owner visual approval for this grip was received on 2026-09-07. The [Owner packet in controlled Drive custody](https://drive.google.com/drive/folders/1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn) includes the defect-exposing angles. The review decision is approved for playtest integration; the original candidate evidence remains tied to its tested source commits.
 
 The [earlier connected fight checkpoint](fight-checkpoint.md) records the broader combat implementation and its previous source SHA.

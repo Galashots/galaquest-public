@@ -1,8 +1,7 @@
 {
   "assetId": "hero.gq-hero-v1.right-hand-grip",
-  "status": "OWNER_REVIEW_PENDING",
+  "status": "OWNER_APPROVED_FOR_PLAYTEST",
   "productionPromotion": false,
-  "decisionRequested": "Approve or request revisions to the fixed right-hand grip candidate for the playtest.",
   "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
   "unityNativeDiagnosticSourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
   "candidateSha256": "f22e1c3d00778f43dd9ecdab18c3d628a15815f2e411aa37bf7c42f9cdb3ea64",
@@ -196,5 +195,10 @@
       "driveFileId": "11UvCzIm0VKlyh7A5B2BV0YnqStgJYtI7"
     }
   ],
-  "ownerReviewFolderId": "1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn"
+  "ownerReviewFolderId": "1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn",
+  "ownerDecision": {
+    "date": "2026-09-07",
+    "statement": "Grip approved good work.",
+    "scope": "Integrate the reviewed fixed grip in the playtest; retain the documented base crease and pommel contact as polish items."
+  }
 }
