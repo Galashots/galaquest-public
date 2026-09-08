@@ -12,6 +12,67 @@ namespace GalaQuest.Tests
     public sealed class U2CombatPresentationPlayModeTests
     {
         [UnityTest]
+        public IEnumerator MagmaLordHelmetFollowsAuthoritativeEquipmentForLocalAndSibling()
+        {
+#if UNITY_EDITOR
+            GameObject root = null;
+            GameObject hero = null;
+            GameObject template = null;
+            GalaQuestCombatContent content = null;
+            GalaQuestConnectionSession session = null;
+            GalaQuestCombatPresentation presentation = null;
+            try
+            {
+                var author = Type.GetType("GalaQuest.Editor.RuneForgeAuthoring, GalaQuest.Editor", true);
+                var helmet = (GalaQuest.Gear.GearItemDefinition)author.GetMethod("LoadHelmet").Invoke(null, null);
+                hero = HeroWithHeadSocket("Local hero");
+                template = HeroWithHeadSocket("Remote hero template");
+                content = ScriptableObject.CreateInstance<GalaQuestCombatContent>();
+                content.HeroPrefab = template;
+                content.MagmaLordHelmet = helmet;
+                root = new GameObject("Helmet presentation test");
+                var traversal = root.AddComponent<GalaQuestTraversalController>();
+                traversal.Configure(null, hero.transform);
+                presentation = root.AddComponent<GalaQuestCombatPresentation>();
+                presentation.Configure(content);
+                var transport = new FakeTransport();
+                session = new GalaQuestConnectionSession(transport);
+                presentation.BindSession(session);
+                session.Begin(new GalaQuestSelectedProfile("profile-helmet-review", "Review", "[]"));
+                transport.Open();
+                transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\"}");
+
+                var frame = HelmetFrame(1, true, true);
+                presentation.ApplyFrame(frame);
+                yield return null;
+                Assert.That(hero.GetComponentsInChildren<Transform>(true).Count(item => item.name == "MagmaLord Helmet"), Is.EqualTo(1));
+                var sibling = GameObject.Find("Other hero p2");
+                Assert.That(sibling, Is.Not.Null);
+                Assert.That(sibling.GetComponentsInChildren<Transform>(true).Count(item => item.name == "MagmaLord Helmet"), Is.EqualTo(1),
+                    "The narrow observer representation follows that sibling's authoritative equipment state.");
+
+                presentation.ApplyFrame(HelmetFrame(2, false, false));
+                yield return null;
+                yield return null;
+                Assert.That(hero.GetComponentsInChildren<Transform>(true).Any(item => item.name == "MagmaLord Helmet"), Is.False);
+                Assert.That(sibling.GetComponentsInChildren<Transform>(true).Any(item => item.name == "MagmaLord Helmet"), Is.False);
+            }
+            finally
+            {
+                if (presentation != null) presentation.BindSession(null);
+                session?.Dispose();
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+                if (hero != null) UnityEngine.Object.DestroyImmediate(hero);
+                if (template != null) UnityEngine.Object.DestroyImmediate(template);
+                if (content != null) UnityEngine.Object.DestroyImmediate(content);
+            }
+#else
+            Assert.Ignore("The candidate asset is loaded through its Editor authoring seam.");
+            yield break;
+#endif
+        }
+
+        [UnityTest]
         public IEnumerator RealCandidateAndHeroConsumeDamageDefeatRecoveryAndReconnect()
         {
 #if UNITY_EDITOR
@@ -207,6 +268,44 @@ namespace GalaQuest.Tests
                 UnityEngine.Object.DestroyImmediate(cameraObject); UnityEngine.Object.DestroyImmediate(lightObject);
             }
         }
+
+#if UNITY_EDITOR
+        private static GameObject HeroWithHeadSocket(string name)
+        {
+            var hero = new GameObject(name);
+            var socketObject = new GameObject("Socket_head");
+            socketObject.transform.SetParent(hero.transform, false);
+            socketObject.AddComponent<GalaQuest.Gear.GearSocket>().Configure(GalaQuest.Gear.GearSocketIds.Head, "Head");
+            return hero;
+        }
+
+        private static GalaQuestServerFrame HelmetFrame(int tick, bool localEquipped, bool siblingEquipped)
+        {
+            var frame = new GalaQuestServerFrame
+            {
+                type = "state",
+                tick = tick,
+                destinationId = GalaQuestProtocolV4.EmberworksDeepDestinationId,
+                players = new[]
+                {
+                    new GalaQuestServerPlayer { id = "p1", x = 0, z = 0 },
+                    new GalaQuestServerPlayer { id = "p2", x = 1, z = 0 },
+                },
+            };
+            frame.encounter.heroes["p1"] = new GalaQuestServerHeroCombat { hp = 30, maxHp = 30 };
+            frame.encounter.heroes["p2"] = new GalaQuestServerHeroCombat { hp = 30, maxHp = 30 };
+            frame.encounter.rewards["p1"] = Reward(localEquipped);
+            frame.encounter.rewards["p2"] = Reward(siblingEquipped);
+            return frame;
+        }
+
+        private static GalaQuestServerRewards Reward(bool equipped)
+        {
+            var reward = new GalaQuestServerRewards();
+            if (equipped) reward.equippedItemIds["helmet"] = GalaQuestRuneForgePresenter.MagmaLordItemId;
+            return reward;
+        }
+#endif
 
         private sealed class FakeTransport : IGalaQuestTransport
         {

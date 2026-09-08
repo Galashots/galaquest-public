@@ -149,6 +149,11 @@ namespace GalaQuest
                 lastInputSentAt = float.NegativeInfinity;
                 StatusChanged?.Invoke($"Connected · {profile.DisplayName}");
             }
+            else if (frame.type == "forge-state")
+            {
+                if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.id != PlayerId
+                    || frame.destinationId != DestinationId || frame.worldEpoch != WorldEpoch) return;
+            }
             else if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.worldEpoch != WorldEpoch) return;
 
             // Only messages accepted by the player/destination/epoch checks reach personal
@@ -227,5 +232,26 @@ namespace GalaQuest
             if (!ControlsReady) return false;
             return transport.Send(GalaQuestProtocolV4.Attack(++attackSequence, WorldEpoch));
         }
+
+        public bool TryOpenRuneForge() => ControlsReady
+            && DestinationId == GalaQuestProtocolV4.EmberworksDeepDestinationId
+            && transport.Send(GalaQuestProtocolV4.ForgeOpen(WorldEpoch));
+
+        public bool TrySelectRuneForgePack(string packId) => ControlsReady && !string.IsNullOrEmpty(packId)
+            && transport.Send(GalaQuestProtocolV4.ForgeSelectPack(packId, WorldEpoch));
+
+        public bool TryAnswerRuneForge(string taskId, string choiceId, string contentVersion) => ControlsReady
+            && !string.IsNullOrEmpty(taskId) && !string.IsNullOrEmpty(choiceId) && !string.IsNullOrEmpty(contentVersion)
+            && transport.Send(GalaQuestProtocolV4.ForgeAnswer(taskId, choiceId, contentVersion, WorldEpoch));
+
+        public bool TryRequestRuneForgeHint(string taskId, string contentVersion) => ControlsReady
+            && !string.IsNullOrEmpty(taskId) && !string.IsNullOrEmpty(contentVersion)
+            && transport.Send(GalaQuestProtocolV4.ForgeHint(taskId, contentVersion, WorldEpoch));
+
+        public bool TryClaimRuneForge() => ControlsReady
+            && transport.Send(GalaQuestProtocolV4.ForgeClaim(WorldEpoch));
+
+        public bool TryEquip(string itemId) => ControlsReady && !string.IsNullOrEmpty(itemId)
+            && transport.Send(GalaQuestProtocolV4.Equip(itemId, WorldEpoch));
     }
 }

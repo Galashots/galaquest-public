@@ -1,0 +1,103 @@
+{
+  "schema": "galaquest-rune-forge-catalog",
+  "schemaVersion": 1,
+  "entitlement": {
+    "id": "emberworks.rune-forge.magmalord-helmet.v1",
+    "itemId": "helmet_magmalord",
+    "displayName": "MagmaLord Helmet"
+  },
+  "packs": [
+    {
+      "id": "grapheme-er-family",
+      "contentVersion": "2026-09-08.1",
+      "title": "Sound Runes",
+      "interaction": "rune-hammer",
+      "requiredSuccesses": 2,
+      "sourceBasis": "Distilled from the selected grapheme sheet: er, ir, ur, wor.",
+      "tasks": [
+        {
+          "id": "grapheme-bird-ir",
+          "skill": "choose-grapheme-for-spoken-word",
+          "spokenPrompt": "bird",
+          "displayPrompt": "b __ d",
+          "hint": "The middle rune is i-r. Hear it in bird.",
+          "choices": [
+            { "id": "er", "label": "er", "correct": false },
+            { "id": "ir", "label": "ir", "correct": true },
+            { "id": "ur", "label": "ur", "correct": false }
+          ]
+        },
+        {
+          "id": "grapheme-turn-ur",
+          "skill": "choose-grapheme-for-spoken-word",
+          "spokenPrompt": "turn",
+          "displayPrompt": "t __ n",
+          "hint": "The middle rune is u-r. Hear it in turn.",
+          "choices": [
+            { "id": "ir", "label": "ir", "correct": false },
+            { "id": "ur", "label": "ur", "correct": true },
+            { "id": "er", "label": "er", "correct": false }
+          ]
+        },
+        {
+          "id": "grapheme-world-wor",
+          "skill": "choose-grapheme-for-spoken-word",
+          "spokenPrompt": "world",
+          "displayPrompt": "__ ld",
+          "hint": "World starts with the w-o-r rune group.",
+          "choices": [
+            { "id": "war", "label": "war", "correct": false },
+            { "id": "wor", "label": "wor", "correct": true },
+            { "id": "wer", "label": "wer", "correct": false }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "place-value-rounding",
+      "contentVersion": "2026-09-08.1",
+      "title": "Number Runes",
+      "interaction": "rune-hammer",
+      "requiredSuccesses": 2,
+      "sourceBasis": "Distilled from the selected place-value, number-form, estimation and rounding snapshot.",
+      "tasks": [
+        {
+          "id": "value-4582-hundreds",
+          "skill": "distinguish-place-from-value",
+          "spokenPrompt": "In four thousand five hundred eighty-two, what is the value of five?",
+          "displayPrompt": "In 4,582, what is the value of 5?",
+          "hint": "Five is in the hundreds place, so its value is five hundred.",
+          "choices": [
+            { "id": "5000", "label": "5,000", "correct": false },
+            { "id": "500", "label": "500", "correct": true },
+            { "id": "50", "label": "50", "correct": false }
+          ]
+        },
+        {
+          "id": "round-6742-hundred",
+          "skill": "round-to-nearest-hundred",
+          "spokenPrompt": "Round six thousand seven hundred forty-two to the nearest hundred.",
+          "displayPrompt": "Round 6,742 to the nearest hundred.",
+          "hint": "Look at the tens digit. Four means keep the seven hundreds.",
+          "choices": [
+            { "id": "6700", "label": "6,700", "correct": true },
+            { "id": "6800", "label": "6,800", "correct": false },
+            { "id": "6000", "label": "6,000", "correct": false }
+          ]
+        },
+        {
+          "id": "expanded-3206",
+          "skill": "expanded-form",
+          "spokenPrompt": "Choose the expanded form of three thousand two hundred six.",
+          "displayPrompt": "Expanded form of 3,206",
+          "hint": "There are three thousands, two hundreds, zero tens, and six ones.",
+          "choices": [
+            { "id": "320-6", "label": "320 + 6", "correct": false },
+            { "id": "3000-200-6", "label": "3,000 + 200 + 6", "correct": true },
+            { "id": "3000-20-6", "label": "3,000 + 20 + 6", "correct": false }
+          ]
+        }
+      ]
+    }
+  ]
+}

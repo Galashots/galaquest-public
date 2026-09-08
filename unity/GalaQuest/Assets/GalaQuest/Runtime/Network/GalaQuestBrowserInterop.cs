@@ -36,6 +36,9 @@ namespace GalaQuest
 
         [DllImport("__Internal")]
         private static extern void GQ_Touch_ConfigureSurface();
+
+        [DllImport("__Internal")]
+        private static extern void GQ_Audio_Speak(string text);
 #endif
 
         public static void ReadSelectedProfile(string gameObject, string callback)
@@ -105,6 +108,13 @@ namespace GalaQuest
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             GQ_Touch_ConfigureSurface();
+#endif
+        }
+
+        public static void Speak(string text)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (!string.IsNullOrEmpty(text)) GQ_Audio_Speak(text);
 #endif
         }
     }

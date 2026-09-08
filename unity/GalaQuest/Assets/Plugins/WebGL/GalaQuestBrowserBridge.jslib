@@ -18,6 +18,16 @@ mergeInto(LibraryManager.library, {
     }
   },
 
+  GQ_Audio_Speak: function (textPtr) {
+    var text = UTF8ToString(textPtr).trim();
+    if (!text || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+    window.speechSynthesis.cancel();
+    var utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.82;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  },
+
   GQ_Profile_ReadSelected: function (gameObjectPtr, callbackPtr) {
     var gameObject = UTF8ToString(gameObjectPtr);
     var callback = UTF8ToString(callbackPtr);
@@ -74,7 +84,8 @@ mergeInto(LibraryManager.library, {
     socket.onmessage = function (event) {
       try {
         var received = JSON.parse(String(event.data));
-        if (received && (received.type === 'welcome' || received.type === 'snapshot' || received.type === 'destination-changed')) {
+        if (received && (received.type === 'welcome' || received.type === 'snapshot'
+            || received.type === 'destination-changed' || received.type === 'forge-state')) {
           var diagnostics = window.__gqUnityCp2Diagnostics || {
             sentInputs: [], serverFrames: [], reconciliations: []
           };

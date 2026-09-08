@@ -69,6 +69,7 @@ namespace GalaQuest
             foreach (var touch in touchscreen.touches)
             {
                 if (!touch.press.wasPressedThisFrame) continue;
+                if (GalaQuestRuneForgePresenter.OwnsTouch(touch.touchId.ReadValue())) continue;
                 if (GetComponent<GalaQuestDestinationPresentation>() != null
                     && GalaQuestDestinationPresentation.IsInTravelRegion(touch.position.ReadValue(),
                         new Vector2(Screen.width, Screen.height))) continue;

@@ -56,6 +56,10 @@ export const PROFILE_FACT_TYPES = Object.freeze([
   'satchel-taken',
   'charm-earned',
   'xp-earned',
+  'forge-pack-selected',
+  'forge-task-attempted',
+  'forge-task-assisted',
+  'forge-task-completed',
 ]);
 
 /** Facts about the WORLD rather than about one child. Durable and guest-stamped (the row records who
@@ -280,6 +284,11 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   // every other personal xp-earned identity above: the profile it names may restore it, another
   // profile may not reserve it out from under them.
   'kill-xp:',
+  'forge-pack:',
+  'forge-attempt:',
+  'forge-assist:',
+  'forge-complete:',
+  'forge-entitlement:',
   // Rune chests: minted `rune-chest:<profileId>:<chestId>` by progression/runeChests.js's own
   // runeChestXpEventId, CLIENT-SIDE ONLY, the same way an offline Lantern unlock is (`lantern-
   // unlocked:<profileId>` above) -- unlike kill-xp, there is no server-side counterpart that ever
