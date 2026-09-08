@@ -156,8 +156,22 @@ namespace GalaQuest.Editor
             var sourceSha = Git("rev-parse HEAD");
             if (!string.IsNullOrWhiteSpace(Git("status --porcelain"))) throw new BuildFailedException("Commit runtime changes before an exact-source candidate build");
             var output = Path.Combine(Application.dataPath, "../Builds/GalaQuestWebGL");
+            var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
+            var previousCompression = PlayerSettings.WebGL.compressionFormat;
+#if UNITY_WEBGL
+            var previousOptimization = UnityEditor.WebGL.UserBuildSettings.codeOptimization;
+#endif
             try
             {
+                if (fastIteration)
+                {
+                    PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+#if UNITY_WEBGL
+                    UnityEditor.WebGL.UserBuildSettings.codeOptimization = UnityEditor.WebGL.WasmCodeOptimization.BuildTimes;
+#else
+                    throw new BuildFailedException("Fast browser review requires the WebGL build target.");
+#endif
+                }
                 var content = Prepare();
                 var scene = PrepareScene(content);
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
@@ -168,16 +182,29 @@ namespace GalaQuest.Editor
                 if (report.summary.result != BuildResult.Succeeded) throw new BuildFailedException("Candidate build failed: " + report.summary.result);
                 var files = Directory.GetFiles(Path.Combine(output, "Build"))
                     .Select(path => new { name = Path.GetFileName(path), bytes = new FileInfo(path).Length, sha256 = Hash(path) }).ToArray();
+#if UNITY_WEBGL
+                var optimization = UnityEditor.WebGL.UserBuildSettings.codeOptimization.ToString();
+#else
+                var optimization = "PlatformDefault";
+#endif
                 var manifest = new { sourceSha, buildFlavor = "LOCAL_CANDIDATE_REVIEW", candidateFbxSha256 = CandidateSha,
                     candidateTextureSha256 = Hash(Path.Combine(CandidateDirectory, "../gremlin-body/texture_0_base_color.png")),
                     heroGripCandidateSha256 = U2HeroGripPreview.CandidateSha,
                     heroGripOwnerApprovedForPlaytest = true,
-                    productionPromotion = false, sceneRecipe = "U2CombatPreview", files };
-                var evidencePath = Path.Combine(RepoRoot, ".local/m2/preview-build-" + sourceSha.Substring(0, 7) + ".json");
+                    productionPromotion = false, sceneRecipe = "U2CombatPreview", fastIteration,
+                    optimization, compression = PlayerSettings.WebGL.compressionFormat.ToString(), files };
+                var evidencePath = Path.Combine(RepoRoot, ".local/m2/preview-build-" + sourceSha.Substring(0, 7) + (fastIteration ? "-fast" : "") + ".json");
                 File.WriteAllText(evidencePath, JsonConvert.SerializeObject(manifest, Formatting.Indented));
                 Debug.Log("Candidate review build complete: " + evidencePath);
             }
-            finally { Cleanup(); }
+            finally
+            {
+                PlayerSettings.WebGL.compressionFormat = previousCompression;
+#if UNITY_WEBGL
+                UnityEditor.WebGL.UserBuildSettings.codeOptimization = previousOptimization;
+#endif
+                Cleanup();
+            }
         }
 
         private static AnimationClip Clip(string path, string suffix)

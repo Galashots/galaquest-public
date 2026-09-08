@@ -89,7 +89,30 @@ namespace GalaQuest.Editor
             item.transform.localPosition = at;
             item.transform.localScale = size;
             item.GetComponent<MeshRenderer>().sharedMaterial = material;
-            Object.DestroyImmediate(item.GetComponent<Collider>());
+            SetCameraCollider(item);
+        }
+
+        public static void RepairCameraObstructions()
+        {
+            var scene = EditorSceneManager.OpenScene(EmberworksGreyboxBuild.ScenePath, OpenSceneMode.Single);
+            var home = scene.GetRootGameObjects().Single(root => root.name == RootName);
+            foreach (var renderer in home.GetComponentsInChildren<MeshRenderer>(true)) SetCameraCollider(renderer.gameObject);
+            if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException("Could not save camp camera obstructions.");
+        }
+
+        private static void SetCameraCollider(GameObject item)
+        {
+            var at = item.transform.localPosition;
+            var size = item.transform.localScale;
+            // These solids sit outside the server's movement envelope. Flat floor discs must
+            // never retain Unity's oversized default capsule (the earlier U1 floor defect).
+            var solid = size.y > .35f && (Mathf.Abs(at.x) > 9.5f || at.z > 9.5f);
+            var collider = item.GetComponent<Collider>();
+            if (!solid) { if (collider != null) Object.DestroyImmediate(collider); return; }
+            if (collider != null) return;
+            if (item.name.StartsWith("TreeCrown") || item.name.StartsWith("GateLantern")) item.AddComponent<SphereCollider>();
+            else if (item.name.StartsWith("TreeTrunk")) item.AddComponent<CapsuleCollider>();
+            else item.AddComponent<BoxCollider>();
         }
 
         private static Material Material(string name, Color color, float metal = 0, bool emission = false)

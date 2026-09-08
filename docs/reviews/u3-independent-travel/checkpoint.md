@@ -94,3 +94,28 @@ Exact-source WebGL build, two-browser travel/reunion, running-game visual review
 results must still be recorded below. This checkpoint does not claim the miniature loop or either
 full adventure complete. The existing gremlin remains a separate review candidate; travel work
 does not promote it or authorize further provider spend.
+
+### Browser checkpoint and causal repairs
+
+At **2346bf4513557d6bc305dbe82cf40f20b6ca5541**, the strict, non-development WebGL candidate build
+passed and the [hosted unit gate](https://github.com/Galashots/galaquest-public/actions/runs/34178387057)
+passed. Two real Unity browser clients verified enemy-free camp, independent travel, released-input
+arrival, separation, damage retained when a sibling arrives later, reunion, socket reconnection to
+the acknowledged destination, and return to camp while the sibling remains in Emberworks. The
+local browser report recorded no browser errors. This proves desktop-browser behavior, not iPad
+performance or touch acceptance.
+
+Visual self-review found two defects: the top travel button covered the gate, and a camp tree could
+completely hide the hero when orbiting at the eastern boundary. The latter was reproduced by a
+scene-based EditMode test: the uncorrected camera stayed 9.836 units away where the obstruction
+required less than 7. The repair gives upright scenery outside the walk envelope camera colliders;
+flat ground discs remain collider-free. The travel button moves below the play space, and its touch
+region is excluded from both camera and joystick ownership. After repair the full EditMode run
+reported 187 pass, zero fail, one optional custody-review skip. Rebuilt visual verification is pending.
+
+The candidate build helper now supports opt-in `GQ_FAST_REVIEW_BUILD=1` for visual iteration using
+Unity's [BuildTimes WebGL optimization](https://docs.unity3d.com/6000.3/Documentation/ScriptReference/WebGL.WasmCodeOptimization.html)
+and disabled compression. It retains StrictMode, non-development output, clean-source and candidate
+hash guards, and restores prior settings afterward. The manifest explicitly identifies optimization,
+compression and fast-iteration status. Default builds retain their existing settings. A fast review
+build does not establish final optimized-build performance on physical iPads.

@@ -52,7 +52,7 @@ namespace GalaQuest
         }
 
         public static Rect TravelButtonRect(Vector2 viewport) =>
-            new Rect((viewport.x - 260f) * .5f, 92f, 260f, 58f);
+            new Rect((viewport.x - 260f) * .5f, viewport.y - 84f, 260f, 58f);
 
         public static bool IsInTravelRegion(Vector2 position, Vector2 viewport) =>
             TravelButtonRect(viewport).Contains(new Vector2(position.x, viewport.y - position.y));
