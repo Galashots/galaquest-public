@@ -15,6 +15,7 @@ namespace GalaQuest
         [SerializeField] private Transform hero;
         [SerializeField] private Transform forgeRoot;
         [SerializeField] private GameObject trappedHelmet;
+        [SerializeField] private Camera interactionCamera;
         [SerializeField] private AudioClip machineCue;
         [SerializeField] private AudioClip successCue;
         [SerializeField] private AudioClip claimCue;
@@ -34,6 +35,8 @@ namespace GalaQuest
             && session.DestinationId == GalaQuestProtocolV4.EmberworksDeepDestinationId
             && Vector3.Distance(hero.position, forgeRoot.position) <= InteractionDistance;
         public static bool OwnsTouch(int touchId) => OwnedTouchIds.Contains(touchId);
+        internal Camera InteractionCamera => interactionCamera != null ? interactionCamera
+            : interactionCamera = Camera.main ?? FindFirstObjectByType<Camera>();
 
         public void Configure(Transform heroTransform, Transform forge, GameObject prize,
             AudioClip machine, AudioClip success, AudioClip claim)
@@ -108,11 +111,12 @@ namespace GalaQuest
         private void RecordBrowserControlDiagnostics()
         {
             GalaQuestBrowserInterop.ClearForgeControls();
-            if (!IsNear || Camera.main == null || interactables == null) return;
+            var camera = InteractionCamera;
+            if (!IsNear || camera == null || interactables == null) return;
             foreach (var item in interactables)
             {
                 if (item == null || !item.gameObject.activeInHierarchy) continue;
-                var point = Camera.main.WorldToScreenPoint(item.transform.position);
+                var point = camera.WorldToScreenPoint(item.transform.position);
                 if (point.z <= 0f) continue;
                 GalaQuestBrowserInterop.RecordForgeControl(item.Kind, item.Value, point.x, point.y);
             }
@@ -132,8 +136,9 @@ namespace GalaQuest
 
         private bool TryPress(int pointerId, Vector2 screenPoint)
         {
-            if (!IsNear || session == null || !session.ControlsReady || Camera.main == null) return false;
-            var ray = Camera.main.ScreenPointToRay(screenPoint);
+            var camera = InteractionCamera;
+            if (!IsNear || session == null || !session.ControlsReady || camera == null) return false;
+            var ray = camera.ScreenPointToRay(screenPoint);
             if (!Physics.Raycast(ray, out var hit, 100f)) return false;
             var target = hit.collider.GetComponentInParent<GalaQuestRuneForgeInteractable>();
             if (target == null || !target.gameObject.activeInHierarchy) return false;

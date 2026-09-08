@@ -103,6 +103,32 @@ namespace GalaQuest.Tests
                 Does.Contain("hammer").And.Contain("rune").And.Contain("hint").And.Contain("hear").And.Contain("claim").And.Contain("equip"));
         }
 
+        [Test]
+        public void PresenterFindsTheActivePreviewCameraWithoutRequiringTheMainCameraTag()
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                UnityEditor.SceneManagement.NewSceneMode.Single);
+            var cameraObject = new GameObject("Forge review camera");
+            var presenterObject = new GameObject("Forge presenter");
+            try
+            {
+                cameraObject.tag = "Untagged";
+                var camera = cameraObject.AddComponent<Camera>();
+                var presenter = presenterObject.AddComponent<GalaQuestRuneForgePresenter>();
+                Assert.That(Camera.main, Is.Null);
+                var property = typeof(GalaQuestRuneForgePresenter).GetProperty("InteractionCamera",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Assert.That(property, Is.Not.Null);
+                Assert.That(property.GetValue(presenter), Is.SameAs(camera));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(presenterObject);
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
         private sealed class Wire : IGalaQuestTransport
         {
             public event Action Opened;
