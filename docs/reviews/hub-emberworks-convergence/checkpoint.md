@@ -81,3 +81,25 @@ CP3 will bind committed inputs to final-head Node/Unity, strict non-development 
 build, real browser integrity flow and hosted evidence. The existing browser driver now supports
 `--integrity`, including a harness-only withheld acknowledgement on an otherwise open socket.
 Physical iPad and independent/Owner acceptance remain separate and are not claimed here.
+
+## CP3 residual F1 counterexample
+
+The same-room observer probe on `6ce52e1cac04b0d66fdf13a62caa6146c59673b5` found one settlement
+snapshot containing both the retired avatar and its replacement. This is a residual ownership
+presentation defect, not an integration/content regression. The committed regression now requires
+zero such snapshots. The correction removes the old body before publishing pending combat, retaining
+its reward identity until settlement. Focused Node/server/bridge/guidance/corpse suite: 87 PASS,
+zero failures (`.local/convergence/cp3-final-focused.log`).
+
+The strict WebGL build succeeded at client source `6ce52e1cac04b0d66fdf13a62caa6146c59673b5`.
+Build entry: `GalaQuest.Editor.U2CombatPreview.BuildWebGL`, `-batchmode -quit -buildTarget WebGL`,
+`GQ_FAST_REVIEW_BUILD=1`; BuildOptions.StrictMode, no Development flag. Manifest:
+`.local/m2/preview-build-6ce52e1-fast.json`; log: `.local/convergence/cp3-build.log`.
+Flavor is LOCAL_CANDIDATE_REVIEW, BuildTimes optimization, disabled compression, productionPromotion
+false. Full committed-head EditMode: 196 PASS / 0 FAIL / 1 opt-in preview SKIP; then the opt-in test
+was separately run with GQ_U2_GRIP_REVIEW=1 and passed (1/1). The original hash-verified hand JSON was
+read from the producer's existing local custody; no candidate was created or promoted.
+
+The residual correction changes only the server, its regression, and the browser driver/checkpoint.
+Unity/client source remains identical, so browser evidence will record its client and server SHAs
+separately. The integrity driver also exercises touch movement after ACK-loss recovery.

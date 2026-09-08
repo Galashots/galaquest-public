@@ -284,3 +284,17 @@ test('live takeover reattaches an existing personal corpse claim in the departed
     assert.equal(room.players.has(old.welcome.id), false);
   }, { enemies: [{ enemyId: 'claim-wolf', kind: 'frost-wolf', spawn: { x: 0, z: 8 } }], rng: () => 0 });
 });
+
+
+test('same-destination takeover never broadcasts both avatars to a sibling', async () => {
+  await withServer(async ({ connect }) => {
+    const sibling = await connect('observer', 'home-hub', 'profile-observer');
+    const old = await connect('old', 'home-hub', 'profile-same-room');
+    const start = sibling.messages.length;
+    const active = await connect('active', 'home-hub', 'profile-same-room');
+    await sibling.wait(m => m.type === 'snapshot' && m.players.some(p => p.id === active.welcome.id));
+    const duplicates = sibling.messages.slice(start).filter(m => m.type === 'snapshot' &&
+      m.players.filter(p => [old.welcome.id, active.welcome.id].includes(p.id)).length > 1);
+    assert.equal(duplicates.length, 0, 'settlement must not publish the retired avatar alongside its replacement');
+  });
+});

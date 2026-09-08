@@ -2111,8 +2111,8 @@ export function attachGameServer(httpServer, options = {}) {
               if (previous.data.playerId !== previousHeroId) continue;
               previous.data.superseded = true;
               const previousWorld = simulationFor(previous.data.destinationId);
-              publishSimulation(previousWorld);
               previousWorld.removePlayer(previousHeroId);
+              publishSimulation(previousWorld);
               rewards.leave(previousHeroId);
               previous.data.playerId = null;
               broadcastDestination(previousWorld.destinationId, leaveMessage(previousHeroId));

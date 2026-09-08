@@ -302,7 +302,14 @@ try{
     const recovered=await waitFor(()=>frame(first),f=>f.destinationId==='home-hub'&&f.players.some(p=>p.id!==before&&p.id!==second.id),'Travel timeout rejoins last confirmed camp',25000,100);
     first.id=recovered.players.find(p=>p.id!==second.id).id;
     await moveAxis(first,'d','x',1.4);
+    const beforeTouch=(await sample(first)).reconciliation.authoritative;
+    const thumb=point(first,5,.18,.84);
+    await touch(first,'touchStart',[thumb]);await delay(80);
+    await touch(first,'touchMove',[{...thumb,x:thumb.x+55}]);await delay(650);
+    await touch(first,'touchEnd',[]);await delay(150);
     checks.travelAckRecovery=await sample(first);
+    const afterTouch=checks.travelAckRecovery.reconciliation.authoritative;
+    assert.ok(Math.hypot(afterTouch.x-beforeTouch.x,afterTouch.z-beforeTouch.z)>.15,'Touch movement works after ACK recovery');
     await capture(first,'15-ack-recovery-controls');
     await second.send('Page.bringToFront');
     await moveAxis(second,'w','z',4.8);await travelTap(second);await arrived(second,'emberworks-deep');
