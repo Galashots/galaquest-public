@@ -99,9 +99,23 @@ namespace GalaQuest
 
         private void Update()
         {
+            RecordBrowserControlDiagnostics();
             PollTouches();
             if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 TryPress(-2, Mouse.current.position.ReadValue());
+        }
+
+        private void RecordBrowserControlDiagnostics()
+        {
+            GalaQuestBrowserInterop.ClearForgeControls();
+            if (!IsNear || Camera.main == null || interactables == null) return;
+            foreach (var item in interactables)
+            {
+                if (item == null || !item.gameObject.activeInHierarchy) continue;
+                var point = Camera.main.WorldToScreenPoint(item.transform.position);
+                if (point.z <= 0f) continue;
+                GalaQuestBrowserInterop.RecordForgeControl(item.Kind, item.Value, point.x, point.y);
+            }
         }
 
         private void PollTouches()

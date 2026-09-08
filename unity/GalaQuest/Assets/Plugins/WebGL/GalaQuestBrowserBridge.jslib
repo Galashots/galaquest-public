@@ -28,6 +28,28 @@ mergeInto(LibraryManager.library, {
     window.speechSynthesis.speak(utterance);
   },
 
+  // Review-only observation seam: the Forge driver still dispatches ordinary canvas
+  // touches. These projected points let it hit the physical world controls without
+  // encoding camera-specific pixels or exposing answers/private learner state.
+  GQ_Diagnostics_ClearForgeControls: function () {
+    window.__gqRuneForgeControls = [];
+  },
+
+  GQ_Diagnostics_RecordForgeControl: function (kindPtr, valuePtr, screenX, screenY) {
+    var canvas = document.querySelector('#unity-canvas');
+    if (!canvas) return;
+    var rect = canvas.getBoundingClientRect();
+    var width = canvas.width || rect.width;
+    var height = canvas.height || rect.height;
+    window.__gqRuneForgeControls = window.__gqRuneForgeControls || [];
+    window.__gqRuneForgeControls.push({
+      kind: UTF8ToString(kindPtr),
+      value: UTF8ToString(valuePtr),
+      x: rect.x + (screenX / width) * rect.width,
+      y: rect.y + (1 - screenY / height) * rect.height
+    });
+  },
+
   GQ_Profile_ReadSelected: function (gameObjectPtr, callbackPtr) {
     var gameObject = UTF8ToString(gameObjectPtr);
     var callback = UTF8ToString(callbackPtr);

@@ -39,6 +39,13 @@ namespace GalaQuest
 
         [DllImport("__Internal")]
         private static extern void GQ_Audio_Speak(string text);
+
+        [DllImport("__Internal")]
+        private static extern void GQ_Diagnostics_ClearForgeControls();
+
+        [DllImport("__Internal")]
+        private static extern void GQ_Diagnostics_RecordForgeControl(
+            string kind, string value, float screenX, float screenY);
 #endif
 
         public static void ReadSelectedProfile(string gameObject, string callback)
@@ -115,6 +122,20 @@ namespace GalaQuest
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             if (!string.IsNullOrEmpty(text)) GQ_Audio_Speak(text);
+#endif
+        }
+
+        public static void ClearForgeControls()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            GQ_Diagnostics_ClearForgeControls();
+#endif
+        }
+
+        public static void RecordForgeControl(string kind, string value, float screenX, float screenY)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            GQ_Diagnostics_RecordForgeControl(kind, value, screenX, screenY);
 #endif
         }
     }
