@@ -36,7 +36,22 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
   law (`public/src/character/speed.js`) and the collision resolver
   (`public/src/world/obstacles.js`), each imported by both the server and client prediction.
 
-## Client
+## Unity production client
+
+- `unity/GalaQuest/` — the Unity production project. Its project-local authority is
+  [`unity/AGENTS.md`](../unity/AGENTS.md); it pins the Editor/URP baseline and the production-client
+  migration boundaries.
+- `unity/GalaQuest/Assets/GalaQuest/Runtime/` — Unity runtime, identity, network, movement, combat,
+  destination, and progression code. `Assets/GalaQuest/Editor/` holds checked-in Editor validation and
+  WebGL build entry points; generated output is `unity/GalaQuest/Builds/GalaQuestWebGL/` and is not
+  source authority.
+- `server.mjs` mounts that existing local build at `/unity/` and the authoritative socket at `/ws`.
+  This is a local runtime route, not a public-deployment guarantee.
+- `tools/unity-playtest/` is the manifest-bound Unity browser-evidence surface. Its
+  [`README.md`](../tools/unity-playtest/README.md) owns the runnable build-manifest and browser-driver
+  procedure; the driver proves asserted behavior, not visual or physical-device acceptance.
+
+## Retained Three.js reference client
 
 `public/index.html` boots `public/src/main.js`, which wires the subsystem directories under
 `public/src/`:
@@ -63,8 +78,9 @@ Vendored libraries live in `public/vendor/`. Numeric character/gear authority, w
 
 ## Tools, tests, CI
 
-- `tools/runtime-test/` — CDP browser harnesses (the local running-game evidence surface);
-  `tools/diagnostics/` — instruments; `tools/ci-diff.py` — hosted-run comparison with flap history.
+- `tools/runtime-test/` — CDP browser harnesses for the retained Three.js client (legacy local
+  running-game evidence); `tools/diagnostics/` — instruments; `tools/ci-diff.py` — hosted-run
+  comparison with flap history.
 - `tools/foundry/`, `tools/meshy/`, `tools/assets/`, `tools/blender/`, `tools/atlas/` — asset
   pipeline; provider spend is Owner-authorized per `AGENTS.md`.
 - `tools/sol-review/`, `tools/forge-review/` — review/capture workers.
