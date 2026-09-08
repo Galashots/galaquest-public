@@ -1899,6 +1899,34 @@ PrefabInstance:
       propertyPath: m_Name
       value: GalaQuestHero
       objectReference: {fileID: 0}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_Mesh
+      value:
+      objectReference: {fileID: 4300000, guid: 2997b3448f9e5f44ca979764133e4801, type: 2}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_AABB.m_Center.x
+      value: -0.0010378361
+      objectReference: {fileID: 0}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_AABB.m_Center.y
+      value: 0.00064264983
+      objectReference: {fileID: 0}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_AABB.m_Center.z
+      value: 0.74988097
+      objectReference: {fileID: 0}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_AABB.m_Extent.x
+      value: 0.67523474
+      objectReference: {fileID: 0}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_AABB.m_Extent.y
+      value: 0.21352524
+      objectReference: {fileID: 0}
+    - target: {fileID: 6050226094852410611, guid: 3a2a7ff399ed9b4458b9b4f04763b15b, type: 3}
+      propertyPath: m_AABB.m_Extent.z
+      value: 0.75022334
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

@@ -64,7 +64,7 @@ namespace GalaQuest.Editor
             return true;
         }
 
-        private const string HeroPrefabPath = "Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab";
+        private const string HeroPrefabPath = HeroGripAuthoring.PrefabPath;
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
 
         private const string RootName = "EmberworksDeep";
