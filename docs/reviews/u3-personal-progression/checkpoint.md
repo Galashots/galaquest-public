@@ -125,3 +125,40 @@ canonical store; a new gesture must follow a fresh neutral Unity frame after tra
 file must be readable as well as present; fixture scripts must skip opaque `about:blank` pages during
 restart. The successful run retains the independent held-input arrival check and does not filter out
 browser errors.
+
+## Checkpoint 2 built-client evidence
+
+Runtime, client and server: **`0eb4d75d33291c756f5a5de152859f4b554abf98`**.
+The revised build and committed `--progression` driver passed all **14 recorded checks**, with
+**zero browser errors**. The [compact proof manifest](browser-proof-0eb4d75.json) records the
+build hashes, progression observations and screenshot hashes.
+
+- Real touch combat earns 20 XP, crossing the fixture from 95 to 115 XP: level 2, POWER 1,400,
+  max HP 35 and damage 12. The nearby non-contributing sibling remains level 1 with zero XP.
+- Travel, reunion and reconnect preserve the shared destination and separate personal progress.
+  The held-input arrival check remains part of the same run.
+- Both Unity pages reload against a replacement server with a new empty reward store. The first
+  child's device journal restores the earned stats; the sibling retains their own level-1 state.
+  Neither hydration produces a fresh reward or level-up notice.
+- JavaScript bridge/adapter **14 PASS**, guidance **7 PASS**, Unity EditMode **189 PASS / 0 FAIL /
+  1 optional skip**. Full local Node: **2301 PASS / 1 FAIL / 3 SKIP**; the sole failure is the existing
+  Lantern XP Windows cleanup `EPERM` (`syscall: rm`). Required hosted run
+  [34188353437](https://github.com/Galashots/galaquest-public/actions/runs/34188353437) **PASS** at this SHA.
+
+Producer inspection of the actual WebGL level-up, restored-camp and sibling screens confirms readable
+POWER punctuation and comparison text, labeled health, clear XP, darker panels, and room around the
+Hero and touch controls. The strongest remaining visual weakness is the plain panel treatment against
+unfinished greybox scenery; it does not yet deliver the full forged-material target from Issue #89.
+The camp edge's steep camera fallback, full first-adventure content, wearable reward payoff and learning
+remain separate work. This checkpoint does not assert a finished Emberworks adventure.
+
+**Owner/independent visual acceptance and physical iPad Safari acceptance remain UNKNOWN.**
+This is a local candidate review build using the candidate gremlin and Owner-admitted grip; it does not
+promote assets, establish final optimized-build performance, or authorize a merge. The implementation
+and producer-review checkpoint is ready for review without expanding this PR into those follow-ups.
+
+![Actual Unity WebGL level-up](level-up-0eb4d75.png)
+
+![Level and health restored from the device journal](restored-camp-0eb4d75.png)
+
+The [sibling's unchanged level-1 screen](sibling-0eb4d75.png) is a separate capture from the second context.
