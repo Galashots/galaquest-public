@@ -1,0 +1,200 @@
+{
+  "assetId": "hero.gq-hero-v1.right-hand-grip",
+  "status": "OWNER_REVIEW_PENDING",
+  "productionPromotion": false,
+  "decisionRequested": "Approve or request revisions to the fixed right-hand grip candidate for the playtest.",
+  "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+  "unityNativeDiagnosticSourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
+  "candidateSha256": "f22e1c3d00778f43dd9ecdab18c3d628a15815f2e411aa37bf7c42f9cdb3ea64",
+  "sourceHeroSha256": "23c161a6a7045987f54b2dae370d02c665d169aefa0c8b6377ca5ee82c893351",
+  "sourcePreserved": true,
+  "rigBones": 24,
+  "newRigBones": 0,
+  "candidateHeroTriangles": 12140,
+  "candidateDriveFileId": "1RGVYLEKB7aGcDeS7kxr_Dj4zSUDxh2Dz",
+  "reference": "Three Owner-provided grip photos. Four fingers wrap at different depths; thumb rests outside near index. Personal photographs are not published.",
+  "producerReview": {
+    "result": "READY_FOR_OWNER_REVIEW_WITH_LIMITATIONS",
+    "strongestHandDefect": "A crease remains at the little-finger base and that finger grazes the pommel in close-up. Eight narrow/base triangles oppose the differential-facing estimate; this is not a clean geometry pass.",
+    "gameplayObservation": "The sword follows the closed hand through native slash poses and is readable after camera orbit. The default wall still obscures part of the fight.",
+    "staticGrip": true,
+    "continuousVideoCaptured": false,
+    "physicalSafari": "UNKNOWN",
+    "audibleSoundQuality": "UNKNOWN"
+  },
+  "verification": {
+    "nativeUnity": {
+      "sourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
+      "result": "PASS",
+      "tests": 1,
+      "xmlSha256": "643fdb53b9cb07c5b8e676584b19c6921037a03108995196cd5a3108a7f85573"
+    },
+    "actualPreviewScene": {
+      "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "result": "PASS",
+      "tests": 1,
+      "xmlSha256": "b96b9ebde8d2d9d4323b250a0fdfa1cdafd49366eb2d07ced5551bad73bd1675",
+      "redReproduction": "At a5ecf5f plus the new test, the connected local hero still used char1 instead of HeroRightGrip. The test failed on mesh identity before the scene correction.",
+      "redXmlSha256": "aa683d22d944fed8332688b777dc26c6fe3eb2b5c9c4e81a887e1c45fd047f04",
+      "canonicalSceneUnchanged": true
+    },
+    "strictWebGL": {
+      "result": "PASS",
+      "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "compressedBytes": 19229420,
+      "files": [
+        {
+          "name": "GalaQuestWebGL.data.br",
+          "bytes": 9672566,
+          "sha256": "99e4980b64a97ff315b360e490c96d156ca9c972cff8a10564fa7bf08db69ef2"
+        },
+        {
+          "name": "GalaQuestWebGL.framework.js.br",
+          "bytes": 79874,
+          "sha256": "2d8c67cae90d771b6ba5ba443ee80498d159cf4a404badbdcc789d1c432ce969"
+        },
+        {
+          "name": "GalaQuestWebGL.loader.js",
+          "bytes": 26983,
+          "sha256": "13a776ee1c0ae2bd17defd043fb2dac3ccee43fed2fe0abeb6a65e482ed84371"
+        },
+        {
+          "name": "GalaQuestWebGL.wasm.br",
+          "bytes": 9449997,
+          "sha256": "9e1bb3d03e1c0d345592cb8988c575458e1c0f864f1bda2213e9798ab7320822"
+        }
+      ]
+    },
+    "browser": {
+      "result": "PASS",
+      "clientSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "serverSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "rawReportSha256": "abdc0eb6a10d7fec710fead7262462855029ccaf8ecd9df1e53fcb5107b61aa1",
+      "firstPlayerEnemyHealth": [
+        20,
+        10
+      ],
+      "siblingFinalEnemyHealth": 0,
+      "heldRecoveryInput": {
+        "v": 4,
+        "type": "input",
+        "seq": 78,
+        "dirX": 0,
+        "dirZ": 0,
+        "magnitude": 0,
+        "run": false
+      },
+      "mutedBefore": {
+        "starts": 54,
+        "states": [
+          "running"
+        ]
+      },
+      "mutedAfter": {
+        "starts": 54,
+        "states": [
+          "running"
+        ]
+      },
+      "unmuted": {
+        "starts": 56,
+        "states": [
+          "running"
+        ]
+      },
+      "rejoinedPlayers": [
+        "p1",
+        "p3"
+      ],
+      "errors": [],
+      "motionSamples": [
+        {
+          "targetMs": 60,
+          "capturedAtMs": 201,
+          "swingSecondsBeforeCapture": 0.185
+        },
+        {
+          "targetMs": 250,
+          "capturedAtMs": 406,
+          "swingSecondsBeforeCapture": 0.302
+        },
+        {
+          "targetMs": 520,
+          "capturedAtMs": 664,
+          "swingSecondsBeforeCapture": 0.551
+        },
+        {
+          "targetMs": 800,
+          "capturedAtMs": 985,
+          "swingSecondsBeforeCapture": 0.929
+        },
+        {
+          "targetMs": 1200,
+          "capturedAtMs": 1348,
+          "swingSecondsBeforeCapture": 1.299
+        }
+      ],
+      "timingLimit": "Samples bracket capture; they are not proof of exact impact-frame timing."
+    },
+    "hosted": {
+      "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "tests": [
+        34172494273,
+        34172492121
+      ],
+      "bundle": 34172494265,
+      "result": "PASS"
+    }
+  },
+  "pictures": [
+    {
+      "name": "hand-unity-palm.png",
+      "sourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
+      "description": "Unity PlayMode palm view; little finger touches the pommel",
+      "sha256": "95844d9667b47d96b5a6e3fca5a41310d86b631360df3c4f6bc48f167670df13",
+      "bytes": 224642,
+      "driveFileId": "1hJiSzLBLyr72ISFoHo6LwnPju2_QWIcH"
+    },
+    {
+      "name": "hand-unity-back.png",
+      "sourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
+      "description": "Unity PlayMode back view; crease at the little-finger base",
+      "sha256": "439accde8ad3206c55ee004af2d1c033cc99f1db8ad2e4f3b595519e04ec5f0c",
+      "bytes": 304273,
+      "driveFileId": "1Ubm3Tt7lpFz6hvidKpCAapjMKF40Ud-m"
+    },
+    {
+      "name": "hand-unity-slash.png",
+      "sourceSha": "a5ecf5fc8e62e485e4776493b933c4b83bbbd117",
+      "description": "Unity PlayMode sampled native slash; diagnostic scene",
+      "sha256": "63a17939972f9941a760a98dfab0323bcef017b6b0e48da89e054a9eb8a451f5",
+      "bytes": 284947,
+      "driveFileId": "1-kmSim6cYEWJB6WBrVvYWTrkEtEL3Cbn"
+    },
+    {
+      "name": "hand-browser-orbit.png",
+      "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "description": "Actual browser after touch orbit",
+      "sha256": "9fd57f44726ebfe7aea37788bddcb48025e869cf57792e2fe38849dd7e27a037",
+      "bytes": 115018,
+      "driveFileId": "1F5J5s5oAqJxkTKFNa0JEIZgha0GgxB6S"
+    },
+    {
+      "name": "hand-browser-slash.png",
+      "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "description": "Actual browser sampled slash",
+      "sha256": "b05f0d5df674e321760713b2c4a53d66e708228dd8acbef781a61f3068606e36",
+      "bytes": 113286,
+      "driveFileId": "1Iq9NBDi5mAJamarEWbyL75d_RgChzB6J"
+    },
+    {
+      "name": "hand-browser-warning.png",
+      "sourceSha": "b8b9735e3777570f4d887e0e0ad07d3eaeba66f5",
+      "description": "Actual browser fight; wall obstructs part of the default view",
+      "sha256": "5e949210336aba5aa715899f65ac459211992b5920560bbdc74cc463d4d0a3be",
+      "bytes": 111562,
+      "driveFileId": "11UvCzIm0VKlyh7A5B2BV0YnqStgJYtI7"
+    }
+  ],
+  "ownerReviewFolderId": "1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn"
+}

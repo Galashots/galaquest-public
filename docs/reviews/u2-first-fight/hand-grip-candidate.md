@@ -24,8 +24,26 @@ For graphics-enabled Unity PlayMode review, also set `GQ_U2_REVIEW=1` and `GQ_U2
 
 `U2CombatPreview.BuildWebGL` requires committed source, stages only temporary review assets, records the hand candidate hash in the build manifest, and cleans up its temporary assets. It does not replace the canonical scene or hero.
 
-## Current review limits
+## Verified checkpoint and Owner review
 
-Exploratory Unity tests passed. The large inward finger folds from the first drafts are resolved in inspected Unity views. A small crease at the little-finger base and narrow bevel faces remain visible at inspection scale. The producer must include that angle in the review packet.
+The connected preview source is **b8b9735e3777570f4d887e0e0ad07d3eaeba66f5**. A new test against the actual scene failed before the local-hero correction: the scene retained `char1` while the remote spawn prefab used `HeroRightGrip`. The correction changes only the temporary scene's local mesh and bounds, retaining its hero transform and movement/camera bindings. The passing test reopens the saved preview and also verifies that the canonical scene bytes remain unchanged.
 
-Exact-commit Unity evidence, actual browser evidence, physical Safari verification and Owner visual acceptance remain pending at this source checkpoint. The [connected fight checkpoint](fight-checkpoint.md) records earlier runtime evidence and its separate source SHA.
+The strict WebGL build and real two-browser run pass at that SHA, with both client and server matching it. The first player reduced the enemy from 30 to 20 to 10 health; the sibling finished it. The run also verified stopped held input after recovery, mute/unmute, rejoin and touch orbit, with zero browser errors. Four compressed build files total 19,229,420 bytes. Hosted [test run 34172494273](https://github.com/Galashots/galaquest-public/actions/runs/34172494273), [test run 34172492121](https://github.com/Galashots/galaquest-public/actions/runs/34172492121), and [director bundle 34172494265](https://github.com/Galashots/galaquest-public/actions/runs/34172494265) pass.
+
+The native Unity combat test and diagnostic images below were produced at **a5ecf5fc8e62e485e4776493b933c4b83bbbd117**. The candidate bytes, native clips and fit are unchanged in the later connected-scene correction. The [evidence manifest](hand-grip-evidence.json) keeps these source identities separate and records the test, build and image hashes.
+
+![Unity PlayMode close-up: four curled fingers and outside thumb; little finger grazes the pommel](hand-unity-palm.png)
+
+![Unity PlayMode close-up: remaining crease at the little-finger base](hand-unity-back.png)
+
+![Unity PlayMode: sampled native slash with the repaired grip](hand-unity-slash.png)
+
+![Actual browser at b8b9735: held sword after touch orbit](hand-browser-orbit.png)
+
+![Actual browser at b8b9735: sampled sword sweep](hand-browser-slash.png)
+
+The large inward folds from the first drafts are resolved in the inspected Unity views. The strongest remaining hand concerns are the little-finger base crease, narrow bevel faces and contact with the pommel in close-up. Eight narrow/base triangles oppose the differential-facing estimate; this is not a clean geometry pass. The preview uses a fixed grip pose with the existing hand bone. Finger animation is not added.
+
+The browser frames show the sword following the hand and a readable sweep after orbit. The default cavern wall still blocks part of the view, and the environment remains greybox. Physical Safari comfort, audible sound quality, continuous-motion judgment and Owner visual acceptance remain open. The [Owner packet in controlled Drive custody](https://drive.google.com/drive/folders/1m51k_mc8ThoyN6KMKaERGj4NMDgiATVn) includes the defect-exposing angles. It requests a decision on this grip candidate; production promotion remains false.
+
+The [earlier connected fight checkpoint](fight-checkpoint.md) records the broader combat implementation and its previous source SHA.
