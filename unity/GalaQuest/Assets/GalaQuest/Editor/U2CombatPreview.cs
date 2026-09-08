@@ -90,6 +90,8 @@ namespace GalaQuest.Editor
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             var content = ScriptableObject.CreateInstance<GalaQuestCombatContent>();
             content.HeroPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab");
+            if (Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1")
+                content.HeroPrefab = U2HeroGripPreview.Prepare(content.HeroPrefab, Temporary);
             content.HeroController = heroController;
             content.StarterWeapon = PrepareStarterWeapon(content.HeroPrefab);
             content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab } };
@@ -153,6 +155,8 @@ namespace GalaQuest.Editor
                     .Select(path => new { name = Path.GetFileName(path), bytes = new FileInfo(path).Length, sha256 = Hash(path) }).ToArray();
                 var manifest = new { sourceSha, buildFlavor = "LOCAL_CANDIDATE_REVIEW", candidateFbxSha256 = CandidateSha,
                     candidateTextureSha256 = Hash(Path.Combine(CandidateDirectory, "../gremlin-body/texture_0_base_color.png")),
+                    heroGripCandidateSha256 = Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1"
+                        ? U2HeroGripPreview.CandidateSha : null,
                     productionPromotion = false, sceneRecipe = "U2CombatPreview", files };
                 var evidencePath = Path.Combine(RepoRoot, ".local/m2/preview-build-" + sourceSha.Substring(0, 7) + ".json");
                 File.WriteAllText(evidencePath, JsonConvert.SerializeObject(manifest, Formatting.Indented));
@@ -192,7 +196,10 @@ namespace GalaQuest.Editor
                 if (bounds.size.y < .9f || bounds.size.y > 1.1f) throw new BuildFailedException("Unexpected imported sword axis or metre scale: " + bounds.size);
                 // The documented source handle point is y=-.43 on the one-metre mesh.
                 // The imported proof prefab restores that mesh's upright orientation.
-                var grip = sword.transform.InverseTransformPoint(new Vector3(bounds.center.x, bounds.min.y + bounds.size.y * .07f, bounds.center.z));
+                var authoredGrip = hero.GetComponentsInChildren<Transform>().SingleOrDefault(item => item.name == U2HeroGripPreview.MarkerName);
+                var grip = sword.transform.InverseTransformPoint(new Vector3(bounds.center.x,
+                    bounds.min.y + bounds.size.y * (authoredGrip != null ? .125f : .07f), bounds.center.z));
+                var modelBladeAxis = sword.transform.InverseTransformDirection(Vector3.up);
                 var wrist = socket.transform.position;
                 var palm = wrist + (wrist - forearm.position).normalized * .055f;
                 var side = Mathf.Sign(wrist.x);
@@ -202,6 +209,18 @@ namespace GalaQuest.Editor
                 sword.transform.rotation = Quaternion.FromToRotation(Vector3.up, blade) * sword.transform.rotation;
                 sword.transform.localScale *= .47f / bounds.size.y;
                 sword.transform.position += palm - sword.transform.TransformPoint(grip);
+                if (authoredGrip != null)
+                {
+                    var longitudinalAxis = Enumerable.Range(0, 3).OrderByDescending(i => Mathf.Abs(modelBladeAxis[i])).First();
+                    if (Mathf.Abs(modelBladeAxis[longitudinalAxis]) < .999f) throw new BuildFailedException("Unqualified sword longitudinal axis");
+                    var fittedScale = sword.transform.localScale;
+                    fittedScale[longitudinalAxis] *= 1.45f;
+                    sword.transform.localScale = fittedScale;
+                    // The model's authored axis is world-up before the carry
+                    // rotation; its prefab root has an independent import rotation.
+                    sword.transform.rotation = Quaternion.FromToRotation(blade, authoredGrip.up) * sword.transform.rotation;
+                    sword.transform.position += authoredGrip.position - sword.transform.TransformPoint(grip);
+                }
                 sword.transform.SetParent(socket.transform, true);
                 var definition = ScriptableObject.CreateInstance<GearItemDefinition>();
                 definition.Configure("gear.sword.ironwood", "Ironwood sword (starter review)", model,

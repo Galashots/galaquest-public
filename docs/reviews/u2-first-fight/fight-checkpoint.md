@@ -38,7 +38,7 @@ A follow-up with the same built client and the documentation-only server head **
 
 ![Actual browser: sword sweep after touch orbit](fight-browser-orbit-slash.png)
 
-The strongest unresolved hero defect is the open right hand around the sword hilt. A bounded grip-repair candidate has been proposed to the Owner; permission is pending. The gremlin's flat hands and tight crouched knees also remain candidate limitations. The comparison convention is a hilt enclosed by the hand, guard outside the fist, and blade separated from the leg, based on the GalaQuest item reference and official Nintendo character sheets for [Link](https://www.smashbros.com/en_US/fighter/03.html), [Toon Link](https://www.smashbros.com/en_US/fighter/43.html), and [Hero](https://www.smashbros.com/en_US/fighter/72.html).
+The strongest unresolved hero defect in the browser build above is the open right hand around the sword hilt. The Owner subsequently authorized a bounded repair and supplied real grip photographs; the [hand candidate follow-up](hand-grip-candidate.md) records that work and its separate verification. The gremlin's flat hands and tight crouched knees also remain candidate limitations. The comparison convention is a hilt enclosed by the hand, guard outside the fist, and blade separated from the leg, based on the GalaQuest item reference and official Nintendo character sheets for [Link](https://www.smashbros.com/en_US/fighter/03.html), [Toon Link](https://www.smashbros.com/en_US/fighter/43.html), and [Hero](https://www.smashbros.com/en_US/fighter/72.html).
 
 ## Remaining acceptance
 

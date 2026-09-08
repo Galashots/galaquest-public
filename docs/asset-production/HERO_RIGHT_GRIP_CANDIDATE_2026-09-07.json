@@ -1,0 +1,48 @@
+{
+  "assetId": "hero.gq-hero-v1.right-hand-grip",
+  "status": "LOCAL_CANDIDATE_REVIEW",
+  "ownerAuthorizedCandidateRepair": true,
+  "productionPromotion": false,
+  "source": {
+    "path": "unity/GalaQuest/Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx",
+    "sha256": "23c161a6a7045987f54b2dae370d02c665d169aefa0c8b6377ca5ee82c893351",
+    "preserved": true,
+    "licenceBasis": "Existing owner-created paid-plan character; see ASSET-LICENSES.md. Not CC0."
+  },
+  "candidate": {
+    "file": "right-hand-grip-v1.json",
+    "sha256": "f22e1c3d00778f43dd9ecdab18c3d628a15815f2e411aa37bf7c42f9cdb3ea64",
+    "bytes": 1511238,
+    "recipe": "tools/assets/author-hero-grip-candidate.py",
+    "tool": "Blender 5.2.0 LTS",
+    "driveFileId": "1RGVYLEKB7aGcDeS7kxr_Dj4zSUDxh2Dz",
+    "driveWorkingFolderId": "1p24sBX3gMc2iIZQyncbIQEfQqjqyysKK",
+    "driveLifecycle": "20_PRODUCTION_WORKING",
+    "newProviderSpend": 0
+  },
+  "geometry": {
+    "sourceUnityVertices": 8247,
+    "sourceTriangles": 6800,
+    "sourceTrianglesReplacedInRightHand": 356,
+    "candidateUnityVertices": 13587,
+    "candidateTriangles": 12140,
+    "originalVertexAndAttributeBuffersPreserved": true,
+    "originalRigBones": 24,
+    "newRigBones": 0,
+    "minimumSampledDeformationJacobianDeterminant": 0.09767697006464005,
+    "trianglesWithOppositeFacingToDifferentialEstimate": 8,
+    "remainingGeometryConcern": "Narrow bevel faces and a crease at the little-finger base remain inspection-scale limitations; metrics do not grant visual acceptance."
+  },
+  "reference": {
+    "authority": "Three Owner-supplied grip photographs, 2026-09-07",
+    "controls": "Four fingers curl around the hilt at different depths; the thumb rests outside near the index finger; preserve palm and finger thickness.",
+    "personalPhotographsPublished": false
+  },
+  "acceptance": {
+    "exploratoryUnityPlayMode": "PASS on the local implementation before its source checkpoint",
+    "exactCommitUnityVerification": "PENDING",
+    "browserVerification": "PENDING",
+    "physicalIPadSafari": "UNKNOWN",
+    "ownerVisualAcceptance": "PENDING"
+  }
+}

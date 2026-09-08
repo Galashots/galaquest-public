@@ -92,6 +92,7 @@ namespace GalaQuest.Tests
                 transport.Receive(JsonConvert.SerializeObject(frame));
                 yield return null;
                 Assert.That(presentation.LocalHealth, Is.EqualTo(24));
+                if (Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1") CaptureWeapon(root, hero, "hit");
                 Assert.That(enemy.GetComponent<GalaQuestCombatMotion>().CurrentState, Is.EqualTo("bash"));
                 Assert.That(attackArea.gameObject.activeSelf, Is.True);
                 Assert.That(attackArea.position.y, Is.GreaterThan(floor.GetComponent<Collider>().bounds.max.y),
@@ -117,6 +118,7 @@ namespace GalaQuest.Tests
                 traversal.StepPrediction(Vector2.up, 1, false, .1f);
                 Assert.That(traversal.PredictedPosition, Is.EqualTo(downPosition));
                 Assert.That(enemy.GetComponent<GalaQuestCombatMotion>().CurrentState, Is.EqualTo("death"));
+                if (Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1") CaptureWeapon(root, hero, "down");
 
                 frame.tick++;
                 frame.encounter.heroes["p1"].hp = 30;
@@ -142,6 +144,7 @@ namespace GalaQuest.Tests
                 yield return null;
                 Assert.That(presentation.EnemyViewCount, Is.EqualTo(1));
                 Assert.That(presentation.LocalHealth, Is.EqualTo(30));
+                if (Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1") CaptureWeapon(root, hero, "rejoined");
             }
             finally
             {
@@ -179,8 +182,23 @@ namespace GalaQuest.Tests
             {
                 camera.targetTexture = target; camera.Render(); RenderTexture.active = target;
                 pixels.ReadPixels(new Rect(0, 0, 1000, 800), 0, 0); pixels.Apply();
-                var folder = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../.local/m2/weapon-review"));
+                var gripReview = Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1";
+                var folder = Path.GetFullPath(Path.Combine(Application.dataPath, gripReview
+                    ? "../../../.local/m2/hero-grip-candidate/unity-review" : "../../../.local/m2/weapon-review"));
                 Directory.CreateDirectory(folder); File.WriteAllBytes(Path.Combine(folder, label + ".png"), pixels.EncodeToPNG());
+                if (gripReview)
+                {
+                    var grip = hero.GetComponentsInChildren<Transform>().Single(t => t.name == "CandidateRightGrip");
+                    camera.fieldOfView = 32;
+                    camera.nearClipPlane = .01f;
+                    foreach (var view in new[] { "back", "palm" })
+                    {
+                        camera.transform.position = grip.position + grip.forward * (view == "back" ? .48f : -.48f) + grip.right * .2f;
+                        camera.transform.LookAt(grip.position, grip.up);
+                        camera.Render(); pixels.ReadPixels(new Rect(0, 0, 1000, 800), 0, 0); pixels.Apply();
+                        File.WriteAllBytes(Path.Combine(folder, label + "-grip-" + view + ".png"), pixels.EncodeToPNG());
+                    }
+                }
             }
             finally
             {
