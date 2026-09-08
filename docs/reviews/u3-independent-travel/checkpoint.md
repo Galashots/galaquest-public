@@ -119,3 +119,36 @@ and disabled compression. It retains StrictMode, non-development output, clean-s
 hash guards, and restores prior settings afterward. The manifest explicitly identifies optimization,
 compression and fast-iteration status. Default builds retain their existing settings. A fast review
 build does not establish final optimized-build performance on physical iPads.
+
+### Repaired browser and visual result
+
+At **931919b0a5ed9bf5c6d193b31d1122caf7cf585f**, the strict, non-development fast review build passed
+and restored a clean checkout. Its [manifest](build-931919b-fast.json) records exact output hashes and
+the BuildTimes/uncompressed flavor. The [hosted unit gate](https://github.com/Galashots/galaquest-public/actions/runs/34181520797)
+also passed. The same two-browser flow passed all ten checks again with zero browser errors: camp,
+held-input arrival, separation, a wounded encounter, return, sibling arrival, reunion, reconnection,
+independent final camp return, and the edge orbit. Both client and server were this exact SHA.
+
+The producer inspected the running-game captures at normal gameplay framing and compared the same
+boundary orbit before/after. The obstruction correction keeps the hero visible; the travel button
+no longer covers the gate. The strongest remaining limitation is the steep overhead fallback at
+that crowded boundary. Camp scenery is visibly a greybox and the gremlin remains a separate candidate.
+These are functional travel proofs, not finished-art or physical-iPad acceptance.
+
+| Before: hero hidden (`2346bf4`) | After: hero visible (`931919b`) |
+| --- | --- |
+| ![Tree blocks the hero](camp-camera-before-2346bf4.png) | ![Hero remains visible at the boundary](camp-camera-after-931919b.png) |
+
+![Two heroes in camp with the gate unobscured](camp-together-931919b.png)
+
+The reusable browser driver is `tools/runtime-test/u3-unity-travel.mjs`. Run it from the repository
+root with a matching candidate-build manifest as its first argument and an optional output suffix
+as its second. `GQ_CHROME_PATH` can override the Windows Chrome executable. It owns isolated browser
+profiles and a temporary server, checks build-file hashes and source identity, and closes its own
+processes. Its output report records client and server SHAs separately. When deliberately validating
+an unchanged older client against a later server, `GQ_REVIEW_SERVER_SHA` must explicitly name the
+current server head; that does not retroactively change the client evidence.
+
+The independent-travel implementation checkpoint is complete for desktop browser review. Owner
+iPad acceptance and the broader miniature co-op loop remain open; subsequent packages supply personal
+progression presentation, learning and admitted companions before completing Emberworks.

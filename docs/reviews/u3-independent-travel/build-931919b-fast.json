@@ -1,0 +1,35 @@
+{
+  "sourceSha": "931919b0a5ed9bf5c6d193b31d1122caf7cf585f",
+  "buildFlavor": "LOCAL_CANDIDATE_REVIEW",
+  "candidateFbxSha256": "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db",
+  "candidateTextureSha256": "9fb9eb5758673cbc3670ad95d1b2e2b9bf075a0699d68aa119ab334f3847d812",
+  "heroGripCandidateSha256": "f22e1c3d00778f43dd9ecdab18c3d628a15815f2e411aa37bf7c42f9cdb3ea64",
+  "heroGripOwnerApprovedForPlaytest": true,
+  "productionPromotion": false,
+  "sceneRecipe": "U2CombatPreview",
+  "fastIteration": true,
+  "optimization": "BuildTimes",
+  "compression": "Disabled",
+  "files": [
+    {
+      "name": "GalaQuestWebGL.data",
+      "bytes": 20222749,
+      "sha256": "7281a1016934f086a709b909a7a41e22db64e809d800ec0f4ad3e5ff438bd8f1"
+    },
+    {
+      "name": "GalaQuestWebGL.framework.js",
+      "bytes": 481883,
+      "sha256": "b753d863c9f07321f95962bc8a04edf4ca0a0a93797475bb5ed69afb0b42dcd4"
+    },
+    {
+      "name": "GalaQuestWebGL.loader.js",
+      "bytes": 26983,
+      "sha256": "4f8f4efe3f58b3b7eda3f129595c6763c159cf8ff680d95ea543d6d70f42017a"
+    },
+    {
+      "name": "GalaQuestWebGL.wasm",
+      "bytes": 55080705,
+      "sha256": "c41e39b81d5a07be562fbc327ac7740b08ecb40b965d13ddf22677be207ebc66"
+    }
+  ]
+}
