@@ -12,10 +12,11 @@ namespace GalaQuest
         private GUIStyle title;
         private GUIStyle number;
         private GUIStyle centered;
-        private static readonly Color Panel = new Color(.065f, .10f, .12f, .94f);
+        private static readonly Color Panel = new Color(.075f, .07f, .065f, .96f);
+        private static readonly Color Rim = new Color(.48f, .36f, .21f);
         private static readonly Color Ink = new Color(.95f, .94f, .86f);
         private static readonly Color Gold = new Color(1f, .77f, .32f);
-        private static readonly Color Health = new Color(.29f, .80f, .47f);
+        private static readonly Color Health = new Color(.80f, .28f, .21f);
         private static readonly Color Experience = new Color(.35f, .76f, .92f);
 
         public void PresentReward(GalaQuestProgressionView value)
@@ -39,8 +40,8 @@ namespace GalaQuest
             var state = progression?.State;
             var hp = combat != null ? combat.LocalHealth : 0;
             var maxHp = combat != null ? combat.LocalMaxHealth : 0;
-            var panel = new Rect(16, 16, Mathf.Min(316, width - 32), state == null ? 84 : 130);
-            Fill(panel, Panel);
+            var panel = new Rect(16, 16, Mathf.Min(316, width - 32), state == null ? 84 : 138);
+            FramedPanel(panel);
             Fill(new Rect(panel.x, panel.y, 3, panel.height), Gold);
             Text(new Rect(30, 23, panel.width - 30, 19), place, small, Experience);
             Text(new Rect(30, 43, panel.width - 30, 27), profileName, title, Ink);
@@ -48,11 +49,11 @@ namespace GalaQuest
             {
                 Text(new Rect(30, 76, 116, 26), "LEVEL " + state.level, title, Ink);
                 Text(new Rect(157, 70, 146, 18), "POWER", small, Gold);
-                Text(new Rect(157, 87, 152, 27), state.powerText, number, Gold);
+                Text(new Rect(157, 84, 152, 36), state.powerText, number, Gold);
                 Bar(new Rect(30, 107, 112, 17), maxHp > 0 ? hp / (float)maxHp : 0, Health);
-                Text(new Rect(30, 105, 112, 20), maxHp > 0 ? hp + " / " + maxHp : "...", centered, Ink);
-                Bar(new Rect(30, 131, panel.width - 28, 5), (float)(state.xpIntoLevel / (double)state.xpForLevel), Experience);
-                Text(new Rect(157, 115, 152, 17), "XP " + state.xpIntoLevel + " / " + state.xpForLevel, small, Experience);
+                Text(new Rect(30, 105, 112, 20), maxHp > 0 ? "HP " + hp + " / " + maxHp : "...", centered, Ink);
+                Bar(new Rect(30, 142, panel.width - 28, 4), (float)(state.xpIntoLevel / (double)state.xpForLevel), Experience);
+                Text(new Rect(157, 120, 152, 22), "XP " + state.xpIntoLevel + " / " + state.xpForLevel, small, Experience);
             }
             if (!connected || !string.IsNullOrEmpty(progression?.Error))
             {
@@ -82,13 +83,13 @@ namespace GalaQuest
             var y = width >= 960 ? 18 : belowPanel;
             var height = reward.leveledUp ? 124 : 64;
             var rect = new Rect(x, y, panelWidth, height);
-            Fill(rect, Panel);
+            FramedPanel(rect);
             Fill(new Rect(x, y, panelWidth, 3), reward.leveledUp ? Gold : Experience);
             if (reward.leveledUp)
             {
-                Text(new Rect(x + 15, y + 12, panelWidth - 30, 29), "LEVEL " + reward.level + "!", number, Gold);
+                Text(new Rect(x + 15, y + 9, panelWidth - 30, 36), "LEVEL " + reward.level + "!", number, Gold);
                 Text(new Rect(x + 15, y + 46, panelWidth - 30, 25),
-                    "POWER " + reward.previousPowerText + "  →  " + reward.powerText + "  (" + reward.powerDeltaText + ")", title, Ink);
+                    "POWER " + reward.previousPowerText + " to " + reward.powerText + " (" + reward.powerDeltaText + ")", title, Ink);
                 Text(new Rect(x + 15, y + 76, panelWidth - 30, 22),
                     "+" + (reward.maxHp - reward.previousMaxHp) + " health    +" + (reward.heroDamage - reward.previousDamage) + " damage", small, Ink);
             }
@@ -129,9 +130,17 @@ namespace GalaQuest
         private static void Fill(Rect rect, Color color)
         {
             var previous = GUI.color;
-            GUI.color = color;
+            // IMGUI solid textures are converted by the linear project. Keep the chosen
+            // display palette dark instead of washing charcoal into blue-grey.
+            GUI.color = QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
             GUI.DrawTexture(rect, Texture2D.whiteTexture);
             GUI.color = previous;
+        }
+
+        private static void FramedPanel(Rect rect)
+        {
+            Fill(rect, Rim);
+            Fill(new Rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2), Panel);
         }
     }
 }

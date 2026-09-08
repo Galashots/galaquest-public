@@ -1,10 +1,11 @@
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { startOwnedServer } from '../runtime-test/owned-server.mjs';
+import { createProfileStore } from '../../public/src/progression/profiles.js';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const manifest = JSON.parse(readFileSync(process.argv[2], 'utf8').replace(/^\uFEFF/, ''));
@@ -19,8 +20,11 @@ for (const file of manifest.files) {
   assert.equal(createHash('sha256').update(bytes).digest('hex'), file.sha256, file.name);
 }
 const suffix = process.argv[3] ?? '';
+const mode = process.argv[4] ?? '--travel';
+assert.ok(['--travel','--progression'].includes(mode),'Use --travel or --progression');
+const progressionMode = mode === '--progression';
 assert.match(suffix, /^[a-z0-9-]*$/);
-const output = resolve(`.local/m3/browser-${sha.slice(0,7)}${suffix}`);
+const output = resolve(`.local/unity-playtest/browser-${sha.slice(0,7)}${suffix}`);
 mkdirSync(output, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), 'gq-m3-chrome-'));
 class CDP {
@@ -50,8 +54,16 @@ class CDP {
 let browser,chrome,server,port;
 const pages=[];
 const checks={};
-const bootstrap = (id,name) => `
-  localStorage.setItem('gq-profiles',JSON.stringify({activeProfileId:'${id}',profiles:[{id:'${id}',displayName:'${name}'}]}));
+const bootstrap = (id,name) => {
+  const fixture = new Map([['gq-profiles',JSON.stringify({v:1,activeProfileId:id,profiles:[{id,displayName:name}]})]]);
+  const storage = {getItem:key=>fixture.get(key)??null,setItem:(key,value)=>fixture.set(key,value)};
+  if(progressionMode && id==='profile-aaaaaaaa')createProfileStore({storage,watchStorageEvents:false})
+    .ingestServerFacts(id,[{type:'xp-earned',eventId:'review:before-first-level',value:'95'}]);
+  return `
+  if(location.origin===${JSON.stringify(server.origin)}) {
+  if(!localStorage.getItem('gq-profiles')) {
+    for(const [key,value] of ${JSON.stringify([...fixture])})localStorage.setItem(key,value);
+  }
   window.__fightAudio={contexts:[],starts:0};
   const Native=window.AudioContext;
   if(Native)window.AudioContext=new Proxy(Native,{construct(target,args){
@@ -60,7 +72,9 @@ const bootstrap = (id,name) => `
     context.createBufferSource=function(){const node=create();const start=node.start.bind(node);node.start=function(...args){window.__fightAudio.starts++;return start(...args)};return node};
     return context;
   }});
+  }
 `;
+};
 const frame = p=>p.eval('window.__gqUnityCp2Diagnostics?.latestServerFrame ?? null');
 const sample = p=>p.eval(`(()=>{const d=window.__gqUnityCp2Diagnostics;if(!d?.latestReconciliation)return null;const f=d.latestServerFrame;return {frame:f,reconciliation:d.latestReconciliation,input:d.latestInput,audio:{starts:window.__fightAudio.starts,states:window.__fightAudio.contexts.map(c=>c.state)}}})()`);
 const waitFor = async (action,predicate,label,timeout=30000,interval=50)=>{
@@ -76,6 +90,12 @@ const tap = async(p,x,y)=>{await touch(p,'touchStart',[point(p,3,x,y)]);await de
 const moveAxis = async(p,k,axis,target)=>{
   const start=(await sample(p)).reconciliation.authoritative[axis];
   if(Math.abs(start-target)<.12)return;
+  // Destination acknowledgements can precede Unity's next input update. Release and
+  // observe fresh rendered reconciliation before beginning this NEW movement gesture;
+  // the separate held-arrival test deliberately keeps its old gesture down.
+  await key(p,'keyUp',k);
+  const releasedAt=(await sample(p)).reconciliation.atMs;
+  await waitFor(()=>sample(p),s=>s.reconciliation.atMs>releasedAt+60,'Neutral input frame');
   await key(p,'keyDown',k);
   try{await waitFor(()=>sample(p),s=>target>start?s.reconciliation.authoritative[axis]>=target:s.reconciliation.authoritative[axis]<=target,`Move ${axis} to ${target}`,12000);}
   finally{await key(p,'keyUp',k);}
@@ -97,8 +117,11 @@ try{
     '--disable-background-timer-throttling','--disable-renderer-backgrounding',`--user-data-dir=${profile}`,'about:blank'
   ],{windowsHide:true,stdio:'ignore'});
   const devTools=join(profile,'DevToolsActivePort');
-  await waitFor(async()=>existsSync(devTools),Boolean,'Chrome start',15000,100);
-  let browserPath;[port,browserPath]=readFileSync(devTools,'utf8').trim().split(/\r?\n/);
+  const endpoint=await waitFor(async()=>{
+    try{return readFileSync(devTools,'utf8').trim().split(/\r?\n/);}
+    catch(error){if(['ENOENT','EBUSY'].includes(error.code))return null;throw error;}
+  },value=>value?.length===2&&Number(value[0])>0,'Chrome endpoint readable',15000,100);
+  let browserPath;[port,browserPath]=endpoint;
   browser=new CDP(`ws://127.0.0.1:${port}${browserPath}`);await browser.ready();
   const createPlayer=async(id,name)=>{
     const {browserContextId}=await browser.send('Target.createBrowserContext');
@@ -127,6 +150,9 @@ try{
   await first.send('Page.bringToFront');
   await capture(first,'01-camp-together');
   checks.camp=await sample(first);
+  if(progressionMode) assert.equal((await first.eval('window.__gqUnityCp2Diagnostics.latestProgression')).xp,95);
+  if(progressionMode) assert.equal((await second.eval('window.__gqUnityCp2Diagnostics.latestProgression')).xp,0);
+
   const travelTap=p=>tap(p,.5-100/p.rect.width,1-55/p.rect.height);
   const arrived=(p,destination)=>waitFor(()=>sample(p),s=>s?.frame.destinationId===destination,'Arrival '+destination);
   await moveAxis(first,'w','z',4.8);
@@ -182,6 +208,30 @@ try{
   checks.reconnected=reconnected;
   assert.equal(reconnected.frame.encounter.enemies[0].hp,woundedHp);
   await capture(second,'07-reconnected-to-adventure');
+  if(progressionMode){
+    // First child already contributed one real hit. Finish the same life with touch attacks;
+    // the nearby sibling has not hit it and must not receive its personal reward.
+    await first.send('Page.bringToFront');
+    await moveAxis(first,'a','x',-4);
+    await moveAxis(first,'w','z',6.8);
+    for(let tries=0;tries<8;tries++) {
+      if((await frame(first)).encounter.enemies[0].hp<=0)break;
+      await faceEnemy(first);
+      await tap(first,.926,.886);
+      await delay(850);
+  }
+  const earned=await waitFor(()=>first.eval('window.__gqUnityCp2Diagnostics.latestProgression'),p=>p?.xp>95,'Earn actual combat XP');
+  assert.equal(earned.xp,115); assert.equal(earned.level,2);assert.equal(earned.gainedXp,20);
+  assert.equal(earned.powerText,'1,400');assert.equal(earned.powerDeltaText,'+400');
+  assert.equal(earned.leveledUp,true);
+  assert.equal((await second.eval('window.__gqUnityCp2Diagnostics.latestProgression')).xp,0,'A nearby non-contributor earns none');
+  await waitFor(()=>frame(first),f=>f.encounter.heroes[first.id]?.maxHp===35,'Combat uses the same grown body');
+  checks.earned=earned;
+  checks.earnedJournal=await first.eval("JSON.parse(localStorage.getItem('gq-journal:profile-aaaaaaaa')).facts");
+  assert.equal(checks.earnedJournal.length,2,'One starting fact and one real kill');
+  await capture(first,'11-level-up');
+
+  }
   await first.send('Page.bringToFront');
   await travelTap(first);
   await arrived(first,'home-hub');
@@ -203,8 +253,36 @@ try{
   await delay(200);
   await capture(first,'10-camp-edge-orbit');
   checks.campEdgeOrbit=await sample(first);
+  if(progressionMode){
+    // Unload the clients, restart only our owned server with an empty temporary store,
+    // then load the actual Unity game on the same origin. No JS adapter call or fixture
+    // rewrite is allowed to stand in for page reload / browser journal recovery.
+    const oldPort=server.port,oldOrigin=server.origin,oldStore=server.rewardStore.rewardStorePath;
+    for(const p of pages)await p.send('Page.navigate',{url:'about:blank'});
+    assert.equal(await server.kill(),true,'Owned server fully stopped');
+    server=await startOwnedServer({quiet:true,candidates:[oldPort]});
+    assert.equal(server.origin,oldOrigin);
+    assert.notEqual(server.rewardStore.rewardStorePath,oldStore,'Recovery uses an empty replacement store');
+    const restorePage=async(p,profileId,expectedXp)=>{
+      await p.send('Page.navigate',{url:server.origin+'/unity/'});
+      await waitFor(()=>sample(p),Boolean,'Rebuilt Unity page reload',180000,1000);
+      const restored=await waitFor(()=>p.eval('window.__gqUnityCp2Diagnostics.latestProgression'),v=>v?.xp===expectedXp,'Reloaded profile journal');
+      p.id=await p.eval('window.__gqUnityCp2Diagnostics.serverFrames.find(f=>f.type==="welcome").id');
+      const welcome=await p.eval('window.__gqUnityCp2Diagnostics.serverFrames.find(f=>f.type==="welcome")');
+      assert.equal(welcome.profileFacts.length,0,'The restarted server initially knew no rewards');
+      assert.equal(restored.leveledUp,false);assert.equal(restored.gainedXp,0,'Restoration is not a fresh reward');
+      assert.equal(restored.profileId,profileId);
+      return restored;
+    };
+    checks.reloadFirst=await restorePage(first,'profile-aaaaaaaa',115);
+    await waitFor(()=>frame(first),f=>f.encounter.heroes[first.id]?.maxHp===35,'Restored journal reaches empty server combat');
+    await capture(first,'12-reload-from-device-save');
+    checks.reloadSecond=await restorePage(second,'profile-bbbbbbbb',0);
+    await capture(second,'13-sibling-still-level-one');
+  }
+
   const errors=pages.flatMap(p=>p.events.filter(e=>e.method==='Runtime.exceptionThrown'||(e.method==='Log.entryAdded'&&e.params.entry.level==='error')));
-  writeFileSync(join(output,'report.json'),JSON.stringify({clientSha:sha,serverSha,manifest,origin:server.origin,checks,errors},null,2));
+  writeFileSync(join(output,'report.json'),JSON.stringify({clientSha:sha,serverSha,mode,manifest,origin:server.origin,checks,errors},null,2));
   assert.equal(errors.length,0,'No browser errors');
   console.log(JSON.stringify({sha,output,result:'PASS',checks:Object.keys(checks)}));
 }catch(error){

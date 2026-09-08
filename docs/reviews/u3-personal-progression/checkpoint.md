@@ -95,3 +95,33 @@ keeps identity and supporting information at the perimeter; Nintendo's
 keeps the level/EXP read compact while combat occupies the centre. These establish conventions,
 not GalaQuest art direction. Current generated screenshots remain producer-review work, not accepted
 visuals. Avoid inheriting the reference MMO's dense text or the action game's tiny XP labels.
+
+### Owner reference recovery and running-browser correction
+
+The Owner requested the earlier Product Design HUD reference during this checkpoint. The original
+mockup image was not recovered from the accessible recent Work conversations or Drive search.
+The settled direction was recovered from the Owner visual-direction note in
+[Issue #89](https://github.com/Galashots/galaquest-public/issues/89): dark metal/leather, restrained
+gold, teal progress, red/orange health, prominent POWER, large ATTACK, and a clear playfield.
+The Owner explicitly permits design judgment when the image cannot be found. This increment applies
+the hierarchy and palette to the progression panel; textured material art, the target treatment and
+parchment objectives are not claimed complete by this checkpoint.
+
+At client/server **`2f7d72385be9f00757eb5f4620d231d4fc580e93`**, the real WebGL driver completed
+all 14 recorded travel/progression checks with **zero browser errors**. A real gremlin kill moves the
+fixture child from 95 to 115 XP, level 2 and POWER 1,400; the non-contributing sibling remains at 0 XP.
+After both pages unload and the owned server is replaced with an empty temporary reward store, the
+device journal restores level 2 and combat max HP 35 without a new reward notice. This is desktop
+Chrome behavior proof, not physical iPad acceptance.
+
+Producer review of the running images rejected clipped POWER punctuation, a missing arrow glyph,
+and a washed-out panel palette. The follow-up gives numerals full line height, uses readable `to`
+text, labels HP, and corrects solid-panel colours for the linear Unity project. Those changed pixels
+require a new built-client review before acceptance.
+
+The progression driver shares the existing travel harness instead of introducing a second framework.
+Initial harness failures were classified before changing runtime: journal fixtures must use the
+canonical store; a new gesture must follow a fresh neutral Unity frame after travel; Chrome's endpoint
+file must be readable as well as present; fixture scripts must skip opaque `about:blank` pages during
+restart. The successful run retains the independent held-input arrival check and does not filter out
+browser errors.
