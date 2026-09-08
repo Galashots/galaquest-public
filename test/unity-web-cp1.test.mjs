@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import { brotliCompressSync } from 'node:zlib';
 
 import { createRuntimeServer } from '../server.mjs';
+import { createUnityProfileProgression } from '../public/src/unity/profileProgression.js';
 
 async function servingUnityBuild(body) {
   const root = mkdtempSync(join(tmpdir(), 'galaquest-unity-web-'));
@@ -139,6 +140,7 @@ function loadBrowserBridge(storageSeed) {
     new URL('../unity/GalaQuest/Assets/Plugins/WebGL/GalaQuestBrowserBridge.jslib', import.meta.url),
     'utf8',
   );
+  context.window.__gqUnityProgressionReady = Promise.resolve(createUnityProfileProgression({storage:context.window.localStorage}));
   vm.runInNewContext(source, context, { filename: 'GalaQuestBrowserBridge.jslib' });
   return { bridge: context.LibraryManager.library, messages, sockets, storage, document, canvas, gestureListeners };
 }
@@ -163,19 +165,19 @@ function familyStorage(activeProfileId) {
   };
 }
 
-function readSelected(runtime) {
+async function readSelected(runtime) {
   runtime.messages.length = 0;
   const storageBefore = [...runtime.storage.entries()];
-  runtime.bridge.GQ_Profile_ReadSelected('GalaQuestRuntime', 'OnBrowserProfile');
+  await runtime.bridge.GQ_Profile_ReadSelected('GalaQuestRuntime', 'OnBrowserProfile');
   assert.equal(runtime.messages.length, 1);
   assert.deepEqual([...runtime.storage.entries()], storageBefore, 'the Unity bridge must not write profile storage');
   return JSON.parse(runtime.messages[0].payload);
 }
 
-test('browser bridge reads only the active existing profile and that profile journal: A -> B -> A', () => {
+test('browser bridge reads only the active existing profile and that profile journal: A -> B -> A', async () => {
   const runtime = loadBrowserBridge(familyStorage(PROFILE_A));
 
-  const firstA = readSelected(runtime);
+  const firstA = await readSelected(runtime);
   assert.equal(firstA.profileId, PROFILE_A);
   assert.equal(firstA.displayName, 'Aster');
   assert.deepEqual(JSON.parse(firstA.factsJson), [FACT_A]);
@@ -183,7 +185,7 @@ test('browser bridge reads only the active existing profile and that profile jou
   const keyring = JSON.parse(runtime.storage.get('gq-profiles'));
   keyring.activeProfileId = PROFILE_B;
   runtime.storage.set('gq-profiles', JSON.stringify(keyring));
-  const b = readSelected(runtime);
+  const b = await readSelected(runtime);
   assert.equal(b.profileId, PROFILE_B);
   assert.equal(b.displayName, 'Bramble');
   assert.deepEqual(JSON.parse(b.factsJson), [FACT_B]);
@@ -191,10 +193,30 @@ test('browser bridge reads only the active existing profile and that profile jou
 
   keyring.activeProfileId = PROFILE_A;
   runtime.storage.set('gq-profiles', JSON.stringify(keyring));
-  const secondA = readSelected(runtime);
+  const secondA = await readSelected(runtime);
   assert.equal(secondA.profileId, PROFILE_A);
   assert.deepEqual(JSON.parse(secondA.factsJson), [FACT_A]);
   assert.doesNotMatch(secondA.factsJson, /coin:b/);
+});
+
+test('accepted Unity rewards return an updated journal before reconnect can restore it', async () => {
+  const runtime=loadBrowserBridge(familyStorage(PROFILE_A));
+  await readSelected(runtime);
+  const frame={v:4,type:'snapshot',events:[
+    {heroId:'p1',type:'xp-earned',eventId:'combat:a',value:'100'},
+    {heroId:'p2',type:'xp-earned',eventId:'combat:b',value:'700'},
+  ]};
+  runtime.bridge.GQ_Profile_ApplyFrame('GalaQuestRuntime','OnBrowserProgression',PROFILE_A,'p1',JSON.stringify(frame));
+  const state=JSON.parse(runtime.messages.at(-1).payload);
+  assert.equal(state.xp,100);
+  assert.equal(state.level,2);
+  assert.equal(state.leveledUp,true);
+  assert.match(state.factsJson,/combat:a/);
+  assert.doesNotMatch(state.factsJson,/combat:b/);
+  assert.match(runtime.storage.get(`gq-journal:${PROFILE_A}`),/combat:a/);
+  const messages=runtime.messages.length;
+  runtime.bridge.GQ_Profile_ApplyFrame('GalaQuestRuntime','OnBrowserProgression',PROFILE_A,'p1',JSON.stringify({v:4,type:'snapshot',events:[]}));
+  assert.equal(runtime.messages.length,messages,'Movement-only frames do not send a save through WebAssembly');
 });
 
 test('browser WebSocket bridge targets same-origin /ws and preserves messages verbatim', () => {

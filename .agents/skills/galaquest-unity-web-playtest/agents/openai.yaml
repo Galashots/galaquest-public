@@ -1,0 +1,4 @@
+interface:
+  display_name: "GalaQuest Unity Web Playtest"
+  short_description: "Build and verify the Unity browser client"
+  default_prompt: "Use $galaquest-unity-web-playtest to verify the current Unity browser change."

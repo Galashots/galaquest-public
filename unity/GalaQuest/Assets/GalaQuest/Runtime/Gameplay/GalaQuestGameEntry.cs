@@ -16,6 +16,7 @@ namespace GalaQuest
         private GalaQuestAttackControl attack;
         private GalaQuestCombatPresentation combat;
         private GalaQuestDestinationPresentation destinations;
+        private GalaQuestProfileProgression progression;
 
         public void ConfigureInitialDestination(string destinationId) => initialDestination = destinationId;
 
@@ -29,6 +30,8 @@ namespace GalaQuest
             traversal = GetComponent<GalaQuestTraversalController>();
             combat = GetComponent<GalaQuestCombatPresentation>();
             destinations = GetComponent<GalaQuestDestinationPresentation>();
+            progression = GetComponent<GalaQuestProfileProgression>();
+            if (progression == null) progression = gameObject.AddComponent<GalaQuestProfileProgression>();
             profileSource.Selected += HandleSelected;
             profileSource.Failed += HandleProfileFailure;
         }
@@ -45,6 +48,7 @@ namespace GalaQuest
             session = new GalaQuestConnectionSession(GetComponent<BrowserWebSocketTransport>());
             session.StatusChanged += HandleStatus;
             session.Disconnected += ScheduleReconnect;
+            progression.BindSession(session, profile.ProfileId);
             if (destinations != null) destinations.BindSession(session);
             traversal.BindSession(session);
             attack.BindSession(session);
@@ -82,7 +86,7 @@ namespace GalaQuest
             var destination = session?.DestinationId ?? initialDestination;
             var place = destination == GalaQuestProtocolV4.HomeHubDestinationId ? "CAMP" : "EMBERWORKS";
             GUI.Label(new Rect(30f, 24f, width - 28f, 22f), $"{place} · {profileName}");
-            GUI.Label(new Rect(30f, 48f, width - 28f, 22f), connectionStatus);
+            GUI.Label(new Rect(30f, 48f, width - 28f, 22f), progression?.Error ?? connectionStatus);
         }
 
         private void OnDestroy()
@@ -100,6 +104,7 @@ namespace GalaQuest
                 if (attack != null) attack.BindSession(null);
                 if (combat != null) combat.BindSession(null);
                 if (destinations != null) destinations.BindSession(null);
+                if (progression != null) progression.BindSession(null, null);
                 session.StatusChanged -= HandleStatus;
                 session.Disconnected -= ScheduleReconnect;
                 session.Dispose();

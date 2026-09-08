@@ -21,38 +21,35 @@ mergeInto(LibraryManager.library, {
   GQ_Profile_ReadSelected: function (gameObjectPtr, callbackPtr) {
     var gameObject = UTF8ToString(gameObjectPtr);
     var callback = UTF8ToString(callbackPtr);
-    var result = { status: 'error', profileId: '', displayName: '', factsJson: '[]' };
-
-    try {
-      var rawKeyring = window.localStorage.getItem('gq-profiles');
-      var keyring = rawKeyring ? JSON.parse(rawKeyring) : null;
-      var profileId = keyring && typeof keyring.activeProfileId === 'string'
-        ? keyring.activeProfileId
-        : '';
-      var profiles = keyring && Array.isArray(keyring.profiles) ? keyring.profiles : [];
-      var profile = profiles.find(function (candidate) {
-        return candidate && candidate.id === profileId;
+    if (!window.__gqUnityProgressionReady) {
+      window.__gqUnityProgressionReady = import('/src/unity/profileProgression.js').then(function (module) {
+        return module.createUnityProfileProgression({storage: window.localStorage});
       });
-
-      if (!profileId || !profile) {
-        result.error = 'No existing GalaQuest profile is selected. Select a child in GalaQuest first.';
-      } else {
-        var rawJournal = window.localStorage.getItem('gq-journal:' + profileId);
-        var journal = rawJournal ? JSON.parse(rawJournal) : null;
-        var facts = journal && Array.isArray(journal.facts) ? journal.facts : [];
-        result = {
-          status: 'ok',
-          profileId: profileId,
-          displayName: typeof profile.displayName === 'string' ? profile.displayName : 'Hero',
-          factsJson: JSON.stringify(facts)
-        };
-      }
-    } catch (error) {
-      result.error = 'Existing GalaQuest profile storage could not be read: '
-        + (error && error.message ? error.message : String(error));
     }
+    // Initialization finishes before Unity opens its session. Later accepted-frame writes
+    // can therefore finish synchronously before that session sends restore-profile.
+    return window.__gqUnityProgressionReady.then(function (progression) {
+      window.__gqUnityProfileProgression = progression;
+      SendMessage(gameObject, callback, JSON.stringify(progression.readSelected()));
+    }).catch(function (error) {
+      SendMessage(gameObject, callback, JSON.stringify({status:'error', error:error.message || String(error)}));
+    });
+  },
 
-    SendMessage(gameObject, callback, JSON.stringify(result));
+  GQ_Profile_ApplyFrame: function (gameObjectPtr, callbackPtr, profileIdPtr, playerIdPtr, messagePtr) {
+    var gameObject = UTF8ToString(gameObjectPtr);
+    var callback = UTF8ToString(callbackPtr);
+    var profileId = UTF8ToString(profileIdPtr);
+    try {
+      if (!window.__gqUnityProfileProgression) throw new Error('The selected profile is not ready.');
+      var result = window.__gqUnityProfileProgression.applyFrame(profileId,
+        UTF8ToString(playerIdPtr), JSON.parse(UTF8ToString(messagePtr)));
+      if (!result) return;
+      if (window.__gqUnityCp2Diagnostics) window.__gqUnityCp2Diagnostics.latestProgression = result;
+      SendMessage(gameObject, callback, JSON.stringify(result));
+    } catch (error) {
+      SendMessage(gameObject, callback, JSON.stringify({status:'error', profileId:profileId, error:error.message || String(error)}));
+    }
   },
 
   GQ_WebSocket_Connect: function (gameObjectPtr, openPtr, messagePtr, closePtr) {

@@ -27,6 +27,7 @@ namespace GalaQuest
         public event Action<string> StatusChanged;
         public event Action Disconnected;
         public event Action TravelStarted;
+        public event Action<string> AcceptedServerMessage;
         public event Action<GalaQuestServerFrame> ServerFrameReceived;
         public string PlayerId { get; private set; } = string.Empty;
         public string DestinationId { get; private set; } = GalaQuestProtocolV4.EmberworksDeepDestinationId;
@@ -53,6 +54,17 @@ namespace GalaQuest
             pendingDestination = null;
             StatusChanged?.Invoke($"Reconnecting as {profile.DisplayName}...");
             transport.Connect();
+        }
+
+        public void RefreshProfileJournal(string profileId, string factsJson)
+        {
+            if (!begun || profileId != profile.ProfileId)
+                throw new InvalidOperationException("A journal cannot replace another child's selected profile.");
+            var journal = factsJson?.Trim();
+            if (string.IsNullOrEmpty(journal) || !journal.StartsWith("[", StringComparison.Ordinal)
+                || !journal.EndsWith("]", StringComparison.Ordinal))
+                throw new ArgumentException("The refreshed profile journal must be a fact array.");
+            profile = new GalaQuestSelectedProfile(profile.ProfileId, profile.DisplayName, journal);
         }
 
         private void HandleOpened()
@@ -114,6 +126,9 @@ namespace GalaQuest
             }
             else if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.worldEpoch != WorldEpoch) return;
 
+            // Only messages accepted by the player/destination/epoch checks reach personal
+            // progression. Its synchronous browser write refreshes the journal before restore.
+            AcceptedServerMessage?.Invoke(message);
             ServerFrameReceived?.Invoke(frame);
             if (restoredThisConnection || frame.type != "welcome" || string.IsNullOrEmpty(PlayerId)) return;
             if (!transport.Send(GalaQuestProtocolV4.RestoreProfile(profile)))

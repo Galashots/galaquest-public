@@ -9,6 +9,10 @@ namespace GalaQuest
         private static extern void GQ_Profile_ReadSelected(string gameObject, string callback);
 
         [DllImport("__Internal")]
+        private static extern void GQ_Profile_ApplyFrame(string gameObject, string callback,
+            string profileId, string playerId, string message);
+
+        [DllImport("__Internal")]
         private static extern int GQ_WebSocket_Connect(
             string gameObject,
             string openCallback,
@@ -38,6 +42,14 @@ namespace GalaQuest
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             GQ_Profile_ReadSelected(gameObject, callback);
+#endif
+        }
+
+        public static void ApplyProgressionFrame(string gameObject, string callback,
+            string profileId, string playerId, string message)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            GQ_Profile_ApplyFrame(gameObject, callback, profileId, playerId, message);
 #endif
         }
 
