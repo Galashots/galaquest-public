@@ -194,7 +194,7 @@ test('U2 real sockets: both Emberworks children can attack without a policy disc
   });
 });
 
-test('real socket: unknown and incompatible destination joins are policy-rejected', async () => {
+test('real socket: unknown destinations are policy-rejected; recognized destinations can coexist', async () => {
   await withGameServer(async ({ url }) => {
     const unknown = client(url);
     await unknown.open();
@@ -213,7 +213,10 @@ test('real socket: unknown and incompatible destination joins are policy-rejecte
     village.send(joinMessage('browser-kid', 'profile-bbbbbbbb'));
     await village.waitForMessage((message) => message.type === 'welcome');
     unity.send(joinMessage('unity-kid', 'profile-cccccccc', EMBERWORKS_DEEP_DESTINATION_ID));
-    assert.equal((await unity.closed()).code, 1008);
+    const welcome = await unity.waitForMessage(message => message.type === 'welcome');
+    assert.equal(welcome.destinationId, EMBERWORKS_DEEP_DESTINATION_ID);
+    assert.equal(welcome.players.length, 1);
+    unity.close();
     village.close();
   });
 });

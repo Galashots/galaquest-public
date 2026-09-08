@@ -30,6 +30,7 @@ import { MARKS_TO_UNLOCK, createRewardLedger, foldEvents } from '../public/src/r
 // R1: repeatable combat XP's own fold -- the second real xp-earned source, riding P2's lantern-XP
 // path unchanged (see rewards/killXp.js's own header for why that is the whole design).
 import { createKillXpLedger, foldKillXpEvents } from '../public/src/rewards/killXp.js';
+import { reassignContributor } from '../public/src/rewards/contributors.js';
 import {
   DEFAULT_EQUIPPED_ITEM_IDS, DEFAULT_EQUIPPED_WEAPON_ID, DEFAULT_OWNED_ITEM_IDS,
   isKnownItem, itemDef,
@@ -172,12 +173,11 @@ export function createRewardCoordinator(options = {}) {
   // by construction -- see brief D3: "absent -> server treats the connection as ephemeral (no
   // persistence, marks still count in-memory for the session)".
   const ephemeral = new Map();
-  let ledger = createRewardLedger();
+  const ledgersByDestination = new Map();
   // R1: the identical per-tick fold marks/lantern already use, kept as its own ledger rather than
   // folded into `ledger` above -- the two answer different questions (a Lantern Mark is Wolf-only
   // and Wren's own reward; kill XP is every kind) and a shared ledger would tangle their contributor
   // bookkeeping for no reason either fold needs.
-  let killXpLedger = createKillXpLedger();
   // playerId -> itemId, for the ephemeral (guestId-less) equip fallback -- mirrors `ephemeral` above,
   // kept as its own map rather than folded into that one's shape because equip has nothing to do with
   // marks/lantern and every one of that map's three fields (marks, unlocked, seenEventIds) would sit
@@ -208,6 +208,15 @@ export function createRewardCoordinator(options = {}) {
     ephemeral.delete(playerId);
     ephemeralEquipment.delete(playerId);
     ephemeralLoot.delete(playerId);
+  }
+
+  function reassignCombatCredit(previousId, nextId) {
+    for (const [destinationId, previous] of ledgersByDestination) {
+      ledgersByDestination.set(destinationId, {
+        ledger: reassignContributor(previous.ledger, previousId, nextId),
+        killXpLedger: reassignContributor(previous.killXpLedger, previousId, nextId),
+      });
+    }
   }
 
   /**
@@ -695,17 +704,19 @@ export function createRewardCoordinator(options = {}) {
    * append to the SAME outgoing snapshot the combat events ride, per the brief: clients hear
    * mark-earned/lantern-unlocked "the way they hear wolf-defeated" -- one array, one broadcast.
    */
-  function processTick(events) {
+  function processTick(events, destinationId = VILLAGE_DESTINATION_ID) {
+    const previous = ledgersByDestination.get(destinationId) ?? {
+      ledger: createRewardLedger(), killXpLedger: createKillXpLedger(),
+    };
     // randomUUID, not the fold's own life index: the index restarts at 0 with the process and would
     // recompute an eventId already on disk. See rewards/marks.js's header for both halves of that
     // lesson and for why the id is minted per LIFE rather than per contributor.
-    const folded = foldEvents(ledger, events, { mintLifeId: () => randomUUID() });
-    ledger = folded.ledger;
+    const folded = foldEvents(previous.ledger, events, { mintLifeId: () => randomUUID() });
     // R1: the identical fold, over the identical events batch, through its OWN ledger -- see
     // killXpLedger's own declaration for why marks and kill XP do not share one. Both read the same
     // wolf-defeated events independently; neither fold's WeakSet interferes with the other's.
-    const killXpFolded = foldKillXpEvents(killXpLedger, events, { mintLifeId: () => randomUUID() });
-    killXpLedger = killXpFolded.ledger;
+    const killXpFolded = foldKillXpEvents(previous.killXpLedger, events, { mintLifeId: () => randomUUID() });
+    ledgersByDestination.set(destinationId, { ledger: folded.ledger, killXpLedger: killXpFolded.ledger });
     const rewardEvents = [];
     for (const award of folded.awards) rewardEvents.push(...applyMarkAward(award));
     for (const award of killXpFolded.awards) rewardEvents.push(...applyKillXpAward(award));
@@ -766,6 +777,7 @@ export function createRewardCoordinator(options = {}) {
     join,
     hasDurableIdentity,
     leave,
+    reassignCombatCredit,
     processTick,
     applyEquip,
     grantOwnership,
@@ -1200,8 +1212,8 @@ export function createSimulation(options = {}) {
     return movementWorld;
   }
 
-  function addPlayer(name, at = movementWorld.heroSpawn) {
-    const id = `p${nextPlayerNumber += 1}`;
+  function addPlayer(name, at = movementWorld.heroSpawn, id = `p${nextPlayerNumber += 1}`) {
+    if (players.has(id)) throw new RangeError(`player ${id} already exists`);
     const player = {
       id,
       name: typeof name === 'string' && name.length > 0 ? name.slice(0, 32) : id,
@@ -1235,6 +1247,25 @@ export function createSimulation(options = {}) {
     // is dropped rather than carried forward.
     streakByPlayer.delete(id);
     return removed;
+  }
+
+  // Destination travel carries the existing body, never its held input or current attack.
+  function playerBody(id) {
+    const hero = arenaOf(id) === SIEGE_ARENA ? siegeState.heroes[id] : encounterState.heroes[id];
+    if (!hero) return null;
+    return {
+      hp: hero.hp, maxHp: hero.maxHp, downSeconds: hero.downSeconds, cooldown: hero.cooldown,
+      protectionSeconds: hero.protectionSeconds ?? 0, specialCooldown: hero.specialCooldown ?? 0,
+    };
+  }
+
+  function restorePlayerBody(id, body) {
+    const hero = encounterState.heroes[id];
+    if (!hero || !body) return;
+    encounterState = Object.freeze({ ...encounterState, heroes: Object.freeze({
+      ...encounterState.heroes, [id]: Object.freeze({ ...hero, ...body }),
+    }) });
+    siegeState = transferSiegeHeroBody(siegeState, id, body);
   }
 
   /**
@@ -1390,6 +1421,7 @@ export function createSimulation(options = {}) {
    */
   function reassignCorpseClaims(fromHeroId, toHeroId) {
     corpseLootState = reassignClaimHero(corpseLootState, fromHeroId, toHeroId);
+    corpseContributorLedger = reassignContributor(corpseContributorLedger, fromHeroId, toHeroId);
   }
 
   /**
@@ -1929,6 +1961,8 @@ export function createSimulation(options = {}) {
     activateDestination,
     addPlayer,
     removePlayer,
+    playerBody,
+    restorePlayerBody,
     applyInput,
     applyAttack,
     applySpecial,
@@ -1971,27 +2005,40 @@ export function attachGameServer(httpServer, options = {}) {
   // own in-memory cart lootState is constructed, so an already-awarded pickup from a previous
   // process can be seeded in as already-collected rather than reappearing as fresh loot.
   const rewards = createRewardCoordinator({ rewardStorePath: options.rewardStorePath });
+  let stopped = false;
   // G3: the same before-the-simulation-exists read GP3-0 does for creditedLootIds, and for the
   // identical reason -- a fresh in-memory siege has no way to ask the store itself, so the one
   // durable world fact it needs is handed in at construction. Without this a server restart puts the
   // Old Beacon out, which is the exact "reload should not pretend the player never won" failure the
   // whole payoff is built against.
-  const simulation = createSimulation({
-    ...options,
-    creditedLootIds: rewards.creditedLootIds(),
-    beaconLit: rewards.beaconLit(),
-    // G4, finally connected, and P2's whole point: the fight asks the reward store how strong this
-    // hero actually is. Handed in as a function rather than a snapshot because every input changes
-    // mid-session -- a child can equip a sword from the Hero screen, be handed Wren's charm, or earn
-    // the XP that levels them, all without the socket dropping -- and a value copied at construction
-    // would mean the stronger hero only started existing after a reconnect. That is the exact defect
-    // docs/MISTAKES.md GQ-013 is about: a reward the rules never read.
-    heroStatsFor: (playerId) => rewards.heroStatsFor(playerId),
-    // R1: the SAME injection reasoning as heroStatsFor immediately above -- a kill-drop gear roll
-    // needs to know what this guest already owns, which is durable reward-store truth the
-    // simulation itself has no business holding.
-    ownedItemIdsFor: (playerId) => rewards.ownedItemIdsFor(playerId),
-  });
+  const destinations = new Map();
+  let nextPlayerNumber = 0;
+  function simulationFor(destinationId = VILLAGE_DESTINATION_ID) {
+    movementWorldForDestination(destinationId); // Validate before allocating a world.
+    if (destinations.has(destinationId)) return destinations.get(destinationId);
+    const simulation = createSimulation({
+      ...options,
+      destinationId,
+      creditedLootIds: rewards.creditedLootIds(),
+      beaconLit: rewards.beaconLit(),
+      // G4, finally connected, and P2's whole point: the fight asks the reward store how strong this
+      // hero actually is. Handed in as a function rather than a snapshot because every input changes
+      // mid-session -- a child can equip a sword from the Hero screen, be handed Wren's charm, or earn
+      // the XP that levels them, all without the socket dropping -- and a value copied at construction
+      // would mean the stronger hero only started existing after a reconnect. That is the exact defect
+      // docs/MISTAKES.md GQ-013 is about: a reward the rules never read.
+      heroStatsFor: (playerId) => rewards.heroStatsFor(playerId),
+      // R1: the SAME injection reasoning as heroStatsFor immediately above -- a kill-drop gear roll
+      // needs to know what this guest already owns, which is durable reward-store truth the
+      // simulation itself has no business holding.
+      ownedItemIdsFor: (playerId) => rewards.ownedItemIdsFor(playerId),
+    });
+    destinations.set(destinationId, simulation);
+    return simulation;
+  }
+  // Compatibility inspection surface: the configured/default destination. Multiplayer callers
+  // use simulationFor(destinationId); identity and rewards belong to this server, not to a room.
+  const simulation = simulationFor(options.destinationId);
   // Whether the durable row has been written for the victory this process is currently watching.
   // Seeded from the store so an already-lit Beacon never re-writes, and flipped by the one tick that
   // sees the siege turn it on -- see the tick loop below.
@@ -2010,7 +2057,7 @@ export function attachGameServer(httpServer, options = {}) {
   // The wire's encounter block, with rewards (D3) and GP2's loot state folded on: every reader of
   // encounterSnapshot()/lootSnapshot() above stays untouched, this is the one seam that adds the
   // fields the wire actually carries.
-  function encounterSnapshotWithRewards() {
+  function encounterSnapshotWithRewards(simulation) {
     const encounter = simulation.encounterSnapshot();
     return {
       ...encounter,
@@ -2025,20 +2072,24 @@ export function attachGameServer(httpServer, options = {}) {
 
   const ws = attachWebSocketServer(httpServer, {
     onMessage(client, text) {
+      if (stopped) return;
       // A ProtocolError thrown here is caught by wsServer, which closes that client with 1008. That
       // is deliberate: a client sending malformed messages is broken or hostile, and either way the
       // simulation should not be guessing what it meant.
       const message = decode(text);
+      let simulation = simulationFor(client.data.destinationId ?? options.destinationId);
 
       if (message.type === 'join') {
         if (client.data.playerId) throw new ProtocolError('already joined');
         try {
-          simulation.activateDestination(message.destinationId ?? VILLAGE_DESTINATION_ID);
+          simulation = simulationFor(message.destinationId ?? VILLAGE_DESTINATION_ID);
         } catch (error) {
           throw new ProtocolError(error.message);
         }
-        const player = simulation.addPlayer(message.name);
+        const player = simulation.addPlayer(message.name, undefined, `p${nextPlayerNumber += 1}`);
         client.data.playerId = player.id;
+        client.data.destinationId = simulation.destinationId;
+        client.data.worldEpoch = 0;
         // Hero id = player id (Task B3's binding interface), so the mapping is keyed the same way
         // everything else in this file keys a hero. Absent guestId (a pre-D3 client, or a client
         // whose localStorage threw) leaves this player ephemeral -- see createRewardCoordinator's
@@ -2053,7 +2104,8 @@ export function attachGameServer(httpServer, options = {}) {
         if (typeof message.guestId === 'string' && message.guestId.length > 0) {
           const previousHeroId = heroIdByGuestId.get(message.guestId);
           if (previousHeroId && previousHeroId !== player.id) {
-            simulation.reassignCorpseClaims(previousHeroId, player.id);
+            rewards.reassignCombatCredit(previousHeroId, player.id);
+            for (const destination of destinations.values()) destination.reassignCorpseClaims(previousHeroId, player.id);
           }
           heroIdByGuestId.set(message.guestId, player.id);
         }
@@ -2068,10 +2120,41 @@ export function attachGameServer(httpServer, options = {}) {
         // never seen it, and to settle each fact's revision BEFORE local progression mints above it.
         // Ephemeral connections get [] from profileFactsFor, so nobody is handed anyone else's save.
         client.send(encode(welcomeMessage(
-          player.id, simulation.tick, simulation.snapshot(), encounterSnapshotWithRewards(),
+          player.id, simulation.tick, simulation.snapshot(), encounterSnapshotWithRewards(simulation),
           rewards.profileFactsFor(player.id),
           simulation.destinationId === VILLAGE_DESTINATION_ID ? undefined : simulation.destinationId,
         )));
+        return;
+      }
+
+      // Acknowledged travel advances the connection's epoch. Messages sent for the old scene,
+      // including a still-held touch, cannot act in the new one. Legacy clients stay at epoch 0.
+      if (client.data.playerId && (message.worldEpoch ?? 0) !== client.data.worldEpoch) return;
+      if (message.type === 'travel') {
+        if (!client.data.playerId) throw new ProtocolError('travel before join');
+        let target;
+        try { target = simulationFor(message.destinationId); }
+        catch (error) { throw new ProtocolError(error.message); }
+        if (target !== simulation) {
+          publishSimulation(simulation); // Settle pending rewards before the departing profile moves.
+          const id = client.data.playerId;
+          const player = simulation.players.get(id);
+          const body = simulation.playerBody(id);
+          target.addPlayer(player.name, undefined, id);
+          target.restorePlayerBody(id, body);
+          simulation.removePlayer(id);
+          const previousDestination = simulation.destinationId;
+          client.data.destinationId = target.destinationId;
+          client.data.worldEpoch += 1;
+          broadcastDestination(previousDestination, leaveMessage(id));
+          simulation = target;
+        }
+        client.send(encode({
+          ...welcomeMessage(client.data.playerId, simulation.tick, simulation.snapshot(),
+            encounterSnapshotWithRewards(simulation), rewards.profileFactsFor(client.data.playerId),
+            simulation.destinationId),
+          type: 'destination-changed', worldEpoch: client.data.worldEpoch,
+        }));
         return;
       }
 
@@ -2091,7 +2174,8 @@ export function attachGameServer(httpServer, options = {}) {
         return;
       }
 
-      if (simulation.destinationId !== VILLAGE_DESTINATION_ID && message.type !== 'restore-profile') {
+      if (simulation.destinationId !== VILLAGE_DESTINATION_ID
+        && !['restore-profile', 'equip', 'special', 'collect-drop', 'collect-corpse-item', 'collect-corpse-all'].includes(message.type)) {
         throw new ProtocolError(`${message.type} is unavailable in ${simulation.destinationId}`);
       }
 
@@ -2331,9 +2415,11 @@ export function attachGameServer(httpServer, options = {}) {
     onClose(client) {
       const id = client.data.playerId;
       if (!id) return;
+      const simulation = simulationFor(client.data.destinationId);
+      if (!stopped) publishSimulation(simulation);
       simulation.removePlayer(id);
       rewards.leave(id);
-      ws.broadcast(encode(leaveMessage(id)));
+      broadcastDestination(simulation.destinationId, leaveMessage(id));
     },
   }, {
     ...options,
@@ -2341,6 +2427,35 @@ export function attachGameServer(httpServer, options = {}) {
     // runtime rejects origin-less raw clients by default while tests/tools may opt in explicitly.
     allowMissingOrigin: options.allowMissingOrigin ?? false,
   });
+
+  function broadcastDestination(destinationId, message) {
+    const encodedByEpoch = new Map();
+    for (const client of ws.clients) {
+      if (!client.data.playerId || client.data.destinationId !== destinationId) continue;
+      const epoch = client.data.worldEpoch;
+      if (!encodedByEpoch.has(epoch)) encodedByEpoch.set(epoch, encode(epoch > 0 ? { ...message, worldEpoch: epoch } : message));
+      client.send(encodedByEpoch.get(epoch));
+    }
+  }
+
+  function publishSimulation(simulation) {
+    const events = simulation.drainEvents();
+    const rewardEvents = rewards.processTick(events, simulation.destinationId);
+    // A contributor can now be elsewhere when the sibling finishes the fight. Their personal
+    // durable fact follows them, while positions, enemies and combat events stay in their world.
+    for (const event of rewardEvents) {
+      for (const client of ws.clients) {
+        if (client.data.playerId === event.heroId && client.data.destinationId !== simulation.destinationId) {
+          simulationFor(client.data.destinationId).announceRewardFacts([event]);
+        }
+      }
+    }
+    broadcastDestination(simulation.destinationId, snapshotMessage(
+      simulation.tick, simulation.snapshot(), encounterSnapshotWithRewards(simulation),
+      [...events, ...rewardEvents],
+      simulation.destinationId === VILLAGE_DESTINATION_ID ? undefined : simulation.destinationId,
+    ));
+  }
 
   const timer = setInterval(() => {
     const nowMs = now();
@@ -2351,59 +2466,22 @@ export function attachGameServer(httpServer, options = {}) {
     // hero back off the Keeper. Neither side may move it alone now.
     const deltaSeconds = Math.min((nowMs - lastStepAt) / 1000, MAX_PREDICTION_STEP_SECONDS);
     lastStepAt = nowMs;
-    const tick = simulation.step(deltaSeconds, nowMs);
-
-    // G3: THE ONE TICK THE BEACON CATCHES FIRE ON, written down before anybody is told about it.
-    //
-    // Polled off the simulation's own flag rather than driven by the `beacon-ignited` event, and the
-    // difference matters: events are drained only on snapshot ticks, so an event-driven write would
-    // sit unwritten for up to a tenth of a second -- and a crash inside that window would light the
-    // Beacon on every client's screen and forget it forever. This runs every tick, and the flag is a
-    // latch, so the row lands on the first tick it is true. `recordBeaconLit` is itself idempotent on
-    // a fixed eventId, making this belt and braces rather than the only guard.
-    if (!beaconLitRecorded && simulation.beaconIsLit()) {
-      // Provenance only: whoever happens to be connected when the world changed. The row is a WORLD
-      // fact and is read for everybody (net/rewardStore.mjs's beaconLit), so any joined guest will
-      // do.
-      //
-      // THE LATCH ONLY CLOSES ON A REAL WRITE, and that distinction is the whole bug this shape
-      // fixes. It used to latch unconditionally after trying every connected player -- so a victory
-      // won entirely by guestId-less (ephemeral) clients marked itself recorded, having written
-      // nothing, and then stopped trying. A durable child joining a minute later would find the
-      // Beacon burning on screen with no row behind it, and the next restart would put it out.
-      //
-      // Leaving the latch open is exactly right for that case: there is nothing to write yet, and
-      // this runs every tick, so the moment a player with a durable identity is connected the row
-      // lands by itself. `applied: false` from an ALREADY-WRITTEN row cannot stall it either --
-      // beaconLitRecorded is seeded from the store at boot, so a world that is already recorded
-      // never enters this branch at all.
-      for (const player of simulation.players.values()) {
-        if (rewards.recordBeaconLit(player.id).applied) {
-          beaconLitRecorded = true;
-          break;
+    ticksSinceSnapshot += 1;
+    const publish = ticksSinceSnapshot >= snapshotEveryTicks;
+    if (publish) ticksSinceSnapshot = 0;
+    for (const simulation of destinations.values()) {
+      simulation.step(deltaSeconds, nowMs);
+      // Persist the Village-only world latch before announcing it. Ephemeral-only victories
+      // leave the latch open until a durable player can record it, matching the existing rule.
+      if (simulation.destinationId === VILLAGE_DESTINATION_ID && !beaconLitRecorded && simulation.beaconIsLit()) {
+        for (const player of simulation.players.values()) {
+          if (rewards.recordBeaconLit(player.id).applied) {
+            beaconLitRecorded = true;
+            break;
+          }
         }
       }
-    }
-
-    ticksSinceSnapshot += 1;
-    if (ticksSinceSnapshot >= snapshotEveryTicks) {
-      ticksSinceSnapshot = 0;
-      // Events accumulated across every tick since the last broadcast (Design ruling 7) -- drained
-      // here, once, so they ride out with the snapshot that reflects the state they resulted in.
-      const events = simulation.drainEvents();
-      // D1's fold, applied through D2's store (or the ephemeral fallback), BEFORE broadcast -- the
-      // brief's own ordering. rewardEvents joins the same array combat events ride, so a client
-      // hears mark-earned/lantern-unlocked exactly the way it hears wolf-defeated: one events array,
-      // one snapshot, no separate channel to wire up.
-      const rewardEvents = rewards.processTick(events);
-      // One encode for everyone rather than per client.
-      ws.broadcast(encode(snapshotMessage(
-        tick,
-        simulation.snapshot(),
-        encounterSnapshotWithRewards(),
-        [...events, ...rewardEvents],
-        simulation.destinationId === VILLAGE_DESTINATION_ID ? undefined : simulation.destinationId,
-      )));
+      if (publish) publishSimulation(simulation);
     }
   }, TICK_MS);
   // Do not hold the process open on this interval alone; the http server is what should keep it up.
@@ -2411,12 +2489,16 @@ export function attachGameServer(httpServer, options = {}) {
 
   return {
     simulation,
+    simulationFor,
     ws,
     // Exposed for tests that want to assert on persisted state directly, and for a future debug
     // surface -- never read by this file itself once construction is done.
     rewards,
     stop() {
+      if (stopped) return;
       clearInterval(timer);
+      for (const destination of destinations.values()) publishSimulation(destination);
+      stopped = true;
       ws.closeAll();
       ws.detach();
       rewards.close();

@@ -34,7 +34,7 @@ export const PROTOCOL_VERSION = 4;
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'special', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
-  'restore-profile',
+  'restore-profile', 'travel', 'destination-changed',
   // R1: kill drops -- the same client->server, no-business-rule-here shape 'collect-loot' already
   // is (see that message's own decode comment). Its dropId cap is DROP_ID_MAX_LENGTH, NOT
   // PICKUP_ID_MAX_LENGTH -- see the correction note on those constants below.
@@ -192,8 +192,24 @@ export function decode(text) {
   if (!MESSAGE_TYPES.includes(raw.type)) {
     fail(`unknown message type ${JSON.stringify(raw.type)}`);
   }
+  const decoded = decodeMessage(raw);
+  if (raw.worldEpoch !== undefined) {
+    if (!Number.isSafeInteger(raw.worldEpoch) || raw.worldEpoch < 0) fail('worldEpoch must be a non-negative safe integer');
+    decoded.worldEpoch = raw.worldEpoch;
+  }
+  if ((raw.type === 'travel' || raw.type === 'destination-changed') && decoded.worldEpoch === undefined) {
+    fail(`${raw.type} requires worldEpoch`);
+  }
+  return decoded;
+}
 
+function decodeMessage(raw) {
   switch (raw.type) {
+    case 'travel': {
+      const destinationId = requireString(raw.destinationId, 'destinationId', 48);
+      if (!destinationId) fail('destinationId must not be empty');
+      return { v: PROTOCOL_VERSION, type: 'travel', destinationId };
+    }
     case 'join': {
       const decoded = { v: PROTOCOL_VERSION, type: 'join', name: requireString(raw.name, 'name') };
       // Additive, not a version bump: absent entirely (a pre-D3 client, or a private-browsing
@@ -216,10 +232,11 @@ export function decode(text) {
       return decoded;
     }
 
+    case 'destination-changed':
     case 'welcome': {
       const decoded = {
         v: PROTOCOL_VERSION,
-        type: 'welcome',
+        type: raw.type,
         id: requireString(raw.id, 'id'),
         tick: requireInteger(raw.tick, 'tick'),
         players: decodePlayers(raw.players),
@@ -232,6 +249,7 @@ export function decode(text) {
       if (raw.destinationId !== undefined && raw.destinationId !== null) {
         decoded.destinationId = requireString(raw.destinationId, 'destinationId', 48);
       }
+      if (raw.type === 'destination-changed' && !decoded.destinationId) fail('destination-changed requires destinationId');
       return decoded;
     }
 
