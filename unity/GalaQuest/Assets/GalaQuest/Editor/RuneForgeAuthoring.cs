@@ -69,8 +69,8 @@ namespace GalaQuest.Editor
         {
             var source = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
             if (source == null) throw new BuildFailedException("Import the authored MagmaLord FBX first: " + ModelPath);
-            var plate = Material("MagmaLordPlate", new Color(.035f, .024f, .02f), .82f, .24f);
-            var horn = Material("MagmaLordHorn", new Color(.17f, .075f, .03f), .12f, .4f);
+            var plate = Material("MagmaLordPlate", new Color(.10f, .045f, .025f), .82f, .32f);
+            var horn = Material("MagmaLordHorn", new Color(.38f, .16f, .045f), .12f, .42f);
             var molten = Material("MagmaLordMolten", new Color(1f, .11f, .005f), .1f, .2f, true);
             var instance = Object.Instantiate(source);
             try
@@ -117,7 +117,10 @@ namespace GalaQuest.Editor
             Shape("ForgeDais", root.transform, PrimitiveType.Cylinder, new Vector3(0, .08f, 0), new Vector3(4.8f, .08f, 4.8f), basalt, false);
             Shape("ForgeRing", root.transform, PrimitiveType.Cylinder, new Vector3(0, .17f, 0), new Vector3(3.9f, .05f, 3.9f), iron, false);
             var cage = Child(root.transform, "PrizeCage");
-            Shape("PrizePlinth", cage, PrimitiveType.Cylinder, new Vector3(0, .72f, .45f), new Vector3(1.25f, .30f, 1.25f), iron, false);
+            Shape("PrizePlinth", cage, PrimitiveType.Cylinder, new Vector3(0, .72f, .45f), new Vector3(1.55f, .30f, 1.55f), iron, false);
+            var halo = Shape("MagmaLordPrizeHalo", cage, PrimitiveType.Cylinder, new Vector3(0, 1.63f, .95f),
+                new Vector3(1.65f, .08f, 1.65f), rune, false);
+            halo.transform.localRotation = Quaternion.Euler(90, 0, 0);
             var prize = (GameObject)PrefabUtility.InstantiatePrefab(definition.SourceModel);
             // This is deliberately an enlarged scene instance of the one wearable asset,
             // never a second gear candidate. Its explicit name protects later custody and review.
@@ -125,14 +128,15 @@ namespace GalaQuest.Editor
             prize.transform.SetParent(cage, false);
             prize.transform.localPosition = new Vector3(0, 1.55f, .45f);
             prize.transform.localRotation = Quaternion.Euler(0, 180, 0);
-            prize.transform.localScale = Vector3.one * 1.55f;
+            prize.transform.localScale = Vector3.one * 2.10f;
             for (var side = -1; side <= 1; side += 2)
                 for (var depth = -1; depth <= 1; depth += 2)
-                    Shape("CageBar", cage, PrimitiveType.Cylinder, new Vector3(side * .58f, 1.55f, .45f + depth * .42f),
-                        new Vector3(.07f, .95f, .07f), iron, false);
-            Shape("CageTop", cage, PrimitiveType.Cube, new Vector3(0, 2.48f, .45f), new Vector3(1.45f, .12f, 1.15f), iron, false);
-            var glow = Shape("CageEmber", cage, PrimitiveType.Sphere, new Vector3(0, 1.42f, .45f), new Vector3(.23f, .23f, .23f), ember, false);
-            var light = glow.AddComponent<Light>(); light.type = LightType.Point; light.color = new Color(1f, .22f, .03f); light.range = 6f; light.intensity = 3f;
+                    Shape("CageBar", cage, PrimitiveType.Cylinder, new Vector3(side * .78f, 1.55f, .45f + depth * .55f),
+                        new Vector3(.07f, 1.08f, .07f), iron, false);
+            Shape("CageTop", cage, PrimitiveType.Cube, new Vector3(0, 2.62f, .45f), new Vector3(1.9f, .12f, 1.45f), iron, false);
+            var glow = Shape("CageEmber", cage, PrimitiveType.Sphere, new Vector3(0, 1.25f, .18f), new Vector3(.16f, .16f, .16f), ember, false);
+            var light = glow.AddComponent<Light>(); light.type = LightType.Point; light.color = new Color(1f, .30f, .04f); light.range = 7f; light.intensity = 5.5f;
+            WorldLabel("MagmaLordPrizeName", cage, "MAGMALORD", new Vector3(0, 2.95f, .45f), .14f);
 
             Interactable("ForgeCore", root.transform, "open", "", new Vector3(0, .55f, -1.35f), new Vector3(.6f, .6f, .35f), ember, "WAKE");
             Interactable("SoundAnvil", root.transform, "pack", "grapheme-er-family", new Vector3(-1.3f, .48f, -.3f), new Vector3(.75f, .48f, .72f), iron, "SOUND");
@@ -154,13 +158,25 @@ namespace GalaQuest.Editor
             var text = new GameObject("Label");
             text.transform.SetParent(root.transform, false);
             text.transform.localPosition = new Vector3(0, .58f, 0);
-            text.transform.localRotation = Quaternion.Euler(0, 180, 0);
+            text.transform.localRotation = Quaternion.identity;
             text.transform.localScale = Vector3.one * .12f;
             var mesh = text.AddComponent<TextMesh>();
             mesh.text = label; mesh.anchor = TextAnchor.MiddleCenter; mesh.alignment = TextAlignment.Center;
             mesh.fontSize = 64; mesh.color = new Color(1f, .8f, .4f);
             root.AddComponent<GalaQuestRuneForgeInteractable>().Configure(kind, value);
             return root;
+        }
+
+        private static void WorldLabel(string name, Transform parent, string value, Vector3 at, float scale)
+        {
+            var text = new GameObject(name);
+            text.transform.SetParent(parent, false);
+            text.transform.localPosition = at;
+            text.transform.localRotation = Quaternion.identity;
+            text.transform.localScale = Vector3.one * scale;
+            var mesh = text.AddComponent<TextMesh>();
+            mesh.text = value; mesh.anchor = TextAnchor.MiddleCenter; mesh.alignment = TextAlignment.Center;
+            mesh.fontSize = 64; mesh.fontStyle = FontStyle.Bold; mesh.color = new Color(1f, .66f, .18f);
         }
 
         private static GameObject Shape(string name, Transform parent, PrimitiveType type, Vector3 at,
@@ -196,10 +212,10 @@ namespace GalaQuest.Editor
         {
             var path = Folder + "/" + name + ".mat";
             var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null) return existing;
             var shader = Shader.Find("Universal Render Pipeline/Lit")
                          ?? throw new BuildFailedException("Missing URP Lit shader.");
-            var material = new Material(shader) { name = name, color = color };
+            var material = existing != null ? existing : new Material(shader) { name = name };
+            material.color = color;
             material.SetFloat("_Metallic", metallic);
             material.SetFloat("_Smoothness", smoothness);
             if (emission)
@@ -208,7 +224,8 @@ namespace GalaQuest.Editor
                 material.SetColor("_EmissionColor", color * 2.5f);
                 material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             }
-            AssetDatabase.CreateAsset(material, path);
+            if (existing == null) AssetDatabase.CreateAsset(material, path);
+            else EditorUtility.SetDirty(material);
             return material;
         }
     }

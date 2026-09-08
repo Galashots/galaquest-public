@@ -32,7 +32,10 @@ mergeInto(LibraryManager.library, {
   // touches. These projected points let it hit the physical world controls without
   // encoding camera-specific pixels or exposing answers/private learner state.
   GQ_Diagnostics_ClearForgeControls: function () {
-    window.__gqRuneForgeControls = [];
+    // Do not clear the last complete projection here. More than one presenter can
+    // update in a frame while preview scenes settle; a later inactive presenter must
+    // not erase the active Forge's points before the browser driver can observe them.
+    window.__gqRuneForgeControls = window.__gqRuneForgeControls || [];
   },
 
   GQ_Diagnostics_RecordForgeControl: function (kindPtr, valuePtr, screenX, screenY) {
@@ -42,12 +45,17 @@ mergeInto(LibraryManager.library, {
     var width = canvas.width || rect.width;
     var height = canvas.height || rect.height;
     window.__gqRuneForgeControls = window.__gqRuneForgeControls || [];
-    window.__gqRuneForgeControls.push({
+    var next = {
       kind: UTF8ToString(kindPtr),
       value: UTF8ToString(valuePtr),
       x: rect.x + (screenX / width) * rect.width,
       y: rect.y + (1 - screenY / height) * rect.height
+    };
+    var previous = window.__gqRuneForgeControls.findIndex(function (item) {
+      return item.kind === next.kind && Math.abs(item.x - next.x) < 4 && Math.abs(item.y - next.y) < 4;
     });
+    if (previous >= 0) window.__gqRuneForgeControls[previous] = next;
+    else window.__gqRuneForgeControls.push(next);
   },
 
   GQ_Profile_ReadSelected: function (gameObjectPtr, callbackPtr) {

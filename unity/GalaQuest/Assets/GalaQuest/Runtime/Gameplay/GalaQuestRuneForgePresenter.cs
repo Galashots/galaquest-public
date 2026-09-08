@@ -244,14 +244,16 @@ namespace GalaQuest
             { alignment = TextAnchor.MiddleCenter, wordWrap = true, normal = { textColor = Color.white } };
             titleStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 32f), 17, 28);
             promptStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 42f), 14, 22);
-            var width = Mathf.Min(620f, Screen.width * .62f);
-            var panel = new Rect((Screen.width - width) / 2f, Screen.height * .10f, width, 104f);
+            var width = Mathf.Min(480f, Screen.width * .50f);
+            var panelX = Mathf.Min(Screen.width - width - 14f,
+                Mathf.Max(Screen.width * .35f, (Screen.width - width) / 2f));
+            var panel = new Rect(panelX, Screen.height * .075f, width, 94f);
             var old = GUI.color;
             GUI.color = new Color(.035f, .018f, .012f, .86f);
             GUI.DrawTexture(panel, Texture2D.whiteTexture);
             GUI.color = Color.white;
             GUI.Label(new Rect(panel.x + 12, panel.y + 5, panel.width - 24, 31), "RUNE FORGE", titleStyle);
-            var prompt = state == null ? "The MagmaLord Helmet is trapped. Touch the forge core."
+            var prompt = state == null ? "MagmaLord Helmet trapped — touch WAKE below."
                 : state.status == "choose-pack" ? "Choose a rune anvil."
                 : state.status == "active" ? state.task?.displayPrompt
                 : state.status == "ready-to-claim" ? "The cage is open. Touch CLAIM."

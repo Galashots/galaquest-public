@@ -91,7 +91,7 @@ namespace GalaQuest.Tests
             var pocket = pocketObject.transform;
             var display = pocket.Find("PrizeCage/MagmaLordForgeDisplayCopy");
             Assert.That(display, Is.Not.Null);
-            Assert.That(display.localScale, Is.EqualTo(Vector3.one * 1.55f));
+            Assert.That(display.localScale, Is.EqualTo(Vector3.one * 2.10f));
             Assert.That(display.GetComponentInChildren<GearMountedItem>(), Is.Null,
                 "The enlarged prize is a named display instance, not another wearable or entitlement.");
             var soundPlaque = pocket.Find("SoundPlaque");
