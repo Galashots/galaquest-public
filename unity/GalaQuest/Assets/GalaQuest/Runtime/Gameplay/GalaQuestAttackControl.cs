@@ -80,6 +80,7 @@ namespace GalaQuest
                 foreach (var touch in touchscreen.touches)
                 {
                     if (!touch.press.wasPressedThisFrame || !touch.press.isPressed
+                        || GalaQuestRuneForgePresenter.OwnsTouch(touch.touchId.ReadValue())
                         || !IsInAttackRegion(touch.position.ReadValue(), new Vector2(Screen.width, Screen.height))) continue;
                     pointerId = touch.touchId.ReadValue();
                     TryAttack();

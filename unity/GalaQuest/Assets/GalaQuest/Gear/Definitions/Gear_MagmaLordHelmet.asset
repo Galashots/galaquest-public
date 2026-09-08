@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c57608c1dd0bc8468abf0ea15aa8dad, type: 3}
+  m_Name: Gear_MagmaLordHelmet
+  m_EditorClassIdentifier: GalaQuest.Gear.Runtime::GalaQuest.Gear.GearItemDefinition
+  semanticId: gear.helmet.magmalord
+  displayName: MagmaLord Helmet
+  sourceModel: {fileID: 7979205626075392247, guid: ef1b05a6ba119804a98e8cc67289d59a, type: 3}
+  socketId: head
+  fitClass: 1
+  localPosition: {x: 0, y: 0.205, z: -0.055}
+  localEulerAngles: {x: 0, y: 0, z: 0}
+  localScale: {x: 0.72, y: 0.72, z: 0.72}
+  mirrorX: 0
+  hidesAnatomy: 0000000001000000
+  fitSource: 1
+  sourceRepoPath: unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/MagmaLordHelmet.fbx

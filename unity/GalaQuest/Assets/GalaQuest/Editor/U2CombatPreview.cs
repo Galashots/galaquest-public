@@ -95,6 +95,7 @@ namespace GalaQuest.Editor
                     "Assets/GalaQuest/Gear/Prefabs/GQ_HERO_V1.prefab"), Temporary);
             content.HeroController = heroController;
             content.StarterWeapon = PrepareStarterWeapon(content.HeroPrefab);
+            content.MagmaLordHelmet = RuneForgeAuthoring.LoadHelmet();
             content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab } };
             content.TelegraphMaterial = telegraph;
             content.Swing = Cue("swing"); content.Impact = Cue("impact"); content.Hurt = Cue("hurt");
@@ -136,6 +137,7 @@ namespace GalaQuest.Editor
             var presentation = root.GetComponent<GalaQuestCombatPresentation>();
             if (presentation == null) presentation = root.AddComponent<GalaQuestCombatPresentation>();
             presentation.Configure(content);
+            RuneForgeAuthoring.ConfigurePreview(root, content);
             var camera = root.GetComponentsInChildren<Camera>().Single(item => item.CompareTag("MainCamera"));
             if (camera.GetComponent<AudioListener>() == null) camera.gameObject.AddComponent<AudioListener>();
             var path = Temporary + "/EmberworksFightPreview.unity";

@@ -18,6 +18,7 @@ namespace GalaQuest
         private GalaQuestDestinationPresentation destinations;
         private GalaQuestProfileProgression progression;
         private GalaQuestHeroHud hud;
+        private GalaQuestRuneForgePresenter forge;
 
         public void ConfigureInitialDestination(string destinationId) => initialDestination = destinationId;
 
@@ -32,6 +33,7 @@ namespace GalaQuest
             combat = GetComponent<GalaQuestCombatPresentation>();
             destinations = GetComponent<GalaQuestDestinationPresentation>();
             progression = GetComponent<GalaQuestProfileProgression>();
+            forge = GetComponent<GalaQuestRuneForgePresenter>();
             if (progression == null) progression = gameObject.AddComponent<GalaQuestProfileProgression>();
             hud = GetComponent<GalaQuestHeroHud>();
             if (hud == null) hud = gameObject.AddComponent<GalaQuestHeroHud>();
@@ -57,6 +59,7 @@ namespace GalaQuest
             traversal.BindSession(session);
             attack.BindSession(session);
             if (combat != null) combat.BindSession(session);
+            if (forge != null) forge.BindSession(session);
             session.Begin(profile, initialDestination);
         }
 
@@ -111,6 +114,7 @@ namespace GalaQuest
                 traversal?.BindSession(null);
                 if (attack != null) attack.BindSession(null);
                 if (combat != null) combat.BindSession(null);
+                if (forge != null) forge.BindSession(null);
                 if (destinations != null) destinations.BindSession(null);
                 if (progression != null) progression.BindSession(null, null);
                 session.StatusChanged -= HandleStatus;

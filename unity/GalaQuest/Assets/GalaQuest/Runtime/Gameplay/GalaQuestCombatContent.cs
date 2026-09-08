@@ -9,6 +9,7 @@ namespace GalaQuest
         public GameObject HeroPrefab;
         public RuntimeAnimatorController HeroController;
         public GalaQuest.Gear.GearItemDefinition StarterWeapon;
+        public GalaQuest.Gear.GearItemDefinition MagmaLordHelmet;
         public EnemyPrefab[] Enemies = Array.Empty<EnemyPrefab>();
         public Material TelegraphMaterial;
         public AudioClip Swing;

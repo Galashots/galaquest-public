@@ -13,6 +13,7 @@ namespace GalaQuest
         private GalaQuestAttackControl attackControl;
         private GalaQuestCombatMotion selfMotion;
         private GameObject selfWeapon;
+        private GameObject selfHelmet;
         private GalaQuestServerHeroCombat self;
         private GalaQuestCombatAudio sound;
         private float receivedAt;
@@ -52,6 +53,7 @@ namespace GalaQuest
             public GalaQuestServerPlayer Player;
             public GalaQuestServerHeroCombat State;
             public float HurtUntil;
+            public GameObject Helmet;
         }
 
         public void Configure(GalaQuestCombatContent assets) => content = assets;
@@ -65,6 +67,7 @@ namespace GalaQuest
             }
             if (attackControl != null) attackControl.AttackRequested -= PredictAttack;
             if (selfWeapon != null) Destroy(selfWeapon);
+            if (selfHelmet != null) Destroy(selfHelmet);
             ClearViews();
             session = value;
             if (session == null) return;
@@ -100,11 +103,13 @@ namespace GalaQuest
         public void ApplyFrame(GalaQuestServerFrame frame)
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId) || frame.encounter == null) return;
+            if (frame.type == "forge-state") return;
             if (frame.type == "welcome" || frame.type == "destination-changed") ClearViews();
             else if (frame.tick <= lastTick) return;
             lastTick = frame.tick;
             receivedAt = Time.unscaledTime;
             frame.encounter.heroes.TryGetValue(session.PlayerId, out self);
+            ReconcileHelmet(session.PlayerId, traversal.Hero, frame, ref selfHelmet);
             if (self != null && self.swingSeconds >= 0) predictedSwingAt = float.NegativeInfinity;
             seen.Clear();
             foreach (var state in frame.encounter.enemies)
@@ -149,6 +154,7 @@ namespace GalaQuest
                 }
                 actor.Player = player;
                 frame.encounter.heroes.TryGetValue(player.id, out actor.State);
+                ReconcileHelmet(player.id, actor.Body.transform, frame, ref actor.Helmet);
             }
             RemoveAbsent(companions, seen, actor => Destroy(actor.Body));
             foreach (var item in frame.events)
@@ -236,6 +242,23 @@ namespace GalaQuest
             else motion.Present("idle", 0, 0, speed);
         }
 
+        private void ReconcileHelmet(string heroId, Transform body, GalaQuestServerFrame frame, ref GameObject mounted)
+        {
+            var wearsMagmaLord = frame.encounter.rewards != null
+                && frame.encounter.rewards.TryGetValue(heroId, out var reward)
+                && reward?.equippedItemIds != null
+                && reward.equippedItemIds.TryGetValue("helmet", out var helmetId)
+                && helmetId == "helmet_magmalord";
+            if (!wearsMagmaLord)
+            {
+                if (mounted != null) Destroy(mounted);
+                mounted = null;
+                return;
+            }
+            if (mounted == null && content.MagmaLordHelmet != null)
+                mounted = GalaQuest.Gear.GearMounter.Mount(body, content.MagmaLordHelmet);
+        }
+
         private void CreateTelegraph(EnemyView actor, GalaQuestServerEnemyAttack attack)
         {
             if (attack == null || attack.reach <= 0 || content.TelegraphMaterial == null) return;
@@ -310,6 +333,8 @@ namespace GalaQuest
             enemies.Clear(); companions.Clear();
             self = null; lastTick = -1; selfHurtUntil = 0;
             predictedSwingAt = float.NegativeInfinity;
+            if (selfHelmet != null) Destroy(selfHelmet);
+            selfHelmet = null;
             if (selfMotion != null) selfMotion.Present("idle", 0, 0);
         }
 
