@@ -127,7 +127,7 @@ namespace GalaQuest
         public void StepPrediction(Vector2 direction, float magnitude, bool run, float rawDeltaSeconds)
         {
             PredictedMotionSpeed = 0f;
-            if (hero == null || session == null || string.IsNullOrEmpty(session.PlayerId) || serverDown || recoveryNeedsNeutral)
+            if (hero == null || session == null || !session.ControlsReady || serverDown || recoveryNeedsNeutral)
             { predictionBacklog = 0; wasMoving = false; return; }
             magnitude = Mathf.Clamp01(magnitude);
             var moving = magnitude > 0f && direction.sqrMagnitude > 0f;
@@ -139,7 +139,7 @@ namespace GalaQuest
             {
                 var speed = GalaQuestMovementLaw.GroundSpeedForInput(magnitude, run);
                 predicted += direction * (speed * budget.DeltaSeconds);
-                predicted = GalaQuestEmberworksMovementWorld.Move(before, predicted);
+                predicted = GalaQuestDestinationMovementWorld.Move(session.DestinationId, before, predicted);
                 hero.rotation = GalaQuestServerCoordinates.ToUnityHeading(Mathf.Atan2(direction.x, direction.y));
             }
             if (budget.DeltaSeconds > 0f)
@@ -168,9 +168,12 @@ namespace GalaQuest
                 serverDown = down;
             }
             authoritative = new Vector2(self.x, self.z);
-            if (!hasAuthoritativePosition || frame.type == "welcome")
+            if (!hasAuthoritativePosition || frame.type == "welcome" || frame.type == "destination-changed")
             {
                 predicted = authoritative;
+                predictionBacklog = 0;
+                wasMoving = false;
+                PredictedMotionSpeed = 0;
                 hasAuthoritativePosition = true;
                 pendingSnapshots = 0;
                 LastDrift = 0f;
@@ -188,7 +191,7 @@ namespace GalaQuest
             var result = GalaQuestMovementLaw.Reconcile(predicted, authoritative, pendingSnapshots);
             if (pendingSnapshots == 0) return result;
             pendingSnapshots = 0;
-            predicted = GalaQuestEmberworksMovementWorld.ResolvePosition(result.Position);
+            predicted = GalaQuestDestinationMovementWorld.ResolvePosition(session.DestinationId, result.Position);
             LastDrift = result.Drift;
             LastReconciliationSnapped = result.Snapped;
             PresentPrediction();

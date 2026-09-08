@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { attachGameServer, createRewardCoordinator } from '../net/gameServerCore.mjs';
+import { attachGameServer, createRewardCoordinator, createSimulation } from '../net/gameServerCore.mjs';
 import { decode, encode, joinMessage, attackMessage, inputMessage } from '../public/src/net/protocolCore.js';
 
 async function withServer(run) {
@@ -69,6 +69,15 @@ test('real sockets: siblings occupy different destinations with distinct identit
     assert.ok(a.messages.filter(message => message.type === 'snapshot')
       .every(message => message.destinationId !== 'emberworks-deep'));
   });
+});
+
+test('the playtest hub is a small safe destination with no inherited adventure enemies', () => {
+  const hub = createSimulation({ destinationId: 'home-hub' });
+  const hero = hub.addPlayer('younger');
+  assert.deepEqual({ x: hero.x, z: hero.z }, { x: 0, z: 0 });
+  assert.deepEqual(hub.encounterSnapshot().enemies, []);
+  hero.x = 100; hero.z = -100; hub.step(0, 0);
+  assert.deepEqual({ x: hero.x, z: hero.z }, { x: 9, z: -7 });
 });
 
 test('real sockets: travel preserves the sibling fight, acknowledges arrival and rejects old-world controls', async () => {

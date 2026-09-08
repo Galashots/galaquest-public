@@ -16,7 +16,7 @@ namespace GalaQuest
         private GUIStyle label;
 
         public event Action AttackRequested;
-        public bool CanPress => !inputBlocked && session != null && !string.IsNullOrEmpty(session.PlayerId) && !down;
+        public bool CanPress => !inputBlocked && session != null && session.ControlsReady && !down;
 
         // Touch positions use a bottom-left origin. Ownership is chosen on press;
         // an attack finger remains reserved when it moves outside the visible disc.
@@ -35,6 +35,7 @@ namespace GalaQuest
             {
                 session.ServerFrameReceived -= ApplyFrame;
                 session.Disconnected -= Cancel;
+                session.TravelStarted -= Cancel;
             }
             session = value;
             down = false;
@@ -43,6 +44,7 @@ namespace GalaQuest
             {
                 session.ServerFrameReceived += ApplyFrame;
                 session.Disconnected += Cancel;
+                session.TravelStarted += Cancel;
             }
         }
 

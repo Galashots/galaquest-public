@@ -222,7 +222,8 @@ function freshEnemy(definition) {
 }
 
 function enemyDefinitionsFromOptions({ enemies, wolfSpawn = { x: 0, z: -4 }, wolfSpawns } = {}) {
-  if (Array.isArray(enemies) && enemies.length > 0) {
+  // An explicitly empty population is a safe world. Only an omitted collection uses the legacy wolf.
+  if (Array.isArray(enemies)) {
     const seen = new Set();
     return enemies.map((definition, index) => {
       const normalized = normalizeEnemyDefinition(definition, `enemy-${index + 1}`);

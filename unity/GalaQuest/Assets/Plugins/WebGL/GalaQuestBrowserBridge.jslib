@@ -77,7 +77,7 @@ mergeInto(LibraryManager.library, {
     socket.onmessage = function (event) {
       try {
         var received = JSON.parse(String(event.data));
-        if (received && (received.type === 'welcome' || received.type === 'snapshot')) {
+        if (received && (received.type === 'welcome' || received.type === 'snapshot' || received.type === 'destination-changed')) {
           var diagnostics = window.__gqUnityCp2Diagnostics || {
             sentInputs: [], serverFrames: [], reconciliations: []
           };

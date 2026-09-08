@@ -8,6 +8,7 @@ import {
 } from './bounds.js';
 import { resolveObstacleCollisions, worldObstacles } from './obstacles.js';
 import { movePlanarPosition, resolvePlanarPosition } from './planarCollision.js';
+import { HOME_HUB_DESTINATION_ID, HOME_HUB_SPAWN, HOME_HUB_BOUNDS, HOME_HUB_CLEARANCE } from './zones/homeHub.js';
 import {
   EMBERWORKS_DEEP_DESTINATION_ID,
   EMBERWORKS_DEEP_HERO_SPAWN,
@@ -41,6 +42,15 @@ const EMBERWORKS_DEEP_MOVEMENT_WORLD = Object.freeze({
 });
 
 const MOVEMENT_WORLDS = Object.freeze({
+  [HOME_HUB_DESTINATION_ID]: Object.freeze({
+    destinationId: HOME_HUB_DESTINATION_ID,
+    heroSpawn: HOME_HUB_SPAWN,
+    bounds: HOME_HUB_BOUNDS,
+    obstacles: Object.freeze([]),
+    planarClearance: HOME_HUB_CLEARANCE,
+    villageInteractions: false,
+    safeHub: true,
+  }),
   [VILLAGE_DESTINATION_ID]: VILLAGE_MOVEMENT_WORLD,
   [EMBERWORKS_DEEP_DESTINATION_ID]: EMBERWORKS_DEEP_MOVEMENT_WORLD,
 });

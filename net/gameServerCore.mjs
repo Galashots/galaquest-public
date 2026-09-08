@@ -1030,7 +1030,8 @@ export function createSimulation(options = {}) {
   // test/config seam for alternate authored collections.
   function createDestinationEncounter() {
     return createPartyEncounterState({
-      enemies: options.enemies ?? (movementWorld.villageInteractions ? ENEMY_POPULATION : EMBERWORKS_DEEP_ENEMIES),
+      enemies: options.enemies ?? (movementWorld.safeHub ? []
+        : movementWorld.villageInteractions ? ENEMY_POPULATION : EMBERWORKS_DEEP_ENEMIES),
       heroIds: [],
       heroSpawn: movementWorld.heroSpawn,
       recoverySanctuary: movementWorld.villageInteractions ? RECOVERY_SANCTUARY : EMBERWORKS_DEEP_RECOVERY_SANCTUARY,

@@ -57,5 +57,40 @@ reported 2290 pass, two fail, three skip: a source-text Beacon scanner needed to
 destination loop (fixed in d7285e5), and the previously observed Windows Lantern-XP temporary-folder
 cleanup hit `EPERM`. The latter occurred during cleanup, not a failed reward assertion.
 
-Unity portals, a visible hub, scene transitions, browser visual review and physical iPad evidence
-are not yet provided by this checkpoint. It does not claim the miniature loop or either full adventure complete.
+The server checkpoint does not establish Unity, browser or physical iPad acceptance.
+
+## Unity camp and travel checkpoint
+
+The existing Unity player scene now contains a small camp alongside the Emberworks scenery. One
+session, hero and camera survive travel; the acknowledged destination selects the scenery, resets
+position prediction and clears the previous destination's combat views. The camp is the initial
+destination. Its gate offers entry to Emberworks, and a Return to camp control allows each child to
+leave independently. Touches on the travel control are excluded from camera gestures.
+
+Travel releases movement before the request, blocks controls while arrival is pending, and requires
+neutral movement before the next stride. New controls carry the acknowledged epoch. Wrong-player
+arrivals and old-world snapshots are ignored. A broken socket reconnects to the last acknowledged
+destination with the same selected profile. A page reload starts at camp.
+
+The initial Unity regression failed because the session had no travel operation. The completed
+EditMode run covers arrival, retry after failed send, synchronous acknowledgement, stale snapshots,
+reconnection, existing collision/locomotion behavior, and the admitted hand asset. The old locomotion
+fixture used duplicate welcomes to reposition a hero; it now opens a fresh fake connection before
+each welcome. No movement constants were tuned for that fixture.
+
+### Camp visual convention
+
+GalaQuest's current hero and materials remain the project reference. Three inspected comparison
+images informed only spatial conventions: an open meeting area with destinations at the edges in
+[Kirby's Waddle Dee Town](https://www.nintendo-master.com/news/kirby-et-le-monde-oublie-se-devoile-en-images-et-en-artworks),
+a compact action courtyard with low foreground scenery in
+[Minecraft Dungeons' camp](https://www.windowscentral.com/minecraft-dungeons-guide-how-replay-levels-higher-difficulties),
+and paths, benches and lighting that frame a gathering place in this
+[LEGO Fortnite village](https://www.eurogamer.de/lego-fortnite-ist-viel-mehr-lego-als-fortnite-aber-deshalb-nicht-weniger-spannend).
+These are attributed game screenshots carried by secondary publications; their art is not copied
+into the project. The camp geometry and simple materials are authored locally through Unity.
+
+Exact-source WebGL build, two-browser travel/reunion, running-game visual review and physical iPad
+results must still be recorded below. This checkpoint does not claim the miniature loop or either
+full adventure complete. The existing gremlin remains a separate review candidate; travel work
+does not promote it or authorize further provider spend.

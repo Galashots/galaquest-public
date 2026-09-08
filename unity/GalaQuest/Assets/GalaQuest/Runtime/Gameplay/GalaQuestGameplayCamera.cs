@@ -91,6 +91,8 @@ namespace GalaQuest
                 if (GalaQuestFloatingJoystickState.IsInMovementRegion(touch.position.ReadValue(), viewport)) continue;
                 if (GalaQuestAttackControl.IsInAttackRegion(touch.position.ReadValue(), viewport)) continue;
                 if (GalaQuestCombatAudio.IsInMuteRegion(touch.position.ReadValue(), viewport)) continue;
+                if (GetComponentInParent<GalaQuestDestinationPresentation>() != null
+                    && GalaQuestDestinationPresentation.IsInTravelRegion(touch.position.ReadValue(), viewport)) continue;
                 touchIds.Add(id);
             }
 

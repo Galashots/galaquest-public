@@ -99,7 +99,7 @@ namespace GalaQuest
         public void ApplyFrame(GalaQuestServerFrame frame)
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId) || frame.encounter == null) return;
-            if (frame.type == "welcome") ClearViews();
+            if (frame.type == "welcome" || frame.type == "destination-changed") ClearViews();
             else if (frame.tick <= lastTick) return;
             lastTick = frame.tick;
             receivedAt = Time.unscaledTime;

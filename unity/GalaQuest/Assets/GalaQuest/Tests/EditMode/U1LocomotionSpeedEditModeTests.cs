@@ -22,7 +22,6 @@ namespace GalaQuest.Tests
             session = new GalaQuestConnectionSession(transport);
             movement.BindSession(session);
             session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Motion test", "[]"));
-            transport.Open();
             Place(-3f, 12f);
         }
 
@@ -74,10 +73,16 @@ namespace GalaQuest.Tests
                 Is.EqualTo(Vector2.Distance(start, movement.PredictedPosition) / 0.1f).Within(0.001f));
         }
 
-        private void Place(float x, float z) => transport.Receive(
-            "{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"players\":[{\"id\":\"p1\",\"x\":" +
-            x.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"z\":" +
-            z.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}]}");
+        private void Place(float x, float z)
+        {
+            // A welcome belongs to a new connection. Duplicate welcomes in the same
+            // connection are intentionally ignored by the travel-aware session.
+            transport.Open();
+            transport.Receive(
+                "{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"players\":[{\"id\":\"p1\",\"x\":" +
+                x.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"z\":" +
+                z.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}]}");
+        }
 
         private sealed class FakeTransport : IGalaQuestTransport
         {

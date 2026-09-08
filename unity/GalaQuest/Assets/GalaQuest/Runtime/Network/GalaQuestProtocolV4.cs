@@ -8,6 +8,7 @@ namespace GalaQuest
     public static class GalaQuestProtocolV4
     {
         public const int Version = 4;
+        public const string HomeHubDestinationId = "home-hub";
         public const string EmberworksDeepDestinationId = "emberworks-deep";
         private static readonly JsonSerializerSettings FrameJsonSettings = new JsonSerializerSettings
         {
@@ -17,7 +18,7 @@ namespace GalaQuest
             CheckAdditionalContent = true
         };
 
-        public static string Join(GalaQuestSelectedProfile profile)
+        public static string Join(GalaQuestSelectedProfile profile, string destinationId = EmberworksDeepDestinationId)
         {
             return JsonUtility.ToJson(new JoinMessage
             {
@@ -25,13 +26,13 @@ namespace GalaQuest
                 type = "join",
                 name = profile.DisplayName,
                 guestId = profile.ProfileId,
-                destinationId = EmberworksDeepDestinationId
+                destinationId = destinationId
             });
         }
 
-        public static string Input(int sequence, float directionX, float directionZ, float magnitude, bool run)
+        public static string Input(int sequence, float directionX, float directionZ, float magnitude, bool run, int worldEpoch = 0)
         {
-            return JsonUtility.ToJson(new InputMessage
+            return WithEpoch(JsonUtility.ToJson(new InputMessage
             {
                 v = Version,
                 type = "input",
@@ -40,7 +41,7 @@ namespace GalaQuest
                 dirZ = directionZ,
                 magnitude = magnitude,
                 run = run
-            });
+            }), worldEpoch);
         }
 
         public static string RestoreProfile(GalaQuestSelectedProfile profile)
@@ -48,10 +49,19 @@ namespace GalaQuest
             return $"{{\"v\":{Version},\"type\":\"restore-profile\",\"facts\":{profile.FactsJson}}}";
         }
 
-        public static string Attack(int sequence)
+        public static string Attack(int sequence, int worldEpoch = 0)
         {
-            return JsonUtility.ToJson(new AttackMessage { v = Version, type = "attack", seq = sequence });
+            return WithEpoch(JsonUtility.ToJson(new AttackMessage { v = Version, type = "attack", seq = sequence }), worldEpoch);
         }
+
+        public static string Travel(string destinationId, int worldEpoch)
+        {
+            return JsonUtility.ToJson(new TravelMessage
+            { v = Version, type = "travel", destinationId = destinationId, worldEpoch = worldEpoch });
+        }
+
+        private static string WithEpoch(string json, int worldEpoch) => worldEpoch == 0 ? json
+            : json.Substring(0, json.Length - 1) + ",\"worldEpoch\":" + worldEpoch + "}";
 
         public static bool TryReadWelcome(string json, out string playerId)
         {
@@ -84,7 +94,9 @@ namespace GalaQuest
             {
                 return false;
             }
-            if (frame == null || frame.v != Version || (frame.type != "welcome" && frame.type != "snapshot"))
+            if (frame == null || frame.v != Version || (frame.type != "welcome" && frame.type != "snapshot" && frame.type != "destination-changed")
+                || frame.worldEpoch < 0 || (frame.type == "destination-changed"
+                    && (frame.worldEpoch == 0 || string.IsNullOrEmpty(frame.id) || string.IsNullOrEmpty(frame.destinationId))))
             {
                 frame = null;
                 return false;
@@ -128,6 +140,15 @@ namespace GalaQuest
         }
 
         [Serializable]
+        private sealed class TravelMessage
+        {
+            public int v;
+            public string type;
+            public string destinationId;
+            public int worldEpoch;
+        }
+
+        [Serializable]
         private sealed class MessageHeader
         {
             public int v;
@@ -143,6 +164,7 @@ namespace GalaQuest
         public string type;
         public string id;
         public int tick;
+        public int worldEpoch;
         public string destinationId;
         public GalaQuestServerPlayer[] players = Array.Empty<GalaQuestServerPlayer>();
         public GalaQuestServerEncounter encounter = new GalaQuestServerEncounter();
