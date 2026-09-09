@@ -35,7 +35,7 @@ import {
 import { CART_LOOT_TABLE, pickupWorldPosition } from '../public/src/world/cartLoot.js';
 import { CART_SEARCH } from '../public/src/world/zones/village.js';
 import { createProfileStore } from '../public/src/progression/profiles.js';
-import { PROFILE_FACT_TYPES } from '../public/src/progression/facts.js';
+import { PRIVATE_PROFILE_FACT_TYPES, PROFILE_FACT_TYPES } from '../public/src/progression/facts.js';
 import { WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import { REWARD_EVENT_TYPES } from '../public/src/rewards/feedback.js';
 
@@ -230,6 +230,8 @@ test('every profile fact type the coordinator can write is one the client can ro
     // no quest, combat or learning source mints one, so there is nothing for the server to announce.
     // The client handler arrives with the first real XP source, which is a later package's job.
     && type !== 'xp-earned'
+    // Learning attempts are addressed private state, not world reward announcements.
+    && !PRIVATE_PROFILE_FACT_TYPES.includes(type)
   ));
 
   const unroutable = announceable.filter((type) => !REWARD_EVENT_TYPES.includes(type));

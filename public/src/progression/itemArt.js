@@ -33,6 +33,7 @@
 // half-delivered art batch degrades to a readable silhouette instead of an empty frame.
 
 import {
+  HELMET_MAGMALORD_ID,
   HELMET_SILVERGUARD_ID,
   SHIELD_IRONWOOD_ID,
   SHOULDER_SILVERGUARD_ID,
@@ -104,6 +105,19 @@ export const HELMET_ICON_SVG = `
       <rect x="6" y="27" width="8" height="6" rx="2"/>
       <rect x="34" y="27" width="8" height="6" rx="2"/>
       <rect x="20" y="6" width="8" height="9" rx="3"/>
+    </g>
+  </svg>
+`;
+
+/** The MagmaLord reward's broad paired horns, molten brow rune and guarded jaw. */
+export const MAGMALORD_HELMET_ICON_SVG = `
+  <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g fill="currentColor">
+      <path d="M15 17 C8 14 5 8 7 3 c4 6 8 7 13 8 Z"/>
+      <path d="M33 17 C40 14 43 8 41 3 c-4 6-8 7-13 8 Z"/>
+      <path d="M24 8 C13 8 9 15 9 26 v13 l8 5 v-14 h14 v14 l8-5 V26 C39 15 35 8 24 8 Z"/>
+      <path d="M24 12 l4 7 -4 4 -4-4 Z"/>
+      <rect x="14" y="25" width="20" height="5" rx="2"/>
     </g>
   </svg>
 `;
@@ -187,6 +201,12 @@ const ITEM_ART = Object.freeze({
     rarity: RARITY_RARE,
     iconUrl: 'assets/items/helmet_silverguard.png',
     iconSvg: HELMET_ICON_SVG,
+  }),
+  [HELMET_MAGMALORD_ID]: Object.freeze({
+    // Provisional presentation classification for this signature reward; it changes no mechanic.
+    rarity: RARITY_RARE,
+    iconUrl: 'assets/items/helmet_magmalord.png',
+    iconSvg: MAGMALORD_HELMET_ICON_SVG,
   }),
   [SHOULDER_SILVERGUARD_ID]: Object.freeze({
     rarity: RARITY_UNCOMMON,
