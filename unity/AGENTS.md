@@ -13,8 +13,12 @@ This directory is the Unity production foundation. Keep these rules durable and 
 
 ## Automation and validation
 
+- On a local Unity-capable workstation, **start the pinned Editor on the intended owned checkout before iterative Unity work if it is not already open.** Wait for initial import/script compilation to settle, confirm the intended project/checkout and no Safe Mode or unexplained compile errors, and keep that Editor/project open through the package when practical. The agent owns this startup; do not assume the Owner has pre-opened Unity.
+- Prefer a connected Unity CLI/Pipeline/live-Editor loop for local scene, prefab, authoring, and focused-test iteration when available. Raw batch mode is a CI/fallback/final-evidence surface, not the default local edit-test loop.
+- After external asset/script edits, follow the [live-Editor refresh procedure](../.agents/skills/galaquest-unity-web-playtest/SKILL.md#refresh-external-edits-through-the-live-editor) to trigger `Assets/Refresh` through CLI and verify import readiness. The worker owns this step even when native screenshots are unavailable; an Owner click is not a normal iteration prerequisite.
 - Prefer checked-in C# Editor automation for repeatable validation, build entry points, and project checks.
-- Unity CLI/MCP may drive the Editor when available. Raw Unity batch-mode fallback must remain possible for CI and for environments without a connected Editor.
+- Raw Unity batch-mode fallback must remain possible for CI and for environments without a connected Editor.
+- When batch mode is necessary, launch one waited Unity process for the project and follow it to termination. Once a known healthy long build is running, do not burn agent turns on frequent process/log polling; inspect again only when completion is expected or the run materially exceeds the established baseline.
 - Compile errors and unexplained Console errors fail validation. A green command is not sufficient if the Editor is in Safe Mode or has unexplained errors.
 - Bind evidence to the exact Git SHA that produced it. The generated evidence root is `.local/unity/review-pack/`; future Owner Review Pack states must be deterministic and explicit.
 - **Every new or materially changed Unity-bound visual asset must be visually self-reviewed in Unity before handoff.** At minimum capture a neutral inspection view and an intended gameplay-framing view; inspect motion in Play Mode when animation, VFX, cloth, deformation, or moving parts matter.

@@ -23,46 +23,76 @@
  *     below relies on that and is checked against the sword, whose value in gear.js is known good.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
-const REWARD_STORE_PATH = fileURLToPath(new URL('../../data/rewards.db', import.meta.url));
+// A private OS-temp database, never the family's real data/rewards.db. This file used to seed
+// data/rewards.db and then call startOwnedServer() with no path, which hands the server its own
+// unrelated fresh OS-temp store -- the seeded facts were never visible to the server under test
+// (#162). Seeding this path and then passing the SAME path to startOwnedServer below is what makes
+// the two sides agree on one database.
+const REWARD_STORE_DIR = mkdtempSync(join(tmpdir(), 'gq-fit-lantern-'));
+const REWARD_STORE_PATH = join(REWARD_STORE_DIR, 'rewards.db');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Register this before seeding or starting the owned server so an early failure cannot strand the
+// directory. If a server was started but teardown was not confirmed, preserve the directory: deleting
+// a SQLite file while its child may still be alive is unsafe and leaves the real owner with no evidence.
+let ownedServer = null;
+let serverStopConfirmed = false;
+async function cleanupRewardStoreDir() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try { rmSync(REWARD_STORE_DIR, { recursive: true, force: true }); return; } catch { /* retry below */ }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(200);
+  }
+  console.error(`could not remove ${REWARD_STORE_DIR} after repeated attempts -- leaving it for manual cleanup`);
+}
+process.on('exit', () => {
+  if (ownedServer && !serverStopConfirmed) return;
+  try { rmSync(REWARD_STORE_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+});
+
+async function stopServerAndCleanup() {
+  if (!ownedServer) return;
+  const stopped = await ownedServer.kill();
+  if (!stopped) throw new Error(`owned server teardown was not confirmed; preserving ${REWARD_STORE_DIR}`);
+  serverStopConfirmed = true;
+  await cleanupRewardStoreDir();
+}
 
 // The belt lantern is UNLOCK-GATED: main.js only mounts it once the guest holds 3 Lantern Marks, so
-// a fit tool that cannot reach that state has nothing to fit. The fit below already pins the page to
-// `fit-lantern-guest-0001` and its comment already asserts that guest "was seeded to 3 marks +
-// unlock" -- but NOTHING IN THIS REPO EVER SEEDED IT. The seeding was a manual step somebody did once
-// against the shared 5201 server's reward store, and the comment recorded the result as though it
-// were a property of the tool.
+// a fit tool that cannot reach that state has nothing to fit. rewardStore's own idempotent apply()
+// with deterministic `fit:`-prefixed eventIds means re-running this never double-counts.
 //
-// That is why hermeticity broke this file immediately, with "lantern anchor never appeared": a
-// harness-owned server reads THIS checkout's data/rewards.db, where that guest has never existed.
-// The dependency was exposed by Phase H1, not created by it, and the fix is to make the tool do what
-// its own comment always claimed -- cribbed from drive-relight.mjs (and docs/pipeline/gear.md's
-// "Unlock-gated gear" pattern): rewardStore's own idempotent apply() with deterministic
-// `fit:`-prefixed eventIds, so re-running this never double-counts.
-//
-// SEEDED BEFORE THE SERVER IS SPAWNED, deliberately. drive-relight.mjs's header has to warn that
-// "the RUNNING SERVER must be restarted" after seeding, because the server reads the ledger at
-// startup; owning the server means this tool simply writes first and starts second, so that caveat
-// does not apply to it at all.
+// SEEDED BEFORE THE SERVER IS SPAWNED, deliberately, and the seed connection is closed before the
+// server starts. drive-relight.mjs's header has to warn that "the RUNNING SERVER must be restarted"
+// after seeding, because the server reads the ledger at startup; owning the server means this tool
+// simply writes first and starts second, so that caveat does not apply to it at all.
 const FIT_LANTERN_GUEST_ID = 'fit-lantern-guest-0001';
 const MARKS_NEEDED = 3;
 {
-  const store = openRewardStore(REWARD_STORE_PATH);
-  for (let i = 0; i < MARKS_NEEDED; i += 1) {
-    store.apply({ guestId: FIT_LANTERN_GUEST_ID, type: 'mark-earned', eventId: `fit:mark:${FIT_LANTERN_GUEST_ID}:${i}` });
-  }
-  store.apply({ guestId: FIT_LANTERN_GUEST_ID, type: 'lantern-unlocked', eventId: `fit:unlock:${FIT_LANTERN_GUEST_ID}` });
-  if (store.marksFor(FIT_LANTERN_GUEST_ID) !== MARKS_NEEDED || !store.unlockedFor(FIT_LANTERN_GUEST_ID)) {
-    throw new Error(
-      `could not seed an unlocked guest: marks ${store.marksFor(FIT_LANTERN_GUEST_ID)}, `
-      + `unlocked ${store.unlockedFor(FIT_LANTERN_GUEST_ID)}`,
-    );
+  let store;
+  try {
+    store = openRewardStore(REWARD_STORE_PATH);
+    for (let i = 0; i < MARKS_NEEDED; i += 1) {
+      store.apply({ guestId: FIT_LANTERN_GUEST_ID, type: 'mark-earned', eventId: `fit:mark:${FIT_LANTERN_GUEST_ID}:${i}` });
+    }
+    store.apply({ guestId: FIT_LANTERN_GUEST_ID, type: 'lantern-unlocked', eventId: `fit:unlock:${FIT_LANTERN_GUEST_ID}` });
+    if (store.marksFor(FIT_LANTERN_GUEST_ID) !== MARKS_NEEDED || !store.unlockedFor(FIT_LANTERN_GUEST_ID)) {
+      throw new Error(
+        `could not seed an unlocked guest: marks ${store.marksFor(FIT_LANTERN_GUEST_ID)}, `
+        + `unlocked ${store.unlockedFor(FIT_LANTERN_GUEST_ID)}`,
+      );
+    }
+  } finally {
+    if (store) store.close();
   }
   console.log(`  seeded ${FIT_LANTERN_GUEST_ID}: ${MARKS_NEEDED} marks, lantern unlocked`);
 }
@@ -71,7 +101,10 @@ const MARKS_NEEDED = 3;
 // This matters more for a fit tool than for a pass/fail harness: what this prints gets PASTED INTO
 // gear.js, so the hero it measures has to be this checkout's hero. 5201 was measured to belong to a
 // sibling worktree, and a number fitted against the wrong hero is wrong in a way that looks right.
-const server = await startOwnedServer();
+// The explicit rewardStorePath is the same path just seeded above, so the server reads that guest.
+ownedServer = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
+const server = ownedServer;
+
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
 // Tall and roomy: this is an inspection viewport, not the phone the game is played on. The gameplay
@@ -92,7 +125,6 @@ const TAG = process.argv.includes('--tag')
   : 'fit';
 
 mkdirSync(OUT, { recursive: true });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class CDP {
   constructor(wsUrl) {
@@ -173,7 +205,10 @@ for (let i = 0; i < 60 && !ready; i += 1) {
   await sleep(500);
   ready = await page.eval('Boolean(window.__galaQuestRuntime && window.__galaQuestRuntime.hero)');
 }
-if (!ready) throw new Error(`runtime never came up on ${URL_UNDER_TEST}`);
+if (!ready) {
+  await stopServerAndCleanup();
+  throw new Error(`runtime never came up on ${URL_UNDER_TEST}`);
+}
 await sleep(600);
 
 // Every connected client draws its own hero, at the origin until someone walks. Those extra heroes
@@ -188,12 +223,19 @@ const players = await page.eval(`(() => {
   const m = text.match(/players\\s+(\\d+)/i);
   return m ? Number(m[1]) : -1;
 })()`);
-if (players === -1) throw new Error('could not read the player count from #runtime-status');
+if (players === -1) {
+  await stopServerAndCleanup();
+  throw new Error('could not read the player count from #runtime-status');
+}
 if (players !== 1) {
   console.error(`\n${players} clients are connected to ${URL_UNDER_TEST}, so the capture would contain ${players} heroes`);
   console.error('and this many shields. Close the other tabs (browser pane and leftover 9224 pages) first:');
   console.error(`  curl -s http://127.0.0.1:${CHROME_PORT}/json/list`);
   await page.send('Target.closeTarget', { targetId });
+  // Review correction: confirmed termination before exit is what makes the temp-store cleanup above
+  // reliable -- an un-awaited kill leaves the child (and its lock on REWARD_STORE_DIR's SQLite file)
+  // alive past this process's own exit, which is exactly what silently orphaned the directory.
+  await stopServerAndCleanup();
   process.exit(2);
 }
 
@@ -239,9 +281,9 @@ async function shot(name) {
 
 // ── the fit ────────────────────────────────────────────────────────────────────────────────────
 // The lantern only mounts for an unlocked guest. The fit guest is seeded to 3 marks + unlock at the
-// TOP of this file, through net/rewardStore.mjs's own apply() (eventIds prefixed `fit:`, so they are
-// identifiable in the store forever) -- pin this page to that guest and reload so the welcome state
-// carries lanternUnlocked and main.js mounts the real asset.
+// top of this file through rewardStore's apply() (eventIds prefixed `fit:`, so they remain identifiable
+// in the store) -- pin this page to that guest and reload so the welcome state carries lanternUnlocked
+// and main.js mounts the real asset.
 //
 // THE CLEAR IS LOAD-BEARING, and leaving it out is what turned this harness red. Setting the guest
 // id is no longer enough on its own. The first navigate above BOOTS THE APP, and booting mints a
@@ -273,7 +315,29 @@ for (let i = 0; i < 60 && !reloadReady; i += 1) {
   await sleep(500);
   reloadReady = await page.eval('Boolean(window.__galaQuestRuntime && window.__galaQuestRuntime.hero)');
 }
-if (!reloadReady) throw new Error(`runtime never came back up after the guest reload on ${URL_UNDER_TEST}`);
+if (!reloadReady) {
+  await stopServerAndCleanup();
+  throw new Error(`runtime never came back up after the guest reload on ${URL_UNDER_TEST}`);
+}
+
+// Assert that the actual gameplay connection is online and carries the seeded server response before
+// polling for the mesh. This reads the same welcome/snapshot state the game renders.
+const gameplayState = await page.eval(`(() => {
+  const rt = window.__galaQuestRuntime, state = rt.netState();
+  const rewards = rt.rewards()[state.selfId] ?? null;
+  return { guestId: rt.net.guestId, status: state.status, selfId: state.selfId, rewards };
+})()`);
+if (gameplayState.guestId !== FIT_LANTERN_GUEST_ID
+    || gameplayState.status !== 'online'
+    || gameplayState.selfId === null
+    || gameplayState.rewards?.marks !== MARKS_NEEDED
+    || gameplayState.rewards?.lanternUnlocked !== true) {
+  console.error(`gameplay connection was not live with the seeded unlock at capture time: ${JSON.stringify(gameplayState)}`);
+  await page.send('Target.closeTarget', { targetId });
+  await stopServerAndCleanup();
+  process.exit(2);
+}
+console.log(`  gameplay connection remains online with marks/unlock at capture time: ${JSON.stringify({ marks: gameplayState.rewards.marks, lanternUnlocked: gameplayState.rewards.lanternUnlocked })}`);
 
 let anchored = false;
 for (let i = 0; i < 20 && !anchored; i += 1) {
@@ -288,8 +352,22 @@ for (let i = 0; i < 20 && !anchored; i += 1) {
 if (!anchored) {
   console.error('lantern mesh never appeared under its anchor -- is this profile unlocked (3 marks) and the GLB shipped?');
   await page.send('Target.closeTarget', { targetId });
+  await stopServerAndCleanup();
   process.exit(2);
 }
+const connectedAtCapture = await page.eval(`(() => {
+  const rt = window.__galaQuestRuntime, state = rt.netState();
+  return { guestId: rt.net.guestId, status: state.status, selfId: state.selfId };
+})()`);
+if (connectedAtCapture.guestId !== FIT_LANTERN_GUEST_ID
+    || connectedAtCapture.status !== 'online'
+    || connectedAtCapture.selfId === null) {
+  console.error(`gameplay connection dropped before capture: ${JSON.stringify(connectedAtCapture)}`);
+  await page.send('Target.closeTarget', { targetId });
+  await stopServerAndCleanup();
+  process.exit(2);
+}
+console.log(`  gameplay connection confirmed online immediately before capture: ${JSON.stringify(connectedAtCapture)}`);
 
 const applied = await page.eval(`(() => {
   const rt = window.__galaQuestRuntime, hero = rt.hero;
@@ -365,4 +443,5 @@ console.log(`      quaternion: Object.freeze([${baked.quaternion.join(', ')}]),`
 console.log(`      scale: Object.freeze([${baked.scale.map(n => +n.toFixed(2)).join(', ')}]),`);
 writeFileSync(`${OUT}${TAG}-baked.json`, JSON.stringify({ applied, baked }, null, 2));
 await page.send('Target.closeTarget', { targetId });
+await stopServerAndCleanup();
 process.exit(0);

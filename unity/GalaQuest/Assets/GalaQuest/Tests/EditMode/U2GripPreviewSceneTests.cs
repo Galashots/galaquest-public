@@ -16,12 +16,16 @@ namespace GalaQuest.Tests
             if (Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") != "1")
                 Assert.Ignore("Optional custody-tier hand review scene");
             var originalScene = File.ReadAllBytes(EmberworksGreyboxBuild.ScenePath);
+            var runnerScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (string.IsNullOrEmpty(runnerScene.path))
+                Assert.That(EditorSceneManager.SaveScene(runnerScene, Path.Combine(U2CombatPreview.RepoRoot,
+                    ".local/throughput/grip-test-runner-" + Guid.NewGuid().ToString("N") + ".unity")), Is.True);
             try
             {
                 var content = U2CombatPreview.Prepare();
                 var scenePath = U2CombatPreview.PrepareScene(content);
-                EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-                var traversal = UnityEngine.Object.FindFirstObjectByType<GalaQuestTraversalController>();
+                var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+                var traversal = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<GalaQuestTraversalController>()).Single();
                 Assert.That(traversal, Is.Not.Null);
                 var self = traversal.Hero.GetComponentsInChildren<SkinnedMeshRenderer>().Single();
                 var remote = content.HeroPrefab.GetComponentsInChildren<SkinnedMeshRenderer>().Single();
@@ -31,7 +35,15 @@ namespace GalaQuest.Tests
                 Assert.That(File.ReadAllBytes(EmberworksGreyboxBuild.ScenePath), Is.EqualTo(originalScene),
                     "Preparing a candidate scene must not overwrite the canonical Emberworks scene");
             }
-            finally { U2CombatPreview.Cleanup(); }
+            finally
+            {
+                // This test opened the generated scene; close it explicitly before
+                // deleting owned outputs. Cleanup never discards open user scenes.
+                var preview = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(
+                    U2CombatPreview.Temporary + "/EmberworksFightPreview.unity");
+                if (preview.IsValid()) EditorSceneManager.CloseScene(preview, true);
+                U2CombatPreview.Cleanup();
+            }
         }
     }
 }

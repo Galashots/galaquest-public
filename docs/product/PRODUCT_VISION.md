@@ -115,6 +115,11 @@ bounded authored adventure zones/scenes with strong visual identity, different e
 purposes, decisive endings/transitions, and little empty traversal. The exact portal/gate/teleport structure
 remains to be proven through bounded Unity work. See #46 and #131.
 
+The current selected production scope is **Hub/Camp + Emberworks only**; Sunroot is not selected for
+implementation. Learning in that scope must be personalized by profile/subject rather than treated as
+math-only; #148 owns the learning-content and public-safe source boundary. These decisions define scope and
+learning direction, not a newly dispatched package.
+
 ## Current pet direction
 
 Pets remain a major engagement surface because they can combine attachment, collection, identity, visible power, progression, rarity, and eventually social play.
@@ -135,6 +140,10 @@ Settled direction for the first pet system:
 The current wolf companion is a placeholder for the future Fox. New paid pet model generation/rig-tuning is
 deferred until the Hero/gear progression spine is functioning and a separate asset-production package is
 authorized.
+
+For the selected opening adventure direction, the green/red worm companions are a scope-specific opening
+override to the later Fox/Bear/Frog starter system. They do not replace that three-starter direction or
+authorize worm production outside a separately selected package.
 
 Pet rarity economy, eggs/hatching, trading/gifting, broader social/economic systems, corpse/body-return death
 friction, and transmog remain product candidates until separately decided and recorded through the

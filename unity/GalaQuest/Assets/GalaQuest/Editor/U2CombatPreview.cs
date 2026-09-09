@@ -17,23 +17,45 @@ namespace GalaQuest.Editor
 {
     // Builds a local review scene from the committed runtime plus named, hashed
     // custody-tier candidate bytes. It neither edits the canonical scene nor admits
-    // the gremlin to production. Temporary assets exist only during this operation.
+    // the gremlin to production. Receipt-verified local assets survive review builds.
     public static class U2CombatPreview
     {
         public const string Temporary = "Assets/U2CombatPreviewTemporary";
         public const string HeroSource = "Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx";
         private const string CandidateSha = "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db";
-        private static bool ownsTemporary;
         public static string RepoRoot => Path.GetFullPath(Path.Combine(Application.dataPath, "../../.."));
         public static string CandidateDirectory => Path.Combine(RepoRoot, ".local/m2/gremlin-local-rig");
 
         public static GalaQuestCombatContent Prepare()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) throw new BuildFailedException("Prepare in Edit Mode");
+            RequireNamedScenes();
+            var input = U2PreviewReceipt.Fingerprint();
+            if (U2PreviewReceipt.Reuse(input))
+                return AssetDatabase.LoadAssetAtPath<GalaQuestCombatContent>(Temporary + "/CombatContent.asset")
+                    ?? throw new BuildFailedException("Missing imported preview content");
+            var previous = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            var scratch = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            UnityEngine.SceneManagement.SceneManager.SetActiveScene(scratch);
+            try
+            {
+                var content = Generate();
+                U2PreviewReceipt.Save(input);
+                return content;
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scratch, true);
+                if (previous.IsValid()) UnityEngine.SceneManagement.SceneManager.SetActiveScene(previous);
+            }
+        }
+
+        private static GalaQuestCombatContent Generate()
+        {
             var fbx = Path.Combine(CandidateDirectory, "lava-gremlin-local-v1.fbx");
             if (!File.Exists(fbx) || Hash(fbx) != CandidateSha) throw new BuildFailedException("Expected the measured local gremlin FBX candidate");
             if (Directory.Exists(Temporary)) throw new BuildFailedException("Preserve pre-existing candidate preview assets: " + Temporary);
             AssetDatabase.CreateFolder("Assets", "U2CombatPreviewTemporary");
-            ownsTemporary = true;
             File.Copy(fbx, Temporary + "/Gremlin.fbx");
             File.Copy(Path.Combine(CandidateDirectory, "../gremlin-body/texture_0_base_color.png"), Temporary + "/GremlinColor.png");
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
@@ -101,21 +123,42 @@ namespace GalaQuest.Editor
             content.Swing = Cue("swing"); content.Impact = Cue("impact"); content.Hurt = Cue("hurt");
             content.Victory = Cue("victory"); content.Windup = Cue("windup");
             AssetDatabase.CreateAsset(content, Temporary + "/CombatContent.asset");
-            AssetDatabase.SaveAssets();
+            foreach (var assetPath in AssetDatabase.GetAllAssetPaths().Where(item => item.StartsWith(Temporary + "/", StringComparison.Ordinal)
+                && !Directory.Exists(item) && !item.EndsWith(".unity", StringComparison.OrdinalIgnoreCase)))
+                foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(assetPath))
+                {
+                    // Animator authoring records Undo internally. These are owned
+                    // generated outputs, not edits to a user's controller. Do not
+                    // leave a later Undo/test teardown able to invalidate a receipt.
+                    AssetDatabase.SaveAssetIfDirty(asset);
+                    Undo.ClearUndo(asset);
+                }
             return content;
         }
 
         public static string PrepareScene(GalaQuestCombatContent content)
         {
-            var scene = EditorSceneManager.OpenScene(EmberworksGreyboxBuild.ScenePath, OpenSceneMode.Single);
+            RequireNamedScenes();
+            if (content != AssetDatabase.LoadAssetAtPath<GalaQuestCombatContent>(Temporary + "/CombatContent.asset"))
+                throw new BuildFailedException("Prepare the current candidate content first");
+            U2PreviewReceipt.CheckOwned();
+            var path = Temporary + "/EmberworksFightPreview.unity";
+            if (File.Exists(path)) return path;
+            var previous = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (!AssetDatabase.CopyAsset(EmberworksGreyboxBuild.ScenePath, path))
+                throw new BuildFailedException("Could not copy the source preview scene");
+            var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            UnityEngine.SceneManagement.SceneManager.SetActiveScene(scene);
+            try
+            {
             var walkable = new[] { "DeepFloor", "GateThreshold", "RouteEntryTurn", "ImmediateActionArena", "RouteActionToExpress" };
-            foreach (var surface in Object.FindObjectsByType<Collider>(FindObjectsSortMode.None))
+            foreach (var surface in scene.GetRootGameObjects().SelectMany(item => item.GetComponentsInChildren<Collider>()))
                 if (walkable.Contains(surface.name) && surface.GetComponent<GalaQuestGroundSurface>() == null)
                     surface.gameObject.AddComponent<GalaQuestGroundSurface>();
             // Preserve the cavern's cool field and warm warning accents while making
             // the approved character palette readable at actual fighting distance.
             RenderSettings.ambientLight = new Color(.26f, .30f, .38f);
-            var fill = Object.FindObjectsByType<Light>(FindObjectsSortMode.None)
+            var fill = scene.GetRootGameObjects().SelectMany(item => item.GetComponentsInChildren<Light>())
                 .Single(light => light.name == "UndergroundFillLight");
             fill.color = new Color(.72f, .80f, 1f);
             fill.intensity = 1.2f;
@@ -140,17 +183,29 @@ namespace GalaQuest.Editor
             RuneForgeAuthoring.ConfigurePreview(root, content);
             var camera = root.GetComponentsInChildren<Camera>().Single(item => item.CompareTag("MainCamera"));
             if (camera.GetComponent<AudioListener>() == null) camera.gameObject.AddComponent<AudioListener>();
-            var path = Temporary + "/EmberworksFightPreview.unity";
-            if (!EditorSceneManager.SaveScene(scene, path, true)) throw new BuildFailedException("Could not save candidate preview scene");
+            if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException("Could not save candidate preview scene");
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            U2PreviewReceipt.Save(U2PreviewReceipt.Fingerprint());
             return path;
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+                if (previous.IsValid()) UnityEngine.SceneManagement.SceneManager.SetActiveScene(previous);
+            }
         }
 
         public static void Cleanup()
         {
-            if (!ownsTemporary) return;
-            if (!EditorApplication.isPlaying) EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            AssetDatabase.DeleteAsset(Temporary);
-            ownsTemporary = false;
+            if (!Directory.Exists(Temporary)) return;
+            U2PreviewReceipt.DeleteOwned();
+        }
+
+        private static void RequireNamedScenes()
+        {
+            for (var i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
+                if (string.IsNullOrEmpty(UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).path))
+                    throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
         }
 
         public static void BuildWebGL()
@@ -159,23 +214,12 @@ namespace GalaQuest.Editor
             if (!string.IsNullOrWhiteSpace(Git("status --porcelain"))) throw new BuildFailedException("Commit runtime changes before an exact-source candidate build");
             var output = Path.Combine(Application.dataPath, "../Builds/GalaQuestWebGL");
             var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
-            var previousCompression = PlayerSettings.WebGL.compressionFormat;
-#if UNITY_WEBGL
-            var previousOptimization = UnityEditor.WebGL.UserBuildSettings.codeOptimization;
-#endif
+            var settings = new U2BuildSettingsScope();
             try
             {
-                if (fastIteration)
-                {
-                    PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
-#if UNITY_WEBGL
-                    UnityEditor.WebGL.UserBuildSettings.codeOptimization = UnityEditor.WebGL.WasmCodeOptimization.BuildTimes;
-#else
-                    throw new BuildFailedException("Fast browser review requires the WebGL build target.");
-#endif
-                }
                 var content = Prepare();
                 var scene = PrepareScene(content);
+                if (fastIteration) settings.UseFastReview();
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     scenes = new[] { scene }, target = BuildTarget.WebGL,
@@ -201,11 +245,7 @@ namespace GalaQuest.Editor
             }
             finally
             {
-                PlayerSettings.WebGL.compressionFormat = previousCompression;
-#if UNITY_WEBGL
-                UnityEditor.WebGL.UserBuildSettings.codeOptimization = previousOptimization;
-#endif
-                Cleanup();
+                settings.Dispose();
             }
         }
 

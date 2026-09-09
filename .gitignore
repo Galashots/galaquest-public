@@ -47,6 +47,9 @@ unity/GalaQuest/obj/
 unity/GalaQuest/Builds/
 unity/GalaQuest/MemoryCaptures/
 unity/GalaQuest/Recordings/
+# Local candidate review inputs; reuse requires an intact generator receipt.
+unity/GalaQuest/Assets/U2CombatPreviewTemporary/
+unity/GalaQuest/Assets/U2CombatPreviewTemporary.meta
 unity/GalaQuest/*.csproj
 unity/GalaQuest/*.sln
 

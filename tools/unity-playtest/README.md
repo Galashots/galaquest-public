@@ -18,6 +18,10 @@ Use that absolute path for batch work and retain its product version in the chec
 with `Start-Process`, use `-PassThru` and wait for that returned process ID; starting the GUI executable
 successfully is not evidence that compilation, tests, or a build finished.
 
+For persistent local candidate inputs and the custody-dependent native regression, see
+[stable preview preparation](../../docs/unity-preview-reuse.md). Reuse the owned warm Editor and
+verify external edits have imported before treating test discovery or a ready status as evidence.
+
 From the repository root:
 
 ```powershell

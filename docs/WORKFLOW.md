@@ -201,11 +201,27 @@ node --test test/*.test.mjs
 
 The protected branch requires the hosted `unit` context. The checked-in `.github/workflows/test.yml` is the authority for its runtime version and command. Guidance integrity runs here too, so Markdown-only changes still receive the cheap required gate.
 
-### 2. Local running-game harnesses
+### 2. Legacy Three.js local running-game harnesses
 
-`tools/runtime-test/` drives real Chrome over CDP. The harnesses own their isolated runtime server; **do not pre-start `server.mjs` for them unless a specific harness explicitly says otherwise**. Open the produced captures when visual evidence matters.
+`tools/runtime-test/` drives the retained Three.js client in real Chrome over CDP. The harnesses own their isolated runtime server; **do not pre-start `server.mjs` for them unless a specific harness explicitly says otherwise**. Open the produced captures when visual evidence matters.
 
-### 3. On-demand Director relay on a PR
+### 3. Unity manifest-based browser evidence
+
+For the Unity production client, use the checked-in manifest-bound browser route in
+[`tools/unity-playtest/README.md`](../tools/unity-playtest/README.md). It identifies the local Unity
+build, its client/server SHAs, and the assertions it can prove. The legacy Three.js harnesses, Render
+relay, and their captures do not provision or substitute for Unity browser evidence. A successful Unity
+driver is behavior evidence only; inspect running-game pixels and physical-device acceptance separately.
+
+For local Unity iteration on a capable workstation, the worker starts the pinned Editor on the intended
+owned checkout when it is not already open, waits for import/compilation to settle, and prefers the
+connected live-Editor/Pipeline loop for scene, prefab, focused-test, and review iteration. Repeated cold
+batch launches are a CI/fallback/final-evidence path, not the normal edit-test loop. If repeated
+startup/import/build overhead dominates the targeted check, or a review-build helper rewrites unchanged
+inputs and dirties the build each time, stop before another expensive cycle and fix/reforecast the tooling
+or reuse the stable build instead of paying the same cost again.
+
+### 4. Legacy Three.js on-demand Director relay on a PR
 
 For an exact PR-head browser run in Actions, the repository owner can comment a whitelisted command such as:
 
@@ -217,11 +233,11 @@ For an exact PR-head browser run in Actions, the repository owner can comment a 
 
 `.github/workflows/director-playtest.yml` is the scenario whitelist and implementation authority. It checks out the actual PR head, runs PR code in a read-only job, uploads evidence, and reports from a separate write-capable job. Do not collapse that security boundary merely to simplify reporting.
 
-### 4. Public hosted playtest
+### 5. Legacy Three.js public hosted playtest
 
-Use the Render instance when a tester has a browser but cannot reach a local machine. Follow `docs/public-playtest.md` and fetch `/source-sha.json` **before** treating the session as evidence for a commit. Per-PR preview instances are opt-in with `[render preview]` in the PR title.
+Use the Render instance when a tester has a browser but cannot reach a local machine. Follow `docs/public-playtest.md` and fetch `/source-sha.json` **before** treating the session as evidence for a commit. Per-PR preview instances are opt-in with `[render preview]` in the PR title. This is retained Three.js coverage, not a Unity build/deployment guarantee.
 
-### 5. Full browser matrix
+### 6. Full browser matrix
 
 `.github/workflows/full-playtest-matrix.yml` is broad diagnostic coverage, not the protected required gate. It is intentionally more expensive and historically noisier than `unit`; use it when the changed surface warrants broad browser coverage and interpret failures from the exact run rather than from remembered pass counts. Markdown-only diffs skip this matrix by design.
 

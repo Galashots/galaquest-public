@@ -1,5 +1,11 @@
 # Progression Program Decomposition v0
 
+> **Status — superseded for dispatch (2026-09-08):** This is preserved historical package and evidence
+> planning. Its E2/H2 sequence and named default-worker model are not current dispatch authority. Refresh
+> the live owning Issues (including [#46](https://github.com/Galashots/galaquest-public/issues/46) and
+> [#148](https://github.com/Galashots/galaquest-public/issues/148)) and follow
+> [`docs/WORKFLOW.md`](../WORKFLOW.md) before framing or assigning any new package.
+
 **Program fixed point:** `main@b7abb7113386f1ce37d65d460f2475007d7fcb02`  
 **Governing design:** `docs/product/PROGRESSION_CONTRACT_V0.md`  
 **Owning product records:** #43 Hero XP/levels, #44 meaningful gear, #47 enemy variety, #41 kid-readable POWER, #35 Pet Companions v1  
