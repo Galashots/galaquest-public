@@ -129,6 +129,35 @@ namespace GalaQuest.Tests
             }
         }
 
+        [Test]
+        public void PhysicalForgeTapSkipsUnrelatedEmberworksColliderInFrontOfControl()
+        {
+            var blocker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var control = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            try
+            {
+                blocker.name = "Ordinary Emberworks geometry";
+                blocker.transform.position = new Vector3(0f, 0f, -2f);
+                control.name = "Number anvil";
+                control.transform.position = Vector3.zero;
+                var interactable = control.AddComponent<GalaQuestRuneForgeInteractable>();
+                interactable.Configure("pack", "place-value-rounding");
+                Physics.SyncTransforms();
+
+                var ray = new Ray(new Vector3(0f, 0f, -10f), Vector3.forward);
+                var finder = typeof(GalaQuestRuneForgePresenter).GetMethod("FindInteractable",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                Assert.That(finder, Is.Not.Null);
+                Assert.That(finder.Invoke(null, new object[] { ray }), Is.SameAs(interactable),
+                    "Visible Forge controls remain usable when ordinary level collision is closer to the camera.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(control);
+                UnityEngine.Object.DestroyImmediate(blocker);
+            }
+        }
+
         private sealed class Wire : IGalaQuestTransport
         {
             public event Action Opened;

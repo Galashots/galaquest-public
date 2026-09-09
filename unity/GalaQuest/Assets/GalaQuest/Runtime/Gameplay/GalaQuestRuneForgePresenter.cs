@@ -139,12 +139,23 @@ namespace GalaQuest
             var camera = InteractionCamera;
             if (!IsNear || session == null || !session.ControlsReady || camera == null) return false;
             var ray = camera.ScreenPointToRay(screenPoint);
-            if (!Physics.Raycast(ray, out var hit, 100f)) return false;
-            var target = hit.collider.GetComponentInParent<GalaQuestRuneForgeInteractable>();
-            if (target == null || !target.gameObject.activeInHierarchy) return false;
+            var target = FindInteractable(ray);
+            if (target == null) return false;
             if (pointerId >= 0) OwnedTouchIds.Add(pointerId);
             Press(target);
             return true;
+        }
+
+        internal static GalaQuestRuneForgeInteractable FindInteractable(Ray ray)
+        {
+            var hits = Physics.RaycastAll(ray, 100f);
+            Array.Sort(hits, (left, right) => left.distance.CompareTo(right.distance));
+            foreach (var hit in hits)
+            {
+                var target = hit.collider.GetComponentInParent<GalaQuestRuneForgeInteractable>();
+                if (target != null && target.gameObject.activeInHierarchy) return target;
+            }
+            return null;
         }
 
         private void Press(GalaQuestRuneForgeInteractable target)
