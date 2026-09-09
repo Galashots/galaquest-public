@@ -197,8 +197,8 @@ try {
     // Clear the right Cinder Gate pillar before moving east. At the arrival z=4 its
     // expanded collision face is x=5.4, so an axis-first route is physically blocked.
     await moveAxis(page, 'w', 'z', 6.0);
-    await moveAxis(page, 'd', 'x', 7.0);
-    await moveAxis(page, 'w', 'z', 14.5);
+    await moveAxis(page, 'd', 'x', 5.0);
+    await moveAxis(page, 'w', 'z', 15.0);
     await waitFor(() => controls(page), value => value.length > 0, 'Physical Forge controls projected');
   };
 
