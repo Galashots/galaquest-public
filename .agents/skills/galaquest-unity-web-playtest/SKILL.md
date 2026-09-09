@@ -27,6 +27,33 @@ description: Build and verify GalaQuest's Unity WebGL client. Use for Unity brow
 - Use the checked-in build entry point appropriate to the current asset state. Candidate build
   helpers and their manifests do not grant asset promotion or replace the normal release build.
 
+## Refresh external edits through the live Editor
+
+After changing assets or scripts outside Unity, use the connected Editor's refresh menu through CLI.
+This works without Computer Use screenshots or an Owner click to focus the Editor.
+
+```powershell
+unity status --format json
+unity command editor_status --format json
+unity command menu --path 'Assets/Refresh' --format json
+unity command editor_status --format json
+```
+
+Before refreshing, verify the reported project path is the intended owned checkout and the Editor is
+ready, with Play Mode stopped and no compilation/domain reload in progress. If multiple Editors are
+connected, select the intended target using the installed CLI's help before issuing commands.
+
+Require the menu result to confirm execution, then allow any import/compilation to finish. Check the
+Editor log/Console for errors and verify the changed asset or script was actually imported before
+using it as evidence. A successful menu request or `unity status` alone does not prove import completion;
+use `editor_status` to confirm readiness. A no-change refresh timing is not a changed-asset benchmark.
+
+If a command times out, its outcome is unknown: inspect the existing Editor/log and wait for active
+work before retrying. If Pipeline is unavailable, diagnose project identity, startup, compilation and
+Safe Mode first. Where supported, screenshot-free native window activation is a focus fallback, but
+verify that a refresh actually occurred. Request Owner input only when available control paths fail;
+do not substitute Reimport All, a build-target switch, or another cold Editor launch for a routine refresh.
+
 ## Build after the cheaper checks
 
 1. Reproduce and fix the behavior with the narrowest meaningful JavaScript/Unity tests first.
