@@ -81,3 +81,19 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
+
+## Rune Forge package
+
+The bounded Forge driver exercises the authored world controls with canvas touch input, two isolated
+anonymous profiles, its own server, and an exact-source build manifest:
+
+```powershell
+node tools/unity-playtest/forge.mjs path/to/candidate-build-manifest.json -forge
+```
+
+It covers wrong-answer retry, hint and gesture-started spoken prompt, assisted and independent
+success, one durable claim, explicit equip and POWER consumption, a late sibling, same-profile
+replacement, and reconnect. It records the Unity client SHA and checked-out server SHA separately.
+The driver can use projected control diagnostics when the player exposes them; its fixed fallback is
+specific to the checked-in Forge pocket and still requires each physical tap to produce the expected
+authoritative server transition.

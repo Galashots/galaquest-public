@@ -91,6 +91,7 @@ vocabulary. A new entry adds its row in the same commit.
 | — | A skinned body goes where its BONES go, not where its geometry box says. | code, visual, harness |
 | — | A shared readiness promise must not await one optional body. | code, harness |
 | — | An instrument spends the lifetime of the subject it is measuring. | harness, evidence |
+| — | A full player build is the last place to discover whether an authored world control can receive a tap. | gameplay, tests, harness |
 
 ---
 
@@ -1788,3 +1789,21 @@ subject is LEFT. An instrument that consumes what it observes has to report the 
 own thoroughness becomes the failure.
 **Foreknowledge helped:** no. GQ-021 was read, cited in this file's own comments, and correctly
 applied to every rate in it — while the lifetime question went unasked.
+
+### OBSERVED — A full player build is the last place to discover whether an authored world control can receive a tap.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-09-08
+**Incident (2026-09-08, Rune Forge/MagmaLord vertical):** the server-owned learning loop and its
+focused tests were green before the first WebGL playthrough, but later anvil taps stopped at the
+first Emberworks collider returned by `Physics.Raycast`. The forge control behind it was visible and
+valid, yet unreachable. Several slow IL2CPP builds and browser-coordinate probes were spent testing
+camera and harness theories before a two-collider EditMode counterexample isolated the input defect.
+`RuneForgeEditModeTests.PhysicalForgeTapSkipsUnrelatedEmberworksColliderInFrontOfControl` now pins the
+small correction: sort all ray hits and choose the nearest active Forge interactable.
+
+The same package exposed three cheaper checks that belong before a player build. Resolve the actual
+active camera without assuming a `MainCamera` tag; inspect world-label scale at gameplay framing,
+because nominal `TextMesh` font size says little after parent scaling; and overwrite an existing
+prefab with `SaveAsPrefabAsset` rather than deleting it first, so an authoring rerun cannot churn its
+`.meta` GUID. Settle those seams and the browser driver's physical route before the exact-head build;
+use full WebGL compilation to prove the integrated player, not to search one coordinate at a time.
+**Foreknowledge helped:** not yet recorded.

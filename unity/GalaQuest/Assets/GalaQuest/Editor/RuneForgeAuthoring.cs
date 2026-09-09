@@ -28,8 +28,6 @@ namespace GalaQuest.Editor
             var pocket = BuildPocket(null, definition);
             try
             {
-                if (AssetDatabase.LoadAssetAtPath<GameObject>(PocketPrefabPath) != null)
-                    AssetDatabase.DeleteAsset(PocketPrefabPath);
                 if (PrefabUtility.SaveAsPrefabAsset(pocket, PocketPrefabPath) == null)
                     throw new BuildFailedException("Could not save the bounded Rune Forge pocket prefab.");
             }

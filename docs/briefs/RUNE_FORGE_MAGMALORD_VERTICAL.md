@@ -99,10 +99,11 @@ visual-payoff gate can pass.
 
 Local capability at orientation:
 
-- Unity `6000.3.23f1`: `C:\Program Files\Unity 6000.3.23f1\Editor\Unity.exe`;
+- Unity Editor `6000.3.23f1` was resolved and launched; retain the exact executable path in local
+  checkpoint evidence rather than durable repository guidance;
 - no live Pipeline-connected Unity instance owns this project, so scene/asset changes must be produced
   through one explicit batch Unity process;
-- Blender `5.2.0 LTS`: `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`.
+- Blender `5.2.0 LTS` was available for the bounded direct-DCC comparison.
 
 ### CP0 falsification
 
