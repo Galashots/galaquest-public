@@ -25,7 +25,11 @@ namespace GalaQuest.Editor
         public static string Fingerprint()
         {
             foreach (var asset in Resources.FindObjectsOfTypeAll<UnityEngine.Object>())
+                // URP can mark read-only embedded FBX materials dirty during a
+                // clean import. Their authored inputs are the model/importer,
+                // already fingerprinted below, not this generated dirty flag.
                 if (EditorUtility.IsPersistent(asset) && EditorUtility.IsDirty(asset)
+                    && (asset.hideFlags & HideFlags.NotEditable) == 0
                     && AssetDatabase.GetAssetPath(asset).StartsWith("Assets/GalaQuest/", StringComparison.Ordinal))
                     throw new BuildFailedException("Save or revert unsaved preview source asset: " + AssetDatabase.GetAssetPath(asset));
             var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
