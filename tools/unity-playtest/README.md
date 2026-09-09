@@ -4,6 +4,10 @@ These drivers run the built Unity client at `/unity/`. They require a local Unit
 exact-source manifest. The legacy `tools/runtime-test` review suites instead run the Three.js client
 and do not provision or select Unity builds.
 
+For persistent local candidate inputs and the custody-dependent native regression, see
+[stable preview preparation](../../docs/unity-preview-reuse.md). Reuse the owned warm Editor and
+verify external edits have imported before treating test discovery or a ready status as evidence.
+
 From the repository root:
 
 ```powershell

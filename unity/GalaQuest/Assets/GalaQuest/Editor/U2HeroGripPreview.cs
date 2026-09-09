@@ -83,7 +83,8 @@ namespace GalaQuest.Editor
                 var backOfHand = bind.MultiplyVector(mapping.MultiplyVector(Vector3.forward)).normalized;
                 marker.localRotation = Quaternion.LookRotation(backOfHand, blade);
                 var result = PrefabUtility.SaveAsPrefabAsset(hero, folder + "/HeroRightGrip.prefab");
-                AssetDatabase.SaveAssets();
+                AssetDatabase.SaveAssetIfDirty(mesh);
+                AssetDatabase.SaveAssetIfDirty(result);
                 File.WriteAllText(Path.Combine(U2CombatPreview.RepoRoot, ".local/m2/hero-grip-candidate/unity-import-receipt.json"),
                     new JObject { ["status"] = "LOCAL_CANDIDATE_REVIEW", ["sourceSha256"] = hash,
                         ["candidateSha256"] = CandidateSha,
