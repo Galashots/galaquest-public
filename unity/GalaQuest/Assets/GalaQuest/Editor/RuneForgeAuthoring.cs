@@ -136,7 +136,7 @@ namespace GalaQuest.Editor
             Shape("CageTop", cage, PrimitiveType.Cube, new Vector3(0, 2.62f, .45f), new Vector3(1.9f, .12f, 1.45f), iron, false);
             var glow = Shape("CageEmber", cage, PrimitiveType.Sphere, new Vector3(0, 1.25f, .18f), new Vector3(.16f, .16f, .16f), ember, false);
             var light = glow.AddComponent<Light>(); light.type = LightType.Point; light.color = new Color(1f, .30f, .04f); light.range = 7f; light.intensity = 5.5f;
-            WorldLabel("MagmaLordPrizeName", cage, "MAGMALORD", new Vector3(0, 2.95f, .45f), .14f);
+            WorldLabel("MagmaLordPrizeName", cage, "MAGMALORD", new Vector3(0, 2.95f, .45f), .030f);
 
             Interactable("ForgeCore", root.transform, "open", "", new Vector3(0, .55f, -1.35f), new Vector3(.6f, .6f, .35f), ember, "WAKE");
             Interactable("SoundAnvil", root.transform, "pack", "grapheme-er-family", new Vector3(-1.3f, .48f, -.3f), new Vector3(.75f, .48f, .72f), iron, "SOUND");
@@ -159,7 +159,7 @@ namespace GalaQuest.Editor
             text.transform.SetParent(root.transform, false);
             text.transform.localPosition = new Vector3(0, .58f, 0);
             text.transform.localRotation = Quaternion.identity;
-            text.transform.localScale = Vector3.one * .12f;
+            text.transform.localScale = Vector3.one * .020f;
             var mesh = text.AddComponent<TextMesh>();
             mesh.text = label; mesh.anchor = TextAnchor.MiddleCenter; mesh.alignment = TextAlignment.Center;
             mesh.fontSize = 64; mesh.color = new Color(1f, .8f, .4f);

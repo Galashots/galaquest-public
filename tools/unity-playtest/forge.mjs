@@ -198,7 +198,7 @@ try {
     // expanded collision face is x=5.4, so an axis-first route is physically blocked.
     await moveAxis(page, 'w', 'z', 6.0);
     await moveAxis(page, 'd', 'x', 7.0);
-    await moveAxis(page, 'w', 'z', 16.8);
+    await moveAxis(page, 'w', 'z', 14.5);
     await waitFor(() => controls(page), value => value.length > 0, 'Physical Forge controls projected');
   };
 
