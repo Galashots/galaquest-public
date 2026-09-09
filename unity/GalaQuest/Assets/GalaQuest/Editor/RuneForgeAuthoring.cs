@@ -118,8 +118,8 @@ namespace GalaQuest.Editor
             Shape("ForgeRing", root.transform, PrimitiveType.Cylinder, new Vector3(0, .17f, 0), new Vector3(3.9f, .05f, 3.9f), iron, false);
             var cage = Child(root.transform, "PrizeCage");
             Shape("PrizePlinth", cage, PrimitiveType.Cylinder, new Vector3(0, .72f, .45f), new Vector3(1.55f, .30f, 1.55f), iron, false);
-            var halo = Shape("MagmaLordPrizeHalo", cage, PrimitiveType.Cylinder, new Vector3(0, 1.63f, .95f),
-                new Vector3(1.65f, .08f, 1.65f), rune, false);
+            var halo = Shape("MagmaLordPrizeBacklight", cage, PrimitiveType.Cylinder, new Vector3(0, 1.63f, .95f),
+                new Vector3(.22f, .02f, .22f), rune, false);
             halo.transform.localRotation = Quaternion.Euler(90, 0, 0);
             var prize = (GameObject)PrefabUtility.InstantiatePrefab(definition.SourceModel);
             // This is deliberately an enlarged scene instance of the one wearable asset,

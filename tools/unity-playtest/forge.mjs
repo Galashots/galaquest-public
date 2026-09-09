@@ -95,7 +95,7 @@ const controls = async page => {
     // the canvas touch/raycast seam and must produce the authoritative server state.
     return [{ kind: 'open', value: '',
       x: page.rect.x + page.rect.width * .50,
-      y: page.rect.y + page.rect.height * .733 }];
+      y: page.rect.y + page.rect.height * .433 }];
   }
   return [];
 };
