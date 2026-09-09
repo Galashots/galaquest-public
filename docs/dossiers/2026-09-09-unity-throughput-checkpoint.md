@@ -8,6 +8,7 @@ No Unity/package upgrade, gameplay change, or candidate promotion.
 The base commits `m_LastMaterialVersion: 9` in URP project settings, while all checked-in materials
 carrying a URP AssetVersion are already at version 10. The pinned URP 17.3.0 package registers ten
 upgraders in `MaterialPostprocessor.k_Upgraders`.
+Read-only reflection against the loaded pinned URP assembly independently returned an upgrader count of 10.
 
 Its `MaterialReimporter.RegisterUpgraderReimport` compares the project marker with that count and
 reimports all materials when they differ. `MaterialPostprocessor.SaveAssetsToDisk` detects
@@ -42,9 +43,9 @@ Owner changes, not clean candidate-SHA acceptance. The existing scene was confir
 | Focused PlayMode | FoundationDiagnosticsPlayModeTests: 1/1, 0.15 seconds runner duration | Excludes mode-transition overhead; runner warned about a generated InitTestScene cleanup |
 | Main-thread control | One eval timed out; refresh and a subsequent read succeeded | Discovery alone is not main-thread responsiveness |
 
-The separate engineering Editor was launched once on the owned checkout with WebGL selected. It
-remained at `Application.AssetDatabase Initial Refresh Start` for over 15 minutes with no Pipeline
-instance available. This blocks clean-checkout runtime timing at this checkpoint. No repeated cold
+The separate engineering Editor was launched once on the owned checkout with WebGL selected. Its
+initial startup exceeded 15 minutes without a Pipeline instance, then advanced through package
+registration and script compilation. This was slow startup, not a proven deadlock. No repeated cold
 launches or target switches were used to manufacture a result. The existing checkout's tracked dirty
 file list remained unchanged after its focused tests.
 
