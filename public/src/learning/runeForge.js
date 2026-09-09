@@ -30,6 +30,11 @@ export function validateRuneForgeCatalog(candidate) {
   if (!Array.isArray(candidate.packs) || candidate.packs.length !== 2)
     throw new Error('Rune Forge V1 requires exactly the two selected packs.');
   const packIds = new Set();
+  // Task ids are a single namespace across the whole catalog, not per pack: completionFact()
+  // resolves a task id to its owning pack by scanning packs in declaration order and returning
+  // the first match, so two packs sharing a task id would let a completion meant for the second
+  // pack silently record against the first pack's identically-named task instead. #159.
+  const taskIds = new Set();
   for (const pack of candidate.packs) {
     requireId(pack?.id, 'pack.id');
     if (packIds.has(pack.id)) throw new Error(`duplicate pack id ${pack.id}`);
@@ -41,10 +46,9 @@ export function validateRuneForgeCatalog(candidate) {
     if (pack.requiredSuccesses !== 2) throw new Error(`${pack.id} must require two successes`);
     if (!Array.isArray(pack.tasks) || pack.tasks.length < 3 || pack.tasks.length > 8)
       throw new Error(`${pack.id} needs three to eight bounded tasks`);
-    const taskIds = new Set();
     for (const task of pack.tasks) {
       requireId(task?.id, `${pack.id}.task.id`);
-      if (taskIds.has(task.id)) throw new Error(`duplicate task id ${task.id}`);
+      if (taskIds.has(task.id)) throw new Error(`duplicate task id ${task.id} across packs`);
       taskIds.add(task.id);
       requireId(task.skill, `${task.id}.skill`);
       requireText(task.spokenPrompt, `${task.id}.spokenPrompt`, 180);

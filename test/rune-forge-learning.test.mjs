@@ -73,6 +73,21 @@ test('content-only edits cannot mint another helmet entitlement', () => {
   assert.equal(before, `forge-entitlement:${profileId}:${MAGMALORD_ENTITLEMENT_ID}`);
 });
 
+test('a task id must be unique across the whole catalog, not just within its own pack', () => {
+  // #159: the validator only tracked task ids per pack, so two different packs could
+  // each own a task named e.g. "grapheme-bird-ir". completionFact() resolves a task id
+  // to a pack by scanning packs in order and returning the first match, so a completion
+  // meant for the second pack's task would silently be recorded against the first pack's
+  // task of the same name instead. The catalog-wide identity rule below must make that
+  // collision impossible to load in the first place.
+  const collided = structuredClone(source);
+  const sharedId = collided.packs[0].tasks[0].id;
+  assert.notEqual(collided.packs[1].tasks[0].id, sharedId,
+    'fixture assumption: the two packs start with distinct task ids');
+  collided.packs[1].tasks[0].id = sharedId;
+  assert.throws(() => validateRuneForgeCatalog(collided), /duplicate task id/);
+});
+
 test('one profile completion never advances a sibling', () => {
   const catalog = validateRuneForgeCatalog(source);
   const a = 'profile-aaaaaaaa';
