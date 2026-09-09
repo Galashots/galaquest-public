@@ -94,8 +94,8 @@ const controls = async page => {
     // fallback for the one wake-up control; every interaction still enters through
     // the canvas touch/raycast seam and must produce the authoritative server state.
     return [{ kind: 'open', value: '',
-      x: page.rect.x + page.rect.width * .50,
-      y: page.rect.y + page.rect.height * .433 }];
+      x: page.rect.x + page.rect.width * .666,
+      y: page.rect.y + page.rect.height * .488 }];
   }
   return [];
 };
