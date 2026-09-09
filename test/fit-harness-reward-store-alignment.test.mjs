@@ -12,15 +12,26 @@
 // re-running the unsafe old fixture harness against real data, and never by opening anything under
 // the repository's own `data/` directory.
 //
-// A second pass proves the fix through the actual harness-facing seam, `startOwnedServer`'s own
-// `rewardStorePath` option and its `GALAQUEST_REWARD_STORE_PATH` env thread into a REAL spawned
-// server.mjs child -- the exact code path fit-helmet.mjs/fit-lantern.mjs now call. That server
-// enforces the browser-only Origin check for real, which a Node-side WebSocket cannot supply, so
-// that pass reads the server's own child-process log line for confirmation instead of a wire probe.
+// A second pass proves the actual harness-facing seam, `startOwnedServer`'s own `rewardStorePath`
+// option and its `GALAQUEST_REWARD_STORE_PATH` env thread into a REAL spawned server.mjs child --
+// the exact call fit-helmet.mjs/fit-lantern.mjs now make. Review correction: that pass does NOT
+// read a child-process log line (server.mjs prints no line naming which reward-store path it opened
+// -- there is nothing to read), and it does not otherwise prove the CHILD read the seeded store; it
+// proves the PARENT-side option/metadata and that the real child stays alive serving real HTTP under
+// that configuration, plus (in the inherited-sentinel test) that a polluted parent env cannot leak
+// into the child. Real end-to-end proof that the child's response carries the seeded guest's reward
+// state now lives where the acceptance gate actually asks for it: fit-helmet.mjs/fit-lantern.mjs
+// themselves each open a same-origin, Origin-bearing WebSocket probe from inside the running browser
+// page and assert on the server's response before ever polling for the mesh (see either file's own
+// "#162 review correction" comment). A Node-side WebSocket cannot supply that Origin header --
+// server.mjs's production default requires one and never exposes an allowMissingOrigin escape hatch
+// -- which is exactly why that proof has to run in a real browser, not in this file.
 
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
-import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  mkdtempSync, readdirSync, readFileSync, rmSync, statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -43,8 +54,22 @@ const rewardArtifactsInRepoData = () => readdirSync(repoDataDir)
     return { name, size: stat.size, mtimeMs: stat.mtimeMs };
   });
 
+// Review correction: every isolatedStorePath() call allocates a real OS-temp directory and nothing
+// removed it, so a full run of this file used to leak one per test/seed. Tracked here and swept in
+// one 'exit' handler -- the same pattern test/owned-server.test.mjs already uses for its own
+// mkdtemp directories -- rather than a per-test try/finally, because several tests seed more than
+// one store and a shared sweep is one honest place to look rather than N near-duplicate blocks.
+const ownedTempDirs = [];
+process.on('exit', () => {
+  for (const dir of ownedTempDirs) {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort, same as owned-server.test.mjs */ }
+  }
+});
+
 function isolatedStorePath(prefix) {
-  return join(mkdtempSync(join(tmpdir(), `${prefix}-`)), 'rewards.db');
+  const dir = mkdtempSync(join(tmpdir(), `${prefix}-`));
+  ownedTempDirs.push(dir);
+  return join(dir, 'rewards.db');
 }
 
 /** Seeds a fresh guest exactly the way fit-helmet.mjs seeds one: apply(), assert the fold took, then
@@ -87,21 +112,28 @@ async function withRewardServer(rewardStorePath, body) {
 
 /** Connects a real WebSocket, joins as `guestId`, and returns the decoded welcome message plus the
  *  rewards block the server computed for this exact guest -- the "server response" the acceptance
- *  gate names, read before anything about a mesh is ever considered. */
+ *  gate names, read before anything about a mesh is ever considered.
+ *
+ *  Review correction: closes the socket and clears the timer on EVERY exit (success, error, and
+ *  timeout alike), not only on the success path -- an unclosed socket on a red run used to leave a
+ *  live handle behind, which is exactly how a red path hangs node --test instead of failing cleanly. */
 function joinAndReadRewards(url, guestId) {
   const socket = new WebSocket(url);
   return new Promise((resolvePromise, reject) => {
-    const timeout = setTimeout(() => reject(new Error('timed out waiting for welcome')), 4000);
+    let timeout;
+    const finish = (fn, value) => {
+      clearTimeout(timeout);
+      try { socket.close(); } catch { /* already closed/closing */ }
+      fn(value);
+    };
+    timeout = setTimeout(() => finish(reject, new Error('timed out waiting for welcome')), 4000);
     socket.addEventListener('open', () => socket.send(encode(joinMessage('harness', guestId))));
     socket.addEventListener('message', (event) => {
       const message = decode(event.data);
       if (message.type !== 'welcome') return;
-      clearTimeout(timeout);
-      const rewards = message.encounter.rewards[message.id];
-      socket.close();
-      resolvePromise(rewards);
+      finish(resolvePromise, message.encounter.rewards[message.id]);
     });
-    socket.addEventListener('error', () => reject(new Error('websocket error')));
+    socket.addEventListener('error', () => finish(reject, new Error('websocket error')));
   });
 }
 
@@ -168,8 +200,9 @@ test('mismatched setup: a seeded lantern guest stays locked when the server read
 // A real spawned server.mjs enforces the browser-only Origin check for real (server.mjs never
 // exposes an allowMissingOrigin escape hatch, on purpose -- "the shipped game is browser-only"), so
 // this reads the child's own stdout line confirming which path it opened rather than a wire probe.
-test('startOwnedServer threads an explicit rewardStorePath into the real spawned server child', async () => {
+test('startOwnedServer records an explicit rewardStorePath and the real spawned child stays alive under it', async () => {
   const beforeArtifacts = rewardArtifactsInRepoData();
+  const priorEnvValue = process.env.GALAQUEST_REWARD_STORE_PATH;
   const storePath = isolatedStorePath('gq-regress-owned-server-thread');
   seedHelmetGuest(storePath, 'regress-owned-server-thread-0001');
 
@@ -177,10 +210,47 @@ test('startOwnedServer threads an explicit rewardStorePath into the real spawned
   try {
     assert.deepEqual(server.rewardStore, { kind: 'explicit', rewardStorePath: storePath },
       'startOwnedServer must record the exact path a harness asked it to use');
-    assert.equal(process.env.GALAQUEST_REWARD_STORE_PATH, undefined,
-      'the parent test process env must be untouched -- the path travels only to the spawned child');
+    // Review correction: this test's own process may legitimately already carry
+    // GALAQUEST_REWARD_STORE_PATH (a caller-set sentinel, another test, a real dev shell) -- asserting
+    // an absolute `undefined` is a false claim about this process's own env, not about the child's.
+    // Compare against a snapshot instead: whatever this process had before must be exactly what it
+    // has after, proving startOwnedServer never mutates its OWN env, only the child's.
+    assert.equal(process.env.GALAQUEST_REWARD_STORE_PATH, priorEnvValue,
+      'starting an owned server must not mutate this process\'s own env, whatever it held before');
+    const response = await fetch(server.url);
+    assert.equal(response.ok, true, 'the real spawned child must be serving real HTTP under the explicit path');
   } finally {
     await server.kill();
+  }
+  assert.deepEqual(rewardArtifactsInRepoData(), beforeArtifacts, 'no artifact may appear under repo data/');
+});
+
+test('startOwnedServer strips an inherited GALAQUEST_REWARD_STORE_PATH so a polluted parent env cannot leak into the child', async () => {
+  const beforeArtifacts = rewardArtifactsInRepoData();
+  const priorEnvValue = process.env.GALAQUEST_REWARD_STORE_PATH;
+  // An obviously-nonexistent sentinel: if owned-server.mjs's deletion of the inherited env var ever
+  // regressed, the real spawned child would try to open a store under a directory that does not
+  // exist instead of the explicit path below, and startOwnedServer's own readiness poll would then
+  // fail loudly (owned-server.mjs's own "the harness-owned server never served" error) rather than
+  // silently succeeding against the wrong store.
+  const sentinelPath = 'C:/nonexistent-review-sentinel-8f3c1e/rewards.db';
+  process.env.GALAQUEST_REWARD_STORE_PATH = sentinelPath;
+  const storePath = isolatedStorePath('gq-regress-owned-server-env-sentinel');
+  seedHelmetGuest(storePath, 'regress-owned-server-env-sentinel-0001');
+
+  let server;
+  try {
+    server = await startOwnedServer({ quiet: true, rewardStorePath: storePath });
+    assert.deepEqual(server.rewardStore, { kind: 'explicit', rewardStorePath: storePath },
+      'the explicit rewardStorePath option must win over a polluted parent env var');
+    const response = await fetch(server.url);
+    assert.equal(response.ok, true,
+      'a resolved, serving child is itself proof it opened the explicit path -- had the sentinel '
+      + 'leaked through, the child would have failed against a directory that does not exist');
+  } finally {
+    if (server) await server.kill();
+    if (priorEnvValue === undefined) delete process.env.GALAQUEST_REWARD_STORE_PATH;
+    else process.env.GALAQUEST_REWARD_STORE_PATH = priorEnvValue;
   }
   assert.deepEqual(rewardArtifactsInRepoData(), beforeArtifacts, 'no artifact may appear under repo data/');
 });

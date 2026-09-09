@@ -24,11 +24,14 @@
  * multiplies position and scale by 100 and leaves the quaternion untouched.
  */
 
-import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
+import { encode, joinMessage } from '../../public/src/net/protocol.js';
 import { HELMET_SILVERGUARD_ID } from '../../public/src/progression/items.js';
 import { startOwnedServer } from './owned-server.mjs';
 
@@ -40,7 +43,8 @@ const RUN_LOG = `${OUT}fit-helmet-run.log`;
 try { writeFileSync(RUN_LOG, `run start ${process.argv.slice(2).join(' ')}\n`); } catch { /* ignore */ }
 const step = (m) => { console.log(m); try { appendFileSync(RUN_LOG, `${m}\n`); } catch { /* ignore */ } };
 // A private OS-temp database, never the family's real data/rewards.db -- see the header above.
-const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-fit-helmet-')), 'rewards.db');
+const REWARD_STORE_DIR = mkdtempSync(join(tmpdir(), 'gq-fit-helmet-'));
+const REWARD_STORE_PATH = join(REWARD_STORE_DIR, 'rewards.db');
 const ANCHOR_NAME = `InterimAdapter_${HELMET_SILVERGUARD_ID}_Head`;
 
 const FIT_HELMET_GUEST_ID = 'fit-helmet-guest-0001';
@@ -60,6 +64,27 @@ const FIT_HELMET_GUEST_ID = 'fit-helmet-guest-0001';
 // Same path the seed just wrote and closed, explicitly, so the server under test reads the guest
 // this file just seeded rather than a fresh unrelated temp store.
 const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
+
+// Owned-resource cleanup (review correction): this file allocated REWARD_STORE_DIR and nothing else
+// removed it. `cleanupRewardStoreDir` is called explicitly, awaited, right after every explicit
+// `await server.kill()` below -- kill() only resolves once portFree() independently confirms the
+// child is actually gone (owned-server.mjs's own guarantee), so by the time this runs the file lock
+// a just-killed child held is already released and the retry loop is a small extra margin, not the
+// only line of defence. The `process.on('exit', ...)` below is a SEPARATE, single-shot safety net
+// for the couple of `throw` paths that reach the process exit without going through an explicit
+// kill+cleanup pair; 'exit' listeners fire in registration order and cannot await, and
+// startOwnedServer() above already registered its own (also best-effort) child-kill listener first.
+async function cleanupRewardStoreDir() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try { rmSync(REWARD_STORE_DIR, { recursive: true, force: true }); return; } catch { /* retry below */ }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(200);
+  }
+  console.error(`could not remove ${REWARD_STORE_DIR} after repeated attempts -- leaving it for manual cleanup`);
+}
+process.on('exit', () => {
+  try { rmSync(REWARD_STORE_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+});
 step(`server up: ${server.url}`);
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
@@ -135,7 +160,7 @@ for (let i = 0; i < 60 && !ready; i += 1) {
   await sleep(500);
   ready = await page.eval('Boolean(window.__galaQuestRuntime && window.__galaQuestRuntime.hero)');
 }
-if (!ready) throw new Error(`runtime never came up on ${URL_UNDER_TEST}`);
+if (!ready) { await server.kill(); await cleanupRewardStoreDir(); throw new Error(`runtime never came up on ${URL_UNDER_TEST}`); }
 step('boot ready');
 await sleep(600);
 
@@ -148,6 +173,7 @@ if (players !== 1) {
   console.error(`\n${players} clients connected -- capture would contain ${players} heroes. Close other 9224 tabs.`);
   await page.send('Target.closeTarget', { targetId });
   await server.kill();
+  await cleanupRewardStoreDir();
   process.exit(2);
 }
 
@@ -221,8 +247,48 @@ for (let i = 0; i < 60 && !reloadReady; i += 1) {
   await sleep(500);
   reloadReady = await page.eval('Boolean(window.__galaQuestRuntime && window.__galaQuestRuntime.hero)');
 }
-if (!reloadReady) throw new Error(`runtime never came back up after the guest reload`);
+if (!reloadReady) {
+  await server.kill();
+  await cleanupRewardStoreDir();
+  throw new Error(`runtime never came back up after the guest reload`);
+}
 step('reload ready (guest pinned)');
+
+// #162 review correction: prove the SEEDED GUEST's equip is visible in the real spawned server's
+// own response BEFORE ever polling for the mesh, so a database-alignment regression cannot be
+// mistaken for a mesh/render defect. A second, same-origin WebSocket probe opened FROM INSIDE this
+// page -- same origin means the real browser sends the Origin header server.mjs's production check
+// requires (it never exposes an allowMissingOrigin escape hatch) -- joins as the seeded guest with
+// the actual wire bytes public/src/net/protocol.js's joinMessage/encode produce, reads its welcome
+// response, then closes immediately, well before any capture below.
+const probeJoinBytes = encode(joinMessage('reward-probe', FIT_HELMET_GUEST_ID));
+const wireRewards = await page.eval(`(() => new Promise((resolveProbe, rejectProbe) => {
+  const probeSocket = new WebSocket(${JSON.stringify(`${ORIGIN_UNDER_TEST.replace(/^http/, 'ws')}/ws`)});
+  const probeTimeout = setTimeout(() => {
+    probeSocket.close();
+    rejectProbe(new Error('timed out waiting for the reward-probe welcome'));
+  }, 5000);
+  probeSocket.addEventListener('open', () => probeSocket.send(${JSON.stringify(probeJoinBytes)}));
+  probeSocket.addEventListener('message', (e) => {
+    const message = JSON.parse(e.data);
+    if (message.type !== 'welcome') return;
+    clearTimeout(probeTimeout);
+    probeSocket.close();
+    resolveProbe(message.encounter.rewards[message.id] ?? null);
+  });
+  probeSocket.addEventListener('error', () => rejectProbe(new Error('reward-probe websocket error')));
+}))()`);
+if (wireRewards?.equippedItemIds?.helmet !== HELMET_SILVERGUARD_ID) {
+  console.error(
+    `server response for ${FIT_HELMET_GUEST_ID} does not show the helmet equipped `
+    + `(got ${JSON.stringify(wireRewards)}) -- this is a reward-store alignment defect, not a mesh/render defect`,
+  );
+  await page.send('Target.closeTarget', { targetId });
+  await server.kill();
+  await cleanupRewardStoreDir();
+  process.exit(2);
+}
+step(`server response confirms equip before mesh check: ${JSON.stringify(wireRewards.equippedItemIds)}`);
 
 let anchored = false;
 for (let i = 0; i < 24 && !anchored; i += 1) {
@@ -238,6 +304,7 @@ if (!anchored) {
   console.error('helmet mesh never appeared under its anchor -- is this profile equipped and the GLB shipped?');
   await page.send('Target.closeTarget', { targetId });
   await server.kill();
+  await cleanupRewardStoreDir();
   process.exit(2);
 }
 step('helmet anchor mounted');
@@ -360,4 +427,5 @@ step(`      scale: Object.freeze([${baked.scale.map((n) => +n.toFixed(2)).join('
 writeFileSync(`${OUT}${TAG}-baked.json`, JSON.stringify({ applied, baked }, null, 2));
 await page.send('Target.closeTarget', { targetId });
 await server.kill();
+await cleanupRewardStoreDir();
 process.exit(0);

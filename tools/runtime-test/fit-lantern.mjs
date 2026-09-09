@@ -23,11 +23,12 @@
  *     below relies on that and is checked against the sword, whose value in gear.js is known good.
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
+import { encode, joinMessage } from '../../public/src/net/protocol.js';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
@@ -37,7 +38,8 @@ const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url)
 // unrelated fresh OS-temp store -- the seeded facts were never visible to the server under test
 // (#162). Seeding this path and then passing the SAME path to startOwnedServer below is what makes
 // the two sides agree on one database.
-const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-fit-lantern-')), 'rewards.db');
+const REWARD_STORE_DIR = mkdtempSync(join(tmpdir(), 'gq-fit-lantern-'));
+const REWARD_STORE_PATH = join(REWARD_STORE_DIR, 'rewards.db');
 
 // The belt lantern is UNLOCK-GATED: main.js only mounts it once the guest holds 3 Lantern Marks, so
 // a fit tool that cannot reach that state has nothing to fit. rewardStore's own idempotent apply()
@@ -71,6 +73,28 @@ const MARKS_NEEDED = 3;
 // sibling worktree, and a number fitted against the wrong hero is wrong in a way that looks right.
 // The explicit rewardStorePath is the same path just seeded above, so the server reads that guest.
 const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
+
+// Owned-resource cleanup (review correction): this file allocated REWARD_STORE_DIR and nothing else
+// removed it. `cleanupRewardStoreDir` is called explicitly, awaited, right after every explicit
+// `await server.kill()` below -- see fit-helmet.mjs's identical helper for the full reasoning
+// (kill() only resolves once the child is independently confirmed gone, so the retry loop here is a
+// small extra margin, not the only line of defence). The `process.on('exit', ...)` below is a
+// separate, single-shot safety net for the couple of `throw` paths that reach the process exit without
+// going through an explicit kill+cleanup pair; 'exit' listeners fire in registration order and
+// cannot await, and startOwnedServer() above already registered its own best-effort child-kill
+// listener first.
+async function cleanupRewardStoreDir() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try { rmSync(REWARD_STORE_DIR, { recursive: true, force: true }); return; } catch { /* retry below */ }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(200);
+  }
+  console.error(`could not remove ${REWARD_STORE_DIR} after repeated attempts -- leaving it for manual cleanup`);
+}
+process.on('exit', () => {
+  try { rmSync(REWARD_STORE_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+});
+
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
 // Tall and roomy: this is an inspection viewport, not the phone the game is played on. The gameplay
@@ -172,7 +196,11 @@ for (let i = 0; i < 60 && !ready; i += 1) {
   await sleep(500);
   ready = await page.eval('Boolean(window.__galaQuestRuntime && window.__galaQuestRuntime.hero)');
 }
-if (!ready) throw new Error(`runtime never came up on ${URL_UNDER_TEST}`);
+if (!ready) {
+  await server.kill();
+  await cleanupRewardStoreDir();
+  throw new Error(`runtime never came up on ${URL_UNDER_TEST}`);
+}
 await sleep(600);
 
 // Every connected client draws its own hero, at the origin until someone walks. Those extra heroes
@@ -187,12 +215,21 @@ const players = await page.eval(`(() => {
   const m = text.match(/players\\s+(\\d+)/i);
   return m ? Number(m[1]) : -1;
 })()`);
-if (players === -1) throw new Error('could not read the player count from #runtime-status');
+if (players === -1) {
+  await server.kill();
+  await cleanupRewardStoreDir();
+  throw new Error('could not read the player count from #runtime-status');
+}
 if (players !== 1) {
   console.error(`\n${players} clients are connected to ${URL_UNDER_TEST}, so the capture would contain ${players} heroes`);
   console.error('and this many shields. Close the other tabs (browser pane and leftover 9224 pages) first:');
   console.error(`  curl -s http://127.0.0.1:${CHROME_PORT}/json/list`);
   await page.send('Target.closeTarget', { targetId });
+  // Review correction: confirmed termination before exit is what makes the temp-store cleanup above
+  // reliable -- an un-awaited kill leaves the child (and its lock on REWARD_STORE_DIR's SQLite file)
+  // alive past this process's own exit, which is exactly what silently orphaned the directory.
+  await server.kill();
+  await cleanupRewardStoreDir();
   process.exit(2);
 }
 
@@ -272,7 +309,45 @@ for (let i = 0; i < 60 && !reloadReady; i += 1) {
   await sleep(500);
   reloadReady = await page.eval('Boolean(window.__galaQuestRuntime && window.__galaQuestRuntime.hero)');
 }
-if (!reloadReady) throw new Error(`runtime never came back up after the guest reload on ${URL_UNDER_TEST}`);
+if (!reloadReady) {
+  await server.kill();
+  await cleanupRewardStoreDir();
+  throw new Error(`runtime never came back up after the guest reload on ${URL_UNDER_TEST}`);
+}
+
+// #162 review correction: prove the SEEDED GUEST's marks/unlock are visible in the real spawned
+// server's own response BEFORE ever polling for the mesh -- see fit-helmet.mjs's identical probe
+// for the full reasoning (same-origin WebSocket from inside the page, real Origin header, real wire
+// bytes, closed immediately). A database-alignment regression must not be mistaken for a mesh/render
+// defect.
+const probeJoinBytes = encode(joinMessage('reward-probe', FIT_LANTERN_GUEST_ID));
+const wireRewards = await page.eval(`(() => new Promise((resolveProbe, rejectProbe) => {
+  const probeSocket = new WebSocket(${JSON.stringify(`${ORIGIN_UNDER_TEST.replace(/^http/, 'ws')}/ws`)});
+  const probeTimeout = setTimeout(() => {
+    probeSocket.close();
+    rejectProbe(new Error('timed out waiting for the reward-probe welcome'));
+  }, 5000);
+  probeSocket.addEventListener('open', () => probeSocket.send(${JSON.stringify(probeJoinBytes)}));
+  probeSocket.addEventListener('message', (e) => {
+    const message = JSON.parse(e.data);
+    if (message.type !== 'welcome') return;
+    clearTimeout(probeTimeout);
+    probeSocket.close();
+    resolveProbe(message.encounter.rewards[message.id] ?? null);
+  });
+  probeSocket.addEventListener('error', () => rejectProbe(new Error('reward-probe websocket error')));
+}))()`);
+if (wireRewards?.marks !== MARKS_NEEDED || wireRewards?.lanternUnlocked !== true) {
+  console.error(
+    `server response for ${FIT_LANTERN_GUEST_ID} does not show ${MARKS_NEEDED} marks + unlocked `
+    + `(got ${JSON.stringify(wireRewards)}) -- this is a reward-store alignment defect, not a mesh/render defect`,
+  );
+  await page.send('Target.closeTarget', { targetId });
+  await server.kill();
+  await cleanupRewardStoreDir();
+  process.exit(2);
+}
+console.log(`  server response confirms marks/unlock before mesh check: ${JSON.stringify({ marks: wireRewards.marks, lanternUnlocked: wireRewards.lanternUnlocked })}`);
 
 let anchored = false;
 for (let i = 0; i < 20 && !anchored; i += 1) {
@@ -287,6 +362,8 @@ for (let i = 0; i < 20 && !anchored; i += 1) {
 if (!anchored) {
   console.error('lantern mesh never appeared under its anchor -- is this profile unlocked (3 marks) and the GLB shipped?');
   await page.send('Target.closeTarget', { targetId });
+  await server.kill();
+  await cleanupRewardStoreDir();
   process.exit(2);
 }
 
@@ -364,4 +441,6 @@ console.log(`      quaternion: Object.freeze([${baked.quaternion.join(', ')}]),`
 console.log(`      scale: Object.freeze([${baked.scale.map(n => +n.toFixed(2)).join(', ')}]),`);
 writeFileSync(`${OUT}${TAG}-baked.json`, JSON.stringify({ applied, baked }, null, 2));
 await page.send('Target.closeTarget', { targetId });
+await server.kill();
+await cleanupRewardStoreDir();
 process.exit(0);
