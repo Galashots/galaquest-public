@@ -20,12 +20,10 @@
 // proves the PARENT-side option/metadata and that the real child stays alive serving real HTTP under
 // that configuration, plus (in the inherited-sentinel test) that a polluted parent env cannot leak
 // into the child. Real end-to-end proof that the child's response carries the seeded guest's reward
-// state now lives where the acceptance gate actually asks for it: fit-helmet.mjs/fit-lantern.mjs
-// themselves each open a same-origin, Origin-bearing WebSocket probe from inside the running browser
-// page and assert on the server's response before ever polling for the mesh (see either file's own
-// "#162 review correction" comment). A Node-side WebSocket cannot supply that Origin header --
-// server.mjs's production default requires one and never exposes an allowMissingOrigin escape hatch
-// -- which is exactly why that proof has to run in a real browser, not in this file.
+// state now lives where the acceptance gate actually asks for it: fit-helmet.mjs/fit-lantern.mjs read
+// the actual gameplay client's published net state and rewards from the running browser before
+// polling for the mesh. The in-process WebSocket checks below pin the storage alignment mechanism
+// independently.
 
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
@@ -197,9 +195,9 @@ test('mismatched setup: a seeded lantern guest stays locked when the server read
 // The wire-level pair above proves the alignment MECHANISM. This proves the actual harness-facing
 // seam -- startOwnedServer's rewardStorePath option threading through a REAL spawned server.mjs
 // child via GALAQUEST_REWARD_STORE_PATH, the exact call fit-helmet.mjs/fit-lantern.mjs now make.
-// A real spawned server.mjs enforces the browser-only Origin check for real (server.mjs never
-// exposes an allowMissingOrigin escape hatch, on purpose -- "the shipped game is browser-only"), so
-// this reads the child's own stdout line confirming which path it opened rather than a wire probe.
+// A real spawned server.mjs stays under its browser-only Origin contract (server.mjs never exposes
+// an allowMissingOrigin escape hatch). The actual seeded-response proof lives in the two browser
+// harnesses, where the actual gameplay client publishes and exposes that server response.
 test('startOwnedServer records an explicit rewardStorePath and the real spawned child stays alive under it', async () => {
   const beforeArtifacts = rewardArtifactsInRepoData();
   const priorEnvValue = process.env.GALAQUEST_REWARD_STORE_PATH;
