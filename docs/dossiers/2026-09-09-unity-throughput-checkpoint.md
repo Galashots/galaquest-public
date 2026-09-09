@@ -39,7 +39,14 @@ Owner changes, not clean candidate-SHA acceptance. The existing scene was confir
 | Initial Editor startup | 495.182 seconds | One earlier cold startup; not a patch comparison |
 | CLI Assets/Refresh | 0.048 seconds; subsequent Editor ready | No-change refresh only |
 | Focused EditMode | FoundationDiagnosticsEditModeTests: 5/5, 0.24 seconds runner duration | Different suite from historical Rune Forge six-test run |
+| Focused PlayMode | FoundationDiagnosticsPlayModeTests: 1/1, 0.15 seconds runner duration | Excludes mode-transition overhead; runner warned about a generated InitTestScene cleanup |
 | Main-thread control | One eval timed out; refresh and a subsequent read succeeded | Discovery alone is not main-thread responsiveness |
+
+The separate engineering Editor was launched once on the owned checkout with WebGL selected. It
+remained at `Application.AssetDatabase Initial Refresh Start` for over 15 minutes with no Pipeline
+instance available. This blocks clean-checkout runtime timing at this checkpoint. No repeated cold
+launches or target switches were used to manufacture a result. The existing checkout's tracked dirty
+file list remained unchanged after its focused tests.
 
 ## Remaining Issue #155 work
 
