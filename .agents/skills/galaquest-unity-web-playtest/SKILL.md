@@ -9,23 +9,43 @@ description: Build and verify GalaQuest's Unity WebGL client. Use for Unity brow
 
 - Follow `docs/WORKFLOW.md` for branch authority. An authorized sequential package can reuse a clean,
   owned Unity checkout and its Library cache; a new package does not inherently need another import.
+- **Local preflight:** when Unity is installed on the workstation, start the pinned GalaQuest Editor on
+  the intended owned checkout before iterative work if it is not already open. Wait for initial import
+  and script compilation to settle, confirm the intended project/checkout and no Safe Mode or unexplained
+  compile errors, and keep that Editor/project open through the iteration loop when practical. The worker
+  owns this startup; do not make the Owner pre-open Unity.
+- Prefer the connected Unity CLI/Pipeline/live Editor for local scene, prefab, authoring, focused-test,
+  and review-camera iteration when available. A cold batch launch is a CI/fallback/final-evidence path,
+  not the ordinary local edit-test loop.
 - Keep Unity test and batch commands on `-buildTarget WebGL`. Switching build targets can invalidate
   useful imports and build cache even when gameplay source has not changed.
 - Run one Unity batch operation per project. Follow its existing process/session to termination;
   a tool observation timeout is not a failed build and does not justify launching another.
+- When a known healthy batch build is active, wait on that process instead of issuing frequent status
+  probes or log tails. Reinspect only when completion is expected or elapsed time materially exceeds the
+  established baseline.
 - Use the checked-in build entry point appropriate to the current asset state. Candidate build
   helpers and their manifests do not grant asset promotion or replace the normal release build.
 
 ## Build after the cheaper checks
 
 1. Reproduce and fix the behavior with the narrowest meaningful JavaScript/Unity tests first.
-2. Settle and commit the runtime inputs before a browser evidence build. Do not edit its inputs
+2. For authored interactions, preflight the intended gameplay camera in Editor/PlayMode before WebGL:
+   active collider, reachable/ordered raycast, projected screen position, and basic gameplay-frame
+   legibility/HUD overlap. Do not pay IL2CPP/WebAssembly cost to discover a defect the Editor can expose.
+3. Treat generated review inputs as cache inputs. If a build helper rewrites unchanged temporary assets,
+   dirties its generated scene, or otherwise invalidates the incremental build merely because it ran,
+   stop the repeat-build loop and make the generator a content-hash no-op or reuse the stable generated
+   inputs before continuing.
+4. Settle and commit the runtime inputs before a browser evidence build. Do not edit its inputs
    while the build runs. Preserve source-cleanliness and output-hash guards.
-3. For candidate iteration, `U2CombatPreview` supports `GQ_FAST_REVIEW_BUILD=1`: BuildTimes
+5. For candidate iteration, `U2CombatPreview` supports `GQ_FAST_REVIEW_BUILD=1`: BuildTimes
    optimization and disabled compression, restored after the build. Record that flavor in evidence.
    A first native compilation can still be expensive; do not promise a speedup without measurement.
-4. Reuse a verified build for checks whose client inputs have not changed. Final optimized-build
-   performance and physical iPad Safari acceptance remain separate gates.
+6. Reuse a verified build for checks whose client inputs have not changed. Use a fast review build only
+   for a claim that genuinely requires the built browser client. Reserve the full optimized WebGL build
+   for a checkpoint/final/performance gate, not ordinary coordinate, label, camera, or interaction tuning.
+   Physical iPad Safari acceptance remains a separate gate.
 
 ## Use the matching browser harness
 

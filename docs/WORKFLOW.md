@@ -213,6 +213,14 @@ build, its client/server SHAs, and the assertions it can prove. The legacy Three
 relay, and their captures do not provision or substitute for Unity browser evidence. A successful Unity
 driver is behavior evidence only; inspect running-game pixels and physical-device acceptance separately.
 
+For local Unity iteration on a capable workstation, the worker starts the pinned Editor on the intended
+owned checkout when it is not already open, waits for import/compilation to settle, and prefers the
+connected live-Editor/Pipeline loop for scene, prefab, focused-test, and review iteration. Repeated cold
+batch launches are a CI/fallback/final-evidence path, not the normal edit-test loop. If repeated
+startup/import/build overhead dominates the targeted check, or a review-build helper rewrites unchanged
+inputs and dirties the build each time, stop before another expensive cycle and fix/reforecast the tooling
+or reuse the stable build instead of paying the same cost again.
+
 ### 4. Legacy Three.js on-demand Director relay on a PR
 
 For an exact PR-head browser run in Actions, the repository owner can comment a whitelisted command such as:
