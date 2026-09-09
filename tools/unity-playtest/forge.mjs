@@ -99,7 +99,7 @@ const controls = async page => {
       y: page.rect.y + page.rect.height * y });
     if (!forge) return [at('open', '', .666, .488)];
     if (forge.status === 'choose-pack') {
-      return [at('pack', 'place-value-rounding', .661, .482)];
+      return [at('pack', 'place-value-rounding', .740, .413)];
     }
   }
   return [];
