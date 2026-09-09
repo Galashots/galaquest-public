@@ -108,6 +108,18 @@ const controls = async page => {
       ];
       return [control];
     }
+    if (forge.status === 'active') {
+      const runeX = [.581, .656, .731];
+      return [
+        ...(forge.task?.choices ?? []).map((choice, index) =>
+          at('rune', String(choice), runeX[index], .494)),
+        at('hammer', '', .762, .470),
+        at('hint', '', .539, .482),
+        at('hear', '', .537, .465),
+      ];
+    }
+    if (forge.status === 'ready-to-claim') return [at('claim', '', .654, .469)];
+    if (forge.status === 'owned') return [at('equip', '', .654, .469)];
   }
   return [];
 };
