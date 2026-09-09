@@ -89,13 +89,18 @@ const controls = async page => {
   const projected = await page.eval('window.__gqRuneForgeControls ?? []');
   if (projected.length > 0) return projected;
   const frames = await forgeFrames(page);
-  if (frames.length === 0 && page.rect) {
-    // Visually measured from the authored dormant Forge framing. This is a bounded
-    // fallback for the one wake-up control; every interaction still enters through
-    // the canvas touch/raycast seam and must produce the authoritative server state.
-    return [{ kind: 'open', value: '',
-      x: page.rect.x + page.rect.width * .666,
-      y: page.rect.y + page.rect.height * .488 }];
+  const forge = frames.at(-1)?.forge ?? page.lastForge?.forge;
+  if (page.rect) {
+    // Visually measured from this one authored Forge pocket. These bounded fallbacks
+    // still enter through the canvas touch/raycast seam and each consequential tap
+    // must produce the expected authoritative server state before the driver advances.
+    const at = (kind, value, x, y) => ({ kind, value,
+      x: page.rect.x + page.rect.width * x,
+      y: page.rect.y + page.rect.height * y });
+    if (!forge) return [at('open', '', .666, .488)];
+    if (forge.status === 'choose-pack') {
+      return [at('pack', 'place-value-rounding', .661, .482)];
+    }
   }
   return [];
 };
@@ -213,9 +218,11 @@ try {
       .then(list => list.find(item => item.kind === kind && (value === undefined || item.value === value)));
     await tapAt(page, control.x, control.y);
     if (['rune', 'hear', 'equip'].includes(kind)) return control;
-    return waitFor(() => forgeFrames(page), list => list.length > before
+    const response = await waitFor(() => forgeFrames(page), list => list.length > before
       && (!expectedStatus || list.at(-1)?.forge?.status === expectedStatus), `${kind} response`)
       .then(list => list.at(-1));
+    page.lastForge = response;
+    return response;
   };
 
   const younger = await createPlayer('profile-aaaaaaaa', 'Younger Forge Review');
