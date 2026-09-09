@@ -23,33 +23,30 @@
  *     below relies on that and is checked against the sword, whose value in gear.js is known good.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
-const REWARD_STORE_PATH = fileURLToPath(new URL('../../data/rewards.db', import.meta.url));
+// A private OS-temp database, never the family's real data/rewards.db. This file used to seed
+// data/rewards.db and then call startOwnedServer() with no path, which hands the server its own
+// unrelated fresh OS-temp store -- the seeded facts were never visible to the server under test
+// (#162). Seeding this path and then passing the SAME path to startOwnedServer below is what makes
+// the two sides agree on one database.
+const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-fit-lantern-')), 'rewards.db');
 
 // The belt lantern is UNLOCK-GATED: main.js only mounts it once the guest holds 3 Lantern Marks, so
-// a fit tool that cannot reach that state has nothing to fit. The fit below already pins the page to
-// `fit-lantern-guest-0001` and its comment already asserts that guest "was seeded to 3 marks +
-// unlock" -- but NOTHING IN THIS REPO EVER SEEDED IT. The seeding was a manual step somebody did once
-// against the shared 5201 server's reward store, and the comment recorded the result as though it
-// were a property of the tool.
+// a fit tool that cannot reach that state has nothing to fit. rewardStore's own idempotent apply()
+// with deterministic `fit:`-prefixed eventIds means re-running this never double-counts.
 //
-// That is why hermeticity broke this file immediately, with "lantern anchor never appeared": a
-// harness-owned server reads THIS checkout's data/rewards.db, where that guest has never existed.
-// The dependency was exposed by Phase H1, not created by it, and the fix is to make the tool do what
-// its own comment always claimed -- cribbed from drive-relight.mjs (and docs/pipeline/gear.md's
-// "Unlock-gated gear" pattern): rewardStore's own idempotent apply() with deterministic
-// `fit:`-prefixed eventIds, so re-running this never double-counts.
-//
-// SEEDED BEFORE THE SERVER IS SPAWNED, deliberately. drive-relight.mjs's header has to warn that
-// "the RUNNING SERVER must be restarted" after seeding, because the server reads the ledger at
-// startup; owning the server means this tool simply writes first and starts second, so that caveat
-// does not apply to it at all.
+// SEEDED BEFORE THE SERVER IS SPAWNED, deliberately, and the seed connection is closed before the
+// server starts. drive-relight.mjs's header has to warn that "the RUNNING SERVER must be restarted"
+// after seeding, because the server reads the ledger at startup; owning the server means this tool
+// simply writes first and starts second, so that caveat does not apply to it at all.
 const FIT_LANTERN_GUEST_ID = 'fit-lantern-guest-0001';
 const MARKS_NEEDED = 3;
 {
@@ -64,6 +61,7 @@ const MARKS_NEEDED = 3;
       + `unlocked ${store.unlockedFor(FIT_LANTERN_GUEST_ID)}`,
     );
   }
+  store.close();
   console.log(`  seeded ${FIT_LANTERN_GUEST_ID}: ${MARKS_NEEDED} marks, lantern unlocked`);
 }
 
@@ -71,7 +69,8 @@ const MARKS_NEEDED = 3;
 // This matters more for a fit tool than for a pass/fail harness: what this prints gets PASTED INTO
 // gear.js, so the hero it measures has to be this checkout's hero. 5201 was measured to belong to a
 // sibling worktree, and a number fitted against the wrong hero is wrong in a way that looks right.
-const server = await startOwnedServer();
+// The explicit rewardStorePath is the same path just seeded above, so the server reads that guest.
+const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
 // Tall and roomy: this is an inspection viewport, not the phone the game is played on. The gameplay

@@ -12,12 +12,21 @@
  * is spawned -- the same discipline fit-lantern uses for its marks+unlock). The slot is derived from
  * the item catalogue, so the equip fact carries only the id, no slot field.
  *
+ * The seed and the server MUST share one store. This file used to seed the repository's real
+ * `data/rewards.db` and then call `startOwnedServer()` with no path, which hands the server its own
+ * fresh OS-temp store -- the seeded facts were never visible to the server under test (#162). The
+ * fix here is a private OS-temp store created up front: seed it, close the seed connection, then pass
+ * that exact path to `startOwnedServer({ rewardStorePath })` so both sides read the same database.
+ * The family's ordinary save under `data/` is never opened by this file at all any more.
+ *
  * Like fit-lantern: skeleton.pose() collapses the whole skeleton by exactly 100x (the glTF
  * inverseBindMatrices are metres while bones live in Armature units), a uniform scale, so the bake
  * multiplies position and scale by 100 and leaves the quaternion untouched.
  */
 
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { HELMET_SILVERGUARD_ID } from '../../public/src/progression/items.js';
@@ -30,7 +39,8 @@ mkdirSync(OUT, { recursive: true });
 const RUN_LOG = `${OUT}fit-helmet-run.log`;
 try { writeFileSync(RUN_LOG, `run start ${process.argv.slice(2).join(' ')}\n`); } catch { /* ignore */ }
 const step = (m) => { console.log(m); try { appendFileSync(RUN_LOG, `${m}\n`); } catch { /* ignore */ } };
-const REWARD_STORE_PATH = fileURLToPath(new URL('../../data/rewards.db', import.meta.url));
+// A private OS-temp database, never the family's real data/rewards.db -- see the header above.
+const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'gq-fit-helmet-')), 'rewards.db');
 const ANCHOR_NAME = `InterimAdapter_${HELMET_SILVERGUARD_ID}_Head`;
 
 const FIT_HELMET_GUEST_ID = 'fit-helmet-guest-0001';
@@ -43,10 +53,13 @@ const FIT_HELMET_GUEST_ID = 'fit-helmet-guest-0001';
   if (equipped.helmet !== HELMET_SILVERGUARD_ID || !owned.includes(HELMET_SILVERGUARD_ID)) {
     throw new Error(`could not seed an equipped helmet: equipped ${JSON.stringify(equipped)}, owned ${JSON.stringify(owned)}`);
   }
+  store.close();
   step(`  seeded ${FIT_HELMET_GUEST_ID}: ${HELMET_SILVERGUARD_ID} owned + equipped`);
 }
 
-const server = await startOwnedServer();
+// Same path the seed just wrote and closed, explicitly, so the server under test reads the guest
+// this file just seeded rather than a fresh unrelated temp store.
+const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
 step(`server up: ${server.url}`);
 const URL_UNDER_TEST = server.url;
 const ORIGIN_UNDER_TEST = server.origin;
