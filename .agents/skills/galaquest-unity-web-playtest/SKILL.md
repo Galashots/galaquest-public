@@ -29,6 +29,12 @@ description: Build and verify GalaQuest's Unity WebGL client. Use for Unity brow
 
 ## Build after the cheaper checks
 
+When a cold test launch repeats a Material Upgrader import, compare the persisted URP project upgrade
+marker with the pinned package's upgrader count and the versioned material assets. Test-mode upgrade
+state can remain in memory only. Inspect and commit the pinned Editor's completed migration output
+(including project settings) when appropriate; never bump the marker alone to bypass an unapplied
+migration. Recheck the affected materials and subsequent imports before claiming a timing improvement.
+
 1. Reproduce and fix the behavior with the narrowest meaningful JavaScript/Unity tests first.
 2. For authored interactions, preflight the intended gameplay camera in Editor/PlayMode before WebGL:
    active collider, reachable/ordered raycast, projected screen position, and basic gameplay-frame
