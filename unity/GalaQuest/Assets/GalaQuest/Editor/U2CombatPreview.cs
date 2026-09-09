@@ -212,23 +212,12 @@ namespace GalaQuest.Editor
             if (!string.IsNullOrWhiteSpace(Git("status --porcelain"))) throw new BuildFailedException("Commit runtime changes before an exact-source candidate build");
             var output = Path.Combine(Application.dataPath, "../Builds/GalaQuestWebGL");
             var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
-            var previousCompression = PlayerSettings.WebGL.compressionFormat;
-#if UNITY_WEBGL
-            var previousOptimization = UnityEditor.WebGL.UserBuildSettings.codeOptimization;
-#endif
+            var settings = new U2BuildSettingsScope();
             try
             {
                 var content = Prepare();
                 var scene = PrepareScene(content);
-                if (fastIteration)
-                {
-                    PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
-#if UNITY_WEBGL
-                    UnityEditor.WebGL.UserBuildSettings.codeOptimization = UnityEditor.WebGL.WasmCodeOptimization.BuildTimes;
-#else
-                    throw new BuildFailedException("Fast browser review requires the WebGL build target.");
-#endif
-                }
+                if (fastIteration) settings.UseFastReview();
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     scenes = new[] { scene }, target = BuildTarget.WebGL,
@@ -254,10 +243,7 @@ namespace GalaQuest.Editor
             }
             finally
             {
-                PlayerSettings.WebGL.compressionFormat = previousCompression;
-#if UNITY_WEBGL
-                UnityEditor.WebGL.UserBuildSettings.codeOptimization = previousOptimization;
-#endif
+                settings.Dispose();
             }
         }
 
