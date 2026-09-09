@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { buildManifest, deterministicJson } from '../tools/unity-migration/export-bridge.mjs';
 
-const BASE_SHA = '470f989e131497bbfb6c4f27a950f4ade4300896';
+const BASE_SHA = '28eb6191ff9a67669b0aaeaebcb812c591aa2170';
 // An intentional change to a pinned source such as speed.js requires regenerating and re-pinning
 // this migration fixture; the failure is an authority-drift signal, not mysterious CI breakage.
 const root = new URL('..', import.meta.url);
