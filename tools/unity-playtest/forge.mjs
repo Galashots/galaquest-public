@@ -99,7 +99,14 @@ const controls = async page => {
       y: page.rect.y + page.rect.height * y });
     if (!forge) return [at('open', '', .666, .488)];
     if (forge.status === 'choose-pack') {
-      return [at('pack', 'place-value-rounding', .738, .462)];
+      const control = at('pack', 'place-value-rounding', .738, .462);
+      control.points = [
+        [control.x, control.y],
+        [control.x - 24, control.y], [control.x + 24, control.y],
+        [control.x, control.y - 22], [control.x, control.y + 22],
+        [page.rect.x + page.rect.width * .661, page.rect.y + page.rect.height * .482],
+      ];
+      return [control];
     }
   }
   return [];
@@ -216,7 +223,12 @@ try {
     const control = await waitFor(() => controls(page), list => list.some(item => item.kind === kind
       && (value === undefined || item.value === value)), `Visible ${kind} control`)
       .then(list => list.find(item => item.kind === kind && (value === undefined || item.value === value)));
-    await tapAt(page, control.x, control.y);
+    const points = control.points ?? [[control.x, control.y]];
+    for (const [x, y] of points) {
+      await tapAt(page, x, y);
+      if (points.length === 1 || (await forgeFrames(page)).length > before) break;
+      await delay(320);
+    }
     if (['rune', 'hear', 'equip'].includes(kind)) return control;
     const response = await waitFor(() => forgeFrames(page), list => list.length > before
       && (!expectedStatus || list.at(-1)?.forge?.status === expectedStatus), `${kind} response`)
