@@ -35,9 +35,9 @@ The Owner-created target should retain these Basic settings:
 - schedules: off
 - cloud tests: off
 
-In Advanced settings set:
+In Advanced settings set (script paths resolve from the configured Unity project subdirectory):
 
-- Pre-build script: `tools/unity-build-automation/provision-u2-review-inputs.sh`
+- Pre-build script: `../../tools/unity-build-automation/provision-u2-review-inputs.sh`
 - Pre-export method: `GalaQuest.Editor.U2CombatPreview.PreExport`
 - Post-export method: `GalaQuest.Editor.U2CombatPreview.PostExport`
 - Scene List override: empty/unset. The pre-export method selects the generated review scene after
@@ -55,6 +55,13 @@ GQ_U2_REVIEW_ASSET_BEARER_TOKEN=<optional Owner secret, only if the gateway requ
 `GQ_FAST_REVIEW_BUILD=1` is optional. Leave it unset for parity with the normal optimized local
 candidate build; set it only for an explicitly fast review iteration. The bridge also checks the
 Build Automation-provided `BUILD_REVISION` and `SCM_REVISION` when present against Git `HEAD`.
+
+The provisioner discovers the checkout root with Git from `PROJECT_DIRECTORY` (the
+`unity/GalaQuest` project), so controlled inputs land under the repository's ignored `.local/m2/`
+tree. Pre-export's clean-source guard tolerates only Build Automation's generated
+`Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset` and that file's possible
+Unity `.meta` chain. Any other tracked or untracked path, including another file inside
+`Assets/__UnityCloud__/`, fails the build and is named in the error.
 
 The pre-build and post-export hooks are enough for the first bridge run. No Unity service credential,
 paid feature, Cloud Content Delivery bucket, schedule, or cloud test is required by this package.
@@ -82,8 +89,17 @@ the byte size and SHA-256 of each file under `Build/`. The existing `travel.mjs`
 can consume that manifest after the artifact is staged at `/unity/`; browser acceptance and physical
 iPad acceptance remain separate gates.
 
-## Current readiness
+## Build #1 recovery status
 
-The repository bridge is ready for configuration review. The target is **not ready for the first
-cloud build until the Owner sets the two controlled URL variables (and the optional bearer secret if
-needed), adds the three hook fields, and confirms that no dashboard Scene List override is active**.
+Build #1 verified that Build Automation checked out the requested source, detected Unity `6000.3.23f1`,
+and presented the configured environment-variable keys. It also showed that the original pre-build
+path was looked up from the project subdirectory and skipped, after which Build Automation's generated
+manifest tripped the original all-or-nothing clean check. The repository repair corrects the documented
+dashboard path, discovers the real Git root during provisioning, and narrowly admits that generated
+manifest state.
+
+Before Build #2, the Owner must change the dashboard Pre-build script field to
+`../../tools/unity-build-automation/provision-u2-review-inputs.sh` and retain the existing pre-export,
+post-export, environment-variable, and empty Scene List settings. Build #2 is still required to prove
+the real authenticated private-asset transfer, Unity import/build, post-export manifest, and artifact;
+repository tests use no private token or controlled asset bytes.

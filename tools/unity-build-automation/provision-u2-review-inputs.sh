@@ -9,7 +9,11 @@ if [[ "${IS_BUILDER:-}" != "true" && "${GQ_U2_PROVISION_LOCAL:-}" != "1" ]]; the
   exit 2
 fi
 
-repo_root="${PROJECT_DIRECTORY:-$(pwd)}"
+project_directory="${PROJECT_DIRECTORY:-$(pwd)}"
+if ! repo_root="$(git -C "$project_directory" rev-parse --show-toplevel 2>/dev/null)" || [[ -z "$repo_root" ]]; then
+  echo "Could not resolve the Git repository root from Unity project directory: $project_directory" >&2
+  exit 2
+fi
 cd "$repo_root"
 
 fbx_url="${GQ_U2_GREMLIN_FBX_URL:-}"

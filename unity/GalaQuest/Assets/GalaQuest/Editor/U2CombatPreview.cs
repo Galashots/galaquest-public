@@ -331,8 +331,16 @@ namespace GalaQuest.Editor
 
         private static void RequireCleanCheckout()
         {
-            if (!string.IsNullOrWhiteSpace(Git("status --porcelain")))
-                throw new BuildFailedException("Commit runtime changes before an exact-source candidate build");
+            // UBA creates this manifest (and Unity may create its narrow chain of
+            // .meta files) before invoking PreExport. Nothing else is exempt.
+            const string statusArguments = "status --porcelain --untracked-files=all -- . "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset.meta\"";
+            var unexpected = Git(statusArguments);
+            if (!string.IsNullOrWhiteSpace(unexpected))
+                throw new BuildFailedException("Unexpected dirty paths prevent an exact-source candidate build:\n" + unexpected);
         }
 
         private static string ResolveSourceSha()
