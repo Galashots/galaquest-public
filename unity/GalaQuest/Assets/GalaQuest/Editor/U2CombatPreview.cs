@@ -218,7 +218,7 @@ namespace GalaQuest.Editor
         private static void RequireNamedScenes()
         {
             for (var i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
-                if (string.IsNullOrEmpty(UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).path))
+                if (!Application.isBatchMode && string.IsNullOrEmpty(UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).path))
                     throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
         }
 
