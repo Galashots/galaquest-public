@@ -264,7 +264,7 @@ try {
   await press(younger, 'rune', '5000');
   state = await press(younger, 'hammer', undefined, 'active');
   assert.equal(state.forge.response, 'retry');
-  assert.equal(state.forge.successCount, 0);
+  assert.equal(state.forge.completedCount, 0);
   checks.wrongRetry = state.forge;
   await capture(younger, '04-wrong-answer-retry');
 
@@ -275,14 +275,14 @@ try {
   await press(younger, 'rune', '500');
   state = await press(younger, 'hammer', undefined, 'active');
   assert.equal(state.forge.response, 'assisted-success');
-  assert.equal(state.forge.successCount, 1);
+  assert.equal(state.forge.completedCount, 1);
   assert.equal(state.forge.task.id, 'round-6742-hundred');
   checks.assisted = state.forge;
 
   await press(younger, 'rune', '6700');
   state = await press(younger, 'hammer', undefined, 'ready-to-claim');
   assert.equal(state.forge.response, 'independent-success');
-  assert.equal(state.forge.successCount, 2);
+  assert.equal(state.forge.completedCount, 2);
   await capture(younger, '05-cage-released');
 
   state = await press(younger, 'claim', undefined, 'owned');
