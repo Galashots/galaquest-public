@@ -58,10 +58,12 @@ Build Automation-provided `BUILD_REVISION` and `SCM_REVISION` when present again
 
 The provisioner derives the checkout root from its checked-in `tools/unity-build-automation/`
 script location rather than invoking Git from `PROJECT_DIRECTORY`, so controlled inputs land under the repository's ignored `.local/m2/`
-tree. Pre-export's clean-source guard tolerates only Build Automation's generated
-`Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset` and that file's possible
-Unity `.meta` chain. Any other tracked or untracked path, including another file inside
-`Assets/__UnityCloud__/`, fails the build and is named in the error.
+tree. Pre-export's clean-source guard tolerates only the exact Build Automation files observed before
+`PreExport`: its generated manifest/meta chain, injected CloudBuild helper DLL/readme/meta files,
+compiler response files (`csc.rsp`, `gmcs.rsp`, `smcs.rsp`, `us.rsp` and their metas), and the known
+`build.json`, `build_manifest.json`, `build_stats.json`, and `editoranalytics_session.json` metadata.
+The allowlist uses exact paths rather than broad generated directories; any other tracked or untracked
+path, including an adjacent file under `Assets/__UnityCloud__/` or `.build/`, fails and is named.
 
 The pre-build and post-export hooks are enough for the first bridge run. No Unity service credential,
 paid feature, Cloud Content Delivery bucket, schedule, or cloud test is required by this package.

@@ -331,13 +331,34 @@ namespace GalaQuest.Editor
 
         private static void RequireCleanCheckout()
         {
-            // UBA creates this manifest (and Unity may create its narrow chain of
-            // .meta files) before invoking PreExport. Nothing else is exempt.
+            // UBA injects a bounded set of build metadata, CloudBuild helper files,
+            // compiler response files, and the generated manifest before PreExport.
+            // Keep this evidence-derived allowlist exact; nothing else is exempt.
             const string statusArguments = "status --porcelain --untracked-files=all -- . "
+                + "\":(exclude).build/last/galaquest-webgl-staging/build_stats.json\" "
+                + "\":(exclude).build/last/galaquest-webgl-staging/extra_data/editoranalytics_session.json\" "
+                + "\":(exclude)build.json\" "
+                + "\":(exclude)unity/GalaQuest/build_manifest.json\" "
                 + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__.meta\" "
                 + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources.meta\" "
                 + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset\" "
-                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset.meta\"";
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/README.md\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/README.md.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/UnityEditor.CloudBuild.dll\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/UnityEditor.CloudBuild.dll.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/UnityEngine.CloudBuild.dll\" "
+                + "\":(exclude)unity/GalaQuest/Assets/__UnityCloud__/Scripts/UnityEngine.CloudBuild.dll.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/csc.rsp\" "
+                + "\":(exclude)unity/GalaQuest/Assets/csc.rsp.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/gmcs.rsp\" "
+                + "\":(exclude)unity/GalaQuest/Assets/gmcs.rsp.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/smcs.rsp\" "
+                + "\":(exclude)unity/GalaQuest/Assets/smcs.rsp.meta\" "
+                + "\":(exclude)unity/GalaQuest/Assets/us.rsp\" "
+                + "\":(exclude)unity/GalaQuest/Assets/us.rsp.meta\"";
             var unexpected = Git(statusArguments);
             if (!string.IsNullOrWhiteSpace(unexpected))
                 throw new BuildFailedException("Unexpected dirty paths prevent an exact-source candidate build:\n" + unexpected);

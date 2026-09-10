@@ -98,6 +98,8 @@ test('exact-source guard allows only the known Unity Build Automation manifest s
   const fixture = mkdtempSync(join(tmpdir(), 'gq-uba-clean-'));
   const manifest = 'unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset';
   mkdirSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Resources'), { recursive: true });
+  mkdirSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor'), { recursive: true });
+  mkdirSync(join(fixture, '.build/last/galaquest-webgl-staging/extra_data'), { recursive: true });
   writeFileSync(join(fixture, 'tracked.txt'), 'committed\n');
   git(fixture, 'init', '-q');
   git(fixture, 'config', 'user.email', 'test@example.invalid');
@@ -111,7 +113,23 @@ test('exact-source guard allows only the known Unity Build Automation manifest s
   writeFileSync(join(fixture, `${manifest}.meta`), 'generated meta\n');
   writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__.meta'), 'folder meta\n');
   writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Resources.meta'), 'folder meta\n');
-  assert.equal(status(), '', 'known UBA manifest and its Unity metadata');
+  writeFileSync(join(fixture, '.build/last/galaquest-webgl-staging/build_stats.json'), '{}\n');
+  writeFileSync(join(fixture, '.build/last/galaquest-webgl-staging/extra_data/editoranalytics_session.json'), '{}\n');
+  writeFileSync(join(fixture, 'build.json'), '{}\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/build_manifest.json'), '{}\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts.meta'), 'folder meta\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor.meta'), 'folder meta\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/README.md'), 'generated\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/README.md.meta'), 'generated meta\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/UnityEditor.CloudBuild.dll'), 'generated\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/Editor/UnityEditor.CloudBuild.dll.meta'), 'generated meta\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/UnityEngine.CloudBuild.dll'), 'generated\n');
+  writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/Scripts/UnityEngine.CloudBuild.dll.meta'), 'generated meta\n');
+  for (const name of ['csc.rsp', 'gmcs.rsp', 'smcs.rsp', 'us.rsp']) {
+    writeFileSync(join(fixture, `unity/GalaQuest/Assets/${name}`), 'generated\n');
+    writeFileSync(join(fixture, `unity/GalaQuest/Assets/${name}.meta`), 'generated meta\n');
+  }
+  assert.equal(status(), '', 'observed UBA generated state is narrowly exempt');
 
   writeFileSync(join(fixture, 'tracked.txt'), 'modified\n');
   assert.match(status(), /tracked\.txt/, 'modified tracked path remains fatal and identifiable');
@@ -120,6 +138,8 @@ test('exact-source guard allows only the known Unity Build Automation manifest s
   assert.match(status(), /untracked\.txt/, 'unrelated untracked path remains fatal and identifiable');
   writeFileSync(join(fixture, 'unity/GalaQuest/Assets/__UnityCloud__/unexpected.txt'), 'unexpected\n');
   assert.match(status(), /__UnityCloud__\/unexpected\.txt/, 'adjacent generated-looking state is not broadly exempt');
+  writeFileSync(join(fixture, '.build/last/galaquest-webgl-staging/unexpected.json'), 'unexpected\n');
+  assert.match(status(), /\.build\/last\/galaquest-webgl-staging\/unexpected\.json/, 'adjacent build metadata is not broadly exempt');
 });
 
 test('cloud documentation routes the exact hooks and keeps the scene override closed', () => {
