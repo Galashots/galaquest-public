@@ -76,6 +76,14 @@ namespace GalaQuest
             audioSource = gameObject.AddComponent<AudioSource>();
             audioSource.spatialBlend = 0f;
             audioSource.volume = .72f;
+            // Configure() only runs once, at Editor authoring time, to bake the pocket into the saved
+            // scene. interactables is intentionally not [SerializeField] (it must always reflect the
+            // live scene graph, not a stale authoring-time snapshot), so a player booting straight from
+            // that saved scene never calls Configure() again and this array starts empty. Re-derive it
+            // here from the serialized forgeRoot so PresentWorld() and the browser control diagnostics
+            // see the real pocket interactables at actual runtime, not just during authoring.
+            if (interactables.Length == 0 && forgeRoot != null)
+                interactables = forgeRoot.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(true);
         }
 
         private void ApplyFrame(GalaQuestServerFrame frame)
