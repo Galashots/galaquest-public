@@ -131,6 +131,23 @@ test('batch entry points seed a committed scene instead of closing the host unti
   assert.match(source, /EditorSceneManager\.OpenScene\(path, OpenSceneMode\.Additive\)/);
 });
 
+test('preview scene authoring resolves objects within the scene it configures', () => {
+  // Seeding a committed scene leaves two copies of EmberworksDeep loaded: the
+  // batch-mode host's, and the additively-opened preview copy. Build #8 proved
+  // an all-scenes lookup then matches a hero in each and throws "Sequence
+  // contains more than one matching element". Scene-scoped lookups are the
+  // codebase convention: EmberworksGreyboxBuild.FindSceneObject filters on
+  // candidate.scene, and the pocket lookup here filters on runtime.scene.
+  const source = read('unity/GalaQuest/Assets/GalaQuest/Editor/RuneForgeAuthoring.cs');
+  const configure = source.match(/public static void ConfigurePreview\(GameObject runtime, GalaQuestCombatContent content\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(configure, 'the preview authoring entry point must remain discoverable');
+  assert.doesNotMatch(configure[1], /FindObjectsByType|FindAnyObjectByType|FindObjectOfType/,
+    'preview authoring must not search across every loaded scene');
+  assert.match(configure[1], /var hero = runtime\.scene\.GetRootGameObjects\(\)/,
+    'the hero is resolved from the scene being configured');
+  assert.match(configure[1], /RuntimeHeroName/);
+});
+
 test('exact-source guard allows only the known Unity Build Automation manifest state', () => {
   const fixture = mkdtempSync(join(tmpdir(), 'gq-uba-clean-'));
   const manifest = 'unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset';
