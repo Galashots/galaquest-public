@@ -4,6 +4,11 @@ These drivers run the built Unity client at `/unity/`. They require a local Unit
 exact-source manifest. The legacy `tools/runtime-test` review suites instead run the Three.js client
 and do not provision or select Unity builds.
 
+For the remote equivalent of the existing U2 candidate build, use the bounded [Unity Build Automation
+bridge](../../docs/unity-cloud-build-bridge.md). It provisions the ignored custody inputs, lets
+`U2CombatPreview` generate and select its temporary review scene, and emits the same manifest shape;
+it does not make the candidate public or replace browser/device acceptance.
+
 Resolve and record the actual Editor executable before a Unity checkpoint. A bare `Unity.exe` in an
 evidence command is only an abbreviation: on Windows, `Get-Command Unity.exe` or `where.exe Unity.exe`
 may resolve a WindowsApps `unity` CLI/MCP shim rather than the Editor. The current project machine's

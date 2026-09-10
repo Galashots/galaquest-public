@@ -22,9 +22,21 @@ namespace GalaQuest.Editor
     {
         public const string Temporary = "Assets/U2CombatPreviewTemporary";
         public const string HeroSource = "Assets/GalaQuest/Migration/SourceAssets/VisibleArmor/Hero.fbx";
-        private const string CandidateSha = "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db";
+        public const string CandidateFbxSha256 = "283cf0579fc864a1e599f7c2ccda3e0b4fdd930d566c04225c8dc88b10be77db";
+        public const string CandidateTextureSha256 = "9fb9eb5758673cbc3670ad95d1b2e2b9bf075a0699d68aa119ab334f3847d812";
+        private const string CandidateFbxName = "lava-gremlin-local-v1.fbx";
+        private const string CandidateTextureName = "texture_0_base_color.png";
+        private static EditorBuildSettingsScene[] cloudPreviousScenes;
+        private static U2BuildSettingsScope cloudSettings;
+        private static string cloudSourceSha;
         public static string RepoRoot => Path.GetFullPath(Path.Combine(Application.dataPath, "../../.."));
         public static string CandidateDirectory => Path.Combine(RepoRoot, ".local/m2/gremlin-local-rig");
+
+        public static void ValidateExternalInputs()
+        {
+            RequireHashedInput(Path.Combine(CandidateDirectory, CandidateFbxName), CandidateFbxSha256);
+            RequireHashedInput(Path.Combine(CandidateDirectory, "../gremlin-body", CandidateTextureName), CandidateTextureSha256);
+        }
 
         public static GalaQuestCombatContent Prepare()
         {
@@ -52,12 +64,14 @@ namespace GalaQuest.Editor
 
         private static GalaQuestCombatContent Generate()
         {
-            var fbx = Path.Combine(CandidateDirectory, "lava-gremlin-local-v1.fbx");
-            if (!File.Exists(fbx) || Hash(fbx) != CandidateSha) throw new BuildFailedException("Expected the measured local gremlin FBX candidate");
+            var fbx = Path.Combine(CandidateDirectory, CandidateFbxName);
+            RequireHashedInput(fbx, CandidateFbxSha256);
+            var texture = Path.Combine(CandidateDirectory, "../gremlin-body", CandidateTextureName);
+            RequirePresentInput(texture);
             if (Directory.Exists(Temporary)) throw new BuildFailedException("Preserve pre-existing candidate preview assets: " + Temporary);
             AssetDatabase.CreateFolder("Assets", "U2CombatPreviewTemporary");
             File.Copy(fbx, Temporary + "/Gremlin.fbx");
-            File.Copy(Path.Combine(CandidateDirectory, "../gremlin-body/texture_0_base_color.png"), Temporary + "/GremlinColor.png");
+            File.Copy(texture, Temporary + "/GremlinColor.png");
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             var importer = (ModelImporter)AssetImporter.GetAtPath(Temporary + "/Gremlin.fbx");
             importer.animationType = ModelImporterAnimationType.Generic;
@@ -208,10 +222,55 @@ namespace GalaQuest.Editor
                     throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
         }
 
+        // Unity Build Automation calls these methods from its Advanced settings.
+        // The shell pre-build hook provisions the ignored custody inputs first;
+        // this hook then prepares the exact generated scene that UBA exports.
+        public static void PreExport()
+        {
+            var sourceSha = ResolveSourceSha();
+            RequireCleanCheckout();
+            var content = Prepare();
+            var scene = PrepareScene(content);
+            cloudPreviousScenes = EditorBuildSettings.scenes;
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scene, true) };
+            cloudSourceSha = sourceSha;
+            if (Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1")
+            {
+                cloudSettings = new U2BuildSettingsScope();
+                cloudSettings.UseFastReview();
+            }
+            Debug.Log("Unity Build Automation prepared exact U2 review scene: " + scene);
+        }
+
+        public static void PostExport(string exportPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(cloudSourceSha))
+                    throw new BuildFailedException("Unity Build Automation PostExport ran without PreExport preparation");
+                ValidateExternalInputs();
+                WriteReviewManifest(exportPath, cloudSourceSha, Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1",
+                    Path.Combine(exportPath, "candidate-build-manifest.json"));
+            }
+            finally
+            {
+                EditorBuildSettings.scenes = cloudPreviousScenes ?? EditorBuildSettings.scenes;
+                cloudPreviousScenes = null;
+                cloudSourceSha = null;
+                if (cloudSettings != null)
+                {
+                    var settings = cloudSettings;
+                    cloudSettings = null;
+                    settings.Dispose();
+                }
+            }
+        }
+
         public static void BuildWebGL()
         {
-            var sourceSha = Git("rev-parse HEAD");
-            if (!string.IsNullOrWhiteSpace(Git("status --porcelain"))) throw new BuildFailedException("Commit runtime changes before an exact-source candidate build");
+            var sourceSha = ResolveSourceSha();
+            RequireCleanCheckout();
+            ValidateExternalInputs();
             var output = Path.Combine(Application.dataPath, "../Builds/GalaQuestWebGL");
             var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
             var settings = new U2BuildSettingsScope();
@@ -226,27 +285,66 @@ namespace GalaQuest.Editor
                     locationPathName = output, options = BuildOptions.StrictMode
                 });
                 if (report.summary.result != BuildResult.Succeeded) throw new BuildFailedException("Candidate build failed: " + report.summary.result);
-                var files = Directory.GetFiles(Path.Combine(output, "Build"))
-                    .Select(path => new { name = Path.GetFileName(path), bytes = new FileInfo(path).Length, sha256 = Hash(path) }).ToArray();
-#if UNITY_WEBGL
-                var optimization = UnityEditor.WebGL.UserBuildSettings.codeOptimization.ToString();
-#else
-                var optimization = "PlatformDefault";
-#endif
-                var manifest = new { sourceSha, buildFlavor = "LOCAL_CANDIDATE_REVIEW", candidateFbxSha256 = CandidateSha,
-                    candidateTextureSha256 = Hash(Path.Combine(CandidateDirectory, "../gremlin-body/texture_0_base_color.png")),
-                    heroGripCandidateSha256 = U2HeroGripPreview.CandidateSha,
-                    heroGripOwnerApprovedForPlaytest = true,
-                    productionPromotion = false, sceneRecipe = "U2CombatPreview", fastIteration,
-                    optimization, compression = PlayerSettings.WebGL.compressionFormat.ToString(), files };
                 var evidencePath = Path.Combine(RepoRoot, ".local/m2/preview-build-" + sourceSha.Substring(0, 7) + (fastIteration ? "-fast" : "") + ".json");
-                File.WriteAllText(evidencePath, JsonConvert.SerializeObject(manifest, Formatting.Indented));
+                WriteReviewManifest(output, sourceSha, fastIteration, evidencePath);
                 Debug.Log("Candidate review build complete: " + evidencePath);
             }
             finally
             {
                 settings.Dispose();
             }
+        }
+
+        private static void WriteReviewManifest(string outputRoot, string sourceSha, bool fastIteration, string manifestPath)
+        {
+            var buildDirectory = Path.Combine(outputRoot, "Build");
+            if (!Directory.Exists(buildDirectory)) throw new BuildFailedException("WebGL output is missing its Build directory: " + buildDirectory);
+            var files = Directory.GetFiles(buildDirectory)
+                .Select(path => new { name = Path.GetFileName(path), bytes = new FileInfo(path).Length, sha256 = Hash(path) }).ToArray();
+#if UNITY_WEBGL
+            var optimization = UnityEditor.WebGL.UserBuildSettings.codeOptimization.ToString();
+#else
+            var optimization = "PlatformDefault";
+#endif
+            var manifest = new { sourceSha, buildFlavor = "LOCAL_CANDIDATE_REVIEW", candidateFbxSha256 = CandidateFbxSha256,
+                candidateTextureSha256 = CandidateTextureSha256,
+                heroGripCandidateSha256 = U2HeroGripPreview.CandidateSha,
+                heroGripOwnerApprovedForPlaytest = true,
+                productionPromotion = false, sceneRecipe = "U2CombatPreview", fastIteration,
+                optimization, compression = PlayerSettings.WebGL.compressionFormat.ToString(), files };
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath));
+            File.WriteAllText(manifestPath, JsonConvert.SerializeObject(manifest, Formatting.Indented));
+        }
+
+        private static void RequireHashedInput(string path, string expectedSha256)
+        {
+            RequirePresentInput(path);
+            var actual = Hash(path);
+            if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                throw new BuildFailedException("Controlled U2 review input hash mismatch: " + path + " expected " + expectedSha256 + " got " + actual);
+        }
+
+        private static void RequirePresentInput(string path)
+        {
+            if (!File.Exists(path)) throw new BuildFailedException("Missing controlled U2 review input; run the cloud provisioning hook: " + path);
+        }
+
+        private static void RequireCleanCheckout()
+        {
+            if (!string.IsNullOrWhiteSpace(Git("status --porcelain")))
+                throw new BuildFailedException("Commit runtime changes before an exact-source candidate build");
+        }
+
+        private static string ResolveSourceSha()
+        {
+            var sourceSha = Git("rev-parse HEAD");
+            foreach (var variable in new[] { "SCM_REVISION", "BUILD_REVISION" })
+            {
+                var declared = Environment.GetEnvironmentVariable(variable);
+                if (!string.IsNullOrWhiteSpace(declared) && !string.Equals(declared.Trim(), sourceSha, StringComparison.OrdinalIgnoreCase))
+                    throw new BuildFailedException(variable + " does not match the checked-out Git HEAD: " + declared + " vs " + sourceSha);
+            }
+            return sourceSha;
         }
 
         private static AnimationClip Clip(string path, string suffix)
