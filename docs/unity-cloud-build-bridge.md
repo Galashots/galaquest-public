@@ -56,8 +56,8 @@ GQ_U2_REVIEW_ASSET_BEARER_TOKEN=<optional Owner secret, only if the gateway requ
 candidate build; set it only for an explicitly fast review iteration. The bridge also checks the
 Build Automation-provided `BUILD_REVISION` and `SCM_REVISION` when present against Git `HEAD`.
 
-The provisioner discovers the checkout root with Git from `PROJECT_DIRECTORY` (the
-`unity/GalaQuest` project), so controlled inputs land under the repository's ignored `.local/m2/`
+The provisioner derives the checkout root from its checked-in `tools/unity-build-automation/`
+script location rather than invoking Git from `PROJECT_DIRECTORY`, so controlled inputs land under the repository's ignored `.local/m2/`
 tree. Pre-export's clean-source guard tolerates only Build Automation's generated
 `Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset` and that file's possible
 Unity `.meta` chain. Any other tracked or untracked path, including another file inside

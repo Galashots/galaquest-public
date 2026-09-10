@@ -46,18 +46,23 @@ test('cloud provisioning names both custody inputs, verifies expected bytes and 
   assert.match(script, /6804038/);
   assert.match(script, /Missing required controlled U2 input URL/);
   assert.match(script, /verification failed/);
+  assert.match(script, /BASH_SOURCE/);
+  assert.doesNotMatch(script, /git -C/);
   assert.doesNotMatch(script, /drive\.google\.com\/uc\?export=download/);
+  assert.match(read('.gitattributes'), /^tools\/unity-build-automation\/provision-u2-review-inputs\.sh text eol=lf$/m);
 });
 
-test('cloud provisioner resolves the repository root from the Unity project directory and rejects bad bytes', () => {
+test('cloud provisioner resolves the repository root from its checked-in script location and rejects bad bytes', () => {
   const fixture = mkdtempSync(join(tmpdir(), 'gq-uba-provision-'));
   const curlOutputs = `${fixture}-curl-outputs`;
   const project = join(fixture, 'unity/GalaQuest');
   const bin = join(fixture, 'bin');
+  const provisioner = join(fixture, 'tools/unity-build-automation/provision-u2-review-inputs.sh');
   mkdirSync(project, { recursive: true });
   mkdirSync(bin);
+  mkdirSync(join(fixture, 'tools/unity-build-automation'), { recursive: true });
   writeFileSync(join(fixture, '.gitignore'), '.local/\n');
-  cpSync(join(root, 'tools/unity-build-automation/provision-u2-review-inputs.sh'), join(fixture, 'provision.sh'));
+  cpSync(join(root, 'tools/unity-build-automation/provision-u2-review-inputs.sh'), provisioner);
   writeFileSync(join(bin, 'curl'), `#!/usr/bin/env bash
 set -euo pipefail
 while [[ $# -gt 0 ]]; do
@@ -73,10 +78,11 @@ printf '%s\\n' "$output" >> "${curlOutputs}"
   git(fixture, 'add', '.');
   git(fixture, 'commit', '-qm', 'fixture');
 
-  const result = spawnSync('bash', [join(fixture, 'provision.sh')], {
+  const result = spawnSync('bash', [provisioner], {
     cwd: project,
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, IS_BUILDER: 'true', PROJECT_DIRECTORY: project,
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, IS_BUILDER: 'true',
+      PROJECT_DIRECTORY: join(fixture, 'intentionally-not-a-project'),
       GQ_U2_GREMLIN_FBX_URL: 'https://fixtures.invalid/gremlin.fbx',
       GQ_U2_GREMLIN_TEXTURE_URL: 'https://fixtures.invalid/gremlin.png' },
   });
