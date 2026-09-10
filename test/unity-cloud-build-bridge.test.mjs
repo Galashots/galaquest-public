@@ -94,6 +94,12 @@ printf '%s\\n' "$output" >> "${curlOutputs}"
   assert.equal(git(fixture, 'status', '--porcelain'), '', 'ignored provisioning attempts must not dirty source');
 });
 
+test('batch-mode cloud preparation preserves interactive untitled-scene safety', () => {
+  const source = read('unity/GalaQuest/Assets/GalaQuest/Editor/U2CombatPreview.cs');
+  assert.match(source, /if \(!Application\.isBatchMode && string\.IsNullOrEmpty\(UnityEngine\.SceneManagement\.SceneManager\.GetSceneAt\(i\)\.path\)\)/);
+  assert.match(source, /Save or close untitled scenes before preview preparation; no user scene is discarded/);
+});
+
 test('exact-source guard allows only the known Unity Build Automation manifest state', () => {
   const fixture = mkdtempSync(join(tmpdir(), 'gq-uba-clean-'));
   const manifest = 'unity/GalaQuest/Assets/__UnityCloud__/Resources/UnityCloudBuildManifest.scriptable.asset';
