@@ -9,9 +9,13 @@ if [[ "${IS_BUILDER:-}" != "true" && "${GQ_U2_PROVISION_LOCAL:-}" != "1" ]]; the
   exit 2
 fi
 
-project_directory="${PROJECT_DIRECTORY:-$(pwd)}"
-if ! repo_root="$(git -C "$project_directory" rev-parse --show-toplevel 2>/dev/null)" || [[ -z "$repo_root" ]]; then
-  echo "Could not resolve the Git repository root from Unity project directory: $project_directory" >&2
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+if ! repo_root="$(cd -- "$script_directory/../.." && pwd -P)" || [[ -z "$repo_root" ]]; then
+  echo "Could not resolve the repository root from pre-build script location: $script_directory" >&2
+  exit 2
+fi
+if [[ ! -e "$repo_root/.git" ]]; then
+  echo "Resolved pre-build repository root has no Git metadata: $repo_root" >&2
   exit 2
 fi
 cd "$repo_root"
