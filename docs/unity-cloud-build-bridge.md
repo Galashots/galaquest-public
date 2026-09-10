@@ -10,7 +10,17 @@ pre-build hook then downloads the two ignored custody inputs into the paths alre
 `U2CombatPreview`, using controlled HTTPS URLs and verifying both byte size and SHA-256 before Unity
 starts. It never logs the URLs or bearer token and never accepts a public Google Drive link.
 
-The existing `U2CombatPreview.PreExport()` method calls `Prepare()` and `PrepareScene()`, then temporarily
+`PreExport()` first proves the checkout is clean, then seeds the Editor's scene state. Unity always keeps
+at least one scene open, and Build Automation starts on its own unsaved untitled scene, so no amount of
+closing scenes can reach the named-scene state the preview authoring requires: closing the last scene
+fails. `SeedBatchModeScene()` therefore opens the committed
+`Assets/GalaQuest/Emberworks/Scenes/EmberworksDeep.unity` with `OpenSceneMode.Single`, which replaces the
+host's untitled scene with one named, saved scene. It runs in batch mode only, so an interactive Editor
+never has scene state replaced and unsaved developer work still stops the build through
+`RequireNamedScenes()`. `BuildWebGL` seeds the same way for local `-batchmode` runs. Both authoring flows
+below stay additive.
+
+The existing `U2CombatPreview.PreExport()` method then calls `Prepare()` and `PrepareScene()`, and temporarily
 sets `EditorBuildSettings.scenes` to the generated
 `Assets/U2CombatPreviewTemporary/EmberworksFightPreview.unity`. This prevents the cloud build from
 silently using the checked-in default scene. `PostExport(string)` writes
@@ -99,6 +109,13 @@ path was looked up from the project subdirectory and skipped, after which Build 
 manifest tripped the original all-or-nothing clean check. The repository repair corrects the documented
 dashboard path, discovers the real Git root during provisioning, and narrowly admits that generated
 manifest state.
+
+Builds #2-#7 each cleared one further environment assumption: the pre-build script's shell and line
+endings, its Git-independent root resolution, and the Build Automation generated state admitted by the
+clean check. Build #7 (`d4db26f`) failed at `Could not close Unity batch-mode untitled housekeeping
+scene`, proving that the untitled host scene cannot be closed; the seeded-scene bootstrap above replaces
+that approach. No dashboard change is required for Build #8 beyond pointing the target at the branch
+carrying the fix.
 
 Before Build #2, the Owner must change the dashboard Pre-build script field to
 `../../tools/unity-build-automation/provision-u2-review-inputs.sh` and retain the existing pre-export,

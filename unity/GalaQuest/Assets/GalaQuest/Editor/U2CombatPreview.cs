@@ -217,16 +217,25 @@ namespace GalaQuest.Editor
 
         private static void RequireNamedScenes()
         {
-            var untitled = Enumerable.Range(0, UnityEngine.SceneManagement.SceneManager.sceneCount)
-                .Select(UnityEngine.SceneManagement.SceneManager.GetSceneAt)
-                .Where(scene => string.IsNullOrEmpty(scene.path) && !EditorSceneManager.IsPreviewScene(scene))
-                .ToArray();
-            if (untitled.Length == 0) return;
-            if (!Application.isBatchMode)
-                throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
-            foreach (var scene in untitled)
-                if (!EditorSceneManager.CloseScene(scene, true))
-                    throw new BuildFailedException("Could not close Unity batch-mode untitled housekeeping scene");
+            for (var i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
+                if (string.IsNullOrEmpty(UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).path))
+                    throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
+        }
+
+        // Unity always keeps at least one scene open, so a batch-mode host that
+        // starts on its own untitled housekeeping scene can never reach a state
+        // where no untitled scene exists by closing scenes: closing the last one
+        // fails. Seed a committed, saved scene instead. Single closes whatever the
+        // host opened and leaves exactly one named, clean scene, after which the
+        // additive authoring flows below hold without a batch-mode exception.
+        // Interactive Editor state is never discarded; a developer's unsaved work
+        // still stops the build through RequireNamedScenes.
+        private static void SeedBatchModeScene()
+        {
+            if (!Application.isBatchMode) return;
+            var seeded = EditorSceneManager.OpenScene(EmberworksGreyboxBuild.ScenePath, OpenSceneMode.Single);
+            if (!seeded.IsValid())
+                throw new BuildFailedException("Could not seed the committed batch-mode scene: " + EmberworksGreyboxBuild.ScenePath);
         }
 
         // Unity Build Automation calls these methods from its Advanced settings.
@@ -236,6 +245,7 @@ namespace GalaQuest.Editor
         {
             var sourceSha = ResolveSourceSha();
             RequireCleanCheckout();
+            SeedBatchModeScene();
             var content = Prepare();
             var scene = PrepareScene(content);
             cloudPreviousScenes = EditorBuildSettings.scenes;
@@ -277,6 +287,7 @@ namespace GalaQuest.Editor
         {
             var sourceSha = ResolveSourceSha();
             RequireCleanCheckout();
+            SeedBatchModeScene();
             ValidateExternalInputs();
             var output = Path.Combine(Application.dataPath, "../Builds/GalaQuestWebGL");
             var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
