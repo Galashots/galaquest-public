@@ -13,6 +13,9 @@ namespace GalaQuest.Tests
     {
         private const string ProfileId = "profile-aaaaaaaa";
         private const string Welcome = "{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":0}";
+        // net/gameServerCore.mjs RUNE_FORGE_POSITION, and an approach inside RUNE_FORGE_REACH_METERS.
+        private static readonly Vector3 ForgeWorldPosition = new Vector3(7.2f, 0f, 17.2f);
+        private static readonly Vector3 ForgeApproachPosition = new Vector3(5f, 0f, 15f);
         private const string ValidState = "{\"v\":4,\"type\":\"forge-state\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":0,\"forge\":{\"status\":\"ready\",\"contentVersion\":\"2026-09-08.1\",\"requiredSuccesses\":2,\"packs\":[{\"id\":\"grapheme-er-family\",\"title\":\"Sound runes\"}],\"entitlement\":{\"id\":\"emberworks.rune-forge.magmalord-helmet.v1\",\"itemId\":\"helmet_magmalord\",\"displayName\":\"MagmaLord Helmet\"}}}";
 
         [Test]
@@ -126,6 +129,63 @@ namespace GalaQuest.Tests
             {
                 UnityEngine.Object.DestroyImmediate(presenterObject);
                 UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        [Test]
+        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint()
+        {
+            var scene = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                UnityEditor.SceneManagement.NewSceneMode.Single);
+            GameObject pocket = null;
+            GameObject heroObject = null;
+            GameObject cameraObject = null;
+            try
+            {
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RuneForgeAuthoring.PocketPrefabPath);
+                Assert.That(prefab, Is.Not.Null, "Run the bounded Rune Forge authoring command first.");
+                pocket = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
+                pocket.transform.position = ForgeWorldPosition;
+
+                // Only the controls the presenter shows together while a task is active can hide
+                // one another, so that is the arrangement the player actually has to work with.
+                var active = new[] { "rune", "hammer", "hint", "hear" };
+                foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(true))
+                    item.gameObject.SetActive(active.Contains(item.Kind));
+                Physics.SyncTransforms();
+
+                heroObject = new GameObject("Hero");
+                heroObject.transform.position = ForgeApproachPosition;
+                cameraObject = new GameObject("GalaQuestGameplayCamera");
+                var camera = cameraObject.AddComponent<Camera>();
+                camera.fieldOfView = 42f;
+                camera.nearClipPlane = .1f;
+                camera.farClipPlane = 160f;
+                cameraObject.AddComponent<GalaQuestGameplayCamera>().Configure(heroObject.transform);
+
+                var finder = typeof(GalaQuestRuneForgePresenter).GetMethod("FindInteractable",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                Assert.That(finder, Is.Not.Null);
+                foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
+                {
+                    // This is exactly what RecordBrowserControlDiagnostics offers the player and the
+                    // browser driver as this control's tap point.
+                    var point = camera.WorldToScreenPoint(item.transform.position);
+                    Assert.That(point.z, Is.GreaterThan(0f), item.name + " projects behind the gameplay camera.");
+                    var winner = (GalaQuestRuneForgeInteractable)finder.Invoke(
+                        null, new object[] { camera.ScreenPointToRay(point) });
+                    Assert.That(winner, Is.SameAs(item), item.name + " (" + item.Kind
+                        + ") cannot be tapped at its own projected point; "
+                        + (winner == null ? "nothing" : winner.name + " (" + winner.Kind + ")")
+                        + " is in front of it at the gameplay camera.");
+                }
+            }
+            finally
+            {
+                if (cameraObject != null) UnityEngine.Object.DestroyImmediate(cameraObject);
+                if (heroObject != null) UnityEngine.Object.DestroyImmediate(heroObject);
+                if (pocket != null) UnityEngine.Object.DestroyImmediate(pocket);
             }
         }
 

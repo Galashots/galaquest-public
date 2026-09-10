@@ -143,7 +143,10 @@ namespace GalaQuest.Editor
                 Interactable("Rune" + (index + 1), root.transform, "rune", "", new Vector3(-1f + index, .38f, -1.05f), new Vector3(.62f, .18f, .62f), rune, "?");
             Interactable("ForgeHammer", root.transform, "hammer", "", new Vector3(1.45f, .55f, -.9f), new Vector3(.32f, .55f, .30f), iron, "STRIKE");
             Interactable("HintBell", root.transform, "hint", "", new Vector3(-1.55f, .45f, -.9f), new Vector3(.28f, .4f, .28f), ember, "HINT");
-            Interactable("SoundPlaque", root.transform, "hear", "", new Vector3(-1.55f, .45f, -.3f), new Vector3(.28f, .4f, .28f), rune, "HEAR");
+            // HINT and HEAR are the only two controls the presenter shows together on this side of
+            // the dais, so HEAR needs its own lateral position: directly behind HintBell it is hidden
+            // from the gameplay camera and every tap on it lands on the bell in front instead.
+            Interactable("SoundPlaque", root.transform, "hear", "", new Vector3(-2f, .45f, -.35f), new Vector3(.28f, .4f, .28f), rune, "HEAR");
             Interactable("ClaimAnvil", root.transform, "claim", "", new Vector3(0, .55f, -.85f), new Vector3(.85f, .42f, .72f), ember, "CLAIM");
             Interactable("EquipStand", root.transform, "equip", "", new Vector3(0, .55f, -.85f), new Vector3(.85f, .42f, .72f), rune, "EQUIP");
             return root;
