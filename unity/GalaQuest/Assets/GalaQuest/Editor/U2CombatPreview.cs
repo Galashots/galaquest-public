@@ -217,9 +217,16 @@ namespace GalaQuest.Editor
 
         private static void RequireNamedScenes()
         {
-            for (var i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
-                if (!Application.isBatchMode && string.IsNullOrEmpty(UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).path))
-                    throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
+            var untitled = Enumerable.Range(0, UnityEngine.SceneManagement.SceneManager.sceneCount)
+                .Select(UnityEngine.SceneManagement.SceneManager.GetSceneAt)
+                .Where(scene => string.IsNullOrEmpty(scene.path) && !EditorSceneManager.IsPreviewScene(scene))
+                .ToArray();
+            if (untitled.Length == 0) return;
+            if (!Application.isBatchMode)
+                throw new BuildFailedException("Save or close untitled scenes before preview preparation; no user scene is discarded");
+            foreach (var scene in untitled)
+                if (!EditorSceneManager.CloseScene(scene, true))
+                    throw new BuildFailedException("Could not close Unity batch-mode untitled housekeeping scene");
         }
 
         // Unity Build Automation calls these methods from its Advanced settings.
