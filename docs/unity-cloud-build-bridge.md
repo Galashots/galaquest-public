@@ -27,6 +27,16 @@ silently using the checked-in default scene. `PostExport(string)` writes
 `candidate-build-manifest.json` beside the WebGL `Build/` directory and records the exact checked-out
 SHA, the candidate input hashes, and the hashes of every WebGL output file.
 
+The fast-review settings scope is constructed before preparation can fail. It snapshots and restores both
+`ProjectSettings.asset` and `EditorBuildSettings.asset`, including the temporary scene list, and rejects
+unrelated dirty persistent assets before its supported `File/Save Project` cleanup. A preparation exception
+cleans up through `PreExport`'s catch path; a post-export success or callback failure cleans up through
+`PostExport`'s `finally` path. Unity's [Build Automation callback documentation](https://docs.unity.com/en-us/build-automation/advanced-build-configuration/run-custom-scripts-during-the-build-process)
+does not promise that post-export runs when the player export stops early, so an export failure that never
+reaches `PostExport` remains an explicit UBA lifecycle limitation rather than an assumed cleanup pass. An
+orderly Editor quit also invokes the same cleanup fallback; a crash or forced process termination cannot be
+claimed to run managed cleanup. The direct local `BuildWebGL()` path owns its own `finally` cleanup.
+
 The direct local method remains `GalaQuest.Editor.U2CombatPreview.BuildWebGL`. It still uses the same
 preparation, scene, input validation, deterministic output directory, and manifest writer.
 

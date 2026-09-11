@@ -31,6 +31,29 @@ test('Unity cloud bridge keeps the existing U2 entry point and generated-scene s
   assert.match(source, /sourceSha/);
   assert.match(source, /BUILD_REVISION/);
   assert.match(source, /SCM_REVISION/);
+
+  const pre = source.match(/public static void PreExport\(\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(pre, 'PreExport must remain discoverable');
+  const scope = pre[1].indexOf('new U2BuildSettingsScope()');
+  const prepare = pre[1].indexOf('var content = Prepare();');
+  assert.ok(scope >= 0 && prepare >= 0 && scope < prepare,
+    'PreExport constructs the settings scope before preparation can fail');
+  assert.match(pre[1], /catch \(Exception error\)/);
+  assert.match(pre[1], /ReleaseCloudState\(/);
+  assert.match(pre[1], /EditorApplication\.quitting \+= CleanupCloudStateOnEditorQuit/);
+
+  const post = source.match(/public static void PostExport\(string exportPath\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(post, 'PostExport must remain discoverable');
+  assert.match(post[1], /finally/);
+  assert.match(post[1], /ReleaseCloudState\(/,
+    'PostExport cleans up through its actual UBA callback finally path');
+
+  const settings = read('unity/GalaQuest/Assets/GalaQuest/Editor/U2BuildSettingsScope.cs');
+  assert.match(settings, /originalEditorBuildSettingsBytes/);
+  assert.match(settings, /public void Abort\(\)/,
+    'pre-export preparation failures restore in memory without saving partial assets');
+  assert.match(settings, /VerifyRestoredDiskSettings\(\)/,
+    'cleanup verifies both project settings files after restoration');
 });
 
 test('cloud provisioning names both custody inputs, verifies expected bytes and hashes, and fails closed', () => {

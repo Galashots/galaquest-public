@@ -26,7 +26,6 @@ namespace GalaQuest.Editor
         public const string CandidateTextureSha256 = "9fb9eb5758673cbc3670ad95d1b2e2b9bf075a0699d68aa119ab334f3847d812";
         private const string CandidateFbxName = "lava-gremlin-local-v1.fbx";
         private const string CandidateTextureName = "texture_0_base_color.png";
-        private static EditorBuildSettingsScene[] cloudPreviousScenes;
         private static U2BuildSettingsScope cloudSettings;
         private static string cloudSourceSha;
         public static string RepoRoot => Path.GetFullPath(Path.Combine(Application.dataPath, "../../.."));
@@ -245,18 +244,29 @@ namespace GalaQuest.Editor
         {
             var sourceSha = ResolveSourceSha();
             RequireCleanCheckout();
-            SeedBatchModeScene();
-            var content = Prepare();
-            var scene = PrepareScene(content);
-            cloudPreviousScenes = EditorBuildSettings.scenes;
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scene, true) };
-            cloudSourceSha = sourceSha;
-            if (Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1")
+            if (cloudSettings != null || !string.IsNullOrWhiteSpace(cloudSourceSha))
+                throw new BuildFailedException("Previous U2 Build Automation state did not complete cleanup");
+            try
             {
                 cloudSettings = new U2BuildSettingsScope();
-                cloudSettings.UseFastReview();
+                EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;
+                EditorApplication.quitting += CleanupCloudStateOnEditorQuit;
+                SeedBatchModeScene();
+                var content = Prepare();
+                var scene = PrepareScene(content);
+                if (Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1")
+                    cloudSettings.UseFastReview();
+                EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scene, true) };
+                cloudSourceSha = sourceSha;
+                Debug.Log("Unity Build Automation prepared exact U2 review scene: " + scene);
             }
-            Debug.Log("Unity Build Automation prepared exact U2 review scene: " + scene);
+            catch (Exception error)
+            {
+                var cleanupError = ReleaseCloudState(false);
+                if (cleanupError != null)
+                    throw new AggregateException("U2 Build Automation preparation and cleanup both failed", error, cleanupError);
+                throw;
+            }
         }
 
         public static void PostExport(string exportPath)
@@ -271,16 +281,36 @@ namespace GalaQuest.Editor
             }
             finally
             {
-                EditorBuildSettings.scenes = cloudPreviousScenes ?? EditorBuildSettings.scenes;
-                cloudPreviousScenes = null;
-                cloudSourceSha = null;
-                if (cloudSettings != null)
-                {
-                    var settings = cloudSettings;
-                    cloudSettings = null;
-                    settings.Dispose();
-                }
+                var cleanupError = ReleaseCloudState();
+                if (cleanupError != null) throw cleanupError;
             }
+        }
+
+        private static Exception ReleaseCloudState(bool persistRestoration = true)
+        {
+            var settings = cloudSettings;
+            if (settings == null)
+            {
+                cloudSourceSha = null;
+                EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;
+                return null;
+            }
+            try
+            {
+                if (persistRestoration) settings.Dispose();
+                else settings.Abort();
+                cloudSettings = null;
+                cloudSourceSha = null;
+                EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;
+                return null;
+            }
+            catch (Exception error) { return error; }
+        }
+
+        private static void CleanupCloudStateOnEditorQuit()
+        {
+            var cleanupError = ReleaseCloudState();
+            if (cleanupError != null) Debug.LogException(cleanupError);
         }
 
         public static void BuildWebGL()
@@ -292,11 +322,13 @@ namespace GalaQuest.Editor
             var output = Path.Combine(Application.dataPath, "../Builds/GalaQuestWebGL");
             var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
             var settings = new U2BuildSettingsScope();
+            var exportStarted = false;
             try
             {
                 var content = Prepare();
                 var scene = PrepareScene(content);
                 if (fastIteration) settings.UseFastReview();
+                exportStarted = true;
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     scenes = new[] { scene }, target = BuildTarget.WebGL,
@@ -309,7 +341,8 @@ namespace GalaQuest.Editor
             }
             finally
             {
-                settings.Dispose();
+                if (exportStarted) settings.Dispose();
+                else settings.Abort();
             }
         }
 
