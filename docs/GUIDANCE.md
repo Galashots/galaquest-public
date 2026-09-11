@@ -64,6 +64,15 @@ auto-discovers that directory may use the discovery; a runtime that does not mus
 load the relevant canonical skill when the task requires it. Do not mirror skill prose into `.claude/skills/`
 or create another skill tree merely to satisfy a runtime discovery convention.
 
+First-party vendor skills — for example Unity's own CLI and engine skills — are installed into the
+runtime's user-global skills directory, outside this repository. That is capability, not authority: they
+rank **below** GalaQuest's checked-in skills and runbooks in the hierarchy above, and a GalaQuest rule
+wins wherever the two disagree. Install only the skills that teach the engine work GalaQuest actually
+does. A vendor skill never authorizes a package upgrade, a new Unity or cloud service, ads, in-app
+purchases, analytics, cloud save, paid AI usage, or any other provider spend; those remain Owner
+decisions under `AGENTS.md` regardless of what a vendor skill recommends. Do not install a second
+Editor-control path alongside the Unity CLI/Pipeline route that `unity/AGENTS.md` already owns.
+
 ## What durable guidance should contain
 
 Prefer statements that survive a new branch, agent, machine, and month:
