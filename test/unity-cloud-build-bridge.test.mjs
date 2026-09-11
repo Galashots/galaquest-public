@@ -52,8 +52,12 @@ test('Unity cloud bridge keeps the existing U2 entry point and generated-scene s
   assert.match(settings, /originalEditorBuildSettingsBytes/);
   assert.match(settings, /public void Abort\(\)/,
     'pre-export preparation failures restore in memory without saving partial assets');
-  assert.match(settings, /VerifyRestoredDiskSettings\(\)/,
+  assert.match(settings, /VerifyRestoredDiskSettings\(/,
     'cleanup verifies both project settings files after restoration');
+  assert.match(settings, /DescribeSettingsDelta\(/,
+    'a rejected cleanup names the serialized fields that moved, not just the two files');
+  assert.match(settings, /already differed on disk before this scope saved/,
+    'the guard separates drift it inherited from drift its own supported save produced');
 });
 
 test('cloud provisioning names both custody inputs, verifies expected bytes and hashes, and fails closed', () => {
