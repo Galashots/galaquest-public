@@ -56,7 +56,6 @@ namespace GalaQuest.Editor
             RequireCleanAssets(true);
             if (!EditorApplication.ExecuteMenuItem("File/Save Project"))
                 throw new BuildFailedException("Could not save restored build settings");
-            RestorePersistentSettings();
             VerifyRestoredDiskSettings();
             disposed = true;
         }
@@ -98,23 +97,16 @@ namespace GalaQuest.Editor
 
         private void VerifyRestoredDiskSettings()
         {
-            if (!originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath))
-                || !originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath)))
-                throw new BuildFailedException("Build changed additional PlayerSettings; preserve and inspect the difference");
-        }
-
-        private void RestorePersistentSettings()
-        {
-            if (!originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath)))
+            var changedPaths = new[]
             {
-                File.WriteAllBytes(ProjectSettingsPath, originalProjectSettingsBytes);
-                Debug.Log("U2 build settings scope restored ProjectSettings.asset snapshot after build");
-            }
-            if (!originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath)))
-            {
-                File.WriteAllBytes(EditorBuildSettingsPath, originalEditorBuildSettingsBytes);
-                Debug.Log("U2 build settings scope restored EditorBuildSettings.asset snapshot after build");
-            }
+                originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath))
+                    ? null : ProjectSettingsPath,
+                originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath))
+                    ? null : EditorBuildSettingsPath
+            }.Where(path => path != null).ToArray();
+            if (changedPaths.Length != 0)
+                throw new BuildFailedException("Build changed additional persistent settings; preserve and inspect the difference: "
+                    + string.Join(", ", changedPaths));
         }
 
         private static bool SameScenes(EditorBuildSettingsScene[] left, EditorBuildSettingsScene[] right)

@@ -13,7 +13,7 @@ namespace GalaQuest.Tests
     public sealed class U2BuildSettingsScopeTests
     {
         [Test]
-        public void RestoresDiskSettingsAndRejectsUnrelatedUnsavedAssets()
+        public void RejectsUnrelatedPlayerSettingsMutationAndUnsavedAssets()
         {
             var path = "Assets/U2SettingsTest-" + Guid.NewGuid().ToString("N") + ".asset";
             var fixture = new TextAsset("Owned preload fixture");
@@ -25,7 +25,8 @@ namespace GalaQuest.Tests
             var originalProductName = PlayerSettings.productName;
             try
             {
-                using (var scope = new U2BuildSettingsScope())
+                var scope = new U2BuildSettingsScope();
+                try
                 {
                     scope.UseFastReview();
                     PlayerSettings.SetPreloadedAssets(new UnityEngine.Object[] { fixture });
@@ -33,6 +34,15 @@ namespace GalaQuest.Tests
                     Assert.That(EditorApplication.ExecuteMenuItem("File/Save Project"), Is.True);
                     Assert.That(File.ReadAllBytes("ProjectSettings/ProjectSettings.asset"), Is.Not.EqualTo(before),
                         "The probe must reproduce the build-produced settings write");
+
+                    var error = Assert.Throws<BuildFailedException>(() => scope.Dispose());
+                    Assert.That(error.Message, Does.Contain("ProjectSettings/ProjectSettings.asset"));
+                }
+                finally
+                {
+                    PlayerSettings.productName = originalProductName;
+                    Assert.That(EditorApplication.ExecuteMenuItem("File/Save Project"), Is.True);
+                    scope.Abort();
                 }
                 Assert.That(File.ReadAllBytes("ProjectSettings/ProjectSettings.asset"), Is.EqualTo(before));
                 Assert.That(PlayerSettings.GetPreloadedAssets(), Is.EqualTo(originalPreloads));

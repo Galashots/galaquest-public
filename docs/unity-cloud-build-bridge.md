@@ -27,9 +27,10 @@ silently using the checked-in default scene. `PostExport(string)` writes
 `candidate-build-manifest.json` beside the WebGL `Build/` directory and records the exact checked-out
 SHA, the candidate input hashes, and the hashes of every WebGL output file.
 
-The fast-review settings scope is constructed before preparation can fail. It snapshots and restores both
-`ProjectSettings.asset` and `EditorBuildSettings.asset`, including the temporary scene list, and rejects
-unrelated dirty persistent assets before its supported `File/Save Project` cleanup. A preparation exception
+The fast-review settings scope is constructed before preparation can fail. It snapshots both
+`ProjectSettings.asset` and `EditorBuildSettings.asset`, restores owned values through Unity APIs including
+the temporary scene list, and rejects any additional persistent-settings difference after its supported
+`File/Save Project` cleanup rather than raw-overwriting the snapshot. A preparation exception
 cleans up through `PreExport`'s catch path; a post-export success or callback failure cleans up through
 `PostExport`'s `finally` path. Unity's [Build Automation callback documentation](https://docs.unity.com/en-us/build-automation/advanced-build-configuration/run-custom-scripts-during-the-build-process)
 does not promise that post-export runs when the player export stops early, so an export failure that never
