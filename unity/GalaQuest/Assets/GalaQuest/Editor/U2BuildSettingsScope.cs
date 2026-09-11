@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
@@ -54,9 +55,10 @@ namespace GalaQuest.Editor
             // and excluding every unrelated dirty persistent asset, both before
             // the operation and after callbacks.
             RequireCleanAssets(true);
+            var changedBeforeSave = ChangedSettingsPaths();
             if (!EditorApplication.ExecuteMenuItem("File/Save Project"))
                 throw new BuildFailedException("Could not save restored build settings");
-            VerifyRestoredDiskSettings();
+            VerifyRestoredDiskSettings(changedBeforeSave);
             disposed = true;
         }
 
@@ -64,7 +66,7 @@ namespace GalaQuest.Editor
         {
             if (disposed) return;
             RestoreInMemory();
-            VerifyRestoredDiskSettings();
+            VerifyRestoredDiskSettings(ChangedSettingsPaths());
             disposed = true;
         }
 
@@ -95,18 +97,50 @@ namespace GalaQuest.Editor
 #endif
         }
 
-        private void VerifyRestoredDiskSettings()
+        private string[] ChangedSettingsPaths()
         {
-            var changedPaths = new[]
+            return new[]
             {
                 originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath))
                     ? null : ProjectSettingsPath,
                 originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath))
                     ? null : EditorBuildSettingsPath
             }.Where(path => path != null).ToArray();
-            if (changedPaths.Length != 0)
-                throw new BuildFailedException("Build changed additional persistent settings; preserve and inspect the difference: "
-                    + string.Join(", ", changedPaths));
+        }
+
+        // The guard is only actionable if it names the fields that moved and whether they
+        // moved before or during this scope's own supported save.
+        private void VerifyRestoredDiskSettings(string[] changedBeforeSave)
+        {
+            var changedPaths = ChangedSettingsPaths();
+            if (changedPaths.Length == 0) return;
+            var report = string.Concat(changedPaths.Select(path => Environment.NewLine + path + " "
+                + (changedBeforeSave.Contains(path)
+                    ? "(already differed on disk before this scope saved)"
+                    : "(first differed when this scope saved)")
+                + Environment.NewLine
+                + DescribeSettingsDelta(path, path == ProjectSettingsPath
+                    ? originalProjectSettingsBytes : originalEditorBuildSettingsBytes)));
+            throw new BuildFailedException("Build changed additional persistent settings; preserve and inspect the difference: "
+                + string.Join(", ", changedPaths) + report);
+        }
+
+        private static string DescribeSettingsDelta(string path, byte[] original)
+        {
+            const int maxLines = 25;
+            var before = SettingsLines(original);
+            var after = SettingsLines(File.ReadAllBytes(path));
+            var lines = before.Except(after).Take(maxLines).Select(line => "  - " + line)
+                .Concat(after.Except(before).Take(maxLines).Select(line => "  + " + line)).ToArray();
+            return lines.Length == 0
+                ? "  (no line-level difference; bytes differ only in line endings or trailing bytes)"
+                : string.Join(Environment.NewLine, lines);
+        }
+
+        private static string[] SettingsLines(byte[] bytes)
+        {
+            return new UTF8Encoding(false).GetString(bytes).Replace("\r\n", "\n").Split('\n')
+                .Select(line => line.Length > 200 ? line.Substring(0, 200) + "..." : line).ToArray();
         }
 
         private static bool SameScenes(EditorBuildSettingsScene[] left, EditorBuildSettingsScene[] right)
