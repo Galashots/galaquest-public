@@ -56,6 +56,7 @@ namespace GalaQuest.Editor
             RequireCleanAssets(true);
             if (!EditorApplication.ExecuteMenuItem("File/Save Project"))
                 throw new BuildFailedException("Could not save restored build settings");
+            RestorePersistentSettings();
             VerifyRestoredDiskSettings();
             disposed = true;
         }
@@ -100,6 +101,20 @@ namespace GalaQuest.Editor
             if (!originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath))
                 || !originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath)))
                 throw new BuildFailedException("Build changed additional PlayerSettings; preserve and inspect the difference");
+        }
+
+        private void RestorePersistentSettings()
+        {
+            if (!originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath)))
+            {
+                File.WriteAllBytes(ProjectSettingsPath, originalProjectSettingsBytes);
+                Debug.Log("U2 build settings scope restored ProjectSettings.asset snapshot after build");
+            }
+            if (!originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath)))
+            {
+                File.WriteAllBytes(EditorBuildSettingsPath, originalEditorBuildSettingsBytes);
+                Debug.Log("U2 build settings scope restored EditorBuildSettings.asset snapshot after build");
+            }
         }
 
         private static bool SameScenes(EditorBuildSettingsScene[] left, EditorBuildSettingsScene[] right)

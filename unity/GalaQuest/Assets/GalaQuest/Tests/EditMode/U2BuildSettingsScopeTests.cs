@@ -22,12 +22,14 @@ namespace GalaQuest.Tests
             var before = File.ReadAllBytes("ProjectSettings/ProjectSettings.asset");
             var originalPreloads = PlayerSettings.GetPreloadedAssets();
             var originalCompression = PlayerSettings.WebGL.compressionFormat;
+            var originalProductName = PlayerSettings.productName;
             try
             {
                 using (var scope = new U2BuildSettingsScope())
                 {
                     scope.UseFastReview();
                     PlayerSettings.SetPreloadedAssets(new UnityEngine.Object[] { fixture });
+                    PlayerSettings.productName = originalProductName + " U2 Scope Probe";
                     Assert.That(EditorApplication.ExecuteMenuItem("File/Save Project"), Is.True);
                     Assert.That(File.ReadAllBytes("ProjectSettings/ProjectSettings.asset"), Is.Not.EqualTo(before),
                         "The probe must reproduce the build-produced settings write");
@@ -42,7 +44,12 @@ namespace GalaQuest.Tests
                 Assert.That(EditorUtility.IsDirty(fixture), Is.True, "Do not silently save unrelated dirty assets");
                 Assert.That(File.GetLastWriteTimeUtc(path), Is.EqualTo(timestamp));
             }
-            finally { AssetDatabase.DeleteAsset(path); }
+            finally
+            {
+                PlayerSettings.productName = originalProductName;
+                EditorApplication.ExecuteMenuItem("File/Save Project");
+                AssetDatabase.DeleteAsset(path);
+            }
         }
 
         [Test]
