@@ -271,37 +271,61 @@ namespace GalaQuest.Editor
 
         public static void PostExport(string exportPath)
         {
+            var finalManifestPath = Path.Combine(exportPath, "candidate-build-manifest.json");
+            var temporaryManifestPath = finalManifestPath + ".tmp";
             try
             {
+                RemoveStaleCandidateManifest(temporaryManifestPath);
+                RemoveStaleCandidateManifest(finalManifestPath);
                 if (string.IsNullOrWhiteSpace(cloudSourceSha))
                     throw new BuildFailedException("Unity Build Automation PostExport ran without PreExport preparation");
+                var sourceSha = cloudSourceSha;
+                var fastIteration = Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1";
                 ValidateExternalInputs();
-                WriteReviewManifest(exportPath, cloudSourceSha, Environment.GetEnvironmentVariable("GQ_FAST_REVIEW_BUILD") == "1",
-                    Path.Combine(exportPath, "candidate-build-manifest.json"));
-            }
-            finally
-            {
+                WriteReviewManifest(exportPath, sourceSha, fastIteration, temporaryManifestPath);
                 var cleanupError = ReleaseCloudState();
                 if (cleanupError != null) throw cleanupError;
+                PromoteCandidateManifest(temporaryManifestPath, finalManifestPath);
             }
+            catch (Exception error)
+            {
+                DeleteCandidateManifests(temporaryManifestPath, finalManifestPath);
+                var cleanupError = ReleaseCloudState();
+                if (cleanupError != null)
+                    throw new AggregateException("U2 Build Automation PostExport and cleanup both failed", error, cleanupError);
+                throw;
+            }
+        }
+
+        private static void RemoveStaleCandidateManifest(string path)
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+
+        private static void PromoteCandidateManifest(string temporaryManifestPath, string finalManifestPath)
+        {
+            File.Move(temporaryManifestPath, finalManifestPath);
+        }
+
+        private static void DeleteCandidateManifests(string temporaryManifestPath, string finalManifestPath)
+        {
+            if (File.Exists(temporaryManifestPath)) File.Delete(temporaryManifestPath);
+            if (File.Exists(finalManifestPath)) File.Delete(finalManifestPath);
         }
 
         private static Exception ReleaseCloudState(bool persistRestoration = true)
         {
             var settings = cloudSettings;
-            if (settings == null)
-            {
-                cloudSourceSha = null;
-                EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;
-                return null;
-            }
+            // Relinquish ownership before Dispose: if settings verification fails,
+            // the orderly Editor-quit handler must not retry the same failed cleanup.
+            cloudSettings = null;
+            cloudSourceSha = null;
+            EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;
+            if (settings == null) return null;
             try
             {
                 if (persistRestoration) settings.Dispose();
                 else settings.Abort();
-                cloudSettings = null;
-                cloudSourceSha = null;
-                EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;
                 return null;
             }
             catch (Exception error) { return error; }

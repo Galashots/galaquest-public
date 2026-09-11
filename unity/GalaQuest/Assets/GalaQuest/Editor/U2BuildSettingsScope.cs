@@ -101,46 +101,33 @@ namespace GalaQuest.Editor
         {
             return new[]
             {
-                originalProjectSettingsBytes.SequenceEqual(File.ReadAllBytes(ProjectSettingsPath))
+                SameSerializedContent(originalProjectSettingsBytes, File.ReadAllBytes(ProjectSettingsPath))
                     ? null : ProjectSettingsPath,
-                originalEditorBuildSettingsBytes.SequenceEqual(File.ReadAllBytes(EditorBuildSettingsPath))
+                SameSerializedContent(originalEditorBuildSettingsBytes, File.ReadAllBytes(EditorBuildSettingsPath))
                     ? null : EditorBuildSettingsPath
             }.Where(path => path != null).ToArray();
         }
 
-        // The guard is only actionable if it names the fields that moved and whether they
-        // moved before or during this scope's own supported save.
         private void VerifyRestoredDiskSettings(string[] changedBeforeSave)
         {
             var changedPaths = ChangedSettingsPaths();
             if (changedPaths.Length == 0) return;
-            var report = string.Concat(changedPaths.Select(path => Environment.NewLine + path + " "
-                + (changedBeforeSave.Contains(path)
-                    ? "(already differed on disk before this scope saved)"
-                    : "(first differed when this scope saved)")
-                + Environment.NewLine
-                + DescribeSettingsDelta(path, path == ProjectSettingsPath
-                    ? originalProjectSettingsBytes : originalEditorBuildSettingsBytes)));
-            throw new BuildFailedException("Build changed additional persistent settings; preserve and inspect the difference: "
-                + string.Join(", ", changedPaths) + report);
+            throw new BuildFailedException("Build changed persistent settings serialized content; preserve and inspect: "
+                + string.Join(", ", changedPaths));
         }
 
-        private static string DescribeSettingsDelta(string path, byte[] original)
+        // Build #15 established that UBA may rewrite these files' line endings.
+        // This comparison deliberately preserves every serialized character beyond
+        // CRLF/CR representation: order, duplicates, values, indentation, intra-line
+        // whitespace, BOM, and terminal-newline presence all remain significant.
+        private static bool SameSerializedContent(byte[] left, byte[] right)
         {
-            const int maxLines = 25;
-            var before = SettingsLines(original);
-            var after = SettingsLines(File.ReadAllBytes(path));
-            var lines = before.Except(after).Take(maxLines).Select(line => "  - " + line)
-                .Concat(after.Except(before).Take(maxLines).Select(line => "  + " + line)).ToArray();
-            return lines.Length == 0
-                ? "  (no line-level difference; bytes differ only in line endings or trailing bytes)"
-                : string.Join(Environment.NewLine, lines);
+            return string.Equals(CanonicalSerializedText(left), CanonicalSerializedText(right), StringComparison.Ordinal);
         }
 
-        private static string[] SettingsLines(byte[] bytes)
+        private static string CanonicalSerializedText(byte[] bytes)
         {
-            return new UTF8Encoding(false).GetString(bytes).Replace("\r\n", "\n").Split('\n')
-                .Select(line => line.Length > 200 ? line.Substring(0, 200) + "..." : line).ToArray();
+            return new UTF8Encoding(false).GetString(bytes).Replace("\r\n", "\n").Replace('\r', '\n');
         }
 
         private static bool SameScenes(EditorBuildSettingsScene[] left, EditorBuildSettingsScene[] right)
