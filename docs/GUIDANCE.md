@@ -64,6 +64,33 @@ auto-discovers that directory may use the discovery; a runtime that does not mus
 load the relevant canonical skill when the task requires it. Do not mirror skill prose into `.claude/skills/`
 or create another skill tree merely to satisfy a runtime discovery convention.
 
+First-party vendor skills — for example Unity's own CLI and engine skills — are installed into the
+runtime's user-global skills directory, outside this repository. That is capability, not authority: they
+rank **below** GalaQuest's checked-in skills and runbooks in the hierarchy above, and a GalaQuest rule
+wins wherever the two disagree. Install only the skills that teach the engine work GalaQuest actually
+does. A vendor skill never authorizes a package upgrade, a new Unity or cloud service, ads, in-app
+purchases, analytics, cloud save, paid AI usage, or any other provider spend; those remain Owner
+decisions under `AGENTS.md` regardless of what a vendor skill recommends. Do not install a second
+Editor-control path alongside the Unity CLI/Pipeline route that `unity/AGENTS.md` already owns.
+
+The curated Unity set is recoverable without this repository holding vendor prose. `unity skill install
+claude-code` (or `codex`) writes the Unity CLI skill that ships with the installed CLI, so it always matches
+the CLI actually on PATH; it lands in the client's user-global skills directory — `~/.claude/skills/unity-cli`
+for Claude Code, `~/.agents/skills/unity-cli` for Codex — and `unity skill install --list` reports every
+supported client and its install state. The engine skills come from `Unity-Technologies/unity-agent-plugin`.
+Its `unity@unity-agent-plugin` plugin is all-or-nothing and bundles both a second copy of `unity-cli` and
+monetization/services skills, so install the development subset instead by copying these directories from
+`skills/<name>/` at a pinned upstream revision into the same user-global skills directory:
+
+`generate-editor-search-query`, `optimize-text-mesh-pro`, `optimize-web`, `physics-3d-collision`,
+`shader-graph-create-custom-node`, `ui`, `ui-imgui`, `ui-ugui`, `ui-uitk`, `urp-postprocessing`,
+`validate-urp-render-graph-renderer-feature`.
+
+Record the upstream revision in the PR that changes the set. Deliberately excluded, and not to be added
+without an Owner decision: `build-live-game`, `implement-in-app-purchases`, `levelplay-unity-integration`,
+`setup-multiplayer-services`, `setup-vivox-voice-chat`, `unity-package-management`, `migrate-birp-to-urp`,
+and `new-unity-project`.
+
 ## What durable guidance should contain
 
 Prefer statements that survive a new branch, agent, machine, and month:
