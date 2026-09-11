@@ -31,6 +31,55 @@ test('Unity cloud bridge keeps the existing U2 entry point and generated-scene s
   assert.match(source, /sourceSha/);
   assert.match(source, /BUILD_REVISION/);
   assert.match(source, /SCM_REVISION/);
+
+  const pre = source.match(/public static void PreExport\(\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(pre, 'PreExport must remain discoverable');
+  const scope = pre[1].indexOf('new U2BuildSettingsScope()');
+  const prepare = pre[1].indexOf('var content = Prepare();');
+  assert.ok(scope >= 0 && prepare >= 0 && scope < prepare,
+    'PreExport constructs the settings scope before preparation can fail');
+  assert.match(pre[1], /catch \(Exception error\)/);
+  assert.match(pre[1], /ReleaseCloudState\(/);
+  assert.match(pre[1], /EditorApplication\.quitting \+= CleanupCloudStateOnEditorQuit/);
+
+  const post = source.match(/public static void PostExport\(string exportPath\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(post, 'PostExport must remain discoverable');
+  assert.match(post[1], /ReleaseCloudState\(/,
+    'PostExport cleans up through its actual UBA callback path');
+
+  const settings = read('unity/GalaQuest/Assets/GalaQuest/Editor/U2BuildSettingsScope.cs');
+  assert.match(settings, /originalEditorBuildSettingsBytes/);
+  assert.match(settings, /public void Abort\(\)/,
+    'pre-export preparation failures restore in memory without saving partial assets');
+  assert.match(settings, /VerifyRestoredDiskSettings\(/,
+    'cleanup verifies both project settings files after restoration');
+  assert.match(settings, /SameSerializedContent\(/,
+    'settings verification uses its narrow logical serialized-content invariant');
+  assert.match(settings, /Replace\(.*\\r\\n.*Replace\(.*\\r/,
+    'only CRLF and CR line-ending drift are normalized');
+  assert.doesNotMatch(settings, /\.Trim\(/,
+    'settings verification must preserve terminal-newline meaning');
+  assert.doesNotMatch(settings, /\.OrderBy\(/,
+    'settings verification must preserve serialized line order');
+
+  assert.match(post[1], /RemoveStaleCandidateManifest/,
+    'PostExport removes a stale final receipt before doing work');
+  assert.match(post[1], /WriteReviewManifest\(exportPath, sourceSha, fastIteration, temporaryManifestPath\)/,
+    'PostExport prepares a non-final manifest first');
+  assert.match(post[1], /ReleaseCloudState\(\)/,
+    'PostExport performs the settings cleanup before finalizing success');
+  assert.match(post[1], /PromoteCandidateManifest\(temporaryManifestPath, finalManifestPath\)/,
+    'only cleanup success can promote the final candidate manifest');
+  assert.match(post[1], /DeleteCandidateManifests\(temporaryManifestPath, finalManifestPath\)/,
+    'any post-export failure removes both temporary and final receipts');
+
+  const release = source.match(/private static Exception ReleaseCloudState\(bool persistRestoration = true\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(release, 'cloud cleanup helper must remain discoverable');
+  assert.ok(release[1].indexOf('cloudSettings = null;') < release[1].indexOf('settings.Dispose()'),
+    'cleanup relinquishes static ownership before a failing Dispose can be retried');
+  assert.ok(release[1].indexOf('EditorApplication.quitting -= CleanupCloudStateOnEditorQuit;')
+    < release[1].indexOf('settings.Dispose()'),
+  'cleanup unsubscribes the quit handler before a failing Dispose can be retried');
 });
 
 test('cloud provisioning names both custody inputs, verifies expected bytes and hashes, and fails closed', () => {
