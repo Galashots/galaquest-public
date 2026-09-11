@@ -55,7 +55,12 @@ namespace GalaQuest.Editor
             var pocket = pocketObject.transform;
             var prize = pocket.Find("PrizeCage/MagmaLordForgeDisplayCopy")?.gameObject
                         ?? throw new BuildFailedException("Rune Forge pocket has no visible prize.");
-            var hero = Object.FindObjectsByType<Transform>(FindObjectsSortMode.None)
+            // Scope the hero to the scene being configured, as the pocket lookup
+            // above already does. A batch-mode host keeps its own seeded copy of
+            // EmberworksDeep open alongside this additively-opened preview copy,
+            // and an all-scenes search then matches a hero in each.
+            var hero = runtime.scene.GetRootGameObjects()
+                .SelectMany(item => item.GetComponentsInChildren<Transform>(true))
                 .Single(item => item.name == EmberworksGreyboxBuild.RuntimeHeroName);
             var presenter = runtime.GetComponent<GalaQuestRuneForgePresenter>()
                             ?? runtime.AddComponent<GalaQuestRuneForgePresenter>();

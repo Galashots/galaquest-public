@@ -94,14 +94,58 @@ printf '%s\\n' "$output" >> "${curlOutputs}"
   assert.equal(git(fixture, 'status', '--porcelain'), '', 'ignored provisioning attempts must not dirty source');
 });
 
-test('batch-mode cloud preparation removes only non-preview untitled scene state and preserves interactive safety', () => {
+test('batch entry points seed a committed scene instead of closing the host untitled scene', () => {
   const source = read('unity/GalaQuest/Assets/GalaQuest/Editor/U2CombatPreview.cs');
-  assert.match(source, /Where\(scene => string\.IsNullOrEmpty\(scene\.path\) && !EditorSceneManager\.IsPreviewScene\(scene\)\)/);
-  assert.match(source, /if \(!Application\.isBatchMode\)/);
-  assert.match(source, /EditorSceneManager\.CloseScene\(scene, true\)/);
-  assert.match(source, /Could not close Unity batch-mode untitled housekeeping scene/);
-  assert.match(source, /Save or close untitled scenes before preview preparation; no user scene is discarded/);
+  const seed = source.match(/private static void SeedBatchModeScene\(\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(seed, 'the batch-mode scene bootstrap must remain discoverable');
+  assert.match(seed[1], /if \(!Application\.isBatchMode\) return;/,
+    'interactive Editor state is never replaced');
+  assert.match(seed[1], /EditorSceneManager\.OpenScene\(EmberworksGreyboxBuild\.ScenePath, OpenSceneMode\.Single\)/,
+    'Single replaces whatever untitled scene the batch host opened with a committed scene');
+  assert.doesNotMatch(seed[1], /CloseScene/,
+    'Unity refuses to close its last scene, so the bootstrap must never try');
+
+  // Unity keeps at least one scene open, so the guard can only be satisfied by
+  // seeding a named scene. It must stay strict and identical in both modes.
+  const guard = source.match(/private static void RequireNamedScenes\(\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(guard, 'the untitled-scene guard must remain discoverable');
+  assert.match(guard[1], /Save or close untitled scenes before preview preparation; no user scene is discarded/);
+  assert.doesNotMatch(guard[1], /isBatchMode/, 'the guard carries no batch-mode escape hatch');
+  assert.doesNotMatch(guard[1], /CloseScene/, 'the guard never discards scene state to pass itself');
+
+  for (const [entry, body] of [
+    ['PreExport', source.match(/public static void PreExport\(\)\n        \{([\s\S]*?)\n        \}/)],
+    ['BuildWebGL', source.match(/public static void BuildWebGL\(\)\n        \{([\s\S]*?)\n            try/)],
+  ]) {
+    assert.ok(body, `${entry} must remain discoverable`);
+    const clean = body[1].indexOf('RequireCleanCheckout()');
+    const seeded = body[1].indexOf('SeedBatchModeScene()');
+    assert.ok(clean >= 0 && seeded >= 0, `${entry} proves cleanliness and seeds the batch scene`);
+    assert.ok(clean < seeded, `${entry} proves repository cleanliness before changing Editor state`);
+  }
+  assert.ok(source.indexOf('SeedBatchModeScene()') < source.indexOf('var content = Prepare();'),
+    'the batch scene is seeded before preview preparation runs');
+
+  // Both authoring flows stay additive so a developer's open scenes survive.
   assert.match(source, /EditorSceneManager\.NewScene\(NewSceneSetup\.EmptyScene, NewSceneMode\.Additive\)/);
+  assert.match(source, /EditorSceneManager\.OpenScene\(path, OpenSceneMode\.Additive\)/);
+});
+
+test('preview scene authoring resolves objects within the scene it configures', () => {
+  // Seeding a committed scene leaves two copies of EmberworksDeep loaded: the
+  // batch-mode host's, and the additively-opened preview copy. Build #8 proved
+  // an all-scenes lookup then matches a hero in each and throws "Sequence
+  // contains more than one matching element". Scene-scoped lookups are the
+  // codebase convention: EmberworksGreyboxBuild.FindSceneObject filters on
+  // candidate.scene, and the pocket lookup here filters on runtime.scene.
+  const source = read('unity/GalaQuest/Assets/GalaQuest/Editor/RuneForgeAuthoring.cs');
+  const configure = source.match(/public static void ConfigurePreview\(GameObject runtime, GalaQuestCombatContent content\)\n        \{([\s\S]*?)\n        \}/);
+  assert.ok(configure, 'the preview authoring entry point must remain discoverable');
+  assert.doesNotMatch(configure[1], /FindObjectsByType|FindAnyObjectByType|FindObjectOfType/,
+    'preview authoring must not search across every loaded scene');
+  assert.match(configure[1], /var hero = runtime\.scene\.GetRootGameObjects\(\)/,
+    'the hero is resolved from the scene being configured');
+  assert.match(configure[1], /RuntimeHeroName/);
 });
 
 test('exact-source guard allows only the known Unity Build Automation manifest state', () => {
