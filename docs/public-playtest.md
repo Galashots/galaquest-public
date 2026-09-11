@@ -83,3 +83,26 @@ cold-start delay as a game defect.
   Coordinate playtest sessions, or suspend the service in the dashboard when not in use.
 - Deploys track `main` automatically, so the URL is a moving target between sessions. This is
   exactly why a claim cites `/source-sha.json` rather than "the current deploy".
+
+## Serving a Unity WebGL candidate at /unity/
+
+`server.mjs` serves `unity/GalaQuest/Builds/GalaQuestWebGL/` at `/unity/`, but `.gitignore` excludes
+that directory, so the Unity artifact is never in an ordinary deploy and `/unity/` returns 404 on the
+`main` instance. A preview that must serve a Unity candidate therefore carries the built bytes on its
+own branch.
+
+Install a Unity Build Automation artifact with:
+
+```bash
+tools/unity-build-automation/install-u2-webgl-artifact.sh <artifact.zip>
+```
+
+The script pins the candidate's build number, source SHA and archive SHA-256, re-checks every shipped
+WebGL file against the hashes the build itself recorded, and **refuses** an archive that does not
+match rather than publishing a different build under the same review link. Installing, committing the
+result on a bounded branch, and opening a PR whose title contains `[render preview]` is the whole
+publication path; the preview stamps its own `/source-sha.json`, so the served commit stays checkable.
+
+Brotli is already handled: `.br` files are served with `content-encoding: br` to clients that offer
+it, and decompressed server-side for clients that do not, which is what makes the plain-HTTP iPad
+route work without a second copy of the build.
