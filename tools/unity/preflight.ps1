@@ -10,6 +10,10 @@
     It contains no machine-local paths: the Editor is discovered through the
     official Unity CLI and the project is resolved from this script's own
     checked-in location, so it travels with the repository.
+
+    Every Editor query names the resolved project with --project-path, so a
+    different Editor that happens to be connected can never answer for this
+    checkout. This script never closes an Editor it does not own.
 #>
 [CmdletBinding()]
 param(
@@ -21,6 +25,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+. (Join-Path $PSScriptRoot 'preflight-lib.ps1')
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $project = Join-Path $repo 'unity\GalaQuest'
@@ -39,12 +45,32 @@ function Fail {
     exit 1
 }
 
+# Capture stdout without letting a non-zero CLI exit become a terminating error:
+# a failed response must be classified, not thrown.
+function Invoke-UnityCli {
+    param([string[]] $Arguments)
+    try {
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        return (& unity @Arguments 2>&1 | Out-String)
+    } catch {
+        return ''
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 # The pinned version is the project's own, never a value copied into guidance.
 if (-not (Test-Path -LiteralPath $versionFile)) {
     Fail 'project' "ProjectVersion.txt is missing under $project" `
         'Confirm this script is running from a GalaQuest checkout.'
 }
-$pinned = ((Get-Content -LiteralPath $versionFile | Select-String '^m_EditorVersion:').Line -split ':\s*', 2)[1].Trim()
+$pinnedLine = Get-Content -LiteralPath $versionFile | Select-String '^m_EditorVersion:'
+if (-not $pinnedLine) {
+    Fail 'pinned-version' 'ProjectVersion.txt has no m_EditorVersion line' `
+        'Repair the Unity project metadata before continuing.'
+}
+$pinned = ($pinnedLine.Line -split ':\s*', 2)[1].Trim()
 Report 'project' 'PASS' $project
 Report 'pinned-version' 'PASS' $pinned
 
@@ -54,60 +80,66 @@ if (-not (Get-Command unity -ErrorAction SilentlyContinue)) {
 }
 Report 'unity-cli' 'PASS' (& unity --version)
 
-$editors = (& unity editors -i --format json | ConvertFrom-Json).data
-$match = $editors | Where-Object { $_.version -eq $pinned }
+$editorsResponse = Read-UnityCliResponse -Text (Invoke-UnityCli @('editors', '-i', '--format', 'json'))
+if (-not $editorsResponse.Ok) {
+    Fail 'pinned-editor' "Could not list installed Editors: $($editorsResponse.Reason)" `
+        'Run "unity editors -i" directly and resolve the CLI error it reports.'
+}
+$match = $editorsResponse.Value.data | Where-Object { $_.version -eq $pinned }
 if (-not $match) {
-    Fail 'pinned-editor' "No installed Editor reports $pinned (found: $(($editors.version) -join ', '))" `
+    $found = ($editorsResponse.Value.data.version) -join ', '
+    Fail 'pinned-editor' "No installed Editor reports $pinned (found: $found)" `
         "Install $pinned through Unity Hub or 'unity install $pinned'."
 }
 Report 'pinned-editor' 'PASS' $match[0].location
 
-function Get-OwnedInstance {
-    $status = & unity status --format json | ConvertFrom-Json
-    if (-not $status.data.instances) { return $null }
-    return $status.data.instances | Where-Object { $_.project -eq $project } | Select-Object -First 1
-}
+# --project-path selects the Editor owning this checkout. A connected Editor on a
+# different project answers "no Pipeline instance found" rather than standing in.
+$statusArgs = @('command', 'editor_status', '--project-path', $project, '--timeout', '60', '--format', 'json')
 
-$instance = Get-OwnedInstance
-if (-not $instance) {
+$probe = Test-UnityEditorReady -ResponseText (Invoke-UnityCli $statusArgs) -Project $project -PinnedVersion $pinned
+if (-not $probe.Ok -and -not $probe.Retryable -and -not $probe.Result) {
     if (-not $Start) {
-        Fail 'connected-editor' "No connected Editor owns $project" `
+        Fail 'connected-editor' "No ready Editor answered for this checkout: $($probe.Reason)" `
             'Re-run with -Start, or attach the Editor already open on this checkout.'
     }
     Report 'connected-editor' 'START' 'Opening the pinned Editor on this checkout'
-    # Keep the build target pinned: switching it later invalidates imports and build cache.
-    Start-Process -FilePath 'unity' -ArgumentList @(
-        '--no-banner', '--non-interactive', 'open', $project,
-        '--editor-version', $pinned, '--build-target', 'WebGL'
-    ) -WindowStyle Hidden | Out-Null
+    Start-Process -FilePath 'unity' -ArgumentList (Get-UnityOpenArguments -Project $project -PinnedVersion $pinned) -WindowStyle Hidden | Out-Null
 }
 
-# 'unity status' reports an instance as ready while it is still importing, so
-# readiness is taken from the Editor itself rather than from the process list.
 $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
 $ready = $null
+$lastReason = $probe.Reason
 while ((Get-Date) -lt $deadline) {
-    $probe = & unity command editor_status --timeout 60 --format json 2>$null | ConvertFrom-Json
-    if ($probe.success) {
-        $result = $probe.data.result
-        if ($result.projectPath -ne $project) {
-            Fail 'editor-identity' "A connected Editor owns $($result.projectPath), not this checkout" `
-                'Target the intended checkout, or close the competing Editor before continuing.'
-        }
-        if (-not $result.compiling -and -not $result.domainReloadInProgress) { $ready = $result; break }
+    $probe = Test-UnityEditorReady -ResponseText (Invoke-UnityCli $statusArgs) -Project $project -PinnedVersion $pinned
+    if ($probe.Ok) { $ready = $probe.Result; break }
+    $lastReason = $probe.Reason
+    # A wrong project or wrong version never becomes right by waiting.
+    if (-not $probe.Retryable -and $probe.Result) {
+        Fail 'editor-identity' $probe.Reason `
+            'Target the intended checkout, or let the competing Editor be closed by whoever owns it.'
     }
     Start-Sleep -Seconds 5
 }
 if (-not $ready) {
-    Fail 'editor-ready' "The Editor did not reach a ready state within $ReadyTimeoutSeconds s" `
+    Fail 'editor-ready' "The Editor did not become ready within $ReadyTimeoutSeconds s: $lastReason" `
         'Inspect the Editor log for Safe Mode, a compile error, or a still-running import.'
 }
 
-Report 'editor-identity' 'PASS' $ready.projectPath
-Report 'editor-ready' 'PASS' "unity $($ready.unityVersion), playMode=$($ready.playMode)"
+Report 'editor-identity' 'PASS' "$($ready.projectPath) @ $($ready.unityVersion)"
+Report 'editor-ready' 'PASS' "status=$($ready.status), playMode=$($ready.playMode)"
 
-$errors = (& unity command get_console_logs --severity error --limit 50 --timeout 60 --format json | ConvertFrom-Json).data.result
-Report 'console-errors' $(if ($errors.total -gt 0) { 'WARN' } else { 'PASS' }) "$($errors.total) error entries"
+# Console state is reported, not gated: a connected-gameplay limitation in this
+# project is not a reason for the tooling preflight to refuse to run.
+$consoleResponse = Read-UnityCliResponse -Text (Invoke-UnityCli @(
+        'command', 'get_console_logs', '--project-path', $project,
+        '--severity', 'error', '--limit', '50', '--timeout', '60', '--format', 'json'))
+if ($consoleResponse.Ok) {
+    $errors = $consoleResponse.Value.data.result
+    Report 'console-errors' $(if ($errors.total -gt 0) { 'WARN' } else { 'PASS' }) "$($errors.total) error entries (inspect before trusting gameplay evidence)"
+} else {
+    Report 'console-errors' 'UNKNOWN' $consoleResponse.Reason
+}
 
 Write-Output ''
-Write-Output "Preflight passed. Drive this Editor with 'unity command <tool>'; 'unity list' shows what it exposes."
+Write-Output "Preflight passed. Drive this Editor with 'unity command <tool> --project-path `"$project`"'; 'unity list' shows what it exposes."

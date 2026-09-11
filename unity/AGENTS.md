@@ -18,9 +18,16 @@ This directory is the Unity production foundation. Keep these rules durable and 
   runs that sequence against this checkout and names the first failing prerequisite — missing CLI, missing pinned
   Editor, no Editor owning this checkout, an Editor owning a *different* checkout, or an Editor that never became
   ready. Run it (add `-Start` to open the Editor) before concluding that Unity is unavailable on a workstation.
+  `tools/unity/preflight-lib.ps1` holds its decision logic and `tools/unity/preflight.tests.ps1` exercises that
+  logic against fixed CLI responses, so the readiness contract can be checked without an Editor.
+- **Name the project on every Editor command.** `unity command <tool> --project-path <project>` addresses the Editor
+  that owns the intended checkout. Without it the CLI may answer from whichever Editor is connected, so a command can
+  silently act on another worktree. An unowned checkout must fail closed; never close another session's Editor to
+  make selection work.
 - Readiness comes from the Editor, not from the process list: `unity status` reports an instance as `ready` while it
-  is still importing. Only `unity command editor_status` reporting `status: ready` with `compiling` and
-  `domainReloadInProgress` both false means the Editor will answer commands.
+  is still importing. Require `unity command editor_status` to report `status: ready` with `compiling` and
+  `domainReloadInProgress` both false, **and** confirm the responding `projectPath` and `unityVersion` match this
+  checkout and its `ProjectVersion.txt`. A failed or malformed CLI response is unknown, never a pass.
 - On a local Unity-capable workstation, **start the pinned Editor on the intended owned checkout before iterative Unity work if it is not already open.** Wait for initial import/script compilation to settle, confirm the intended project/checkout and no Safe Mode or unexplained compile errors, and keep that Editor/project open through the package when practical. The agent owns this startup; do not assume the Owner has pre-opened Unity.
 - Prefer a connected Unity CLI/Pipeline/live-Editor loop for local scene, prefab, authoring, and focused-test iteration when available. Raw batch mode is a CI/fallback/final-evidence surface, not the default local edit-test loop.
 - After external asset/script edits, follow the [live-Editor refresh procedure](../.agents/skills/galaquest-unity-web-playtest/SKILL.md#refresh-external-edits-through-the-live-editor) to trigger `Assets/Refresh` through CLI and verify import readiness. The worker owns this step even when native screenshots are unavailable; an Owner click is not a normal iteration prerequisite.
