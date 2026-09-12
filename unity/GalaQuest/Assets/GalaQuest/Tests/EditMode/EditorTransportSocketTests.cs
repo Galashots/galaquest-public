@@ -84,6 +84,20 @@ namespace GalaQuest.Tests
         }
 
         [UnityTest]
+        public IEnumerator CloseHandshakeLeavesNoHalfOpenServerSocket()
+        {
+            transport.Close();
+            yield return Until(() => closed != null);
+            yield return new WaitForSecondsRealtime(0.2f);
+            opened = false;
+            transport.Connect();
+            yield return Until(() => opened);
+            Assert.That(transport.Send("connections"), Is.True);
+            yield return Until(() => messages.Count > 0);
+            Assert.That(messages[0], Is.EqualTo("connections:1"));
+        }
+
+        [UnityTest]
         public IEnumerator RealReconnectRetiresOldSocketTraffic()
         {
             Assert.That(transport.Send("retired"), Is.True);

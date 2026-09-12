@@ -153,5 +153,3 @@ namespace GalaQuest.Tests
         }
     }
 }
-
-

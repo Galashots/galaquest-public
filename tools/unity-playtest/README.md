@@ -103,4 +103,3 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
-

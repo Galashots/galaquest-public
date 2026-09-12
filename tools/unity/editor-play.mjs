@@ -91,4 +91,3 @@ try {
   process.exitCode = 1;
   await teardown('failure');
 }
-

@@ -184,11 +184,31 @@ namespace GalaQuest
             var token = cancellation;
             socket = null;
             cancellation = null;
-            lock (sendGate) { pendingSends = Task.CompletedTask; queuedSends = 0; }
-            try { token?.Cancel(); } catch (Exception) { /* already disposed */ }
-            try { live?.Abort(); } catch (Exception) { /* already faulted */ }
-            try { live?.Dispose(); } catch (Exception) { /* already disposed */ }
-            try { token?.Dispose(); } catch (Exception) { /* already disposed */ }
+            Task sends;
+            lock (sendGate) { sends = pendingSends; pendingSends = Task.CompletedTask; queuedSends = 0; }
+            _ = RetireAsync(live, token, sends);
+        }
+
+        private static async Task RetireAsync(ClientWebSocket live, CancellationTokenSource token, Task sends)
+        {
+            // Send a WebSocket close before aborting TCP. An abort alone can leave the Node HTTP
+            // upgrade socket half-open. This never blocks Unity, and has a bounded cancellation.
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var abort = deadline.Token.Register(() => { try { live?.Abort(); } catch (Exception) { } });
+            try
+            {
+                await sends.ConfigureAwait(false);
+                if (live != null && (live.State == WebSocketState.Open || live.State == WebSocketState.CloseReceived))
+                    await live.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Editor session ended", deadline.Token).ConfigureAwait(false);
+            }
+            catch (Exception) { /* faulted/connecting sockets still receive the bounded abort below */ }
+            finally
+            {
+                try { token?.Cancel(); } catch (Exception) { }
+                try { live?.Abort(); } catch (Exception) { }
+                try { live?.Dispose(); } catch (Exception) { }
+                try { token?.Dispose(); } catch (Exception) { }
+            }
         }
 
         // Play Mode exit destroys this component. Bumping the generation first means any frame still
