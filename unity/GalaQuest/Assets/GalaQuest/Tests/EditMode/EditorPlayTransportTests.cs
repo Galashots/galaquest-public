@@ -11,12 +11,12 @@ namespace GalaQuest.Tests
         private GameObject host;
         private EditorWebSocketTransport transport;
         private string previousUrl;
-        private bool hadUrl;
+
 
         [SetUp]
         public void SetUp()
         {
-            hadUrl = EditorPrefs.HasKey(GalaQuestEditorPlaySeam.ServerUrlKey);
+
             previousUrl = GalaQuestEditorPlaySeam.ServerUrl;
             host = new GameObject("Editor transport test");
             transport = host.AddComponent<EditorWebSocketTransport>();
@@ -26,8 +26,8 @@ namespace GalaQuest.Tests
         public void TearDown()
         {
             UnityEngine.Object.DestroyImmediate(host);
-            if (hadUrl) GalaQuestEditorPlaySeam.ServerUrl = previousUrl;
-            else EditorPrefs.DeleteKey(GalaQuestEditorPlaySeam.ServerUrlKey);
+            GalaQuestEditorPlaySeam.ServerUrl = previousUrl;
+
         }
 
         [Test]
@@ -49,6 +49,46 @@ namespace GalaQuest.Tests
                 UnityEngine.Object.DestroyImmediate(entryHost);
                 GalaQuestEditorPlaySeam.Enabled = enabled;
             }
+        }
+        [Test]
+        public void LegacyGlobalPreferenceCannotEnableThisEditor()
+        {
+            var had = EditorPrefs.HasKey(GalaQuestEditorPlaySeam.EnabledKey);
+            var oldGlobal = EditorPrefs.GetBool(GalaQuestEditorPlaySeam.EnabledKey);
+            var oldLocal = GalaQuestEditorPlaySeam.Enabled;
+            try
+            {
+                GalaQuestEditorPlaySeam.Enabled = false;
+                EditorPrefs.SetBool(GalaQuestEditorPlaySeam.EnabledKey, true);
+                Assert.That(GalaQuestEditorPlaySeam.Enabled, Is.False);
+            }
+            finally
+            {
+                if (had) EditorPrefs.SetBool(GalaQuestEditorPlaySeam.EnabledKey, oldGlobal);
+                else EditorPrefs.DeleteKey(GalaQuestEditorPlaySeam.EnabledKey);
+                GalaQuestEditorPlaySeam.Enabled = oldLocal;
+            }
+        }
+
+        [Test]
+        public void OnlyAcquiringOwnerCanReleaseAndRestoreEndpoint()
+        {
+            Assert.That(GalaQuestEditorPlaySeam.Enabled, Is.False, "Run ownership tests with the helper released.");
+            var owner = Guid.NewGuid().ToString();
+            var previous = GalaQuestEditorPlaySeam.ServerUrl;
+            try
+            {
+                Assert.That(GalaQuestEditorPlaySeam.Acquire(owner, "ws://127.0.0.1:5217/ws"), Is.True);
+                Assert.Throws<InvalidOperationException>(() => GalaQuestEditorPlaySeam.Acquire("other", "ws://127.0.0.1:5216/ws"));
+                Assert.That(GalaQuestEditorPlaySeam.Release("other"), Is.False);
+                Assert.That(GalaQuestEditorPlaySeam.Enabled, Is.True);
+                Assert.That(GalaQuestEditorPlaySeam.ServerUrl, Does.Contain(":5217/"));
+                Assert.That(GalaQuestEditorPlaySeam.Release(owner), Is.True);
+                Assert.That(GalaQuestEditorPlaySeam.Enabled, Is.False);
+                Assert.That(GalaQuestEditorPlaySeam.ServerUrl, Is.EqualTo(previous));
+                Assert.That(GalaQuestEditorPlaySeam.Release(owner), Is.False);
+            }
+            finally { GalaQuestEditorPlaySeam.Release(owner); }
         }
         private void Pump() => typeof(EditorWebSocketTransport)
             .GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(transport, null);
@@ -113,4 +153,5 @@ namespace GalaQuest.Tests
         }
     }
 }
+
 

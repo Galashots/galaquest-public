@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -19,6 +20,39 @@ namespace GalaQuest
         public const string ServerUrlKey = "GalaQuest.EditorPlaySeam.ServerUrl";
         public const string ProfileIdKey = "GalaQuest.EditorPlaySeam.ProfileId";
         public const string DisplayNameKey = "GalaQuest.EditorPlaySeam.DisplayName";
+        private const string OwnerKey = "GalaQuest.EditorPlaySeam.Owner";
+        private const string PreviousUrlKey = "GalaQuest.EditorPlaySeam.PreviousUrl";
+
+        // SessionState is local to this Editor process, survives domain reload, and is discarded
+        // when the Editor exits. Global EditorPrefs must never enable another checkout's seam.
+        public static bool Owns(string owner) => !string.IsNullOrEmpty(owner)
+            && SessionState.GetString(OwnerKey, string.Empty) == owner;
+
+        public static bool Acquire(string owner, string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(owner) || Enabled || !string.IsNullOrEmpty(SessionState.GetString(OwnerKey, string.Empty)))
+                throw new InvalidOperationException("An Editor play owner is already active, or the owner token is empty.");
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new InvalidOperationException("Stop Play Mode before acquiring Editor play.");
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || !uri.IsLoopback
+                || (uri.Scheme != "ws" && uri.Scheme != "wss"))
+                throw new ArgumentException("Editor play requires a loopback WebSocket endpoint.");
+            SessionState.SetString(PreviousUrlKey, ServerUrl);
+            SessionState.SetString(OwnerKey, owner);
+            ServerUrl = endpoint;
+            Enabled = true;
+            return true;
+        }
+
+        public static bool Release(string owner)
+        {
+            if (!Owns(owner)) return false;
+            Enabled = false;
+            ServerUrl = SessionState.GetString(PreviousUrlKey, DefaultServerUrl);
+            SessionState.EraseString(PreviousUrlKey);
+            SessionState.EraseString(OwnerKey);
+            return true;
+        }
 
         // A deliberately non-default port. The production dev server uses 5201; an Editor session
         // must not silently attach to whatever server is already serving real play.
@@ -33,38 +67,38 @@ namespace GalaQuest
         /// <summary>Off unless a developer explicitly turns it on for this Editor.</summary>
         public static bool Enabled
         {
-            get => EditorPrefs.GetBool(EnabledKey, false);
-            set => EditorPrefs.SetBool(EnabledKey, value);
+            get => SessionState.GetBool(EnabledKey, false);
+            set => SessionState.SetBool(EnabledKey, value);
         }
 
         public static string ServerUrl
         {
             get
             {
-                var stored = EditorPrefs.GetString(ServerUrlKey, string.Empty);
+                var stored = SessionState.GetString(ServerUrlKey, string.Empty);
                 return string.IsNullOrWhiteSpace(stored) ? DefaultServerUrl : stored;
             }
-            set => EditorPrefs.SetString(ServerUrlKey, value ?? string.Empty);
+            set => SessionState.SetString(ServerUrlKey, value ?? string.Empty);
         }
 
         public static string ProfileId
         {
             get
             {
-                var stored = EditorPrefs.GetString(ProfileIdKey, string.Empty);
+                var stored = SessionState.GetString(ProfileIdKey, string.Empty);
                 return string.IsNullOrWhiteSpace(stored) ? DefaultProfileId : stored;
             }
-            set => EditorPrefs.SetString(ProfileIdKey, value ?? string.Empty);
+            set => SessionState.SetString(ProfileIdKey, value ?? string.Empty);
         }
 
         public static string DisplayName
         {
             get
             {
-                var stored = EditorPrefs.GetString(DisplayNameKey, string.Empty);
+                var stored = SessionState.GetString(DisplayNameKey, string.Empty);
                 return string.IsNullOrWhiteSpace(stored) ? DefaultDisplayName : stored;
             }
-            set => EditorPrefs.SetString(DisplayNameKey, value ?? string.Empty);
+            set => SessionState.SetString(DisplayNameKey, value ?? string.Empty);
         }
 
         /// <summary>

@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -19,8 +20,8 @@ namespace GalaQuest
     ///
     /// Threading contract: receives arrive on a background task and are queued; every event this
     /// class raises is raised from Update() on Unity's main thread, in arrival order. Sends are
-    /// serialized behind one lock because concurrent SendAsync calls on a ClientWebSocket are
-    /// undefined. A connection generation counter retires callbacks from a superseded socket, so a
+    /// serialized in a cancellable task chain without blocking the Editor. A connection generation
+    /// counter retires callbacks from a superseded socket, so a
     /// late frame from a closed connection cannot mutate the session that replaced it.
     /// </summary>
     [AddComponentMenu("")]
@@ -32,9 +33,11 @@ namespace GalaQuest
 
         private readonly ConcurrentQueue<Action> mainThreadEvents = new ConcurrentQueue<Action>();
         private readonly object sendGate = new object();
+        private Task pendingSends = Task.CompletedTask;
+        private int queuedSends;
         private ClientWebSocket socket;
         private CancellationTokenSource cancellation;
-        private int generation;
+        private volatile int generation;
         private bool reportedClosed;
 
         public string Endpoint { get; private set; } = string.Empty;
@@ -43,9 +46,8 @@ namespace GalaQuest
         {
             // Retire any previous socket first: Reconnect() calls straight into here, and two live
             // sockets would both feed the one session.
-            Teardown();
-
             var current = ++generation;
+            Teardown();
             reportedClosed = false;
             Endpoint = GalaQuestEditorPlaySeam.ServerUrl;
 
@@ -74,23 +76,31 @@ namespace GalaQuest
 
         public bool Send(string message)
         {
-            var live = socket;
-            if (live == null || live.State != WebSocketState.Open) return false;
-            var bytes = Encoding.UTF8.GetBytes(message ?? string.Empty);
-            try
+            lock (sendGate)
             {
-                // Serialized: the session can send an input and a travel frame in the same tick.
-                lock (sendGate)
-                {
-                    live.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None)
-                        .GetAwaiter().GetResult();
-                }
+                var live = socket;
+                if (live == null || live.State != WebSocketState.Open || cancellation == null || queuedSends >= 128) return false;
+                var bytes = Encoding.UTF8.GetBytes(message ?? string.Empty);
+                queuedSends++;
+                pendingSends = SendAfterAsync(pendingSends, live, bytes, cancellation.Token, generation);
                 return true;
             }
-            catch (Exception)
+        }
+
+        private async Task SendAfterAsync(Task previous, ClientWebSocket live, byte[] bytes, CancellationToken token, int current)
+        {
+            try
             {
-                return false;
+                await previous.ConfigureAwait(false);
+                if (token.IsCancellationRequested || current != generation) return;
+                await live.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, token).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) { }
+            catch (Exception exception)
+            {
+                Enqueue(current, () => RaiseClosed($"Editor transport send failed: {exception.Message}"));
+            }
+            finally { lock (sendGate) { if (current == generation) queuedSends--; } }
         }
 
         public void Close()
@@ -117,7 +127,7 @@ namespace GalaQuest
             Enqueue(current, () => { if (generation == current) Opened?.Invoke(); });
 
             var buffer = new byte[16 * 1024];
-            var text = new StringBuilder();
+            using var text = new MemoryStream();
             try
             {
                 while (!token.IsCancellationRequested && live.State == WebSocketState.Open)
@@ -125,13 +135,15 @@ namespace GalaQuest
                     var result = await live.ReceiveAsync(new ArraySegment<byte>(buffer), token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        Enqueue(current, () => RaiseClosed("Editor transport closed by the server"));
+                        var code = (int?)result.CloseStatus ?? 1006;
+                        var reason = result.CloseStatusDescription ?? string.Empty;
+                        Enqueue(current, () => RaiseClosed(JsonUtility.ToJson(new ClosePayload { code = code, reason = reason })));
                         return;
                     }
-                    text.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                    text.Write(buffer, 0, result.Count);
                     if (!result.EndOfMessage) continue;
-                    var message = text.ToString();
-                    text.Clear();
+                    var message = Encoding.UTF8.GetString(text.GetBuffer(), 0, (int)text.Length);
+                    text.SetLength(0);
                     Enqueue(current, () => { if (generation == current) MessageReceived?.Invoke(message); });
                 }
             }
@@ -159,6 +171,8 @@ namespace GalaQuest
             Closed?.Invoke(detail);
         }
 
+        [Serializable] private sealed class ClosePayload { public int code; public string reason; }
+
         private void Update()
         {
             while (mainThreadEvents.TryDequeue(out var action)) action();
@@ -170,6 +184,7 @@ namespace GalaQuest
             var token = cancellation;
             socket = null;
             cancellation = null;
+            lock (sendGate) { pendingSends = Task.CompletedTask; queuedSends = 0; }
             try { token?.Cancel(); } catch (Exception) { /* already disposed */ }
             try { live?.Abort(); } catch (Exception) { /* already faulted */ }
             try { live?.Dispose(); } catch (Exception) { /* already disposed */ }

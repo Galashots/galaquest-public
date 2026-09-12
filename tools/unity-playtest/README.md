@@ -1,5 +1,37 @@
 # Unity browser playtests
 
+## Connected local Editor
+
+Use the pinned, already-owned Editor and explicitly target `unity/GalaQuest` with Unity CLI.
+Run `pwsh -NoProfile -File tools/unity/preflight.ps1` first. With Play Mode stopped, start
+`node tools/unity/editor-play.mjs` in a terminal and retain that terminal for Ctrl+C teardown.
+The helper prints its synthetic identity boundary, owned backend PID, loopback endpoint and fresh
+OS-temp reward store before enabling the Editor override. It never selects inherited real-save paths.
+Editor-local SessionState survives Play Mode/domain reload but does not enable another checkout or
+persist after Editor exit. Only the acquiring token may stop/release that Editor session.
+Ctrl+C stops owned Play Mode, restores the endpoint, disables the override and verifies backend
+exit/port release. A cleanup warning is NOT a verified stop. After an abrupt helper termination,
+inspect ownership before manually releasing the recorded token; do not kill unrelated processes.
+
+Use the existing combat preview preparation described below for fighting evidence; the canonical
+greybox scene alone does not contain the combat presentation. Candidate preparation is not promotion.
+Editor identity/transport do not provide browser progression/journal parity: XP, POWER and rewards
+must be accepted in the built browser until a faithful projection exists.
+
+Run the native `EditorPlayTransportTests` and `EditorTransportSocketTests` plus the existing
+connection/travel tests through Pipeline `run_tests`. The socket fixture uses the repository's
+WebSocket server, an ephemeral loopback port and no saves. Read the fresh executed result names/counts;
+discovery or an async command's initial zero summary is not acceptance. Verify compilation first.
+
+For composited evidence in Play Mode use `capture_game_view --source screen` through the CLI.
+The installed Pipeline can confine `save_path` to Assets even when the schema describes it as
+project-relative. A supported alternative is to omit `save_path`, redirect the JSON response into
+ignored `.local` evidence, and decode `data.result.base64` into the original PNG without printing
+the payload. Inspect the image, retain its SHA-256 and exact source identity, then upload the original
+to the controlled Drive working packet. Avoid AssetDatabase refresh during an active evidence run.
+
+## Built browser
+
 These drivers run the built Unity client at `/unity/`. They require a local Unity build and its
 exact-source manifest. The legacy `tools/runtime-test` review suites instead run the Three.js client
 and do not provision or select Unity builds.
@@ -71,3 +103,4 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
+

@@ -1,128 +1,94 @@
-/**
- * Run connected GalaQuest gameplay inside the local Unity Editor.
- *
- *   node tools/unity/editor-play.mjs                 # start server, enable the seam, hold until Ctrl+C
- *   node tools/unity/editor-play.mjs --cycles 2      # enter and exit Play Mode twice, then tear down
- *   node tools/unity/editor-play.mjs --hold 30       # seconds to stay in Play Mode per cycle
- *
- * WHAT IT OWNS. One isolated Node server on a harness port with a throwaway reward store, and the
- * Editor-only development seam. It starts them, proves what it selected BEFORE anything connects,
- * and puts both back afterwards. It stops only the server it spawned and disables only the seam it
- * enabled; it never touches the Editor's project, scenes, or another session's server.
- *
- * WHY THE PROOF COMES FIRST. An inherited GALAQUEST_REWARD_STORE_PATH, or a stale server already
- * holding the port, would silently point connected play at the family's real saves. The selected
- * store and port are printed and asserted before the Editor is told where to connect, so a run that
- * would have reached real data fails here instead of succeeding quietly.
- *
- * It deliberately owns no gameplay. The server is the existing one, the client is the existing one,
- * and this script only decides which server the Editor talks to.
- */
-
+/** Connected Editor gameplay with an isolated backend and a process-local Editor ownership token. */
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, writeFileSync, rmSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 import { startOwnedServer } from '../runtime-test/owned-server.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PROJECT = resolve(REPO_ROOT, 'unity/GalaQuest');
-
 const argOf = (name, fallback) => {
   const index = process.argv.indexOf(`--${name}`);
-  return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
+  return index >= 0 ? process.argv[index + 1] : fallback;
 };
 const cycles = Number(argOf('cycles', '0'));
 const holdSeconds = Number(argOf('hold', '20'));
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function unity(args, { allowFailure = false } = {}) {
-  const result = spawnSync('unity', args, { encoding: 'utf8', shell: true });
-  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  let parsed = null;
-  try { parsed = JSON.parse(text); } catch { /* reported below */ }
-  if (!allowFailure && !parsed?.success) {
-    throw new Error(`unity ${args.join(' ')} failed: ${parsed?.errors?.[0]?.message ?? text.slice(0, 300)}`);
-  }
+if (!Number.isInteger(cycles) || cycles < 0 || !Number.isFinite(holdSeconds) || holdSeconds <= 0)
+  throw new Error('--cycles must be a non-negative integer; --hold must be positive seconds');
+const owner = randomUUID();
+const controlDirectory = mkdtempSync(join(tmpdir(), 'galaquest-editor-control-'));
+const controlFile = join(controlDirectory, 'EditorPlayControl.cs');
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+function unity(args) {
+  const result = spawnSync('unity', args, { encoding: 'utf8', shell: true, timeout: 130_000 });
+  let parsed;
+  try { parsed = JSON.parse(result.stdout); } catch { /* bounded diagnostic below */ }
+  if (result.status !== 0 || !parsed?.success || parsed?.data?.success === false || parsed?.data?.result?.success === false)
+    throw new Error(`Unity command failed: ${JSON.stringify(parsed?.data?.result?.error ?? parsed?.errors ?? result.error ?? result.stderr).slice(0, 600)}`);
   return parsed;
 }
-
-const editorCommand = (tool, extra = []) =>
-  unity(['command', tool, '--project-path', `"${PROJECT}"`, ...extra, '--timeout', '120', '--format', 'json']);
-
-// EditorPrefs is the seam's own switch; setting it through eval keeps one source of truth.
-const setPref = (expression) =>
-  unity(['command', 'eval', '--project-path', `"${PROJECT}"`, `"${expression}"`, '--timeout', '120', '--format', 'json']);
-
-let server = null;
-let seamEnabled = false;
-
-async function teardown(reason) {
-  console.log(`\nTearing down (${reason})`);
-  try { editorCommand('editor_stop'); } catch { /* already stopped */ }
-  if (seamEnabled) {
-    try {
-      setPref('UnityEditor.EditorPrefs.SetBool(\\"GalaQuest.EditorPlaySeam.Enabled\\", false); return \\"off\\";');
-      console.log('  development seam disabled');
-    } catch (error) { console.log(`  WARNING: could not disable the seam: ${error.message}`); }
-  }
-  if (server && !server.exited) {
-    server.kill();
-    console.log(`  owned server pid ${server.child.pid} stopped`);
-  }
+function control(body) {
+  writeFileSync(controlFile, `using UnityEditor; using GalaQuest; public static class EditorPlayControl { public static object Main() { ${body} } }`);
+  return unity(['command', 'run_script', '--project-path', `"${PROJECT}"`, '--file', `"${controlFile}"`, '--timeout', '120', '--format', 'json']).data.result.result;
 }
-
-process.on('SIGINT', async () => { await teardown('interrupted'); process.exit(130); });
-
+let server;
+let seamEnabled = false;
+let stopping;
+async function teardown(reason) {
+  if (stopping) return stopping;
+  stopping = (async () => {
+    console.log(`Tearing down (${reason})`);
+    if (seamEnabled) {
+      try {
+        const released = control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) return false; EditorApplication.isPlaying = false; return GalaQuestEditorPlaySeam.Release("${owner}");`);
+        if (!released) throw new Error('Owner token no longer matches; no Editor state was changed');
+        console.log('Owned Editor play stopped; development override released');
+      } catch (error) { console.error(`Editor cleanup NOT VERIFIED: ${error.message}`); process.exitCode = 1; }
+    }
+    if (server && !await server.kill()) { console.error('Owned backend cleanup NOT VERIFIED'); process.exitCode = 1; }
+    else if (server) console.log('Owned backend exit and port release verified');
+    rmSync(controlFile, { force: true });
+    // Only this explicitly created, empty directory is removed; no recursive filesystem cleanup.
+    rmdirSync(controlDirectory);
+  })();
+  return stopping;
+}
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
+  await teardown(signal); process.exit(process.exitCode || (signal === 'SIGINT' ? 130 : 143));
+});
 try {
+  const available = control('return !EditorApplication.isPlayingOrWillChangePlaymode && !GalaQuestEditorPlaySeam.Enabled;');
+  if (!available) throw new Error('Selected Editor is already playing or has a development owner');
   server = await startOwnedServer({ quiet: true });
-
-  // Prove isolation before the Editor is pointed anywhere.
   const store = server.rewardStore;
-  if (store.kind !== 'temporary') {
-    throw new Error(`refusing to run: reward store is '${store.kind}', not an isolated temporary store`);
-  }
-  const storePath = store.rewardStorePath;
-  if (!storePath.startsWith(tmpdir())) {
-    throw new Error(`refusing to run: reward store ${storePath} is outside the OS temp directory`);
-  }
-  const fromRepo = relative(REPO_ROOT, storePath);
-  if (!fromRepo.startsWith('..')) {
-    throw new Error(`refusing to run: reward store ${storePath} is inside the checkout`);
-  }
-
+  const relativeToTemp = relative(resolve(tmpdir()), resolve(store.rewardStorePath));
+  const relativeToRepo = relative(REPO_ROOT, resolve(store.rewardStorePath));
+  if (store.kind !== 'temporary' || isAbsolute(relativeToTemp) || relativeToTemp.startsWith('..')
+      || (!isAbsolute(relativeToRepo) && !relativeToRepo.startsWith('..')))
+    throw new Error('Refusing a reward store outside the disposable OS-temp boundary');
   const endpoint = `ws://127.0.0.1:${server.port}/ws`;
-  console.log('Owned local runtime');
-  console.log(`  server pid    ${server.child.pid}`);
-  console.log(`  port          ${server.port}`);
-  console.log(`  endpoint      ${endpoint}`);
-  console.log(`  reward store  ${storePath}  (${store.kind}, outside the checkout)`);
-  console.log(`  real saves    untouched: data/rewards.db is never opened by this run`);
-
-  setPref(`UnityEditor.EditorPrefs.SetString(\\"GalaQuest.EditorPlaySeam.ServerUrl\\", \\"${endpoint}\\"); return \\"set\\";`);
-  setPref('UnityEditor.EditorPrefs.SetBool(\\"GalaQuest.EditorPlaySeam.Enabled\\", true); return \\"on\\";');
-  seamEnabled = true;
-  console.log('  development seam enabled with a synthetic profile');
-
+  console.log(`Owned backend pid ${server.child.pid}; endpoint ${endpoint}; temporary store ${store.rewardStorePath}`);
+  seamEnabled = control(`return GalaQuestEditorPlaySeam.Acquire("${owner}", "${endpoint}");`) === true;
+  if (!seamEnabled) throw new Error('Editor ownership acquisition was not acknowledged');
+  console.log(`Editor owner ${owner}; project ${PROJECT}; synthetic profile only`);
   if (cycles > 0) {
-    for (let cycle = 1; cycle <= cycles; cycle += 1) {
-      console.log(`\nPlay Mode cycle ${cycle} of ${cycles}`);
-      editorCommand('editor_play');
+    for (let cycle = 1; cycle <= cycles; cycle++) {
+      control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) throw new System.InvalidOperationException("Owner lost"); EditorApplication.isPlaying = true; return true;`);
       await sleep(holdSeconds * 1000);
-      editorCommand('editor_stop');
+      control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) throw new System.InvalidOperationException("Owner lost"); EditorApplication.isPlaying = false; return true;`);
       await sleep(4000);
-      console.log(`  cycle ${cycle} complete`);
+      console.log(`Play cycle ${cycle} requested; gameplay/lifecycle acceptance requires separate evidence`);
     }
     await teardown('cycles complete');
   } else {
-    console.log('\nEditor is ready to enter Play Mode. Press Ctrl+C here to stop and clean up.');
-    // Hold the server open for interactive play.
+    console.log('Ready for interactive Play Mode. Ctrl+C releases only this owned Editor/server session.');
     for (;;) await sleep(60_000);
   }
 } catch (error) {
-  console.error(`\nFAILED: ${error.message}`);
-  await teardown('failure');
+  console.error(`FAILED: ${error.message}`);
   process.exitCode = 1;
+  await teardown('failure');
 }
+
