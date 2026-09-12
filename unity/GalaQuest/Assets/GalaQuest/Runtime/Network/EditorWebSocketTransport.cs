@@ -52,13 +52,13 @@ namespace GalaQuest
             if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var uri)
                 || (uri.Scheme != "ws" && uri.Scheme != "wss"))
             {
-                Enqueue(current, () => Closed?.Invoke($"Editor server endpoint is not a WebSocket URL: {Endpoint}"));
+                Enqueue(current, () => RaiseClosed($"Editor server endpoint is not a WebSocket URL: {Endpoint}"));
                 return;
             }
             // A development seam must not reach a family or production service by accident.
             if (!uri.IsLoopback)
             {
-                Enqueue(current, () => Closed?.Invoke($"Editor play refuses a non-loopback endpoint: {Endpoint}"));
+                Enqueue(current, () => RaiseClosed($"Editor play refuses a non-loopback endpoint: {Endpoint}"));
                 return;
             }
 
@@ -95,7 +95,9 @@ namespace GalaQuest
 
         public void Close()
         {
-            var current = generation;
+            // Retire queued opens/messages as well as the socket. Close can happen before Update
+            // dispatches an already received frame or a failed connection attempt.
+            var current = ++generation;
             Teardown();
             Enqueue(current, () => RaiseClosed("Editor transport closed"));
         }
