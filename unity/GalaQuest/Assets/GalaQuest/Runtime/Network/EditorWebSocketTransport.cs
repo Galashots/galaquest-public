@@ -34,6 +34,7 @@ namespace GalaQuest
         private readonly ConcurrentQueue<Action> mainThreadEvents = new ConcurrentQueue<Action>();
         private readonly object sendGate = new object();
         private Task pendingSends = Task.CompletedTask;
+        private Task receiveTask = Task.CompletedTask;
         private int queuedSends;
         private ClientWebSocket socket;
         private CancellationTokenSource cancellation;
@@ -71,7 +72,7 @@ namespace GalaQuest
             socket.Options.SetRequestHeader("Origin",
                 (uri.Scheme == "wss" ? "https://" : "http://") + uri.Authority);
             cancellation = new CancellationTokenSource();
-            _ = RunAsync(socket, cancellation.Token, uri, current);
+            receiveTask = RunAsync(socket, cancellation.Token, uri, current);
         }
 
         public bool Send(string message)
@@ -82,23 +83,27 @@ namespace GalaQuest
                 if (live == null || live.State != WebSocketState.Open || cancellation == null || queuedSends >= 128) return false;
                 var bytes = Encoding.UTF8.GetBytes(message ?? string.Empty);
                 queuedSends++;
-                pendingSends = SendAfterAsync(pendingSends, live, bytes, cancellation.Token, generation);
+                pendingSends = SendAfterAsync(pendingSends, live, bytes, cancellation.Token, generation, receiveTask);
                 return true;
             }
         }
 
-        private async Task SendAfterAsync(Task previous, ClientWebSocket live, byte[] bytes, CancellationToken token, int current)
+        private async Task SendAfterAsync(Task previous, ClientWebSocket live, byte[] bytes, CancellationToken token, int current, Task receiving)
         {
             try
             {
                 await previous.ConfigureAwait(false);
-                if (token.IsCancellationRequested || current != generation) return;
+                if (token.IsCancellationRequested || current != generation || live.State != WebSocketState.Open) return;
                 await live.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { }
-            catch (Exception exception)
+            catch (Exception)
             {
-                Enqueue(current, () => RaiseClosed($"Editor transport send failed: {exception.Message}"));
+                // The receiver owns the terminal cause. A send failure must not win a race
+                // against an authoritative takeover close already arriving on that socket.
+                await Task.WhenAny(receiving, Task.Delay(2000)).ConfigureAwait(false);
+                if (!receiving.IsCompleted && current == generation && !token.IsCancellationRequested)
+                    try { live.Abort(); } catch (Exception) { }
             }
             finally { lock (sendGate) { if (current == generation) queuedSends--; } }
         }
@@ -120,7 +125,7 @@ namespace GalaQuest
             }
             catch (Exception exception)
             {
-                Enqueue(current, () => RaiseClosed($"Editor transport could not reach {uri}: {exception.Message}"));
+                CompleteConnection(live, current, () => $"Editor transport could not reach {uri}: {exception.Message}");
                 return;
             }
 
@@ -130,14 +135,14 @@ namespace GalaQuest
             using var text = new MemoryStream();
             try
             {
-                while (!token.IsCancellationRequested && live.State == WebSocketState.Open)
+                while (!token.IsCancellationRequested)
                 {
                     var result = await live.ReceiveAsync(new ArraySegment<byte>(buffer), token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         var code = (int?)result.CloseStatus ?? 1006;
                         var reason = result.CloseStatusDescription ?? string.Empty;
-                        Enqueue(current, () => RaiseClosed(JsonUtility.ToJson(new ClosePayload { code = code, reason = reason })));
+                        CompleteConnection(live, current, () => JsonUtility.ToJson(new ClosePayload { code = code, reason = reason }));
                         return;
                     }
                     text.Write(buffer, 0, result.Count);
@@ -149,12 +154,28 @@ namespace GalaQuest
             }
             catch (OperationCanceledException)
             {
-                // Expected on Play Mode exit or an explicit Close(); the teardown path reports it.
+                // Explicit teardown already retired this generation. A socket abort following
+                // a send failure still needs a receiver-owned terminal notification.
+                if (!token.IsCancellationRequested)
+                    CompleteConnection(live, current, () => "Editor transport connection was interrupted");
             }
             catch (Exception exception)
             {
-                Enqueue(current, () => RaiseClosed($"Editor transport lost the connection: {exception.Message}"));
+                CompleteConnection(live, current, () => $"Editor transport lost the connection: {exception.Message}");
             }
+        }
+
+        private void CompleteConnection(ClientWebSocket live, int current, Func<string> detail)
+        {
+            Enqueue(current, () =>
+            {
+                if (!ReferenceEquals(socket, live)) return;
+                var cause = detail();
+                // Retire resources/callbacks but deliver this terminal cause directly, once.
+                generation++;
+                Teardown();
+                RaiseClosed(cause);
+            });
         }
 
         // Queued work is tagged with the generation that produced it and dropped if a newer
@@ -185,7 +206,7 @@ namespace GalaQuest
             socket = null;
             cancellation = null;
             Task sends;
-            lock (sendGate) { sends = pendingSends; pendingSends = Task.CompletedTask; queuedSends = 0; }
+            lock (sendGate) { sends = pendingSends; pendingSends = Task.CompletedTask; receiveTask = Task.CompletedTask; queuedSends = 0; }
             _ = RetireAsync(live, token, sends);
         }
 

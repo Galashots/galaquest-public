@@ -9,8 +9,10 @@ The helper prints its synthetic identity boundary, owned backend PID, loopback e
 OS-temp reward store before enabling the Editor override. It never selects inherited real-save paths.
 Editor-local SessionState survives Play Mode/domain reload but does not enable another checkout or
 persist after Editor exit. Only the acquiring token may stop/release that Editor session.
-Ctrl+C stops owned Play Mode, restores the endpoint, disables the override and verifies backend
-exit/port release. A cleanup warning is NOT a verified stop. After an abrupt helper termination,
+Ctrl+C requests owned Play Mode stop, boundedly verifies the stopped state and destruction of the
+runtime transport, then restores the endpoint, disables the override and verifies backend exit/port
+release. If stop cannot be verified, the helper retains ownership/backend for inspection and a later
+Ctrl+C retry. A cleanup warning is NOT a verified stop. After an abrupt helper termination,
 inspect ownership before manually releasing the recorded token; do not kill unrelated processes.
 
 Use the existing combat preview preparation described below for fighting evidence; the canonical

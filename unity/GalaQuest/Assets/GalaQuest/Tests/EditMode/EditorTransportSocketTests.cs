@@ -20,6 +20,7 @@ namespace GalaQuest.Tests
         private readonly List<string> messages = new List<string>();
         private string closed;
         private bool opened;
+        private int closeCount;
         private int callbackThread;
         [Serializable] private sealed class ClosePayload { public int code; }
 
@@ -40,7 +41,7 @@ namespace GalaQuest.Tests
             previousUrl = GalaQuestEditorPlaySeam.ServerUrl;
             host = new GameObject("Owned socket fixture test");
             transport = host.AddComponent<EditorWebSocketTransport>();
-            messages.Clear(); opened = false; closed = null; callbackThread = -1;
+            messages.Clear(); opened = false; closed = null; callbackThread = -1; closeCount = 0;
             fixture = Process.Start(new ProcessStartInfo("node", "tools/unity/transport-fixture.mjs")
             {
                 WorkingDirectory = Path.GetFullPath(Path.Combine(Application.dataPath, "../../..")),
@@ -53,7 +54,7 @@ namespace GalaQuest.Tests
             GalaQuestEditorPlaySeam.ServerUrl = $"ws://127.0.0.1:{port}/ws";
             transport.Opened += () => { opened = true; callbackThread = System.Threading.Thread.CurrentThread.ManagedThreadId; };
             transport.MessageReceived += messages.Add;
-            transport.Closed += detail => closed = detail;
+            transport.Closed += detail => { closed = detail; closeCount++; };
             transport.Connect();
             yield return Until(() => opened);
         }
@@ -116,6 +117,76 @@ namespace GalaQuest.Tests
             Assert.That(transport.Send("unicode"), Is.True);
             yield return Until(() => messages.Count == 1);
             Assert.That(messages[0], Is.EqualTo("a🔥b"));
+        }
+
+
+        private object Field(string name) => typeof(EditorWebSocketTransport)
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(transport);
+
+        private IEnumerator AssertRemoteRetired()
+        {
+            // Query HTTP's actual TCP sockets over stdin, without reconnecting the client.
+            yield return new WaitForSecondsRealtime(0.5f);
+            var response = fixture.StandardOutput.ReadLineAsync();
+            fixture.StandardInput.WriteLine("connections");
+            fixture.StandardInput.Flush();
+            yield return Until(() => response.IsCompleted);
+            Assert.That(response.Result, Is.EqualTo("connections:0"), "Remote close must not leave a half-open server socket.");
+            Assert.That(Field("socket"), Is.Null, "Terminal transport must release its native socket reference.");
+            Assert.That(closeCount, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator ServerTakeoverRetiresSocketWithoutReconnectOrDestroy()
+        {
+            Assert.That(transport.Send("takeover"), Is.True);
+            yield return Until(() => closed != null);
+            Assert.That(JsonUtility.FromJson<ClosePayload>(closed).code, Is.EqualTo(4001));
+            yield return AssertRemoteRetired();
+        }
+
+        [UnityTest]
+        public IEnumerator SendFailureCannotMaskRealTakeoverWhileOutboundWorkIsPending()
+        {
+            using var session = new GalaQuestConnectionSession(transport);
+            opened = false;
+            session.Begin(new GalaQuestSelectedProfile("profile-editor-socket-test", "Socket test", "[]"));
+            yield return Until(() => opened);
+            // Hold real outbound work in the existing serialized chain, then fault it. This
+            // deterministically reaches the send-failure catch before the real 4001 arrives.
+            var barrier = new TaskCompletionSource<bool>();
+            typeof(EditorWebSocketTransport).GetField("pendingSends", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(transport, barrier.Task);
+            Assert.That(transport.Send("pending-one"), Is.True);
+            Assert.That(transport.Send("pending-two"), Is.True);
+            barrier.SetException(new IOException("Controlled pending-send failure"));
+            yield return null;
+            Pump();
+            fixture.StandardInput.WriteLine("takeover");
+            fixture.StandardInput.Flush();
+            yield return Until(() => closed != null);
+            Assert.That(closed, Does.StartWith("{"), "Generic send failure masked authoritative close.");
+            Assert.That(JsonUtility.FromJson<ClosePayload>(closed).code, Is.EqualTo(4001));
+            Assert.That(session.CanReconnect, Is.False);
+            session.Reconnect();
+            yield return AssertRemoteRetired();
+        }
+
+        [UnityTest]
+        public IEnumerator RealTakeoverWithQueuedOutboundTrafficRemainsTerminal()
+        {
+            using var session = new GalaQuestConnectionSession(transport);
+            opened = false;
+            session.Begin(new GalaQuestSelectedProfile("profile-editor-socket-test", "Socket test", "[]"));
+            yield return Until(() => opened);
+            Assert.That(transport.Send("takeover"), Is.True);
+            for (var index = 0; index < 32; index++) transport.Send("outbound-" + index);
+            yield return Until(() => closed != null);
+            Assert.That(closed, Does.StartWith("{"));
+            Assert.That(JsonUtility.FromJson<ClosePayload>(closed).code, Is.EqualTo(4001));
+            Assert.That(session.CanReconnect, Is.False);
+            session.Reconnect();
+            yield return AssertRemoteRetired();
         }
 
         [UnityTest]

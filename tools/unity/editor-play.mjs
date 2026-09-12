@@ -21,42 +21,67 @@ const owner = randomUUID();
 const controlDirectory = mkdtempSync(join(tmpdir(), 'galaquest-editor-control-'));
 const controlFile = join(controlDirectory, 'EditorPlayControl.cs');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-function unity(args) {
-  const result = spawnSync('unity', args, { encoding: 'utf8', shell: true, timeout: 130_000 });
+function unity(args, timeoutSeconds = 120) {
+  const result = spawnSync('unity', args, { encoding: 'utf8', shell: true, timeout: (timeoutSeconds + 10) * 1000 });
   let parsed;
   try { parsed = JSON.parse(result.stdout); } catch { /* bounded diagnostic below */ }
   if (result.status !== 0 || !parsed?.success || parsed?.data?.success === false || parsed?.data?.result?.success === false)
     throw new Error(`Unity command failed: ${JSON.stringify(parsed?.data?.result?.error ?? parsed?.errors ?? result.error ?? result.stderr).slice(0, 600)}`);
   return parsed;
 }
-function control(body) {
+function control(body, timeoutSeconds = 120) {
   writeFileSync(controlFile, `using UnityEditor; using GalaQuest; public static class EditorPlayControl { public static object Main() { ${body} } }`);
-  return unity(['command', 'run_script', '--project-path', `"${PROJECT}"`, '--file', `"${controlFile}"`, '--timeout', '120', '--format', 'json']).data.result.result;
+  return unity(['command', 'run_script', '--project-path', `"${PROJECT}"`, '--file', `"${controlFile}"`, '--timeout', String(timeoutSeconds), '--timeout_ms', String(timeoutSeconds * 1000), '--format', 'json'], timeoutSeconds).data.result.result;
 }
 let server;
 let seamEnabled = false;
 let stopping;
+let stopRequested = false;
+let blockedHold;
 async function teardown(reason) {
+  stopRequested = true;
   if (stopping) return stopping;
   stopping = (async () => {
     console.log(`Tearing down (${reason})`);
-    if (seamEnabled) {
-      try {
-        const released = control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) return false; EditorApplication.isPlaying = false; return GalaQuestEditorPlaySeam.Release("${owner}");`);
-        if (!released) throw new Error('Owner token no longer matches; no Editor state was changed');
-        console.log('Owned Editor play stopped; development override released');
-      } catch (error) { console.error(`Editor cleanup NOT VERIFIED: ${error.message}`); process.exitCode = 1; }
+    try {
+      if (seamEnabled) {
+        const requested = control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) return false; EditorApplication.isPlaying = false; return true;`, 15);
+        if (!requested) throw new Error('Owner token no longer matches; no Editor state was changed');
+        const deadline = Date.now() + 60_000;
+        let verified = false;
+        let lastError = '';
+        while (Date.now() < deadline) {
+          try {
+            verified = control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) throw new System.InvalidOperationException("Owner changed"); return !EditorApplication.isPlayingOrWillChangePlaymode && !EditorApplication.isCompiling && UnityEngine.Object.FindObjectsByType<EditorWebSocketTransport>(UnityEngine.FindObjectsInactive.Include, UnityEngine.FindObjectsSortMode.None).Length == 0;`, 10) === true;
+            if (verified) break;
+          } catch (error) { lastError = error.message; }
+          await sleep(1000);
+        }
+        if (!verified) throw new Error(`Play Mode stop/runtime destruction not verified within the bounded wait: ${lastError}`);
+        if (control(`return GalaQuestEditorPlaySeam.Release("${owner}");`, 15) !== true)
+          throw new Error('Owned seam release was not acknowledged');
+        seamEnabled = false;
+        console.log('Play Mode stopped and runtime transport destruction verified; owned override released');
+      }
+      if (server && !await server.kill()) throw new Error('Owned backend exit/port release not verified');
+      if (server) console.log('Owned backend exit and port release verified');
+      rmSync(controlFile, { force: true });
+      rmdirSync(controlDirectory);
+      clearInterval(blockedHold);
+      return true;
+    } catch (error) {
+      console.error(`Cleanup NOT VERIFIED: ${error.message}. Preserving remaining owned resources; resolve the stop and retry Ctrl+C. Owner token: ${owner}`);
+      process.exitCode = 1;
+      blockedHold ??= setInterval(() => {}, 60_000);
+      return false;
     }
-    if (server && !await server.kill()) { console.error('Owned backend cleanup NOT VERIFIED'); process.exitCode = 1; }
-    else if (server) console.log('Owned backend exit and port release verified');
-    rmSync(controlFile, { force: true });
-    // Only this explicitly created, empty directory is removed; no recursive filesystem cleanup.
-    rmdirSync(controlDirectory);
   })();
-  return stopping;
+  const completed = await stopping;
+  if (!completed) stopping = null;
+  return completed;
 }
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
-  await teardown(signal); process.exit(process.exitCode || (signal === 'SIGINT' ? 130 : 143));
+  if (await teardown(signal)) process.exit(process.exitCode || (signal === 'SIGINT' ? 130 : 143));
 });
 try {
   const available = control('return !EditorApplication.isPlayingOrWillChangePlaymode && !GalaQuestEditorPlaySeam.Enabled;');
@@ -75,8 +100,10 @@ try {
   console.log(`Editor owner ${owner}; project ${PROJECT}; synthetic profile only`);
   if (cycles > 0) {
     for (let cycle = 1; cycle <= cycles; cycle++) {
+      if (stopRequested) break;
       control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) throw new System.InvalidOperationException("Owner lost"); EditorApplication.isPlaying = true; return true;`);
       await sleep(holdSeconds * 1000);
+      if (stopRequested) break;
       control(`if (!GalaQuestEditorPlaySeam.Owns("${owner}")) throw new System.InvalidOperationException("Owner lost"); EditorApplication.isPlaying = false; return true;`);
       await sleep(4000);
       console.log(`Play cycle ${cycle} requested; gameplay/lifecycle acceptance requires separate evidence`);
