@@ -8,6 +8,7 @@ namespace GalaQuest
         [SerializeField] private string initialDestination = GalaQuestProtocolV4.EmberworksDeepDestinationId;
         private const float ReconnectDelaySeconds = 2f;
         private IGalaQuestSelectedProfileSource profileSource;
+        private IGalaQuestTransport selectedTransport;
         private GalaQuestConnectionSession session;
         private string profileName = "Waiting for existing GalaQuest profile";
         private string connectionStatus = "Starting Unity Web client...";
@@ -22,17 +23,15 @@ namespace GalaQuest
         public void ConfigureInitialDestination(string destinationId) => initialDestination = destinationId;
 
         /// <summary>
-        /// Find a non-browser implementation attached to this entry. In a player no such component
-        /// can exist -- the development implementations are compiled out -- so this returns null and
-        /// the browser profile source and transport are selected exactly as before.
+        /// Resolve only the opt-in Editor adapters. Shipping players always use browser interop.
         /// </summary>
         private T ResolveDevelopmentOverride<T>() where T : class
         {
-            foreach (var component in GetComponents<MonoBehaviour>())
-            {
-                if (component is BrowserSelectedProfileSource || component is BrowserWebSocketTransport) continue;
-                if (component is T candidate) return candidate;
-            }
+#if UNITY_EDITOR
+            if (!GalaQuestEditorPlaySeam.Enabled) return null;
+            if (typeof(T) == typeof(IGalaQuestTransport)) return GetComponent<EditorWebSocketTransport>() as T;
+            if (typeof(T) == typeof(IGalaQuestSelectedProfileSource)) return GetComponent<EditorSyntheticProfileSource>() as T;
+#endif
             return null;
         }
 
@@ -51,6 +50,9 @@ namespace GalaQuest
 #endif
             profileSource = ResolveDevelopmentOverride<IGalaQuestSelectedProfileSource>()
                 ?? GetComponent<BrowserSelectedProfileSource>();
+            // Select identity and transport together, before asynchronous profile delivery.
+            selectedTransport = ResolveDevelopmentOverride<IGalaQuestTransport>()
+                ?? (IGalaQuestTransport)GetComponent<BrowserWebSocketTransport>();
             traversal = GetComponent<GalaQuestTraversalController>();
             combat = GetComponent<GalaQuestCombatPresentation>();
             destinations = GetComponent<GalaQuestDestinationPresentation>();
@@ -72,9 +74,7 @@ namespace GalaQuest
         private void HandleSelected(GalaQuestSelectedProfile profile)
         {
             profileName = profile.DisplayName;
-            var transport = ResolveDevelopmentOverride<IGalaQuestTransport>()
-                ?? (IGalaQuestTransport)GetComponent<BrowserWebSocketTransport>();
-            session = new GalaQuestConnectionSession(transport);
+            session = new GalaQuestConnectionSession(selectedTransport);
             session.StatusChanged += HandleStatus;
             session.Disconnected += ScheduleReconnect;
             progression.BindSession(session, profile.ProfileId);

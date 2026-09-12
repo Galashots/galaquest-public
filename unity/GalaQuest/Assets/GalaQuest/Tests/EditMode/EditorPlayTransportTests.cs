@@ -30,6 +30,26 @@ namespace GalaQuest.Tests
             else EditorPrefs.DeleteKey(GalaQuestEditorPlaySeam.ServerUrlKey);
         }
 
+        [Test]
+        public void DisabledSeamIgnoresAnAttachedNativeAdapter()
+        {
+            var enabled = GalaQuestEditorPlaySeam.Enabled;
+            var entryHost = new GameObject("Selection test");
+            entryHost.SetActive(false);
+            try
+            {
+                GalaQuestEditorPlaySeam.Enabled = false;
+                entryHost.AddComponent<EditorWebSocketTransport>();
+                var entry = entryHost.AddComponent<GalaQuestGameEntry>();
+                var resolver = typeof(GalaQuestGameEntry).GetMethod("ResolveDevelopmentOverride", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(resolver.MakeGenericMethod(typeof(IGalaQuestTransport)).Invoke(entry, null), Is.Null);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(entryHost);
+                GalaQuestEditorPlaySeam.Enabled = enabled;
+            }
+        }
         private void Pump() => typeof(EditorWebSocketTransport)
             .GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(transport, null);
 
@@ -93,3 +113,4 @@ namespace GalaQuest.Tests
         }
     }
 }
+
