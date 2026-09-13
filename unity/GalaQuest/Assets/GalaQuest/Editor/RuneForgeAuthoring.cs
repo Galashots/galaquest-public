@@ -97,7 +97,7 @@ namespace GalaQuest.Editor
             {
                 // The model is authored upright, at metre scale, around its own head centre. This is
                 // the first reviewable fit, not an Owner-authored lock; Unity fit review may revise it.
-                definition.TryApplySeedFit(new Vector3(0f, .205f, -.055f), Vector3.zero, Vector3.one * .72f);
+                definition.TryApplySeedFit(new Vector3(0f, .205f, -.055f), new Vector3(0, 180, 0), Vector3.one * .72f);
                 AssetDatabase.CreateAsset(definition, DefinitionPath);
             }
             EditorUtility.SetDirty(definition);
@@ -188,8 +188,20 @@ namespace GalaQuest.Editor
             var mesh = text.AddComponent<TextMesh>();
             mesh.text = label; mesh.anchor = TextAnchor.MiddleCenter; mesh.alignment = TextAlignment.Center;
             mesh.fontSize = 64; mesh.color = new Color(1f, .8f, .4f);
+            SizeControlLabel(mesh);
             root.AddComponent<GalaQuestRuneForgeInteractable>().Configure(kind, value);
             return root;
+        }
+
+        public static void SizeControlLabel(TextMesh label)
+        {
+            if (label == null || label.transform.parent == null)
+                throw new BuildFailedException("Expected an authored physical control label.");
+            var parentScale = label.transform.parent.lossyScale;
+            if (parentScale.x <= 0 || parentScale.y <= 0 || parentScale.z <= 0)
+                throw new BuildFailedException("Expected positive physical control dimensions.");
+            // Shallow rune blocks must not squash the text with their collider/mesh dimensions.
+            label.transform.localScale = new Vector3(.025f / parentScale.x, .025f / parentScale.y, .025f / parentScale.z);
         }
 
         private static void WorldLabel(string name, Transform parent, string value, Vector3 at, float scale)

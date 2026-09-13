@@ -18,7 +18,7 @@ MonoBehaviour:
   socketId: head
   fitClass: 1
   localPosition: {x: 0, y: 0.205, z: -0.055}
-  localEulerAngles: {x: 0, y: 0, z: 0}
+  localEulerAngles: {x: 0, y: 180, z: 0}
   localScale: {x: 0.72, y: 0.72, z: 0.72}
   mirrorX: 0
   hidesAnatomy: 0000000001000000

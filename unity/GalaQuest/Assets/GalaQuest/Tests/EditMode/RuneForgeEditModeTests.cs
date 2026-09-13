@@ -285,6 +285,44 @@ namespace GalaQuest.Tests
             finally { UnityEngine.Object.DestroyImmediate(instance); }
         }
 
+        [Test]
+        public void HelmetMoltenFacePointsForwardFromTheHeadSocket()
+        {
+            var definition = RuneForgeAuthoring.LoadHelmet();
+            var instance = UnityEngine.Object.Instantiate(definition.SourceModel);
+            try
+            {
+                instance.transform.localRotation = definition.LocalRotation;
+                instance.transform.localScale = definition.LocalScale;
+                var renderers = instance.GetComponentsInChildren<Renderer>();
+                var plate = renderers.Single(r => r.name == "ForgedPlate");
+                var face = renderers.Single(r => r.name == "MoltenSeams");
+                Assert.That(face.bounds.center.z, Is.GreaterThan(plate.bounds.center.z),
+                    "The authored molten brow and cheek seams belong in front of the wearer.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
+        }
+
+        [Test]
+        public void PhysicalRuneLabelsAreNotFlattenedByTheirAnvilScale()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RuneForgeAuthoring.PocketPrefabPath);
+            var instance = UnityEngine.Object.Instantiate(prefab);
+            try
+            {
+                foreach (var control in instance.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(true))
+                {
+                    control.SetLabel(control.Kind == "rune" ? "5,000" : "STRIKE");
+                    var label = control.GetComponentInChildren<TextMesh>(true);
+                    var scale = label.transform.lossyScale;
+                    Assert.That(scale.y, Is.EqualTo(scale.x).Within(.0001f), control.name + " flattens its text.");
+                    Assert.That(label.GetComponent<Renderer>().bounds.size.y, Is.GreaterThan(.14f),
+                        control.name + " must have readable world text at the established approach distance.");
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
+        }
+
         private sealed class Wire : IGalaQuestTransport
         {
             public event Action Opened;
