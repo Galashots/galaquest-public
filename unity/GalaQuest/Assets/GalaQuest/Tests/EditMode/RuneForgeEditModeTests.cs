@@ -373,6 +373,31 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void SiblingHealthBarYieldsToAnActualProjectedRuneButNotClearSpace()
+        {
+            var pocket = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(RuneForgeAuthoring.PocketPrefabPath));
+            var cameraObject = new GameObject("Projection camera");
+            try
+            {
+                var camera = cameraObject.AddComponent<Camera>();
+                camera.pixelRect = new Rect(0, 0, 390, 844);
+                var rune = pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(true).First(c => c.Kind == "rune");
+                rune.gameObject.SetActive(true);
+                camera.transform.position = rune.transform.position + new Vector3(0, 2, -8);
+                camera.transform.LookAt(rune.transform);
+                var projected = camera.WorldToScreenPoint(rune.transform.position);
+                var bar = new Rect(projected.x - 40, 844 - projected.y - 2, 80, 13);
+                Assert.That(GalaQuestRuneForgePresenter.OverlapsControlProjection(bar, camera, new[] { rune }, 844), Is.True,
+                    "A sibling bar cannot obscure the physical answer it projects over.");
+                Assert.That(GalaQuestRuneForgePresenter.OverlapsControlProjection(new Rect(0, 0, 20, 10), camera, new[] { rune }, 844), Is.False);
+                rune.gameObject.SetActive(false);
+                Assert.That(GalaQuestRuneForgePresenter.OverlapsControlProjection(bar, camera, new[] { rune }, 844), Is.False,
+                    "Inactive Forge controls must not hide ordinary health feedback.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(cameraObject); UnityEngine.Object.DestroyImmediate(pocket); }
+        }
+
+        [Test]
         public void ExpandedFormLabelWrapsWithoutChangingTheAnswerIdentity()
         {
             var root = new GameObject("Rune");

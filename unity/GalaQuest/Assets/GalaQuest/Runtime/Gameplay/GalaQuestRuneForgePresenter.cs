@@ -128,6 +128,40 @@ namespace GalaQuest
             }
         }
 
+        // Secondary overhead bars yield when they would cover a real Forge control.
+        // This changes visibility only; damage, health state and interaction stay intact.
+        public bool CoversActiveControl(Rect screenRect) => IsNear
+            && OverlapsControlProjection(screenRect, InteractionCamera, interactables, Screen.height);
+
+        public static bool OverlapsControlProjection(Rect screenRect, Camera camera,
+            IEnumerable<GalaQuestRuneForgeInteractable> controls, float viewportHeight)
+        {
+            if (camera == null || controls == null) return false;
+            foreach (var control in controls)
+            {
+                if (control == null || !control.gameObject.activeInHierarchy) continue;
+                foreach (var renderer in control.GetComponentsInChildren<Renderer>())
+                {
+                    if (!renderer.enabled) continue;
+                    var bounds = renderer.bounds;
+                    var min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+                    var max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+                    for (var corner = 0; corner < 8; corner++)
+                    {
+                        var world = bounds.center + Vector3.Scale(bounds.extents, new Vector3(
+                            (corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                        var point = camera.WorldToScreenPoint(world);
+                        if (point.z <= 0) continue;
+                        var gui = new Vector2(point.x, viewportHeight - point.y);
+                        min = Vector2.Min(min, gui); max = Vector2.Max(max, gui);
+                    }
+                    if (min.x <= max.x && screenRect.Overlaps(Rect.MinMaxRect(min.x - 3, min.y - 3, max.x + 3, max.y + 3)))
+                        return true;
+                }
+            }
+            return false;
+        }
+
         private void PollTouches()
         {
             var touchscreen = Touchscreen.current;

@@ -319,7 +319,10 @@ namespace GalaQuest
             {
                 if (actor.State == null) continue;
                 var point = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * 1.8f);
-                if (point.z > 0) DrawHealth(new Rect(point.x - 38, Screen.height - point.y, 76, 9), actor.State.hp, actor.State.maxHp, new Color(.3f, .8f, 1));
+                var plate = new Rect(point.x - 40, Screen.height - point.y - 2, 80, 13);
+                if (point.z > 0 && GetComponent<GalaQuestRuneForgePresenter>()?.CoversActiveControl(plate) != true)
+                    DrawHealth(new Rect(point.x - 38, Screen.height - point.y, 76, 9),
+                        actor.State.hp, actor.State.maxHp, new Color(.3f, .8f, 1));
             }
         }
 
