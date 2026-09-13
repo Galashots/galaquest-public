@@ -57,19 +57,38 @@ namespace GalaQuest.Editor
 
         private static void ArrangeTaskControls(Transform root)
         {
-            // The help pair and confirmation sit above the answer row, on the
-            // front of the existing station. At the normal left approach the old
-            // low, far-left HEAR label coincided with the Hero's head.
-            Place("SoundPlaque", new Vector3(-1.4f, .60f, -.3f), new Vector3(.60f, .75f, .30f));
-            Place("HintBell", new Vector3(-.7f, .60f, -.3f), new Vector3(.60f, .75f, .30f));
-            Place("ForgeHammer", new Vector3(1.15f, .68f, -.3f), new Vector3(.72f, .92f, .30f));
+            // Work-height controls clear the approaching Hero's head, including an
+            // ordinary portrait orbit. A thin supported surface keeps the prize
+            // visible behind the answers rather than making a solid blocking wall.
+            var iron = AssetDatabase.LoadAssetAtPath<Material>(Folder + "/ForgeIron.mat")
+                        ?? throw new BuildFailedException("Missing existing Forge iron material");
+            Support("ControlWorkbench", new Vector3(0, 1.2f, -.8f), new Vector3(3.5f, .18f, 1.4f));
+            Support("ControlWorkbenchLeft", new Vector3(-1.4f, .65f, -.8f), new Vector3(.18f, 1.1f, .75f));
+            Support("ControlWorkbenchRight", new Vector3(1.4f, .65f, -.8f), new Vector3(.18f, 1.1f, .75f));
+            Place("SoundPlaque", new Vector3(-1.4f, 1.515f, -.3f), new Vector3(.60f, .45f, .30f));
+            Place("HintBell", new Vector3(-.7f, 1.515f, -.3f), new Vector3(.60f, .45f, .30f));
+            Place("ForgeHammer", new Vector3(1.15f, 1.54f, -.3f), new Vector3(.72f, .5f, .30f));
+            for (var i = 0; i < 3; i++)
+                Place("Rune" + (i + 1), new Vector3(-1 + i, 1.42f, -1.05f), new Vector3(.8f, .26f, .62f));
+            Place("ForgeCore", new Vector3(0, 1.42f, -1.05f), new Vector3(.6f, .26f, .55f));
+            Place("SoundAnvil", new Vector3(-1.3f, 1.42f, -.6f), new Vector3(.75f, .26f, .72f));
+            Place("NumberAnvil", new Vector3(1.3f, 1.42f, -.6f), new Vector3(.75f, .26f, .72f));
+            Place("ClaimAnvil", new Vector3(0, 1.42f, -1.05f), new Vector3(.85f, .26f, .72f));
+            Place("EquipStand", new Vector3(0, 1.42f, -1.05f), new Vector3(.85f, .26f, .72f));
+            void Support(string name, Vector3 position, Vector3 size)
+            {
+                var item = root.Find(name)?.gameObject
+                           ?? Shape(name, root, PrimitiveType.Cube, position, size, iron, false);
+                item.transform.localPosition = position;
+                item.transform.localScale = size;
+            }
             void Place(string name, Vector3 position, Vector3 size)
             {
                 var control = root.Find(name) ?? throw new BuildFailedException("Missing Forge control " + name);
                 control.localPosition = position;
                 control.localScale = size;
-                if (name != "ForgeHammer") control.GetComponent<Renderer>().sharedMaterial =
-                    AssetDatabase.LoadAssetAtPath<Material>(Folder + "/ForgeIron.mat");
+                if (name == "SoundPlaque" || name == "HintBell") control.GetComponent<Renderer>().sharedMaterial =
+                    iron;
                 SizeControlLabel(control.GetComponentInChildren<TextMesh>(true));
             }
         }

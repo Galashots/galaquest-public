@@ -26,7 +26,9 @@ namespace GalaQuest
         public void SetLabel(string text)
         {
             if (label == null) label = GetComponentInChildren<TextMesh>(true);
-            plainLabel = text;
+            // Keep the catalog's longer expanded-form choices on their own rune.
+            plainLabel = kind == "rune" && text != null && text.Length > 8
+                ? text.Replace(" + ", " +\n") : text;
             UpdateLabel();
         }
 

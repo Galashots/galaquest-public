@@ -166,8 +166,11 @@ namespace GalaQuest.Tests
             }
         }
 
-        [Test]
-        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint()
+        [TestCase(1024, 768)]
+        [TestCase(1366, 768)]
+        [TestCase(844, 390)]
+        [TestCase(390, 844)]
+        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint(int width, int height)
         {
             var scene = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
                 UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
@@ -196,7 +199,17 @@ namespace GalaQuest.Tests
                 camera.fieldOfView = 42f;
                 camera.nearClipPlane = .1f;
                 camera.farClipPlane = 160f;
-                cameraObject.AddComponent<GalaQuestGameplayCamera>().Configure(heroObject.transform);
+                camera.pixelRect = new Rect(0, 0, width, height);
+                var follow = cameraObject.AddComponent<GalaQuestGameplayCamera>();
+                follow.Configure(heroObject.transform);
+                if (height > width)
+                {
+                    // Exercise the existing orbit convention; this fixture is not runtime input evidence.
+                    typeof(GalaQuestGameplayCamera).GetMethod("ApplyDrag",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                        .Invoke(follow, new object[] { new Vector2(44f * Mathf.Deg2Rad / .006f * Screen.height / 600f, 0) });
+                    follow.FollowNow();
+                }
 
                 var finder = typeof(GalaQuestRuneForgePresenter).GetMethod("FindInteractable",
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
@@ -207,6 +220,8 @@ namespace GalaQuest.Tests
                     // browser driver as this control's tap point.
                     var point = camera.WorldToScreenPoint(item.transform.position);
                     Assert.That(point.z, Is.GreaterThan(0f), item.name + " projects behind the gameplay camera.");
+                    Assert.That(new Rect(0, 0, width, height).Contains(point), Is.True,
+                        item.name + " is outside the " + width + "x" + height + " viewport: " + point);
                     var winner = (GalaQuestRuneForgeInteractable)finder.Invoke(
                         null, new object[] { camera.ScreenPointToRay(point) });
                     Assert.That(winner, Is.SameAs(item), item.name + " (" + item.Kind
@@ -355,6 +370,26 @@ namespace GalaQuest.Tests
                 }
             }
             finally { UnityEngine.Object.DestroyImmediate(instance); }
+        }
+
+        [Test]
+        public void ExpandedFormLabelWrapsWithoutChangingTheAnswerIdentity()
+        {
+            var root = new GameObject("Rune");
+            try
+            {
+                var label = new GameObject("Label");
+                label.transform.SetParent(root.transform);
+                var mesh = label.AddComponent<TextMesh>();
+                var rune = root.AddComponent<GalaQuestRuneForgeInteractable>();
+                rune.Configure("rune", "expanded-correct");
+                rune.SetLabel("6,000 + 700 + 20");
+                Assert.That(mesh.text, Is.EqualTo("6,000 +\n700 +\n20"));
+                rune.SetGlow(true, true);
+                Assert.That(mesh.text, Does.Contain("6,000 +\n700 +\n20"));
+                Assert.That(rune.Value, Is.EqualTo("expanded-correct"));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
         }
 
         private sealed class Wire : IGalaQuestTransport
