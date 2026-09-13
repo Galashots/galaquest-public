@@ -12,6 +12,8 @@ namespace GalaQuest
         private bool emberFog;
         private Color emberAmbient;
         private Color emberBackground;
+        private bool travelPointerHeld;
+        private bool travelPointerInside;
 
         public string VisibleDestination { get; private set; }
         public void Configure(GameObject home, GameObject emberworks)
@@ -67,6 +69,13 @@ namespace GalaQuest
             var oldEnabled = GUI.enabled;
             var travelEnabled = session.ControlsReady && nearGate && !session.IsTravelling;
             GUI.enabled = travelEnabled;
+            if (!travelEnabled || Event.current.rawType == EventType.MouseUp) travelPointerHeld = false;
+            else if (Event.current.type == EventType.MouseDown && Event.current.button == 0
+                && rect.Contains(Event.current.mousePosition))
+            { travelPointerHeld = true; travelPointerInside = true; }
+            else if (travelPointerHeld && (Event.current.type == EventType.MouseDrag
+                || Event.current.type == EventType.MouseMove))
+                travelPointerInside = rect.Contains(Event.current.mousePosition);
             var label = session.IsTravelling ? "Travelling..." : home
                 ? (nearGate ? "Enter Emberworks" : "Walk to the gate") : "Return to camp";
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
@@ -75,6 +84,8 @@ namespace GalaQuest
             if (Event.current.type == EventType.Repaint)
             {
                 GalaQuestCombatHudStyle.Panel(rect, lit: travelEnabled);
+                if (travelPointerHeld && travelPointerInside)
+                    GalaQuestCombatHudStyle.Fill(GalaQuestCombatHudStyle.Inset(rect, 7), new Color(.88f, .65f, .31f, .22f));
                 GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8 * layout.Scale), label, 18 * layout.Scale,
                     travelEnabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter);
                 GalaQuestCombatHudStyle.Panel(layout.Objective, paper: true);
@@ -87,6 +98,9 @@ namespace GalaQuest
             }
             GUI.enabled = oldEnabled;
         }
+
+        private void OnApplicationFocus(bool focused) { if (!focused) travelPointerHeld = false; }
+        private void OnDisable() => travelPointerHeld = false;
 
         private void OnDestroy() => BindSession(null);
     }
