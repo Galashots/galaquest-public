@@ -102,16 +102,21 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            if (!state.Active || circleTexture == null) return;
+            if (Event.current.type != EventType.Repaint || circleTexture == null) return;
+            if (!state.Active)
+            {
+                var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
+                GalaQuestCombatHudStyle.MovementRest(layout.Movement);
+                return;
+            }
             var radius = state.Radius;
             var origin = ToGuiPoint(state.Origin);
             var handle = ToGuiPoint(state.Handle);
 
-            DrawCircle(origin, radius, new Color(0.035f, 0.05f, 0.08f, 0.52f));
-            DrawCircle(origin, radius * 0.82f, new Color(0.24f, 0.29f, 0.37f, 0.38f));
+            GalaQuestCombatHudStyle.Disc(new Rect(origin.x - radius, origin.y - radius, radius * 2, radius * 2), true, false);
             var handleColor = state.Magnitude >= GalaQuestMovementLaw.RunDeflection
                 ? new Color(1f, 0.48f, 0.12f, 0.92f)
-                : new Color(0.88f, 0.91f, 0.94f, 0.90f);
+                : GalaQuestCombatHudStyle.Gold;
             DrawCircle(handle, radius * 0.43f, handleColor);
         }
 
