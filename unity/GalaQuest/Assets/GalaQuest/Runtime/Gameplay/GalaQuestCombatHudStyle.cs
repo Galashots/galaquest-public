@@ -9,7 +9,7 @@ namespace GalaQuest
         public static readonly Color Ink = new Color(.96f, .9f, .76f);
         public static readonly Color Teal = new Color(.26f, .72f, .77f);
         public static readonly Color Red = new Color(.78f, .19f, .11f);
-        private static Texture2D leather, parchment, disc;
+        private static Texture2D leather, parchment, disc, frame, litFrame, paperFrame;
         private static GUIStyle text;
 
         public static void Text(Rect rect, string value, float size, Color color,
@@ -35,20 +35,41 @@ namespace GalaQuest
         public static void Panel(Rect rect, bool paper = false, bool lit = false)
         {
             EnsureTextures();
-            Fill(new Rect(rect.x + 2, rect.y + 4, rect.width, rect.height), new Color(0, 0, 0, .55f));
-            Fill(rect, lit ? Gold : new Color(.36f, .27f, .15f));
-            Fill(Inset(rect, 1), new Color(.09f, .08f, .06f));
-            var inner = Inset(rect, 3);
-            var old = GUI.color; GUI.color = Color.white;
-            GUI.DrawTextureWithTexCoords(inner, paper ? parchment : leather,
-                new Rect(0, 0, inner.width / 128, inner.height / 128));
-            GUI.color = old;
-            Fill(new Rect(rect.x + 4, rect.y + 3, rect.width - 8, 1), paper
-                ? new Color(.93f, .78f, .47f) : new Color(.48f, .4f, .24f));
-            Fill(new Rect(rect.x + 4, rect.yMax - 4, rect.width - 8, 1), new Color(.12f, .07f, .025f));
-            foreach (var x in new[] { rect.x + 5, rect.xMax - 8 })
-                foreach (var y in new[] { rect.y + 5, rect.yMax - 8 })
-                { Fill(new Rect(x, y, 3, 3), Gold); Fill(new Rect(x, y, 2, 1), Ink); }
+            // Nine slices retain cut corners and broad bevels at every screen size.
+            var texture = paper ? paperFrame : lit ? litFrame : frame;
+            var corner = Mathf.Min(12, rect.height * .25f);
+            for (var row = 0; row < 3; row++)
+                for (var col = 0; col < 3; col++)
+                {
+                    var x = col == 0 ? rect.x : col == 1 ? rect.x + corner : rect.xMax - corner;
+                    var y = row == 0 ? rect.y : row == 1 ? rect.y + corner : rect.yMax - corner;
+                    var w = col == 1 ? rect.width - corner * 2 : corner;
+                    var h = row == 1 ? rect.height - corner * 2 : corner;
+                    var u = col == 0 ? 0 : col == 1 ? 12f / 128 : 116f / 128;
+                    var v = row == 0 ? 116f / 128 : row == 1 ? 12f / 128 : 0;
+                    var uvw = col == 1 ? 104f / 128 : 12f / 128;
+                    var uvh = row == 1 ? 104f / 128 : 12f / 128;
+                    GUI.DrawTextureWithTexCoords(new Rect(x, y, w, h), texture, new Rect(u, v, uvw, uvh));
+                }
+        }
+
+        public static void MovementRest(Rect rect)
+        {
+            Disc(rect, true, false);
+            var thumb = new Rect(rect.center.x - rect.width * .19f, rect.center.y - rect.height * .23f,
+                rect.width * .38f, rect.height * .38f);
+            Disc(thumb, true, false);
+            Fill(new Rect(thumb.x + thumb.width * .25f, thumb.y + thumb.height * .32f,
+                thumb.width * .5f, 2), Gold);
+            for (var i = 0; i < 4; i++)
+            {
+                var previous = GUI.matrix;
+                GUIUtility.RotateAroundPivot(i * 90, rect.center);
+                Fill(new Rect(rect.center.x - 1, rect.y + rect.height * .13f, 2, rect.height * .09f), Gold);
+                GUI.matrix = previous;
+            }
+            Text(new Rect(rect.x, rect.y + rect.height * .68f, rect.width, rect.height * .18f),
+                "MOVE", rect.height * .095f, Gold, true, TextAnchor.MiddleCenter);
         }
 
         public static void Bar(Rect rect, float fraction, Color color)
@@ -87,6 +108,7 @@ namespace GalaQuest
         {
             if (leather != null) return;
             leather = MaterialTexture(false); parchment = MaterialTexture(true);
+            frame = FrameTexture(false, false); litFrame = FrameTexture(false, true); paperFrame = FrameTexture(true, false);
             const int size = 256;
             disc = NewTexture(size, "GalaQuest forged control");
             var pixels = new Color[size * size];
@@ -117,8 +139,34 @@ namespace GalaQuest
                 {
                     var grain = Noise(x, y) * .45f + Mathf.PerlinNoise(x * .09f, y * .09f) * .55f;
                     pixels[y * 128 + x] = paper
-                        ? Color.Lerp(new Color(.62f, .44f, .22f), new Color(.86f, .72f, .46f), grain)
+                        ? Color.Lerp(new Color(.77f, .63f, .39f), new Color(.85f, .73f, .50f), grain)
                         : Color.Lerp(new Color(.035f, .038f, .033f), new Color(.11f, .095f, .063f), grain);
+                }
+            texture.SetPixels(pixels); texture.Apply(false, true); return texture;
+        }
+
+        private static Texture2D FrameTexture(bool paper, bool lit)
+        {
+            const int size = 128;
+            var texture = NewTexture(size, paper ? "GalaQuest cut parchment" : "GalaQuest bevelled frame");
+            var pixels = new Color[size * size];
+            for (var y = 0; y < size; y++)
+                for (var x = 0; x < size; x++)
+                {
+                    var dx = Mathf.Min(x, size - 1 - x);
+                    var dy = Mathf.Min(y, size - 1 - y);
+                    var edge = Mathf.Min(dx, dy, (dx + dy - 8) * .7071f);
+                    var light = Mathf.Clamp01(.4f + y / 180f - x / 360f);
+                    var grain = Noise(x, y) * .12f + Mathf.PerlinNoise(x * .07f, y * .07f) * .88f;
+                    var c = paper
+                        ? Color.Lerp(new Color(.78f, .65f, .43f), new Color(.87f, .76f, .53f), grain)
+                        : Color.Lerp(new Color(.055f, .052f, .039f), new Color(.095f, .083f, .057f), grain);
+                    if (edge < 5) c = Color.Lerp(new Color(.13f, .10f, .06f),
+                        lit ? new Color(.84f, .63f, .30f) : new Color(.48f, .37f, .21f), light);
+                    if (edge < 1 || (edge >= 5 && edge < 6)) c = new Color(.025f, .023f, .018f);
+                    if (edge >= 6 && edge < 7) c = paper ? new Color(.57f, .40f, .20f) : new Color(.19f, .15f, .085f);
+                    c.a = Mathf.Clamp01(edge + 1);
+                    pixels[y * size + x] = c;
                 }
             texture.SetPixels(pixels); texture.Apply(false, true); return texture;
         }
@@ -129,9 +177,9 @@ namespace GalaQuest
 
         public static void Release()
         {
-            foreach (var texture in new[] { leather, parchment, disc })
+            foreach (var texture in new[] { leather, parchment, disc, frame, litFrame, paperFrame })
                 if (texture != null) Object.Destroy(texture);
-            leather = parchment = disc = null; text = null;
+            leather = parchment = disc = frame = litFrame = paperFrame = null; text = null;
         }
     }
 }

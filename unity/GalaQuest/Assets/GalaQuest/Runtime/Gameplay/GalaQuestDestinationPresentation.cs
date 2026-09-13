@@ -65,16 +65,18 @@ namespace GalaQuest
             var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
             var rect = layout.Travel;
             var oldEnabled = GUI.enabled;
-            GUI.enabled = session.ControlsReady && nearGate && !session.IsTravelling;
+            var travelEnabled = session.ControlsReady && nearGate && !session.IsTravelling;
+            GUI.enabled = travelEnabled;
             var label = session.IsTravelling ? "Travelling..." : home
                 ? (nearGate ? "Enter Emberworks" : "Walk to the gate") : "Return to camp";
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
                 session.RequestTravel(home ? GalaQuestProtocolV4.EmberworksDeepDestinationId : GalaQuestProtocolV4.HomeHubDestinationId);
+            GUI.enabled = oldEnabled;
             if (Event.current.type == EventType.Repaint)
             {
-                GalaQuestCombatHudStyle.Panel(rect, lit: GUI.enabled);
+                GalaQuestCombatHudStyle.Panel(rect, lit: travelEnabled);
                 GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8 * layout.Scale), label, 18 * layout.Scale,
-                    GUI.enabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter);
+                    travelEnabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter);
                 GalaQuestCombatHudStyle.Panel(layout.Objective, paper: true);
                 var objective = home ? "Enter the glowing gate" : "Take on the Emberworks fight";
                 var content = GalaQuestCombatHudStyle.Inset(layout.Objective, 12 * layout.Scale);

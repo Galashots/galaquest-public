@@ -43,5 +43,30 @@ namespace GalaQuest
 
         public bool CoversStatus(Rect rect) => rect.Overlaps(Status) || rect.Overlaps(Identity)
             || rect.Overlaps(Objective) || rect.Overlaps(Mute);
+
+        public Rect PlaceEngagedNameplate(Rect rect, Vector2 viewport)
+        {
+            var original = rect;
+            var best = rect;
+            var distance = float.PositiveInfinity;
+            for (var i = 0; i < 4; i++)
+            {
+                var obstacle = i == 0 ? Status : i == 1 ? Identity : i == 2 ? Objective : Mute;
+                if (!original.Overlaps(obstacle)) continue;
+                for (var side = 0; side < 4; side++)
+                {
+                    var candidate = original;
+                    if (side == 0) candidate.x = obstacle.xMax + 8 * Scale;
+                    else if (side == 1) candidate.x = obstacle.xMin - original.width - 8 * Scale;
+                    else if (side == 2) candidate.y = obstacle.yMax + 8 * Scale;
+                    else candidate.y = obstacle.yMin - original.height - 8 * Scale;
+                    if (candidate.xMin < 0 || candidate.yMin < 0 || candidate.xMax > viewport.x
+                        || candidate.yMax > viewport.y || CoversStatus(candidate)) continue;
+                    var delta = (candidate.center - original.center).sqrMagnitude;
+                    if (delta < distance) { best = candidate; distance = delta; }
+                }
+            }
+            return best;
+        }
     }
 }

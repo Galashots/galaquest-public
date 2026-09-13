@@ -106,9 +106,7 @@ namespace GalaQuest
             if (!state.Active)
             {
                 var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
-                GalaQuestCombatHudStyle.Disc(layout.Movement, true, false);
-                GalaQuestCombatHudStyle.Text(layout.Movement, "MOVE", 14 * layout.Scale,
-                    GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleCenter);
+                GalaQuestCombatHudStyle.MovementRest(layout.Movement);
                 return;
             }
             var radius = state.Radius;

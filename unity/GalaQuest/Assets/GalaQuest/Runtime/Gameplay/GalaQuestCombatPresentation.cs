@@ -306,10 +306,11 @@ namespace GalaQuest
             var point = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * 1.55f);
             if (point.z <= 0) return;
             var s = layout.Scale;
-            var width = (engaged ? 156 : 112) * s;
+            var width = (engaged ? 184 : 140) * s;
             var height = (engaged ? 60 : 42) * s;
             var rect = new Rect(point.x - width / 2, Screen.height - point.y - height, width, height);
             if (rect.xMin < 0 || rect.xMax > Screen.width || rect.yMin < 0 || rect.yMax > Screen.height) return;
+            if (engaged) rect = layout.PlaceEngagedNameplate(rect, new Vector2(Screen.width, Screen.height));
             // Secondary labels yield to the fixed HUD and already-visible labels; they never stack into a wall of UI.
             if (!engaged)
             {
@@ -320,9 +321,10 @@ namespace GalaQuest
             GalaQuestCombatHudStyle.Panel(rect, lit: engaged);
             var kind = actor.State.kind ?? "Enemy";
             var name = kind.Length > 0 ? char.ToUpperInvariant(kind[0]) + kind.Substring(1).Replace('-', ' ') : "Enemy";
-            GalaQuestCombatHudStyle.Text(new Rect(rect.x + 5 * s, rect.y + 3 * s, rect.width - 10 * s, 23 * s),
-                name + "  LV " + actor.State.level, (engaged ? 17 : 14) * s,
-                GalaQuestCombatHudStyle.Ink, true, TextAnchor.MiddleCenter);
+            GalaQuestCombatHudStyle.Text(new Rect(rect.x + 9 * s, rect.y + 3 * s, rect.width - 49 * s, 23 * s),
+                name, (engaged ? 15 : 12) * s, GalaQuestCombatHudStyle.Ink, true);
+            GalaQuestCombatHudStyle.Text(new Rect(rect.xMax - 40 * s, rect.y + 3 * s, 32 * s, 23 * s),
+                "LV " + actor.State.level, 11 * s, GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleRight);
             if (engaged) GalaQuestCombatHudStyle.Text(new Rect(rect.x, rect.y + 25 * s, rect.width, 15 * s),
                 "ENGAGED", 10 * s, GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleCenter);
             GalaQuestCombatHudStyle.Bar(new Rect(rect.x + 8 * s, rect.yMax - 14 * s, rect.width - 16 * s, 8 * s),
@@ -332,7 +334,7 @@ namespace GalaQuest
             {
                 var feet = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * .45f);
                 var y = Screen.height - feet.y;
-                foreach (var side in new[] { -1, 1 })
+                for (var side = -1; side <= 1; side += 2)
                 {
                     var x = feet.x + side * 29 * s;
                     GalaQuestCombatHudStyle.Fill(new Rect(x, y - 18 * s, 2 * s, 36 * s), GalaQuestCombatHudStyle.Gold);
