@@ -24,8 +24,6 @@ namespace GalaQuest
         private GalaQuestRuneForgeInteractable[] interactables = Array.Empty<GalaQuestRuneForgeInteractable>();
         private GalaQuestRuneForgeInteractable selectedRune;
         private AudioSource audioSource;
-        private GUIStyle titleStyle;
-        private GUIStyle promptStyle;
         private string feedback = string.Empty;
         private float feedbackUntil;
         private bool equipped;
@@ -259,24 +257,24 @@ namespace GalaQuest
             PresentWorld();
         }
 
+        public static Rect PromptRect(Vector2 viewport)
+        {
+            var hud = new GalaQuestCombatHudLayout(viewport);
+            var panel = hud.Objective;
+            panel.height = 128 * hud.Scale;
+            return panel;
+        }
+
         private void OnGUI()
         {
             if (!IsNear) return;
-            titleStyle ??= new GUIStyle(GUI.skin.label)
-            { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, normal = { textColor = new Color(1f, .72f, .25f) } };
-            promptStyle ??= new GUIStyle(GUI.skin.label)
-            { alignment = TextAnchor.MiddleCenter, wordWrap = true, normal = { textColor = Color.white } };
-            titleStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 32f), 17, 28);
-            promptStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 42f), 14, 22);
-            var width = Mathf.Min(480f, Screen.width * .50f);
-            var panelX = Mathf.Min(Screen.width - width - 14f,
-                Mathf.Max(Screen.width * .35f, (Screen.width - width) / 2f));
-            var panel = new Rect(panelX, Screen.height * .075f, width, 94f);
-            var old = GUI.color;
-            GUI.color = new Color(.035f, .018f, .012f, .86f);
-            GUI.DrawTexture(panel, Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            GUI.Label(new Rect(panel.x + 12, panel.y + 5, panel.width - 24, 31), "RUNE FORGE", titleStyle);
+            var viewport = new Vector2(Screen.width, Screen.height);
+            var panel = PromptRect(viewport);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            GalaQuestCombatHudStyle.Panel(panel, paper: true);
+            var title = state?.status == "active" ? "RUNE FORGE  /  " + state.completedCount + " OF " + state.requiredSuccesses : "RUNE FORGE";
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 6*s, panel.width - 24*s, 24*s),
+                title, 15*s, new Color(.25f, .15f, .06f), true);
             var prompt = state == null ? "MagmaLord Helmet trapped — touch WAKE below."
                 : state.status == "choose-pack" ? "Choose a rune anvil."
                 : state.status == "active" ? state.task?.displayPrompt
@@ -284,8 +282,8 @@ namespace GalaQuest
                 : equipped ? "MagmaLord Helmet equipped · 20% damage reduction"
                 : "You own the helmet. Touch EQUIP to wear it.";
             if (Time.unscaledTime < feedbackUntil && !string.IsNullOrEmpty(feedback)) prompt = feedback;
-            GUI.Label(new Rect(panel.x + 14, panel.y + 39, panel.width - 28, 55), prompt, promptStyle);
-            GUI.color = old;
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 32*s, panel.width - 24*s, panel.height - 40*s),
+                prompt, 18*s, new Color(.14f, .085f, .025f), true, TextAnchor.UpperLeft, true);
         }
 
         private void OnDestroy() => BindSession(null);

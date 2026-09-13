@@ -250,6 +250,41 @@ namespace GalaQuest.Tests
             }
         }
 
+        [TestCase(1024, 768)]
+        [TestCase(1366, 768)]
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        public void ForgePromptLeavesStatusAndControlsVisible(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var hud = new GalaQuestCombatHudLayout(viewport);
+            var prompt = GalaQuestRuneForgePresenter.PromptRect(viewport);
+            Assert.That(prompt.Overlaps(hud.Status) || prompt.Overlaps(hud.Identity) || prompt.Overlaps(hud.Mute), Is.False);
+            Assert.That(prompt.Overlaps(hud.Attack) || prompt.Overlaps(hud.Movement)
+                || prompt.Overlaps(hud.Travel), Is.False);
+            Assert.That(prompt.xMin >= 0 && prompt.yMin >= 0 && prompt.xMax <= width
+                && prompt.yMax <= height, Is.True);
+        }
+
+        [Test]
+        public void HelmetKeepsAuthoredMetreDimensionsWhenWearableFitReplacesRootScale()
+        {
+            var definition = RuneForgeAuthoring.LoadHelmet();
+            var instance = UnityEngine.Object.Instantiate(definition.SourceModel);
+            try
+            {
+                var renderers = instance.GetComponentsInChildren<Renderer>();
+                Bounds Measure() { var bounds = renderers[0].bounds; foreach (var r in renderers.Skip(1)) bounds.Encapsulate(r.bounds); return bounds; }
+                var authoredSize = Measure().size;
+                Assert.That(authoredSize.x, Is.GreaterThan(.5f), "The authored horn span is metre-scale.");
+                instance.transform.localScale = definition.LocalScale;
+                instance.transform.localRotation = Quaternion.Euler(definition.LocalEulerAngles);
+                Assert.That(Vector3.Distance(Measure().size, Vector3.Scale(authoredSize, definition.LocalScale)),
+                    Is.LessThan(.001f), "Wearable fit must preserve both FBX units and upright source axes.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
+        }
+
         private sealed class Wire : IGalaQuestTransport
         {
             public event Action Opened;

@@ -75,6 +75,7 @@ namespace GalaQuest.Editor
             try
             {
                 instance.name = "MagmaLordHelmet";
+                NormalizeHelmetRootTransform(instance);
                 foreach (var renderer in instance.GetComponentsInChildren<Renderer>(true))
                 {
                     renderer.sharedMaterial = renderer.name.Contains("Molten", StringComparison.OrdinalIgnoreCase) ? molten
@@ -102,6 +103,28 @@ namespace GalaQuest.Editor
             EditorUtility.SetDirty(definition);
             AssetDatabase.SaveAssets();
             return definition;
+        }
+
+        public static void NormalizeHelmetRootTransform(GameObject instance)
+        {
+            // Fits and the enlarged display replace the root. Keep FBX units and axis conversion
+            // below that root, without changing meshes, the authored appearance or socket fit.
+            var root = instance.transform;
+            var scale = root.localScale;
+            var rotation = root.localRotation;
+            var position = root.localPosition;
+            if (root.GetComponent<Renderer>() != null || scale.x <= 0
+                || !Mathf.Approximately(scale.x, scale.y) || !Mathf.Approximately(scale.x, scale.z))
+                throw new BuildFailedException("Expected the helmet's empty, uniformly scaled import root.");
+            foreach (Transform child in root)
+            {
+                child.localPosition = position + rotation * Vector3.Scale(child.localPosition, scale);
+                child.localRotation = rotation * child.localRotation;
+                child.localScale = Vector3.Scale(child.localScale, scale);
+            }
+            root.localScale = Vector3.one;
+            root.localRotation = Quaternion.identity;
+            root.localPosition = Vector3.zero;
         }
 
         private static GameObject BuildPocket(Transform parent, GearItemDefinition definition)
