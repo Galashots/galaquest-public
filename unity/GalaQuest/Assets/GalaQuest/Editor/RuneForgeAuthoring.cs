@@ -60,9 +60,9 @@ namespace GalaQuest.Editor
             // The help pair and confirmation sit above the answer row, on the
             // front of the existing station. At the normal left approach the old
             // low, far-left HEAR label coincided with the Hero's head.
-            Place("SoundPlaque", new Vector3(-1.1f, .80f, -.3f), new Vector3(.60f, 1.20f, .30f));
-            Place("HintBell", new Vector3(-.35f, .80f, -.3f), new Vector3(.60f, 1.20f, .30f));
-            Place("ForgeHammer", new Vector3(1.15f, .85f, -.3f), new Vector3(.72f, 1.30f, .35f));
+            Place("SoundPlaque", new Vector3(-1.4f, .60f, -.3f), new Vector3(.60f, .75f, .30f));
+            Place("HintBell", new Vector3(-.7f, .60f, -.3f), new Vector3(.60f, .75f, .30f));
+            Place("ForgeHammer", new Vector3(1.15f, .68f, -.3f), new Vector3(.72f, .92f, .30f));
             void Place(string name, Vector3 position, Vector3 size)
             {
                 var control = root.Find(name) ?? throw new BuildFailedException("Missing Forge control " + name);
