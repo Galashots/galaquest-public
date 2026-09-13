@@ -6,6 +6,17 @@ namespace GalaQuest.Tests
     public sealed class CombatHudLayoutTests
     {
         [Test]
+        public void PortraitForgePromptClearsObservedApproachHead()
+        {
+            // Connected main 4c99811, ordinary approach (5,15), 390x844: the visible
+            // head occupies y=320..363. The old parchment extends through y=357.
+            // This reproduction does not claim the separate offscreen Forge is fixed.
+            var prompt = GalaQuestRuneForgePresenter.PromptRect(new Vector2(390, 844));
+            Assert.That(prompt.Overlaps(new Rect(173, 320, 48, 43)), Is.False);
+            Assert.That(prompt.yMax, Is.LessThan(310), "Keep a little separation above the visible head.");
+        }
+
+        [Test]
         public void EngagedNameplateStaysReadableBesideTheObjective()
         {
             var viewport = new Vector2(1024, 768);

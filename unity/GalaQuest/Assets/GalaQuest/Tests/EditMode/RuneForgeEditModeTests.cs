@@ -35,6 +35,40 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void QuestionRemainsTheServerQuestionDuringRetryAndHintFeedback()
+        {
+            foreach (var response in new[] { "retry", "hint", "independent-success" })
+            {
+                var state = JsonUtility.FromJson<GalaQuestRuneForgeState>(
+                    "{\"status\":\"active\",\"task\":{\"displayPrompt\":\"In 4,582, what is the value of 5?\"}}");
+                state.response = response;
+                Assert.That(GalaQuestRuneForgePresenter.CurrentPrompt(state, false),
+                    Is.EqualTo(state.task.displayPrompt));
+            }
+        }
+
+        [Test]
+        public void SelectionUsesTextAndBaseColourAndRestoresOnDeselection()
+        {
+            var root = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var text = new GameObject("Label"); text.transform.SetParent(root.transform);
+            try
+            {
+                var mesh = text.AddComponent<TextMesh>(); mesh.text = "500";
+                var control = root.AddComponent<GalaQuestRuneForgeInteractable>();
+                control.Configure("rune", "500"); control.SetGlow(true, true); control.SetLabel("500");
+                Assert.That(mesh.text, Is.EqualTo("> 500 <"));
+                var block = new MaterialPropertyBlock(); root.GetComponent<Renderer>().GetPropertyBlock(block);
+                Assert.That(block.HasColor("_BaseColor"), Is.True);
+                control.SetGlow(true, false);
+                Assert.That(mesh.text, Is.EqualTo("500"));
+                root.GetComponent<Renderer>().GetPropertyBlock(block);
+                Assert.That(block.HasColor("_BaseColor"), Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
+        [Test]
         public void SessionRejectsForgeStateFromAnotherPlayerDestinationOrEpoch()
         {
             var wire = new Wire();

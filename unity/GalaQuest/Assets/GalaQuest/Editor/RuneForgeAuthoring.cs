@@ -43,6 +43,37 @@ namespace GalaQuest.Editor
             return definition;
         }
 
+        [MenuItem("GalaQuest/Rune Forge/Update control presentation only")]
+        public static void UpdateControlPresentation()
+        {
+            var root = PrefabUtility.LoadPrefabContents(PocketPrefabPath);
+            try
+            {
+                ArrangeTaskControls(root.transform);
+                PrefabUtility.SaveAsPrefabAsset(root, PocketPrefabPath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static void ArrangeTaskControls(Transform root)
+        {
+            // The help pair and confirmation sit above the answer row, on the
+            // front of the existing station. At the normal left approach the old
+            // low, far-left HEAR label coincided with the Hero's head.
+            Place("SoundPlaque", new Vector3(-1.1f, .80f, -.3f), new Vector3(.60f, 1.20f, .30f));
+            Place("HintBell", new Vector3(-.35f, .80f, -.3f), new Vector3(.60f, 1.20f, .30f));
+            Place("ForgeHammer", new Vector3(1.15f, .85f, -.3f), new Vector3(.72f, 1.30f, .35f));
+            void Place(string name, Vector3 position, Vector3 size)
+            {
+                var control = root.Find(name) ?? throw new BuildFailedException("Missing Forge control " + name);
+                control.localPosition = position;
+                control.localScale = size;
+                if (name != "ForgeHammer") control.GetComponent<Renderer>().sharedMaterial =
+                    AssetDatabase.LoadAssetAtPath<Material>(Folder + "/ForgeIron.mat");
+                SizeControlLabel(control.GetComponentInChildren<TextMesh>(true));
+            }
+        }
+
         public static void ConfigurePreview(GameObject runtime, GalaQuestCombatContent content)
         {
             content.MagmaLordHelmet = LoadHelmet();
@@ -173,6 +204,7 @@ namespace GalaQuest.Editor
             Interactable("SoundPlaque", root.transform, "hear", "", new Vector3(-2f, .45f, -.35f), new Vector3(.28f, .4f, .28f), rune, "HEAR");
             Interactable("ClaimAnvil", root.transform, "claim", "", new Vector3(0, .55f, -.85f), new Vector3(.85f, .42f, .72f), ember, "CLAIM");
             Interactable("EquipStand", root.transform, "equip", "", new Vector3(0, .55f, -.85f), new Vector3(.85f, .42f, .72f), rune, "EQUIP");
+            ArrangeTaskControls(root.transform);
             return root;
         }
 
