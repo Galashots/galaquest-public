@@ -81,6 +81,21 @@ test('arrival reward history is hydrated once and a wrong-player history cannot 
   assert.equal(state.gainedXp,0);
 });
 
+test('accepted private forge state persists its durable facts without replaying a reward ceremony', () => {
+  const {storage,bridge}=setup();
+  const entitlement={type:'gear-owned',eventId:`forge-entitlement:${A}:emberworks.rune-forge.magmalord-helmet.v1`,value:'helmet_magmalord'};
+  const history={type:'forge-task-completed',eventId:`forge-complete:${A}:emberworks.rune-forge.magmalord-helmet.v1:g2-ir-bird`,value:'{\"taskId\":\"g2-ir-bird\",\"outcome\":\"independent\"}'};
+  const state=bridge.applyFrame(A,'p1',{v:4,type:'forge-state',id:'p1',profileFacts:[entitlement,history],events:[],forge:{status:'owned'}});
+  assert.deepEqual(state.ownedItemIds,['starter_sword','shield_ironwood','helmet_magmalord']);
+  assert.equal(state.gainedXp,0);
+  assert.equal(state.leveledUp,false);
+  const journal=createProfileStore({storage}).journalFor(A);
+  assert.equal(journal.filter(fact=>fact.eventId===entitlement.eventId).length,1);
+  bridge.applyFrame(A,'p1',{v:4,type:'forge-state',id:'p1',profileFacts:[entitlement,history],events:[],forge:{status:'owned'}});
+  assert.equal(createProfileStore({storage}).journalFor(A).filter(fact=>fact.eventId===entitlement.eventId).length,1);
+  assert.throws(()=>bridge.applyFrame(A,'p1',{v:4,type:'forge-state',id:'p2',profileFacts:[entitlement],forge:{}}),/different player/);
+});
+
 test('ordinary movement and sibling-only events do not read the device journal', () => {
   const bridge=createUnityProfileProgression({storage:{getItem(){throw new Error('Unexpected hot-path storage read');}}});
   assert.equal(bridge.applyFrame(A,'p1',snapshot([])),null);

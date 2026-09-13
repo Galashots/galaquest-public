@@ -124,6 +124,24 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void ForgeOwnedTouchCannotBecomeAnOrbitFinger()
+        {
+            var owned = (System.Collections.Generic.HashSet<int>)typeof(GalaQuestRuneForgePresenter)
+                .GetField("OwnedTouchIds", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                .GetValue(null);
+            owned.Add(7);
+            try
+            {
+                var point = ScreenPoint(.65f, .65f);
+                Touch(7, UnityEngine.InputSystem.TouchPhase.Began, point);
+                var rotation = camera.transform.rotation;
+                Touch(7, UnityEngine.InputSystem.TouchPhase.Moved, point + new Vector2(80, 20));
+                Assert.That(Quaternion.Angle(rotation, camera.transform.rotation), Is.LessThan(.001f));
+            }
+            finally { owned.Remove(7); }
+        }
+
+        [Test]
         public void MovementRegionTouchCannotRotateTheCamera()
         {
             var origin = ScreenPoint(0.2f, 0.2f);

@@ -88,6 +88,8 @@ namespace GalaQuest
                     GalaQuestCombatHudStyle.Fill(GalaQuestCombatHudStyle.Inset(rect, 7), new Color(.88f, .65f, .31f, .22f));
                 GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8 * layout.Scale), label, 18 * layout.Scale,
                     travelEnabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter);
+                if (GetComponent<GalaQuestRuneForgePresenter>()?.IsNear != true)
+                {
                 GalaQuestCombatHudStyle.Panel(layout.Objective, paper: true);
                 var objective = home ? "Enter the glowing gate" : "Take on the Emberworks fight";
                 var content = GalaQuestCombatHudStyle.Inset(layout.Objective, 12 * layout.Scale);
@@ -95,6 +97,7 @@ namespace GalaQuest
                     home ? "CAMP  /  NEXT STEP" : "EMBERWORKS  /  NEXT STEP", 11 * layout.Scale, new Color(.25f, .15f, .06f), true);
                 content.y += 14 * layout.Scale; content.height -= 10 * layout.Scale;
                 GalaQuestCombatHudStyle.Text(content, objective, 18 * layout.Scale, new Color(.14f, .085f, .025f), true);
+                }
             }
             GUI.enabled = oldEnabled;
         }

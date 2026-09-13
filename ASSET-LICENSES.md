@@ -75,6 +75,15 @@ above, not CC0. The personal grip reference photographs are not redistributed.
 | `candidates/sword_wildwood_w1a.glb` | Meshy paid-plan generation, owner-directed. Candidate, not yet promoted to gameplay. |
 | `candidates/dawnwarden-helmet-v1.glb`, `candidates/dawnwarden-sword-v1.glb` | Meshy paid-plan generation, owner-directed, then re-exported clean (measured generator `pygltflib@v1.16.5`). **Candidate, not shipped.** Kept in-tree only because they are the reference the owner-accepted Asset Forge fit was authored against. |
 
+The MagmaLord Helmet candidate at
+`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/MagmaLordHelmet.fbx` is project-original direct
+Blender work generated from the checked-in deterministic recipe
+`tools/blender/author_magmalord_helmet.py`. It uses Blender primitives and project-authored material
+values; no provider output or third-party mesh is embedded. The larger helmet trapped in the Rune
+Forge is the explicitly named scene instance `MagmaLordForgeDisplayCopy` of this same candidate,
+not another source asset or entitlement. It remains a review candidate until the Owner's visual and
+promotion gates are complete.
+
 **Input-provenance check.** These were reviewed for deliberate third-party or franchise input before
 publication. The generation prompts themselves are not recoverable from this repository — they lived
 in a gitignored working directory — but the surrounding engineering record describes what was asked

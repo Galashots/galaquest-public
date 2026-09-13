@@ -35,7 +35,7 @@ export function createUnityProfileProgression(options = {}) {
   }
 
   function applyFrame(profileId, playerId, frame) {
-    if (!playerId || frame?.v !== 4 || !['welcome', 'destination-changed', 'snapshot'].includes(frame.type))
+    if (!playerId || frame?.v !== 4 || !['welcome', 'destination-changed', 'snapshot', 'forge-state'].includes(frame.type))
       throw new Error('An accepted server frame and player are required for progression.');
     const hydration = frame.type !== 'snapshot';
     if (hydration && frame.id !== playerId)

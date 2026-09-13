@@ -60,6 +60,30 @@ namespace GalaQuest
             { v = Version, type = "travel", destinationId = destinationId, worldEpoch = worldEpoch });
         }
 
+        public static string ForgeOpen(int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new SimpleMessage { v = Version, type = "forge-open" }), worldEpoch);
+
+        public static string ForgeSelectPack(string packId, int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new ForgePackMessage
+            { v = Version, type = "forge-select-pack", packId = packId }), worldEpoch);
+
+        public static string ForgeAnswer(string taskId, string choiceId, string contentVersion, int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new ForgeAnswerMessage
+            {
+                v = Version, type = "forge-answer", taskId = taskId,
+                choiceId = choiceId, contentVersion = contentVersion
+            }), worldEpoch);
+
+        public static string ForgeHint(string taskId, string contentVersion, int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new ForgeHintMessage
+            { v = Version, type = "forge-hint", taskId = taskId, contentVersion = contentVersion }), worldEpoch);
+
+        public static string ForgeClaim(int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new SimpleMessage { v = Version, type = "forge-claim" }), worldEpoch);
+
+        public static string Equip(string itemId, int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new EquipMessage { v = Version, type = "equip", itemId = itemId }), worldEpoch);
+
         private static string WithEpoch(string json, int worldEpoch) => worldEpoch == 0 ? json
             : json.Substring(0, json.Length - 1) + ",\"worldEpoch\":" + worldEpoch + "}";
 
@@ -94,9 +118,12 @@ namespace GalaQuest
             {
                 return false;
             }
-            if (frame == null || frame.v != Version || (frame.type != "welcome" && frame.type != "snapshot" && frame.type != "destination-changed")
+            if (frame == null || frame.v != Version || (frame.type != "welcome" && frame.type != "snapshot"
+                    && frame.type != "destination-changed" && frame.type != "forge-state")
                 || frame.worldEpoch < 0 || (frame.type == "destination-changed"
-                    && (frame.worldEpoch == 0 || string.IsNullOrEmpty(frame.id) || string.IsNullOrEmpty(frame.destinationId))))
+                    && (frame.worldEpoch == 0 || string.IsNullOrEmpty(frame.id) || string.IsNullOrEmpty(frame.destinationId)))
+                || (frame.type == "forge-state" && (string.IsNullOrEmpty(frame.id)
+                    || string.IsNullOrEmpty(frame.destinationId) || frame.forge == null)))
             {
                 frame = null;
                 return false;
@@ -149,6 +176,25 @@ namespace GalaQuest
         }
 
         [Serializable]
+        private sealed class SimpleMessage { public int v; public string type; }
+
+        [Serializable]
+        private sealed class ForgePackMessage { public int v; public string type; public string packId; }
+
+        [Serializable]
+        private sealed class ForgeAnswerMessage
+        {
+            public int v; public string type; public string taskId; public string choiceId; public string contentVersion;
+        }
+
+        [Serializable]
+        private sealed class ForgeHintMessage
+        { public int v; public string type; public string taskId; public string contentVersion; }
+
+        [Serializable]
+        private sealed class EquipMessage { public int v; public string type; public string itemId; }
+
+        [Serializable]
         private sealed class MessageHeader
         {
             public int v;
@@ -169,6 +215,7 @@ namespace GalaQuest
         public GalaQuestServerPlayer[] players = Array.Empty<GalaQuestServerPlayer>();
         public GalaQuestServerEncounter encounter = new GalaQuestServerEncounter();
         public GalaQuestServerCombatEvent[] events = Array.Empty<GalaQuestServerCombatEvent>();
+        public GalaQuestRuneForgeState forge;
     }
 
     [Serializable]
@@ -187,7 +234,59 @@ namespace GalaQuest
         public int revision;
         public GalaQuestServerEnemy[] enemies = Array.Empty<GalaQuestServerEnemy>();
         public Dictionary<string, GalaQuestServerHeroCombat> heroes = new Dictionary<string, GalaQuestServerHeroCombat>();
+        public Dictionary<string, GalaQuestServerRewards> rewards = new Dictionary<string, GalaQuestServerRewards>();
     }
+
+    [Serializable]
+    public sealed class GalaQuestServerRewards
+    {
+        public string[] ownedItemIds = Array.Empty<string>();
+        public Dictionary<string, string> equippedItemIds = new Dictionary<string, string>();
+        public int xp;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestRuneForgeState
+    {
+        public string status;
+        public GalaQuestRuneForgeEntitlement entitlement;
+        public GalaQuestRuneForgePack[] packs = Array.Empty<GalaQuestRuneForgePack>();
+        public string selectedPackId;
+        public string contentVersion;
+        public int completedCount;
+        public int requiredSuccesses;
+        public bool readyToClaim;
+        public bool owned;
+        public GalaQuestRuneForgeTask task;
+        public GalaQuestRuneForgeHistory[] history = Array.Empty<GalaQuestRuneForgeHistory>();
+        public string response;
+        public string hint;
+        public bool justGranted;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestRuneForgeEntitlement { public string id; public string itemId; public string displayName; }
+
+    [Serializable]
+    public sealed class GalaQuestRuneForgePack { public string id; public string title; }
+
+    [Serializable]
+    public sealed class GalaQuestRuneForgeTask
+    {
+        public string id;
+        public string skill;
+        public string spokenPrompt;
+        public string displayPrompt;
+        public string hint;
+        public GalaQuestRuneForgeChoice[] choices = Array.Empty<GalaQuestRuneForgeChoice>();
+    }
+
+    [Serializable]
+    public sealed class GalaQuestRuneForgeChoice { public string id; public string label; }
+
+    [Serializable]
+    public sealed class GalaQuestRuneForgeHistory
+    { public string entitlementId; public string packId; public string taskId; public string contentVersion; public string outcome; }
 
     [Serializable]
     public sealed class GalaQuestServerHeroCombat
