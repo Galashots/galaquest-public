@@ -21,7 +21,7 @@ namespace GalaQuest
             // padding, so contextual Forge text clears the ordinary approach Hero.
             Status = new Rect(margin, margin, railWidth, (Narrow ? 90 : 144) * s);
             Identity = Narrow
-                ? new Rect(margin, Status.yMax + 8 * s, railWidth - 110 * s, 44 * s)
+                ? new Rect(margin, Status.yMax + 8 * s, railWidth - 110 * s, 64 * s)
                 : new Rect(viewport.x - 258 * s, margin, 240 * s, 78 * s);
             Mute = new Rect(viewport.x - margin - 100 * s,
                 Narrow ? Status.yMax + 8 * s : Identity.yMax + 8 * s, 100 * s, 44 * s);

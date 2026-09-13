@@ -8,6 +8,8 @@ namespace GalaQuest
         private readonly Queue<GalaQuestProgressionView> rewards = new Queue<GalaQuestProgressionView>();
         private GalaQuestProgressionView reward;
         private float rewardUntil;
+        private bool rewardDeferred;
+        private float rewardDeferredAt;
 
         public void PresentReward(GalaQuestProgressionView value)
         {
@@ -50,10 +52,10 @@ namespace GalaQuest
 
             r = layout.Identity;
             GalaQuestCombatHudStyle.Panel(r);
-            GalaQuestCombatHudStyle.Text(new Rect(r.x + 10 * s, r.y + 3 * s, r.width - 20 * s, (compact ? 19 : 25) * s),
-                profileName, (compact ? 14 : 18) * s, GalaQuestCombatHudStyle.Ink, true);
+            GalaQuestCombatHudStyle.Text(new Rect(r.x + 10 * s, r.y + 3 * s, r.width - 20 * s, (compact ? 36 : 42) * s),
+                profileName, (compact ? 14 : 18) * s, GalaQuestCombatHudStyle.Ink, true, TextAnchor.UpperLeft, true);
             var resources = state == null ? place : "Coins " + state.coins + "   Marks " + state.marks + "   Shards " + state.shards;
-            GalaQuestCombatHudStyle.Text(new Rect(r.x + 10 * s, r.y + (compact ? 22 : 27) * s, r.width - 20 * s, r.height - (compact ? 24 : 29) * s),
+            GalaQuestCombatHudStyle.Text(new Rect(r.x + 10 * s, r.y + (compact ? 39 : 47) * s, r.width - 20 * s, r.height - (compact ? 41 : 49) * s),
                 resources, (compact ? 12 : 13) * s, GalaQuestCombatHudStyle.Gold, wrap: true);
 
             if (!connected || !string.IsNullOrEmpty(progression?.Error))
@@ -69,6 +71,19 @@ namespace GalaQuest
 
         private void DrawReward(GalaQuestCombatHudLayout layout)
         {
+            // The physical task keeps priority over queued reward ceremonies. In
+            // portrait they share the clear band above travel; retain the ceremony
+            // and its remaining duration until the player leaves the station.
+            if (GetComponent<GalaQuestRuneForgePresenter>()?.IsNear == true)
+            {
+                if (!rewardDeferred) { rewardDeferred = true; rewardDeferredAt = Time.unscaledTime; }
+                return;
+            }
+            if (rewardDeferred)
+            {
+                if (reward != null) rewardUntil += Time.unscaledTime - rewardDeferredAt;
+                rewardDeferred = false;
+            }
             if (Time.unscaledTime >= rewardUntil)
             {
                 reward = rewards.Count > 0 ? rewards.Dequeue() : null;

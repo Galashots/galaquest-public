@@ -262,6 +262,9 @@ namespace GalaQuest
             var hud = new GalaQuestCombatHudLayout(viewport);
             var panel = hud.Objective;
             panel.height = 128 * hud.Scale;
+            // A full-width portrait question above the actor also covers the prize,
+            // even after an ordinary orbit. Use the clear band above travel instead.
+            if (hud.Narrow) panel.y = hud.Travel.y - panel.height - 8 * hud.Scale;
             return panel;
         }
 

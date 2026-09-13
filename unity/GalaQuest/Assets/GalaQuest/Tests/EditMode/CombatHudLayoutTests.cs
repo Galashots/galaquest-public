@@ -13,7 +13,12 @@ namespace GalaQuest.Tests
             // This reproduction does not claim the separate offscreen Forge is fixed.
             var prompt = GalaQuestRuneForgePresenter.PromptRect(new Vector2(390, 844));
             Assert.That(prompt.Overlaps(new Rect(173, 320, 48, 43)), Is.False);
-            Assert.That(prompt.yMax, Is.LessThan(310), "Keep a little separation above the visible head.");
+            Assert.That(prompt.Overlaps(new Rect(155, 320, 84, 166)), Is.False, "The whole visible Hero remains clear.");
+            Assert.That(prompt.Overlaps(new Rect(60, 180, 260, 130)), Is.False,
+                "The current prize is visible after an ordinary orbit toward the station.");
+            var hud = new GalaQuestCombatHudLayout(new Vector2(390, 844));
+            foreach (var control in new[] { hud.Travel, hud.Attack, hud.Movement, hud.Mute })
+                Assert.That(prompt.Overlaps(control), Is.False);
         }
 
         [Test]
