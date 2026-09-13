@@ -168,8 +168,9 @@ namespace GalaQuest
             var normalizedDelta = pixelDelta * (ReferenceHeight / Mathf.Max(1, Screen.height));
             dragTravel += normalizedDelta.magnitude;
             if (dragTravel < DragDeadzonePixels) return;
-            // Match the accepted browser direction; Unity touch Y increases upward.
-            yaw = Mathf.Repeat(yaw - normalizedDelta.x * YawRadiansPerPixel * Mathf.Rad2Deg, 360f);
+            // Match visible browser orbit motion: its camera looks along local -Z,
+            // Unity's along +Z, so horizontal yaw signs differ. Unity touch Y is upward.
+            yaw = Mathf.Repeat(yaw + normalizedDelta.x * YawRadiansPerPixel * Mathf.Rad2Deg, 360f);
             pitch = Mathf.Clamp(pitch - normalizedDelta.y * PitchRadiansPerPixel * Mathf.Rad2Deg,
                 MinimumPitch, MaximumPitch);
         }
