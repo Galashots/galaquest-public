@@ -37,6 +37,7 @@ export const STARTER_SWORD_ID = 'starter_sword';
 export const WILDWOOD_BLADE_ID = 'wildwood_blade';
 export const SHIELD_IRONWOOD_ID = 'shield_ironwood';
 export const HELMET_SILVERGUARD_ID = 'helmet_silverguard';
+export const HELMET_MAGMALORD_ID = 'helmet_magmalord';
 export const SHOULDER_SILVERGUARD_ID = 'shoulder_silverguard';
 
 export const ITEM_DEFS = Object.freeze({
@@ -70,6 +71,12 @@ export const ITEM_DEFS = Object.freeze({
     slot: HELMET_SLOT,
     name: 'Silverguard Helmet',
     damageReductionPercent: 10,
+  }),
+  [HELMET_MAGMALORD_ID]: Object.freeze({
+    id: HELMET_MAGMALORD_ID,
+    slot: HELMET_SLOT,
+    name: 'MagmaLord Helmet',
+    damageReductionPercent: 20,
   }),
   // R1: the first item a kill drop can grant, not a claim ceremony -- see world/enemyDrops.js's own
   // gear pool. shield_ironwood is deliberately NOT raised alongside this one: G1's own

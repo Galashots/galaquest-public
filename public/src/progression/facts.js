@@ -45,6 +45,15 @@ import { EQUIPMENT_SLOTS, itemDef, WEAPON_SLOT } from './items.js';
 /** One profile's own earnings. `village-upgrade` and `beacon-lit` are deliberately absent: those are
  *  world facts, not one profile's earnings, and folding them into a personal state would be a
  *  category error. */
+// Forge interaction history remains private to the learner. It travels inside profileFacts and the
+// addressed forge-state response, never as a world/reward event that a sibling client could route.
+export const PRIVATE_PROFILE_FACT_TYPES = Object.freeze([
+  'forge-pack-selected',
+  'forge-task-attempted',
+  'forge-task-assisted',
+  'forge-task-completed',
+]);
+
 export const PROFILE_FACT_TYPES = Object.freeze([
   'mark-earned',
   'lantern-unlocked',
@@ -56,6 +65,7 @@ export const PROFILE_FACT_TYPES = Object.freeze([
   'satchel-taken',
   'charm-earned',
   'xp-earned',
+  ...PRIVATE_PROFILE_FACT_TYPES,
 ]);
 
 /** Facts about the WORLD rather than about one child. Durable and guest-stamped (the row records who
@@ -280,6 +290,11 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   // every other personal xp-earned identity above: the profile it names may restore it, another
   // profile may not reserve it out from under them.
   'kill-xp:',
+  'forge-pack:',
+  'forge-attempt:',
+  'forge-assist:',
+  'forge-complete:',
+  'forge-entitlement:',
   // Rune chests: minted `rune-chest:<profileId>:<chestId>` by progression/runeChests.js's own
   // runeChestXpEventId, CLIENT-SIDE ONLY, the same way an offline Lantern unlock is (`lantern-
   // unlocked:<profileId>` above) -- unlike kill-xp, there is no server-side counterpart that ever

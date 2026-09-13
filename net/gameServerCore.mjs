@@ -85,12 +85,18 @@ import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
 import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
 import { HELMET_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import {
+  FORGE_PACK_SELECTED, FORGE_TASK_ASSISTED, FORGE_TASK_ATTEMPTED, FORGE_TASK_COMPLETED,
+  MAGMALORD_ENTITLEMENT_ID, MAGMALORD_HELMET_ID, entitlementEventId,
+} from '../public/src/learning/runeForge.js';
+import { createRuneForgeService } from './runeForge.mjs';
+import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
 } from '../public/src/world/bounds.js';
 // G3 follow-up: the Beacon's own collision, imported the identical "one law, two consumers" way
 // bounds.js's world edge already is -- see world/obstacles.js's own header for why this cannot be a
 // server-only rule.
 import {
+  EMBERWORKS_DEEP_DESTINATION_ID,
   VILLAGE_DESTINATION_ID,
   moveMovementWorldPosition,
   movementWorldForDestination,
@@ -107,6 +113,8 @@ import { attachWebSocketServer } from './wsServer.mjs';
 // -- enough to feel like a find next to the cart's own haul, not so much that skipping the arc's
 // authored rewards in favour of hunting caches would ever be the better play.
 export const HOLLOW_CACHE_SHARDS = 3;
+export const RUNE_FORGE_POSITION = Object.freeze({ x: 7.2, z: 17.2 });
+export const RUNE_FORGE_REACH_METERS = 3.25;
 
 // ARC 2's CHARM_BONUS_HEARTS USED TO LIVE HERE, and it does not any more.
 //
@@ -250,6 +258,32 @@ export function createRewardCoordinator(options = {}) {
     const eventId = `own:${guestId}:${itemId}`;
     const result = store.apply({ guestId, heroId: playerId, type: 'gear-owned', eventId, value: itemId });
     return announcementFor(result, { type: 'gear-owned', heroId: playerId, eventId, value: itemId });
+  }
+
+  const FORGE_FACT_TYPES = new Set([
+    FORGE_PACK_SELECTED, FORGE_TASK_ATTEMPTED, FORGE_TASK_ASSISTED, FORGE_TASK_COMPLETED,
+  ]);
+
+  function recordForgeFact(playerId, fact) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId || !FORGE_FACT_TYPES.has(fact?.type)
+      || typeof fact.eventId !== 'string' || !fact.eventId.includes(`:${guestId}:`)) return false;
+    return store.apply({
+      guestId, heroId: playerId, type: fact.type, eventId: fact.eventId, value: fact.value,
+    }).applied;
+  }
+
+  function grantRuneForgeEntitlement(playerId, entitlement) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId || entitlement?.id !== MAGMALORD_ENTITLEMENT_ID
+      || entitlement?.itemId !== MAGMALORD_HELMET_ID) return false;
+    return store.apply({
+      guestId,
+      heroId: playerId,
+      type: 'gear-owned',
+      eventId: entitlementEventId(guestId, entitlement.id),
+      value: entitlement.itemId,
+    }).applied;
   }
 
   /**
@@ -775,12 +809,17 @@ export function createRewardCoordinator(options = {}) {
 
   return {
     join,
+    profileIdFor(playerId) {
+      return guestIdByPlayer.get(playerId) ?? null;
+    },
     hasDurableIdentity,
     leave,
     reassignCombatCredit,
     processTick,
     applyEquip,
     grantOwnership,
+    recordForgeFact,
+    grantRuneForgeEntitlement,
     claimWildwoodBlade,
     claimSatchel,
     claimCharm,
@@ -2006,6 +2045,13 @@ export function attachGameServer(httpServer, options = {}) {
   // own in-memory cart lootState is constructed, so an already-awarded pickup from a previous
   // process can be seeded in as already-collected rather than reappearing as fresh loot.
   const rewards = createRewardCoordinator({ rewardStorePath: options.rewardStorePath });
+  const runeForge = createRuneForgeService({
+    catalogPath: options.runeForgeCatalogPath,
+    factsFor: (playerId) => rewards.profileFactsFor(playerId),
+    profileIdFor: (playerId) => rewards.profileIdFor(playerId),
+    recordFact: (playerId, fact) => rewards.recordForgeFact(playerId, fact),
+    grantEntitlement: (playerId, entitlement) => rewards.grantRuneForgeEntitlement(playerId, entitlement),
+  });
   let stopped = false;
   // G3: the same before-the-simulation-exists read GP3-0 does for creditedLootIds, and for the
   // identical reason -- a fresh in-memory siege has no way to ask the store itself, so the one
@@ -2069,6 +2115,26 @@ export function attachGameServer(httpServer, options = {}) {
       village: rewards.villageSnapshot(),
       siege: simulation.siegeSnapshot(),
     };
+  }
+
+  function atRuneForge(simulation, playerId) {
+    if (simulation.destinationId !== EMBERWORKS_DEEP_DESTINATION_ID) return false;
+    const player = simulation.players.get(playerId);
+    return Boolean(player) && Math.hypot(
+      player.x - RUNE_FORGE_POSITION.x, player.z - RUNE_FORGE_POSITION.z,
+    ) <= RUNE_FORGE_REACH_METERS;
+  }
+
+  function sendRuneForgeState(client, state) {
+    client.send(encode({
+      v: 4,
+      type: 'forge-state',
+      id: client.data.playerId,
+      destinationId: client.data.destinationId,
+      worldEpoch: client.data.worldEpoch,
+      forge: state,
+      profileFacts: rewards.profileFactsFor(client.data.playerId),
+    }));
   }
 
   const ws = attachWebSocketServer(httpServer, {
@@ -2188,6 +2254,24 @@ export function attachGameServer(httpServer, options = {}) {
         return;
       }
 
+      if (message.type === 'forge-open' || message.type === 'forge-select-pack'
+        || message.type === 'forge-answer' || message.type === 'forge-hint'
+        || message.type === 'forge-claim') {
+        if (!client.data.playerId) throw new ProtocolError(`${message.type} before join`);
+        if (!rewards.hasDurableIdentity(client.data.playerId) || !atRuneForge(simulation, client.data.playerId)) return;
+        let state;
+        if (message.type === 'forge-select-pack')
+          state = runeForge.select(client.data.playerId, message.packId);
+        else if (message.type === 'forge-answer')
+          state = runeForge.answer(client.data.playerId, message.taskId, message.choiceId, message.contentVersion);
+        else if (message.type === 'forge-hint')
+          state = runeForge.hint(client.data.playerId, message.taskId, message.contentVersion);
+        else if (message.type === 'forge-claim') state = runeForge.claim(client.data.playerId);
+        else state = runeForge.stateFor(client.data.playerId);
+        sendRuneForgeState(client, state);
+        return;
+      }
+
       if (simulation.destinationId !== VILLAGE_DESTINATION_ID
         && !['restore-profile', 'equip', 'special', 'collect-drop', 'collect-corpse-item', 'collect-corpse-all'].includes(message.type)) {
         throw new ProtocolError(`${message.type} is unavailable in ${simulation.destinationId}`);
@@ -2219,6 +2303,8 @@ export function attachGameServer(httpServer, options = {}) {
         // has already validated both halves, or refused the message.
         rewards.applyEquip(client.data.playerId, message.itemId,
           message.eventId === undefined ? undefined : { eventId: message.eventId, rev: message.rev });
+        if (simulation.destinationId === EMBERWORKS_DEEP_DESTINATION_ID)
+          sendRuneForgeState(client, runeForge.stateFor(client.data.playerId, { response: 'equipped' }));
         return;
       }
 

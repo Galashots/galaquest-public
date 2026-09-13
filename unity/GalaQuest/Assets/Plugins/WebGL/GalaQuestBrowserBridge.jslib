@@ -18,6 +18,46 @@ mergeInto(LibraryManager.library, {
     }
   },
 
+  GQ_Audio_Speak: function (textPtr) {
+    var text = UTF8ToString(textPtr).trim();
+    if (!text || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+    window.speechSynthesis.cancel();
+    var utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.82;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  },
+
+  // Review-only observation seam: the Forge driver still dispatches ordinary canvas
+  // touches. These projected points let it hit the physical world controls without
+  // encoding camera-specific pixels or exposing answers/private learner state.
+  GQ_Diagnostics_ClearForgeControls: function () {
+    // Do not clear the last complete projection here. More than one presenter can
+    // update in a frame while preview scenes settle; a later inactive presenter must
+    // not erase the active Forge's points before the browser driver can observe them.
+    window.__gqRuneForgeControls = window.__gqRuneForgeControls || [];
+  },
+
+  GQ_Diagnostics_RecordForgeControl: function (kindPtr, valuePtr, screenX, screenY) {
+    var canvas = document.querySelector('#unity-canvas');
+    if (!canvas) return;
+    var rect = canvas.getBoundingClientRect();
+    var width = canvas.width || rect.width;
+    var height = canvas.height || rect.height;
+    window.__gqRuneForgeControls = window.__gqRuneForgeControls || [];
+    var next = {
+      kind: UTF8ToString(kindPtr),
+      value: UTF8ToString(valuePtr),
+      x: rect.x + (screenX / width) * rect.width,
+      y: rect.y + (1 - screenY / height) * rect.height
+    };
+    var previous = window.__gqRuneForgeControls.findIndex(function (item) {
+      return item.kind === next.kind && Math.abs(item.x - next.x) < 4 && Math.abs(item.y - next.y) < 4;
+    });
+    if (previous >= 0) window.__gqRuneForgeControls[previous] = next;
+    else window.__gqRuneForgeControls.push(next);
+  },
+
   GQ_Profile_ReadSelected: function (gameObjectPtr, callbackPtr) {
     var gameObject = UTF8ToString(gameObjectPtr);
     var callback = UTF8ToString(callbackPtr);
@@ -74,7 +114,8 @@ mergeInto(LibraryManager.library, {
     socket.onmessage = function (event) {
       try {
         var received = JSON.parse(String(event.data));
-        if (received && (received.type === 'welcome' || received.type === 'snapshot' || received.type === 'destination-changed')) {
+        if (received && (received.type === 'welcome' || received.type === 'snapshot'
+            || received.type === 'destination-changed' || received.type === 'forge-state')) {
           var diagnostics = window.__gqUnityCp2Diagnostics || {
             sentInputs: [], serverFrames: [], reconciliations: []
           };

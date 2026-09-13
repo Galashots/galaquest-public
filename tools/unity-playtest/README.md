@@ -38,6 +38,20 @@ These drivers run the built Unity client at `/unity/`. They require a local Unit
 exact-source manifest. The legacy `tools/runtime-test` review suites instead run the Three.js client
 and do not provision or select Unity builds.
 
+Resolve and record the actual Editor executable before a Unity checkpoint. A bare `Unity.exe` in an
+evidence command is only an abbreviation: on Windows, `Get-Command Unity.exe` or `where.exe Unity.exe`
+may resolve a WindowsApps `unity` CLI/MCP shim rather than the Editor. The current project machine's
+verified 6000.3.23f1 Editor is:
+
+```powershell
+$unityEditor = 'C:\Program Files\Unity 6000.3.23f1\Editor\Unity.exe'
+Get-Item -LiteralPath $unityEditor | Select-Object FullName, VersionInfo
+```
+
+Use that absolute path for batch work and retain its product version in the checkpoint. When launching
+with `Start-Process`, use `-PassThru` and wait for that returned process ID; starting the GUI executable
+successfully is not evidence that compilation, tests, or a build finished.
+
 For persistent local candidate inputs and the custody-dependent native regression, see
 [stable preview preparation](../../docs/unity-preview-reuse.md). Reuse the owned warm Editor and
 verify external edits have imported before treating test discovery or a ready status as evidence.
@@ -105,3 +119,19 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
+
+## Rune Forge package
+
+The bounded Forge driver exercises the authored world controls with canvas touch input, two isolated
+anonymous profiles, its own server, and an exact-source build manifest:
+
+```powershell
+node tools/unity-playtest/forge.mjs path/to/candidate-build-manifest.json -forge
+```
+
+It covers wrong-answer retry, hint and gesture-started spoken prompt, assisted and independent
+success, one durable claim, explicit equip and POWER consumption, a late sibling, same-profile
+replacement, and reconnect. It records the Unity client SHA and checked-out server SHA separately.
+The driver can use projected control diagnostics when the player exposes them; its fixed fallback is
+specific to the checked-in Forge pocket and still requires each physical tap to produce the expected
+authoritative server transition.

@@ -35,6 +35,10 @@ export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'special', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
   'restore-profile', 'travel', 'destination-changed',
+  // #148 Rune Forge. The four action messages carry only the selected authored task identity;
+  // the server owns proximity, durable progress, answer correctness, and entitlement grant.
+  // `forge-state` is the private response for the joined profile and never enters a snapshot.
+  'forge-open', 'forge-select-pack', 'forge-answer', 'forge-hint', 'forge-claim', 'forge-state',
   // R1: kill drops -- the same client->server, no-business-rule-here shape 'collect-loot' already
   // is (see that message's own decode comment). Its dropId cap is DROP_ID_MAX_LENGTH, NOT
   // PICKUP_ID_MAX_LENGTH -- see the correction note on those constants below.
@@ -58,6 +62,10 @@ const ITEM_ID_MAX_LENGTH = 32;
 // prefix, the order and a UUID. Bounded like every other wire string so a client cannot make the
 // server store an arbitrarily long primary key.
 const EVENT_ID_MAX_LENGTH = 160;
+// Forge task facts carry a compact JSON value with stable task/version/outcome identity. This is
+// still bounded hostile input on restore, but is intentionally larger than a short gear item id.
+const FACT_VALUE_MAX_LENGTH = 512;
+const LEARNING_ID_MAX_LENGTH = 96;
 // GP2 pickup ids look like "cart-loot:shard:1" -- world/cartLoot.js's own table entries -- longer
 // than an item id but still a short, caller-built token, never player-authored text.
 const PICKUP_ID_MAX_LENGTH = 48;
@@ -197,7 +205,8 @@ export function decode(text) {
     if (!Number.isSafeInteger(raw.worldEpoch) || raw.worldEpoch < 0) fail('worldEpoch must be a non-negative safe integer');
     decoded.worldEpoch = raw.worldEpoch;
   }
-  if ((raw.type === 'travel' || raw.type === 'destination-changed') && decoded.worldEpoch === undefined) {
+  if ((raw.type === 'travel' || raw.type === 'destination-changed' || raw.type === 'forge-state')
+    && decoded.worldEpoch === undefined) {
     fail(`${raw.type} requires worldEpoch`);
   }
   return decoded;
@@ -251,6 +260,48 @@ function decodeMessage(raw) {
       }
       if (raw.type === 'destination-changed' && !decoded.destinationId) fail('destination-changed requires destinationId');
       return decoded;
+    }
+
+    case 'forge-state': {
+      const forge = raw.forge;
+      if (forge === null || typeof forge !== 'object' || Array.isArray(forge)) {
+        fail('forge-state forge must be an object');
+      }
+      const destinationId = requireString(raw.destinationId, 'destinationId', 48);
+      if (!destinationId) fail('forge-state destinationId must not be empty');
+      return {
+        v: PROTOCOL_VERSION,
+        type: 'forge-state',
+        id: requireString(raw.id, 'id'),
+        destinationId,
+        forge,
+        profileFacts: decodeProfileFacts(raw.profileFacts),
+      };
+    }
+
+    case 'forge-open':
+    case 'forge-claim':
+      return { v: PROTOCOL_VERSION, type: raw.type };
+
+    case 'forge-select-pack': {
+      const packId = requireString(raw.packId, 'packId', LEARNING_ID_MAX_LENGTH);
+      if (!packId) fail('packId must not be empty');
+      return { v: PROTOCOL_VERSION, type: 'forge-select-pack', packId };
+    }
+
+    case 'forge-answer': {
+      const taskId = requireString(raw.taskId, 'taskId', LEARNING_ID_MAX_LENGTH);
+      const choiceId = requireString(raw.choiceId, 'choiceId', LEARNING_ID_MAX_LENGTH);
+      const contentVersion = requireString(raw.contentVersion, 'contentVersion', LEARNING_ID_MAX_LENGTH);
+      if (!taskId || !choiceId || !contentVersion) fail('forge-answer fields must not be empty');
+      return { v: PROTOCOL_VERSION, type: 'forge-answer', taskId, choiceId, contentVersion };
+    }
+
+    case 'forge-hint': {
+      const taskId = requireString(raw.taskId, 'taskId', LEARNING_ID_MAX_LENGTH);
+      const contentVersion = requireString(raw.contentVersion, 'contentVersion', LEARNING_ID_MAX_LENGTH);
+      if (!taskId || !contentVersion) fail('forge-hint fields must not be empty');
+      return { v: PROTOCOL_VERSION, type: 'forge-hint', taskId, contentVersion };
     }
 
     case 'attack': {
@@ -637,7 +688,7 @@ function decodeProfileFacts(facts) {
       fail(`profileFacts[${index}].type is not a durable fact type: ${JSON.stringify(decoded.type)}`);
     }
     if (fact.value !== undefined && fact.value !== null) {
-      decoded.value = requireString(fact.value, `profileFacts[${index}].value`, ITEM_ID_MAX_LENGTH);
+      decoded.value = requireString(fact.value, `profileFacts[${index}].value`, FACT_VALUE_MAX_LENGTH);
     }
     // An XP amount is checked HERE, at the boundary, for the reason the file header already gives:
     // rejecting malformed input where it arrives keeps the failure local and nameable instead of

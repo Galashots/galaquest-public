@@ -2,7 +2,7 @@
   "schema": "galaquest.unity-migration-bridge",
   "schemaVersion": 1,
   "bridgeVersion": "0.1.0",
-  "originatingGitSha": "470f989e131497bbfb6c4f27a950f4ade4300896",
+  "originatingGitSha": "28eb6191ff9a67669b0aaeaebcb812c591aa2170",
   "sourceRepository": "Galashots/galaquest-public",
   "sourceCoordinateSystem": {
     "name": "Three.js/glTF",
