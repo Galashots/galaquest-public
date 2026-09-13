@@ -26,6 +26,7 @@ namespace GalaQuest
         private readonly Dictionary<string, HeroView> companions = new Dictionary<string, HeroView>();
         private readonly HashSet<string> seen = new HashSet<string>();
         private readonly List<string> removed = new List<string>();
+        private readonly List<Rect> nameplateRects = new List<Rect>();
         public int EnemyViewCount => enemies.Count;
         public int RemoteHeroCount => companions.Count;
         public int LocalHealth => self?.hp ?? 0;
@@ -261,7 +262,7 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            if (self == null) return;
+            if (self == null || Event.current.type != EventType.Repaint) return;
             textStyle ??= new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             textStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 35f), 16, 26);
             if (GetComponent<GalaQuestHeroHud>() == null)
@@ -277,18 +278,67 @@ namespace GalaQuest
             }
             if (view == null) view = Camera.main;
             if (view == null) return;
+            var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
+            // Emphasis describes the nearest real threat targeting this Hero, not a new target-lock mechanic.
+            EnemyView engaged = null;
+            var closest = 81f;
             foreach (var actor in enemies.Values)
             {
-                if (actor.State.hp <= 0 || Vector3.Distance(actor.Body.transform.position, traversal.Hero.position) > 9) continue;
-                var point = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * 1.35f);
-                if (point.z <= 0) continue;
-                DrawHealth(new Rect(point.x - 42, Screen.height - point.y, 84, 11), actor.State.hp, actor.State.maxHp, new Color(1, .52f, .2f));
+                if (actor.State.hp <= 0 || actor.State.targetId != session.PlayerId) continue;
+                var distance = (actor.Body.transform.position - traversal.Hero.position).sqrMagnitude;
+                if (distance < closest) { closest = distance; engaged = actor; }
             }
+            nameplateRects.Clear();
+            if (engaged != null) DrawEnemyNameplate(engaged, true, layout);
+            foreach (var actor in enemies.Values)
+                if (actor != engaged) DrawEnemyNameplate(actor, false, layout);
             foreach (var actor in companions.Values)
             {
                 if (actor.State == null) continue;
                 var point = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * 1.8f);
                 if (point.z > 0) DrawHealth(new Rect(point.x - 38, Screen.height - point.y, 76, 9), actor.State.hp, actor.State.maxHp, new Color(.3f, .8f, 1));
+            }
+        }
+
+        private void DrawEnemyNameplate(EnemyView actor, bool engaged, GalaQuestCombatHudLayout layout)
+        {
+            if (actor.State.hp <= 0 || (actor.Body.transform.position - traversal.Hero.position).sqrMagnitude > 81) return;
+            var point = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * 1.55f);
+            if (point.z <= 0) return;
+            var s = layout.Scale;
+            var width = (engaged ? 156 : 112) * s;
+            var height = (engaged ? 60 : 42) * s;
+            var rect = new Rect(point.x - width / 2, Screen.height - point.y - height, width, height);
+            if (rect.xMin < 0 || rect.xMax > Screen.width || rect.yMin < 0 || rect.yMax > Screen.height) return;
+            // Secondary labels yield to the fixed HUD and already-visible labels; they never stack into a wall of UI.
+            if (!engaged)
+            {
+                if (layout.CoversStatus(rect)) return;
+                foreach (var occupied in nameplateRects) if (occupied.Overlaps(rect)) return;
+            }
+            nameplateRects.Add(rect);
+            GalaQuestCombatHudStyle.Panel(rect, lit: engaged);
+            var kind = actor.State.kind ?? "Enemy";
+            var name = kind.Length > 0 ? char.ToUpperInvariant(kind[0]) + kind.Substring(1).Replace('-', ' ') : "Enemy";
+            GalaQuestCombatHudStyle.Text(new Rect(rect.x + 5 * s, rect.y + 3 * s, rect.width - 10 * s, 23 * s),
+                name + "  LV " + actor.State.level, (engaged ? 17 : 14) * s,
+                GalaQuestCombatHudStyle.Ink, true, TextAnchor.MiddleCenter);
+            if (engaged) GalaQuestCombatHudStyle.Text(new Rect(rect.x, rect.y + 25 * s, rect.width, 15 * s),
+                "ENGAGED", 10 * s, GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleCenter);
+            GalaQuestCombatHudStyle.Bar(new Rect(rect.x + 8 * s, rect.yMax - 14 * s, rect.width - 16 * s, 8 * s),
+                actor.State.maxHp > 0 ? actor.State.hp / (float)actor.State.maxHp : 0,
+                engaged ? GalaQuestCombatHudStyle.Red : new Color(.31f, .58f, .29f));
+            if (engaged)
+            {
+                var feet = view.WorldToScreenPoint(actor.Body.transform.position + Vector3.up * .45f);
+                var y = Screen.height - feet.y;
+                foreach (var side in new[] { -1, 1 })
+                {
+                    var x = feet.x + side * 29 * s;
+                    GalaQuestCombatHudStyle.Fill(new Rect(x, y - 18 * s, 2 * s, 36 * s), GalaQuestCombatHudStyle.Gold);
+                    GalaQuestCombatHudStyle.Fill(new Rect(x - (side > 0 ? 7 : 0) * s, y - 18 * s, 9 * s, 2 * s), GalaQuestCombatHudStyle.Gold);
+                    GalaQuestCombatHudStyle.Fill(new Rect(x - (side > 0 ? 7 : 0) * s, y + 16 * s, 9 * s, 2 * s), GalaQuestCombatHudStyle.Gold);
+                }
             }
         }
 

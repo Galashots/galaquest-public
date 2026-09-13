@@ -60,7 +60,7 @@ namespace GalaQuest
         private void OnApplicationPause(bool paused) { if (paused) StopAll(); }
 
         public static bool IsInMuteRegion(Vector2 point, Vector2 viewport) =>
-            new Rect(viewport.x - 130, viewport.y - 58, 114, 42).Contains(point);
+            GalaQuestCombatHudLayout.ToTouch(new GalaQuestCombatHudLayout(viewport).Mute, viewport).Contains(point);
 
         private void Update()
         {
@@ -79,7 +79,11 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            GUI.Box(new Rect(Screen.width - 130, 16, 114, 42), muted ? "Sound off" : "Sound on");
+            if (Event.current.type != EventType.Repaint) return;
+            var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
+            GalaQuestCombatHudStyle.Panel(layout.Mute);
+            GalaQuestCombatHudStyle.Text(layout.Mute, muted ? "Sound off" : "Sound on", 14 * layout.Scale,
+                GalaQuestCombatHudStyle.Ink, align: TextAnchor.MiddleCenter);
         }
     }
 }

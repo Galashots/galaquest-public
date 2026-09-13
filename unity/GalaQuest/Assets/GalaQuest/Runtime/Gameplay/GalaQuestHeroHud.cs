@@ -8,21 +8,10 @@ namespace GalaQuest
         private readonly Queue<GalaQuestProgressionView> rewards = new Queue<GalaQuestProgressionView>();
         private GalaQuestProgressionView reward;
         private float rewardUntil;
-        private GUIStyle small;
-        private GUIStyle title;
-        private GUIStyle number;
-        private GUIStyle centered;
-        private static readonly Color Panel = new Color(.075f, .07f, .065f, .96f);
-        private static readonly Color Rim = new Color(.48f, .36f, .21f);
-        private static readonly Color Ink = new Color(.95f, .94f, .86f);
-        private static readonly Color Gold = new Color(1f, .77f, .32f);
-        private static readonly Color Health = new Color(.80f, .28f, .21f);
-        private static readonly Color Experience = new Color(.35f, .76f, .92f);
 
         public void PresentReward(GalaQuestProgressionView value)
         {
             if (!value.leveledUp && value.gainedXp == 0 && value.gainedCoins == 0 && value.gainedMarks == 0) return;
-            // A level-up keeps its readable moment while later small gains wait their turn.
             if (rewards.Count < 8) rewards.Enqueue(value);
         }
 
@@ -30,43 +19,54 @@ namespace GalaQuest
             GalaQuestProfileProgression progression, GalaQuestCombatPresentation combat, bool connected)
         {
             if (Event.current.type != EventType.Repaint) return;
-            EnsureStyles();
-            var oldMatrix = GUI.matrix;
-            // Keep the existing top-left identity convention, group health and XP, and leave
-            // the combat centre / bottom touch controls clear. Reference rationale is in the checkpoint.
-            var scale = Mathf.Clamp(Screen.height / 600f, .85f, 1.35f);
-            GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, Vector3.one * scale);
-            var width = Screen.width / scale;
+            var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
+            var s = layout.Scale;
+            var r = layout.Status;
             var state = progression?.State;
             var hp = combat != null ? combat.LocalHealth : 0;
             var maxHp = combat != null ? combat.LocalMaxHealth : 0;
-            var panel = new Rect(16, 16, Mathf.Min(316, width - 32), state == null ? 84 : 138);
-            FramedPanel(panel);
-            Fill(new Rect(panel.x, panel.y, 3, panel.height), Gold);
-            Text(new Rect(30, 23, panel.width - 30, 19), place, small, Experience);
-            Text(new Rect(30, 43, panel.width - 30, 27), profileName, title, Ink);
-            if (state != null)
-            {
-                Text(new Rect(30, 76, 116, 26), "LEVEL " + state.level, title, Ink);
-                Text(new Rect(157, 70, 146, 18), "POWER", small, Gold);
-                Text(new Rect(157, 84, 152, 36), state.powerText, number, Gold);
-                Bar(new Rect(30, 107, 112, 17), maxHp > 0 ? hp / (float)maxHp : 0, Health);
-                Text(new Rect(30, 105, 112, 20), maxHp > 0 ? "HP " + hp + " / " + maxHp : "...", centered, Ink);
-                Bar(new Rect(30, 142, panel.width - 28, 4), (float)(state.xpIntoLevel / (double)state.xpForLevel), Experience);
-                Text(new Rect(157, 120, 152, 22), "XP " + state.xpIntoLevel + " / " + state.xpForLevel, small, Experience);
-            }
+            GalaQuestCombatHudStyle.Panel(r, lit: true);
+            var x = r.x + 12 * s;
+            var width = r.width - 24 * s;
+            GalaQuestCombatHudStyle.Text(new Rect(x, r.y + 10 * s, 38 * s, 30 * s), "HP", 18 * s,
+                GalaQuestCombatHudStyle.Ink, true);
+            var health = new Rect(x + 40 * s, r.y + 12 * s, width - 40 * s, 30 * s);
+            GalaQuestCombatHudStyle.Bar(health, maxHp > 0 ? hp / (float)maxHp : 0, GalaQuestCombatHudStyle.Red);
+            GalaQuestCombatHudStyle.Text(health, maxHp > 0 ? hp + " / " + maxHp : "Waiting for health", 20 * s,
+                GalaQuestCombatHudStyle.Ink, true, TextAnchor.MiddleCenter);
+            var xp = new Rect(x + 72 * s, r.y + 55 * s, width - 72 * s, 23 * s);
+            GalaQuestCombatHudStyle.Text(new Rect(x, r.y + 49 * s, 72 * s, 30 * s),
+                state != null ? "LV " + state.level : "LV --", 19 * s, GalaQuestCombatHudStyle.Gold, true);
+            GalaQuestCombatHudStyle.Bar(xp, state != null && state.xpForLevel > 0
+                ? (float)(state.xpIntoLevel / (double)state.xpForLevel) : 0, GalaQuestCombatHudStyle.Teal);
+            GalaQuestCombatHudStyle.Text(xp, state != null ? state.xpIntoLevel + " / " + state.xpForLevel + " XP"
+                : "Progression unavailable", 13 * s, GalaQuestCombatHudStyle.Ink, true, TextAnchor.MiddleCenter);
+            GalaQuestCombatHudStyle.Fill(new Rect(x, r.y + 88 * s, width, 1), new Color(.36f, .27f, .13f));
+            GalaQuestCombatHudStyle.Text(new Rect(x, r.y + 96 * s, 100 * s, 31 * s), "POWER", 21 * s,
+                GalaQuestCombatHudStyle.Gold, true);
+            GalaQuestCombatHudStyle.Text(new Rect(x + 102 * s, r.y + 92 * s, width - 102 * s, 39 * s),
+                state?.powerText ?? "--", 30 * s, GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleRight);
+
+            r = layout.Identity;
+            GalaQuestCombatHudStyle.Panel(r);
+            GalaQuestCombatHudStyle.Text(new Rect(r.x + 10 * s, r.y + 3 * s, r.width - 20 * s, 25 * s),
+                profileName, 18 * s, GalaQuestCombatHudStyle.Ink, true);
+            var resources = state == null ? place : "Coins " + state.coins + "   Marks " + state.marks + "   Shards " + state.shards;
+            GalaQuestCombatHudStyle.Text(new Rect(r.x + 10 * s, r.y + 27 * s, r.width - 20 * s, r.height - 29 * s),
+                resources, 13 * s, GalaQuestCombatHudStyle.Gold, wrap: true);
+
             if (!connected || !string.IsNullOrEmpty(progression?.Error))
             {
                 var status = progression?.Error ?? connectionStatus;
-                var rect = new Rect(16, panel.yMax + 8, Mathf.Min(400, width - 32), 55);
-                Fill(rect, Panel);
-                Text(new Rect(rect.x + 12, rect.y + 5, rect.width - 24, 45), status, small, Ink);
+                var notice = new Rect(layout.Objective.x, layout.Objective.yMax + 8 * s, layout.Objective.width, 52 * s);
+                GalaQuestCombatHudStyle.Panel(notice);
+                GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(notice, 8 * s), status, 15 * s,
+                    GalaQuestCombatHudStyle.Ink, wrap: true);
             }
-            DrawReward(width, panel.yMax + 16);
-            GUI.matrix = oldMatrix;
+            DrawReward(layout);
         }
 
-        private void DrawReward(float width, float belowPanel)
+        private void DrawReward(GalaQuestCombatHudLayout layout)
         {
             if (Time.unscaledTime >= rewardUntil)
             {
@@ -78,22 +78,27 @@ namespace GalaQuest
                 }
             }
             if (reward == null) return;
-            var panelWidth = Mathf.Min(370, width - 32);
-            var x = width >= 960 ? (width - panelWidth) * .5f + 54 : 16;
-            var y = width >= 960 ? 18 : belowPanel;
-            var height = reward.leveledUp ? 124 : 64;
-            var rect = new Rect(x, y, panelWidth, height);
-            FramedPanel(rect);
-            Fill(new Rect(x, y, panelWidth, 3), reward.leveledUp ? Gold : Experience);
+            var r = layout.Reward;
+            var s = layout.Scale;
+            GalaQuestCombatHudStyle.Panel(r, lit: reward.leveledUp);
             if (reward.leveledUp)
             {
-                Text(new Rect(x + 15, y + 9, panelWidth - 30, 36), "LEVEL " + reward.level + "!", number, Gold);
-                Text(new Rect(x + 15, y + 46, panelWidth - 30, 25),
-                    "POWER " + reward.previousPowerText + " to " + reward.powerText + " (" + reward.powerDeltaText + ")", title, Ink);
-                Text(new Rect(x + 15, y + 76, panelWidth - 30, 22),
-                    "+" + (reward.maxHp - reward.previousMaxHp) + " health    +" + (reward.heroDamage - reward.previousDamage) + " damage", small, Ink);
+                GalaQuestCombatHudStyle.Text(new Rect(r.x + 12 * s, r.y + 5 * s, r.width - 24 * s, 30 * s),
+                    "LEVEL " + reward.level + "!", 25 * s, GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleCenter);
+                GalaQuestCombatHudStyle.Text(new Rect(r.x + 12 * s, r.y + 37 * s, r.width - 24 * s, 26 * s),
+                    "POWER " + reward.previousPowerText + " to " + reward.powerText + " (" + reward.powerDeltaText + ")",
+                    17 * s, GalaQuestCombatHudStyle.Ink, true, TextAnchor.MiddleCenter);
+                GalaQuestCombatHudStyle.Text(new Rect(r.x + 12 * s, r.y + 65 * s, r.width - 24 * s, 25 * s),
+                    "+" + (reward.maxHp - reward.previousMaxHp) + " health    +" + (reward.heroDamage - reward.previousDamage) + " damage",
+                    14 * s, GalaQuestCombatHudStyle.Ink, align: TextAnchor.MiddleCenter);
             }
-            else Text(new Rect(x + 15, y + 14, panelWidth - 30, 29), EarnedText(reward), title, Experience);
+            else
+            {
+                GalaQuestCombatHudStyle.Text(new Rect(r.x + 12 * s, r.y + 9 * s, r.width - 24 * s, 24 * s),
+                    "EARNED", 14 * s, GalaQuestCombatHudStyle.Gold, true, TextAnchor.MiddleCenter);
+                GalaQuestCombatHudStyle.Text(new Rect(r.x + 12 * s, r.y + 34 * s, r.width - 24 * s, 48 * s),
+                    EarnedText(reward), 20 * s, GalaQuestCombatHudStyle.Ink, true, TextAnchor.MiddleCenter, true);
+            }
         }
 
         private static string EarnedText(GalaQuestProgressionView value)
@@ -105,42 +110,6 @@ namespace GalaQuest
             return string.Join("   ", parts);
         }
 
-        private void EnsureStyles()
-        {
-            if (small != null) return;
-            small = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true, richText = false };
-            title = new GUIStyle(small) { fontSize = 18, fontStyle = FontStyle.Bold, wordWrap = false };
-            number = new GUIStyle(title) { fontSize = 24 };
-            centered = new GUIStyle(small) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-        }
-
-        private static void Text(Rect rect, string text, GUIStyle style, Color color)
-        {
-            style.normal.textColor = color;
-            GUI.Label(rect, text ?? string.Empty, style);
-        }
-
-        private static void Bar(Rect rect, float fraction, Color color)
-        {
-            Fill(rect, new Color(.02f, .035f, .045f, 1));
-            rect.width *= Mathf.Clamp01(fraction);
-            Fill(rect, color);
-        }
-
-        private static void Fill(Rect rect, Color color)
-        {
-            var previous = GUI.color;
-            // IMGUI solid textures are converted by the linear project. Keep the chosen
-            // display palette dark instead of washing charcoal into blue-grey.
-            GUI.color = QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = previous;
-        }
-
-        private static void FramedPanel(Rect rect)
-        {
-            Fill(rect, Rim);
-            Fill(new Rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2), Panel);
-        }
+        private void OnDestroy() => GalaQuestCombatHudStyle.Release();
     }
 }
