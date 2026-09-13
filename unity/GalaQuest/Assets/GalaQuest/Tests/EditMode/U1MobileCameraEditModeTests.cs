@@ -53,6 +53,76 @@ namespace GalaQuest.Tests
                 "a real touch drag must rotate the runtime camera");
         }
 
+        [TestCase(false, 60f)]
+        [TestCase(false, -60f)]
+        [TestCase(true, 60f)]
+        [TestCase(true, -60f)]
+        public void HorizontalDragMovesForwardLandmarkAgainstPointerLikeAcceptedBrowser(bool useTouch, float pixels)
+        {
+            // Compare visible motion, not raw yaw: Three.js looks along local -Z,
+            // while Unity looks along +Z. Equal yaw signs reverse the screen result.
+            var view = cameraObject.GetComponent<Camera>();
+            var landmark = hero.transform.position + new Vector3(0f, 0.6f, 5f);
+            var before = view.WorldToViewportPoint(landmark);
+            var origin = ScreenPoint(0.6f, 0.6f);
+            var delta = new Vector2(pixels * Mathf.Max(1, Screen.height) / 600f, 0f);
+            if (useTouch)
+            {
+                Touch(1, UnityEngine.InputSystem.TouchPhase.Began, origin);
+                Touch(1, UnityEngine.InputSystem.TouchPhase.Moved, origin + delta);
+                Touch(1, UnityEngine.InputSystem.TouchPhase.Ended, origin + delta);
+            }
+            else
+            {
+                var mouse = InputSystem.AddDevice<Mouse>();
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = origin }.WithButton(MouseButton.Right));
+                StepInput();
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = origin + delta }.WithButton(MouseButton.Right));
+                StepInput();
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = origin + delta });
+                StepInput();
+            }
+            var after = view.WorldToViewportPoint(landmark);
+            Assert.That(before.z, Is.GreaterThan(0f));
+            Assert.That(after.z, Is.GreaterThan(0f));
+            Assert.That((after.x - before.x) * Mathf.Sign(pixels), Is.LessThan(-0.01f),
+                "a right drag must sweep forward scenery left, as in the accepted browser game");
+            Assert.That(Mathf.Abs(Mathf.DeltaAngle(0f, camera.YawDegrees)),
+                Is.EqualTo(Mathf.Abs(pixels) * 0.006f * Mathf.Rad2Deg).Within(0.001f),
+                "preserve the existing viewport-normalized sensitivity");
+        }
+
+        [TestCase(false, 12f)]
+        [TestCase(false, -12f)]
+        [TestCase(true, 12f)]
+        [TestCase(true, -12f)]
+        public void VerticalDragPreservesAcceptedElevationDirection(bool useTouch, float upwardPixels)
+        {
+            var origin = ScreenPoint(0.6f, 0.6f);
+            var delta = Vector2.up * upwardPixels * Mathf.Max(1, Screen.height) / 600f;
+            var before = camera.transform.position.y;
+            var beforePitch = camera.PitchDegrees;
+            if (useTouch)
+            {
+                Touch(1, UnityEngine.InputSystem.TouchPhase.Began, origin);
+                Touch(1, UnityEngine.InputSystem.TouchPhase.Moved, origin + delta);
+                Touch(1, UnityEngine.InputSystem.TouchPhase.Ended, origin + delta);
+            }
+            else
+            {
+                var mouse = InputSystem.AddDevice<Mouse>();
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = origin }.WithButton(MouseButton.Right));
+                StepInput();
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = origin + delta }.WithButton(MouseButton.Right));
+                StepInput();
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = origin + delta });
+                StepInput();
+            }
+            Assert.That((camera.transform.position.y - before) * Mathf.Sign(upwardPixels), Is.LessThan(0f),
+                "upward drag lowers the orbit elevation in the accepted browser game");
+            Assert.That(camera.PitchDegrees, Is.EqualTo(beforePitch - upwardPixels * 0.004f * Mathf.Rad2Deg).Within(0.001f));
+        }
+
         [Test]
         public void MovementRegionTouchCannotRotateTheCamera()
         {
