@@ -218,6 +218,38 @@ namespace GalaQuest.Tests
             }
         }
 
+        [Test]
+        public void PreviewUsesItsTraversalHeroWhenAnotherSceneHasTheSameHeroName()
+        {
+            var source = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+                EmberworksGreyboxBuild.ScenePath,
+                UnityEditor.SceneManagement.OpenSceneMode.Single);
+            var preview = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                UnityEditor.SceneManagement.NewSceneMode.Additive);
+            UnityEngine.SceneManagement.SceneManager.SetActiveScene(preview);
+            var content = ScriptableObject.CreateInstance<GalaQuestCombatContent>();
+            try
+            {
+                new GameObject("EmberworksDeep");
+                var runtime = new GameObject("Selected runtime");
+                var hero = new GameObject(EmberworksGreyboxBuild.RuntimeHeroName).transform;
+                runtime.AddComponent<GalaQuestTraversalController>().Configure(null, hero);
+                RuneForgeAuthoring.ConfigurePreview(runtime, content);
+                var presenter = runtime.GetComponent<GalaQuestRuneForgePresenter>();
+                var binding = new SerializedObject(presenter).FindProperty("hero");
+                Assert.That(binding.objectReferenceValue, Is.SameAs(hero));
+                Assert.That(preview.GetRootGameObjects().Single(item => item.name == "EmberworksDeep")
+                    .GetComponentsInChildren<GalaQuestRuneForgeInteractable>(true), Is.Not.Empty);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(content);
+                UnityEditor.SceneManagement.EditorSceneManager.CloseScene(preview, true);
+                UnityEngine.SceneManagement.SceneManager.SetActiveScene(source);
+            }
+        }
+
         private sealed class Wire : IGalaQuestTransport
         {
             public event Action Opened;

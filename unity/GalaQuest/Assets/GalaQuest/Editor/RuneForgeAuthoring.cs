@@ -55,8 +55,9 @@ namespace GalaQuest.Editor
             var pocket = pocketObject.transform;
             var prize = pocket.Find("PrizeCage/MagmaLordForgeDisplayCopy")?.gameObject
                         ?? throw new BuildFailedException("Rune Forge pocket has no visible prize.");
-            var hero = Object.FindObjectsByType<Transform>(FindObjectsSortMode.None)
-                .Single(item => item.name == EmberworksGreyboxBuild.RuntimeHeroName);
+            var hero = runtime.GetComponent<GalaQuestTraversalController>()?.Hero;
+            if (hero == null || hero.gameObject.scene != runtime.scene)
+                throw new BuildFailedException("Rune Forge requires the selected runtime's bound traversal Hero.");
             var presenter = runtime.GetComponent<GalaQuestRuneForgePresenter>()
                             ?? runtime.AddComponent<GalaQuestRuneForgePresenter>();
             presenter.Configure(hero, pocket, prize, content.Windup, content.Impact, content.Victory);
