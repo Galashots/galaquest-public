@@ -31,6 +31,7 @@ const GUIDANCE_FILES = [
   'docs/public-playtest.md',
   'tools/foundry/README.md',
   'tools/meshy/README.md',
+  'tools/unity-playtest/README.md',
 ];
 
 const GUIDANCE_DIRS = [
@@ -220,5 +221,38 @@ test('sabotage: guidance scanners detect the objective failure modes they claim 
       ['docs/check.md:2 missing repo path: tools/missing.mjs']);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function untargetedUnityCommands(source) {
+  const blocks = [...source.matchAll(/^```powershell\r?\n([\s\S]*?)^```/gm)];
+  return blocks.flatMap((block) => block[1].replace(/`\r?\n\s*/g, ' ').split(/\r?\n/))
+    .map((line) => line.replace(/\s+#.*$/, ''))
+    .filter((line) => /^\s*unity\s+command\s/.test(line))
+    .filter((line) => !/\s--project-path\s+(?:"[^"\s][^"]*"|'[^'\s][^']*'|[^\s#'"-][^\s#'"]*)/.test(line));
+}
+
+test('runnable Unity examples explicitly target their owned project', () => {
+  for (const rel of ['.agents/skills/galaquest-unity-web-playtest/SKILL.md',
+    'tools/unity-playtest/README.md']) {
+    assert.deepEqual(untargetedUnityCommands(readFileSync(join(REPO, rel), 'utf8')), [],
+      `${rel}: an Editor command could target another checkout`);
+  }
+});
+
+test('Unity targeting guard rejects omitted targets, empty arguments and comment-only targets', () => {
+  const fenced = (command) => '```powershell\n' + command + '\n```\n';
+  for (const command of ['unity command editor_status --format json',
+    "unity command menu --path 'Assets/Refresh' --format json",
+    'unity command editor_status --project-path --format json',
+    'unity command editor_status --project-path "" --format json',
+    "unity command editor_status --project-path '' --format json",
+    'unity command editor_status # --project-path "$project"']) {
+    assert.equal(untargetedUnityCommands(fenced(command)).length, 1, command);
+  }
+  for (const command of ['unity status --format json',
+    'unity command editor_status --project-path "$project" --format json',
+    'unity command editor_status `\n  --project-path "$project" --format json']) {
+    assert.deepEqual(untargetedUnityCommands(fenced(command)), [], command);
   }
 });

@@ -38,19 +38,19 @@ These drivers run the built Unity client at `/unity/`. They require a local Unit
 exact-source manifest. The legacy `tools/runtime-test` review suites instead run the Three.js client
 and do not provision or select Unity builds.
 
-Resolve and record the actual Editor executable before a Unity checkpoint. A bare `Unity.exe` in an
-evidence command is only an abbreviation: on Windows, `Get-Command Unity.exe` or `where.exe Unity.exe`
-may resolve a WindowsApps `unity` CLI/MCP shim rather than the Editor. The current project machine's
-verified 6000.3.23f1 Editor is:
+Discover and record the pinned Editor through the official Unity CLI, following
+[`unity/AGENTS.md`](../../unity/AGENTS.md). From the intended repository root:
 
 ```powershell
-$unityEditor = 'C:\Program Files\Unity 6000.3.23f1\Editor\Unity.exe'
-Get-Item -LiteralPath $unityEditor | Select-Object FullName, VersionInfo
+pwsh -NoProfile -File tools/unity/preflight.ps1
+unity editors -i
 ```
 
-Use that absolute path for batch work and retain its product version in the checkpoint. When launching
-with `Start-Process`, use `-PassThru` and wait for that returned process ID; starting the GUI executable
-successfully is not evidence that compilation, tests, or a build finished.
+For batch fallback, use the actual pinned Editor executable reported by CLI discovery and verify
+its product version; do not copy a workstation-specific path or resolve a bare `Unity.exe`, which
+may select a WindowsApps CLI shim. Prefer the owned warm Editor for ordinary iteration. When launching
+batch work with `Start-Process`, use `-PassThru` and wait for that returned process ID; starting the GUI
+executable successfully is not evidence that compilation, tests, or a build finished.
 
 For persistent local candidate inputs and the custody-dependent native regression, see
 [stable preview preparation](../../docs/unity-preview-reuse.md). Reuse the owned warm Editor and
