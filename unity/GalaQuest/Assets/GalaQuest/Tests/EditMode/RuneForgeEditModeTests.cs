@@ -170,7 +170,10 @@ namespace GalaQuest.Tests
         [TestCase(1366, 768)]
         [TestCase(844, 390)]
         [TestCase(390, 844)]
-        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint(int width, int height)
+        [TestCase(390, 844, 5.576f, 15.304f)]
+        [TestCase(390, 844, 6.199f, 16.017f)]
+        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint(int width, int height,
+            float approachX = 5f, float approachZ = 15f)
         {
             var scene = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
                 UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
@@ -193,7 +196,7 @@ namespace GalaQuest.Tests
                 Physics.SyncTransforms();
 
                 heroObject = new GameObject("Hero");
-                heroObject.transform.position = ForgeApproachPosition;
+                heroObject.transform.position = new Vector3(approachX, .01f, approachZ);
                 cameraObject = new GameObject("GalaQuestGameplayCamera");
                 var camera = cameraObject.AddComponent<Camera>();
                 camera.fieldOfView = 42f;
@@ -210,7 +213,8 @@ namespace GalaQuest.Tests
                 Assert.That(finder, Is.Not.Null);
                 foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
                 {
-                    item.SetLabel(item.Kind == "rune" ? "6,000 + 700 + 20" : item.Kind.ToUpperInvariant());
+                    item.SetLabel(item.Kind == "rune" ? "6,000 + 700 + 20"
+                        : item.Kind == "hammer" ? "STRIKE" : item.Kind.ToUpperInvariant());
                     foreach (var renderer in item.GetComponentsInChildren<Renderer>())
                     {
                         var bounds = renderer.bounds;

@@ -57,23 +57,28 @@ namespace GalaQuest.Editor
 
         private static void ArrangeTaskControls(Transform root)
         {
-            // Put the physical work surface on the approach side of the prize.
-            // Its complete controls fit the default portrait view without requiring
-            // an orbit, while retaining their world dimensions and label scale.
-            var approachOffset = new Vector3(-2.1f, 0, 0);
+            // Two columns on a stepped workbench keep the complete controls in the
+            // approach view, including when a sibling stands closer to the prize.
+            // Retain physical touch dimensions and readable label scale.
+            var approachOffset = new Vector3(-1.55f, 0, 0);
             var iron = AssetDatabase.LoadAssetAtPath<Material>(Folder + "/ForgeIron.mat")
                         ?? throw new BuildFailedException("Missing existing Forge iron material");
-            Support("ControlWorkbench", new Vector3(0, 1.55f, -.8f), new Vector3(3.5f, .18f, 1.4f));
-            Support("ControlWorkbenchLeft", new Vector3(-1.4f, .825f, -.8f), new Vector3(.18f, 1.45f, .75f));
-            Support("ControlWorkbenchRight", new Vector3(1.4f, .825f, -.8f), new Vector3(.18f, 1.45f, .75f));
-            Place("SoundPlaque", new Vector3(-1.4f, 1.515f, -.3f), new Vector3(.60f, .45f, .30f));
-            Place("HintBell", new Vector3(-.7f, 1.515f, -.3f), new Vector3(.60f, .45f, .30f));
-            Place("ForgeHammer", new Vector3(1.15f, 1.54f, -.3f), new Vector3(.72f, .5f, .30f));
+            Support("ControlWorkbench", new Vector3(0, 1.55f, -1.05f), new Vector3(2.05f, .18f, 1.05f));
+            Support("ControlWorkbenchRear", new Vector3(0, 1.93f, .15f), new Vector3(2.05f, .18f, 1.05f));
+            Support("ControlWorkbenchHelp", new Vector3(0, 2.085f, 1.3f), new Vector3(2.05f, .18f, .7f));
+            Support("ControlWorkbenchLeft", new Vector3(-.9f, .825f, -1.05f), new Vector3(.18f, 1.45f, .75f));
+            Support("ControlWorkbenchRight", new Vector3(.9f, .825f, -1.05f), new Vector3(.18f, 1.45f, .75f));
+            Support("ControlWorkbenchRearLeft", new Vector3(-.9f, 1.0475f, 1.3f), new Vector3(.18f, 1.895f, .5f));
+            Support("ControlWorkbenchRearRight", new Vector3(.9f, 1.0475f, 1.3f), new Vector3(.18f, 1.895f, .5f));
+            Place("SoundPlaque", new Vector3(-.5f, 2.05f, 1.3f), new Vector3(.60f, .45f, .30f));
+            Place("HintBell", new Vector3(.5f, 2.05f, 1.3f), new Vector3(.60f, .45f, .30f));
+            Place("ForgeHammer", new Vector3(.5f, 1.8f, .15f), new Vector3(.72f, .5f, .30f));
             for (var i = 0; i < 3; i++)
-                Place("Rune" + (i + 1), new Vector3(-1 + i, 1.42f, -1.05f), new Vector3(.8f, .26f, .62f));
+                Place("Rune" + (i + 1), new Vector3(i == 1 ? .5f : -.5f,
+                    i == 2 ? 1.8f : 1.42f, i == 2 ? .15f : -1.05f), new Vector3(.8f, .26f, .62f));
             Place("ForgeCore", new Vector3(0, 1.42f, -1.05f), new Vector3(.6f, .26f, .55f));
-            Place("SoundAnvil", new Vector3(-1.3f, 1.42f, -.6f), new Vector3(.75f, .26f, .72f));
-            Place("NumberAnvil", new Vector3(1.3f, 1.42f, -.6f), new Vector3(.75f, .26f, .72f));
+            Place("SoundAnvil", new Vector3(-.5f, 1.42f, -1.05f), new Vector3(.75f, .26f, .72f));
+            Place("NumberAnvil", new Vector3(.5f, 1.42f, -1.05f), new Vector3(.75f, .26f, .72f));
             Place("ClaimAnvil", new Vector3(0, 1.42f, -1.05f), new Vector3(.85f, .26f, .72f));
             Place("EquipStand", new Vector3(0, 1.42f, -1.05f), new Vector3(.85f, .26f, .72f));
             void Support(string name, Vector3 position, Vector3 size)
