@@ -61,8 +61,10 @@ Editor log/Console for errors and verify the changed asset or script was actuall
 using it as evidence. A successful menu request or `unity status` alone does not prove import completion;
 use `editor_status` to confirm readiness. A no-change refresh timing is not a changed-asset benchmark.
 
-If a command times out, its outcome is unknown: inspect the existing Editor/log and wait for active
-work before retrying. If Pipeline is unavailable, diagnose project identity, startup, compilation and
+If a command times out **without** an Editor/Pipeline error, its outcome is UNKNOWN: inspect the existing
+Editor/log and wait for active work before retrying. If the timed-out request itself emitted an Editor
+error or failed StrictMode/build validation, use the FAIL handling above rather than relabelling it as an
+observation timeout. If Pipeline is unavailable, diagnose project identity, startup, compilation and
 Safe Mode first. Where supported, screenshot-free native window activation is a focus fallback, but
 verify that a refresh actually occurred. Request Owner input only when available control paths fail;
 do not substitute Reimport All, a build-target switch, or another cold Editor launch for a routine refresh.
