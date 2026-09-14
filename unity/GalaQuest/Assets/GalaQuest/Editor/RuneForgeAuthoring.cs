@@ -57,14 +57,15 @@ namespace GalaQuest.Editor
 
         private static void ArrangeTaskControls(Transform root)
         {
-            // Work-height controls clear the approaching Hero's head, including an
-            // ordinary portrait orbit. A thin supported surface keeps the prize
-            // visible behind the answers rather than making a solid blocking wall.
+            // Put the physical work surface on the approach side of the prize.
+            // Its complete controls fit the default portrait view without requiring
+            // an orbit, while retaining their world dimensions and label scale.
+            var approachOffset = new Vector3(-2.1f, 0, 0);
             var iron = AssetDatabase.LoadAssetAtPath<Material>(Folder + "/ForgeIron.mat")
                         ?? throw new BuildFailedException("Missing existing Forge iron material");
-            Support("ControlWorkbench", new Vector3(0, 1.2f, -.8f), new Vector3(3.5f, .18f, 1.4f));
-            Support("ControlWorkbenchLeft", new Vector3(-1.4f, .65f, -.8f), new Vector3(.18f, 1.1f, .75f));
-            Support("ControlWorkbenchRight", new Vector3(1.4f, .65f, -.8f), new Vector3(.18f, 1.1f, .75f));
+            Support("ControlWorkbench", new Vector3(0, 1.55f, -.8f), new Vector3(3.5f, .18f, 1.4f));
+            Support("ControlWorkbenchLeft", new Vector3(-1.4f, .825f, -.8f), new Vector3(.18f, 1.45f, .75f));
+            Support("ControlWorkbenchRight", new Vector3(1.4f, .825f, -.8f), new Vector3(.18f, 1.45f, .75f));
             Place("SoundPlaque", new Vector3(-1.4f, 1.515f, -.3f), new Vector3(.60f, .45f, .30f));
             Place("HintBell", new Vector3(-.7f, 1.515f, -.3f), new Vector3(.60f, .45f, .30f));
             Place("ForgeHammer", new Vector3(1.15f, 1.54f, -.3f), new Vector3(.72f, .5f, .30f));
@@ -79,13 +80,14 @@ namespace GalaQuest.Editor
             {
                 var item = root.Find(name)?.gameObject
                            ?? Shape(name, root, PrimitiveType.Cube, position, size, iron, false);
-                item.transform.localPosition = position;
+                item.transform.localPosition = position + approachOffset;
                 item.transform.localScale = size;
             }
             void Place(string name, Vector3 position, Vector3 size)
             {
                 var control = root.Find(name) ?? throw new BuildFailedException("Missing Forge control " + name);
-                control.localPosition = position;
+                // The centered answer row must also clear the Hero's head in projection.
+                control.localPosition = position + approachOffset + Vector3.up * .35f;
                 control.localScale = size;
                 if (name == "SoundPlaque" || name == "HintBell") control.GetComponent<Renderer>().sharedMaterial =
                     iron;

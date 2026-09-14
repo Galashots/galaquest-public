@@ -202,20 +202,30 @@ namespace GalaQuest.Tests
                 camera.pixelRect = new Rect(0, 0, width, height);
                 var follow = cameraObject.AddComponent<GalaQuestGameplayCamera>();
                 follow.Configure(heroObject.transform);
-                if (height > width)
-                {
-                    // Exercise the existing orbit convention; this fixture is not runtime input evidence.
-                    typeof(GalaQuestGameplayCamera).GetMethod("ApplyDrag",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                        .Invoke(follow, new object[] { new Vector2(44f * Mathf.Deg2Rad / .006f * Screen.height / 600f, 0) });
-                    follow.FollowNow();
-                }
+                // Required task controls must be discoverable at the ordinary approach,
+                // before the player has made any camera gesture.
 
                 var finder = typeof(GalaQuestRuneForgePresenter).GetMethod("FindInteractable",
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
                 Assert.That(finder, Is.Not.Null);
                 foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
                 {
+                    item.SetLabel(item.Kind == "rune" ? "6,000 + 700 + 20" : item.Kind.ToUpperInvariant());
+                    foreach (var renderer in item.GetComponentsInChildren<Renderer>())
+                    {
+                        var bounds = renderer.bounds;
+                        for (var corner = 0; corner < 8; corner++)
+                        {
+                            var world = bounds.center + Vector3.Scale(bounds.extents,
+                                new Vector3((corner & 1) == 0 ? -1 : 1,
+                                    (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                            var pixel = camera.WorldToScreenPoint(world);
+                            Assert.That(pixel.z > 0 && pixel.x >= 4 && pixel.x <= width - 4
+                                && pixel.y >= 4 && pixel.y <= height - 4, Is.True,
+                                item.name + "/" + renderer.name + " visible bounds leave default "
+                                + width + "x" + height + " view: " + pixel);
+                        }
+                    }
                     // This is exactly what RecordBrowserControlDiagnostics offers the player and the
                     // browser driver as this control's tap point.
                     var point = camera.WorldToScreenPoint(item.transform.position);
