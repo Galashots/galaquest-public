@@ -1,3 +1,5 @@
+using System.Linq;
+// The Forge geometry assertions intentionally remain independent of gameplay state.
 using NUnit.Framework;
 using UnityEngine;
 
@@ -81,6 +83,33 @@ namespace GalaQuest.Tests
             Assert.That(travel.Overlaps(attack), Is.False);
             Assert.That(travel.xMin, Is.GreaterThanOrEqualTo(0));
             Assert.That(travel.xMax, Is.LessThanOrEqualTo(viewport.x));
+        }
+
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        [TestCase(1024, 768)]
+        public void ForgeQuestionPanelIsCentredAndOwnsItsChoiceActions(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var panel = GalaQuestRuneForgePresenter.QuestionPanelRect(viewport);
+            Assert.That(panel.center.x, Is.EqualTo(width * .5f).Within(1));
+            Assert.That(panel.center.y, Is.EqualTo(height * .5f).Within(1));
+            Assert.That(panel.xMin, Is.GreaterThanOrEqualTo(0));
+            Assert.That(panel.yMin, Is.GreaterThanOrEqualTo(0));
+            Assert.That(panel.xMax, Is.LessThanOrEqualTo(width));
+            Assert.That(panel.yMax, Is.LessThanOrEqualTo(height));
+
+            var choices = Enumerable.Range(0, 3)
+                .Select(index => GalaQuestRuneForgePresenter.QuestionChoiceRect(viewport, index, 3)).ToArray();
+            for (var index = 0; index < choices.Length; index++)
+            {
+                Assert.That(panel.Contains(choices[index].center), Is.True);
+                for (var other = index + 1; other < choices.Length; other++)
+                    Assert.That(choices[index].Overlaps(choices[other]), Is.False);
+            }
+            var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
+            Assert.That(panel.Contains(close.center), Is.True);
+            Assert.That(choices.Any(choice => choice.Overlaps(close)), Is.False);
         }
     }
 }

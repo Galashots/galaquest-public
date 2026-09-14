@@ -14,7 +14,8 @@ namespace GalaQuest
         private float pressedAt = float.NegativeInfinity;
 
         public event Action AttackRequested;
-        public bool CanPress => !inputBlocked && session != null && session.ControlsReady && !down;
+        public bool CanPress => !inputBlocked && !GalaQuestRuneForgePresenter.IsInputCaptured
+            && session != null && session.ControlsReady && !down;
 
         // Touch positions use a bottom-left origin. Ownership is chosen on press;
         // an attack finger remains reserved when it moves outside the visible disc.
@@ -58,7 +59,7 @@ namespace GalaQuest
 
         private void Update()
         {
-            if (inputBlocked) return;
+            if (inputBlocked || GalaQuestRuneForgePresenter.IsInputCaptured) { Cancel(); return; }
             var touchscreen = Touchscreen.current;
             var anyTouch = false;
             var ownerPresent = false;
@@ -92,7 +93,7 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            if (Event.current.type != EventType.Repaint) return;
+            if (GalaQuestRuneForgePresenter.IsInputCaptured || Event.current.type != EventType.Repaint) return;
             var rect = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height)).Attack;
             var pressed = Time.unscaledTime - pressedAt < .14f;
             GalaQuestCombatHudStyle.Disc(rect, CanPress, pressed);

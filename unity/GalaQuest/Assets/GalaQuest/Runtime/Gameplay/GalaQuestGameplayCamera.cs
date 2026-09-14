@@ -62,7 +62,7 @@ namespace GalaQuest
 
         private void Update()
         {
-            if (inputBlocked) return;
+            if (inputBlocked || GalaQuestRuneForgePresenter.IsInputCaptured) { ResetGestures(); return; }
             var anyTouch = PollTouches(Touchscreen.current);
             if (!anyTouch) PollMouse(Mouse.current);
             else mouseDragging = false;

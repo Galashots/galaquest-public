@@ -64,6 +64,7 @@ namespace GalaQuest
 
         private void Update()
         {
+            if (GalaQuestRuneForgePresenter.IsInputCaptured) return;
             var anyTouch = false;
             var viewport = new Vector2(Screen.width, Screen.height);
             if (Touchscreen.current != null)
@@ -79,7 +80,7 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            if (Event.current.type != EventType.Repaint) return;
+            if (GalaQuestRuneForgePresenter.IsInputCaptured || Event.current.type != EventType.Repaint) return;
             var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
             GalaQuestCombatHudStyle.Panel(layout.Mute);
             GalaQuestCombatHudStyle.Text(layout.Mute, muted ? "Sound off" : "Sound on", 14 * layout.Scale,

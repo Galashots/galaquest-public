@@ -61,6 +61,7 @@ namespace GalaQuest
         private void OnGUI()
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId)) return;
+            if (GalaQuestRuneForgePresenter.IsInputCaptured) return;
             var home = session.DestinationId == GalaQuestProtocolV4.HomeHubDestinationId;
             var nearGate = !home || (traversal != null &&
                 Vector2.Distance(traversal.PredictedPosition, new Vector2(0, 7)) <= 3f);
@@ -77,7 +78,7 @@ namespace GalaQuest
                 || Event.current.type == EventType.MouseMove))
                 travelPointerInside = rect.Contains(Event.current.mousePosition);
             var label = session.IsTravelling ? "Travelling..." : home
-                ? (nearGate ? "Enter Emberworks" : "Walk to the gate") : "Return to camp";
+                ? (nearGate ? "TAP TO ENTER EMBERWORKS" : "WALK TO THE GATE") : "TAP TO RETURN TO CAMP";
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
                 session.RequestTravel(home ? GalaQuestProtocolV4.EmberworksDeepDestinationId : GalaQuestProtocolV4.HomeHubDestinationId);
             GUI.enabled = oldEnabled;
@@ -91,7 +92,9 @@ namespace GalaQuest
                 if (GetComponent<GalaQuestRuneForgePresenter>()?.IsNear != true)
                 {
                 GalaQuestCombatHudStyle.Panel(layout.Objective, paper: true);
-                var objective = home ? "Enter the glowing gate" : "Take on the Emberworks fight";
+                var objective = home
+                    ? (nearGate ? "At the gate — tap ENTER EMBERWORKS" : "Walk to the gate, then tap ENTER EMBERWORKS")
+                    : "Find the Forge station, then tap WAKE";
                 var content = GalaQuestCombatHudStyle.Inset(layout.Objective, 12 * layout.Scale);
                 GalaQuestCombatHudStyle.Text(new Rect(content.x, content.y - 4 * layout.Scale, content.width, 18 * layout.Scale),
                     home ? "CAMP  /  NEXT STEP" : "EMBERWORKS  /  NEXT STEP", 11 * layout.Scale, new Color(.25f, .15f, .06f), true);

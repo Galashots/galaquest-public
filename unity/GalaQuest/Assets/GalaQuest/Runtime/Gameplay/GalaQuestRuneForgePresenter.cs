@@ -11,6 +11,7 @@ namespace GalaQuest
         public const string MagmaLordItemId = "helmet_magmalord";
         private const float InteractionDistance = 4.2f;
         private static readonly HashSet<int> OwnedTouchIds = new HashSet<int>();
+        private static GalaQuestRuneForgePresenter activePresenter;
 
         [SerializeField] private Transform hero;
         [SerializeField] private Transform forgeRoot;
@@ -23,12 +24,16 @@ namespace GalaQuest
         private GalaQuestRuneForgeState state;
         private GalaQuestRuneForgeInteractable[] interactables = Array.Empty<GalaQuestRuneForgeInteractable>();
         private GalaQuestRuneForgeInteractable selectedRune;
+        private string selectedChoiceId;
         private AudioSource audioSource;
         private string feedback = string.Empty;
         private float feedbackUntil;
         private bool equipped;
+        private bool questionPanelOpen;
 
         public GalaQuestRuneForgeState State => state;
+        public bool IsQuestionPanelOpen => questionPanelOpen && IsNear;
+        public static bool IsInputCaptured => activePresenter != null && activePresenter.IsQuestionPanelOpen;
         public bool IsNear => session != null && hero != null && forgeRoot != null
             && session.DestinationId == GalaQuestProtocolV4.EmberworksDeepDestinationId
             && Vector3.Distance(hero.position, forgeRoot.position) <= InteractionDistance;
@@ -71,6 +76,7 @@ namespace GalaQuest
 
         private void Awake()
         {
+            activePresenter = this;
             audioSource = gameObject.AddComponent<AudioSource>();
             audioSource.spatialBlend = 0f;
             audioSource.volume = .72f;
@@ -90,8 +96,10 @@ namespace GalaQuest
             {
                 state = frame.forge;
                 selectedRune = null;
+                selectedChoiceId = null;
                 feedback = ResponseText(state);
                 feedbackUntil = Time.unscaledTime + 2.2f;
+                questionPanelOpen = state != null;
                 if (state.justGranted) Play(claimCue);
                 else if (state.response == "retry") Play(machineCue);
                 else if (state.response == "independent-success" || state.response == "assisted-success") Play(successCue);
@@ -109,6 +117,13 @@ namespace GalaQuest
         private void Update()
         {
             RecordBrowserControlDiagnostics();
+            if (questionPanelOpen)
+            {
+                PollPanelTouches();
+                if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                    HandlePanelPointer(-2, Mouse.current.position.ReadValue());
+                return;
+            }
             PollTouches();
             if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 TryPress(-2, Mouse.current.position.ReadValue());
@@ -117,8 +132,14 @@ namespace GalaQuest
         private void RecordBrowserControlDiagnostics()
         {
             GalaQuestBrowserInterop.ClearForgeControls();
+            if (!IsNear) return;
+            if (questionPanelOpen)
+            {
+                RecordPanelControls();
+                return;
+            }
             var camera = InteractionCamera;
-            if (!IsNear || camera == null || interactables == null) return;
+            if (camera == null || interactables == null) return;
             foreach (var item in interactables)
             {
                 if (item == null || !item.gameObject.activeInHierarchy) continue;
@@ -126,6 +147,38 @@ namespace GalaQuest
                 if (point.z <= 0f) continue;
                 GalaQuestBrowserInterop.RecordForgeControl(item.Kind, item.Value, point.x, point.y);
             }
+        }
+
+        private void RecordPanelControls()
+        {
+            var viewport = new Vector2(Screen.width, Screen.height);
+            if (state?.status == "choose-pack")
+            {
+                for (var index = 0; index < (state.packs?.Length ?? 0); index++)
+                {
+                    var pack = state.packs[index];
+                    RecordPanelControl("pack", pack.id, PackRect(viewport, index, state.packs.Length));
+                }
+            }
+            else if (state?.status == "active")
+            {
+                for (var index = 0; index < (state.task?.choices?.Length ?? 0); index++)
+                    RecordPanelControl("rune", state.task.choices[index].id,
+                        QuestionChoiceRect(viewport, index, state.task.choices.Length));
+                RecordPanelControl("hear", string.Empty, QuestionActionRect(viewport, 0, 3));
+                RecordPanelControl("hint", string.Empty, QuestionActionRect(viewport, 1, 3));
+                RecordPanelControl("hammer", string.Empty, QuestionActionRect(viewport, 2, 3));
+            }
+            else if (state?.status == "ready-to-claim")
+                RecordPanelControl("claim", string.Empty, QuestionActionRect(viewport, 0, 1));
+            else if (state?.status == "owned" && !equipped)
+                RecordPanelControl("equip", string.Empty, QuestionActionRect(viewport, 0, 1));
+            RecordPanelControl("close", string.Empty, QuestionCloseRect(viewport));
+        }
+
+        private static void RecordPanelControl(string kind, string value, Rect rect)
+        {
+            GalaQuestBrowserInterop.RecordForgeControl(kind, value, rect.center.x, Screen.height - rect.center.y);
         }
 
         // Secondary overhead bars yield when they would cover a real Forge control.
@@ -172,6 +225,82 @@ namespace GalaQuest
                 if (touch.press.wasPressedThisFrame) TryPress(id, touch.position.ReadValue());
                 if (touch.press.wasReleasedThisFrame || !touch.press.isPressed) OwnedTouchIds.Remove(id);
             }
+        }
+
+        private void PollPanelTouches()
+        {
+            var touchscreen = Touchscreen.current;
+            if (touchscreen == null) return;
+            foreach (var touch in touchscreen.touches)
+            {
+                var id = touch.touchId.ReadValue();
+                if (touch.press.wasPressedThisFrame) HandlePanelPointer(id, touch.position.ReadValue());
+                if (touch.press.wasReleasedThisFrame || !touch.press.isPressed) OwnedTouchIds.Remove(id);
+            }
+        }
+
+        private bool HandlePanelPointer(int pointerId, Vector2 screenPoint)
+        {
+            if (!IsQuestionPanelOpen) return false;
+            if (pointerId >= 0) OwnedTouchIds.Add(pointerId);
+            var viewport = new Vector2(Screen.width, Screen.height);
+            var guiPoint = new Vector2(screenPoint.x, viewport.y - screenPoint.y);
+            if (!QuestionPanelRect(viewport).Contains(guiPoint)) return true;
+            if (QuestionCloseRect(viewport).Contains(guiPoint))
+            {
+                questionPanelOpen = false;
+                selectedChoiceId = null;
+                PresentWorld();
+                return true;
+            }
+            if (state?.status == "choose-pack")
+            {
+                for (var index = 0; index < (state.packs?.Length ?? 0); index++)
+                    if (PackRect(viewport, index, state.packs.Length).Contains(guiPoint))
+                    {
+                        session.TrySelectRuneForgePack(state.packs[index].id);
+                        return true;
+                    }
+            }
+            else if (state?.status == "active")
+            {
+                for (var index = 0; index < (state.task?.choices?.Length ?? 0); index++)
+                    if (QuestionChoiceRect(viewport, index, state.task.choices.Length).Contains(guiPoint))
+                    {
+                        selectedChoiceId = state.task.choices[index].id;
+                        feedback = "Selected. Touch STRIKE to check it.";
+                        feedbackUntil = Time.unscaledTime + 4f;
+                        return true;
+                    }
+                for (var index = 0; index < 3; index++)
+                    if (QuestionActionRect(viewport, index, 3).Contains(guiPoint))
+                    {
+                        PanelAction(index);
+                        return true;
+                    }
+            }
+            else if ((state?.status == "ready-to-claim" || (state?.status == "owned" && !equipped))
+                && QuestionActionRect(viewport, 0, 1).Contains(guiPoint))
+            {
+                PanelAction(0);
+                return true;
+            }
+            return true;
+        }
+
+        private void PanelAction(int index)
+        {
+            if (state?.status == "active")
+            {
+                if (index == 0 && state.task != null) GalaQuestBrowserInterop.Speak(state.task.spokenPrompt);
+                else if (index == 1 && state.task != null)
+                    session.TryRequestRuneForgeHint(state.task.id, state.contentVersion);
+                else if (index == 2 && state.task != null && !string.IsNullOrEmpty(selectedChoiceId))
+                    session.TryAnswerRuneForge(state.task.id, selectedChoiceId, state.contentVersion);
+                return;
+            }
+            if (state?.status == "ready-to-claim") session.TryClaimRuneForge();
+            else if (state?.status == "owned" && !equipped) session.TryEquip(MagmaLordItemId);
         }
 
         private bool TryPress(int pointerId, Vector2 screenPoint)
@@ -235,15 +364,16 @@ namespace GalaQuest
             var status = state?.status ?? "dormant";
             foreach (var item in interactables)
             {
-                var active = item.Kind == "open" ? state == null
-                    : item.Kind == "pack" ? status == "choose-pack"
+                var active = item.Kind == "open" ? !questionPanelOpen
+                    : item.Kind == "pack" ? status == "choose-pack" && !questionPanelOpen
                     : item.Kind == "rune" || item.Kind == "hammer" || item.Kind == "hint" || item.Kind == "hear"
-                        ? status == "active"
-                    : item.Kind == "claim" ? status == "ready-to-claim"
-                    : item.Kind == "equip" ? status == "owned" && !equipped
+                        ? status == "active" && !questionPanelOpen
+                    : item.Kind == "claim" ? status == "ready-to-claim" && !questionPanelOpen
+                    : item.Kind == "equip" ? status == "owned" && !equipped && !questionPanelOpen
                     : false;
                 item.gameObject.SetActive(active);
                 item.SetGlow(active, item == selectedRune || (item.Kind == "hammer" && selectedRune != null));
+                if (item.Kind == "open") item.SetLabel(state == null ? "WAKE" : "OPEN FORGE");
             }
             if (status == "active" && state.task?.choices != null)
             {
@@ -285,7 +415,9 @@ namespace GalaQuest
         {
             state = null;
             selectedRune = null;
+            selectedChoiceId = null;
             equipped = false;
+            questionPanelOpen = false;
             feedback = string.Empty;
             OwnedTouchIds.Clear();
             PresentWorld();
@@ -302,36 +434,169 @@ namespace GalaQuest
             return panel;
         }
 
+        public static Rect QuestionPanelRect(Vector2 viewport)
+        {
+            var hud = new GalaQuestCombatHudLayout(viewport);
+            var s = hud.Scale;
+            var width = Mathf.Min(viewport.x - 24 * s, hud.Narrow ? 372 * s : 640 * s);
+            var compact = viewport.y < 600;
+            var height = Mathf.Min(viewport.y - 20 * s, (hud.Narrow ? (compact ? 460 : 660) : 520) * s);
+            return new Rect((viewport.x - width) * .5f, (viewport.y - height) * .5f, width, height);
+        }
+
+        public static Rect QuestionChoiceRect(Vector2 viewport, int index, int count)
+        {
+            var panel = QuestionPanelRect(viewport);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            var compact = viewport.y < 600;
+            var top = panel.y + (compact ? 92 : 122) * s;
+            var height = (compact ? 38 : 58) * s;
+            var gap = 6 * s;
+            var width = panel.width - 32 * s;
+            return new Rect(panel.x + 16 * s, top + index * (height + gap), width, height);
+        }
+
+        public static Rect PackRect(Vector2 viewport, int index, int count)
+        {
+            var panel = QuestionPanelRect(viewport);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            var compact = viewport.y < 600;
+            var top = panel.y + (compact ? 82 : 106) * s;
+            var height = (compact ? 48 : 70) * s;
+            var gap = 8 * s;
+            return new Rect(panel.x + 16 * s, top + index * (height + gap), panel.width - 32 * s, height);
+        }
+
+        public static Rect QuestionActionRect(Vector2 viewport, int index, int count)
+        {
+            var panel = QuestionPanelRect(viewport);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            var compact = viewport.y < 600;
+            var height = (compact ? 34 : 48) * s;
+            var gap = 6 * s;
+            var bottom = panel.yMax - (compact ? 70 : 88) * s;
+            var width = (panel.width - 32 * s - (count - 1) * gap) / count;
+            return new Rect(panel.x + 16 * s + index * (width + gap), bottom, width, height);
+        }
+
+        public static Rect QuestionCloseRect(Vector2 viewport)
+        {
+            var panel = QuestionPanelRect(viewport);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            var compact = viewport.y < 600;
+            var height = (compact ? 30 : 40) * s;
+            return new Rect(panel.x + 16 * s, panel.yMax - (compact ? 42 : 56) * s,
+                panel.width - 32 * s, height);
+        }
+
         private void OnGUI()
         {
             if (!IsNear) return;
             var viewport = new Vector2(Screen.width, Screen.height);
-            var panel = PromptRect(viewport);
-            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            if (!IsQuestionPanelOpen)
+            {
+                DrawNearbyPrompt(viewport);
+                return;
+            }
+            var layout = new GalaQuestCombatHudLayout(viewport);
+            var panel = QuestionPanelRect(viewport);
+            var s = layout.Scale;
+            GalaQuestCombatHudStyle.Fill(new Rect(0, 0, viewport.x, viewport.y), new Color(0f, 0f, 0f, .32f));
             GalaQuestCombatHudStyle.Panel(panel, paper: true);
-            var title = state?.status == "active" ? "RUNE FORGE  /  " + state.completedCount + " OF " + state.requiredSuccesses : "RUNE FORGE";
-            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 6*s, panel.width - 24*s, 24*s),
-                title, 15*s, new Color(.25f, .15f, .06f), true);
-            var prompt = CurrentPrompt(state, equipped);
-            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 32*s, panel.width - 24*s, 47*s),
-                prompt, 18*s, new Color(.14f, .085f, .025f), true, TextAnchor.UpperLeft, true);
-            var action = Time.unscaledTime < feedbackUntil && !string.IsNullOrEmpty(feedback) ? feedback
-                : state?.status == "active" ? (selectedRune != null ? "Rune selected. Touch STRIKE." : "Choose a rune, then touch STRIKE.") : string.Empty;
-            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 83*s, panel.width - 24*s, panel.height - 90*s),
-                action, 14*s, new Color(.25f, .15f, .06f), false, TextAnchor.UpperLeft, true);
+            var ink = new Color(.14f, .085f, .025f);
+            var title = state?.status == "active" ? "RUNE FORGE  /  " + state.completedCount + " OF " + state.requiredSuccesses
+                : state?.status == "choose-pack" ? "CHOOSE YOUR LEARNING TRACK" : "RUNE FORGE";
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 16*s, panel.y + 8*s, panel.width - 32*s, 28*s),
+                title, (viewport.y < 600 ? 14 : 17)*s, ink, true, TextAnchor.MiddleCenter);
+            if (state?.status == "choose-pack") DrawPackPanel(panel, s, ink);
+            else if (state?.status == "active") DrawQuestionPanel(panel, s, ink);
+            else
+            {
+                GalaQuestCombatHudStyle.Text(new Rect(panel.x + 16*s, panel.y + 48*s, panel.width - 32*s, 54*s),
+                    CurrentPrompt(state, equipped), 18*s, ink, true, TextAnchor.MiddleCenter, true);
+                if (state?.status == "ready-to-claim") DrawPanelButton(QuestionActionRect(viewport, 0, 1), "CLAIM", true, true, s);
+                else if (state?.status == "owned" && !equipped) DrawPanelButton(QuestionActionRect(viewport, 0, 1), "EQUIP", true, true, s);
+            }
+            DrawPanelButton(QuestionCloseRect(viewport), "CLOSE", true, false, s);
         }
+
+        private void DrawNearbyPrompt(Vector2 viewport)
+        {
+            var panel = PromptRect(viewport);
+            var scale = new GalaQuestCombatHudLayout(viewport).Scale;
+            GalaQuestCombatHudStyle.Panel(panel, paper: true);
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*scale, panel.y + 8*scale,
+                panel.width - 24*scale, 24*scale), state == null ? "FORGE / READY" : "FORGE / CONTINUE",
+                15*scale, new Color(.25f, .15f, .06f), true, TextAnchor.MiddleCenter);
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 14*scale, panel.y + 36*scale,
+                panel.width - 28*scale, panel.height - 46*scale), CurrentPrompt(state, equipped),
+                17*scale, new Color(.14f, .085f, .025f), true, TextAnchor.MiddleCenter, true);
+        }
+
+        private void DrawPackPanel(Rect panel, float s, Color ink)
+        {
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 18*s, panel.y + 43*s, panel.width - 36*s, 36*s),
+                "Pick one. This selection is saved with your Forge progress.", 14*s, ink, false, TextAnchor.MiddleCenter, true);
+            for (var index = 0; index < (state.packs?.Length ?? 0); index++)
+            {
+                var pack = state.packs[index];
+                var rect = PackRect(new Vector2(Screen.width, Screen.height), index, state.packs.Length);
+                DrawPanelButton(rect, TrackTitle(pack.id), true, false, s);
+                GalaQuestCombatHudStyle.Text(new Rect(rect.x + 10*s, rect.yMax - 24*s, rect.width - 20*s, 18*s),
+                    TrackDescription(pack.id), 11*s, GalaQuestCombatHudStyle.Ink, false, TextAnchor.MiddleCenter, true);
+            }
+        }
+
+        private void DrawQuestionPanel(Rect panel, float s, Color ink)
+        {
+            var compact = Screen.height < 600;
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 16*s, panel.y + 43*s, panel.width - 32*s, (compact ? 38 : 58)*s),
+                CurrentPrompt(state, equipped), (compact ? 15 : 18)*s, ink, true, TextAnchor.MiddleCenter, true);
+            for (var index = 0; index < (state.task?.choices?.Length ?? 0); index++)
+            {
+                var choice = state.task.choices[index];
+                DrawPanelButton(QuestionChoiceRect(new Vector2(Screen.width, Screen.height), index, state.task.choices.Length),
+                    choice.label, choice.id == selectedChoiceId, choice.id == selectedChoiceId, s);
+            }
+            var action = !string.IsNullOrEmpty(feedback) ? feedback : "Choose an answer, then tap STRIKE.";
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 16*s, panel.yMax - (compact ? 122 : 154)*s,
+                panel.width - 32*s, (compact ? 42 : 56)*s), action, 13*s, ink, false, TextAnchor.MiddleCenter, true);
+            DrawPanelButton(QuestionActionRect(new Vector2(Screen.width, Screen.height), 0, 3), "HEAR", true, false, s);
+            DrawPanelButton(QuestionActionRect(new Vector2(Screen.width, Screen.height), 1, 3), "HINT", true, false, s);
+            DrawPanelButton(QuestionActionRect(new Vector2(Screen.width, Screen.height), 2, 3), "STRIKE",
+                !string.IsNullOrEmpty(selectedChoiceId), !string.IsNullOrEmpty(selectedChoiceId), s);
+        }
+
+        private static void DrawPanelButton(Rect rect, string label, bool enabled, bool selected, float scale)
+        {
+            GalaQuestCombatHudStyle.Panel(rect, lit: enabled && selected);
+            GalaQuestCombatHudStyle.Fill(GalaQuestCombatHudStyle.Inset(rect, 7*scale),
+                enabled ? (selected ? new Color(.88f, .65f, .31f, .42f) : new Color(.03f, .04f, .035f, .78f))
+                    : new Color(.2f, .2f, .2f, .42f));
+            GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8*scale), label,
+                Mathf.Max(11, 16*scale), enabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter, true);
+        }
+
+        private static string TrackTitle(string id) => id == "grapheme-er-family" ? "SOUND" : id == "place-value-rounding" ? "NUMBER" : id;
+        private static string TrackDescription(string id) => id == "grapheme-er-family"
+            ? "Hear a word. Choose the letters that make its sound." : id == "place-value-rounding"
+                ? "Build numbers with place value and rounding." : "Choose this learning track.";
 
         // Transient feedback has its own line; it must never replace the current
         // server question (including after a successful strike advances the task).
         public static string CurrentPrompt(GalaQuestRuneForgeState state, bool equipped) =>
-            state == null ? "MagmaLord Helmet trapped — touch WAKE below."
-                : state.status == "choose-pack" ? "Choose a rune anvil."
+            state == null ? "MagmaLord Helmet waiting — tap WAKE at the Forge."
+                : state.status == "choose-pack" ? "Choose SOUND or NUMBER."
                 : state.status == "active" ? state.task?.displayPrompt
-                : state.status == "ready-to-claim" ? "The cage is open. Touch CLAIM."
+                : state.status == "ready-to-claim" ? "The cage is open — tap CLAIM."
                 : equipped ? "MagmaLord Helmet equipped · 20% damage reduction"
-                : "You own the helmet. Touch EQUIP to wear it.";
+                : "You own the helmet — tap EQUIP to wear it.";
 
-        private void OnDestroy() => BindSession(null);
+        private void OnDestroy()
+        {
+            if (activePresenter == this) activePresenter = null;
+            BindSession(null);
+        }
     }
 
 }
