@@ -172,6 +172,7 @@ namespace GalaQuest.Tests
         [TestCase(390, 844)]
         [TestCase(390, 844, 5.576f, 15.304f)]
         [TestCase(390, 844, 6.199f, 16.017f)]
+        [TestCase(390, 844, 5.357f, 15.336f)]
         public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint(int width, int height,
             float approachX = 5f, float approachZ = 15f)
         {
@@ -203,6 +204,7 @@ namespace GalaQuest.Tests
                 camera.nearClipPlane = .1f;
                 camera.farClipPlane = 160f;
                 camera.pixelRect = new Rect(0, 0, width, height);
+                camera.aspect = (float)width / height;
                 var follow = cameraObject.AddComponent<GalaQuestGameplayCamera>();
                 follow.Configure(heroObject.transform);
                 // Required task controls must be discoverable at the ordinary approach,
@@ -212,9 +214,19 @@ namespace GalaQuest.Tests
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
                 Assert.That(finder, Is.Not.Null);
                 foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
-                {
                     item.SetLabel(item.Kind == "rune" ? "6,000 + 700 + 20"
                         : item.Kind == "hammer" ? "STRIKE" : item.Kind.ToUpperInvariant());
+                // TextMesh geometry is refreshed by rendering; immediate bounds after
+                // SetLabel can describe the previous text instead of the visible label.
+                var target = new RenderTexture(width, height, 24);
+                try { camera.targetTexture = target; camera.Render(); }
+                finally
+                {
+                    camera.targetTexture = null;
+                    UnityEngine.Object.DestroyImmediate(target);
+                }
+                foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
+                {
                     foreach (var renderer in item.GetComponentsInChildren<Renderer>())
                     {
                         var bounds = renderer.bounds;
@@ -228,6 +240,11 @@ namespace GalaQuest.Tests
                                 && pixel.y >= 4 && pixel.y <= height - 4, Is.True,
                                 item.name + "/" + renderer.name + " visible bounds leave default "
                                 + width + "x" + height + " view: " + pixel);
+                            var guiPoint = new Vector2(pixel.x, height - pixel.y);
+                            var hud = new GalaQuestCombatHudLayout(new Vector2(width, height));
+                            Assert.That(hud.Status.Contains(guiPoint) || hud.Identity.Contains(guiPoint)
+                                || hud.Mute.Contains(guiPoint), Is.False,
+                                item.name + "/" + renderer.name + " is covered by the status HUD at " + guiPoint);
                         }
                     }
                     // This is exactly what RecordBrowserControlDiagnostics offers the player and the
