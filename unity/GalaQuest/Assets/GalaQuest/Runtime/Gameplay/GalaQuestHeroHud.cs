@@ -20,7 +20,6 @@ namespace GalaQuest
         public void Draw(string profileName, string place, string connectionStatus,
             GalaQuestProfileProgression progression, GalaQuestCombatPresentation combat, bool connected)
         {
-            if (GalaQuestRuneForgePresenter.IsInputCaptured) return;
             if (Event.current.type != EventType.Repaint) return;
             var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));
             var s = layout.Scale;

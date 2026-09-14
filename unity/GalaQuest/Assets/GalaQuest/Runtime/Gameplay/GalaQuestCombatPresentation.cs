@@ -285,7 +285,7 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            if (GalaQuestRuneForgePresenter.IsInputCaptured || self == null || Event.current.type != EventType.Repaint) return;
+            if (self == null || Event.current.type != EventType.Repaint) return;
             textStyle ??= new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             textStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 35f), 16, 26);
             if (GetComponent<GalaQuestHeroHud>() == null)

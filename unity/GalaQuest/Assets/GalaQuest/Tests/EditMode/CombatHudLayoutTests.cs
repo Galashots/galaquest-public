@@ -110,6 +110,17 @@ namespace GalaQuest.Tests
             var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
             Assert.That(panel.Contains(close.center), Is.True);
             Assert.That(choices.Any(choice => choice.Overlaps(close)), Is.False);
+
+            var activeActions = Enumerable.Range(0, 3)
+                .Select(index => GalaQuestRuneForgePresenter.QuestionActionRect(viewport, index, 3)).ToArray();
+            for (var index = 0; index < activeActions.Length; index++)
+                Assert.That(activeActions[index].Overlaps(close), Is.False,
+                    $"Active action {index} must not overlap CLOSE at {width}x{height}.");
+
+            var claim = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 1);
+            Assert.That(claim.Overlaps(close), Is.False, $"CLAIM must not overlap CLOSE at {width}x{height}.");
+            var equip = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 1);
+            Assert.That(equip.Overlaps(close), Is.False, $"EQUIP must not overlap CLOSE at {width}x{height}.");
         }
     }
 }

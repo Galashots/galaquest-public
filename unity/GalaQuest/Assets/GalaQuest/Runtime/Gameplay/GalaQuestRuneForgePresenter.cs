@@ -485,7 +485,9 @@ namespace GalaQuest
             var s = new GalaQuestCombatHudLayout(viewport).Scale;
             var compact = viewport.y < 600;
             var height = (compact ? 30 : 40) * s;
-            return new Rect(panel.x + 16 * s, panel.yMax - (compact ? 42 : 56) * s,
+            // Keep CLOSE below every visible action row. The panel owns input while
+            // open, so an overlapping strip would make the earlier CLOSE check win.
+            return new Rect(panel.x + 16 * s, panel.yMax - (compact ? 30 : 40) * s,
                 panel.width - 32 * s, height);
         }
 
