@@ -31,17 +31,21 @@ description: Build and verify GalaQuest's Unity WebGL client. Use for Unity brow
 
 After changing assets or scripts outside Unity, use the connected Editor's refresh menu through CLI.
 This works without Computer Use screenshots or an Owner click to focus the Editor.
+Run these commands from the intended repository root:
 
 ```powershell
+$project = (Resolve-Path 'unity/GalaQuest').Path
+pwsh -NoProfile -File tools/unity/preflight.ps1
 unity status --format json
-unity command editor_status --format json
-unity command menu --path 'Assets/Refresh' --format json
-unity command editor_status --format json
+unity command editor_status --project-path "$project" --format json
+unity command menu --project-path "$project" --path 'Assets/Refresh' --format json
+unity command editor_status --project-path "$project" --format json
 ```
 
 Before refreshing, verify the reported project path is the intended owned checkout and the Editor is
-ready, with Play Mode stopped and no compilation/domain reload in progress. If multiple Editors are
-connected, select the intended target using the installed CLI's help before issuing commands.
+ready, with Play Mode stopped and no compilation/domain reload in progress. Every Editor command
+must explicitly target that project, even when only one Editor is connected. Verify the responding
+project path and pinned Editor version; a discovery listing alone is not readiness evidence.
 
 Require the menu result to confirm execution, then allow any import/compilation to finish. Check the
 Editor log/Console for errors and verify the changed asset or script was actually imported before
