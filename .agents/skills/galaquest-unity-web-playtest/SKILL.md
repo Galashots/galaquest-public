@@ -19,8 +19,16 @@ description: Build and verify GalaQuest's Unity WebGL client. Use for Unity brow
   not the ordinary local edit-test loop.
 - Keep Unity test and batch commands on `-buildTarget WebGL`. Switching build targets can invalidate
   useful imports and build cache even when gameplay source has not changed.
-- Run one Unity batch operation per project. Follow its existing process/session to termination;
-  a tool observation timeout is not a failed build and does not justify launching another.
+- Run one Unity batch operation per project and follow its existing process/session to termination.
+  A client/connector observation timeout that does not inject an Editor error leaves the outcome UNKNOWN;
+  inspect the original operation and do not launch another one merely because observation stopped.
+- Treat an Editor/Pipeline execution timeout as part of the operation when it reaches the Editor. If a
+  `run_script` `timeout_ms` or another Editor request emits `LogError`, reports a main-thread operation
+  timeout, or makes StrictMode/build validation fail, that build gate is FAIL even when compilation or
+  linking workers continue afterward. Before a known long strict build, size the run-specific request
+  timeout above the established healthy baseline. After an injected timeout, preserve the failed receipt,
+  follow the original workers to termination, verify settings/scene/source restoration and cleanliness,
+  then retry unchanged inputs with only the observation/request budget changed when that is the causal fix.
 - When a known healthy batch build is active, wait on that process instead of issuing frequent status
   probes or log tails. Reinspect only when completion is expected or elapsed time materially exceeds the
   established baseline.
@@ -53,8 +61,10 @@ Editor log/Console for errors and verify the changed asset or script was actuall
 using it as evidence. A successful menu request or `unity status` alone does not prove import completion;
 use `editor_status` to confirm readiness. A no-change refresh timing is not a changed-asset benchmark.
 
-If a command times out, its outcome is unknown: inspect the existing Editor/log and wait for active
-work before retrying. If Pipeline is unavailable, diagnose project identity, startup, compilation and
+If a command times out **without** an Editor/Pipeline error, its outcome is UNKNOWN: inspect the existing
+Editor/log and wait for active work before retrying. If the timed-out request itself emitted an Editor
+error or failed StrictMode/build validation, use the FAIL handling above rather than relabelling it as an
+observation timeout. If Pipeline is unavailable, diagnose project identity, startup, compilation and
 Safe Mode first. Where supported, screenshot-free native window activation is a focus fallback, but
 verify that a refresh actually occurred. Request Owner input only when available control paths fail;
 do not substitute Reimport All, a build-target switch, or another cold Editor launch for a routine refresh.
@@ -71,6 +81,13 @@ migration. Recheck the affected materials and subsequent imports before claiming
 2. For authored interactions, preflight the intended gameplay camera in Editor/PlayMode before WebGL:
    active collider, reachable/ordered raycast, projected screen position, and basic gameplay-frame
    legibility/HUD overlap. Do not pay IL2CPP/WebAssembly cost to discover a defect the Editor can expose.
+   For a claim about default-state discoverability or readability, assert every required task control in
+   the target viewport **before** scripted orbit, recenter, reposition, zoom, or other corrective camera
+   input. A helper action that makes a control visible cannot prove it was visible on arrival. If the
+   intended player flow genuinely requires adjusting the view first, the cue and that action are part of
+   the product requirement and must be exercised as such rather than hidden in harness setup. When a
+   sibling, enemy, world label, or other presentation can overlap the controls, include at least one
+   crowded/interference state at the narrow target viewport before accepting the layout.
 3. Treat generated review inputs as cache inputs. If a build helper rewrites unchanged temporary assets,
    dirties its generated scene, or otherwise invalidates the incremental build merely because it ran,
    stop the repeat-build loop and make the generator a content-hash no-op or reuse the stable generated

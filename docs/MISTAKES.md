@@ -92,6 +92,7 @@ vocabulary. A new entry adds its row in the same commit.
 | — | A shared readiness promise must not await one optional body. | code, harness |
 | — | An instrument spends the lifetime of the subject it is measuring. | harness, evidence |
 | — | A full player build is the last place to discover whether an authored world control can receive a tap. | gameplay, tests, harness |
+| — | A harness that improves the view before checking it can turn a discoverability failure into a pass. | harness, visual, gameplay |
 
 ---
 
@@ -538,7 +539,7 @@ starting collected pickups at `gone`; pinned by `test/loot-pickups.test.mjs`.
 **Foreknowledge helped:** not yet recorded.
 
 ### GQ-019 — Automation timeouts are wall-clock budgets, not sample counts — and the fix for that has its own floor.
-**Status:** RULE · **Hits:** 2 · **First:** 2026-08-17 · **Last:** 2026-08-23
+**Status:** RULE · **Hits:** 3 · **First:** 2026-08-17 · **Last:** 2026-09-12
 **Not enforced because:** the defect is a budget being too small for a machine nobody has measured,
 and no test can know what machine the next one is. `test/automation-timing.test.mjs` pins the helper;
 what it cannot pin is a caller's choice of number. The countermeasure is the successor entry below --
@@ -563,6 +564,21 @@ read; nominal ten-second walks expanded into multi-minute overshoots. Fixed by
 structural coverage in `test/automation-timing.test.mjs` and `test/review-suite.test.mjs`.
 (2) 2026-08-23 -- eight harnesses red hosted and green locally, every one of them a budget sized on
 a machine where a `Runtime.evaluate` costs 5 ms against one where it costs a frame.
+**Hit 3's correction: a timeout can be part of the operation, not merely the observer.** A client or
+connector that stops waiting without changing Editor state leaves the result UNKNOWN; it does not
+justify launching a replacement operation while the first one may still be running. But an Editor-bound
+Pipeline request has a different failure mode: its timeout can emit an Editor `LogError` and cause strict
+build validation to fail. In that case the gate is genuinely FAIL even if lower-level compilation/linking
+workers continue and eventually produce files. Size the request budget for a known long strict build before
+launch. If the budget itself causes the failure, preserve the failed receipt, follow the original work to
+termination, verify restoration/source cleanliness, and retry unchanged inputs with only the request budget
+changed; do not relabel the first result as a pass because workers kept going.
+(3) 2026-09-12 -- PR #171 validation invoked the existing strict local build through Pipeline
+`run_script` with `timeout_ms=900000`. The build was still compiling/linking when the request expired;
+Pipeline emitted `LogError`, Unity reported `Main thread operation timed out after 900000ms`, and
+StrictMode returned Failed. The original workers were followed to completion and restoration/cleanliness
+was verified; the bounded retry kept source, recipe and cache unchanged and raised only the run-specific
+observation/request limits. The later build succeeded. The first attempt remains a failed gate.
 **Foreknowledge helped:** not yet recorded.
 
 ### RULE (GQ-022) — An instrument is not evidence until it has been shown to fail.
@@ -1806,4 +1822,25 @@ because nominal `TextMesh` font size says little after parent scaling; and overw
 prefab with `SaveAsPrefabAsset` rather than deleting it first, so an authoring rerun cannot churn its
 `.meta` GUID. Settle those seams and the browser driver's physical route before the exact-head build;
 use full WebGL compilation to prove the integrated player, not to search one coordinate at a time.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A harness that improves the view before checking it can turn a discoverability failure into a pass.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-09-13
+**Rule:** When the product claim is that a child can see and use required task controls on arrival,
+measure the ordinary arrival/default view before automation supplies expert knowledge. A scripted orbit,
+recenter, zoom, reposition, or other corrective input can make a broken layout usable and then let every
+later interaction assertion pass. That proves the corrected view works; it says nothing about whether the
+player could discover the controls before the harness helped. If deliberate camera adjustment is intended
+gameplay, its cue and action are part of the requirement and must be tested explicitly. For world-space
+task controls, also check a realistic interference state when nearby player/enemy labels or other
+presentation can occupy the same screen region.
+**Incident (2026-09-13, PR #174 Rune Forge portrait P1):** the built browser passed fourteen Forge
+behavior groups and the physical controls worked after input, but the driver captured the 390x844 portrait
+approach, injected a 44-degree touch orbit, and only then called its on-screen-control check and proceeded
+with answers/STRIKE. Independent running-pixel review opened the pre-orbit original and found the right-hand
+answer/STRIKE region outside the ordinary task view. Earlier in the same P1, a nearby sibling's overhead HP
+bar had also covered the answer row while the underlying Forge behavior remained healthy. The correction
+kept camera and control sizes stable, repacked the workbench, added pre-orbit renderer-bound containment,
+and retained a nearby-sibling portrait check. Required controls then fit before any orbit; physical iPad
+usability remained a separate UNKNOWN rather than being inferred from the browser pass.
 **Foreknowledge helped:** not yet recorded.
