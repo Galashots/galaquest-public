@@ -122,5 +122,40 @@ namespace GalaQuest.Tests
             var equip = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 1);
             Assert.That(equip.Overlaps(close), Is.False, $"EQUIP must not overlap CLOSE at {width}x{height}.");
         }
+
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        [TestCase(1024, 768)]
+        [TestCase(768, 1024)]
+        [TestCase(1100, 505)]
+        public void ForgeTrackButtonKeepsItsTitleClearOfItsDescription(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var panel = GalaQuestRuneForgePresenter.QuestionPanelRect(viewport);
+            var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
+            const int count = 2;
+            var packs = new Rect[count];
+            for (var index = 0; index < count; index++)
+            {
+                var pack = GalaQuestRuneForgePresenter.PackRect(viewport, index, count);
+                var title = GalaQuestRuneForgePresenter.PackTitleRect(viewport, index, count);
+                var description = GalaQuestRuneForgePresenter.PackDescriptionRect(viewport, index, count);
+                packs[index] = pack;
+
+                Assert.That(title.Overlaps(description), Is.False,
+                    $"Track {index} title must not overlap its description at {width}x{height}.");
+                Assert.That(pack.Contains(title.min) && pack.Contains(title.max), Is.True,
+                    $"Track {index} title must stay inside its button at {width}x{height}.");
+                Assert.That(pack.Contains(description.min) && pack.Contains(description.max), Is.True,
+                    $"Track {index} description must stay inside its button at {width}x{height}.");
+                Assert.That(title.height, Is.GreaterThan(0), $"Track {index} title band collapsed at {width}x{height}.");
+                Assert.That(panel.Contains(pack.center), Is.True,
+                    $"Track {index} must stay inside the panel at {width}x{height}.");
+                Assert.That(pack.Overlaps(close), Is.False,
+                    $"Track {index} must not overlap CLOSE at {width}x{height}.");
+            }
+            Assert.That(packs[0].Overlaps(packs[1]), Is.False,
+                $"Track buttons must not overlap each other at {width}x{height}.");
+        }
     }
 }

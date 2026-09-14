@@ -462,9 +462,28 @@ namespace GalaQuest
             var s = new GalaQuestCombatHudLayout(viewport).Scale;
             var compact = viewport.y < 600;
             var top = panel.y + (compact ? 82 : 106) * s;
-            var height = (compact ? 48 : 70) * s;
+            // One height everywhere. A track button carries a title AND a description, and the
+            // old compact 48*s left no room for both: the centred title was drawn straight
+            // through the description strip at every landscape phone size.
+            var height = 70 * s;
             var gap = 8 * s;
             return new Rect(panel.x + 16 * s, top + index * (height + gap), panel.width - 32 * s, height);
+        }
+
+        // Title and description own separate, non-touching bands of the same button, so
+        // neither can be drawn over the other at any viewport.
+        public static Rect PackTitleRect(Vector2 viewport, int index, int count)
+        {
+            var rect = PackRect(viewport, index, count);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            return new Rect(rect.x + 8 * s, rect.y + 8 * s, rect.width - 16 * s, rect.height - 38 * s);
+        }
+
+        public static Rect PackDescriptionRect(Vector2 viewport, int index, int count)
+        {
+            var rect = PackRect(viewport, index, count);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            return new Rect(rect.x + 10 * s, rect.yMax - 30 * s, rect.width - 20 * s, 24 * s);
         }
 
         public static Rect QuestionActionRect(Vector2 viewport, int index, int count)
@@ -542,9 +561,11 @@ namespace GalaQuest
             for (var index = 0; index < (state.packs?.Length ?? 0); index++)
             {
                 var pack = state.packs[index];
-                var rect = PackRect(new Vector2(Screen.width, Screen.height), index, state.packs.Length);
-                DrawPanelButton(rect, TrackTitle(pack.id), true, false, s);
-                GalaQuestCombatHudStyle.Text(new Rect(rect.x + 10*s, rect.yMax - 24*s, rect.width - 20*s, 18*s),
+                var viewport = new Vector2(Screen.width, Screen.height);
+                var count = state.packs.Length;
+                DrawPanelButton(PackRect(viewport, index, count), TrackTitle(pack.id), true, false, s,
+                    PackTitleRect(viewport, index, count));
+                GalaQuestCombatHudStyle.Text(PackDescriptionRect(viewport, index, count),
                     TrackDescription(pack.id), 11*s, GalaQuestCombatHudStyle.Ink, false, TextAnchor.MiddleCenter, true);
             }
         }
@@ -569,13 +590,14 @@ namespace GalaQuest
                 !string.IsNullOrEmpty(selectedChoiceId), !string.IsNullOrEmpty(selectedChoiceId), s);
         }
 
-        private static void DrawPanelButton(Rect rect, string label, bool enabled, bool selected, float scale)
+        private static void DrawPanelButton(Rect rect, string label, bool enabled, bool selected,
+            float scale, Rect? labelRect = null)
         {
             GalaQuestCombatHudStyle.Panel(rect, lit: enabled && selected);
             GalaQuestCombatHudStyle.Fill(GalaQuestCombatHudStyle.Inset(rect, 7*scale),
                 enabled ? (selected ? new Color(.88f, .65f, .31f, .42f) : new Color(.03f, .04f, .035f, .78f))
                     : new Color(.2f, .2f, .2f, .42f));
-            GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8*scale), label,
+            GalaQuestCombatHudStyle.Text(labelRect ?? GalaQuestCombatHudStyle.Inset(rect, 8*scale), label,
                 Mathf.Max(11, 16*scale), enabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter, true);
         }
 
