@@ -36,6 +36,7 @@ Run these commands from the intended repository root:
 ```powershell
 $project = (Resolve-Path 'unity/GalaQuest').Path
 pwsh -NoProfile -File tools/unity/preflight.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Unity preflight failed; do not refresh.' }
 unity status --format json
 unity command editor_status --project-path "$project" --format json
 unity command menu --project-path "$project" --path 'Assets/Refresh' --format json
