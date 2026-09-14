@@ -80,6 +80,25 @@ measured from GQ_HERO_V1 itself. A fixture states:
 - one **primary measurement** per slot, the only thing normalization may use;
 - **secondary proportion bands** that Warn or Reject an absurd silhouette.
 
+### Canonical source orientation for newly generated gear
+
+Owner rule: newly generated GalaQuest armor/gear must enter production with a known, consistent
+wearer-relative orientation. Use the same canonical convention as the Hero fixtures:
+
+- **+X = wearer's right** and **-X = wearer's left**;
+- **+Y = up/top** and **-Y = down/bottom**;
+- **+Z = forward/front** and **-Z = back**.
+
+For a helmet, that means the crown points +Y, the face opening points +Z, and the wearer's right side
+points +X. Prefer normalizing new first-party production GLBs to this convention before fit/profile
+authoring, with an identity root/object rotation where practical. Provider-original bytes remain
+immutable source custody; if a provider emits an arbitrary orientation, record that raw orientation and
+normalize a working/production derivative rather than overwriting the source master.
+
+`GearAssetFitProfile.raw-to-canonical` remains the honest compatibility seam for legacy, third-party,
+or unavoidable non-canonical inputs. For newly generated GalaQuest gear it should normally be identity,
+or carry an explicit documented exception, rather than serving as routine orientation cleanup.
+
 Every contract-critical number is classified `MEASURED`, `AUTHORED` or `DERIVED`. `Unclassified` is a
 hard validation failure: the contract refuses to claim authority for a number nobody has classified.
 
