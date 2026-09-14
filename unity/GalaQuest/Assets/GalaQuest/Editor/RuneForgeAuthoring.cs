@@ -329,4 +329,3 @@ namespace GalaQuest.Editor
         }
     }
 }
-
