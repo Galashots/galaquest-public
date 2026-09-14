@@ -35,6 +35,40 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void QuestionRemainsTheServerQuestionDuringRetryAndHintFeedback()
+        {
+            foreach (var response in new[] { "retry", "hint", "independent-success" })
+            {
+                var state = JsonUtility.FromJson<GalaQuestRuneForgeState>(
+                    "{\"status\":\"active\",\"task\":{\"displayPrompt\":\"In 4,582, what is the value of 5?\"}}");
+                state.response = response;
+                Assert.That(GalaQuestRuneForgePresenter.CurrentPrompt(state, false),
+                    Is.EqualTo(state.task.displayPrompt));
+            }
+        }
+
+        [Test]
+        public void SelectionUsesTextAndBaseColourAndRestoresOnDeselection()
+        {
+            var root = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var text = new GameObject("Label"); text.transform.SetParent(root.transform);
+            try
+            {
+                var mesh = text.AddComponent<TextMesh>(); mesh.text = "500";
+                var control = root.AddComponent<GalaQuestRuneForgeInteractable>();
+                control.Configure("rune", "500"); control.SetGlow(true, true); control.SetLabel("500");
+                Assert.That(mesh.text, Is.EqualTo("> 500 <"));
+                var block = new MaterialPropertyBlock(); root.GetComponent<Renderer>().GetPropertyBlock(block);
+                Assert.That(block.HasColor("_BaseColor"), Is.True);
+                control.SetGlow(true, false);
+                Assert.That(mesh.text, Is.EqualTo("500"));
+                root.GetComponent<Renderer>().GetPropertyBlock(block);
+                Assert.That(block.HasColor("_BaseColor"), Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
+        [Test]
         public void SessionRejectsForgeStateFromAnotherPlayerDestinationOrEpoch()
         {
             var wire = new Wire();
@@ -132,8 +166,15 @@ namespace GalaQuest.Tests
             }
         }
 
-        [Test]
-        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint()
+        [TestCase(1024, 768)]
+        [TestCase(1366, 768)]
+        [TestCase(844, 390)]
+        [TestCase(390, 844)]
+        [TestCase(390, 844, 5.576f, 15.304f)]
+        [TestCase(390, 844, 6.199f, 16.017f)]
+        [TestCase(390, 844, 5.357f, 15.336f)]
+        public void EveryActiveForgeControlIsReachableAtItsOwnProjectedScreenPoint(int width, int height,
+            float approachX = 5f, float approachZ = 15f)
         {
             var scene = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
                 UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
@@ -156,23 +197,62 @@ namespace GalaQuest.Tests
                 Physics.SyncTransforms();
 
                 heroObject = new GameObject("Hero");
-                heroObject.transform.position = ForgeApproachPosition;
+                heroObject.transform.position = new Vector3(approachX, .01f, approachZ);
                 cameraObject = new GameObject("GalaQuestGameplayCamera");
                 var camera = cameraObject.AddComponent<Camera>();
                 camera.fieldOfView = 42f;
                 camera.nearClipPlane = .1f;
                 camera.farClipPlane = 160f;
-                cameraObject.AddComponent<GalaQuestGameplayCamera>().Configure(heroObject.transform);
+                camera.pixelRect = new Rect(0, 0, width, height);
+                camera.aspect = (float)width / height;
+                var follow = cameraObject.AddComponent<GalaQuestGameplayCamera>();
+                follow.Configure(heroObject.transform);
+                // Required task controls must be discoverable at the ordinary approach,
+                // before the player has made any camera gesture.
 
                 var finder = typeof(GalaQuestRuneForgePresenter).GetMethod("FindInteractable",
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
                 Assert.That(finder, Is.Not.Null);
                 foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
+                    item.SetLabel(item.Kind == "rune" ? "6,000 + 700 + 20"
+                        : item.Kind == "hammer" ? "STRIKE" : item.Kind.ToUpperInvariant());
+                // TextMesh geometry is refreshed by rendering; immediate bounds after
+                // SetLabel can describe the previous text instead of the visible label.
+                var target = new RenderTexture(width, height, 24);
+                try { camera.targetTexture = target; camera.Render(); }
+                finally
                 {
+                    camera.targetTexture = null;
+                    UnityEngine.Object.DestroyImmediate(target);
+                }
+                foreach (var item in pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(false))
+                {
+                    foreach (var renderer in item.GetComponentsInChildren<Renderer>())
+                    {
+                        var bounds = renderer.bounds;
+                        for (var corner = 0; corner < 8; corner++)
+                        {
+                            var world = bounds.center + Vector3.Scale(bounds.extents,
+                                new Vector3((corner & 1) == 0 ? -1 : 1,
+                                    (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                            var pixel = camera.WorldToScreenPoint(world);
+                            Assert.That(pixel.z > 0 && pixel.x >= 4 && pixel.x <= width - 4
+                                && pixel.y >= 4 && pixel.y <= height - 4, Is.True,
+                                item.name + "/" + renderer.name + " visible bounds leave default "
+                                + width + "x" + height + " view: " + pixel);
+                            var guiPoint = new Vector2(pixel.x, height - pixel.y);
+                            var hud = new GalaQuestCombatHudLayout(new Vector2(width, height));
+                            Assert.That(hud.Status.Contains(guiPoint) || hud.Identity.Contains(guiPoint)
+                                || hud.Mute.Contains(guiPoint), Is.False,
+                                item.name + "/" + renderer.name + " is covered by the status HUD at " + guiPoint);
+                        }
+                    }
                     // This is exactly what RecordBrowserControlDiagnostics offers the player and the
                     // browser driver as this control's tap point.
                     var point = camera.WorldToScreenPoint(item.transform.position);
                     Assert.That(point.z, Is.GreaterThan(0f), item.name + " projects behind the gameplay camera.");
+                    Assert.That(new Rect(0, 0, width, height).Contains(point), Is.True,
+                        item.name + " is outside the " + width + "x" + height + " viewport: " + point);
                     var winner = (GalaQuestRuneForgeInteractable)finder.Invoke(
                         null, new object[] { camera.ScreenPointToRay(point) });
                     Assert.That(winner, Is.SameAs(item), item.name + " (" + item.Kind
@@ -321,6 +401,51 @@ namespace GalaQuest.Tests
                 }
             }
             finally { UnityEngine.Object.DestroyImmediate(instance); }
+        }
+
+        [Test]
+        public void SiblingHealthBarYieldsToAnActualProjectedRuneButNotClearSpace()
+        {
+            var pocket = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(RuneForgeAuthoring.PocketPrefabPath));
+            var cameraObject = new GameObject("Projection camera");
+            try
+            {
+                var camera = cameraObject.AddComponent<Camera>();
+                camera.pixelRect = new Rect(0, 0, 390, 844);
+                var rune = pocket.GetComponentsInChildren<GalaQuestRuneForgeInteractable>(true).First(c => c.Kind == "rune");
+                rune.gameObject.SetActive(true);
+                camera.transform.position = rune.transform.position + new Vector3(0, 2, -8);
+                camera.transform.LookAt(rune.transform);
+                var projected = camera.WorldToScreenPoint(rune.transform.position);
+                var bar = new Rect(projected.x - 40, 844 - projected.y - 2, 80, 13);
+                Assert.That(GalaQuestRuneForgePresenter.OverlapsControlProjection(bar, camera, new[] { rune }, 844), Is.True,
+                    "A sibling bar cannot obscure the physical answer it projects over.");
+                Assert.That(GalaQuestRuneForgePresenter.OverlapsControlProjection(new Rect(0, 0, 20, 10), camera, new[] { rune }, 844), Is.False);
+                rune.gameObject.SetActive(false);
+                Assert.That(GalaQuestRuneForgePresenter.OverlapsControlProjection(bar, camera, new[] { rune }, 844), Is.False,
+                    "Inactive Forge controls must not hide ordinary health feedback.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(cameraObject); UnityEngine.Object.DestroyImmediate(pocket); }
+        }
+
+        [Test]
+        public void ExpandedFormLabelWrapsWithoutChangingTheAnswerIdentity()
+        {
+            var root = new GameObject("Rune");
+            try
+            {
+                var label = new GameObject("Label");
+                label.transform.SetParent(root.transform);
+                var mesh = label.AddComponent<TextMesh>();
+                var rune = root.AddComponent<GalaQuestRuneForgeInteractable>();
+                rune.Configure("rune", "expanded-correct");
+                rune.SetLabel("6,000 + 700 + 20");
+                Assert.That(mesh.text, Is.EqualTo("6,000 +\n700 +\n20"));
+                rune.SetGlow(true, true);
+                Assert.That(mesh.text, Does.Contain("6,000 +\n700 +\n20"));
+                Assert.That(rune.Value, Is.EqualTo("expanded-correct"));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
         }
 
         private sealed class Wire : IGalaQuestTransport

@@ -43,6 +43,67 @@ namespace GalaQuest.Editor
             return definition;
         }
 
+        [MenuItem("GalaQuest/Rune Forge/Update control presentation only")]
+        public static void UpdateControlPresentation()
+        {
+            var root = PrefabUtility.LoadPrefabContents(PocketPrefabPath);
+            try
+            {
+                ArrangeTaskControls(root.transform);
+                PrefabUtility.SaveAsPrefabAsset(root, PocketPrefabPath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static void ArrangeTaskControls(Transform root)
+        {
+            // Keep a single answer row and a separate help/confirmation row. Compact
+            // the gaps, not the touch surfaces, and place the prize behind the controls.
+            var approachOffset = new Vector3(-1.5f, 0, 1f);
+            var iron = AssetDatabase.LoadAssetAtPath<Material>(Folder + "/ForgeIron.mat")
+                        ?? throw new BuildFailedException("Missing existing Forge iron material");
+            var cage = root.Find("PrizeCage") ?? throw new BuildFailedException("Missing Forge prize cage");
+            cage.localPosition = new Vector3(0, 0, 1.1f);
+            // Remove only the superseded presentation steps owned by this authoring pass.
+            foreach (var name in new[] { "ControlWorkbenchHelp",
+                         "ControlWorkbenchRearLeft", "ControlWorkbenchRearRight" })
+            {
+                var old = root.Find(name);
+                if (old != null) Object.DestroyImmediate(old.gameObject);
+            }
+            Support("ControlWorkbench", new Vector3(0, 1.55f, -.7f), new Vector3(2.85f, .18f, 1.5f));
+            Support("ControlWorkbenchRear", new Vector3(0, 1.685f, -.3f), new Vector3(2.85f, .18f, .5f));
+            Support("ControlWorkbenchLeft", new Vector3(-1.2f, .825f, -.7f), new Vector3(.18f, 1.45f, .75f));
+            Support("ControlWorkbenchRight", new Vector3(1.2f, .825f, -.7f), new Vector3(.18f, 1.45f, .75f));
+            Place("SoundPlaque", new Vector3(-.85f, 1.65f, -.3f), new Vector3(.60f, .45f, .30f));
+            Place("HintBell", new Vector3(0, 1.65f, -.3f), new Vector3(.60f, .45f, .30f));
+            Place("ForgeHammer", new Vector3(.85f, 1.675f, -.3f), new Vector3(.72f, .5f, .30f));
+            for (var i = 0; i < 3; i++)
+                Place("Rune" + (i + 1), new Vector3(-.85f + i * .85f, 1.42f, -1.05f), new Vector3(.8f, .26f, .62f));
+            Place("ForgeCore", new Vector3(0, 1.42f, -1.05f), new Vector3(.6f, .26f, .55f));
+            Place("SoundAnvil", new Vector3(-.6f, 1.42f, -1.05f), new Vector3(.75f, .26f, .72f));
+            Place("NumberAnvil", new Vector3(.6f, 1.42f, -1.05f), new Vector3(.75f, .26f, .72f));
+            Place("ClaimAnvil", new Vector3(0, 1.42f, -1.05f), new Vector3(.85f, .26f, .72f));
+            Place("EquipStand", new Vector3(0, 1.42f, -1.05f), new Vector3(.85f, .26f, .72f));
+            void Support(string name, Vector3 position, Vector3 size)
+            {
+                var item = root.Find(name)?.gameObject
+                           ?? Shape(name, root, PrimitiveType.Cube, position, size, iron, false);
+                item.transform.localPosition = position + approachOffset;
+                item.transform.localScale = size;
+            }
+            void Place(string name, Vector3 position, Vector3 size)
+            {
+                var control = root.Find(name) ?? throw new BuildFailedException("Missing Forge control " + name);
+                // The centered answer row must also clear the Hero's head in projection.
+                control.localPosition = position + approachOffset + Vector3.up * .35f;
+                control.localScale = size;
+                if (name == "SoundPlaque" || name == "HintBell") control.GetComponent<Renderer>().sharedMaterial =
+                    iron;
+                SizeControlLabel(control.GetComponentInChildren<TextMesh>(true));
+            }
+        }
+
         public static void ConfigurePreview(GameObject runtime, GalaQuestCombatContent content)
         {
             content.MagmaLordHelmet = LoadHelmet();
@@ -173,6 +234,7 @@ namespace GalaQuest.Editor
             Interactable("SoundPlaque", root.transform, "hear", "", new Vector3(-2f, .45f, -.35f), new Vector3(.28f, .4f, .28f), rune, "HEAR");
             Interactable("ClaimAnvil", root.transform, "claim", "", new Vector3(0, .55f, -.85f), new Vector3(.85f, .42f, .72f), ember, "CLAIM");
             Interactable("EquipStand", root.transform, "equip", "", new Vector3(0, .55f, -.85f), new Vector3(.85f, .42f, .72f), rune, "EQUIP");
+            ArrangeTaskControls(root.transform);
             return root;
         }
 

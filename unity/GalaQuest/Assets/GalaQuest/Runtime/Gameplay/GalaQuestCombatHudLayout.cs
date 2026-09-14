@@ -17,9 +17,11 @@ namespace GalaQuest
             var s = Scale;
             var margin = 18 * s;
             var railWidth = Narrow ? viewport.x - margin * 2 : 328 * s;
-            Status = new Rect(margin, margin, railWidth, 144 * s);
+            // Portrait keeps the same three truthful status rows, with less vertical
+            // padding, so contextual Forge text clears the ordinary approach Hero.
+            Status = new Rect(margin, margin, railWidth, (Narrow ? 90 : 144) * s);
             Identity = Narrow
-                ? new Rect(margin, Status.yMax + 8 * s, railWidth - 110 * s, 58 * s)
+                ? new Rect(margin, Status.yMax + 8 * s, railWidth - 110 * s, 64 * s)
                 : new Rect(viewport.x - 258 * s, margin, 240 * s, 78 * s);
             Mute = new Rect(viewport.x - margin - 100 * s,
                 Narrow ? Status.yMax + 8 * s : Identity.yMax + 8 * s, 100 * s, 44 * s);

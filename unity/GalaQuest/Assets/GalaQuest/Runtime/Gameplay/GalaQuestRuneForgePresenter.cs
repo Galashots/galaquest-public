@@ -128,6 +128,40 @@ namespace GalaQuest
             }
         }
 
+        // Secondary overhead bars yield when they would cover a real Forge control.
+        // This changes visibility only; damage, health state and interaction stay intact.
+        public bool CoversActiveControl(Rect screenRect) => IsNear
+            && OverlapsControlProjection(screenRect, InteractionCamera, interactables, Screen.height);
+
+        public static bool OverlapsControlProjection(Rect screenRect, Camera camera,
+            IEnumerable<GalaQuestRuneForgeInteractable> controls, float viewportHeight)
+        {
+            if (camera == null || controls == null) return false;
+            foreach (var control in controls)
+            {
+                if (control == null || !control.gameObject.activeInHierarchy) continue;
+                foreach (var renderer in control.GetComponentsInChildren<Renderer>())
+                {
+                    if (!renderer.enabled) continue;
+                    var bounds = renderer.bounds;
+                    var min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+                    var max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+                    for (var corner = 0; corner < 8; corner++)
+                    {
+                        var world = bounds.center + Vector3.Scale(bounds.extents, new Vector3(
+                            (corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                        var point = camera.WorldToScreenPoint(world);
+                        if (point.z <= 0) continue;
+                        var gui = new Vector2(point.x, viewportHeight - point.y);
+                        min = Vector2.Min(min, gui); max = Vector2.Max(max, gui);
+                    }
+                    if (min.x <= max.x && screenRect.Overlaps(Rect.MinMaxRect(min.x - 3, min.y - 3, max.x + 3, max.y + 3)))
+                        return true;
+                }
+            }
+            return false;
+        }
+
         private void PollTouches()
         {
             var touchscreen = Touchscreen.current;
@@ -209,7 +243,7 @@ namespace GalaQuest
                     : item.Kind == "equip" ? status == "owned" && !equipped
                     : false;
                 item.gameObject.SetActive(active);
-                item.SetGlow(active, item == selectedRune);
+                item.SetGlow(active, item == selectedRune || (item.Kind == "hammer" && selectedRune != null));
             }
             if (status == "active" && state.task?.choices != null)
             {
@@ -262,6 +296,9 @@ namespace GalaQuest
             var hud = new GalaQuestCombatHudLayout(viewport);
             var panel = hud.Objective;
             panel.height = 128 * hud.Scale;
+            // A full-width portrait question above the actor also covers the prize,
+            // even after an ordinary orbit. Use the clear band above travel instead.
+            if (hud.Narrow) panel.y = hud.Travel.y - panel.height - 8 * hud.Scale;
             return panel;
         }
 
@@ -275,16 +312,24 @@ namespace GalaQuest
             var title = state?.status == "active" ? "RUNE FORGE  /  " + state.completedCount + " OF " + state.requiredSuccesses : "RUNE FORGE";
             GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 6*s, panel.width - 24*s, 24*s),
                 title, 15*s, new Color(.25f, .15f, .06f), true);
-            var prompt = state == null ? "MagmaLord Helmet trapped — touch WAKE below."
+            var prompt = CurrentPrompt(state, equipped);
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 32*s, panel.width - 24*s, 47*s),
+                prompt, 18*s, new Color(.14f, .085f, .025f), true, TextAnchor.UpperLeft, true);
+            var action = Time.unscaledTime < feedbackUntil && !string.IsNullOrEmpty(feedback) ? feedback
+                : state?.status == "active" ? (selectedRune != null ? "Rune selected. Touch STRIKE." : "Choose a rune, then touch STRIKE.") : string.Empty;
+            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 83*s, panel.width - 24*s, panel.height - 90*s),
+                action, 14*s, new Color(.25f, .15f, .06f), false, TextAnchor.UpperLeft, true);
+        }
+
+        // Transient feedback has its own line; it must never replace the current
+        // server question (including after a successful strike advances the task).
+        public static string CurrentPrompt(GalaQuestRuneForgeState state, bool equipped) =>
+            state == null ? "MagmaLord Helmet trapped — touch WAKE below."
                 : state.status == "choose-pack" ? "Choose a rune anvil."
                 : state.status == "active" ? state.task?.displayPrompt
                 : state.status == "ready-to-claim" ? "The cage is open. Touch CLAIM."
                 : equipped ? "MagmaLord Helmet equipped · 20% damage reduction"
                 : "You own the helmet. Touch EQUIP to wear it.";
-            if (Time.unscaledTime < feedbackUntil && !string.IsNullOrEmpty(feedback)) prompt = feedback;
-            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 12*s, panel.y + 32*s, panel.width - 24*s, panel.height - 40*s),
-                prompt, 18*s, new Color(.14f, .085f, .025f), true, TextAnchor.UpperLeft, true);
-        }
 
         private void OnDestroy() => BindSession(null);
     }
