@@ -19,6 +19,9 @@ This checked-in runbook is the durable agent authority. If the Drive `START HERE
 
 Do not create another GalaQuest asset-pipeline root because a task, agent, worktree, provider export, Downloads folder, or synced local folder is more convenient. If the structure genuinely needs to change, change this runbook and the controlled Drive structure deliberately.
 
+Folder links below are navigation aids, not public access grants. They retain the existing Drive
+permissions; do not change sharing merely to make a link open for another reader.
+
 ## Controlled structure
 
 ```text
