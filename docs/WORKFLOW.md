@@ -239,7 +239,13 @@ Use the Render instance when a tester has a browser but cannot reach a local mac
 
 ### 6. Full browser matrix
 
-`.github/workflows/full-playtest-matrix.yml` is broad diagnostic coverage, not the protected required gate. It is intentionally more expensive and historically noisier than `unit`; use it when the changed surface warrants broad browser coverage and interpret failures from the exact run rather than from remembered pass counts. Markdown-only diffs skip this matrix by design.
+`.github/workflows/full-playtest-matrix.yml` is broad diagnostic coverage, not the protected required gate. It is intentionally more expensive and historically noisier than `unit`; use it when the changed surface warrants broad browser coverage and interpret failures from the exact run rather than from remembered pass counts.
+
+Automatic runs skip only when every changed path is Markdown or under `unity/`. Shared server,
+protocol, public assets, tools, workflow configuration, unknown paths and mixed changes still run
+this legacy matrix. Manual dispatch remains available. The required `unit` gate is unfiltered.
+A skipped legacy matrix does not establish Unity correctness: use the native/built-client/device
+acceptance surfaces above for the actual Unity claim.
 
 ## Private-source safe ports
 
