@@ -6,22 +6,15 @@ on:
   # result has to bind to the exact branch head an independent reviewer audits.
   push:
     branches: [main, 'integration/**']
-    # A prose-only diff cannot change what a browser-driven harness observes: no harness reads a
-    # markdown file as input -- every docs/ and *.md mention under tools/runtime-test/ is a comment
-    # citing a rule, not a load. Running the full hosted matrix (31 jobs today; count it in this
-    # file rather than trusting this comment) to re-observe an
-    # unchanged game is spend with no signal attached, so a diff that is entirely markdown skips.
-    #
-    # DELIBERATELY NOT IGNORED: .github/workflows/** -- a change to the matrix must be validated BY
-    # the matrix. Nor tools/**, which is where the harnesses themselves live.
-    #
-    # IF THIS EVER BECOMES A REQUIRED CHECK, REVISIT. paths-ignore produces no run at all rather
-    # than a passing one, and a required check that never runs blocks the merge button forever. It
-    # is safe today precisely because the matrix is not required (it has never been green on main).
-    paths-ignore: ['**.md']
+    # This matrix drives the legacy Three.js client, not the built Unity client.
+    # Skip only when EVERY changed path is Markdown or Unity-local. Mixed changes
+    # involving shared server/protocol/public assets, tools, or workflows still run.
+    # Keep the required unit workflow unfiltered; Unity native/build/device proof
+    # remains a separate acceptance surface, not a passing result from this skip.
+    paths-ignore: ['**.md', 'unity/**']
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md']
+    paths-ignore: ['**.md', 'unity/**']
   workflow_dispatch:
     inputs:
       ref:
