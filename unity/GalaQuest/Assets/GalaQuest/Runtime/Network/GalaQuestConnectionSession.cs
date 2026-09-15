@@ -71,6 +71,7 @@ namespace GalaQuest
             interrupted = false;
             acceptingFrames = false;
             PlayerId = string.Empty;
+            ClearPetState();
             pendingDestination = null;
             StatusChanged?.Invoke($"Reconnecting as {profile.DisplayName}...");
             transport.Connect();
@@ -239,6 +240,7 @@ namespace GalaQuest
                 catch (ArgumentException) { }
             }
             PlayerId = string.Empty;
+            ClearPetState();
             pendingDestination = null;
             StatusChanged?.Invoke(superseded
                 ? "Profile opened elsewhere · continue in the newer session"

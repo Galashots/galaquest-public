@@ -152,6 +152,28 @@ namespace GalaQuest.Tests
             Assert.That(session.LatestPetState, Is.Null, "a reconnect must not inherit the last connection's follower");
         }
 
+        [Test]
+        public void DisconnectAndReconnectRetirePetStateBeforeReplacementWelcome()
+        {
+            var wire = new Wire();
+            using var session = new GalaQuestConnectionSession(wire);
+            var clearEvents = 0;
+            session.PetStateChanged += (pets, error) => { if (pets == null && error == null) clearEvents += 1; };
+            session.Begin(new GalaQuestSelectedProfile(ProfileId, "Aster", "[]"));
+            wire.Open();
+            wire.Receive(Welcome);
+            wire.Receive(PetState);
+            Assert.That(session.LatestPetState?.equippedPetId, Is.EqualTo("worm_green"));
+            wire.Disconnect("network interruption");
+            Assert.That(session.LatestPetState, Is.Null, "disconnect must retire visible pet state immediately");
+            Assert.That(clearEvents, Is.EqualTo(1));
+            session.Reconnect();
+            Assert.That(session.LatestPetState, Is.Null);
+            Assert.That(clearEvents, Is.EqualTo(1), "reconnect must not double-notify an already-cleared state");
+            wire.Open(); wire.Receive(Welcome);
+            Assert.That(clearEvents, Is.EqualTo(1), "replacement welcome must not double-notify an already-cleared state");
+        }
+
         // Red if the sibling aggregate stops parsing -- remote followers depend on reading another
         // player's rewards.pets block, which pet-server.test.mjs:387-389 proves a sibling receives.
         [Test]
@@ -215,6 +237,7 @@ namespace GalaQuest.Tests
             public bool Send(string message) { Sent.Add(message); return true; }
             public void Open() => Opened?.Invoke();
             public void Receive(string message) => MessageReceived?.Invoke(message);
+            public void Disconnect(string detail) => Closed?.Invoke(detail);
         }
     }
 }
