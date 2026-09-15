@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -20,8 +20,9 @@ function syntheticGlb(document) {
 
 test('source inspector reports geometry, bounds, rig and measured clip coverage from GLB declarations', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gq-inspect-glb-'));
-  const path = join(dir, 'fixture.glb');
-  writeFileSync(path, syntheticGlb({
+  try {
+    const path = join(dir, 'fixture.glb');
+    writeFileSync(path, syntheticGlb({
     asset: { version: '2.0', generator: 'fixture' },
     accessors: [
       { count: 6, min: [-1, -2, -3], max: [1, 2, 3] },
@@ -38,12 +39,19 @@ test('source inspector reports geometry, bounds, rig and measured clip coverage 
   assert.equal(result.vertex_count_unique_position_accessors, 6);
   assert.deepEqual(result.bounds_accessor_local.dimensions, [2, 4, 6]);
   assert.equal(result.skins[0].joint_count, 1);
-  assert.deepEqual(result.animations[0], { name: 'walk', duration_seconds: 1.25, channel_count: 1, driven_nodes: ['Bone'] });
+    assert.deepEqual(result.animations[0], { name: 'walk', duration_seconds: 1.25, channel_count: 1, driven_nodes: ['Bone'] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('source inspector rejects non-GLB input instead of fabricating evidence', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gq-inspect-glb-bad-'));
-  const path = join(dir, 'bad.glb');
-  writeFileSync(path, 'not a glb');
-  assert.throws(() => inspectGlb(path), /not GLB/);
+  try {
+    const path = join(dir, 'bad.glb');
+    writeFileSync(path, 'not a glb');
+    assert.throws(() => inspectGlb(path), /not GLB/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
