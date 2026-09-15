@@ -13,39 +13,16 @@ This directory is the Unity production foundation. Keep these rules durable and 
 
 ## Automation and validation
 
-- **Discover the Editor through the official Unity CLI, never by guessing an install path.** `unity editors -i`
-  lists installed Editors and `unity status` lists connected ones with their project paths. `tools/unity/preflight.ps1`
-  runs that sequence against this checkout and names the first failing prerequisite — missing CLI, missing pinned
-  Editor, no Editor owning this checkout, an Editor owning a *different* checkout, or an Editor that never became
-  ready. Run it (add `-Start` to open the Editor) before concluding that Unity is unavailable on a workstation.
-  `tools/unity/preflight-lib.ps1` holds its decision logic and `tools/unity/preflight.tests.ps1` exercises that
-  logic against fixed CLI responses, so the readiness contract can be checked without an Editor.
-- **Name the project on every Editor command.** `unity command <tool> --project-path <project>` addresses the Editor
-  that owns the intended checkout. Without it the CLI may answer from whichever Editor is connected, so a command can
-  silently act on another worktree. An unowned checkout must fail closed; never close another session's Editor to
-  make selection work.
-- Readiness comes from the Editor, not from the process list: `unity status` reports an instance as `ready` while it
-  is still importing. Require `unity command editor_status` to report `status: ready` with `compiling` and
-  `domainReloadInProgress` both false, **and** confirm the responding `projectPath` and `unityVersion` match this
-  checkout and its `ProjectVersion.txt`. A failed or malformed CLI response is unknown, never a pass.
-- On a local Unity-capable workstation, **start the pinned Editor on the intended owned checkout before iterative Unity work if it is not already open.** Wait for initial import/script compilation to settle, confirm the intended project/checkout and no Safe Mode or unexplained compile errors, and keep that Editor/project open through the package when practical. The agent owns this startup; do not assume the Owner has pre-opened Unity.
-- Prefer a connected Unity CLI/Pipeline/live-Editor loop for local scene, prefab, authoring, and focused-test iteration when available. Raw batch mode is a CI/fallback/final-evidence surface, not the default local edit-test loop.
-- After external asset/script edits, follow the [live-Editor refresh procedure](../.agents/skills/galaquest-unity-web-playtest/SKILL.md#refresh-external-edits-through-the-live-editor) to trigger `Assets/Refresh` through CLI and verify import readiness. The worker owns this step even when native screenshots are unavailable; an Owner click is not a normal iteration prerequisite.
-- Prefer checked-in C# Editor automation for repeatable validation, build entry points, and project checks.
-- Raw Unity batch-mode fallback must remain possible for CI and for environments without a connected Editor.
-- When batch mode is necessary, launch one waited Unity process for the project and follow it to termination. Once a known healthy long build is running, do not burn agent turns on frequent process/log polling; inspect again only when completion is expected or the run materially exceeds the established baseline.
-- Compile errors and unexplained Console errors fail validation. A green command is not sufficient if the Editor is in Safe Mode or has unexplained errors.
-- Bind evidence to the exact Git SHA that produced it. The generated evidence root is `.local/unity/review-pack/`; future Owner Review Pack states must be deterministic and explicit.
-- **Every new or materially changed Unity-bound visual asset must be visually self-reviewed in Unity before handoff.** At minimum capture a neutral inspection view and an intended gameplay-framing view; inspect motion in Play Mode when animation, VFX, cloth, deformation, or moving parts matter.
-- Meshy, Blender, DCC, or importer previews may expose defects but do not replace the Unity self-review. Follow `docs/review-guides/asset-visual-review.md` and the `visual-reference-first` skill for comparative reference review.
-- A producer review must state the strongest visual defect/counterargument found. Self-review does not independently accept the producer's own consequential work.
-- Prefer phone-readable stills on the PR/review surface. Large recordings and large raw/source masters may use the Owner-controlled Google Drive custody/review tier, linked from an exact-SHA review manifest; do not bloat Git merely to transport review media.
-- When publishing Unity review evidence to Drive, use only the controlled root and `30_OWNER_REVIEW/00_NEEDS_OWNER_REVIEW` lifecycle defined in `docs/pipeline/google-drive-asset-custody.md`. Keep `.local/unity/review-pack/` as generated local evidence; Drive is the durable transfer/review surface, not a second Unity source tree.
-- Running-game pixels remain the final visual authority. Asset inspection, serialized files, and renders can establish file facts but cannot establish how the game looks.
+- Read `.agents/skills/galaquest-unity-web-playtest/SKILL.md` for the live-Editor refresh, test-discovery/input, grounding, build-reuse and timeout procedures. Prefer checked-in C# automation for repeatable authoring and validation.
+- Discover through the official Unity CLI (`unity editors -i`, `unity status`), not guessed executable paths. Run `tools/unity/preflight.ps1` before declaring the workstation unavailable; its decision logic and tests are `tools/unity/preflight-lib.ps1` and `tools/unity/preflight.tests.ps1`.
+- Explicitly set `--project-path` on every `unity command`. Verify the responding `projectPath` and `unityVersion` against the owned checkout and `ProjectVersion.txt`; never close or operate another session's Editor to obtain a target.
+- Readiness requires `editor_status` with `status: ready`, `compiling: false` and `domainReloadInProgress: false`. A discovery listing or process is not readiness proof; failed/malformed responses are UNKNOWN. Safe Mode, compile errors and unexplained Console errors fail validation.
+- Prefer the already-open owned Editor and CLI/Pipeline loop. Start the pinned Editor on that checkout only when needed; startup and refresh are worker responsibilities, not routine Owner gates. Preserve raw batch mode for CI/fallback/final evidence, not repeated cold iteration.
+- Bind generated `.local/unity/review-pack/` evidence to exact source state. For changed Unity-visible work, use `.agents/skills/visual-reference-first/SKILL.md` and `docs/review-guides/asset-visual-review.md`; self-review is not independent acceptance and source/DCC metrics do not replace running pixels.
 
 ## Migration boundaries
 
-- Three.js remains the reference client during migration.
+- Unity is the production client. The retained Three.js client is a legacy/reference diagnostic surface and does not define Unity acceptance.
 - The existing Node server and protocol remain authoritative until an approved package explicitly changes them.
 - Networking libraries stay behind a GalaQuest-owned abstraction; do not let provider APIs become gameplay contracts.
 - Centralize future coordinate conversion rather than scattering axis or unit fixes through content code.

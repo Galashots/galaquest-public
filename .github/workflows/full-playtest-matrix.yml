@@ -1,20 +1,32 @@
 name: full-playtest-matrix
 
+# data/ is excluded deliberately: tracked content is documentation; runtime saves are ignored.
+# Review both trigger lists if tracked runtime data or a dependency manifest is introduced.
 on:
   # `integration/**` is a reviewed convergence lane. It is on the PUSH trigger deliberately, and not
   # on pull_request: a pull_request run reports against a synthetic merge SHA, and an integration
   # result has to bind to the exact branch head an independent reviewer audits.
   push:
     branches: [main, 'integration/**']
-    # This matrix drives the legacy Three.js client, not the built Unity client.
-    # Skip only when EVERY changed path is Markdown or Unity-local. Mixed changes
-    # involving shared server/protocol/public assets, tools, or workflows still run.
-    # Keep the required unit workflow unfiltered; Unity native/build/device proof
-    # remains a separate acceptance surface, not a passing result from this skip.
-    paths-ignore: ['**.md', 'unity/**']
+    # This matrix drives the retained legacy Three.js client, not the Unity production client.
+    # Auto-run only when a path owned by that legacy runtime/harness changes. Keep the required
+    # unit workflow unfiltered; Unity native/build/device proof remains a separate surface.
+    paths:
+      - 'server.mjs'
+      - 'net/**'
+      - 'public/**'
+      - 'tools/runtime-test/**'
+      - 'docs/asset-production/asset-registry-v1.json'
+      - '.github/workflows/full-playtest-matrix.yml'
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'unity/**']
+    paths:
+      - 'server.mjs'
+      - 'net/**'
+      - 'public/**'
+      - 'tools/runtime-test/**'
+      - 'docs/asset-production/asset-registry-v1.json'
+      - '.github/workflows/full-playtest-matrix.yml'
   workflow_dispatch:
     inputs:
       ref:

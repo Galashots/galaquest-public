@@ -1,6 +1,6 @@
 # GalaQuest public agent authority
 
-This file is intentionally short. It defines where work happens and the hard boundaries agents must not drift across. For detailed rules, follow the public guidance system in `docs/GUIDANCE.md` and read only the task-relevant authorities that actually exist in this repository.
+Keep these hard boundaries. Before choosing an implementation or review surface, use the task router in `docs/GUIDANCE.md`; load only the relevant domain guidance and mechanical proof. `docs/WORKFLOW.md` owns package framing and production continuation.
 
 ## Repository topology
 
@@ -24,42 +24,25 @@ If the current directory is not a Git checkout, **do not recursively search the 
   scope reforecast, writer topology, context health, and handoff detail.
 - Every material test, browser observation, review conclusion, and acceptance claim names the **exact
   public SHA** it proves.
-- Behaviour fixes should have a red-capable reproduction/test before the fix when practical. Do not tune
-  gameplay or prediction constants merely to make hosted CI pass.
-- Run relevant tests from the actual checkout. Do not trust stale test counts copied into docs or chat.
-- For Unity WebGL builds and browser regressions, read
-  `.agents/skills/galaquest-unity-web-playtest/SKILL.md` before choosing the build or test surface.
+- Run relevant tests from the actual checkout; do not trust stale counts or weaken behavior to make CI pass.
 
 ## Guidance is part of the product
 
-- `AGENTS.md` holds hard repository boundaries; `docs/WORKFLOW.md` holds the development/evidence lifecycle; domain runbooks and skills hold task-specific procedure; `docs/MISTAKES.md` is the historical lessons ledger.
-- Active guidance must be executable from the public repository. Do not make a private file, remembered chat, machine-local path, old PR number, browser tab, or historical provider authorization a current prerequisite.
-- When a tool, path, workflow, or evidence surface changes, update the guidance that points to it in the same PR when practical.
-- `test/guidance-integrity.test.mjs` continuously checks objective guidance integrity inside the required unit suite. Do not weaken it to preserve stale prose; repair the guidance or make an intentional exception explicit in `docs/GUIDANCE.md`.
+- Active guidance must be executable from public authority, not private files, remembered chats, machine state, or historical provider authorization. Repair task-relevant guidance in the same PR when practical.
+- Keep `test/guidance-integrity.test.mjs` effective; repair stale guidance rather than weakening its objective checks. `docs/GUIDANCE.md` owns deliberate exceptions.
 
 ## Product authority
 
-- `docs/product/PRODUCT_VISION.md` records settled Owner-level product direction. Do not promote an agent suggestion or isolated observation into it without an Owner decision.
-- `docs/product/PROGRESSION_CONTRACT_V0.md` is the current shared design contract for the selected progression push. When working on Hero XP/levels, gear, POWER, enemy scaling/population, progression-linked learning, or pet contribution, read it after Product Vision and before fixing implementation package shape.
-- `docs/product/PRODUCT_SYSTEM.md` defines how product ideas, signals, provenance, initiatives, lifecycle stages, and implementation links are captured.
-- GitHub Issues governed by that system are the canonical live product-memory/backlog records. Search them before claiming an idea is new, selected, rejected, or currently prioritized.
-- GitHub Projects may present those Issues visually, but Project-only fields are not independent authority. If the Project view drifts from an Issue, repair the view from the Issue.
-- Product chats are temporary thinking surfaces. Ratchet durable ideas, meaningful signals, Owner decisions, and selected initiatives into the product system rather than requiring a future agent to recover an old conversation.
-- A bounded implementation worker must not silently expand a PR because it discovers another good product idea. Capture/report the candidate separately under the authorization rules in `docs/product/PRODUCT_SYSTEM.md`.
+- `docs/product/PRODUCT_VISION.md` records settled Owner direction; agent suggestions and isolated observations do not become decisions by repetition.
+- `docs/product/PRODUCT_SYSTEM.md` governs live Issues and decision provenance. Search existing records before claiming work is new, selected, rejected, or prioritized; Project views and chats are not independent authority.
+- Follow applicable design contracts through the task router. Preserve new product signals in the owning record without silently expanding a writer's package or manufacturing a new Owner gate for already-settled direction.
 
 ## Visual and product acceptance
 
-- **Running-game pixels are final appearance authority.** A render, GLB inspection, screenshot of an asset, or machine metric can reject a bad result; none of them can visually accept the running game.
-- **The producer must visually self-review every new or materially changed player-visible asset before handoff.** Do not hand off an asset after only provider/DCC preview, importer success, geometry metrics, or automated tests. Follow `docs/review-guides/asset-visual-review.md` and record the strongest defect or disconfirming comparison you found.
-- For Unity-bound assets, self-review in **Unity** is mandatory once the asset can be imported there: inspect a neutral diagnostic view plus intended gameplay framing; inspect motion in Play Mode when animation/VFX matters. Meshy, Blender, or isolated renders do not replace this step.
-- Before declaring a visual ready, compare it against current GalaQuest authority and, when web/image-search capability is available, multiple attributable comparable references. Prefer official game/studio/publisher material or real-world references over anonymous reposts or AI-image collections. External examples establish conventions/quality bars, not GalaQuest art direction.
-- When the target exists mainly as a verbal brief and no canonical reference settles it, the Production Director may create a **non-canonical generated target reference** for direct comparison. Label what attributes it controls; generated art does not become canon by default.
-- Producer self-review is **not independent acceptance**. A consequential asset still needs the independent/Owner review required by `docs/WORKFLOW.md`; asset promotion into shipped production remains Owner-controlled.
-- Prefer phone-readable stills on the PR/review surface. Large raw/source assets and large recordings belong in the Owner-controlled Google Drive custody/review tier when available, linked back to the exact-SHA PR/evidence manifest rather than committed merely for review.
-- **All GalaQuest asset custody/review activity in Google Drive uses the single controlled root and lifecycle in `docs/pipeline/google-drive-asset-custody.md`.** Do not create parallel GalaQuest asset roots, treat Downloads/synced worktrees as authority, or improvise a new Drive hierarchy because the controlled structure is inconvenient.
-- The active Drive Owner queue is for decision-ready packets only. An Owner visual decision in Drive does not itself promote or ship an asset; ratchet the decision into the GitHub/registry authority that owns the asset lifecycle.
-- Player-visible changes require human inspection in the running game at gameplay framing and, where useful, inspection scale. Automated harnesses are necessary evidence for behaviour but do not substitute for human visual judgment.
-- **Reference first.** Before deciding how something should look, sit, hang, pose, or be held, inspect real reference images. The owner's GalaQuest reference art outranks external examples. Record the visual convention before tuning numbers.
+- **Running-game pixels are final appearance authority; human visual judgment accepts.** Measurements, isolated renders, and automated checks can diagnose or reject, not replace that judgment.
+- **The producer must visually self-review every new or materially changed player-visible asset before handoff.** For Unity-bound assets, that review includes the actual Unity import at gameplay framing and motion when relevant. `docs/review-guides/asset-visual-review.md` owns the evidence/acceptance contract; `.agents/skills/visual-reference-first/SKILL.md` owns the make-look-fix iteration loop.
+- Producer self-review is **not independent acceptance**. Consequential player-visible work requires the fresh review seam defined by `docs/WORKFLOW.md`; asset promotion into shipped production remains Owner-controlled.
+- If Google Drive is used for source custody or Owner review, use only the controlled lifecycle in `docs/pipeline/google-drive-asset-custody.md`. A Drive decision does not itself promote an asset; ratchet the decision into the GitHub/registry authority that owns that lifecycle.
 - Do not silently change a hero or important character's rig, skeleton, fingers, body, topology, or anatomy to make gear or placement pass. If the defect is in the body/rig rather than the attachment, stop and report it.
 - Asset promotion into shipped production remains Owner-controlled; qualification and evidence are not approval.
 - No paid Meshy or other provider spend without explicit owner authorization for that **specific current work**. A budget, historical spend, old delegation, credit ceiling, or presence of a guarded `--go` tool is never authorization by itself.
@@ -75,25 +58,4 @@ Use this sequence:
 
 Do not bulk-copy private branches or preserve duplicate active implementations. Third-party or franchise-inspired private gear remains private unless its redistribution and project use are explicitly cleared.
 
-## Public authorities
-
-Read these when relevant; do not invent missing private prerequisites:
-
-- `docs/GUIDANCE.md` — guidance hierarchy, maintenance, and linting policy
-- `docs/CODEBASE.md` — code map, quickstart, and elevated-acceptance surfaces
-- `docs/GLOSSARY.md` — shared process/runtime vocabulary (pointers, not authority)
-- `docs/product/PRODUCT_VISION.md` — settled product direction
-- `docs/product/PROGRESSION_CONTRACT_V0.md` — shared Hero/gear/POWER/enemy/learning progression design contract for the current push
-- `docs/product/PRODUCT_SYSTEM.md` — product-memory, provenance, board, and issue lifecycle
-- `docs/MISTAKES.md` — durable lessons ledger
-- `docs/WORKFLOW.md` — public branch/PR and verification flow
-- `docs/GALAQUEST_VISUAL_AUTHORITY.md` — visual direction and acceptance
-- `docs/review-guides/asset-visual-review.md` — mandatory producer self-review and comparative visual evidence
-- `docs/pipeline/` — public asset/character pipeline rules
-- `docs/pipeline/google-drive-asset-custody.md` — single-root Google Drive source custody, working-file, and Owner-review lifecycle
-- `docs/public-playtest.md` — hosted playtest and deployment provenance
-- `docs/teardown/hero_contract.json` — character/gear numeric authority where applicable
-- `ASSET-LICENSES.md` — shipped asset provenance and redistribution basis
-- `.github/workflows/` — live hosted test definitions
-
-If a public instruction references a path that does not exist, treat that as a guidance defect: repair or report it. Do not go looking for a private substitute by default.
+If a routed public instruction names a missing path, repair or report the guidance defect; do not hunt for a private substitute.
