@@ -127,6 +127,27 @@ namespace GalaQuest.Tests
         [TestCase(844, 390)]
         [TestCase(1024, 768)]
         [TestCase(768, 1024)]
+        [TestCase(640, 360)]
+        public void ForgeFeedbackAndActionsFitWithoutReducingDismissTarget(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var panel = GalaQuestRuneForgePresenter.QuestionPanelRect(viewport);
+            var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
+            var action = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 3);
+            var feedback = GalaQuestRuneForgePresenter.QuestionFeedbackRect(viewport);
+            var lastChoice = GalaQuestRuneForgePresenter.QuestionChoiceRect(viewport, 2, 3);
+            Assert.That(close.height, Is.GreaterThanOrEqualTo(40f));
+            Assert.That(action.height, Is.GreaterThanOrEqualTo(40f));
+            Assert.That(lastChoice.yMax, Is.LessThan(feedback.yMin));
+            Assert.That(feedback.yMax, Is.LessThan(action.yMin));
+            Assert.That(action.yMax, Is.LessThan(close.yMin));
+            Assert.That(close.yMax, Is.LessThan(panel.yMax));
+        }
+
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        [TestCase(1024, 768)]
+        [TestCase(768, 1024)]
         [TestCase(1100, 505)]
         public void ForgeTrackButtonKeepsItsTitleClearOfItsDescription(int width, int height)
         {

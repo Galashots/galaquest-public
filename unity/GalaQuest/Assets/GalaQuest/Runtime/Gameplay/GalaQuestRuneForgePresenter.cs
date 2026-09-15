@@ -30,10 +30,13 @@ namespace GalaQuest
         private float feedbackUntil;
         private bool equipped;
         private bool questionPanelOpen;
+        private bool panelDismissed;
+        private static int capturedFrame = -1;
 
         public GalaQuestRuneForgeState State => state;
         public bool IsQuestionPanelOpen => questionPanelOpen && IsNear;
-        public static bool IsInputCaptured => activePresenter != null && activePresenter.IsQuestionPanelOpen;
+        public static bool IsInputCaptured => activePresenter != null
+            && (activePresenter.IsQuestionPanelOpen || capturedFrame == Time.frameCount);
         public bool IsNear => session != null && hero != null && forgeRoot != null
             && session.DestinationId == GalaQuestProtocolV4.EmberworksDeepDestinationId
             && Vector3.Distance(hero.position, forgeRoot.position) <= InteractionDistance;
@@ -99,7 +102,8 @@ namespace GalaQuest
                 selectedChoiceId = null;
                 feedback = ResponseText(state);
                 feedbackUntil = Time.unscaledTime + 2.2f;
-                questionPanelOpen = state != null;
+                // A late hint/answer reply may update progress, not undo deliberate dismissal.
+                questionPanelOpen = state != null && !panelDismissed;
                 if (state.justGranted) Play(claimCue);
                 else if (state.response == "retry") Play(machineCue);
                 else if (state.response == "independent-success" || state.response == "assisted-success") Play(successCue);
@@ -116,9 +120,11 @@ namespace GalaQuest
 
         private void Update()
         {
+            if (questionPanelOpen && !IsNear) DismissPanel();
             RecordBrowserControlDiagnostics();
             if (questionPanelOpen)
             {
+                capturedFrame = Time.frameCount;
                 PollPanelTouches();
                 if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                     HandlePanelPointer(-2, Mouse.current.position.ReadValue());
@@ -248,9 +254,7 @@ namespace GalaQuest
             if (!QuestionPanelRect(viewport).Contains(guiPoint)) return true;
             if (QuestionCloseRect(viewport).Contains(guiPoint))
             {
-                questionPanelOpen = false;
-                selectedChoiceId = null;
-                PresentWorld();
+                DismissPanel();
                 return true;
             }
             if (state?.status == "choose-pack")
@@ -286,6 +290,16 @@ namespace GalaQuest
                 return true;
             }
             return true;
+        }
+
+        private void DismissPanel()
+        {
+            // Update runs before attack/joystick/camera; retain ownership for this entire frame.
+            capturedFrame = Time.frameCount;
+            questionPanelOpen = false;
+            panelDismissed = true;
+            selectedChoiceId = null;
+            PresentWorld();
         }
 
         private void PanelAction(int index)
@@ -332,7 +346,10 @@ namespace GalaQuest
             Play(machineCue);
             switch (target.Kind)
             {
-                case "open": session.TryOpenRuneForge(); break;
+                case "open":
+                    panelDismissed = false;
+                    if (!session.TryOpenRuneForge()) panelDismissed = true;
+                    break;
                 case "pack": session.TrySelectRuneForgePack(target.Value); break;
                 case "rune": SelectRune(target); break;
                 case "hammer":
@@ -364,13 +381,9 @@ namespace GalaQuest
             var status = state?.status ?? "dormant";
             foreach (var item in interactables)
             {
-                var active = item.Kind == "open" ? !questionPanelOpen
-                    : item.Kind == "pack" ? status == "choose-pack" && !questionPanelOpen
-                    : item.Kind == "rune" || item.Kind == "hammer" || item.Kind == "hint" || item.Kind == "hear"
-                        ? status == "active" && !questionPanelOpen
-                    : item.Kind == "claim" ? status == "ready-to-claim" && !questionPanelOpen
-                    : item.Kind == "equip" ? status == "owned" && !equipped && !questionPanelOpen
-                    : false;
+                // The panel owns answers/claim/equip. Re-enabling legacy table targets
+                // makes the middle rune occupy the same collider position as OPEN FORGE.
+                var active = item.Kind == "open" && !questionPanelOpen;
                 item.gameObject.SetActive(active);
                 item.SetGlow(active, item == selectedRune || (item.Kind == "hammer" && selectedRune != null));
                 if (item.Kind == "open") item.SetLabel(state == null ? "WAKE" : "OPEN FORGE");
@@ -418,6 +431,7 @@ namespace GalaQuest
             selectedChoiceId = null;
             equipped = false;
             questionPanelOpen = false;
+            panelDismissed = false;
             feedback = string.Empty;
             OwnedTouchIds.Clear();
             PresentWorld();
@@ -490,23 +504,28 @@ namespace GalaQuest
         {
             var panel = QuestionPanelRect(viewport);
             var s = new GalaQuestCombatHudLayout(viewport).Scale;
-            var compact = viewport.y < 600;
-            var height = (compact ? 34 : 48) * s;
+            var height = Mathf.Max(40f, 48 * s);
             var gap = 6 * s;
-            var bottom = panel.yMax - (compact ? 70 : 88) * s;
             var width = (panel.width - 32 * s - (count - 1) * gap) / count;
-            return new Rect(panel.x + 16 * s + index * (width + gap), bottom, width, height);
+            return new Rect(panel.x + 16 * s + index * (width + gap),
+                QuestionCloseRect(viewport).yMin - 8 * s - height, width, height);
         }
 
         public static Rect QuestionCloseRect(Vector2 viewport)
         {
             var panel = QuestionPanelRect(viewport);
             var s = new GalaQuestCombatHudLayout(viewport).Scale;
-            var compact = viewport.y < 600;
-            var height = (compact ? 30 : 40) * s;
-            // Keep CLOSE below every visible action row. The panel owns input while
-            // open, so an overlapping strip would make the earlier CLOSE check win.
-            return new Rect(panel.x + 16 * s, panel.yMax - (compact ? 30 : 40) * s,
+            var height = Mathf.Max(40f, 40 * s);
+            return new Rect(panel.x + 16 * s, panel.yMax - 6 * s - height,
+                panel.width - 32 * s, height);
+        }
+
+        public static Rect QuestionFeedbackRect(Vector2 viewport)
+        {
+            var panel = QuestionPanelRect(viewport);
+            var s = new GalaQuestCombatHudLayout(viewport).Scale;
+            var height = (viewport.y < 600 ? 42 : 56) * s;
+            return new Rect(panel.x + 16 * s, QuestionActionRect(viewport, 0, 3).y - 8 * s - height,
                 panel.width - 32 * s, height);
         }
 
@@ -582,8 +601,8 @@ namespace GalaQuest
                     choice.label, choice.id == selectedChoiceId, choice.id == selectedChoiceId, s);
             }
             var action = !string.IsNullOrEmpty(feedback) ? feedback : "Choose an answer, then tap STRIKE.";
-            GalaQuestCombatHudStyle.Text(new Rect(panel.x + 16*s, panel.yMax - (compact ? 122 : 154)*s,
-                panel.width - 32*s, (compact ? 42 : 56)*s), action, 13*s, ink, false, TextAnchor.MiddleCenter, true);
+            GalaQuestCombatHudStyle.Text(QuestionFeedbackRect(new Vector2(Screen.width, Screen.height)),
+                action, 13*s, ink, false, TextAnchor.MiddleCenter, true);
             DrawPanelButton(QuestionActionRect(new Vector2(Screen.width, Screen.height), 0, 3), "HEAR", true, false, s);
             DrawPanelButton(QuestionActionRect(new Vector2(Screen.width, Screen.height), 1, 3), "HINT", true, false, s);
             DrawPanelButton(QuestionActionRect(new Vector2(Screen.width, Screen.height), 2, 3), "STRIKE",
@@ -597,7 +616,8 @@ namespace GalaQuest
             GalaQuestCombatHudStyle.Fill(GalaQuestCombatHudStyle.Inset(rect, 7*scale),
                 enabled ? (selected ? new Color(.88f, .65f, .31f, .42f) : new Color(.03f, .04f, .035f, .78f))
                     : new Color(.2f, .2f, .2f, .42f));
-            GalaQuestCombatHudStyle.Text(labelRect ?? GalaQuestCombatHudStyle.Inset(rect, 8*scale), label,
+            GalaQuestCombatHudStyle.Text(labelRect ?? new Rect(rect.x + 8*scale, rect.y + 2*scale,
+                rect.width - 16*scale, rect.height - 4*scale), label,
                 Mathf.Max(11, 16*scale), enabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter, true);
         }
 
@@ -618,7 +638,7 @@ namespace GalaQuest
 
         private void OnDestroy()
         {
-            if (activePresenter == this) activePresenter = null;
+            if (activePresenter == this) { activePresenter = null; capturedFrame = -1; }
             BindSession(null);
         }
     }

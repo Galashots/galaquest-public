@@ -78,7 +78,7 @@ namespace GalaQuest
                 || Event.current.type == EventType.MouseMove))
                 travelPointerInside = rect.Contains(Event.current.mousePosition);
             var label = session.IsTravelling ? "Travelling..." : home
-                ? (nearGate ? "TAP TO ENTER EMBERWORKS" : "WALK TO THE GATE") : "TAP TO RETURN TO CAMP";
+                ? (nearGate ? "TAP TO ENTER\nEMBERWORKS" : "WALK TO THE GATE") : "TAP TO RETURN\nTO CAMP";
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
                 session.RequestTravel(home ? GalaQuestProtocolV4.EmberworksDeepDestinationId : GalaQuestProtocolV4.HomeHubDestinationId);
             GUI.enabled = oldEnabled;
@@ -87,8 +87,8 @@ namespace GalaQuest
                 GalaQuestCombatHudStyle.Panel(rect, lit: travelEnabled);
                 if (travelPointerHeld && travelPointerInside)
                     GalaQuestCombatHudStyle.Fill(GalaQuestCombatHudStyle.Inset(rect, 7), new Color(.88f, .65f, .31f, .22f));
-                GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8 * layout.Scale), label, 18 * layout.Scale,
-                    travelEnabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter);
+                GalaQuestCombatHudStyle.Text(GalaQuestCombatHudStyle.Inset(rect, 8 * layout.Scale), label, 15 * layout.Scale,
+                    travelEnabled ? GalaQuestCombatHudStyle.Ink : Color.gray, true, TextAnchor.MiddleCenter, true);
                 if (GetComponent<GalaQuestRuneForgePresenter>()?.IsNear != true)
                 {
                 GalaQuestCombatHudStyle.Panel(layout.Objective, paper: true);
