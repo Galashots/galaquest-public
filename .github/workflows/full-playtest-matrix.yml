@@ -1,5 +1,7 @@
 name: full-playtest-matrix
 
+# data/ is excluded deliberately: tracked content is documentation; runtime saves are ignored.
+# Review both trigger lists if tracked runtime data or a dependency manifest is introduced.
 on:
   # `integration/**` is a reviewed convergence lane. It is on the PUSH trigger deliberately, and not
   # on pull_request: a pull_request run reports against a synthetic merge SHA, and an integration
@@ -10,7 +12,6 @@ on:
     # Auto-run only when a path owned by that legacy runtime/harness changes. Keep the required
     # unit workflow unfiltered; Unity native/build/device proof remains a separate surface.
     paths:
-      - 'package.json'
       - 'server.mjs'
       - 'net/**'
       - 'public/**'
@@ -20,7 +21,6 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'package.json'
       - 'server.mjs'
       - 'net/**'
       - 'public/**'
