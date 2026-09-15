@@ -73,6 +73,50 @@ namespace GalaQuest.Tests
         }
 
         [UnityTest]
+        public IEnumerator WormFollowersUseVisibleOwnersAndClearWithLifecycle()
+        {
+            GameObject root = null, hero = null, template = null;
+            GalaQuestCombatContent content = null; GalaQuestConnectionSession session = null;
+            GalaQuestCombatPresentation presentation = null;
+            try
+            {
+                hero = new GameObject("Local pet hero"); template = new GameObject("Remote pet hero template");
+                content = ScriptableObject.CreateInstance<GalaQuestCombatContent>(); content.HeroPrefab = template;
+                root = new GameObject("Pet presentation test");
+                var traversal = root.AddComponent<GalaQuestTraversalController>(); traversal.Configure(null, hero.transform);
+                presentation = root.AddComponent<GalaQuestCombatPresentation>(); presentation.Configure(content);
+                var transport = new FakeTransport(); session = new GalaQuestConnectionSession(transport);
+                presentation.BindSession(session);
+                session.Begin(new GalaQuestSelectedProfile("profile-pet-review", "Review", "[]"), GalaQuestProtocolV4.HomeHubDestinationId);
+                transport.Open(); transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"destinationId\":\"home-hub\",\"worldEpoch\":0}");
+                var frame = PetFrame(1, true, "worm_green", "worm_green", "worm_green", 3f);
+                presentation.ApplyFrame(frame); yield return null;
+                var local = GameObject.Find("Pet p1 worm_green"); var p2 = GameObject.Find("Pet p2 worm_green"); var p3 = GameObject.Find("Pet p3 worm_green");
+                Assert.That(local, Is.Not.Null); Assert.That(p2, Is.Not.Null); Assert.That(p3, Is.Not.Null);
+                Assert.That(p2, Is.Not.SameAs(p3), "two owners may equip the same worm id without sharing a view");
+                Assert.That(Vector3.Distance(local.transform.position, hero.transform.position), Is.LessThan(1.5f));
+                Assert.That(Vector3.Distance(local.transform.position, new Vector3(40, local.transform.position.y, 40)), Is.GreaterThan(20f),
+                    "local follower uses the visible local Hero, not that player's snapshot coordinates");
+                frame = PetFrame(2, true, "worm_green", "worm_green", "worm_green", 5f);
+                presentation.ApplyFrame(frame); yield return null;
+                var remoteBody = GameObject.Find("Other hero p2");
+                Assert.That(Vector3.Distance(p2.transform.position, remoteBody.transform.position),
+                    Is.LessThan(Vector3.Distance(p2.transform.position, new Vector3(5, p2.transform.position.y, 0))),
+                    "remote follower trails the interpolated visible body rather than snapping to raw frame coordinates");
+                frame = PetFrame(3, false, "worm_green", null, null, 5f);
+                presentation.ApplyFrame(frame); yield return null; yield return null;
+                Assert.That(GameObject.Find("Pet p2 worm_green"), Is.Null); Assert.That(GameObject.Find("Pet p3 worm_green"), Is.Null);
+                transport.Close(); yield return null; Assert.That(GameObject.Find("Pet p1 worm_green"), Is.Null);
+            }
+            finally
+            {
+                if (presentation != null) presentation.BindSession(null); session?.Dispose();
+                if (root != null) UnityEngine.Object.DestroyImmediate(root); if (hero != null) UnityEngine.Object.DestroyImmediate(hero);
+                if (template != null) UnityEngine.Object.DestroyImmediate(template); if (content != null) UnityEngine.Object.DestroyImmediate(content);
+            }
+        }
+
+        [UnityTest]
         public IEnumerator RealCandidateAndHeroConsumeDamageDefeatRecoveryAndReconnect()
         {
 #if UNITY_EDITOR
@@ -297,6 +341,24 @@ namespace GalaQuest.Tests
             frame.encounter.rewards["p1"] = Reward(localEquipped);
             frame.encounter.rewards["p2"] = Reward(siblingEquipped);
             return frame;
+        }
+
+        private static GalaQuestServerFrame PetFrame(int tick, bool includeP3, string localPet, string p2Pet, string p3Pet, float p2X)
+        {
+            var players = includeP3
+                ? new[] { new GalaQuestServerPlayer { id = "p1", x = 40, z = 40 }, new GalaQuestServerPlayer { id = "p2", x = p2X, z = 0 }, new GalaQuestServerPlayer { id = "p3", x = -3, z = 0 } }
+                : new[] { new GalaQuestServerPlayer { id = "p1", x = 40, z = 40 }, new GalaQuestServerPlayer { id = "p2", x = p2X, z = 0 } };
+            var frame = new GalaQuestServerFrame { type = "state", tick = tick, destinationId = GalaQuestProtocolV4.HomeHubDestinationId, players = players };
+            foreach (var player in players) frame.encounter.heroes[player.id] = new GalaQuestServerHeroCombat { hp = 30, maxHp = 30 };
+            frame.encounter.rewards["p1"] = PetReward(localPet); frame.encounter.rewards["p2"] = PetReward(p2Pet);
+            if (includeP3) frame.encounter.rewards["p3"] = PetReward(p3Pet);
+            return frame;
+        }
+
+        private static GalaQuestServerRewards PetReward(string petId)
+        {
+            return new GalaQuestServerRewards { pets = new GalaQuestServerPetState
+                { ownedPetIds = string.IsNullOrEmpty(petId) ? Array.Empty<string>() : new[] { petId }, equippedPetId = petId, equipRev = string.IsNullOrEmpty(petId) ? -1 : 1 } };
         }
 
         private static GalaQuestServerRewards Reward(bool equipped)
