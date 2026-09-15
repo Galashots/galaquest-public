@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const matrix = readFileSync(new URL('../.github/workflows/full-playtest-matrix.yml', import.meta.url), 'utf8');
 const unit = readFileSync(new URL('../.github/workflows/test.yml', import.meta.url), 'utf8');
 
 const EXPECTED_PATHS = [
-  'package.json',
   'server.mjs',
   'net/**',
   'public/**',
@@ -27,6 +26,14 @@ function eventBlock(source, event) {
   return block.join('\n');
 }
 
+// Pattern agreement alone cannot prove that a named dependency exists in the checkout.
+function assertLiteralPathsExist(patterns) {
+  for (const pattern of patterns) {
+    if (pattern.endsWith('/**')) continue;
+    assert.ok(existsSync(new URL(`../${pattern}`, import.meta.url)), `missing literal matrix input: ${pattern}`);
+  }
+}
+
 function selectedPatterns(source, event) {
   const block = eventBlock(source, event);
   const lines = block.split(/\r?\n/);
@@ -39,6 +46,7 @@ function selectedPatterns(source, event) {
     patterns.push(match[1]);
   }
   assert.deepEqual(patterns, EXPECTED_PATHS, `${event}: legacy ownership paths changed; review deliberately`);
+  assertLiteralPathsExist(patterns);
   return patterns;
 }
 
@@ -55,9 +63,9 @@ for (const event of ['push', 'pull_request']) {
   test(`${event}: only retained Three.js runtime and harness ownership auto-runs the legacy matrix`, () => {
     const patterns = selectedPatterns(matrix, event);
     for (const path of [
-      'package.json',
       'server.mjs',
-      'net/protocol.js',
+      'net/gameServerCore.mjs',
+      'public/src/net/protocolCore.js',
       'public/src/main.js',
       'public/assets/example.glb',
       'tools/runtime-test/drive-village.mjs',
@@ -73,11 +81,18 @@ for (const event of ['push', 'pull_request']) {
       ['test/example.test.mjs'],
       ['tools/unity-playtest/forge.mjs'],
       ['render.yaml'],
+      ['data/README.md'],
       ['unknown-source.bin'],
       ['test/example.test.mjs', 'docs/WORKFLOW.md', 'unity/changed.asset'],
     ]) assert.equal(runsLegacy(paths, patterns), false, JSON.stringify(paths));
   });
 }
+
+test('literal input validation rejects a dead path independently of pattern agreement', () => {
+  assert.doesNotThrow(() => assertLiteralPathsExist(['.github/workflows/full-playtest-matrix.yml']));
+  assert.throws(() => assertLiteralPathsExist(['.github/workflows/__missing_legacy_input__.yml']),
+    /missing literal matrix input/);
+});
 
 test('required unit remains unfiltered and broad diagnostics remain manually callable', () => {
   for (const event of ['push', 'pull_request']) {
