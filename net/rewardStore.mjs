@@ -359,6 +359,10 @@ export function openRewardStore(path) {
     if (award.type === 'gear-owned' && !isKnownItem(award.value)) {
       throw new Error(`reward store apply() got an unknown item id ${JSON.stringify(award.value)}`);
     }
+    if (['pet-owned', 'pet-equipped'].includes(award.type)
+      && !isClientRestorableProfileFact(award, award.guestId)) {
+      throw new Error('reward store apply() got an invalid pet fact or profile identity');
+    }
     if (award.type === 'xp-earned' && parseXpFactAmount(award.value) === null) {
       // Same posture as the two above, through the same shared reader the fold uses. A durable XP
       // row whose amount is negative, fractional or "12abc" is not progression the game can ever

@@ -39,19 +39,24 @@
 // public/src/progression/ directly (items.js), so anything here has to stay importable there.
 
 import { sanitizeGuestId } from '../net/guestId.js';
+import { petDef } from './pets.js';
 import { LEVEL_ONE, xpToAdvanceFrom } from './levels.js';
 import { EQUIPMENT_SLOTS, itemDef, WEAPON_SLOT } from './items.js';
 
 /** One profile's own earnings. `village-upgrade` and `beacon-lit` are deliberately absent: those are
  *  world facts, not one profile's earnings, and folding them into a personal state would be a
  *  category error. */
-// Forge interaction history remains private to the learner. It travels inside profileFacts and the
-// addressed forge-state response, never as a world/reward event that a sibling client could route.
+// Addressed private state that travels inside profileFacts and the profile's own state responses
+// (forge-state for Forge interactions, pet-state/welcome/restore for companions), NEVER as a
+// world/reward event a sibling client could route. Public snapshots expose only aggregates of these
+// facts (e.g. pets owned/equipped), never the underlying history.
 export const PRIVATE_PROFILE_FACT_TYPES = Object.freeze([
   'forge-pack-selected',
   'forge-task-attempted',
   'forge-task-assisted',
   'forge-task-completed',
+  'pet-owned',
+  'pet-equipped',
 ]);
 
 export const PROFILE_FACT_TYPES = Object.freeze([
@@ -256,7 +261,8 @@ export function isProfileFact(fact) {
     && typeof fact.eventId === 'string' && fact.eventId.length > 0
     && typeof fact.type === 'string' && PROFILE_FACT_TYPE_SET.has(fact.type),
   );
-  return structural && (!isEquipmentFactType(fact.type) || isSemanticallyValidEquipmentFact(fact));
+  return structural && (!isEquipmentFactType(fact.type) || isSemanticallyValidEquipmentFact(fact))
+    && (!['pet-owned', 'pet-equipped'].includes(fact.type) || isValidPetFact(fact));
 }
 
 // H1: local-first recovery is allowed to trust PERSONAL history, but that trust stops before facts
@@ -303,6 +309,8 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   // identity. Same rule as every profile-scoped prefix here: the named profile may restore it,
   // nobody else may reserve it out from under them.
   'rune-chest:',
+  'pet-owned:',
+  'pet-equip:',
 ]);
 
 // The sentinel rewards/offlineProgress.js stamps every offline-earned event with (its own
@@ -479,6 +487,30 @@ export function latestEquippedItemIds(facts) {
   return Object.fromEntries(
     [...latestEquippedFacts(facts)].map(([slot, fact]) => [slot, fact.value]),
   );
+}
+
+function isValidPetFact(fact) {
+  const [family, owner, suffix, extra] = fact.eventId.split(':');
+  if (!owner || sanitizeGuestId(owner) !== owner || extra !== undefined) return false;
+  if (fact.type === 'pet-owned')
+    return family === 'pet-owned' && suffix === fact.value && Boolean(petDef(fact.value));
+  return family === 'pet-equip' && /^[A-Za-z0-9-]{1,64}$/.test(suffix ?? '')
+    && (fact.value === 'none' || Boolean(petDef(fact.value)))
+    && Number.isSafeInteger(fact.rev) && fact.rev >= 0;
+}
+
+/** Pet choices share the existing revision/id ordering law; no gear/stat shape changes. */
+export function foldPetFacts(facts) {
+  const owned = new Set();
+  let selected = null;
+  for (const fact of unionFacts(facts)) {
+    if (fact.type === 'pet-owned') owned.add(fact.value);
+    else if (fact.type === 'pet-equipped'
+      && equipOutranks(fact, selected?.rev ?? -1, selected?.eventId ?? null)) selected = fact;
+  }
+  return { ownedPetIds: [...owned].sort(),
+    equippedPetId: owned.has(selected?.value) ? selected.value : null,
+    equipRev: selected?.rev ?? -1 };
 }
 
 function numberOr(value, fallback) {
