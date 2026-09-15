@@ -71,6 +71,7 @@ namespace GalaQuest
             {
                 session.ServerFrameReceived -= ApplyFrame;
                 session.Disconnected -= ClearViews;
+                session.TravelStarted -= ClearViews;
             }
             if (attackControl != null) attackControl.AttackRequested -= PredictAttack;
             if (selfWeapon != null) Destroy(selfWeapon);
@@ -95,6 +96,7 @@ namespace GalaQuest
             if (attackControl != null) attackControl.AttackRequested += PredictAttack;
             session.ServerFrameReceived += ApplyFrame;
             session.Disconnected += ClearViews;
+            session.TravelStarted += ClearViews;
         }
 
         private void PredictAttack()
@@ -110,7 +112,7 @@ namespace GalaQuest
         public void ApplyFrame(GalaQuestServerFrame frame)
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId) || frame.encounter == null) return;
-            if (frame.type == "forge-state") return;
+            if (frame.type == "forge-state" || frame.type == "pet-state") return;
             if (frame.type == "welcome" || frame.type == "destination-changed") ClearViews();
             else if (frame.tick <= lastTick) return;
             lastTick = frame.tick;
@@ -195,7 +197,8 @@ namespace GalaQuest
 
         private void Update()
         {
-            if (session == null || string.IsNullOrEmpty(session.PlayerId)) return;
+            if (session == null || string.IsNullOrEmpty(session.PlayerId) || session.IsTravelling)
+            { ClearViews(); return; }
             traversal.Hero.position = GalaQuestGroundSurface.Project(traversal.Hero.position, .01f);
             var age = Mathf.Clamp(Time.unscaledTime - receivedAt, 0, .15f);
             PresentHero(selfMotion, self, traversal.PredictedMotionSpeed, age, selfHurtUntil, Time.unscaledTime - predictedSwingAt < .25f);
@@ -203,7 +206,10 @@ namespace GalaQuest
             var blend = 1 - Mathf.Exp(-16 * Time.unscaledDeltaTime);
             foreach (var actor in companions.Values)
             {
-                MoveBody(actor.Body.transform, Position(actor.Player.x, actor.Player.z), actor.Player.heading, blend);
+                var target = Position(actor.Player.x, actor.Player.z);
+                var snapped = Vector3.Distance(actor.Body.transform.position, target) > 3f;
+                MoveBody(actor.Body.transform, target, actor.Player.heading, blend);
+                if (snapped) actor.PetTrail?.Reset(actor.Body.transform.position, actor.Body.transform.forward);
                 StepPet(actor.PetBody, actor.PetTrail, actor.Body.transform, Time.unscaledDeltaTime);
                 PresentHero(actor.Motion, actor.State, actor.Player.speed, age, actor.HurtUntil, false);
             }

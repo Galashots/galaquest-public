@@ -103,9 +103,20 @@ namespace GalaQuest.Tests
                 Assert.That(Vector3.Distance(p2.transform.position, remoteBody.transform.position),
                     Is.LessThan(Vector3.Distance(p2.transform.position, new Vector3(5, p2.transform.position.y, 0))),
                     "remote follower trails the interpolated visible body rather than snapping to raw frame coordinates");
-                frame = PetFrame(3, false, "worm_green", null, null, 5f);
+                frame = PetFrame(3, true, "worm_green", "worm_green", "worm_green", 9f);
+                presentation.ApplyFrame(frame); yield return null;
+                Assert.That(Vector3.Distance(p2.transform.position, remoteBody.transform.position), Is.LessThan(1.5f),
+                    "the >3m presentation snap must reset its follower rather than replaying a fictitious route");
+                var privateReply = new GalaQuestServerFrame { type = "pet-state", tick = 100000 };
+                presentation.ApplyFrame(privateReply);
+                Assert.That(presentation.RemoteHeroCount, Is.EqualTo(2), "private pet replies are not empty world snapshots");
+                frame = PetFrame(4, false, "worm_green", null, null, 9f);
                 presentation.ApplyFrame(frame); yield return null; yield return null;
                 Assert.That(GameObject.Find("Pet p2 worm_green"), Is.Null); Assert.That(GameObject.Find("Pet p3 worm_green"), Is.Null);
+                session.RequestTravel(GalaQuestProtocolV4.EmberworksDeepDestinationId);
+                yield return null;
+                Assert.That(GameObject.Find("Pet p1 worm_green"), Is.Null, "retire on travel start, not delayed arrival");
+                Assert.That(presentation.RemoteHeroCount, Is.Zero);
                 transport.Close(); yield return null; Assert.That(GameObject.Find("Pet p1 worm_green"), Is.Null);
             }
             finally
@@ -343,6 +354,8 @@ namespace GalaQuest.Tests
             return frame;
         }
 
+#endif
+
         private static GalaQuestServerFrame PetFrame(int tick, bool includeP3, string localPet, string p2Pet, string p3Pet, float p2X)
         {
             var players = includeP3
@@ -361,6 +374,7 @@ namespace GalaQuest.Tests
                 { ownedPetIds = string.IsNullOrEmpty(petId) ? Array.Empty<string>() : new[] { petId }, equippedPetId = petId, equipRev = string.IsNullOrEmpty(petId) ? -1 : 1 } };
         }
 
+#if UNITY_EDITOR
         private static GalaQuestServerRewards Reward(bool equipped)
         {
             var reward = new GalaQuestServerRewards();

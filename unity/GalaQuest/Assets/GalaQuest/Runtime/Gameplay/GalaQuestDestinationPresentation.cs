@@ -8,6 +8,7 @@ namespace GalaQuest
         [SerializeField] private GameObject emberworksRoot;
         private GalaQuestConnectionSession session;
         private GalaQuestTraversalController traversal;
+        private GalaQuestPetCampPresenter petCamp;
         private bool capturedLighting;
         private bool emberFog;
         private Color emberAmbient;
@@ -24,6 +25,7 @@ namespace GalaQuest
             if (session != null) session.ServerFrameReceived -= ApplyFrame;
             session = value;
             traversal = GetComponent<GalaQuestTraversalController>();
+            petCamp = GetComponent<GalaQuestPetCampPresenter>();
             if (session != null) session.ServerFrameReceived += ApplyFrame;
         }
 
@@ -62,6 +64,7 @@ namespace GalaQuest
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId)) return;
             if (GalaQuestRuneForgePresenter.IsInputCaptured) return;
+            if (petCamp?.OwnsContextAction == true) return;
             var home = session.DestinationId == GalaQuestProtocolV4.HomeHubDestinationId;
             var nearGate = !home || (traversal != null &&
                 Vector2.Distance(traversal.PredictedPosition, new Vector2(0, 7)) <= 3f);

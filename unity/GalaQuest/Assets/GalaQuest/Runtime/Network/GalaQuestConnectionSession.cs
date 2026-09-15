@@ -260,6 +260,12 @@ namespace GalaQuest
             transport.Close();
         }
 
+        public bool TrySendPetAction(string action, string petId, string eventId, int rev) =>
+            ControlsReady && DestinationId == GalaQuestProtocolV4.HomeHubDestinationId
+            && !string.IsNullOrEmpty(action) && !string.IsNullOrEmpty(petId)
+            && !string.IsNullOrEmpty(eventId) && rev >= 0
+            && transport.Send(GalaQuestProtocolV4.PetAction(action, petId, eventId, rev, WorldEpoch));
+
         public bool TrySendAttackIntent()
         {
             if (!ControlsReady) return false;
