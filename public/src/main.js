@@ -149,6 +149,7 @@ import {
   streakStillActive,
 } from './progression/streaks.js';
 import { streakMeterView } from './progression/streakView.js';
+import { persistentGuidanceView, wildwoodBurstAspirationView } from './progression/guidanceView.js';
 // THE HIDDEN LEARNING LAYER: every 8th kill this hero personally lands spawns a rune chest. Pure
 // rules live in progression/runeChests.js (this module's own header explains why it is CLIENT-LOCAL
 // and offline-first rather than following R1's server-authoritative kill drops); the mesh is
@@ -757,16 +758,59 @@ async function bootstrap() {
   const attack = createAttackInput(attackButtonElement);
   const specialAttack = createAttackInput(specialButtonElement);
   const specialButtonStateElement = document.querySelector('#special-button-state');
-  function renderSpecialButton(hero, level, ready) {
-    const unlocked = level >= SPECIAL_ATTACK_UNLOCK_LEVEL;
+  const specialButtonAspirationElement = document.querySelector('#special-button-aspiration');
+  const desktopAspirationElement = document.querySelector('#desktop-aspiration');
+  // The first known state is hydration, not a transition. Clearing this latch while progression is
+  // unknown makes a reconnect seed the next authoritative state without replaying an unlock beat.
+  let aspirationStateSeen = null;
+  let aspirationTransitionTimer = null;
+  function pulseAspirationTransition() {
+    delete specialButtonElement.dataset.aspirationTransition;
+    window.requestAnimationFrame(() => { specialButtonElement.dataset.aspirationTransition = 'true'; });
+    window.clearTimeout(aspirationTransitionTimer);
+    aspirationTransitionTimer = window.setTimeout(() => {
+      delete specialButtonElement.dataset.aspirationTransition;
+    }, 900);
+  }
+  function renderSpecialButton(hero, stats, ready, progressionKnown) {
+    const aspiration = wildwoodBurstAspirationView({
+      progressionKnown,
+      levelState: stats?.levelState,
+    });
+    const unlocked = aspiration?.state === 'unlocked';
+    specialButtonElement.dataset.progressionKnown = String(aspiration !== null);
     specialButtonElement.dataset.unlocked = String(unlocked);
-    if (!unlocked) specialButtonStateElement.textContent = `LV ${SPECIAL_ATTACK_UNLOCK_LEVEL}`;
-    else if ((hero.specialSeconds ?? -1) >= 0) specialButtonStateElement.textContent = 'FIRING';
-    else if ((hero.specialCooldown ?? 0) > 0) specialButtonStateElement.textContent = `${Math.ceil(hero.specialCooldown)}s`;
-    else specialButtonStateElement.textContent = ready ? 'READY' : 'WAIT';
+    specialButtonElement.dataset.aspirationState = aspiration?.state ?? 'unknown';
+
+    if (!aspiration) {
+      aspirationStateSeen = null;
+      specialButtonStateElement.textContent = 'SYNCING';
+      specialButtonAspirationElement.textContent = '';
+      desktopAspirationElement.textContent = 'syncing progression…';
+      specialButtonElement.setAttribute('aria-label', `${SPECIAL_ATTACK_NAME} progress is syncing`);
+      return;
+    }
+
+    if (aspirationStateSeen === null) aspirationStateSeen = aspiration.state;
+    else if (aspiration.state !== aspirationStateSeen) {
+      aspirationStateSeen = aspiration.state;
+      pulseAspirationTransition();
+    }
+
+    if (!unlocked) {
+      specialButtonStateElement.textContent = aspiration.stateText;
+    } else if ((hero.specialSeconds ?? -1) >= 0) {
+      specialButtonStateElement.textContent = 'FIRING';
+    } else if ((hero.specialCooldown ?? 0) > 0) {
+      specialButtonStateElement.textContent = `${Math.ceil(hero.specialCooldown)}s`;
+    } else {
+      specialButtonStateElement.textContent = ready ? 'READY' : 'WAIT';
+    }
+    specialButtonAspirationElement.textContent = aspiration.progressText ?? aspiration.stateText;
+    desktopAspirationElement.textContent = aspiration.desktopText;
     specialButtonElement.setAttribute('aria-label', unlocked
-      ? `${SPECIAL_ATTACK_NAME} ${specialButtonStateElement.textContent}`
-      : `${SPECIAL_ATTACK_NAME}, unlocks at level ${SPECIAL_ATTACK_UNLOCK_LEVEL}`);
+      ? `${aspiration.ariaLabel}, ${specialButtonStateElement.textContent}`
+      : aspiration.ariaLabel);
   }
   // THE OPENING SHOT. The camera used to default to heading 0 -- looking due north, up the empty
   // lane toward the wolf. A child's very first frame was a green field, five unlit lamp posts, and
@@ -1848,11 +1892,29 @@ async function bootstrap() {
   // The standing objective, same render-from-current-value discipline as the health readout and the pips.
   const questObjectiveElement = document.querySelector('#quest-objective');
   let questObjectiveLine = null;
+  let questObjectiveChangeTimer = null;
   function renderQuestObjective(line) {
     if (line === questObjectiveLine) return;
+    const changedWhileVisible = questObjectiveLine !== null && line !== null;
     questObjectiveLine = line;
     questObjectiveElement.dataset.shown = String(line !== null);
-    if (line !== null) questObjectiveElement.textContent = line;
+    questObjectiveElement.textContent = line ?? '';
+    if (line === null) {
+      questObjectiveElement.removeAttribute('aria-label');
+      delete questObjectiveElement.dataset.changed;
+      return;
+    }
+    // CSS supplies the small NOW label without changing the textContent consumed by existing
+    // runtime readers. The aria label carries the same meaning to a non-visual reader.
+    questObjectiveElement.setAttribute('aria-label', `NOW: ${line}`);
+    if (changedWhileVisible) {
+      delete questObjectiveElement.dataset.changed;
+      window.requestAnimationFrame(() => { questObjectiveElement.dataset.changed = 'true'; });
+      window.clearTimeout(questObjectiveChangeTimer);
+      questObjectiveChangeTimer = window.setTimeout(() => {
+        delete questObjectiveElement.dataset.changed;
+      }, 520);
+    }
   }
   // WHICH WAY TO TURN. The chip says what to do; this says where it is.
   //
@@ -3629,6 +3691,11 @@ async function bootstrap() {
     const ownRewards = netStatus === 'online'
       ? (net.selfId !== null ? serverEncounter?.rewards?.[net.selfId] : null)
       : profileState;
+    // A connecting socket is not an answer. Keep the aspiration hidden/syncing until the same
+    // authoritative rewards object that feeds the Hero stats is available, so reconnect cannot
+    // briefly advertise an old level as the current one.
+    const progressionKnown = netStatus === 'offline'
+      || (netStatus === 'online' && ownRewards != null);
     const currentEquippedWeaponId = equippedWeaponIdFromRewards(ownRewards);
     // The whole equipped-per-slot map, resolved once so the fight below, the helmet mount and the
     // Hero screen all read the same answer rather than three copies of "online ? wire : journal".
@@ -3965,7 +4032,7 @@ async function bootstrap() {
           && canHeroSpecialAttack(serverEncounter, ownHeroId, heroStatsThisFrame.level);
         attack.setReady(canSwing);
         specialAttack.setReady(canBurst);
-        renderSpecialButton(encounterState.hero, heroStatsThisFrame.level, canBurst);
+        renderSpecialButton(encounterState.hero, heroStatsThisFrame, canBurst, progressionKnown);
         if ((tappedAttack || pressedAttack) && canSwing) {
           net.sendAttack();
           // Presentation only: the clip starts on the button press, not on the server's ack, so a
@@ -4024,7 +4091,7 @@ async function bootstrap() {
         const canBurst = outsideSpecialArena
           && canSpecialAttack(encounterState, heroStatsThisFrame.level);
         specialAttack.setReady(canBurst);
-        renderSpecialButton(encounterState.hero, heroStatsThisFrame.level, canBurst);
+        renderSpecialButton(encounterState.hero, heroStatsThisFrame, canBurst, progressionKnown);
 
         // The fight runs off the same predicted position the hero is drawn at, so a swing lands where
         // the child sees themselves standing rather than where the server last heard from them.
@@ -5535,7 +5602,12 @@ async function bootstrap() {
         lodgeFound,
       },
     );
-    renderQuestObjective(currentObjective?.text ?? null);
+    const guidance = persistentGuidanceView({
+      objective: currentObjective,
+      progressionKnown: rewardsKnown,
+      levelState: heroStatsThisFrame.levelState,
+    });
+    renderQuestObjective(guidance.now?.text ?? null);
     // ALWAYS ON, EXCEPT WHEN IT WOULD BE NOISE. The playtest brief this pass answers to says the
     // guidance should "basically always be there" -- so the arrow/marker and the ground trail are
     // suspended for exactly two reasons and no others: a full-screen overlay owns the screen (the
