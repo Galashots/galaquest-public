@@ -151,12 +151,32 @@ function brokenRepoPaths(relFile, source, root = REPO) {
   return failures;
 }
 
-test('active guidance corpus is explicit and substantial', () => {
-  assert.ok(guidanceFiles.length >= 15, `only ${guidanceFiles.length} guidance files found; scope likely regressed`);
+test('required guidance files exist', () => {
   for (const rel of GUIDANCE_FILES) {
     assert.ok(existsSync(join(REPO, rel)), `required guidance file is missing: ${rel}`);
     assert.ok(statSync(join(REPO, rel)).isFile(), `required guidance path is not a file: ${rel}`);
   }
+});
+
+test('task router covers durable work categories and the read-context boundary', () => {
+  const guidance = readFileSync(join(REPO, 'docs/GUIDANCE.md'), 'utf8');
+  const categories = [
+    'Unity gameplay / scene / prefab',
+    'Unity WebGL / browser acceptance',
+    'Player-visible assets',
+    'HUD / UI',
+    'Network / protocol / session',
+    'Persistence / progression',
+    'Product / content expansion',
+    'Consequential acceptance / review',
+    'Provider-backed asset work',
+    'Legacy Three.js diagnostics',
+  ];
+  for (const category of categories) {
+    assert.ok(guidance.includes(category), `task router is missing category: ${category}`);
+  }
+  assert.match(guidance, /Routing grants read context, not write ownership/i,
+    'task router must distinguish read context from write ownership');
 });
 
 test('Claude bootstrap imports the canonical root authority exactly', () => {

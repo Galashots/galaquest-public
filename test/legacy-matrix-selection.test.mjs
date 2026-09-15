@@ -5,6 +5,16 @@ import { readFileSync } from 'node:fs';
 const matrix = readFileSync(new URL('../.github/workflows/full-playtest-matrix.yml', import.meta.url), 'utf8');
 const unit = readFileSync(new URL('../.github/workflows/test.yml', import.meta.url), 'utf8');
 
+const EXPECTED_PATHS = [
+  'package.json',
+  'server.mjs',
+  'net/**',
+  'public/**',
+  'tools/runtime-test/**',
+  'docs/asset-production/asset-registry-v1.json',
+  '.github/workflows/full-playtest-matrix.yml',
+];
+
 function eventBlock(source, event) {
   const lines = source.split(/\r?\n/);
   const start = lines.indexOf(`  ${event}:`);
@@ -17,35 +27,55 @@ function eventBlock(source, event) {
   return block.join('\n');
 }
 
-function ignoredPatterns(source, event) {
+function selectedPatterns(source, event) {
   const block = eventBlock(source, event);
-  const match = block.match(/^    paths-ignore: \[([^\]\n]+)\]$/m);
-  assert.ok(match, `${event}: expected an explicit, reviewable paths-ignore list`);
-  assert.match(match[1], /^'[^']+'(?:, '[^']+')*$/, 'unsupported filter syntax must not pass silently');
-  return [...match[1].matchAll(/'([^']+)'/g)].map((item) => item[1]);
+  const lines = block.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === '    paths:');
+  assert.notEqual(start, -1, `${event}: expected an explicit, reviewable paths list`);
+  const patterns = [];
+  for (const line of lines.slice(start + 1)) {
+    const match = line.match(/^      - '([^']+)'$/);
+    if (!match) break;
+    patterns.push(match[1]);
+  }
+  assert.deepEqual(patterns, EXPECTED_PATHS, `${event}: legacy ownership paths changed; review deliberately`);
+  return patterns;
 }
 
-// These are the two reviewed GitHub glob forms, not a general-purpose glob engine.
-// A workflow is skipped only when EVERY changed path matches an ignored pattern.
+function matchesReviewedPattern(path, pattern) {
+  if (pattern.endsWith('/**')) return path.startsWith(pattern.slice(0, -3) + '/');
+  return path === pattern;
+}
+
 function runsLegacy(paths, patterns) {
-  assert.deepEqual(patterns, ['**.md', 'unity/**'], 'do not silently suppress another source family');
-  return paths.some((path) => !path.endsWith('.md') && !path.startsWith('unity/'));
+  return paths.some((path) => patterns.some((pattern) => matchesReviewedPattern(path, pattern)));
 }
 
 for (const event of ['push', 'pull_request']) {
-  test(`${event}: only documentation and Unity-local source skip the legacy matrix`, () => {
-    const patterns = ignoredPatterns(matrix, event);
+  test(`${event}: only retained Three.js runtime and harness ownership auto-runs the legacy matrix`, () => {
+    const patterns = selectedPatterns(matrix, event);
+    for (const path of [
+      'package.json',
+      'server.mjs',
+      'net/protocol.js',
+      'public/src/main.js',
+      'public/assets/example.glb',
+      'tools/runtime-test/drive-village.mjs',
+      'docs/asset-production/asset-registry-v1.json',
+      '.github/workflows/full-playtest-matrix.yml',
+    ]) {
+      assert.equal(runsLegacy([path], patterns), true, path);
+      assert.equal(runsLegacy(['docs/note.md', 'unity/changed.asset', path], patterns), true, `mixed: ${path}`);
+    }
     for (const paths of [
       ['README.md', 'docs/WORKFLOW.md'],
-      ['unity/GalaQuest/ProjectSettings/ProjectSettings.asset'],
-      ['unity/GalaQuest/Assets/GalaQuest/Runtime/Example.cs', 'docs/WORKFLOW.md'],
+      ['unity/GalaQuest/Assets/GalaQuest/Runtime/Example.cs'],
+      ['test/example.test.mjs'],
+      ['tools/unity-playtest/forge.mjs'],
+      ['render.yaml'],
+      ['unknown-source.bin'],
+      ['test/example.test.mjs', 'docs/WORKFLOW.md', 'unity/changed.asset'],
     ]) assert.equal(runsLegacy(paths, patterns), false, JSON.stringify(paths));
-    for (const path of ['server.mjs', 'net/protocol.js', 'public/src/main.js',
-      'public/assets/example.glb', 'test/example.test.mjs', 'tools/unity-playtest/forge.mjs',
-      '.github/workflows/full-playtest-matrix.yml', 'render.yaml', 'unknown-source.bin']) {
-      assert.equal(runsLegacy([path], patterns), true, path);
-      assert.equal(runsLegacy(['unity/changed.asset', 'docs/note.md', path], patterns), true, `mixed: ${path}`);
-    }
   });
 }
 
@@ -57,7 +87,9 @@ test('required unit remains unfiltered and broad diagnostics remain manually cal
   assert.match(matrix, /ref: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
 });
 
-test('the selection contract rejects both the original omission and overbroad exclusions', () => {
-  assert.throws(() => runsLegacy(['unity/change.cs'], ['**.md']), /source family/);
-  assert.throws(() => runsLegacy(['net/protocol.js'], ['**.md', 'unity/**', 'net/**']), /source family/);
+test('the selection contract is red-capable for missing or broadened ownership', () => {
+  const missing = matrix.replace("      - 'net/**'\n", '');
+  assert.throws(() => selectedPatterns(missing, 'push'), /ownership paths changed/);
+  const broadened = matrix.replace("      - 'net/**'\n", "      - 'net/**'\n      - 'test/**'\n");
+  assert.throws(() => selectedPatterns(broadened, 'push'), /ownership paths changed/);
 });
