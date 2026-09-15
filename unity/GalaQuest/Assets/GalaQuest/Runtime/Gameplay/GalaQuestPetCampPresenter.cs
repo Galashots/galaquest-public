@@ -208,7 +208,7 @@ namespace GalaQuest
             content.y += 14 * layout.Scale;
             content.height -= 10 * layout.Scale;
             var instruction = !string.IsNullOrEmpty(lastError) ? ErrorText(lastError)
-                : action == "befriend" ? "A new friend is waiting — tap BEFRIEND"
+                : action == "befriend" ? "Tap BEFRIEND to make a friend"
                 : action == "follow" ? "Ask this worm to follow you"
                 : action == "rest" ? "Let this worm rest at Camp"
                 : "Getting to know this worm...";
