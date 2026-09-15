@@ -25,7 +25,7 @@ explicit authorization for that specific current work.
 Stylisation may exaggerate silhouette and proportions; it does not make implausible kinematics invisible. On the actual body/clip being considered, check at minimum:
 
 - major pivots sit at plausible joint centres and the limb chain folds from those centres;
-- torso motion is shared through an appropriate spine chain rather than faked at one waist hinge;
+- torso motion is shared through an appropriate spine chain rather than faked at one waist hinge: treat the ribcage and pelvis as largely rigid masses connected by the spine, with bending shared through the lower back and twist carried through the chest/upper spine as the pose requires;
 - standing/motion shows believable weight shift rather than a permanently level, mirrored pelvis/shoulder pose;
 - feet maintain credible ground contact through important frames; and
 - left/right differences are judged by visible consequence, not rejected by an invented symmetry threshold.
