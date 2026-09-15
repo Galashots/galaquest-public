@@ -4,11 +4,12 @@ Historical proven run: the Lantern Keeper (2026-08-13) shipped at 5,258 triangle
 `idle` + `wave`. Historical credit totals are planning evidence only; every new paid task still needs
 explicit authorization for that specific current work.
 
-> **This lane is governed by the anatomy and artist-review rules in [README.md](README.md).** Read
-> "How a human body actually stands and bends" before choosing a motion, and run
-> `node tools/foundry/pose_anatomy.mjs` on the candidate before merge. Provider action names do not
-> describe anatomy. This lane intentionally has **no default clip**: measure the body/clip you will
-> actually ship.
+> **Character-specific anatomy, rig, and clip judgment is owned by `.agents/skills/galaquest-character-foundry/SKILL.md`.**
+> Run `node tools/foundry/pose_anatomy.mjs` on the candidate before merge and interpret the measurement
+> beside the actual visual evidence. Provider action names do not describe anatomy. Use
+> `.agents/skills/visual-reference-first/SKILL.md` while iterating and `docs/review-guides/asset-visual-review.md`
+> for handoff evidence/acceptance. This lane intentionally has **no default clip**: measure the body/clip
+> you will actually ship.
 
 > **Matching joint names are NECESSARY BUT NOT SUFFICIENT. No clip transfers between two bodies until
 > rest-skeleton compatibility has been explicitly proven.** Keeper generations have demonstrated that
@@ -18,6 +19,18 @@ explicit authorization for that specific current work.
 > `tools/foundry/verify_native_clip.mjs` checks compatibility at acceptance time, and
 > `tools/foundry/merge_clips.mjs` re-checks it at merge time. Do not bypass either by stripping
 > translation tracks or treating a refusal as a nuisance.
+
+### Anatomy and stance checks
+
+Stylisation may exaggerate silhouette and proportions; it does not make implausible kinematics invisible. On the actual body/clip being considered, check at minimum:
+
+- major pivots sit at plausible joint centres and the limb chain folds from those centres;
+- torso motion is shared through an appropriate spine chain rather than faked at one waist hinge: treat the ribcage and pelvis as largely rigid masses connected by the spine, with bending shared through the lower back and twist carried through the chest/upper spine as the pose requires;
+- standing/motion shows believable weight shift rather than a permanently level, mirrored pelvis/shoulder pose;
+- feet maintain credible ground contact through important frames; and
+- left/right differences are judged by visible consequence, not rejected by an invented symmetry threshold.
+
+Use `pose_anatomy.mjs` as measurement beside visual evidence. A provider action name, green budget, or the previous GalaQuest clip is not anatomy authority; qualify the candidate that would actually ship.
 
 ## Steps
 
@@ -83,8 +96,9 @@ explicit authorization for that specific current work.
    node tools/foundry/clip_inventory.mjs tmp/<name>-ship.glb
    node tools/foundry/pose_anatomy.mjs tmp/<name>-ship.glb
    ```
-   Render/capture multiple frames of every important clip from multiple angles, then run the full
-   artist's review pass from the pipeline README. Budgets passing is not the finish line.
+   Render/capture multiple meaningful frames of every important clip from multiple angles. Apply the
+   Character Foundry anatomy/rig judgment, then the shared `visual-reference-first` loop and asset visual
+   review guide. Budgets passing is not the finish line.
 
 9. **Ship and integrate.** Put the accepted file under the consumer's existing `public/assets/` family,
    wire an AnimationMixer/clip selection using runtime identifiers discovered from the actual asset,

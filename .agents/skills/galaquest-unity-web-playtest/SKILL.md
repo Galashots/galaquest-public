@@ -1,6 +1,6 @@
 ---
 name: galaquest-unity-web-playtest
-description: Build and verify GalaQuest's Unity WebGL client. Use for Unity browser regressions, candidate review builds, build-cache decisions, and client/server evidence provenance.
+description: Operate and verify GalaQuest's Unity Editor and WebGL client. Use for scene/prefab iteration, focused-test discovery, input and grounding diagnosis, browser regressions, build-cache decisions, and client/server evidence provenance.
 ---
 
 # GalaQuest Unity Web Playtest
@@ -69,6 +69,18 @@ Safe Mode first. Where supported, screenshot-free native window activation is a 
 verify that a refresh actually occurred. Request Owner input only when available control paths fail;
 do not substitute Reimport All, a build-target switch, or another cold Editor launch for a routine refresh.
 
+## Focused tests and input proof
+
+After adding or moving tests, refresh/import through the owned Editor, verify assembly compilation, and inspect test discovery. Confirm the intended test names appear and execute; report discovered/executed/skipped counts from this run, not a remembered total. Zero, filtered-out or undiscovered requested tests are not PASS. Check the assembly definition, test platform and filter before trusting a green command.
+
+Match input injection to the actual consumer. IMGUI `OnGUI`/`GUI.Button` needs the Game View/IMGUI event path; a device event queued to the Input System alone does not prove that control was clicked. Preserve Input-System injection for movement/camera consumers (see `unity/GalaQuest/Assets/GalaQuest/Tests/EditMode/U1MobileCameraEditModeTests.cs`). Assert the resulting interaction, not merely event submission. For WebGL input claims, use real browser input through the matching driver; direct gameplay-method calls are not gesture proof.
+
+## Ground-contact diagnosis
+
+Reproduce the reported scene, camera, floor and pose before moving an offset. Compare rendered geometry (including a baked/current skinned pose) with skeleton/root transforms and the actual floor/contact data. Rest bounds alone do not locate animated feet. Check scale, clip/root motion and the intended contact frames, then projection/camera and shadow perception; distinguish a physical gap from a visual cue before correcting either.
+
+Keep protected Hero rig/body/grip boundaries intact. Do not hide a rig defect with an attachment offset. After the smallest owned correction, rerun the same useful measurement and reported framing at the new exact state; the visual-review guide owns comparison identity and acceptance.
+
 ## Build after the cheaper checks
 
 When a cold test launch repeats a Material Upgrader import, compare the persisted URP project upgrade
@@ -119,8 +131,9 @@ migration. Recheck the affected materials and subsequent imports before claiming
 - Record the Unity client build SHA and Node server SHA separately, plus build hashes. If deliberately
   running an older client against a newer server, verify the relevant source diff and keep both SHAs;
   do not relabel old pixels as a new build.
-- A successful driver proves its assertions. Inspect the generated running-game images separately,
-  following `docs/review-guides/asset-visual-review.md` for changed visuals. Record the strongest
-  remaining defect. Desktop input and screenshots cannot establish physical iPad acceptance.
+- This skill owns Unity/WebGL execution and provenance, not artistic acceptance. A successful driver proves
+  its assertions only. For changed visuals, use `.agents/skills/visual-reference-first/SKILL.md` for the
+  make/look/fix loop and `docs/review-guides/asset-visual-review.md` for evidence/acceptance. Desktop input
+  and screenshots cannot establish physical iPad acceptance.
 - Keep new incidents in the checkpoint or mistakes ledger; update this procedure only with reusable
   corrections. Keep root `AGENTS.md` as the short routing and authority surface.

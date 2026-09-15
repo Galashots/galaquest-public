@@ -42,7 +42,7 @@ stylized lava armor game character
 child friendly fantasy enemy silhouette
 ```
 
-When web/image-search capability exists, use **at least three useful attributable examples** before declaring a new visual asset ready. Image search is discovery, not authority. Do not use anonymous reposts, Pinterest boards, or uncredited AI imagery as the sole benchmark.
+When current GalaQuest authority does not settle the convention or quality bar, use multiple independent, attributable external examples when that comparison is useful. Image search is discovery, not authority. Do not use anonymous reposts, Pinterest boards, or uncredited AI imagery as the sole benchmark.
 
 ## Generated target reference
 
@@ -58,57 +58,46 @@ Use that image narrowly. Record what it controls, such as:
 
 Label it `generated target reference — non-canonical`. It does not become canon by default and cannot overrule accepted runtime evidence or Owner-supplied art direction.
 
-## The procedure
+## The loop: BUILD -> LOOK -> REPRODUCE -> FIX -> LOOK AGAIN
 
-### Before making/tuning the visual
+### BUILD
 
-1. **Name it as a player would.** "Character holding a shield", not "left-hand rigid attachment orientation". The plain phrasing is what finds images; the technical phrasing often finds nothing.
-2. **Read GalaQuest authority first.** Identify which accepted runtime/reference actually controls identity, construction, progression, material, or world tone.
-3. **Look at three or more external examples** when search capability exists, from different angles/sources where possible.
-4. **Write the convention down in one sentence** before touching any numbers or expensive production.
-5. **If the target is still ambiguous**, use/request a Director-generated non-canonical target reference rather than silently guessing.
+1. **Name the visual in player language.** "Character holding a shield" finds useful convention evidence; "left-hand rigid attachment orientation" usually does not.
+2. **Read GalaQuest authority first.** Identify which accepted runtime/reference controls the question: identity, construction, progression, material, world tone, UI framing, or another explicit role.
+3. **Use external reference only where internal authority does not settle the convention or quality bar.** When external comparison is useful, use multiple independent attributable examples rather than one screenshot or franchise.
+4. **Write the intended convention in one sentence** before tuning numbers or spending on production.
+5. **If the target remains materially ambiguous**, use/request a Director-generated non-canonical target reference instead of silently inventing a new style answer.
 
-### After making/tuning the visual
+### LOOK
 
-6. **Open the actual output yourself.** Do not hand off from logs, metrics, thumbnails, or provider preview alone.
-7. **For Unity-bound assets, inspect in Unity.** Use a neutral diagnostic view and intended gameplay framing. For motion/VFX/cloth/deformation, inspect Play Mode motion.
-8. **Compare side by side against the chosen references.** Check silhouette, proportion/fit, pose/motion, material/value, colour hierarchy, gameplay readability, cohesion with GalaQuest, originality, and visible artifacts.
-9. **State the strongest reason the result may still be wrong.** Name the mismatch or disconfirming reference. "Looks good" is not enough.
-10. **Fix/reject/reforecast material defects before handoff.** Do not outsource obvious producer defects to the independent reviewer.
-11. **Bind evidence to the exact SHA/state.** Capture useful stills; use `.local/unity/review-pack/` for Unity review evidence. Put phone-readable stills on the PR/review surface when practical. Large recordings/raw masters may use the Owner-controlled Google Drive custody/review tier, linked from an exact-SHA manifest.
-12. **Verify in the running game for final appearance acceptance.** Unity proof/inspection scenes qualify assets but do not overrule running-game pixels.
-13. **Comment the observed convention next to durable transform/presentation values** where useful, so the next agent inherits reasoning rather than magic numbers.
+Open the actual output yourself. Do not hand off from logs, metrics, thumbnails, importer success, or provider preview. For Unity-bound work, inspect the actual Unity import at neutral inspection scale and intended gameplay framing; inspect motion when animation, VFX, cloth, deformation, or moving parts matter.
 
-If Unity, web/image search, or visual evidence is inaccessible, report that gate **UNKNOWN** and route it to a capable runtime/reviewer. Lack of capability is not permission to claim readiness.
+Compare against the controlling GalaQuest references and any supporting external evidence. State the strongest reason the result may still be wrong. "Looks good" is not critical review.
 
-## Red flags — you are deriving or self-approving when you should be looking
+### REPRODUCE
+
+Turn the strongest visible mismatch into an observable condition before changing it again. Reproduce the defect in the destination surface and, when before/after comparison matters, keep camera, gameplay state, pose/frame, lighting, and viewport/device conditions materially comparable.
+
+Diagnose the actual cause rather than the easiest number to move. A floating or misaligned subject may come from geometry, root transform, animation pose, floor/contact data, projection/camera, shadowing, or attachment logic; do not hide an uncertain cause behind a blind offset.
+
+### FIX
+
+Make the smallest causal correction that stays inside the owned surface. A small, local, low-risk visual defect should normally be fixed instead of ticketed. Reforecast a materially cross-system/risky correction, and use governing product/visual authority for a genuine art/product choice rather than manufacturing an Owner gate.
+
+### LOOK AGAIN
+
+Recapture the corrected result under the comparable condition and inspect it again. Once integrated, running-game pixels are final appearance authority. Measurements and automated checks may diagnose or reject a result; they do not artistically accept appearance.
+
+Bind useful evidence to the exact SHA/state and follow `docs/review-guides/asset-visual-review.md` for the acceptance/evidence package and fresh independent-review seam. If a required visual surface is inaccessible, report the gate **UNKNOWN** rather than claiming readiness.
+
+## Red flags — derive less, look more
 
 | Thought | Reality |
 |---|---|
-| "It should be perpendicular to the forearm" | You are inventing a convention. Go and look at one. |
+| "It should be perpendicular to the forearm" | You are inventing a convention. Look at accepted/runtime or external convention evidence. |
 | "Mirror the other hand's axis" | Symmetry is not a carry convention. Look. |
-| "The natural axis of the disc is…" | Objects do not have natural axes. Cultures have conventions. |
-| "I've adjusted this three times and it still looks off" | You are missing the convention entirely. Stop and look. |
-| "Which did the owner mean by 'tip'?" | The image answers it faster than the clarifying question. |
-| "I can't name three games/references that ship this" | Then you do not know what it should look like yet. |
-| "Meshy/Blender looks fine" | For Unity-bound work, you have not yet reviewed the actual destination render. |
-| "The importer/tests pass" | Mechanical validity is not visual quality. Open it. |
-| "Looks good" | Name the strongest flaw/counterexample or you have not reviewed critically. |
+| "I've adjusted this three times and it still looks off" | Stop tuning and reproduce the visible defect before moving another number. |
+| "Meshy/Blender looks fine" | For Unity-bound work, you have not reviewed the destination render. |
+| "The importer/tests pass" | Mechanical validity is not visual quality. Open the result. |
+| "Looks good" | Name the strongest flaw or disconfirming evidence. |
 | "The reviewer can tell me if it's bad" | Producer self-review comes first; independent review is a separate seam. |
-
-## What it cost to learn
-
-On 2026-08-12 the shield was fitted to the hero's **hand**. The work was careful: hand-bone axes
-measured on the live rig, the blade axis mirrored across the sagittal plane, orthonormal bases
-constructed, a degenerate basis diagnosed and fixed, quaternions carried to twelve places, and the
-bind-pose bake verified to 0.00002 rig units against the known-good sword.
-
-The geometry was correct throughout. The answer was wrong: **a shield is strapped to the outside of
-the forearm, not gripped in the fist.** A handful of reference screenshots settled in seconds what an
-hour of basis vectors could not.
-
-Three internally consistent wrong fits went past review first. Each satisfied every constraint that
-had been stated in words. That is the failure mode: nothing in the maths ever complains.
-
-The fit that finally worked is in `public/src/character/gear.js`, solved with
-`tools/runtime-test/fit-shield.mjs`.

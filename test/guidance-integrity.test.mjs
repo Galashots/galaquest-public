@@ -151,12 +151,74 @@ function brokenRepoPaths(relFile, source, root = REPO) {
   return failures;
 }
 
-test('active guidance corpus is explicit and substantial', () => {
-  assert.ok(guidanceFiles.length >= 15, `only ${guidanceFiles.length} guidance files found; scope likely regressed`);
+test('required guidance files exist', () => {
   for (const rel of GUIDANCE_FILES) {
     assert.ok(existsSync(join(REPO, rel)), `required guidance file is missing: ${rel}`);
     assert.ok(statSync(join(REPO, rel)).isFile(), `required guidance path is not a file: ${rel}`);
   }
+});
+
+const TASK_CATEGORIES = [
+  'Unity gameplay / scene / prefab', 'Unity WebGL / browser acceptance', 'Player-visible assets',
+  'HUD / UI', 'Network / protocol / session', 'Persistence / progression',
+  'Product / content expansion', 'Consequential acceptance / review',
+  'Provider-backed asset work', 'Legacy Three.js diagnostics',
+];
+
+// Check usable routes, not keywords anywhere in the handbook. Mechanical paths are read context,
+// not a second source manifest or an instruction to run every test listed here for every task.
+function taskRouterFailures(source, pathExists = (path) => existsSync(join(REPO, path))) {
+  const section = source.split(/^## Task router\r?\n/m)[1]?.split(/^## /m)[0] ?? '';
+  const rows = section.split(/\r?\n/).filter((line) => line.startsWith('|'))
+    .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim().replaceAll('**', '')));
+  const criticalProof = new Map([
+    ['Network / protocol / session', 'public/src/net/protocolCore.js'],
+    ['Persistence / progression', 'net/rewardStore.mjs'],
+    ['Player-visible assets', 'docs/asset-production/asset-registry-v1.json'],
+  ]);
+  const failures = [];
+  for (const category of TASK_CATEGORIES) {
+    const matches = rows.filter((row) => row[0] === category);
+    if (matches.length !== 1) { failures.push(`${category}: expected one route`); continue; }
+    const row = matches[0];
+    if (row.length !== 4 || !row[3]) { failures.push(`${category}: guidance/proof/tags required`); continue; }
+    for (const [column, label] of [[1, 'guidance'], [2, 'proof']]) {
+      const paths = [...row[column].matchAll(/`((?:\.agents|\.github|docs|tools|public|test|net|data|unity)\/[^`]+)`/g)]
+        .map((match) => match[1]);
+      if (!paths.length) failures.push(`${category}: missing ${label} path`);
+      for (const path of paths) if (!pathExists(path)) failures.push(`${category}: missing path ${path}`);
+      if (column === 2) {
+        if (paths.length && paths.every((path) => path.endsWith('.md')))
+          failures.push(`${category}: proof cannot be Markdown only`);
+        const required = criticalProof.get(category);
+        if (required && !paths.includes(required)) failures.push(`${category}: missing proof ${required}`);
+      }
+    }
+  }
+  return failures;
+}
+
+test('task router provides domain guidance, mechanical proof and narrow lesson routing', () => {
+  const guidance = readFileSync(join(REPO, 'docs/GUIDANCE.md'), 'utf8');
+  assert.deepEqual(taskRouterFailures(guidance), []);
+  assert.match(guidance, /Routing grants read context, not write ownership/i,
+    'task router must distinguish read context from write ownership');
+});
+
+test('sabotage: route labels elsewhere, empty proof and wrong codec do not satisfy the router', () => {
+  const source = readFileSync(join(REPO, 'docs/GUIDANCE.md'), 'utf8');
+  const row = source.split(/\r?\n/).find((line) => line.startsWith('| **Network / protocol / session** |'));
+  assert.ok(row, 'network route fixture must exist');
+  const withoutRow = source.replace(row, '') + '\nNetwork / protocol / session\n';
+  assert.ok(taskRouterFailures(withoutRow).some((failure) => failure.includes('expected one route')));
+  const cells = row.split('|');
+  cells[3] = ' `docs/CODEBASE.md` ';
+  const markdownOnly = source.replace(row, cells.join('|'));
+  assert.ok(taskRouterFailures(markdownOnly).some((failure) => failure.includes('Markdown only')));
+  const wrongCodec = source.replace(row, row.replace('public/src/net/protocolCore.js', 'net/gameServerCore.mjs'));
+  assert.ok(taskRouterFailures(wrongCodec).some((failure) => failure.includes('missing proof public/src/net/protocolCore.js')));
+  const deadPath = source.replace(row, row.replace('public/src/net/protocolCore.js', 'unity/missing-router-proof.cs'));
+  assert.ok(taskRouterFailures(deadPath).some((failure) => failure.includes('missing path unity/missing-router-proof.cs')));
 });
 
 test('Claude bootstrap imports the canonical root authority exactly', () => {
