@@ -43,6 +43,28 @@ Issues provide provenance and lifecycle for ideas, signals, and initiatives. A c
 contract sits between those layers and implementation: it coordinates one selected cross-system push but
 does not become a second backlog or replace the owning Issues.
 
+## Task router
+
+Start from the narrowest row that matches the work, then read only the supporting authority needed to understand the actual contract.
+
+| Work category | Start here |
+| --- | --- |
+| **Unity gameplay / scene / prefab** | `unity/AGENTS.md`, then the relevant Unity code/tests and checked-in specialist |
+| **Unity WebGL / browser acceptance** | `.agents/skills/galaquest-unity-web-playtest/SKILL.md` and `tools/unity-playtest/README.md` |
+| **Player-visible assets** | `docs/pipeline/README.md`, the asset-specific lane, `.agents/skills/visual-reference-first/SKILL.md`, and `docs/review-guides/asset-visual-review.md` |
+| **HUD / UI** | current product authority plus `docs/GALAQUEST_VISUAL_AUTHORITY.md`, then the owning client code and tests |
+| **Network / protocol / session** | `docs/CODEBASE.md`, then the live producer/caller, codec/parser, and governing tests |
+| **Persistence / progression** | current product contract when applicable, then `docs/CODEBASE.md` and the owning store/runtime tests |
+| **Product / content expansion** | `docs/product/PRODUCT_VISION.md`, `docs/product/PRODUCT_SYSTEM.md`, and the owning live product Issue |
+| **Consequential acceptance / review** | `docs/WORKFLOW.md`; add `docs/review-guides/asset-visual-review.md` when player-visible |
+| **Provider-backed asset work** | `docs/pipeline/README.md`, the asset-specific lane, and the guarded provider-client README |
+| **Legacy Three.js diagnostics** | `docs/WORKFLOW.md`, `tools/runtime-test/`, and the applicable checked-in workflow |
+
+**Routing grants read context, not write ownership.** A bounded writer may need to inspect a producer, codec/parser, caller, or governing tests outside its writable surface to understand an existing contract. That does not silently expand the package's write scope.
+
+For network/protocol discovery, search in this order before inventing a new field or limit:
+`literal wire/type identifiers -> caller/producer -> codec/parser -> governing tests`.
+
 ## Runtime-local capability is not project authority
 
 Runtime-local state may include model/runtime memory, user or global instructions, local hooks,
@@ -61,35 +83,17 @@ state.
 
 Checked-in skill content has one canonical repository location: `.agents/skills/`. A runtime that
 auto-discovers that directory may use the discovery; a runtime that does not must explicitly read or
-load the relevant canonical skill when the task requires it. Do not mirror skill prose into `.claude/skills/`
-or create another skill tree merely to satisfy a runtime discovery convention.
+load the relevant canonical skill when the task requires it. Do not mirror skill prose into another
+repository tree merely to satisfy a runtime discovery convention.
 
-First-party vendor skills — for example Unity's own CLI and engine skills — are installed into the
-runtime's user-global skills directory, outside this repository. That is capability, not authority: they
-rank **below** GalaQuest's checked-in skills and runbooks in the hierarchy above, and a GalaQuest rule
-wins wherever the two disagree. Install only the skills that teach the engine work GalaQuest actually
-does. A vendor skill never authorizes a package upgrade, a new Unity or cloud service, ads, in-app
-purchases, analytics, cloud save, paid AI usage, or any other provider spend; those remain Owner
-decisions under `AGENTS.md` regardless of what a vendor skill recommends. Do not install a second
-Editor-control path alongside the Unity CLI/Pipeline route that `unity/AGENTS.md` already owns.
+Runtime-global or vendor-provided skills are capability, not GalaQuest authority. They rank below the
+checked-in skills and runbooks above and should be selected only when they add a capability the current
+task actually needs. Their installation paths, client-specific setup commands, and runtime inventories are
+machine/runtime state rather than durable repository guidance.
 
-The curated Unity set is recoverable without this repository holding vendor prose. `unity skill install
-claude-code` (or `codex`) writes the Unity CLI skill that ships with the installed CLI, so it always matches
-the CLI actually on PATH; it lands in the client's user-global skills directory — `~/.claude/skills/unity-cli`
-for Claude Code, `~/.agents/skills/unity-cli` for Codex — and `unity skill install --list` reports every
-supported client and its install state. The engine skills come from `Unity-Technologies/unity-agent-plugin`.
-Its `unity@unity-agent-plugin` plugin is all-or-nothing and bundles both a second copy of `unity-cli` and
-monetization/services skills, so install the development subset instead by copying these directories from
-`skills/<name>/` at a pinned upstream revision into the same user-global skills directory:
-
-`generate-editor-search-query`, `optimize-text-mesh-pro`, `optimize-web`, `physics-3d-collision`,
-`shader-graph-create-custom-node`, `ui`, `ui-imgui`, `ui-ugui`, `ui-uitk`, `urp-postprocessing`,
-`validate-urp-render-graph-renderer-feature`.
-
-Record the upstream revision in the PR that changes the set. Deliberately excluded, and not to be added
-without an Owner decision: `build-live-game`, `implement-in-app-purchases`, `levelplay-unity-integration`,
-`setup-multiplayer-services`, `setup-vivox-voice-chat`, `unity-package-management`, `migrate-birp-to-urp`,
-and `new-unity-project`.
+A vendor skill never authorizes a package upgrade, a new engine/cloud service, analytics, monetization,
+paid AI/provider usage, or other Owner-controlled transition. Do not add a second Editor-control path
+alongside the Unity CLI/Pipeline route that `unity/AGENTS.md` already owns without an explicit package.
 
 ## What durable guidance should contain
 

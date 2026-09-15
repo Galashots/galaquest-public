@@ -76,6 +76,24 @@ Do not create a parallel side-quest backlog. Route worthwhile separable findings
 A worker without authorization to create or update the durable destination reports the finding to the Production
 Director instead of broadening the PR.
 
+## Autonomous production selection
+
+When no package is already selected and Owner input is not required, choose the next production move in this order:
+
+1. settled `docs/product/PRODUCT_VISION.md`, the owning selected Initiative/Requirement, and any applicable design contract;
+2. the strongest current **player-visible** need inside that direction;
+3. an available safe writer topology and acceptance surface that can carry the work to a credible result;
+4. existing qualified or realistically qualifiable assets that serve that need.
+
+Asset inventory serves product direction; it does not choose it. For an asset-backed need, route through:
+`selected need -> canonical asset registry/inventory -> candidate -> QUALIFY / REPAIR / INTEGRATE / PARK-or-REJECT`.
+
+Maintenance interrupts that flow only when it blocks the selected player outcome or when repeated measured production cost makes the repair cheaper than continuing around it. Do not manufacture infrastructure, cleanup, or test-hardening work merely to keep a worker occupied.
+
+### Anti-polish stop
+
+Once the current role of a feature, asset, or presentation is materially credible, move forward. Continue polishing only when the remaining defect materially hurts fun, readability, usability, identity, perceived quality, or future production throughput. "Could be nicer" by itself is not a reason to stall the next player-visible outcome.
+
 ## One coherent objective per public branch/PR
 
 - Branch from current public `main`; use one coherent objective per branch and pull request, whether the
@@ -159,33 +177,25 @@ For behaviour changes:
 - do not weaken product behaviour, prediction constants, thresholds, or tests merely to satisfy hosted CI;
 - rerun the affected evidence after the fix.
 
+For consequential state-changing Git, filesystem, or tool operations, verify the resulting state when that state matters to correctness, custody, cleanup, or evidence. An exit code, acknowledgement, or registry mutation alone is not proof that the intended postcondition holds.
+
 ### Mandatory visual self-review before handoff
 
-For every new or materially changed player-visible asset, **the producer must perform and record a visual self-review before asking anyone else to accept it**. Follow `docs/review-guides/asset-visual-review.md` and the `visual-reference-first` skill.
+For every new or materially changed player-visible asset, **the producer must perform and record a visual self-review before asking anyone else to accept it**. Use `.agents/skills/visual-reference-first/SKILL.md` for the execution loop — **BUILD -> LOOK -> REPRODUCE -> FIX -> LOOK AGAIN** — and `docs/review-guides/asset-visual-review.md` for the comparison, evidence, and acceptance contract.
 
-The minimum review posture is:
+When a visual defect is being corrected, reproduce the before/after under materially comparable camera, gameplay state, pose/frame, lighting, and viewport/device conditions when those variables affect the claim. For Unity-bound assets, inspect the actual Unity import and gameplay framing; inspect motion when animation, VFX, cloth, deformation, or moving parts matter. Running-game pixels remain final appearance authority.
 
-1. inspect the relevant accepted GalaQuest visual/runtime authority and Owner-provided references;
-2. when web/image-search capability exists, compare against at least three attributable external examples that genuinely test the convention or quality bar; prefer official game/studio/publisher material or real-world references over anonymous reposts or AI collections;
-3. if the intended target is materially verbal/ambiguous and no canonical reference settles it, use a Production Director-generated **non-canonical target reference** when that would reduce expensive guesswork, explicitly stating what attributes it controls;
-4. for Unity-bound assets, inspect the actual import in Unity at neutral inspection scale **and** intended gameplay framing; inspect motion in Play Mode for animation/VFX/cloth/moving parts;
-5. record the strongest defect, mismatch, or disconfirming comparison found — not only positive observations;
-6. fix, reject, or reforecast material defects before requesting independent review.
+If a required visual surface cannot be accessed, that gate is **UNKNOWN**, not waived. Measurements and automated checks may reject a result or diagnose a cause; they do not artistically accept appearance.
 
-A producer's own visual review can prove that the worker looked critically at its output; it cannot independently accept its own consequential implementation.
+### Visual defect triage
 
-If Unity, image search, or the generated evidence cannot be accessed, that visual gate is **UNKNOWN**, not waived. Route the missing check to a capable runtime/reviewer before consequential acceptance.
+- **Small, local, causal, low-risk defect in the owned surface:** fix it, reproduce/capture again, and keep building.
+- **Materially cross-system, risky, or package-changing defect:** reforecast before absorbing it.
+- **Unresolved art/product choice:** use the governing product/visual authority; seek Owner judgment only when that authority does not settle the choice.
 
-Visual evidence should be easy for the Owner to inspect from a phone. Attach key stills to the PR/review surface when practical. Store large raw/source masters and large recordings in the Owner-controlled Google Drive custody/review tier when available, link them from the exact-SHA PR/handoff, and preserve an exact-SHA evidence manifest. Do not commit large binaries merely to make review convenient.
+Consequential independent visual review must be fresh: give the reviewer the actual pixels, governing target/authority, and enough gameplay context to judge the result, but do not prime the first judgment with what the writer changed or the verdict it wants.
 
-Do not copy third-party comparison imagery into Git/Drive solely as evidence unless its project custody is cleared; preserve source links/search terms instead.
-
-For player-visible changes:
-
-- inspect the running game personally;
-- automated browser/runtime checks prove behaviour but do not visually accept appearance;
-- use reference images before deriving visual conventions;
-- machine measurements may reject a result but human running-game inspection is required for visual acceptance.
+Visual evidence should be easy for the Owner to inspect from a phone. Attach useful stills to the PR/review surface when practical; use the controlled Google Drive custody/review tier for large source masters or recordings and bind them to the exact-SHA evidence manifest. Do not copy third-party comparison imagery into project custody merely as proof of review; preserve source links/search terms unless custody is cleared.
 
 A missing artifact, missing hosted run, inaccessible browser surface, or unverified runtime is **UNKNOWN**, not inferred PASS.
 
