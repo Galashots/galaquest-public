@@ -119,8 +119,9 @@ migration. Recheck the affected materials and subsequent imports before claiming
 - Record the Unity client build SHA and Node server SHA separately, plus build hashes. If deliberately
   running an older client against a newer server, verify the relevant source diff and keep both SHAs;
   do not relabel old pixels as a new build.
-- A successful driver proves its assertions. Inspect the generated running-game images separately,
-  following `docs/review-guides/asset-visual-review.md` for changed visuals. Record the strongest
-  remaining defect. Desktop input and screenshots cannot establish physical iPad acceptance.
+- This skill owns Unity/WebGL execution and provenance, not artistic acceptance. A successful driver proves
+  its assertions only. For changed visuals, use `.agents/skills/visual-reference-first/SKILL.md` for the
+  make/look/fix loop and `docs/review-guides/asset-visual-review.md` for evidence/acceptance. Desktop input
+  and screenshots cannot establish physical iPad acceptance.
 - Keep new incidents in the checkpoint or mistakes ledger; update this procedure only with reusable
   corrections. Keep root `AGENTS.md` as the short routing and authority surface.

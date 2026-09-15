@@ -36,16 +36,13 @@ This directory is the Unity production foundation. Keep these rules durable and 
 - When batch mode is necessary, launch one waited Unity process for the project and follow it to termination. Once a known healthy long build is running, do not burn agent turns on frequent process/log polling; inspect again only when completion is expected or the run materially exceeds the established baseline.
 - Compile errors and unexplained Console errors fail validation. A green command is not sufficient if the Editor is in Safe Mode or has unexplained errors.
 - Bind evidence to the exact Git SHA that produced it. The generated evidence root is `.local/unity/review-pack/`; future Owner Review Pack states must be deterministic and explicit.
-- **Every new or materially changed Unity-bound visual asset must be visually self-reviewed in Unity before handoff.** At minimum capture a neutral inspection view and an intended gameplay-framing view; inspect motion in Play Mode when animation, VFX, cloth, deformation, or moving parts matter.
-- Meshy, Blender, DCC, or importer previews may expose defects but do not replace the Unity self-review. Follow `docs/review-guides/asset-visual-review.md` and the `visual-reference-first` skill for comparative reference review.
-- A producer review must state the strongest visual defect/counterargument found. Self-review does not independently accept the producer's own consequential work.
-- Prefer phone-readable stills on the PR/review surface. Large recordings and large raw/source masters may use the Owner-controlled Google Drive custody/review tier, linked from an exact-SHA review manifest; do not bloat Git merely to transport review media.
-- When publishing Unity review evidence to Drive, use only the controlled root and `30_OWNER_REVIEW/00_NEEDS_OWNER_REVIEW` lifecycle defined in `docs/pipeline/google-drive-asset-custody.md`. Keep `.local/unity/review-pack/` as generated local evidence; Drive is the durable transfer/review surface, not a second Unity source tree.
-- Running-game pixels remain the final visual authority. Asset inspection, serialized files, and renders can establish file facts but cannot establish how the game looks.
+- **Every new or materially changed Unity-bound visual asset must be visually self-reviewed in Unity before handoff.** This file owns Unity execution safety; `.agents/skills/visual-reference-first/SKILL.md` owns the make/look/fix loop and `docs/review-guides/asset-visual-review.md` owns evidence/acceptance. Running-game pixels remain final appearance authority.
+- For floating, grounding, attachment, or alignment defects, reproduce the visible state before tuning. Diagnose actual geometry, root transform, animation pose, floor/contact data, projection/camera, shadowing, and attachment logic as applicable before applying a blind offset; recapture the comparable state after the fix.
+- Self-review is not independent acceptance. Preserve `.local/unity/review-pack/` as generated exact-state evidence and route large review media through the controlled custody/review process referenced by the review guide rather than creating another Unity source tree.
 
 ## Migration boundaries
 
-- Three.js remains the reference client during migration.
+- Unity is the production client. The retained Three.js client is a legacy/reference diagnostic surface and does not define Unity acceptance.
 - The existing Node server and protocol remain authoritative until an approved package explicitly changes them.
 - Networking libraries stay behind a GalaQuest-owned abstraction; do not let provider APIs become gameplay contracts.
 - Centralize future coordinate conversion rather than scattering axis or unit fixes through content code.

@@ -2,7 +2,7 @@
 
 This guide applies to every new or materially changed **player-visible asset** before it is handed off for independent review, integrated as accepted content, or proposed for promotion. It covers characters, enemies, pets, gear, props, environment pieces, VFX-bearing assets, and other visuals whose quality matters to the player.
 
-The producer's self-review is mandatory. It is **necessary but never sufficient** for independent acceptance or Owner-controlled promotion.
+The producer's self-review is mandatory. It is **necessary but never sufficient** for independent acceptance or Owner-controlled promotion. `.agents/skills/visual-reference-first/SKILL.md` owns the build/look/fix execution loop; this guide owns the comparison hierarchy, review evidence, and acceptance handoff.
 
 ## Hard rule: do not hand off an asset you have not actually looked at
 
@@ -23,15 +23,14 @@ A deterministic Unity proof scene is acceptable for **asset qualification before
 
 Do not review from taste or memory alone. Use the narrowest visual authority that answers the question, in this order:
 
-1. current accepted GalaQuest runtime/reference evidence;
-2. Owner-supplied concept/reference art and recorded review guides;
-3. relevant GalaQuest construction/material/progression authority;
-4. external comparison references for the convention or quality bar being tested;
-5. a generated target reference when the intended result exists mainly as a verbal description.
+1. accepted running-game evidence and canonical public GalaQuest references;
+2. current GalaQuest product/visual authority and Owner-approved references for the question being judged;
+3. attributable external comparison references **only when** internal authority does not settle the convention or quality bar;
+4. a generated target reference only when the intended result remains materially verbal/ambiguous.
 
 ### External comparison references
 
-When web/image-search capability is available, search for **at least three useful examples** before declaring a new asset visually ready. Prefer recognizable, attributable sources:
+When external comparison is actually needed, use multiple independent, recognizable, attributable sources rather than one screenshot or franchise. Prefer:
 
 - official game/studio/publisher screenshots or media pages;
 - credited developer or artist portfolio material tied to the shipped work;
@@ -73,6 +72,18 @@ Compare the produced asset against the relevant reference set and answer the app
 Every self-review must state the **strongest mismatch, weakness, or disconfirming reference** found. "Looks good" is not a review.
 
 If the strongest mismatch is material, fix/reject/reforecast the asset before requesting independent acceptance. Do not make the reviewer rediscover an obvious defect the producer already saw.
+
+## Reproduction identity
+
+For a claimed visual correction, make the before/after evidence comparable enough that the change can be attributed to the implementation rather than the capture. Hold camera/framing, gameplay state, pose or animation frame, lighting, viewport/device scale, and relevant scene state constant when those variables affect the claim. If a condition must change, state that limitation instead of presenting the pair as a controlled comparison.
+
+An isolated render may be useful for diagnosis, but the destination surface owns the relevant reproduction. For Unity-bound work, reproduce in Unity; once integrated, running-game pixels own final appearance judgment.
+
+## Independent review hygiene
+
+For consequential player-visible acceptance, give the fresh reviewer the actual pixels, the governing target/authority, and enough gameplay context to understand what the player is seeing. Do **not** prime the reviewer's first judgment with what the producer changed, the defect it hoped to fix, or the verdict it wants. Record that context after the reviewer has formed the initial assessment when it is useful for diagnosis.
+
+Measurements and automated checks may diagnose or reject a visual result. They do not artistically accept appearance; that requires appropriate human judgment of the running game.
 
 ## Evidence package
 

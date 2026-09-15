@@ -44,9 +44,9 @@ The six roles answer *what GalaQuest looks like*. They do not answer every conve
 carried, worn, posed, or framed. Those conventions are observed, not derived.
 
 Before fixing a presentation detail — shield carriage, weapon angle, pack placement, idle stance,
-creature pose, UI framing — inspect at least three relevant examples. Start with GalaQuest's own
-accepted runtime where it has solved the same convention, then use comparable third-person games for
-independent examples. External games are convention evidence, not GalaQuest art direction.
+creature pose, UI framing — start with GalaQuest's accepted runtime/public authority where it has solved
+the same convention. If that does not settle the convention or quality bar, use multiple independent,
+attributable examples from comparable games or the real world. External examples are convention evidence, not GalaQuest art direction.
 
 The procedural version of this rule is the `visual-reference-first` skill.
 
@@ -56,7 +56,7 @@ Reference-first applies **after production as well as before it**. Every new or 
 
 The producer must compare the result against the relevant GalaQuest authority and deliberately look for a reason to reject or revise it. A review that says only “looks good” is not evidence of critical judgment.
 
-When web/image-search capability is available, use multiple attributable external comparisons to test convention and quality. Prefer official studio/publisher/game screenshots, credited production work, or real-world reference photography. Anonymous reposts, uncredited AI imagery, and one beloved franchise screenshot are weak comparison evidence and must not become GalaQuest art direction by accident.
+When internal authority does not settle the convention or quality bar, use multiple attributable external comparisons when that comparison is useful. Prefer official studio/publisher/game screenshots, credited production work, or real-world reference photography. Anonymous reposts, uncredited AI imagery, and one beloved franchise screenshot are weak comparison evidence and must not become GalaQuest art direction by accident.
 
 For a Unity-bound asset, Unity is the required post-production comparison surface once import is possible. Inspect both a neutral diagnostic view and intended gameplay framing; motion must be observed in Play Mode when animation, cloth, VFX, deformation, or moving parts matter. Meshy/DCC beauty renders are useful diagnostics, not acceptance evidence.
 
