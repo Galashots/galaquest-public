@@ -20,6 +20,18 @@ explicit authorization for that specific current work.
 > `tools/foundry/merge_clips.mjs` re-checks it at merge time. Do not bypass either by stripping
 > translation tracks or treating a refusal as a nuisance.
 
+### Anatomy and stance checks
+
+Stylisation may exaggerate silhouette and proportions; it does not make implausible kinematics invisible. On the actual body/clip being considered, check at minimum:
+
+- major pivots sit at plausible joint centres and the limb chain folds from those centres;
+- torso motion is shared through an appropriate spine chain rather than faked at one waist hinge;
+- standing/motion shows believable weight shift rather than a permanently level, mirrored pelvis/shoulder pose;
+- feet maintain credible ground contact through important frames; and
+- left/right differences are judged by visible consequence, not rejected by an invented symmetry threshold.
+
+Use `pose_anatomy.mjs` as measurement beside visual evidence. A provider action name, green budget, or the previous GalaQuest clip is not anatomy authority; qualify the candidate that would actually ship.
+
 ## Steps
 
 1. **Reference** per [references.md](references.md), with the character additions:
