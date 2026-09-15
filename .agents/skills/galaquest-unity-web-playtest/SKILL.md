@@ -1,6 +1,6 @@
 ---
 name: galaquest-unity-web-playtest
-description: Build and verify GalaQuest's Unity WebGL client. Use for Unity browser regressions, candidate review builds, build-cache decisions, and client/server evidence provenance.
+description: Operate and verify GalaQuest's Unity Editor and WebGL client. Use for scene/prefab iteration, focused-test discovery, input and grounding diagnosis, browser regressions, build-cache decisions, and client/server evidence provenance.
 ---
 
 # GalaQuest Unity Web Playtest
@@ -68,6 +68,18 @@ observation timeout. If Pipeline is unavailable, diagnose project identity, star
 Safe Mode first. Where supported, screenshot-free native window activation is a focus fallback, but
 verify that a refresh actually occurred. Request Owner input only when available control paths fail;
 do not substitute Reimport All, a build-target switch, or another cold Editor launch for a routine refresh.
+
+## Focused tests and input proof
+
+After adding or moving tests, refresh/import through the owned Editor, verify assembly compilation, and inspect test discovery. Confirm the intended test names appear and execute; report discovered/executed/skipped counts from this run, not a remembered total. Zero, filtered-out or undiscovered requested tests are not PASS. Check the assembly definition, test platform and filter before trusting a green command.
+
+Match input injection to the actual consumer. IMGUI `OnGUI`/`GUI.Button` needs the Game View/IMGUI event path; a device event queued to the Input System alone does not prove that control was clicked. Preserve Input-System injection for movement/camera consumers (see `unity/GalaQuest/Assets/GalaQuest/Tests/EditMode/U1MobileCameraEditModeTests.cs`). Assert the resulting interaction, not merely event submission. For WebGL input claims, use real browser input through the matching driver; direct gameplay-method calls are not gesture proof.
+
+## Ground-contact diagnosis
+
+Reproduce the reported scene, camera, floor and pose before moving an offset. Compare rendered geometry (including a baked/current skinned pose) with skeleton/root transforms and the actual floor/contact data. Rest bounds alone do not locate animated feet. Check scale, clip/root motion and the intended contact frames, then projection/camera and shadow perception; distinguish a physical gap from a visual cue before correcting either.
+
+Keep protected Hero rig/body/grip boundaries intact. Do not hide a rig defect with an attachment offset. After the smallest owned correction, rerun the same useful measurement and reported framing at the new exact state; the visual-review guide owns comparison identity and acceptance.
 
 ## Build after the cheaper checks
 
