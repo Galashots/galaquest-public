@@ -30,6 +30,7 @@ namespace GalaQuest
 
         private void Update()
         {
+            if (GalaQuestRuneForgePresenter.IsInputCaptured) { state.Cancel(); return; }
             PollTouches(Touchscreen.current);
         }
 
@@ -103,7 +104,7 @@ namespace GalaQuest
 
         private void OnGUI()
         {
-            if (Event.current.type != EventType.Repaint || circleTexture == null) return;
+            if (GalaQuestRuneForgePresenter.IsInputCaptured || Event.current.type != EventType.Repaint || circleTexture == null) return;
             if (!state.Active)
             {
                 var layout = new GalaQuestCombatHudLayout(new Vector2(Screen.width, Screen.height));

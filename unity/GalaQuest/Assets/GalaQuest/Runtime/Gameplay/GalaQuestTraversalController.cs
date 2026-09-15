@@ -23,6 +23,7 @@ namespace GalaQuest
         private int pendingSnapshots;
         private bool serverDown;
         private bool recoveryNeedsNeutral;
+        private bool forgeNeedsNeutral;
 
         public Vector2 PredictedPosition => predicted;
         public Transform Hero => hero;
@@ -50,6 +51,7 @@ namespace GalaQuest
             PredictedMotionSpeed = 0f;
             serverDown = false;
             recoveryNeedsNeutral = false;
+            forgeNeedsNeutral = false;
             if (session != null) session.ServerFrameReceived += ApplyServerFrame;
         }
 
@@ -102,7 +104,12 @@ namespace GalaQuest
                 floatingJoystick != null && floatingJoystick.Active,
                 floatingJoystick != null ? floatingJoystick.Value : Vector2.zero);
             if (!serverDown && input.Magnitude == 0) recoveryNeedsNeutral = false;
-            if (serverDown || recoveryNeedsNeutral) input = new ResolvedMovementInput(Vector2.zero, 0, false);
+            var forgeCaptured = GalaQuestRuneForgePresenter.IsInputCaptured;
+            if (input.Magnitude == 0) forgeNeedsNeutral = false;
+            else if (forgeCaptured) forgeNeedsNeutral = true;
+            // Keep sending neutral intent and reconciling; do not freeze authoritative movement.
+            if (serverDown || recoveryNeedsNeutral || forgeCaptured || forgeNeedsNeutral)
+                input = new ResolvedMovementInput(Vector2.zero, 0, false);
             var worldDirection = gameplayCamera != null
                 ? gameplayCamera.ToWorldDirection(input.Direction)
                 : input.Direction;

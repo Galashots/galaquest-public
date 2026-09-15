@@ -1,3 +1,5 @@
+using System.Linq;
+// The Forge geometry assertions intentionally remain independent of gameplay state.
 using NUnit.Framework;
 using UnityEngine;
 
@@ -81,6 +83,100 @@ namespace GalaQuest.Tests
             Assert.That(travel.Overlaps(attack), Is.False);
             Assert.That(travel.xMin, Is.GreaterThanOrEqualTo(0));
             Assert.That(travel.xMax, Is.LessThanOrEqualTo(viewport.x));
+        }
+
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        [TestCase(1024, 768)]
+        public void ForgeQuestionPanelIsCentredAndOwnsItsChoiceActions(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var panel = GalaQuestRuneForgePresenter.QuestionPanelRect(viewport);
+            Assert.That(panel.center.x, Is.EqualTo(width * .5f).Within(1));
+            Assert.That(panel.center.y, Is.EqualTo(height * .5f).Within(1));
+            Assert.That(panel.xMin, Is.GreaterThanOrEqualTo(0));
+            Assert.That(panel.yMin, Is.GreaterThanOrEqualTo(0));
+            Assert.That(panel.xMax, Is.LessThanOrEqualTo(width));
+            Assert.That(panel.yMax, Is.LessThanOrEqualTo(height));
+
+            var choices = Enumerable.Range(0, 3)
+                .Select(index => GalaQuestRuneForgePresenter.QuestionChoiceRect(viewport, index, 3)).ToArray();
+            for (var index = 0; index < choices.Length; index++)
+            {
+                Assert.That(panel.Contains(choices[index].center), Is.True);
+                for (var other = index + 1; other < choices.Length; other++)
+                    Assert.That(choices[index].Overlaps(choices[other]), Is.False);
+            }
+            var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
+            Assert.That(panel.Contains(close.center), Is.True);
+            Assert.That(choices.Any(choice => choice.Overlaps(close)), Is.False);
+
+            var activeActions = Enumerable.Range(0, 3)
+                .Select(index => GalaQuestRuneForgePresenter.QuestionActionRect(viewport, index, 3)).ToArray();
+            for (var index = 0; index < activeActions.Length; index++)
+                Assert.That(activeActions[index].Overlaps(close), Is.False,
+                    $"Active action {index} must not overlap CLOSE at {width}x{height}.");
+
+            var claim = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 1);
+            Assert.That(claim.Overlaps(close), Is.False, $"CLAIM must not overlap CLOSE at {width}x{height}.");
+            var equip = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 1);
+            Assert.That(equip.Overlaps(close), Is.False, $"EQUIP must not overlap CLOSE at {width}x{height}.");
+        }
+
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        [TestCase(1024, 768)]
+        [TestCase(768, 1024)]
+        [TestCase(640, 360)]
+        public void ForgeFeedbackAndActionsFitWithoutReducingDismissTarget(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var panel = GalaQuestRuneForgePresenter.QuestionPanelRect(viewport);
+            var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
+            var action = GalaQuestRuneForgePresenter.QuestionActionRect(viewport, 0, 3);
+            var feedback = GalaQuestRuneForgePresenter.QuestionFeedbackRect(viewport);
+            var lastChoice = GalaQuestRuneForgePresenter.QuestionChoiceRect(viewport, 2, 3);
+            Assert.That(close.height, Is.GreaterThanOrEqualTo(40f));
+            Assert.That(action.height, Is.GreaterThanOrEqualTo(40f));
+            Assert.That(lastChoice.yMax, Is.LessThan(feedback.yMin));
+            Assert.That(feedback.yMax, Is.LessThan(action.yMin));
+            Assert.That(action.yMax, Is.LessThan(close.yMin));
+            Assert.That(close.yMax, Is.LessThan(panel.yMax));
+        }
+
+        [TestCase(390, 844)]
+        [TestCase(844, 390)]
+        [TestCase(1024, 768)]
+        [TestCase(768, 1024)]
+        [TestCase(1100, 505)]
+        public void ForgeTrackButtonKeepsItsTitleClearOfItsDescription(int width, int height)
+        {
+            var viewport = new Vector2(width, height);
+            var panel = GalaQuestRuneForgePresenter.QuestionPanelRect(viewport);
+            var close = GalaQuestRuneForgePresenter.QuestionCloseRect(viewport);
+            const int count = 2;
+            var packs = new Rect[count];
+            for (var index = 0; index < count; index++)
+            {
+                var pack = GalaQuestRuneForgePresenter.PackRect(viewport, index, count);
+                var title = GalaQuestRuneForgePresenter.PackTitleRect(viewport, index, count);
+                var description = GalaQuestRuneForgePresenter.PackDescriptionRect(viewport, index, count);
+                packs[index] = pack;
+
+                Assert.That(title.Overlaps(description), Is.False,
+                    $"Track {index} title must not overlap its description at {width}x{height}.");
+                Assert.That(pack.Contains(title.min) && pack.Contains(title.max), Is.True,
+                    $"Track {index} title must stay inside its button at {width}x{height}.");
+                Assert.That(pack.Contains(description.min) && pack.Contains(description.max), Is.True,
+                    $"Track {index} description must stay inside its button at {width}x{height}.");
+                Assert.That(title.height, Is.GreaterThan(0), $"Track {index} title band collapsed at {width}x{height}.");
+                Assert.That(panel.Contains(pack.center), Is.True,
+                    $"Track {index} must stay inside the panel at {width}x{height}.");
+                Assert.That(pack.Overlaps(close), Is.False,
+                    $"Track {index} must not overlap CLOSE at {width}x{height}.");
+            }
+            Assert.That(packs[0].Overlaps(packs[1]), Is.False,
+                $"Track buttons must not overlap each other at {width}x{height}.");
         }
     }
 }
