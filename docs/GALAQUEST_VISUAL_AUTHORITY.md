@@ -52,23 +52,9 @@ The procedural version of this rule is the `visual-reference-first` skill.
 
 ## Comparative visual review is mandatory, not optional polish
 
-Reference-first applies **after production as well as before it**. Every new or materially changed player-visible asset must receive a producer self-review under [`docs/review-guides/asset-visual-review.md`](review-guides/asset-visual-review.md) before handoff.
+Every materially changed player-visible result requires critical producer self-review under [`docs/review-guides/asset-visual-review.md`](review-guides/asset-visual-review.md). That guide owns comparison hierarchy, Unity destination review, original-condition reproduction, fresh critique and evidence; `.agents/skills/visual-reference-first/SKILL.md` owns iteration.
 
-The producer must compare the result against the relevant GalaQuest authority and deliberately look for a reason to reject or revise it. A review that says only “looks good” is not evidence of critical judgment.
-
-When internal authority does not settle the convention or quality bar, use multiple attributable external comparisons when that comparison is useful. Prefer official studio/publisher/game screenshots, credited production work, or real-world reference photography. Anonymous reposts, uncredited AI imagery, and one beloved franchise screenshot are weak comparison evidence and must not become GalaQuest art direction by accident.
-
-For a Unity-bound asset, Unity is the required post-production comparison surface once import is possible. Inspect both a neutral diagnostic view and intended gameplay framing; motion must be observed in Play Mode when animation, cloth, VFX, deformation, or moving parts matter. Meshy/DCC beauty renders are useful diagnostics, not acceptance evidence.
-
-Every producer self-review should identify the **strongest mismatch, weakness, or disconfirming reference** found. If that mismatch is material, fix/reject/reforecast before requesting independent review.
-
-### Generated target references
-
-Sometimes the intended visual is clear in words but no canonical image exists. In that case, the Production Director may generate a **non-canonical target reference** from the approved brief for direct comparison before expensive modelling or rework.
-
-The generated image must be labelled `generated target reference — non-canonical` and assigned a narrow control role such as silhouette, palette/material treatment, proportion, gameplay readability, or environment massing. It does not become canon simply because it is attractive, and it cannot overrule accepted runtime evidence or Owner-supplied direction.
-
-Generated targets are especially useful when an agent would otherwise be guessing from adjectives like “chunky,” “bad-ass,” “kid-readable,” “molten,” or “friendly but capable.” They should reduce ambiguity, not manufacture a new style authority.
+A Director-generated target may clarify an approved verbal brief, but remains explicitly non-canonical and limited to named attributes. It cannot override accepted running-game evidence or Owner direction. The review guide owns this procedure; this file owns GalaQuest's visual roles and accepted evidence.
 
 ## NS-03 — construction evidence and the heads-tall convention
 

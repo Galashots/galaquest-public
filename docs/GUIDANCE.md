@@ -45,25 +45,24 @@ does not become a second backlog or replace the owning Issues.
 
 ## Task router
 
-Start from the narrowest row that matches the work, then read only the supporting authority needed to understand the actual contract.
+Use the matching row before choosing a work or acceptance surface. Combine rows only when the task spans domains; the table is not a universal preflight. Follow the actual caller and tests, not every file in a listed directory. Search only the relevant `docs/MISTAKES.md` index tags in the last column.
 
-| Work category | Start here |
-| --- | --- |
-| **Unity gameplay / scene / prefab** | `unity/AGENTS.md`, then the relevant Unity code/tests and checked-in specialist |
-| **Unity WebGL / browser acceptance** | `.agents/skills/galaquest-unity-web-playtest/SKILL.md` and `tools/unity-playtest/README.md` |
-| **Player-visible assets** | `docs/pipeline/README.md`, the asset-specific lane, `.agents/skills/visual-reference-first/SKILL.md`, and `docs/review-guides/asset-visual-review.md` |
-| **HUD / UI** | current product authority plus `docs/GALAQUEST_VISUAL_AUTHORITY.md`, then the owning client code and tests |
-| **Network / protocol / session** | `docs/CODEBASE.md`, then the live producer/caller, codec/parser, and governing tests |
-| **Persistence / progression** | current product contract when applicable, then `docs/CODEBASE.md` and the owning store/runtime tests |
-| **Product / content expansion** | `docs/product/PRODUCT_VISION.md`, `docs/product/PRODUCT_SYSTEM.md`, and the owning live product Issue |
-| **Consequential acceptance / review** | `docs/WORKFLOW.md`; add `docs/review-guides/asset-visual-review.md` when player-visible |
-| **Provider-backed asset work** | `docs/pipeline/README.md`, the asset-specific lane, and the guarded provider-client README |
-| **Legacy Three.js diagnostics** | `docs/WORKFLOW.md`, `tools/runtime-test/`, and the applicable checked-in workflow |
+| Work category | Task guidance | Mechanical truth / proof entry point | Lesson tags |
+| --- | --- | --- | --- |
+| **Unity gameplay / scene / prefab** | `unity/AGENTS.md`; `.agents/skills/galaquest-unity-web-playtest/SKILL.md` for Editor iteration | Actual scene/prefab and caller in `unity/GalaQuest/Assets/GalaQuest/`; governing tests in `unity/GalaQuest/Assets/GalaQuest/Tests/` | code, tests, visual |
+| **Unity WebGL / browser acceptance** | `.agents/skills/galaquest-unity-web-playtest/SKILL.md`; `tools/unity-playtest/README.md` | Matching driver in `tools/unity-playtest/`, build manifest, separate client/server SHAs, actual captures; device proof separately | harness, evidence, ci |
+| **Player-visible assets** | `docs/pipeline/README.md`; `docs/asset-production/ASSET_REGISTRY_V1.md`; `.agents/skills/visual-reference-first/SKILL.md`; `docs/review-guides/asset-visual-review.md` | `docs/asset-production/asset-registry-v1.json`, actual source/derivative hashes, destination import and running-game pixels | assets, visual, evidence |
+| **HUD / UI** | `docs/product/PRODUCT_VISION.md`; `docs/GALAQUEST_VISUAL_AUTHORITY.md`; `.agents/skills/visual-reference-first/SKILL.md`; `docs/review-guides/asset-visual-review.md`; `unity/AGENTS.md` for Unity | Owning presenter/input path in `unity/GalaQuest/Assets/GalaQuest/Runtime/Gameplay/` or retained `public/src/ui/`; `unity/GalaQuest/Assets/GalaQuest/Tests/EditMode/CombatHudLayoutTests.cs` plus target-viewport running pixels | visual, harness, tests |
+| **Network / protocol / session** | `docs/CODEBASE.md`; `unity/AGENTS.md` when changing Unity | `net/gameServerCore.mjs` caller/producer; `public/src/net/protocolCore.js`; Unity reader in `unity/GalaQuest/Assets/GalaQuest/Runtime/Network/`; `test/protocol.test.mjs` and relevant Unity session tests | net, tests, harness |
+| **Persistence / progression** | `docs/product/PROGRESSION_CONTRACT_V0.md`; `docs/CODEBASE.md` | Producer and fold in `public/src/progression/facts.js`; `net/rewardStore.mjs`; `test/reward-store.test.mjs`; restore/restart consumers and Unity progression tests | persistence, net, tests |
+| **Product / content expansion** | `docs/product/PRODUCT_VISION.md`; `docs/product/PRODUCT_SYSTEM.md`; owning live Initiative/Requirement and its selected design contract | Owning Issue acceptance outcome against actual content/runtime in `unity/GalaQuest/Assets/GalaQuest/`; use `docs/asset-production/asset-registry-v1.json` only for assets serving that outcome | gameplay, visual, assets |
+| **Consequential acceptance / review** | `docs/WORKFLOW.md`; `docs/review-guides/asset-visual-review.md` when visible | Exact diff, applicable checks in `test/` and `.github/workflows/`, independent evidence; actual runtime/device pixels when relevant | evidence, ci, tests |
+| **Provider-backed asset work** | `docs/pipeline/README.md`; selected asset lane; `tools/meshy/README.md` when applicable; `docs/pipeline/google-drive-asset-custody.md` | `docs/asset-production/asset-registry-v1.json`, exact source/hash and recovery coordinate, guarded client in `tools/meshy/`, destination qualification | assets, evidence, visual |
+| **Legacy Three.js diagnostics** | `docs/CODEBASE.md`; `docs/WORKFLOW.md` verification surfaces | `tools/runtime-test/review-suites.mjs`, matching driver and `.github/workflows/full-playtest-matrix.yml`; not Unity acceptance | harness, net, ci |
 
-**Routing grants read context, not write ownership.** A bounded writer may need to inspect a producer, codec/parser, caller, or governing tests outside its writable surface to understand an existing contract. That does not silently expand the package's write scope.
+**Routing grants read context, not write ownership.** A bounded writer may need callers, producers, codecs/parsers and governing tests outside its writable module. Inspect them without expanding the write scope.
 
-For network/protocol discovery, search in this order before inventing a new field or limit:
-`literal wire/type identifiers -> caller/producer -> codec/parser -> governing tests`.
+Before designing a new protocol/contract, field, or limit, search literal wire/type identifiers, then read the actual caller/producer, codec/parser, and governing tests. Preserve existing contracts rather than inventing a parallel one from an isolated module.
 
 ## Runtime-local capability is not project authority
 
@@ -169,38 +168,10 @@ If an ordinary runbook needs to discuss a path that deliberately does not exist,
 historical/missing in prose rather than formatting the dead path as a current repo-local instruction. A
 growing allowlist is a smell: repair the document architecture before adding exceptions.
 
-## Ratchet rule
+## Ratchet and update discipline
 
-When guidance causes a real failure, fix two things:
+Correct misleading guidance at the narrow authority that owns it; add a cheap objective regression when useful. `docs/WORKFLOW.md` owns including a reusable lesson in the same production PR. Search existing lessons before adding history; link a new incident to its active prevention rule, not another copy of the warning.
 
-1. correct the misleading document;
-2. add the smallest mechanical check that would have caught that class of drift, when the check can
-   stay objective and cheap.
+When a tool, path or proof surface changes, repair its callers and task route together. Remove or explicitly supersede obsolete instructions. `docs/product/PRODUCT_SYSTEM.md` owns product decisions and provenance; guarded client runbooks own provider procedure, never blanket spend permission.
 
-Do not respond to a documentation failure by making the prose louder. Do not respond to one typo by
-building a generalized style framework.
-
-For product planning, the parallel ratchet is defined in `docs/product/PRODUCT_SYSTEM.md`: preserve
-meaningful ideas, signals, decisions, and initiatives in the smallest durable authority instead of
-requiring future agents to reconstruct a chat transcript.
-
-## Update discipline
-
-In the PR that changes a stable surface, ask:
-
-- Did a command or path move? Update the active runbook that points to it.
-- Did a new verification surface land? Update `docs/WORKFLOW.md` or the relevant domain guide.
-- Did settled Owner product direction change? Update `docs/product/PRODUCT_VISION.md` and the owning
-  product Issue so live provenance and durable direction agree.
-- Did a selected cross-system push gain or change a shared design contract? Keep that contract reachable
-  from `AGENTS.md`/this hierarchy, and keep provisional tuning visibly distinct from Owner-locked direction.
-- Did a provider client or spend shape change? Update its guarded tool README and pipeline runbook,
-  but keep authorization outside durable budget numbers.
-- Did a reusable failure mode appear? Record it once in `docs/MISTAKES.md` and promote only the stable
-  prevention rule into the runbook contributors actually read.
-- Did a product decision become superseded? Mark the old statement historical or remove it from active
-  guidance; do not leave two "current" answers.
-
-The fixed point is simple: a fresh contributor should be able to start from public `main`, follow the
-active Markdown plus live product Issues, and reach the same product and executable surfaces the
-repository actually contains.
+Before adding prose or a check, identify its unique job and the existing authority it replaces or complements. Do not create another handbook, backlog, style framework, or universal checklist to fix a local routing failure.

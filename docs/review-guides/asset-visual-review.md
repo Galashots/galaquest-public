@@ -1,6 +1,6 @@
 # Mandatory asset visual self-review
 
-This guide applies to every new or materially changed **player-visible asset** before it is handed off for independent review, integrated as accepted content, or proposed for promotion. It covers characters, enemies, pets, gear, props, environment pieces, VFX-bearing assets, and other visuals whose quality matters to the player.
+This guide applies to new or materially changed **player-visible work**, including assets, HUD/UI, scene/camera presentation and feedback, before handoff for independent review or proposed promotion. Neutral asset inspection is required for asset work; HUD/UI and scene work use the relevant running-game framing and interaction instead of an irrelevant asset checklist.
 
 The producer's self-review is mandatory. It is **necessary but never sufficient** for independent acceptance or Owner-controlled promotion. `.agents/skills/visual-reference-first/SKILL.md` owns the build/look/fix execution loop; this guide owns the comparison hierarchy, review evidence, and acceptance handoff.
 
@@ -75,9 +75,11 @@ If the strongest mismatch is material, fix/reject/reforecast the asset before re
 
 ## Reproduction identity
 
-For a claimed visual correction, make the before/after evidence comparable enough that the change can be attributed to the implementation rather than the capture. Hold camera/framing, gameplay state, pose or animation frame, lighting, viewport/device scale, and relevant scene state constant when those variables affect the claim. If a condition must change, state that limitation instead of presenting the pair as a controlled comparison.
+Reproduce the **original reported condition** as closely as practical before diagnosing and correcting it. Not seeing the defect in another renderer, scene, camera or pose does not prove it fixed. If the original condition cannot be reproduced, the correction claim remains UNKNOWN; a different setup is supporting diagnosis, not a substitute PASS.
 
-An isolated render may be useful for diagnosis, but the destination surface owns the relevant reproduction. For Unity-bound work, reproduce in Unity; once integrated, running-game pixels own final appearance judgment.
+At the corrected exact SHA, recreate the same useful camera/framing, gameplay state, pose/frame, lighting and viewport/device conditions, then rerun the same useful measurement/comparison before human visual judgment. Preserve client/server and source/derivative hashes when needed to prove identity. State unavoidable differences rather than presenting an uncontrolled pair as causal proof.
+
+For Unity-bound work, use Unity and the relevant running-game condition; an isolated render can diagnose but cannot override that evidence. Reuse a capture for multiple claims only when it actually exposes each risk; a hidden underside, motion defect or different device may need distinct evidence.
 
 ## Independent review hygiene
 
@@ -109,21 +111,8 @@ When the Owner needs a visual decision, publish a self-contained, phone-readable
 
 Link Drive evidence from the PR or handoff and include an exact-SHA review manifest so the evidence cannot become detached from the state it proves. Google Drive is custody/transfer and a fast Owner review surface; it does not replace GitHub as repository authority or promote an asset by itself.
 
-## Capability gaps are UNKNOWN, not exemptions
+## Capability gaps and handoff
 
-If an agent cannot access Unity, cannot perform web/image search, or cannot open the produced visual evidence, it must say so. It may continue mechanical work that does not depend on that judgment, but it may not claim visual readiness.
+An inaccessible **required** destination/render, original reproduction or visual artifact makes that claim UNKNOWN. Continue only work that does not depend on the missing judgment and route the missing check before consequential acceptance. Unavailable web/image search is a blocker only when external evidence is actually needed under the reference hierarchy; do not invent a research gate when canonical GalaQuest evidence settles the question.
 
-Route the missing visual step to a capable agent/runtime before consequential acceptance.
-
-## Minimum handoff statement
-
-A visual-asset handoff should make these facts easy to find:
-
-- what exact asset/state was reviewed;
-- which GalaQuest references controlled the result;
-- what external comparisons were used;
-- what Unity views/motion were actually inspected;
-- the strongest defect or counterargument found;
-- where the screenshots/video live;
-- what remains UNKNOWN;
-- whether this is producer self-review, independent review, or Owner acceptance.
+Use the evidence package above once. Identify whether the record is producer self-review, fresh independent critique or Owner acceptance, and name any unresolved gate; do not duplicate it into another checklist.

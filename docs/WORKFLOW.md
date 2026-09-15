@@ -6,7 +6,7 @@ This workflow applies to the public active repository. It is deliberately recove
 
 1. Orient from the current checkout using the orientation sequence below.
 2. Confirm the repository is `Galashots/galaquest-public`, refresh public `main`, and record the exact starting SHA.
-3. Read `AGENTS.md`, then only the public authorities relevant to the task (`docs/CODEBASE.md` for the code map, `docs/GUIDANCE.md`, visual/pipeline docs, tests, workflows, contracts). Route into `docs/MISTAKES.md` through its index — skim or search by tag for the surfaces the task touches; do not read the ledger end to end.
+3. Read `AGENTS.md`, then use the `docs/GUIDANCE.md` task router to select narrow guidance, mechanical truth and relevant `docs/MISTAKES.md` tags. Do not ingest the whole handbook or lessons ledger.
 4. Refresh live GitHub branch/PR/CI/deployment state before trusting a handoff or prior chat report.
 5. Run the relevant baseline tests from the checkout when execution is available. Record actual results, not remembered counts.
 
@@ -85,10 +85,9 @@ When no package is already selected and Owner input is not required, choose the 
 3. an available safe writer topology and acceptance surface that can carry the work to a credible result;
 4. existing qualified or realistically qualifiable assets that serve that need.
 
-Asset inventory serves product direction; it does not choose it. For an asset-backed need, route through:
-`selected need -> canonical asset registry/inventory -> candidate -> QUALIFY / REPAIR / INTEGRATE / PARK-or-REJECT`.
+Keep selected player-visible expansion active or next-ready during an authorized production session when direction and safe capacity permit. Read-only scouts may prepare the next bounded package without competing for an active writer's files or Editor. Do not request fresh Owner selection when Product authority already settles it; reserved spend, promotion and merge decisions still apply.
 
-Maintenance interrupts that flow only when it blocks the selected player outcome or when repeated measured production cost makes the repair cheaper than continuing around it. Do not manufacture infrastructure, cleanup, or test-hardening work merely to keep a worker occupied.
+Asset inventory serves that need through `docs/pipeline/README.md`; it does not select Product direction. Maintenance interrupts only when it blocks the selected player outcome or repeated measured production cost justifies a bounded repair. Do not select random Issues, inventory or cleanup merely to keep agents occupied.
 
 ### Anti-polish stop
 
@@ -168,40 +167,37 @@ Keep the fixed-point record proportional to the task rather than imposing a gian
 
 ## Evidence and acceptance
 
-Every material claim identifies the exact public SHA it proves.
+Every material claim identifies the exact public SHA it proves. Missing evidence is **UNKNOWN**, not inferred PASS.
 
-For behaviour changes:
+For behaviour fixes, observe the reproduction/test fail for the intended defect before the correction where practical, then rerun it after the smallest causal fix. A test merely described as red-capable is not observed red evidence. If reproduction is impractical, state the unproven claim; do not weaken behavior, thresholds or tests to satisfy CI.
 
-- establish a red-capable reproduction or test before accepting a causal theory when practical;
-- prefer the smallest causal fix;
-- do not weaken product behaviour, prediction constants, thresholds, or tests merely to satisfy hosted CI;
-- rerun the affected evidence after the fix.
+Before attributing a broad/noisy failure to the candidate, compare a suitable exact base/control under materially equivalent conditions and inspect the actual failure. A new red alone does not prove causality; absent a suitable comparison, cause remains UNKNOWN. Baseline debt does not become PASS or waive a required gate.
 
-For consequential state-changing Git, filesystem, or tool operations, verify the resulting state when that state matters to correctness, custody, cleanup, or evidence. An exit code, acknowledgement, or registry mutation alone is not proof that the intended postcondition holds.
+For consequential state-changing Git/filesystem/tool commands, verify the intended postcondition, not just the exit code or acknowledgement. Check both registry and filesystem state when both matter. Automation must clean up state it owns, or deliberately retain bounded reusable state/evidence; uncontrolled temp/scratch/profile leakage is a tooling defect. Repair the producer under scope control, not by sweeping unknown active state or bypassing permissions.
 
-### Mandatory visual self-review before handoff
+### Supporting lesson ratchets
 
-For every new or materially changed player-visible asset, **the producer must perform and record a visual self-review before asking anyone else to accept it**. Use `.agents/skills/visual-reference-first/SKILL.md` for the execution loop — **BUILD -> LOOK -> REPRODUCE -> FIX -> LOOK AGAIN** — and `docs/review-guides/asset-visual-review.md` for the comparison, evidence, and acceptance contract.
+A genuinely reusable failure or materially better execution path may justify a narrow `docs/MISTAKES.md` entry, task-runbook/skill correction, or cheap regression in the **same production PR**. Treat that as supporting scope when it serves the package, not automatic scope pollution. Search existing lessons first, connect any new incident to its active prevention rule, and reforecast material expansion. No reusable lesson means no mandatory guidance churn.
 
-When a visual defect is being corrected, reproduce the before/after under materially comparable camera, gameplay state, pose/frame, lighting, and viewport/device conditions when those variables affect the claim. For Unity-bound assets, inspect the actual Unity import and gameplay framing; inspect motion when animation, VFX, cloth, deformation, or moving parts matter. Running-game pixels remain final appearance authority.
+### Review roles
 
-If a required visual surface cannot be accessed, that gate is **UNKNOWN**, not waived. Measurements and automated checks may reject a result or diagnose a cause; they do not artistically accept appearance.
+For consequential acceptance, distinguish **Intent/Spec**, **Standards/Governance**, **Evidence/Acceptance**, and, when visible, **Product/Owner Fit**. The writer may self-check but cannot independently accept its own implementation by changing role labels. Use a fresh reviewer or genuinely independent proof toolchain proportionate to the risk; preserve reserved Owner decisions.
 
-### Visual defect triage
+### Visual work and defect triage
 
-- **Small, local, causal, low-risk defect in the owned surface:** fix it, reproduce/capture again, and keep building.
-- **Materially cross-system, risky, or package-changing defect:** reforecast before absorbing it.
-- **Unresolved art/product choice:** use the governing product/visual authority; seek Owner judgment only when that authority does not settle the choice.
+The producer must critically inspect new or materially changed player-visible work before handoff. `.agents/skills/visual-reference-first/SKILL.md` owns BUILD -> LOOK -> REPRODUCE -> FIX -> LOOK AGAIN; `docs/review-guides/asset-visual-review.md` owns reference hierarchy, original-condition comparison, fresh unprimed critique and evidence custody. Running-game human visual judgment remains acceptance, not a machine metric.
 
-Consequential independent visual review must be fresh: give the reviewer the actual pixels, governing target/authority, and enough gameplay context to judge the result, but do not prime the first judgment with what the writer changed or the verdict it wants.
+- **Small, local, causally clear, low-risk defect in the owned surface:** fix and verify it inside the package.
+- **Related but material, cross-system or package-changing defect:** reforecast or route it before absorption.
+- **Genuine Product/art-direction choice:** use governing authority; ask the Owner only for an unresolved reserved decision.
 
-Visual evidence should be easy for the Owner to inspect from a phone. Attach useful stills to the PR/review surface when practical; use the controlled Google Drive custody/review tier for large source masters or recordings and bind them to the exact-SHA evidence manifest. Do not copy third-party comparison imagery into project custody merely as proof of review; preserve source links/search terms unless custody is cleared.
-
-A missing artifact, missing hosted run, inaccessible browser surface, or unverified runtime is **UNKNOWN**, not inferred PASS.
+Scope control is neither an excuse to hand off visibly broken changed work nor permission for uncontrolled redesign. Apply the anti-polish stop once the present role is materially credible.
 
 ## Verification surfaces
 
-Use the cheapest surface that proves the claim, then escalate when the product risk warrants it.
+Use the cheapest authoritative surface that proves the claim, then escalate for a distinct risk. Before retaining, adding or removing a check, ask what unique failure it catches that a cheaper current check does not. Removal needs stronger replacement, proven duplication, a removed target, or demonstrated non-discriminating/noisy coverage, not speed alone. Distinct geometry, behavior, visual and physical-device risks are not duplicates.
+
+Classify noisy coverage deliberately: repair, quarantine with a return condition, retarget, make diagnostic/advisory, or retain as a justified gate. Do not encode transient failure counts or silently convert execution failures to success. Reuse exact-state evidence when its relevant inputs/conditions are unchanged; repeat it for changed risk, not ceremony.
 
 ### 1. Required unit gate
 
@@ -223,13 +219,7 @@ build, its client/server SHAs, and the assertions it can prove. The legacy Three
 relay, and their captures do not provision or substitute for Unity browser evidence. A successful Unity
 driver is behavior evidence only; inspect running-game pixels and physical-device acceptance separately.
 
-For local Unity iteration on a capable workstation, the worker starts the pinned Editor on the intended
-owned checkout when it is not already open, waits for import/compilation to settle, and prefers the
-connected live-Editor/Pipeline loop for scene, prefab, focused-test, and review iteration. Repeated cold
-batch launches are a CI/fallback/final-evidence path, not the normal edit-test loop. If repeated
-startup/import/build overhead dominates the targeted check, or a review-build helper rewrites unchanged
-inputs and dirties the build each time, stop before another expensive cycle and fix/reforecast the tooling
-or reuse the stable build instead of paying the same cost again.
+`unity/AGENTS.md` owns project safety. `.agents/skills/galaquest-unity-web-playtest/SKILL.md` owns the live-Editor, focused-test, build-reuse and timeout procedures; do not substitute repeated cold builds for that loop.
 
 ### 4. Legacy Three.js on-demand Director relay on a PR
 
@@ -259,13 +249,7 @@ above for the actual Unity claim.
 
 ## Private-source safe ports
 
-Private GalaQuest material is source/provenance only unless explicitly being inspected for a bounded safe port.
-
-Use this sequence:
-
-`inspect private source once -> define exact public-safe file/behaviour surface -> implement/port in public -> test public -> bind acceptance to public SHA`
-
-Do not maintain duplicate active implementations. Do not bulk-merge private branches into public. Third-party/franchise-inspired private gear stays private unless its use is explicitly cleared.
+Follow `AGENTS.md` for the bounded private-source sequence, redistribution clearance and prohibition on duplicate active implementations.
 
 ## Hosted CI and diagnostics
 
