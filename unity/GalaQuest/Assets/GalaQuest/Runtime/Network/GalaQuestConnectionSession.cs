@@ -34,6 +34,18 @@ namespace GalaQuest
         public event Action Disconnected;
         public event Action TravelStarted;
         public event Action<string> AcceptedServerMessage;
+        // Typed private pet state for the Camp presenter. Null until the first accepted pet-state.
+        public event Action<GalaQuestServerPetState, string> PetStateChanged;
+        public GalaQuestServerPetState LatestPetState { get; private set; }
+        public string LastPetError { get; private set; }
+
+        private void ClearPetState()
+        {
+            if (LatestPetState == null && LastPetError == null) return;
+            LatestPetState = null;
+            LastPetError = null;
+            PetStateChanged?.Invoke(null, null);
+        }
         public event Action<GalaQuestServerFrame> ServerFrameReceived;
         public string PlayerId { get; private set; } = string.Empty;
         public string DestinationId { get; private set; } = GalaQuestProtocolV4.EmberworksDeepDestinationId;
@@ -138,6 +150,10 @@ namespace GalaQuest
                 if (!string.IsNullOrEmpty(PlayerId) || string.IsNullOrEmpty(frame.id) || frame.worldEpoch != 0) return;
                 PlayerId = frame.id;
                 if (!string.IsNullOrEmpty(frame.destinationId)) DestinationId = frame.destinationId;
+                // A welcome is a new connection identity. Pet state is per-connection private
+                // state, so carrying the previous connection's block across a reconnect would
+                // show a follower this session has not been told about yet.
+                ClearPetState();
             }
             else if (frame.type == "destination-changed")
             {
@@ -145,6 +161,10 @@ namespace GalaQuest
                     || frame.worldEpoch != WorldEpoch + 1) return;
                 WorldEpoch = frame.worldEpoch;
                 DestinationId = frame.destinationId;
+                // The pet camp lives in one destination (progression/pets.js:7). Leaving it
+                // retires the state rather than letting a stale block outlive the world it
+                // described; the next accepted pet-state re-establishes it.
+                ClearPetState();
                 pendingDestination = null;
                 lastInputSentAt = float.NegativeInfinity;
                 StatusChanged?.Invoke($"Connected · {profile.DisplayName}");
@@ -153,6 +173,17 @@ namespace GalaQuest
             {
                 if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.id != PlayerId
                     || frame.destinationId != DestinationId || frame.worldEpoch != WorldEpoch) return;
+            }
+            else if (frame.type == "pet-state")
+            {
+                // Identical boundary to forge-state: pet-state is private addressed state for this
+                // connection only (pet-server.test.mjs:409-411), so a frame naming another player,
+                // another destination or a stale epoch is discarded rather than applied.
+                if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.id != PlayerId
+                    || frame.destinationId != DestinationId || frame.worldEpoch != WorldEpoch) return;
+                LatestPetState = frame.pets;
+                LastPetError = frame.error;
+                PetStateChanged?.Invoke(frame.pets, frame.error);
             }
             else if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.worldEpoch != WorldEpoch) return;
 

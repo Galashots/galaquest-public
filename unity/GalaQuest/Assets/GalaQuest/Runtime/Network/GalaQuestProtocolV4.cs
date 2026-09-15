@@ -84,6 +84,20 @@ namespace GalaQuest
         public static string Equip(string itemId, int worldEpoch) => WithEpoch(
             JsonUtility.ToJson(new EquipMessage { v = Version, type = "equip", itemId = itemId }), worldEpoch);
 
+        // Deliberately NOT WithEpoch. protocolCore.js:209-213 requires pet-action to CARRY a
+        // worldEpoch, and 0 is a legal value; WithEpoch omits the field entirely at 0, which the
+        // server rejects as "pet-action requires worldEpoch". The pet camp is home-hub
+        // (progression/pets.js:7) and welcome always arrives at epoch 0, so epoch 0 is the normal
+        // case here, not an edge one. Travel already sends the field explicitly for this reason.
+        public static string PetAction(string action, string petId, string eventId, int rev, int worldEpoch)
+        {
+            return JsonUtility.ToJson(new PetActionMessage
+            {
+                v = Version, type = "pet-action", action = action,
+                petId = petId, eventId = eventId, rev = rev, worldEpoch = worldEpoch
+            });
+        }
+
         private static string WithEpoch(string json, int worldEpoch) => worldEpoch == 0 ? json
             : json.Substring(0, json.Length - 1) + ",\"worldEpoch\":" + worldEpoch + "}";
 
@@ -119,11 +133,14 @@ namespace GalaQuest
                 return false;
             }
             if (frame == null || frame.v != Version || (frame.type != "welcome" && frame.type != "snapshot"
-                    && frame.type != "destination-changed" && frame.type != "forge-state")
+                    && frame.type != "destination-changed" && frame.type != "forge-state"
+                    && frame.type != "pet-state")
                 || frame.worldEpoch < 0 || (frame.type == "destination-changed"
                     && (frame.worldEpoch == 0 || string.IsNullOrEmpty(frame.id) || string.IsNullOrEmpty(frame.destinationId)))
                 || (frame.type == "forge-state" && (string.IsNullOrEmpty(frame.id)
-                    || string.IsNullOrEmpty(frame.destinationId) || frame.forge == null)))
+                    || string.IsNullOrEmpty(frame.destinationId) || frame.forge == null))
+                || (frame.type == "pet-state" && (string.IsNullOrEmpty(frame.id)
+                    || string.IsNullOrEmpty(frame.destinationId) || frame.pets == null)))
             {
                 frame = null;
                 return false;
@@ -133,6 +150,11 @@ namespace GalaQuest
             frame.encounter.heroes ??= new Dictionary<string, GalaQuestServerHeroCombat>();
             frame.encounter.enemies ??= Array.Empty<GalaQuestServerEnemy>();
             frame.events ??= Array.Empty<GalaQuestServerCombatEvent>();
+            if (frame.pets != null) frame.pets.ownedPetIds ??= Array.Empty<string>();
+            foreach (var reward in frame.encounter.rewards.Values)
+            {
+                if (reward?.pets != null) reward.pets.ownedPetIds ??= Array.Empty<string>();
+            }
             return true;
         }
 
@@ -195,6 +217,16 @@ namespace GalaQuest
         private sealed class EquipMessage { public int v; public string type; public string itemId; }
 
         [Serializable]
+        private sealed class PetActionMessage
+        {
+            // Exactly the fields protocolCore.js:267-275 decodes, and no others. profileId, facts,
+            // destinationId, x and z are injected server-side (gameServerCore.mjs:2277-2290) and
+            // must never appear here -- sending them would be a client asserting its own ownership.
+            public int v; public string type; public string action;
+            public string petId; public string eventId; public int rev; public int worldEpoch;
+        }
+
+        [Serializable]
         private sealed class MessageHeader
         {
             public int v;
@@ -216,6 +248,8 @@ namespace GalaQuest
         public GalaQuestServerEncounter encounter = new GalaQuestServerEncounter();
         public GalaQuestServerCombatEvent[] events = Array.Empty<GalaQuestServerCombatEvent>();
         public GalaQuestRuneForgeState forge;
+        public GalaQuestServerPetState pets;
+        public string error;
     }
 
     [Serializable]
@@ -243,6 +277,18 @@ namespace GalaQuest
         public string[] ownedItemIds = Array.Empty<string>();
         public Dictionary<string, string> equippedItemIds = new Dictionary<string, string>();
         public int xp;
+        // Optional: absent for a profile that has met no pet yet (protocolCore.js:771).
+        public GalaQuestServerPetState pets;
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerPetState
+    {
+        public string[] ownedPetIds = Array.Empty<string>();
+        // null means "no companion following", and is distinct from the empty string.
+        public string equippedPetId;
+        // -1 is the legal "never equipped" value (protocolCore.js:742), not 0.
+        public int equipRev = -1;
     }
 
     [Serializable]
