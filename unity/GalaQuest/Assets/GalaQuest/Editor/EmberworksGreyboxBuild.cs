@@ -25,6 +25,7 @@ namespace GalaQuest.Editor
         public const string RuntimeRootName = "GalaQuestRuntime";
         public const string RuntimeHeroName = "GalaQuestHero";
         public const string RuntimeCameraName = "GalaQuestGameplayCamera";
+        public const float RuntimeHeroGroundClearance = .01f;
 
         [MenuItem("GalaQuest/Emberworks/Repair Cylinder Colliders")]
         public static void RepairCylinderColliders()
@@ -139,6 +140,21 @@ namespace GalaQuest.Editor
             return AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath) == null;
         }
 
+        [MenuItem("GalaQuest/Hero/Repair Ground Fallback")]
+        public static void RepairHeroGroundFallback()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var hero = FindSceneObject(RuntimeHeroName)
+                ?? throw new BuildFailedException("The runtime Hero is missing from Emberworks.");
+            var position = hero.transform.position;
+            if (Mathf.Abs(position.y - RuntimeHeroGroundClearance) <= .0001f) return;
+            hero.transform.position = new Vector3(position.x, RuntimeHeroGroundClearance, position.z);
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+                throw new BuildFailedException("Could not save the Hero ground-fallback correction.");
+            AssetDatabase.SaveAssets();
+        }
+
         public static void EnsureRegenerationWillNotOverwritePlayableScene()
         {
             if (!CanBuildGreybox())
@@ -166,7 +182,7 @@ namespace GalaQuest.Editor
             var hero = (GameObject)PrefabUtility.InstantiatePrefab(heroPrefab, scene);
             hero.name = RuntimeHeroName;
             hero.transform.SetParent(runtimeRoot.transform, true);
-            hero.transform.position = new Vector3(0f, 0.25f, 4f);
+            hero.transform.position = new Vector3(0f, RuntimeHeroGroundClearance, 4f);
             hero.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
 
             foreach (var otherCamera in UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
