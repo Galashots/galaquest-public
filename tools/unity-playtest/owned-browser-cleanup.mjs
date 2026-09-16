@@ -26,7 +26,7 @@ $record=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ownedPid)
 if($record){
   if($record.Name -ine 'chrome.exe' -or !$record.CommandLine -or $record.CommandLine.IndexOf($profile,[StringComparison]::OrdinalIgnoreCase) -lt 0){throw 'Browser PID identity changed; nothing was stopped'}
   $owned=Get-Process -Id $ownedPid -ErrorAction SilentlyContinue
-  if($owned){$owned.Kill(); if(!$owned.WaitForExit(10000)){throw 'Owned Chrome did not exit'}}
+  if($owned){& taskkill.exe /PID $ownedPid /T /F | Out-Null; if(!$owned.WaitForExit(15000)){throw 'Owned Chrome tree did not exit'}}
 }
 $remaining=@(Get-CimInstance Win32_Process -Filter "name='chrome.exe'" | Where-Object {$_.CommandLine -and $_.CommandLine.IndexOf($profile,[StringComparison]::OrdinalIgnoreCase) -ge 0})
 if($remaining.Count){throw 'An owned-profile Chrome is still alive; profile preserved'}
