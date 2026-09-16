@@ -12,6 +12,7 @@ namespace GalaQuest
         private bool down;
         private bool inputBlocked;
         private float pressedAt = float.NegativeInfinity;
+        private int lastAttackFrame = -1;
 
         public event Action AttackRequested;
         public bool CanPress => !inputBlocked && !GalaQuestRuneForgePresenter.IsInputCaptured
@@ -51,7 +52,8 @@ namespace GalaQuest
 
         public bool TryAttack()
         {
-            if (!CanPress || !session.TrySendAttackIntent()) return false;
+            if (!CanPress || lastAttackFrame == Time.frameCount || !session.TrySendAttackIntent()) return false;
+            lastAttackFrame = Time.frameCount;
             pressedAt = Time.unscaledTime;
             AttackRequested?.Invoke();
             return true;
