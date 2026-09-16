@@ -19,8 +19,9 @@ export const EMBERWORKS_DEEP_ENEMIES = Object.freeze([
   // The existing Alpha presentation gives this authored heavy a readable silhouette without
   // introducing an asset/provider dependency. Its rules role is distinct in encounter.js: a long,
   // committed smash that can be sidestepped and punished during recovery.
+  // Its bounded approach pocket cannot reach the Rune Forge controls, even after respawn.
   Object.freeze({ enemyId: 'emberworks-alpha-1', kind: 'alpha-wolf', level: 1, attackProfile: 'heavy',
-    spawn: Object.freeze({ x: 4, z: 14 }), leashRadius: 6 }),
+    spawn: Object.freeze({ x: 4, z: 9 }), leashRadius: 2.5 }),
 ]);
 
 // Cinder Gate -> immediate-action cavern -> the flat approach to Lava Express.

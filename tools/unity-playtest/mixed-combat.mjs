@@ -144,7 +144,7 @@ try{
   await moveAxis(first,'w','z',4.8);await tap(first,.5-100/first.rect.width,1-55/first.rect.height);
   await waitFor(()=>frame(first),f=>f.destinationId==='emberworks-deep','Enter Emberworks');
   assert.ok(alpha(await frame(first)),'This proof requires the integrated authored heavy');
-  await moveAxis(first,'d','x',4);await moveAxis(first,'w','z',10);
+  await moveAxis(first,'d','x',4);await moveAxis(first,'w','z',6.8);
   const windup=await waitFor(()=>frame(first),f=>alpha(f)?.mode==='bite'&&alpha(f).modeSeconds<.2,'Fresh committed heavy windup',18000);
   checks.dodgeBefore=windup;await capture(first,'01-heavy-windup');
   const heading=alpha(windup).heading;const hp=hero(windup).hp;
@@ -156,9 +156,8 @@ try{
   assert.ok(hero(missed).hp>=hp,'A real sidestep avoids heavy contact damage');
   assert.ok(dodgeFrames.filter(f=>alpha(f).mode==='bite').every(f=>Math.abs(alpha(f).heading-heading)<.001),'Windup does not track the dodging player');
   checks.dodge={before:windup,after:missed,frames:dodgeFrames};await capture(first,'02-heavy-missed');
-  const returnX=alpha(missed).x;const targetZ=alpha(missed).z-1.6;
+  const returnX=4;
   await moveAxis(first,(body(await frame(first)).x>returnX?'a':'d'),'x',returnX);
-  await moveAxis(first,(body(await frame(first)).z>targetZ?'s':'w'),'z',targetZ);
   const standing=await waitFor(()=>frame(first),f=>alpha(f)?.mode==='bite'&&alpha(f).modeSeconds<.2,'Standing contact control',18000);
   await capture(first,'03-standing-windup');
   const contact=await waitFor(()=>frame(first),f=>hero(f).hp<hero(standing).hp,'Heavy standing hit',4000);
@@ -166,8 +165,14 @@ try{
   assert.equal(hero(standing).hp-hero(contact).hp,enemyStatsForLevel('alpha-wolf',alpha(standing).level).biteDamage,'Standing still takes one authoritative heavy hit');
   const recovery=await waitFor(()=>frame(first),f=>alpha(f)?.mode==='idle','Heavy recovery',4000);
   checks.standing.recovery=recovery;await capture(first,'05-heavy-recovery');
+  // Recover through the ordinary camp route before testing the second mechanic. No HP mutation.
+  await tap(first,.5-100/first.rect.width,1-55/first.rect.height);
+  await waitFor(()=>frame(first),f=>f.destinationId==='home-hub','Return to the safe camp');
+  checks.rest=await waitFor(()=>frame(first),f=>hero(f).hp===hero(f).maxHp,'Natural camp recovery',25000);
+  await moveAxis(first,'w','z',4.8);await tap(first,.5-100/first.rect.width,1-55/first.rect.height);
+  await waitFor(()=>frame(first),f=>f.destinationId==='emberworks-deep','Return to the ongoing mixed encounter');
   await moveAxis(first,(body(await frame(first)).x>0?'a':'d'),'x',0);
-  await moveAxis(first,(body(await frame(first)).z>9.5?'s':'w'),'z',9.5);
+  await moveAxis(first,(body(await frame(first)).z>7.3?'s':'w'),'z',7.3);
   await key(first,'keyDown','w');await delay(80);await key(first,'keyUp','w');
   const grouped=await waitFor(()=>frame(first),f=>{
     const p=body(f), enemies=f.encounter.enemies.filter(e=>e.hp>0);
