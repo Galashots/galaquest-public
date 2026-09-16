@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using GalaQuest.Editor;
 using NUnit.Framework;
 using UnityEditor;
@@ -107,6 +108,25 @@ namespace GalaQuest.Tests
             {
                 var prefab = AlphaCandidateAuthoring.Prepare(folder);
                 Assert.That(prefab, Is.Not.Null);
+                var modelPath=folder+"/Alpha/Alpha.fbx";
+                var bite=AssetDatabase.LoadAllAssetsAtPath(modelPath).OfType<AnimationClip>()
+                    .Single(x=>x.name=="bite"||x.name.EndsWith("|bite"));
+                var heavy=AssetDatabase.LoadAssetAtPath<AnimationClip>(folder+"/Alpha/AlphaBiteRetimed.anim");
+                Assert.That(heavy.length,Is.EqualTo(1.75f).Within(.0001f));
+                var sourceBody=Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(modelPath));
+                var heavyBody=Object.Instantiate(sourceBody);
+                try {
+                    bite.SampleAnimation(sourceBody,AlphaCandidateAuthoring.BiteContactSourceSeconds);
+                    heavy.SampleAnimation(heavyBody,AlphaCandidateAuthoring.BiteContactAuthoredSeconds);
+                    var sourcePose=sourceBody.GetComponentsInChildren<Transform>();
+                    var heavyPose=heavyBody.GetComponentsInChildren<Transform>();
+                    Assert.That(heavyPose.Length,Is.EqualTo(sourcePose.Length));
+                    for(var i=0;i<sourcePose.Length;i++) {
+                        Assert.That(Vector3.Distance(sourcePose[i].localPosition,heavyPose[i].localPosition),Is.LessThan(.0001f));
+                        Assert.That(Quaternion.Angle(sourcePose[i].localRotation,heavyPose[i].localRotation),Is.LessThan(.1f),
+                            "Retiming must preserve the imported contact pose for "+sourcePose[i].name);
+                    }
+                } finally { Object.DestroyImmediate(sourceBody); Object.DestroyImmediate(heavyBody); }
                 var content = ScriptableObject.CreateInstance<GalaQuestCombatContent>();
                 content.Enemies = new[] { AlphaCandidateAuthoring.NewEnemyEntry(prefab) };
                 Assert.That(content.FindEnemy("alpha-wolf"), Is.Not.Null);
