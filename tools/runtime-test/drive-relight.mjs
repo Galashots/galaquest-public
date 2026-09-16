@@ -23,7 +23,9 @@
  * treats the restart as a separate operator step, not something the proof script does for you.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import {
@@ -43,17 +45,13 @@ import { startOwnedServer } from './owned-server.mjs';
 import { TAP_TARGET_FLOOR_PX } from '../../public/src/ui/tapTargets.js';
 
 const CHROME_PORT = 9224;
-// Spawns and owns its own server on an isolated port rather than using the shared 5201 (Phase H1).
-// This harness seeds a reserved fixture guest into the reward store and then asserts what the page
-// does with it, so it is the one least able to afford another run's writes landing in the middle.
-// See owned-server.mjs.
-const server = await startOwnedServer();
-const URL_UNDER_TEST = server.url;
-const ORIGIN_UNDER_TEST = server.origin;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
 const VIEWPORT = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
-const REWARD_STORE_PATH = fileURLToPath(new URL('../../data/rewards.db', import.meta.url));
-// the owner's own id for this proof (brief W3), never reused by any other harness or real guest.
+// The fixture store is private to this run. It must be the SAME store the owned server opens: a
+// server started with owned-server.mjs's default temp store cannot observe a seed written to the
+// repository's data/rewards.db, and a real family save is out of scope for a proof harness.
+const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'galaquest-relight-')), 'rewards.db');
+// The owner's own id for this proof (brief W3), never reused by any other harness or real guest.
 const RELIGHT_GUEST_ID = 'relight-probe-guest-0001';
 
 mkdirSync(OUT, { recursive: true });
@@ -79,6 +77,13 @@ function check(name, passed, detail) {
     `marks ${store.marksFor(RELIGHT_GUEST_ID)}, unlocked ${store.unlockedFor(RELIGHT_GUEST_ID)}`);
   store.close();
 })();
+
+// Start only after the seed is complete, and pass the exact same private path to the child. SQLite
+// connections are allowed to retain a view of the database they opened, so relying on a post-start
+// file mutation would make the outcome depend on journal timing rather than the fixture state.
+const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
+const URL_UNDER_TEST = server.url;
+const ORIGIN_UNDER_TEST = server.origin;
 
 class CDP {
   constructor(wsUrl) {
