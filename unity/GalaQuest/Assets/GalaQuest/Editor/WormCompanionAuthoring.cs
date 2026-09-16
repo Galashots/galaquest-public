@@ -18,6 +18,31 @@ namespace GalaQuest.Editor
         private static readonly string[] FbxHashes = {
             "aef5592b2ce1a6758d9aa11e327d74c2ce0f5e7d730801c6979e944198c9c54a",
             "0198b4eb647980732a4da0fe8735e3d7af4d7d5fb8ff3ec1f80643b4ef1253eb" };
+        // Existing accepted native appearance may be carried into an explicit review build.
+        // This opt-in never changes a shipping scene or declares a new art approval.
+        public static bool NativeReviewEnabled => Environment.GetEnvironmentVariable("GQ_REVIEW_NATIVE_WORMS") == "1";
+        public static string NativeReviewSource => Path.Combine(U2CombatPreview.RepoRoot, ".local/pet-worm-native");
+        public static System.Collections.Generic.IEnumerable<string> NativeReviewInputs()
+        {
+            if (!NativeReviewEnabled) yield break;
+            for (var i=0;i<Variants.Length;i++) {
+                var dir=Path.Combine(NativeReviewSource,Variants[i]+"-merged-v2");
+                if(Hash(Path.Combine(dir,"candidate.fbx"))!=FbxHashes[i])
+                    throw new InvalidOperationException("Expected the unchanged qualified worm FBX: "+Variants[i]);
+                foreach(var name in new[]{"candidate.fbx","base_color.png","normal.png","metallic_roughness.png"})
+                    yield return Path.Combine(dir,name);
+            }
+        }
+        public static void ConfigureNativeReview(GameObject root)
+        {
+            if(!NativeReviewEnabled) return;
+            var green=AssetDatabase.LoadAssetAtPath<GameObject>(OutputRoot+"/green/Worm.prefab");
+            var red=AssetDatabase.LoadAssetAtPath<GameObject>(OutputRoot+"/red/Worm.prefab");
+            if(green==null||red==null) throw new InvalidOperationException("Prepare the native worm review inputs first");
+            var catalog=root.GetComponent<GalaQuestPetAppearanceCatalog>();
+            if(catalog==null) catalog=root.AddComponent<GalaQuestPetAppearanceCatalog>();
+            catalog.Configure(green,red);
+        }
         public static string Author(string sourceRoot)
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Stop Play Mode first.");
@@ -189,8 +214,17 @@ namespace GalaQuest.Editor
             material.SetTexture("_MetallicGlossMap", AssetDatabase.LoadAssetAtPath<Texture2D>(folder + "/metallic_smoothness.png"));
             material.SetFloat("_Metallic", 1); material.SetFloat("_Smoothness", .6f);
             material.SetFloat("_Cull", 0);
+            // Match the pinned URP material normalization before receipt capture.
+            material.doubleSidedGI = true;
+            material.SetTexture("_MainTex", material.GetTexture("_BaseMap"));
             material.EnableKeyword("_NORMALMAP"); material.EnableKeyword("_METALLICSPECGLOSSMAP");
             EditorUtility.SetDirty(material);
+            // Finish the pinned Editor's material import before receipts capture its bytes.
+            // A deferred import can otherwise alter an already-recorded material after Play Mode.
+            AssetDatabase.SaveAssetIfDirty(material);
+            AssetDatabase.ImportAsset(materialPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            AssetDatabase.SaveAssetIfDirty(material);
             return material;
         }
         private static void ImportTexture(string path, bool normal, bool srgb)
