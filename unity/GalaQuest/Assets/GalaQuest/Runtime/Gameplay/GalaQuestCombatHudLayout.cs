@@ -7,7 +7,7 @@ namespace GalaQuest
     {
         public readonly float Scale;
         public readonly bool Narrow;
-        public readonly Rect Status, Identity, Objective, Mute, Travel, Reward, Attack, Movement;
+        public readonly Rect Status, Identity, Objective, Mute, Travel, Reward, Attack, Special, Movement;
 
         public GalaQuestCombatHudLayout(Vector2 viewport)
         {
@@ -30,6 +30,11 @@ namespace GalaQuest
             var attackSize = Mathf.Clamp(viewport.y * .18f, 96, Narrow ? 136 : 156);
             Attack = new Rect(viewport.x - margin - attackSize, viewport.y - margin - attackSize,
                 attackSize, attackSize);
+            var specialSize = attackSize * .48f;
+            // Keep the compact special beside the ordinary attack in the bottom rail. In portrait,
+            // the band above the attack belongs to Forge/travel context and must remain readable.
+            Special = new Rect(Attack.x - specialSize - 10 * s,
+                Attack.y + Attack.height - specialSize, specialSize, specialSize);
             var movementSize = Mathf.Min(144 * s, viewport.x * .34f);
             Movement = new Rect(margin, viewport.y - margin - movementSize, movementSize, movementSize);
             var travelWidth = Mathf.Min(260 * s, viewport.x - margin * 2);

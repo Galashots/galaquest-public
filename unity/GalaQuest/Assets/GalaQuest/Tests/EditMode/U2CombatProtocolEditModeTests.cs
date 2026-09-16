@@ -56,6 +56,14 @@ namespace GalaQuest.Tests
         }
 
         [Test]
+        public void SpecialUsesTheV4WireTypeAndEpochConvention()
+        {
+            Assert.That(GalaQuestProtocolV4.Special(7), Is.EqualTo("{\"v\":4,\"type\":\"special\",\"seq\":7}"));
+            Assert.That(GalaQuestProtocolV4.Special(8, 3),
+                Is.EqualTo("{\"v\":4,\"type\":\"special\",\"seq\":8,\"worldEpoch\":3}"));
+        }
+
+        [Test]
         public void AttackIsIndependentOfMovementAndWaitsForFreshWelcomeAfterDisconnect()
         {
             var transport = new FakeTransport();
@@ -66,10 +74,13 @@ namespace GalaQuest.Tests
             transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\"}");
             Assert.That(session.TrySendMovementIntent(Vector2.up, 1f, false, 0), Is.True);
             Assert.That(session.TrySendAttackIntent(), Is.True);
+            Assert.That(session.TrySendSpecialIntent(), Is.True);
             Assert.That(session.TrySendMovementIntent(Vector2.zero, 0f, false, .01f), Is.True, "Attack cannot delay the movement release");
             Assert.That(session.TrySendAttackIntent(), Is.True);
             var attacks = transport.Sent.Where(packet => packet.Contains("\"type\":\"attack\"")).ToArray();
             Assert.That(attacks, Is.EqualTo(new[] { "{\"v\":4,\"type\":\"attack\",\"seq\":1}", "{\"v\":4,\"type\":\"attack\",\"seq\":2}" }));
+            var specials = transport.Sent.Where(packet => packet.Contains("\"type\":\"special\"")).ToArray();
+            Assert.That(specials, Is.EqualTo(new[] { "{\"v\":4,\"type\":\"special\",\"seq\":1}" }));
             transport.Close();
             Assert.That(session.PlayerId, Is.Empty);
             Assert.That(session.TrySendAttackIntent(), Is.False);
@@ -79,7 +90,8 @@ namespace GalaQuest.Tests
             Assert.That(session.TrySendAttackIntent(), Is.False);
             transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p2\"}");
             Assert.That(session.TrySendAttackIntent(), Is.True);
-            Assert.That(transport.Sent.Last(), Is.EqualTo(attacks[0]));
+            Assert.That(session.TrySendSpecialIntent(), Is.True);
+            Assert.That(transport.Sent.Last(), Is.EqualTo("{\"v\":4,\"type\":\"special\",\"seq\":1}"));
         }
 
         private sealed class FakeTransport : IGalaQuestTransport

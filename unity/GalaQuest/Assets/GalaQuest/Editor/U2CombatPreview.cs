@@ -71,6 +71,7 @@ namespace GalaQuest.Editor
             AssetDatabase.CopyAsset(HeroLocomotionAuthoring.ControllerPath, Temporary + "/HeroCombat.controller");
             var heroController = AssetDatabase.LoadAssetAtPath<AnimatorController>(Temporary + "/HeroCombat.controller");
             AddState(heroController, "slash", Clip(HeroSource, "sword_slash"), 1.5f);
+            AddState(heroController, "burst", Clip(HeroSource, "sword_slash"), .72f);
             AddState(heroController, "hit", Clip(HeroSource, "hit"));
             AddState(heroController, "death", Clip(HeroSource, "death"), 1.75f);
             var enemyController = AnimatorController.CreateAnimatorControllerAtPath(Temporary + "/Gremlin.controller");
