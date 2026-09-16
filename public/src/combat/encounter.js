@@ -79,8 +79,13 @@ const ORDINARY_BITE = Object.freeze({
 
 export function enemyAttackForKind(kind) {
   if (kind === 'lava-gremlin') return GREMLIN_BASH;
-  if (kind === 'alpha-wolf') return HEAVY_SMASH;
   return ORDINARY_BITE;
+}
+// Authored attack profile: this one heavy role belongs to an enemy definition, not every Alpha.
+export const ALPHA_HEAVY_ATTACK_PROFILE = 'heavy';
+export function enemyAttackFor(enemy) {
+  return enemy?.attackProfile === ALPHA_HEAVY_ATTACK_PROFILE
+    ? HEAVY_SMASH : enemyAttackForKind(enemy?.kind);
 }
 export const STAGGER_SECONDS = 0.667;
 export const DEATH_SECONDS = 1.75;
@@ -204,7 +209,10 @@ function normalizeEnemyDefinition(definition, fallbackId = DEFAULT_ENEMY_ID) {
   const leashRadius = Number.isFinite(definition?.leashRadius) && definition.leashRadius > 0
     ? definition.leashRadius
     : DEFAULT_WOLF_LEASH_RADIUS;
-  return { enemyId, kind, level, patrol, spawnIndex, home, homeAuthored, leashRadius };
+  const attackProfile = definition?.attackProfile;
+  if (attackProfile !== undefined && (attackProfile !== ALPHA_HEAVY_ATTACK_PROFILE || kind !== 'alpha-wolf'))
+    throw new TypeError(`unsupported attackProfile ${JSON.stringify(attackProfile)} for ${kind}`);
+  return { enemyId, kind, level, patrol, spawnIndex, home, homeAuthored, leashRadius, attackProfile };
 }
 
 function freshEnemy(definition) {
@@ -214,6 +222,7 @@ function freshEnemy(definition) {
   return {
     enemyId: normalized.enemyId,
     kind: normalized.kind,
+    attackProfile: normalized.attackProfile,
     level: normalized.level,
     maxHp: stats.maxHp,
     biteDamage: stats.biteDamage,
@@ -430,6 +439,7 @@ function resetEnemy(enemy, { moveOn = false } = {}) {
   const reset = freshEnemy({
     enemyId: enemy.enemyId,
     kind: enemy.kind,
+    attackProfile: enemy.attackProfile,
     level: enemy.level,
     patrol: enemy.patrol,
     spawnIndex,
@@ -722,7 +732,7 @@ function enemyIsHostile(enemy, command) {
 }
 
 function advanceEnemy(enemy, heroes, heroIds, commandHeroes, events, deltaSeconds, command) {
-  const attack = enemyAttackForKind(enemy.kind);
+  const attack = enemyAttackFor(enemy);
   const move = (target) => {
     const wanted = stepTowards(enemy, target, enemy.speed, deltaSeconds);
     const position = command.moveEnemy?.(enemy, wanted) ?? wanted;
