@@ -218,7 +218,7 @@ try{
     // the same user's native deletion succeeds. No ACL or permission changes.
     try {
       assert.equal(process.platform,'win32');
-      assert.notEqual(chrome?.exitCode,null,'Do not delete a live browser profile');
+      assert.ok(chrome && (chrome.exitCode !== null || chrome.signalCode !== null),'Do not delete a live browser profile');
       execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
         'Remove-Item -LiteralPath $env:GQ_OWNED_PROFILE -Recurse -ErrorAction Stop'],
         {env:{...process.env,GQ_OWNED_PROFILE:profile},timeout:20000,stdio:'pipe'});
