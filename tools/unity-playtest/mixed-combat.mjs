@@ -211,10 +211,8 @@ try{
   for(let i=0;i<pages.length;i++)await capture(pages[i],`failure-${i}`).catch(()=>{});
 }finally{
   let clean=true;const cleanupErrors=[];
-  // Release the explicitly owned WebGL contexts before closing their browser process.
-  if(browser) for(const p of pages) if(p.browserContextId)
-    await browser.send('Target.disposeBrowserContext',{browserContextId:p.browserContextId}).catch(()=>{});
-  if(browser)await browser.send('Browser.close').catch(()=>{});
+  // These are disposable fixture contexts. Stop the verified owned process tree directly;
+  // a partially completed Chromium graceful shutdown can leave Windows waiting on child resources.
   for(const p of pages)p.ws.close();browser?.ws.close();
   let browserDisposal=null;
   try {
