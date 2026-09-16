@@ -130,7 +130,7 @@ try{
     const {browserContextId}=await browser.send('Target.createBrowserContext');
     const {targetId}=await browser.send('Target.createTarget',{url:'about:blank',browserContextId});
     const targets=await fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json());
-    const p=new CDP(targets.find(t=>t.id===targetId).webSocketDebuggerUrl);await p.ready();pages.push(p);
+    const p=new CDP(targets.find(t=>t.id===targetId).webSocketDebuggerUrl);await p.ready();p.browserContextId=browserContextId;pages.push(p);
     for(const api of ['Runtime.enable','Page.enable','Log.enable'])await p.send(api);
     await p.send('Emulation.setDeviceMetricsOverride',{width:1180,height:820,deviceScaleFactor:1,mobile:false});
     await p.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
@@ -206,6 +206,9 @@ try{
   for(let i=0;i<pages.length;i++)await capture(pages[i],`failure-${i}`).catch(()=>{});
 }finally{
   let clean=true;const cleanupErrors=[];
+  // Release the explicitly owned WebGL contexts before closing their browser process.
+  if(browser) for(const p of pages) if(p.browserContextId)
+    await browser.send('Target.disposeBrowserContext',{browserContextId:p.browserContextId}).catch(()=>{});
   if(browser)await browser.send('Browser.close').catch(()=>{});
   for(const p of pages)p.ws.close();browser?.ws.close();
   let browserDisposal=null;
