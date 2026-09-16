@@ -1,6 +1,6 @@
 // Built-client Burst integration: fixture levels, real inputs, exact source and isolated cleanup.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -212,8 +212,19 @@ try{
     if(chrome.exitCode===null){chrome.kill();await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(3000)]);}
   }
   if(server&&!await server.kill()){clean=false;cleanupErrors.push('Owned server exit/port release not verified');}
-  try{rmSync(profile,{recursive:true,force:true,maxRetries:8,retryDelay:250});}
-  catch(error){clean=false;cleanupErrors.push(error.message);}
+  try{rmSync(profile,{recursive:true,force:true,maxRetries:20,retryDelay:500});}
+  catch(error){
+    // Windows can refuse Node's recursive removal after Chrome has exited even when
+    // the same user's native deletion succeeds. No ACL or permission changes.
+    try {
+      assert.equal(process.platform,'win32');
+      assert.ok(chrome && (chrome.exitCode !== null || chrome.signalCode !== null),'Do not delete a live browser profile');
+      execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+        'Remove-Item -LiteralPath $env:GQ_OWNED_PROFILE -Recurse -ErrorAction Stop'],
+        {env:{...process.env,GQ_OWNED_PROFILE:profile},timeout:20000,stdio:'pipe'});
+      assert.equal(existsSync(profile),false,'Owned profile removal must be verified');
+    } catch(cleanupError){clean=false;cleanupErrors.push(error.message+'; '+cleanupError.message);}
+  }
   const result=completed&&!failure&&clean?'PASS':'FAIL';
   const report={clientSha:sha,serverSha,mode,manifest,origin:server?.origin,checks,
     result,failure,cleanup:{passed:clean,profile,errors:cleanupErrors},
