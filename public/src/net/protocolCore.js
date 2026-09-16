@@ -27,6 +27,7 @@
 // this module does. The alternative was a second copy of the durable fact vocabulary living here,
 // which is the drift docs/MISTAKES.md GQ-007 exists to stop.
 import { isDurableFactType, parseXpFactAmount } from '../progression/facts.js';
+import { petDef, WORM_PETS } from '../progression/pets.js';
 import { ENEMY_KINDS, enemyStatsForLevel, isSupportedEnemyLevel } from '../combat/enemyStats.js';
 
 export const PROTOCOL_VERSION = 4;
@@ -34,7 +35,7 @@ export const PROTOCOL_VERSION = 4;
 export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'special', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
-  'restore-profile', 'travel', 'destination-changed',
+  'restore-profile', 'travel', 'destination-changed', 'pet-action', 'pet-state',
   // #148 Rune Forge. The four action messages carry only the selected authored task identity;
   // the server owns proximity, durable progress, answer correctness, and entitlement grant.
   // `forge-state` is the private response for the joined profile and never enters a snapshot.
@@ -205,7 +206,8 @@ export function decode(text) {
     if (!Number.isSafeInteger(raw.worldEpoch) || raw.worldEpoch < 0) fail('worldEpoch must be a non-negative safe integer');
     decoded.worldEpoch = raw.worldEpoch;
   }
-  if ((raw.type === 'travel' || raw.type === 'destination-changed' || raw.type === 'forge-state')
+  if ((raw.type === 'travel' || raw.type === 'destination-changed' || raw.type === 'forge-state'
+    || raw.type === 'pet-action' || raw.type === 'pet-state')
     && decoded.worldEpoch === undefined) {
     fail(`${raw.type} requires worldEpoch`);
   }
@@ -262,6 +264,24 @@ function decodeMessage(raw) {
       return decoded;
     }
 
+    case 'pet-action': {
+      const action = requireString(raw.action, 'action', 16);
+      const petId = requireString(raw.petId, 'petId', 32);
+      const eventId = requireString(raw.eventId, 'eventId', 64);
+      if (!['befriend', 'follow', 'rest'].includes(action)) fail('unknown pet action');
+      if (!petDef(petId)) fail('unknown pet id');
+      if (!/^[A-Za-z0-9-]{1,64}$/.test(eventId)) fail('invalid pet eventId');
+      if (!Number.isSafeInteger(raw.rev) || raw.rev < 0) fail('invalid pet revision');
+      return { v: PROTOCOL_VERSION, type: raw.type, action, petId, eventId, rev: raw.rev };
+    }
+    case 'pet-state': {
+      const destinationId = requireString(raw.destinationId, 'destinationId', 48);
+      if (!destinationId) fail('pet-state destinationId must not be empty');
+      return { v: PROTOCOL_VERSION, type: raw.type, id: requireString(raw.id, 'id'),
+        destinationId, pets: decodePetState(raw.pets),
+        error: raw.error == null ? null : requireString(raw.error, 'error', 64),
+        profileFacts: decodeProfileFacts(raw.profileFacts) };
+    }
     case 'forge-state': {
       const forge = raw.forge;
       if (forge === null || typeof forge !== 'object' || Array.isArray(forge)) {
@@ -714,6 +734,15 @@ function decodeProfileFacts(facts) {
   });
 }
 
+function decodePetState(pets) {
+  if (!pets || !Array.isArray(pets.ownedPetIds) || pets.ownedPetIds.length > WORM_PETS.length
+    || pets.ownedPetIds.some(id => !petDef(id))
+    || new Set(pets.ownedPetIds).size !== pets.ownedPetIds.length) fail('invalid pet ownership');
+  if (pets.equippedPetId !== null && !pets.ownedPetIds.includes(pets.equippedPetId)) fail('unowned follower');
+  if (!Number.isSafeInteger(pets.equipRev) || pets.equipRev < -1) fail('invalid pet revision');
+  return { ownedPetIds: [...pets.ownedPetIds], equippedPetId: pets.equippedPetId, equipRev: pets.equipRev };
+}
+
 function decodeRewards(rewards) {
   if (rewards === undefined) return {};
   if (rewards === null || typeof rewards !== 'object' || Array.isArray(rewards)) {
@@ -739,6 +768,7 @@ function decodeRewards(rewards) {
     // DEFAULT_OWNED_ITEM_IDS (starter sword only); this layer only validates SHAPE (an array of
     // strings), never which items exist or are legal to own -- that is rewardStore.mjs's job, the
     // same boundary equippedWeaponId already draws.
+    if (reward.pets !== undefined) decoded.pets = decodePetState(reward.pets);
     if (reward.ownedItemIds !== undefined) {
       if (!Array.isArray(reward.ownedItemIds)) {
         fail(`encounter.rewards[${id}].ownedItemIds must be an array`);
