@@ -57,6 +57,18 @@ export const GREMLIN_BASH = Object.freeze({
   reach: 1.45,
   halfArcRadians: Math.PI * 0.2,
 });
+// The Alpha is the heavy role for the bounded Emberworks combat package. It deliberately keeps
+// the published `bite` mode so older clients still animate the checked-in Wolf clip, while this
+// server-owned geometry creates a different decision: step out during the long telegraph, then
+// punish the committed heading during the slow recovery. The narrow arc makes the dodge legible;
+// the extra reach makes standing still a bad answer.
+export const HEAVY_SMASH = Object.freeze({
+  contactSeconds: 0.95,
+  durationSeconds: 1.75,
+  cooldownSeconds: 3.6,
+  reach: 2.1,
+  halfArcRadians: Math.PI * 0.26,
+});
 const ORDINARY_BITE = Object.freeze({
   contactSeconds: WOLF_BITE_CONTACT_SECONDS,
   durationSeconds: WOLF_BITE_SECONDS,
@@ -66,7 +78,9 @@ const ORDINARY_BITE = Object.freeze({
 });
 
 export function enemyAttackForKind(kind) {
-  return kind === 'lava-gremlin' ? GREMLIN_BASH : ORDINARY_BITE;
+  if (kind === 'lava-gremlin') return GREMLIN_BASH;
+  if (kind === 'alpha-wolf') return HEAVY_SMASH;
+  return ORDINARY_BITE;
 }
 export const STAGGER_SECONDS = 0.667;
 export const DEATH_SECONDS = 1.75;
