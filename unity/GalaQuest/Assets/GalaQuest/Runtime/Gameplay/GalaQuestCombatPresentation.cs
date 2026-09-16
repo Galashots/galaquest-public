@@ -14,6 +14,11 @@ namespace GalaQuest
         private GalaQuestCombatMotion selfMotion;
         private GameObject selfWeapon;
         private GameObject selfHelmet;
+        private GameObject selfPetBody;
+        private GalaQuestCompanionTrail selfPetTrail;
+        private string selfPetId;
+        private string pendingFriendship;
+        private float friendshipExpires;
         private GalaQuestServerHeroCombat self;
         private GalaQuestCombatAudio sound;
         private float receivedAt;
@@ -55,6 +60,9 @@ namespace GalaQuest
             public GalaQuestServerHeroCombat State;
             public float HurtUntil;
             public GameObject Helmet;
+            public GameObject PetBody;
+            public GalaQuestCompanionTrail PetTrail;
+            public string PetId;
         }
 
         public void Configure(GalaQuestCombatContent assets) => content = assets;
@@ -65,6 +73,7 @@ namespace GalaQuest
             {
                 session.ServerFrameReceived -= ApplyFrame;
                 session.Disconnected -= ClearViews;
+                session.TravelStarted -= ClearViews;
             }
             if (attackControl != null) attackControl.AttackRequested -= PredictAttack;
             if (selfWeapon != null) Destroy(selfWeapon);
@@ -89,6 +98,7 @@ namespace GalaQuest
             if (attackControl != null) attackControl.AttackRequested += PredictAttack;
             session.ServerFrameReceived += ApplyFrame;
             session.Disconnected += ClearViews;
+            session.TravelStarted += ClearViews;
         }
 
         private void PredictAttack()
@@ -104,13 +114,14 @@ namespace GalaQuest
         public void ApplyFrame(GalaQuestServerFrame frame)
         {
             if (session == null || string.IsNullOrEmpty(session.PlayerId) || frame.encounter == null) return;
-            if (frame.type == "forge-state") return;
+            if (frame.type == "forge-state" || frame.type == "pet-state") return;
             if (frame.type == "welcome" || frame.type == "destination-changed") ClearViews();
             else if (frame.tick <= lastTick) return;
             lastTick = frame.tick;
             receivedAt = Time.unscaledTime;
             frame.encounter.heroes.TryGetValue(session.PlayerId, out self);
             ReconcileHelmet(session.PlayerId, traversal.Hero, frame, ref selfHelmet);
+            ReconcilePet(session.PlayerId, traversal.Hero, frame, ref selfPetBody, ref selfPetTrail, ref selfPetId);
             if (self != null && self.swingSeconds >= 0) predictedSwingAt = float.NegativeInfinity;
             seen.Clear();
             foreach (var state in frame.encounter.enemies)
@@ -156,8 +167,9 @@ namespace GalaQuest
                 actor.Player = player;
                 frame.encounter.heroes.TryGetValue(player.id, out actor.State);
                 ReconcileHelmet(player.id, actor.Body.transform, frame, ref actor.Helmet);
+                ReconcilePet(player.id, actor.Body.transform, frame, ref actor.PetBody, ref actor.PetTrail, ref actor.PetId);
             }
-            RemoveAbsent(companions, seen, actor => Destroy(actor.Body));
+            RemoveAbsent(companions, seen, actor => { if (actor.PetBody != null) Destroy(actor.PetBody); Destroy(actor.Body); });
             foreach (var item in frame.events)
             {
                 if (item == null) continue;
@@ -187,14 +199,26 @@ namespace GalaQuest
 
         private void Update()
         {
-            if (session == null || string.IsNullOrEmpty(session.PlayerId)) return;
+            if (session == null || string.IsNullOrEmpty(session.PlayerId) || session.IsTravelling)
+            { ClearViews(); return; }
             traversal.Hero.position = GalaQuestGroundSurface.Project(traversal.Hero.position, .01f);
             var age = Mathf.Clamp(Time.unscaledTime - receivedAt, 0, .15f);
             PresentHero(selfMotion, self, traversal.PredictedMotionSpeed, age, selfHurtUntil, Time.unscaledTime - predictedSwingAt < .25f);
+            StepPet(selfPetBody, selfPetTrail, traversal.Hero, Time.unscaledDeltaTime);
+            if (pendingFriendship != null)
+            {
+                if (Time.unscaledTime > friendshipExpires) pendingFriendship = null;
+                else if (selfPetId == pendingFriendship && selfPetBody != null)
+                { selfPetBody.GetComponent<GalaQuestWormMotion>()?.Celebrate(); pendingFriendship = null; }
+            }
             var blend = 1 - Mathf.Exp(-16 * Time.unscaledDeltaTime);
             foreach (var actor in companions.Values)
             {
-                MoveBody(actor.Body.transform, Position(actor.Player.x, actor.Player.z), actor.Player.heading, blend);
+                var target = Position(actor.Player.x, actor.Player.z);
+                var snapped = Vector3.Distance(actor.Body.transform.position, target) > 3f;
+                MoveBody(actor.Body.transform, target, actor.Player.heading, blend);
+                if (snapped) actor.PetTrail?.Reset(actor.Body.transform.position, actor.Body.transform.forward);
+                StepPet(actor.PetBody, actor.PetTrail, actor.Body.transform, Time.unscaledDeltaTime);
                 PresentHero(actor.Motion, actor.State, actor.Player.speed, age, actor.HurtUntil, false);
             }
             foreach (var actor in enemies.Values)
@@ -258,6 +282,61 @@ namespace GalaQuest
             }
             if (mounted == null && content.MagmaLordHelmet != null)
                 mounted = GalaQuest.Gear.GearMounter.Mount(body, content.MagmaLordHelmet);
+        }
+
+        private void ReconcilePet(string ownerId, Transform owner, GalaQuestServerFrame frame,
+            ref GameObject body, ref GalaQuestCompanionTrail trail, ref string petId)
+        {
+            string equipped = null;
+            if (frame.encounter.rewards != null && frame.encounter.rewards.TryGetValue(ownerId, out var reward)
+                && reward?.pets != null) equipped = reward.pets.equippedPetId;
+            if (petId == equipped && (string.IsNullOrEmpty(equipped) || body != null)) return;
+            if (body != null) Destroy(body);
+            body = null; trail = null; petId = null;
+            if (string.IsNullOrEmpty(equipped) || GalaQuestPetCatalog.Find(equipped) == null) return;
+            petId = equipped;
+            trail = new GalaQuestCompanionTrail(owner.position, owner.forward);
+            body = CreatePetBody(ownerId, equipped, trail.Position);
+        }
+
+        private GameObject CreatePetBody(string ownerId, string petId, Vector3 position)
+        {
+            var candidate = GetComponent<GalaQuestPetAppearanceCatalog>()?.Create(
+                $"Pet {ownerId} {petId}", petId, position, Quaternion.identity);
+            if (candidate != null) return candidate;
+            // Unassigned art retains the existing qualification fallback.
+            var body = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            body.name = $"Pet {ownerId} {petId}";
+            body.transform.position = position + Vector3.up * .18f;
+            body.transform.localScale = new Vector3(.45f, .28f, .7f);
+            var collider = body.GetComponent<Collider>();
+            if (collider != null) Destroy(collider);
+            var renderer = body.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                var block = new MaterialPropertyBlock();
+                var color = petId == "worm_red" ? new Color(.78f, .16f, .12f) : new Color(.2f, .7f, .26f);
+                block.SetColor("_BaseColor", color); block.SetColor("_Color", color);
+                renderer.SetPropertyBlock(block);
+            }
+            return body;
+        }
+
+        public void CelebrateFriendship(string petId)
+        {
+            pendingFriendship = GalaQuestPetCatalog.Find(petId) == null ? null : petId;
+            friendshipExpires = Time.unscaledTime + 2f;
+        }
+
+        private static void StepPet(GameObject body, GalaQuestCompanionTrail trail, Transform owner, float dt)
+        {
+            if (body == null || trail == null || owner == null) return;
+            if (trail.NeedsReset) trail.Reset(owner.position, owner.forward);
+            var position = trail.Step(owner.position, owner.forward, dt);
+            body.transform.position = body.GetComponent<GalaQuestWormMotion>() != null
+                ? GalaQuestPetAppearanceCatalog.Floor(position) : position + Vector3.up * .18f;
+            var facing = trail.Facing; facing.y = 0;
+            if (facing.sqrMagnitude > 1e-6f) body.transform.rotation = Quaternion.LookRotation(facing.normalized, Vector3.up);
         }
 
         private void CreateTelegraph(EnemyView actor, GalaQuestServerEnemyAttack attack)
@@ -383,9 +462,12 @@ namespace GalaQuest
 
         private void ClearViews()
         {
+            pendingFriendship = null;
             foreach (var actor in enemies.Values) { Destroy(actor.Body); Destroy(actor.Sector); }
-            foreach (var actor in companions.Values) Destroy(actor.Body);
+            foreach (var actor in companions.Values) { if (actor.PetBody != null) Destroy(actor.PetBody); Destroy(actor.Body); }
             enemies.Clear(); companions.Clear();
+            if (selfPetBody != null) Destroy(selfPetBody);
+            selfPetBody = null; selfPetTrail = null; selfPetId = null;
             self = null; lastTick = -1; selfHurtUntil = 0;
             predictedSwingAt = float.NegativeInfinity;
             if (selfHelmet != null) Destroy(selfHelmet);

@@ -33,6 +33,7 @@ vocabulary. A new entry adds its row in the same commit.
 
 | ref | lesson | tags |
 |---|---|---|
+| — | A clean unlit render does not prove a simplified mesh has no cracks. | assets, visual, tests |
 | GQ-007 | Never restate a constant. Import it. | code |
 | GQ-008 | A harness that navigates to the game must start from a known guest. | harness |
 | GQ-009 | A diagnostic that partitions events by harness timestamp measures the harness, not the system. | harness, evidence |
@@ -1843,4 +1844,12 @@ bar had also covered the answer row while the underlying Forge behavior remained
 kept camera and control sizes stable, repacked the workbench, added pre-orbit renderer-bound containment,
 and retained a nearby-sibling portrait check. Required controls then fit before any orbit; physical iPad
 usability remained a separate UNKNOWN rather than being inferred from the browser pass.
+**Foreknowledge helped:** not yet recorded.
+
+### OBSERVED — A clean unlit render does not prove a simplified mesh has no cracks.
+**Status:** OBSERVED · **Hits:** 1 · **First/Last:** 2026-09-15
+**Incident:** Both worm sources retained coincident attribute vertices, but a roughly 16k-triangle derivative opened thousands of genuine boundary edges. Unit normals, valid UV ranges and a clean unlit view had not exercised that failure. A source review also confused boundary-edge counts with triangle percentages.
+**Cause tested:** glTF attribute seams imported as separate vertices were collapsed independently. Enabling the importer's `merge_vertices` before the same decimation eliminated the measured open edges for both candidates without changing their three texture maps or triangle target. This is a tested correction for these sources, not a universal weld-distance rule.
+**Prevention:** Compare raw position/index topology before and after reduction; distinguish coincident attribute vertices from separated seams. The opt-in `tools/asset-registry/inspect-glb-topology.mjs` and `test/inspect-glb-topology.test.mjs` exercise an intact attribute seam and a genuinely opened seam. Unsupported inputs stay UNKNOWN. Edge incidence alone proves neither solidity nor artistic quality.
+**Visual proof:** Preserve renderer, lighting and useful framing, then inspect the running-game candidate under the existing visual-review guide. Do not change the shader, remove normal maps or move offsets to hide an untested geometry defect.
 **Foreknowledge helped:** not yet recorded.

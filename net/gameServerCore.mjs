@@ -89,6 +89,8 @@ import {
   MAGMALORD_ENTITLEMENT_ID, MAGMALORD_HELMET_ID, entitlementEventId,
 } from '../public/src/learning/runeForge.js';
 import { createRuneForgeService } from './runeForge.mjs';
+import { evaluatePetAction } from './petCompanions.mjs';
+import { foldPetFacts } from '../public/src/progression/facts.js';
 import {
   WORLD_LIMIT, WORLD_LIMIT_EAST, WORLD_LIMIT_NORTH, clampToWorldX, clampToWorldZ,
 } from '../public/src/world/bounds.js';
@@ -776,6 +778,7 @@ export function createRewardCoordinator(options = {}) {
           equippedWeaponId: store.equippedWeaponFor(guestId) ?? DEFAULT_EQUIPPED_WEAPON_ID,
           equippedItemIds: store.equippedItemsFor(guestId),
           ownedItemIds: ownedItemIdsFor(heroId),
+          pets: foldPetFacts(guestId ? store.profileFactsFor(guestId) : []),
           coins: store.coinsFor(guestId),
           shards: store.shardsFor(guestId),
           satchelCarried: store.satchelTakenFor(guestId),
@@ -793,6 +796,7 @@ export function createRewardCoordinator(options = {}) {
           equippedWeaponId: equipment.weapon ?? DEFAULT_EQUIPPED_WEAPON_ID,
           equippedItemIds: equipment,
           ownedItemIds: ownedItemIdsFor(heroId),
+          pets: foldPetFacts(guestId ? store.profileFactsFor(guestId) : []),
           coins: lootState?.coins ?? 0,
           shards: lootState?.shards ?? 0,
           // An equip-only connection has no durable identity, so it can never have picked anything
@@ -820,6 +824,16 @@ export function createRewardCoordinator(options = {}) {
     grantOwnership,
     recordForgeFact,
     grantRuneForgeEntitlement,
+    applyPetAction(playerId, request) {
+      const profileId = guestIdByPlayer.get(playerId);
+      const facts = profileId ? store.profileFactsFor(profileId) : [];
+      // Identity and history come from this connection, never from client payload.
+      const result = evaluatePetAction({ ...request, profileId, facts });
+      if (result.ok && result.facts.length) store.applyAll(result.facts.map(fact => ({
+        ...fact, guestId: profileId, heroId: playerId,
+      })));
+      return { ...result, state: foldPetFacts(profileId ? store.profileFactsFor(profileId) : []) };
+    },
     claimWildwoodBlade,
     claimSatchel,
     claimCharm,
@@ -901,6 +915,8 @@ export function createRewardCoordinator(options = {}) {
       // What this profile owns once the restore lands: what the store already knows, plus whatever
       // ownership this message brings. Computed BEFORE anything is written so the equip check below
       // sees the same final picture regardless of the order the facts happen to be listed in.
+      const ownedPetsAfter = new Set(foldPetFacts(store.profileFactsFor(guestId)).ownedPetIds);
+      for (const fact of candidates) if (fact.type === 'pet-owned') ownedPetsAfter.add(fact.value);
       const ownedAfter = new Set(store.ownedItemIdsFor(guestId));
       for (const fact of candidates) {
         if (fact.type === 'gear-owned') ownedAfter.add(fact.value);
@@ -920,6 +936,10 @@ export function createRewardCoordinator(options = {}) {
       let refused = 0;
       const accepted = [];
       for (const fact of candidates) {
+        if (fact.type === 'pet-equipped' && fact.value !== 'none' && !ownedPetsAfter.has(fact.value)) {
+          refused += 1;
+          continue;
+        }
         if ((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !ownedAfter.has(fact.value)) {
           refused += 1;
           continue;
@@ -2251,6 +2271,21 @@ export function attachGameServer(httpServer, options = {}) {
         if (!client.data.playerId) throw new ProtocolError('attack before join');
         // Applied the instant it arrives, not batched to the tick -- see applyAttack's comment.
         simulation.applyAttack(client.data.playerId, message);
+        return;
+      }
+
+      if (message.type === 'pet-action') {
+        if (!client.data.playerId) throw new ProtocolError('pet-action before join');
+        const player = simulation.players.get(client.data.playerId);
+        const result = rewards.applyPetAction(client.data.playerId, {
+          action: message.action, petId: message.petId, eventId: message.eventId, rev: message.rev,
+          destinationId: simulation.destinationId, x: player?.x, z: player?.z,
+        });
+        client.send(encode({ v: 4, type: 'pet-state', id: client.data.playerId,
+          destinationId: simulation.destinationId, worldEpoch: client.data.worldEpoch,
+          pets: result.state, error: result.error,
+          profileFacts: rewards.profileFactsFor(client.data.playerId),
+        }));
         return;
       }
 
