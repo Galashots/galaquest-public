@@ -214,6 +214,9 @@ namespace GalaQuest.Editor
             material.SetTexture("_MetallicGlossMap", AssetDatabase.LoadAssetAtPath<Texture2D>(folder + "/metallic_smoothness.png"));
             material.SetFloat("_Metallic", 1); material.SetFloat("_Smoothness", .6f);
             material.SetFloat("_Cull", 0);
+            // Match the pinned URP material normalization before receipt capture.
+            material.doubleSidedGI = true;
+            material.SetTexture("_MainTex", material.GetTexture("_BaseMap"));
             material.EnableKeyword("_NORMALMAP"); material.EnableKeyword("_METALLICSPECGLOSSMAP");
             EditorUtility.SetDirty(material);
             // Finish the pinned Editor's material import before receipts capture its bytes.
