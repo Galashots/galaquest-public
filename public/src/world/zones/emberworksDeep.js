@@ -19,7 +19,7 @@ export const EMBERWORKS_DEEP_ENEMIES = Object.freeze([
   // The existing Alpha presentation gives this authored heavy a readable silhouette without
   // introducing an asset/provider dependency. Its rules role is distinct in encounter.js: a long,
   // committed smash that can be sidestepped and punished during recovery.
-  Object.freeze({ enemyId: 'emberworks-alpha-1', kind: 'alpha-wolf', level: 1,
+  Object.freeze({ enemyId: 'emberworks-alpha-1', kind: 'alpha-wolf', level: 1, attackProfile: 'heavy',
     spawn: Object.freeze({ x: 4, z: 14 }), leashRadius: 6 }),
 ]);
 

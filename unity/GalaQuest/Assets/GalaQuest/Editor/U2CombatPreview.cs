@@ -99,6 +99,8 @@ namespace GalaQuest.Editor
             }
             finally { Object.DestroyImmediate(anchor); }
 
+            var alphaPrefab = AlphaCandidateAuthoring.Prepare(Temporary);
+
             var telegraph = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             telegraph.SetFloat("_Surface", 1);
             telegraph.SetFloat("_SrcBlend", (int)BlendMode.SrcAlpha);
@@ -118,7 +120,8 @@ namespace GalaQuest.Editor
             content.HeroController = heroController;
             content.StarterWeapon = PrepareStarterWeapon(content.HeroPrefab);
             content.MagmaLordHelmet = RuneForgeAuthoring.LoadHelmet();
-            content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab } };
+            content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab },
+                AlphaCandidateAuthoring.NewEnemyEntry(alphaPrefab) };
             content.TelegraphMaterial = telegraph;
             content.Swing = Cue("swing"); content.Impact = Cue("impact"); content.Hurt = Cue("hurt");
             content.Victory = Cue("victory"); content.Windup = Cue("windup");

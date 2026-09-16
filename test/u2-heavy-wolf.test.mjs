@@ -6,6 +6,7 @@ import {
   WOLF_BITE_DAMAGE,
   createPartyEncounterState,
   enemyAttackForKind,
+  enemyAttackFor,
   stepParty,
 } from '../public/src/combat/encounter.js';
 import { createSimulation } from '../net/gameServerCore.mjs';
@@ -16,7 +17,7 @@ const STEP = 0.05;
 function heavyWindup(heroPosition = { x: 0, z: 1.9 }) {
   let state = createPartyEncounterState({
     heroIds: ['child'],
-    enemies: [{ enemyId: 'alpha', kind: 'alpha-wolf', level: 1, spawn: { x: 0, z: 0 } }],
+    enemies: [{ enemyId: 'alpha', kind: 'alpha-wolf', level: 1, attackProfile: 'heavy', spawn: { x: 0, z: 0 } }],
   });
   const command = { heroes: { child: { position: heroPosition } } };
   for (let i = 0; i < 40 && state.enemies[0].mode !== 'bite'; i += 1) {
@@ -27,7 +28,7 @@ function heavyWindup(heroPosition = { x: 0, z: 1.9 }) {
 }
 
 test('Alpha attack geometry is a real heavy role, not ordinary bite or gremlin bash', () => {
-  const alpha = enemyAttackForKind('alpha-wolf');
+  const alpha = enemyAttackFor({ kind: 'alpha-wolf', attackProfile: 'heavy' });
   const wolf = enemyAttackForKind('wolf');
   const gremlin = enemyAttackForKind('lava-gremlin');
   assert.deepEqual(alpha, HEAVY_SMASH);
