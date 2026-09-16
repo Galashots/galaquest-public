@@ -143,7 +143,7 @@ try{
   };
   const first=await createPlayer('profile-aaaaaaaa','Level Five Review');
   const second=await createPlayer('profile-bbbbbbbb','Level Four Review');
-  const progression=p=>p.eval('window.__gqUnityCp2Diagnostics.latestProgression');
+  const progression=p=>p.eval('window.__gqUnityCp2Diagnostics?.latestProgression ?? null');
   const sent=p=>p.eval('window.__burstSends');
   const self=(p,f)=>f.encounter.heroes[p.id];
   await waitFor(()=>progression(first),s=>s?.level===5,'Level-5 fixture restored');
