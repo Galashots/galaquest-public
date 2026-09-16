@@ -120,6 +120,22 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
 
+## Native heavy combat candidate
+
+The Alpha review body is derived from the existing owned `public/assets/enemies/wolf.glb`, not from new provider art. Produce its ignored local FBX, base texture and conversion receipt with the pinned Blender executable:
+
+```powershell
+node tools/unity-migration/convert-alpha-candidate.mjs --blender <path-to-pinned-Blender>
+```
+
+The converter refuses an existing output directory; preserve an earlier candidate before making another. `AlphaCandidateAuthoring` verifies the original source, converter/recipe, Blender version and declared file bytes before import. The source remains immutable. Changed converter bytes, including checkout line-ending differences, require re-running the converter rather than editing a receipt. The heavy profile belongs to the authored Emberworks Alpha, not every Alpha in the fixed world.
+
+For a review build retaining the already-qualified native worms, stage their unchanged `green-merged-v2` and `red-merged-v2` directories beneath `.local/pet-worm-native`. Each directory contains `candidate.fbx`, `base_color.png`, `normal.png` and `metallic_roughness.png`. The existing worm authorer checks its pinned FBX identities. Recover those sources through the governed Drive custody lane; do not hunt unrelated checkouts or invent replacements.
+
+Set `GQ_REVIEW_NATIVE_WORMS=1` **inside the owned Editor process** before calling `U2CombatPreview.Prepare` and `BuildWebGL`. With a live Pipeline session, set it in the same `run_script`; setting only the caller shell's environment does not update an already-running Editor. The generated source fingerprints include these inputs and the temporary scene receives explicit native-worm bindings. This mode preserves the existing appearance/motion; it neither promotes an asset nor changes the shipping scene.
+
+Run `AlphaNativeAuthoringTests` with the actual candidate present. Its import/clip and original-versus-retimed contact-pose checks are required evidence, not optional skipped checks for a claimed native integration. Inspect both ordinary gameplay framing and meaningful heavy windup/contact/recovery frames; these tests do not accept appearance.
+
 ## Rune Forge package
 
 The bounded Forge driver exercises the authored world controls with canvas touch input, two isolated
