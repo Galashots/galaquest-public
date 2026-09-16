@@ -132,6 +132,8 @@ namespace GalaQuest.Editor
             var importer = (ModelImporter)AssetImporter.GetAtPath(dir + "/" + FbxFileName);
             importer.animationType = ModelImporterAnimationType.Generic;
             importer.importAnimation = true;
+            // Keep the baked source contact keys; lossy compression can span the retime kink.
+            importer.animationCompression = ModelImporterAnimationCompression.Off;
             importer.optimizeGameObjects = false;
             var takes = importer.defaultClipAnimations;
             foreach (var take in takes) take.loopTime = IsClip(take.name, "idle") || IsClip(take.name, "walk");
