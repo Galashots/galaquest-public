@@ -166,11 +166,16 @@ try{
   assert.ok(dodgeFrames.every(f=>hero(f).hp>=hp),'A real sidestep avoids contact damage throughout the windup');
   assert.ok(dodgeFrames.filter(f=>alpha(f).mode==='bite').every(f=>Math.abs(alpha(f).heading-heading)<.001),'Windup does not track the dodging player');
   checks.dodge={before:windup,after:missed,frames:dodgeFrames};await capture(first,'02-heavy-missed');
+  // Exact-damage control starts fully healed; passive recovery must not mask part of a hit.
+  await tap(first,.5-100/first.rect.width,1-55/first.rect.height);
+  await waitFor(()=>frame(first),f=>f.destinationId==='home-hub','Camp before standing control');
+  checks.standingRest=await waitFor(()=>frame(first),f=>hero(f).hp===hero(f).maxHp,'Full natural recovery before standing control',25000);
+  await moveAxis(first,'w','z',4.8);await tap(first,.5-100/first.rect.width,1-55/first.rect.height);
+  await waitFor(()=>frame(first),f=>f.destinationId==='emberworks-deep','Standing-control return');
   const returnX=4;
   await moveAxis(first,(body(await frame(first)).x>returnX?'a':'d'),'x',returnX);
   await moveAxis(first,(body(await frame(first)).z>6.8?'s':'w'),'z',6.8);
   const standing=await waitFor(()=>frame(first),f=>alpha(f)?.mode==='bite'&&alpha(f).modeSeconds<.2,'Standing contact control',18000);
-  await capture(first,'03-standing-windup');
   const contact=await waitFor(()=>frame(first),f=>hero(f).hp<hero(standing).hp,'Heavy standing hit',4000);
   checks.standing={before:standing,contact};await capture(first,'04-heavy-contact');
   assert.equal(hero(standing).hp-hero(contact).hp,enemyStatsForLevel('alpha-wolf',alpha(standing).level).biteDamage,'Standing still takes one authoritative heavy hit');
@@ -211,14 +216,23 @@ try{
     await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(3000)]);
     if(chrome.exitCode===null){chrome.kill();await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(3000)]);}
   }
-  if(server&&!await server.kill()){clean=false;cleanupErrors.push('Owned server exit/port release not verified');}
+  if(server) {
+    let stopped=await server.kill();
+    if(!stopped){await delay(1500);stopped=await server.kill();}
+    if(!stopped){clean=false;cleanupErrors.push('Owned server exit/port release not verified');}
+  }
   try{rmSync(profile,{recursive:true,force:true,maxRetries:20,retryDelay:500});}
   catch(error){
+    // Allow pending child-exit events to run after the synchronous filesystem retry.
+    await delay(100);
     // Windows can refuse Node's recursive removal after Chrome has exited even when
     // the same user's native deletion succeeds. No ACL or permission changes.
     try {
       assert.equal(process.platform,'win32');
-      assert.ok(chrome && (chrome.exitCode !== null || chrome.signalCode !== null),'Do not delete a live browser profile');
+      assert.ok(chrome,'No owned browser identity');
+      if(chrome.exitCode===null && chrome.signalCode===null)
+        await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(5000)]);
+      assert.ok(chrome.exitCode!==null || chrome.signalCode!==null,'Do not delete a live browser profile');
       execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
         'Remove-Item -LiteralPath $env:GQ_OWNED_PROFILE -Recurse -ErrorAction Stop'],
         {env:{...process.env,GQ_OWNED_PROFILE:profile},timeout:20000,stdio:'pipe'});
@@ -227,7 +241,7 @@ try{
   }
   const result=completed&&!failure&&clean?'PASS':'FAIL';
   const report={clientSha:sha,serverSha,mode,manifest,origin:server?.origin,checks,
-    result,failure,cleanup:{passed:clean,profile,errors:cleanupErrors},
+    result,failure,cleanup:{passed:clean,profile,chromePid:chrome?.pid,chromeExitCode:chrome?.exitCode,chromeSignalCode:chrome?.signalCode,errors:cleanupErrors},
     limits:['Synthetic Level-5 integration, not natural first-15 pacing','Emulated viewport, not physical iPad','Captures require visual inspection']};
   writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify({clientSha:sha,serverSha,result,output,failure,cleanup:report.cleanup}));

@@ -211,14 +211,23 @@ try{
     await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(3000)]);
     if(chrome.exitCode===null){chrome.kill();await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(3000)]);}
   }
-  if(server&&!await server.kill()){clean=false;cleanupErrors.push('Owned server exit/port release not verified');}
+  if(server) {
+    let stopped=await server.kill();
+    if(!stopped){await delay(1500);stopped=await server.kill();}
+    if(!stopped){clean=false;cleanupErrors.push('Owned server exit/port release not verified');}
+  }
   try{rmSync(profile,{recursive:true,force:true,maxRetries:20,retryDelay:500});}
   catch(error){
+    // Allow pending child-exit events to run after the synchronous filesystem retry.
+    await delay(100);
     // Windows can refuse Node's recursive removal after Chrome has exited even when
     // the same user's native deletion succeeds. No ACL or permission changes.
     try {
       assert.equal(process.platform,'win32');
-      assert.ok(chrome && (chrome.exitCode !== null || chrome.signalCode !== null),'Do not delete a live browser profile');
+      assert.ok(chrome,'No owned browser identity');
+      if(chrome.exitCode===null && chrome.signalCode===null)
+        await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(5000)]);
+      assert.ok(chrome.exitCode!==null || chrome.signalCode!==null,'Do not delete a live browser profile');
       execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
         'Remove-Item -LiteralPath $env:GQ_OWNED_PROFILE -Recurse -ErrorAction Stop'],
         {env:{...process.env,GQ_OWNED_PROFILE:profile},timeout:20000,stdio:'pipe'});
@@ -227,7 +236,7 @@ try{
   }
   const result=completed&&!failure&&clean?'PASS':'FAIL';
   const report={clientSha:sha,serverSha,mode,manifest,origin:server?.origin,checks,
-    result,failure,cleanup:{passed:clean,profile,errors:cleanupErrors},
+    result,failure,cleanup:{passed:clean,profile,chromePid:chrome?.pid,chromeExitCode:chrome?.exitCode,chromeSignalCode:chrome?.signalCode,errors:cleanupErrors},
     limits:['Synthetic Level-5 integration, not natural first-15 pacing','Emulated viewport, not physical iPad','Captures require visual inspection']};
   writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify({clientSha:sha,serverSha,result,output,failure,cleanup:report.cleanup}));
