@@ -168,6 +168,130 @@ test('current Git custody paths exist and recorded hashes match', () => {
   }
 });
 
+// Exercise the production entrypoint with real repository classes and deliberately wrong bytes.
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { relative } from 'node:path';
+import { qualifyAsset, verifyReceipt } from '../tools/asset-registry/qualify-asset.mjs';
+
+const qualificationOptions = (id, extra = {}) => ({ id, purpose: 'Production-route regression, not visual acceptance',
+  reference: ['docs/GALAQUEST_VISUAL_AUTHORITY.md'], ...extra });
+function qualificationScratch(callback) {
+  mkdirSync(resolve(root, '.local'), { recursive: true });
+  const dir = mkdtempSync(resolve(root, '.local/qualification-'));
+  try { return callback(relative(root, dir).replaceAll('\\', '/')); }
+  finally { rmSync(dir, { recursive: true, force: true }); }
+}
+function mutatedGlb(bytes, mutate) {
+  const length = bytes.readUInt32LE(12);
+  const json = JSON.parse(bytes.subarray(20, 20 + length).toString('utf8'));
+  mutate(json);
+  const text = Buffer.from(JSON.stringify(json));
+  const chunk = Buffer.alloc(Math.ceil(text.length / 4) * 4, 0x20);
+  text.copy(chunk);
+  const output = Buffer.concat([bytes.subarray(0, 20), chunk, bytes.subarray(20 + length)]);
+  output.writeUInt32LE(output.length, 8);
+  output.writeUInt32LE(chunk.length, 12);
+  return output;
+}
+
+test('qualification joins real Wolf, Ironwood shield and cart without claiming appearance or mutating inventory', () => {
+  const before = readFileSync(registryPath);
+  for (const [id, type] of [['enemy.wolf', 'character'], ['gear.shield.ironwood', 'rigid-gear'], ['prop.village.cart', 'rigid-prop']]) {
+    const options = qualificationOptions(id, { class: type });
+    const result = qualifyAsset(options);
+    assert.equal(result.checks.source_identity.status, 'PASS', id);
+    assert.equal(result.checks.class_contract.status, 'PASS', id);
+    assert.ok(result.measurements.triangle_count > 0);
+    assert.equal(result.status, 'UNKNOWN');
+    assert.equal(result.promotion_authorized, false);
+    assert.equal(result.next_action, 'COMPLETE_SPECIALIST_AND_UNITY_REVIEW');
+    for (const name of ['topology', 'materials', 'fit', 'performance', 'unity', 'producer_visual', 'independent_visual', 'device', 'rights', 'owner']) {
+      assert.equal(result.checks[name].status, 'UNKNOWN', name);
+    }
+    assert.ok(result.diagnostics.every((run) => run.exit_code === 0), id);
+    assert.deepEqual(qualifyAsset(options), result, 'unchanged input produces an identical receipt');
+    assert.notEqual(verifyReceipt(result).status, 'FAIL');
+    assert.equal(verifyReceipt(result).qualification_status, 'UNKNOWN');
+  }
+  assert.deepEqual(readFileSync(registryPath), before);
+});
+
+test('qualification rejects wrong source identity and skinned character misdeclared as rigid gear', () => {
+  const wolf = 'public/assets/enemies/wolf.glb';
+  const source = qualifyAsset(qualificationOptions('gear.shield.ironwood', { class: 'rigid-gear', source: wolf }));
+  assert.equal(source.checks.source_identity.status, 'FAIL');
+  const candidate = qualifyAsset(qualificationOptions('gear.shield.ironwood', { class: 'rigid-gear', candidate: wolf }));
+  assert.equal(candidate.checks.source_identity.status, 'PASS');
+  assert.equal(candidate.checks.class_contract.status, 'FAIL');
+  assert.equal(candidate.checks.derivative_lineage.status, 'UNKNOWN');
+  assert.equal(candidate.status, 'FAIL');
+});
+
+test('qualification fails closed for unknown identity, ambiguous classes, absent inputs and recorded rejection', () => {
+  assert.throws(() => qualifyAsset({ id: 'nonexistent-qualification-id' }), /exact asset_id/);
+  for (const id of ['gear.shield.ironwood', 'prop.village.cart']) {
+    assert.equal(qualifyAsset(qualificationOptions(id)).next_action, 'DECLARE_SUPPORTED_CLASS');
+  }
+  const missing = qualifyAsset({ id: 'enemy.wolf', candidate: '.local/missing-qualification.glb' });
+  assert.equal(missing.checks.metadata.status, 'UNKNOWN');
+  assert.equal(missing.checks.intent_inputs.status, 'UNKNOWN');
+  assert.equal(missing.status, 'UNKNOWN');
+  const unsupported = qualifyAsset(qualificationOptions('gear.shield.ironwood', { class: 'deformable-gear' }));
+  assert.equal(unsupported.next_action, 'DECLARE_SUPPORTED_CLASS');
+  assert.equal(qualifyAsset({ id: 'fox-meshy-download-v1' }).checks.recorded_rejections.status, 'FAIL');
+  assert.equal(qualifyAsset({ id: 'dawnwarden-helmet-v1' }).checks.lifecycle.status, 'FAIL');
+  assert.throws(() => qualifyAsset({ id: 'enemy.wolf', source: '../outside.glb' }), /checkout-relative/);
+});
+
+test('native clip adapter accepts the actual native Wolf and rejects equal-name different-rest Wolf', () => qualificationScratch((prefix) => {
+  const path = `${prefix}/wrong-rest.glb`;
+  const wolf = readFileSync(resolve(root, 'public/assets/enemies/wolf.glb'));
+  writeFileSync(resolve(root, path), mutatedGlb(wolf, (gltf) => {
+    const joint = gltf.skins[0].joints.map((index) => gltf.nodes[index]).find((node) => node.translation?.some((v) => Math.abs(v) > 0.001));
+    assert.ok(joint);
+    joint.translation = joint.translation.map((value) => value * 1.5);
+  }));
+  const good = qualifyAsset(qualificationOptions('enemy.wolf', { clip: ['public/assets/enemies/wolf.glb'] }));
+  assert.equal(good.checks.native_clip.status, 'PASS');
+  assert.equal(good.checks.rig_animation.status, 'UNKNOWN');
+  const bad = qualifyAsset(qualificationOptions('enemy.wolf', { clip: [path] }));
+  assert.equal(bad.checks.native_clip.status, 'FAIL');
+  assert.equal(bad.status, 'FAIL');
+  assert.match(bad.diagnostics.at(-1).stdout, /rest bone/);
+}));
+
+test('receipt binds derivative, external texture, importer metadata and review bytes; PASS text is not acceptance', () => qualificationScratch((prefix) => {
+  const candidate = `${prefix}/shield.glb`, texture = `${prefix}/albedo.png`, review = `${prefix}/review.json`;
+  const original = readFileSync(resolve(root, 'public/assets/gear/shield_ironwood.glb'));
+  writeFileSync(resolve(root, candidate), mutatedGlb(original, (gltf) => { gltf.images = [{ uri: 'albedo.png' }]; }));
+  writeFileSync(resolve(root, texture), 'deliberate identity-only fixture');
+  writeFileSync(resolve(root, `${candidate}.meta`), 'importer fixture');
+  writeFileSync(resolve(root, review), '{"owner":"PASS","visual":"PASS"}');
+  const result = qualifyAsset(qualificationOptions('gear.shield.ironwood', { class: 'rigid-gear', candidate, evidence: [review] }));
+  assert.equal(result.checks.owner.status, 'UNKNOWN');
+  assert.equal(result.checks.producer_visual.status, 'UNKNOWN');
+  assert.notEqual(verifyReceipt(result).status, 'FAIL');
+  for (const path of [candidate, texture, `${candidate}.meta`, review]) {
+    const before = readFileSync(resolve(root, path));
+    writeFileSync(resolve(root, path), 'changed');
+    assert.ok(verifyReceipt(result).changed.includes(path), path);
+    writeFileSync(resolve(root, path), before);
+  }
+  const edited = structuredClone(result); edited.status = 'PASS';
+  assert.equal(verifyReceipt(edited).status, 'FAIL');
+}));
+
+test('qualification CLI returns incomplete exit 2 and refuses to overwrite its receipt', () => qualificationScratch((prefix) => {
+  const tool = resolve(root, 'tools/asset-registry/qualify-asset.mjs'), out = `${prefix}/receipt.json`;
+  const args = [tool, '--id', 'enemy.wolf', '--out', out];
+  assert.equal(spawnSync(process.execPath, args, { cwd: root }).status, 2);
+  const before = readFileSync(resolve(root, out));
+  assert.equal(JSON.parse(before).status, 'UNKNOWN');
+  assert.equal(spawnSync(process.execPath, args, { cwd: root }).status, 1);
+  assert.deepEqual(readFileSync(resolve(root, out)), before);
+}));
+
 test('authority remains secret-free and Package B interface-only', () => {
   const text = JSON.stringify(registry);
   assert.doesNotMatch(text, /(api[-_]?key|Bearer\s|access_token|C:\\Users\\|asset-staging-raw|https?:\/\/[^" ]*cloudfront\.net)/i);
