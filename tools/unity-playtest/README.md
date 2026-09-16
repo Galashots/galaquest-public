@@ -120,6 +120,9 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
 
+## Integrated combat counterplay
+
+With a manifest-bound candidate containing the native Alpha and the Unity Burst control, run `node tools/unity-playtest/mixed-combat.mjs <manifest> -mixed`. The driver uses a synthetic Level-5 profile and ordinary keyboard input to compare a real sidestep with standing in the heavy attack, then brings both enemy roles into one forward Burst cone. It records actual snapshots, captures, client/server SHAs and owned-resource cleanup. This is integration proof, not natural unlock pacing or physical-device acceptance. Inspect its windup, contact, recovery and mixed-hit captures.
 ## Native heavy combat candidate
 
 The Alpha review body is derived from the existing owned `public/assets/enemies/wolf.glb`, not from new provider art. Produce its ignored local FBX, base texture and conversion receipt with the pinned Blender executable:
