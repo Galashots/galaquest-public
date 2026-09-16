@@ -13,6 +13,7 @@ namespace GalaQuest
         private readonly GameObject[] offerMarkers = new GameObject[GalaQuestPetCatalog.Offers.Length];
         private bool stateKnown;
         private bool pendingAction;
+        private string pendingFriendshipId;
         private string lastError;
         private bool gestureHeld, gestureCancelled;
         private string pressedPetId, pressedAction;
@@ -42,6 +43,7 @@ namespace GalaQuest
             stateKnown = false;
             currentOffer = null;
             pendingAction = false;
+            pendingFriendshipId = null;
             lastError = null;
             if (session != null)
             {
@@ -78,17 +80,28 @@ namespace GalaQuest
 
         private void ApplyPetState(GalaQuestServerPetState next, string error)
         {
+            var celebrate = pendingAction && error == null && pendingFriendshipId != null
+                && next?.ownedPetIds != null && Array.IndexOf(next.ownedPetIds, pendingFriendshipId) >= 0
+                ? pendingFriendshipId : null;
+            pendingFriendshipId = null;
             state = next;
             stateKnown = next != null;
             pendingAction = false;
             lastError = error;
             RefreshOfferVisuals();
+            if (celebrate != null)
+            {
+                if (next.equippedPetId == celebrate) GetComponent<GalaQuestCombatPresentation>()?.CelebrateFriendship(celebrate);
+                else for (var i = 0; i < GalaQuestPetCatalog.Offers.Length; i++)
+                    if (GalaQuestPetCatalog.Offers[i].Id == celebrate) offerBodies[i]?.GetComponent<GalaQuestWormMotion>()?.Celebrate();
+            }
         }
 
         private void ResetTransient()
         {
             CancelGesture();
             pendingAction = false;
+            pendingFriendshipId = null;
             lastError = null;
             stateKnown = false;
             currentOffer = null;
@@ -119,6 +132,7 @@ namespace GalaQuest
             var eventId = Guid.NewGuid().ToString("N");
             if (!session.TrySendPetAction(action, currentOffer.Id, eventId, rev)) return false;
             pendingAction = true;
+            pendingFriendshipId = action == "befriend" ? currentOffer.Id : null;
             lastError = null;
             return true;
         }
@@ -224,8 +238,12 @@ namespace GalaQuest
                     offerMarkers[i] = GalaQuestPetVisuals.CreateMarker(offer,
                         new Vector3(offer.CampX, .015f, offer.CampZ));
                 if (offerBodies[i] == null)
-                    offerBodies[i] = GalaQuestPetVisuals.CreateTemporaryBody(
-                        "Camp pet " + offer.Id, offer.Id, new Vector3(offer.CampX, .22f, offer.CampZ));
+                {
+                    var position = new Vector3(offer.CampX, .22f, offer.CampZ);
+                    offerBodies[i] = GetComponent<GalaQuestPetAppearanceCatalog>()?.Create(
+                        "Camp pet " + offer.Id, offer.Id, position, Quaternion.Euler(0, 180, 0))
+                        ?? GalaQuestPetVisuals.CreateTemporaryBody("Camp pet " + offer.Id, offer.Id, position);
+                }
             }
         }
 

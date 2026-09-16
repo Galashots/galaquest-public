@@ -17,6 +17,8 @@ namespace GalaQuest
         private GameObject selfPetBody;
         private GalaQuestCompanionTrail selfPetTrail;
         private string selfPetId;
+        private string pendingFriendship;
+        private float friendshipExpires;
         private GalaQuestServerHeroCombat self;
         private GalaQuestCombatAudio sound;
         private float receivedAt;
@@ -203,6 +205,12 @@ namespace GalaQuest
             var age = Mathf.Clamp(Time.unscaledTime - receivedAt, 0, .15f);
             PresentHero(selfMotion, self, traversal.PredictedMotionSpeed, age, selfHurtUntil, Time.unscaledTime - predictedSwingAt < .25f);
             StepPet(selfPetBody, selfPetTrail, traversal.Hero, Time.unscaledDeltaTime);
+            if (pendingFriendship != null)
+            {
+                if (Time.unscaledTime > friendshipExpires) pendingFriendship = null;
+                else if (selfPetId == pendingFriendship && selfPetBody != null)
+                { selfPetBody.GetComponent<GalaQuestWormMotion>()?.Celebrate(); pendingFriendship = null; }
+            }
             var blend = 1 - Mathf.Exp(-16 * Time.unscaledDeltaTime);
             foreach (var actor in companions.Values)
             {
@@ -291,9 +299,12 @@ namespace GalaQuest
             body = CreatePetBody(ownerId, equipped, trail.Position);
         }
 
-        private static GameObject CreatePetBody(string ownerId, string petId, Vector3 position)
+        private GameObject CreatePetBody(string ownerId, string petId, Vector3 position)
         {
-            // Temporary qualification body. The approved worm prefab replaces only this seam.
+            var candidate = GetComponent<GalaQuestPetAppearanceCatalog>()?.Create(
+                $"Pet {ownerId} {petId}", petId, position, Quaternion.identity);
+            if (candidate != null) return candidate;
+            // Unassigned art retains the existing qualification fallback.
             var body = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             body.name = $"Pet {ownerId} {petId}";
             body.transform.position = position + Vector3.up * .18f;
@@ -311,11 +322,19 @@ namespace GalaQuest
             return body;
         }
 
+        public void CelebrateFriendship(string petId)
+        {
+            pendingFriendship = GalaQuestPetCatalog.Find(petId) == null ? null : petId;
+            friendshipExpires = Time.unscaledTime + 2f;
+        }
+
         private static void StepPet(GameObject body, GalaQuestCompanionTrail trail, Transform owner, float dt)
         {
             if (body == null || trail == null || owner == null) return;
             if (trail.NeedsReset) trail.Reset(owner.position, owner.forward);
-            body.transform.position = trail.Step(owner.position, owner.forward, dt) + Vector3.up * .18f;
+            var position = trail.Step(owner.position, owner.forward, dt);
+            body.transform.position = body.GetComponent<GalaQuestWormMotion>() != null
+                ? GalaQuestPetAppearanceCatalog.Floor(position) : position + Vector3.up * .18f;
             var facing = trail.Facing; facing.y = 0;
             if (facing.sqrMagnitude > 1e-6f) body.transform.rotation = Quaternion.LookRotation(facing.normalized, Vector3.up);
         }
@@ -443,6 +462,7 @@ namespace GalaQuest
 
         private void ClearViews()
         {
+            pendingFriendship = null;
             foreach (var actor in enemies.Values) { Destroy(actor.Body); Destroy(actor.Sector); }
             foreach (var actor in companions.Values) { if (actor.PetBody != null) Destroy(actor.PetBody); Destroy(actor.Body); }
             enemies.Clear(); companions.Clear();
