@@ -121,7 +121,7 @@ namespace GalaQuest
             if (self == null || self.hp <= 0 || self.specialSeconds >= 0 || self.specialCooldown > 0) return;
             if (Time.unscaledTime - predictedSpecialAt < .25f) return;
             predictedSpecialAt = Time.unscaledTime;
-            selfMotion.Present("slash", 0, .72f);
+            selfMotion.Present("burst", 0, .72f);
             sound.PlaySwing();
             lastSwingSoundAt = Time.unscaledTime;
         }
@@ -280,7 +280,7 @@ namespace GalaQuest
         {
             if (motion == null || state == null) return;
             if (state.downSeconds >= 0) motion.Present("death", state.downSeconds + age, 1.75f);
-            else if (state.specialSeconds >= 0) motion.Present("slash",
+            else if (state.specialSeconds >= 0) motion.Present("burst",
                 Mathf.Min(.72f, state.specialSeconds + age), .72f);
             else if (state.swingSeconds >= 0) motion.Present("slash", state.swingSeconds + age, 1.5f);
             else if (predictedSpecial) { /* Preserve immediate special prediction until authority answers. */ }
