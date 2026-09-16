@@ -492,6 +492,7 @@ namespace GalaQuest
             selfPetBody = null; selfPetTrail = null; selfPetId = null;
             self = null; lastTick = -1; selfHurtUntil = 0;
             predictedSwingAt = float.NegativeInfinity;
+            predictedSpecialAt = float.NegativeInfinity;
             if (selfHelmet != null) Destroy(selfHelmet);
             selfHelmet = null;
             if (selfMotion != null) selfMotion.Present("idle", 0, 0);
