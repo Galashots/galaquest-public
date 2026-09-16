@@ -18,13 +18,13 @@ namespace GalaQuest.Tests
             var dir=Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()); Directory.CreateDirectory(dir);
             var fbx=new byte[]{1,2,3,4}; var texture=new byte[]{5,6};
             File.WriteAllBytes(Path.Combine(dir,"Alpha.fbx"),fbx); File.WriteAllBytes(Path.Combine(dir,"Alpha.texture-0.jpg"),texture);
-            var files=new System.Collections.Generic.List<object>();
-            if(includeFbxEntry) files.Add(new {name="Alpha.fbx",sha256=fileSha,bytes=fileBytes});
-            files.Add(new {name="Alpha.texture-0.jpg",sha256=Hash(texture),bytes=texture.Length});
-            var receipt=new {sourceSha256=sourceSha,fbxSha256=fileSha,blenderVersion="4.5.13",
-                recipeSha256=Hash(File.ReadAllBytes(Path.Combine(U2CombatPreview.RepoRoot,AlphaCandidateAuthoring.RecipePath))),
-                converterSha256=Hash(File.ReadAllBytes(Path.Combine(U2CombatPreview.RepoRoot,AlphaCandidateAuthoring.ConverterPath))),files};
-            File.WriteAllText(Path.Combine(dir,"receipt.json"),Newtonsoft.Json.JsonConvert.SerializeObject(receipt)); return dir;
+            var files = includeFbxEntry ? "{\"name\":\"Alpha.fbx\",\"sha256\":\""+fileSha+"\",\"bytes\":"+fileBytes+"}," : "";
+            var recipe = Hash(File.ReadAllBytes(Path.Combine(U2CombatPreview.RepoRoot,AlphaCandidateAuthoring.RecipePath)));
+            var converter = Hash(File.ReadAllBytes(Path.Combine(U2CombatPreview.RepoRoot,AlphaCandidateAuthoring.ConverterPath)));
+            var json = "{\"sourceSha256\":\""+sourceSha+"\",\"fbxSha256\":\""+fileSha+"\",\"blenderVersion\":\"4.5.13\","+
+                "\"recipeSha256\":\""+recipe+"\",\"converterSha256\":\""+converter+"\",\"files\":["+files+
+                "{\"name\":\"Alpha.texture-0.jpg\",\"sha256\":\""+Hash(texture)+"\",\"bytes\":"+texture.Length+"}]}";
+            File.WriteAllText(Path.Combine(dir,"receipt.json"),json); return dir;
         }
         [Test]
         public void ValidBindingPassesButChangedTextureRejects()
