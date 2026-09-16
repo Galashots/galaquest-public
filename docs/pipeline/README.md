@@ -25,6 +25,10 @@ Start from a selected player/product need, then use the canonical asset registry
 
 Prefer an existing qualified or realistically qualifiable asset when it serves the selected need. Do not integrate an asset merely because it is available, old, expensive, or waiting in custody.
 
+Use the [qualification entrypoint](../asset-production/ASSET_REGISTRY_V1.md#qualification-entrypoint-and-receipt)
+to join a declared identity/class, exact source/candidate bytes and existing diagnostics before the
+specialist lane. Its receipt names outstanding work; it neither accepts art nor promotes inventory.
+
 ## Iron rules — every lane
 
 1. **Credentials stay local.** Guarded Meshy clients read `.local/meshy/api-key.txt` from the current

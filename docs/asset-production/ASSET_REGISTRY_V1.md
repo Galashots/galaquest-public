@@ -37,6 +37,41 @@ The current Drive intake evidence is `ASSET_INTAKE_2026-08-29.json`.
 source recovery conclusion. Neither file promotes raw binaries into the public
 runtime tree.
 
+## Qualification entrypoint and receipt
+
+Use the existing semantic identity, not a provider filename, to start read-only qualification:
+
+```text
+node tools/asset-registry/qualify-asset.mjs --id enemy.wolf --purpose "Enemy movement review" --reference docs/GALAQUEST_VISUAL_AUTHORITY.md
+node tools/asset-registry/qualify-asset.mjs --id gear.shield.ironwood --class rigid-gear
+node tools/asset-registry/qualify-asset.mjs --id prop.village.cart --class rigid-prop
+node tools/asset-registry/qualify-asset.mjs --verify <receipt.json>
+```
+
+`--source` names a recovered file already staged in the owned checkout; its hash must match
+this registry. `--candidate` names a derivative without claiming proven ancestry. Generic model
+and gear records require an explicit class; deformable gear is not the rigid lane. `--clip`
+(repeatable) runs the existing strict native-clip check against the candidate body. `--root`
+opts into root-motion measurement using the actual root name, never a guessed humanoid default.
+
+Repeat `--reference` for controlling comparison files and `--evidence` for recipes and existing
+Unity provenance/review manifests, importer settings, materials, prefabs, scenes and captures.
+The entrypoint hashes those files and observed `.meta` companions; it does NOT discover Unity's
+whole dependency graph or validate the contents of a review claim. Preserve the dependency set
+from the existing Unity capture/import tooling. A GLB hash alone cannot bind a changed mount.
+
+`--out .local/<new-receipt>.json` (or an ignored `tmp/` path) requires an existing parent and
+refuses overwrite. The receipt binds registry, sources, candidate resources, tools, authority,
+checkout/runtime state and diagnostics. Missing inputs remain UNKNOWN. Re-run after changes;
+`--verify` detects changed listed inputs and accidental receipt edits, not malicious forgery.
+Keep useful receipts in the existing PR/Drive custody route; this is not another registry.
+
+Exit 1 means rejection/error; 2 means incomplete/UNKNOWN. Exit 0 is possible only for matching
+receipt bindings, not asset acceptance. Historical PASS and attached PASS text never become
+fresh qualification. The Hero budget printer may emit FAIL with exit 0; its contract is not a
+universal prop limit. Specialist and human gates remain separate. No importing, transformation,
+registry mutation, upload, provider call or promotion is performed by this entrypoint.
+
 ## Package B interface
 
 Animation Lab v1 consumes registry records and emits evidence references for

@@ -32,6 +32,81 @@ Stylisation may exaggerate silhouette and proportions; it does not make implausi
 
 Use `pose_anatomy.mjs` as measurement beside visual evidence. A provider action name, green budget, or the previous GalaQuest clip is not anatomy authority; qualify the candidate that would actually ship.
 
+## Rigging procedure: preserve the body, qualify the skeleton
+
+Use this sequence for rig production; the command reference below owns provider invocation.
+Inputs are the selected need, semantic asset ID, immutable source hash, intended body family,
+metre scale, reference roles, destination and required actions. An unknown family is not permission
+to reuse a humanoid rig on a worm or quadruped.
+
+1. **Identify and inspect.** Run `tools/asset-registry/qualify-asset.mjs` for the record and
+   `node tools/assets/glb-intake-report.mjs <source.glb>`. Save the raw source and compare its
+   silhouette beside accepted content. Existing rigged sources stay pristine; do not re-rig by default.
+2. **Resolve topology before skinning.** On a candidate copy, inspect cracks, nonmanifold areas,
+   normals and separated shells; measure the exported bytes after any reduction. Split UV-seam
+   vertices can turn a decimation into cracks. Choose seam-preserving connectivity treatment before
+   reducing, and compare UVs/normals/textures afterward; never blindly weld everything. Use the
+   applicable source/GLB gate from `tools/foundry/README.md`. Deliberately open garments are not
+   automatically defects. Unsupported gate scope stays UNKNOWN, not zero defects.
+3. **Choose the existing rig route.** For an authorized humanoid provider job, use the guarded
+   rig client below and preserve task ID plus the pristine rigged result. Provider web-app capability
+   is not API-client capability. For a locally authored body, use its explicitly qualified family
+   recipe or author a candidate against the approved skeleton. The source-hash-locked
+   `tools/blender/author_gremlin_rig.py` is a gremlin recipe, NOT a universal rigger; never remove its
+   source guard to process another anatomy. No applicable family means a separate qualification task.
+4. **Establish the rest/bind contract.** In Blender, inspect the candidate in Rest Position against
+   the immutable reference: hierarchy, joint centres, bone directions/roll, scale and bind state.
+   Keep mesh and armature in the agreed metre convention. Do not apply a posed frame as a new rest
+   pose, rename joints, or change the Hero's skeleton to accommodate a downloaded clip or gear item.
+   Save the editable authoring source and recipe/version before motion work.
+5. **Bind and repair weights on the candidate.** Automatic weights are only a starting proposal.
+   Inspect each deforming region; remove unintended influences, limit meaningful influences to the
+   live character contract's cap, normalize, and compare deformation before/after pruning. Inspect
+   shoulders, elbows, hips, knees, hands and facial/cloth regions where present. A skin/joint count
+   does not prove normalized weights, valid inverse binds or plausible anatomy.
+6. **Stress the actual exported body.** Pose flexion, twist, crouch/reach and important action extremes.
+   Inspect volume collapse, opposite-limb pulling, disconnected pieces and joint pivots from front,
+   side, rear and three-quarter. Run `pose_anatomy.mjs` only for an applicable humanoid skeleton;
+   its humanoid axis assumptions are not a quadruped/worm gate. Preserve raw observations and the
+   strongest visible defect. Missing applicable weight/bind proof stays UNKNOWN.
+7. **Prove the Unity import before authoring a library.** Use the destination procedure below on
+   one body and one representative motion. Check native imported rig type, skeleton/clip binding,
+   unit scale, axes, material response and ground contact. Preserve source, exported GLB, FBX and
+   texture hashes plus Blender/Unity versions and importer settings. Rigging is not complete merely
+   because Blender plays a clip. Fix/reject the owned candidate before multiplying motions.
+
+## Animation procedure: native motion before more clips
+
+1. **Declare what the player must read.** Choose the required actions from the selected behavior,
+   not an attractive motion pack: anticipation, contact/action, recovery and loop transitions.
+   Record whether gameplay or animation owns translation/yaw. No provider name is anatomy evidence.
+2. **Inventory before sourcing.** Run `node tools/foundry/clip_inventory.mjs <body.glb>` and inspect
+   existing clips. Select actual exported names, durations and roots. Use the body's family recipe
+   for local authoring or the individually authorized provider command below. Preserve each donor.
+3. **Check compatibility before merge.** Run the strict native check below for provider clips.
+   Donor mode is only for our same-body export whose joint order changed. Matching names alone is
+   insufficient. A refusal is a repair/re-source condition, not permission to delete translation
+   tracks. The current verifier is a scoped rest-joint check, not full inverse-bind/weight proof.
+4. **Measure root behavior and anatomy.** Run
+   `node tools/foundry/measure_root_motion.mjs <clip.glb> --root <actual-root-name>`.
+   For humanoids also use `node tools/foundry/pose_anatomy.mjs <clip.glb> --json --sweep`.
+   Compare the start/end and extrema, foot contact, pelvis/shoulder weight shift, joint folding and
+   torso articulation. A rigid sliding follower is not a finished slither or walk. Correct the
+   candidate motion or use a compatible source; never hide a rig error with global body offsets.
+5. **Merge once onto the pristine compatible body.** Use `merge_clips.mjs` below, which repeats
+   compatibility at the mutation boundary. Export/recompress a new derivative, never overwrite the
+   original. Re-inventory that derivative and inspect meaningful frames and transitions; neither
+   compatible skeletons nor seamless endpoints prove appealing movement or correct contact timing.
+6. **Verify Unity motion in context.** Confirm actual imported clips and controller states; inspect
+   idle-to-move, move-to-stop, turning and action transitions in Play Mode, then the connected game.
+   Compare root/controller displacement with the declared motion owner to catch double movement,
+   sliding, teleports and rotation drift. Observe baked/current deformed feet against the actual
+   floor, not just rest bounds. Sample wind-up, contact and recovery rather than one flattering frame.
+7. **Close the evidence, not the artistic decision.** Bind source/donor/export/import/controller,
+   scene/material/capture files in the qualification receipt and existing Unity review manifest.
+   Producer critique, fresh review, device evidence and Owner promotion remain distinct. Any changed
+   relevant input invalidates the affected proof. No batch of fifty clips advances from one good idle.
+
 ## Steps
 
 1. **Reference** per [references.md](references.md), with the character additions:
@@ -100,10 +175,15 @@ Use `pose_anatomy.mjs` as measurement beside visual evidence. A provider action 
    Character Foundry anatomy/rig judgment, then the shared `visual-reference-first` loop and asset visual
    review guide. Budgets passing is not the finish line.
 
-9. **Ship and integrate.** Put the accepted file under the consumer's existing `public/assets/` family,
-   wire an AnimationMixer/clip selection using runtime identifiers discovered from the actual asset,
-   then capture the running game at gameplay and inspection scale. Running-game pixels are final
-   appearance authority.
+9. **Qualify the Unity destination, then integrate under the owning package.** Follow `unity/AGENTS.md`
+   and `tools/unity-migration/README.md`. The existing bridge converter/proof scene has a declared
+   asset set; it is not a universal character importer. Use the applicable family converter and native
+   ModelImporter settings, preserve `.meta` identities, and record any missing family adapter as UNKNOWN.
+   Compare source/export/native-import skeleton, actual clip names, scale, material slots and grounding.
+   Refresh through the explicitly targeted owned Editor; verify ready state and nonzero focused-test
+   discovery. Inspect neutral, gameplay and motion views before a connected-game handoff. Keep
+   qualification candidates in controlled custody; do not copy unapproved art into production merely
+   to make an import succeed. An AnimationMixer or legacy Three.js render is not Unity acceptance.
 
 ## Cost discipline
 
