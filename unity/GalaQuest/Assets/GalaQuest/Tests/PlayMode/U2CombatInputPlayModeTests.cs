@@ -300,6 +300,36 @@ namespace GalaQuest.Tests
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(special, value);
 
         [UnityTest]
+        public IEnumerator OneFrameCanEmitAtMostOneAttackIntent()
+        {
+            var root = new GameObject("One-frame attack dedupe");
+            var attack = root.AddComponent<GalaQuestAttackControl>();
+            var transport = new FakeTransport();
+            using var session = new GalaQuestConnectionSession(transport);
+            attack.BindSession(session);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Younger", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\"}");
+            try
+            {
+                yield return null;
+                Assert.That(attack.TryAttack(), Is.True);
+                Assert.That(attack.TryAttack(), Is.False,
+                    "two physical input sources observed in one Update must collapse to one attack intent");
+                Assert.That(transport.AttackCount, Is.EqualTo(1));
+
+                yield return null;
+                Assert.That(attack.TryAttack(), Is.True,
+                    "frame dedupe must not suppress a later deliberate press");
+                Assert.That(transport.AttackCount, Is.EqualTo(2));
+            }
+            finally
+            {
+                attack.BindSession(null);
+                UnityEngine.Object.Destroy(root);
+            }
+        }
+        [UnityTest]
         public IEnumerator RecoveryRequiresReleasingTheHeldMovementThumb()
         {
             var touchscreen = InputSystem.AddDevice<Touchscreen>();
