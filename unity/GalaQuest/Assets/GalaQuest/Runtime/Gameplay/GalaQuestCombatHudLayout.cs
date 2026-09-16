@@ -7,7 +7,7 @@ namespace GalaQuest
     {
         public readonly float Scale;
         public readonly bool Narrow;
-        public readonly Rect Status, Identity, Objective, Mute, Travel, Reward, Attack, Movement;
+        public readonly Rect Status, Identity, Objective, Mute, Travel, Reward, Attack, Special, Movement;
 
         public GalaQuestCombatHudLayout(Vector2 viewport)
         {
@@ -30,6 +30,9 @@ namespace GalaQuest
             var attackSize = Mathf.Clamp(viewport.y * .18f, 96, Narrow ? 136 : 156);
             Attack = new Rect(viewport.x - margin - attackSize, viewport.y - margin - attackSize,
                 attackSize, attackSize);
+            var specialSize = attackSize * .48f;
+            Special = new Rect(Attack.x + Attack.width - specialSize,
+                Attack.y - specialSize - 16 * s, specialSize, specialSize);
             var movementSize = Mathf.Min(144 * s, viewport.x * .34f);
             Movement = new Rect(margin, viewport.y - margin - movementSize, movementSize, movementSize);
             var travelWidth = Mathf.Min(260 * s, viewport.x - margin * 2);

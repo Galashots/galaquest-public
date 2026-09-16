@@ -54,6 +54,11 @@ namespace GalaQuest
             return WithEpoch(JsonUtility.ToJson(new AttackMessage { v = Version, type = "attack", seq = sequence }), worldEpoch);
         }
 
+        public static string Special(int sequence, int worldEpoch = 0)
+        {
+            return WithEpoch(JsonUtility.ToJson(new SpecialMessage { v = Version, type = "special", seq = sequence }), worldEpoch);
+        }
+
         public static string Travel(string destinationId, int worldEpoch)
         {
             return JsonUtility.ToJson(new TravelMessage
@@ -182,6 +187,14 @@ namespace GalaQuest
 
         [Serializable]
         private sealed class AttackMessage
+        {
+            public int v;
+            public string type;
+            public int seq;
+        }
+
+        [Serializable]
+        private sealed class SpecialMessage
         {
             public int v;
             public string type;
@@ -341,6 +354,8 @@ namespace GalaQuest
         public int maxHp;
         public float swingSeconds = -1;
         public float cooldown;
+        public float specialSeconds = -1;
+        public float specialCooldown;
         public float downSeconds = -1;
         public float protectionSeconds;
     }

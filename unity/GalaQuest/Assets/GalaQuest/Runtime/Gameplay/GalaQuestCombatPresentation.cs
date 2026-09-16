@@ -11,6 +11,7 @@ namespace GalaQuest
         private GalaQuestConnectionSession session;
         private GalaQuestTraversalController traversal;
         private GalaQuestAttackControl attackControl;
+        private GalaQuestSpecialControl specialControl;
         private GalaQuestCombatMotion selfMotion;
         private GameObject selfWeapon;
         private GameObject selfHelmet;
@@ -24,6 +25,7 @@ namespace GalaQuest
         private float receivedAt;
         private float selfHurtUntil;
         private float predictedSwingAt = float.NegativeInfinity;
+        private float predictedSpecialAt = float.NegativeInfinity;
         private float lastSwingSoundAt = float.NegativeInfinity;
         private int lastTick = -1;
         private Camera view;
@@ -76,6 +78,7 @@ namespace GalaQuest
                 session.TravelStarted -= ClearViews;
             }
             if (attackControl != null) attackControl.AttackRequested -= PredictAttack;
+            if (specialControl != null) specialControl.SpecialRequested -= PredictSpecial;
             if (selfWeapon != null) Destroy(selfWeapon);
             if (selfHelmet != null) Destroy(selfHelmet);
             ClearViews();
@@ -84,6 +87,7 @@ namespace GalaQuest
             if (content == null) throw new InvalidOperationException("Combat content must be configured before joining.");
             traversal = GetComponent<GalaQuestTraversalController>();
             attackControl = GetComponent<GalaQuestAttackControl>();
+            specialControl = GetComponent<GalaQuestSpecialControl>();
             var hero = traversal.Hero;
             var animator = hero.GetComponent<Animator>();
             if (animator == null) animator = hero.gameObject.AddComponent<Animator>();
@@ -96,6 +100,7 @@ namespace GalaQuest
             if (sound == null) sound = gameObject.AddComponent<GalaQuestCombatAudio>();
             sound.Configure(content);
             if (attackControl != null) attackControl.AttackRequested += PredictAttack;
+            if (specialControl != null) specialControl.SpecialRequested += PredictSpecial;
             session.ServerFrameReceived += ApplyFrame;
             session.Disconnected += ClearViews;
             session.TravelStarted += ClearViews;
@@ -107,6 +112,16 @@ namespace GalaQuest
             if (Time.unscaledTime - predictedSwingAt < .25f) return;
             predictedSwingAt = Time.unscaledTime;
             selfMotion.Present("slash", 0, 1.5f);
+            sound.PlaySwing();
+            lastSwingSoundAt = Time.unscaledTime;
+        }
+
+        private void PredictSpecial()
+        {
+            if (self == null || self.hp <= 0 || self.specialSeconds >= 0 || self.specialCooldown > 0) return;
+            if (Time.unscaledTime - predictedSpecialAt < .25f) return;
+            predictedSpecialAt = Time.unscaledTime;
+            selfMotion.Present("slash", 0, .72f);
             sound.PlaySwing();
             lastSwingSoundAt = Time.unscaledTime;
         }
@@ -123,6 +138,7 @@ namespace GalaQuest
             ReconcileHelmet(session.PlayerId, traversal.Hero, frame, ref selfHelmet);
             ReconcilePet(session.PlayerId, traversal.Hero, frame, ref selfPetBody, ref selfPetTrail, ref selfPetId);
             if (self != null && self.swingSeconds >= 0) predictedSwingAt = float.NegativeInfinity;
+            if (self != null && self.specialSeconds >= 0) predictedSpecialAt = float.NegativeInfinity;
             seen.Clear();
             foreach (var state in frame.encounter.enemies)
             {
@@ -178,7 +194,8 @@ namespace GalaQuest
                     if (item.heroId == session.PlayerId) { selfHurtUntil = receivedAt + .5f; sound.PlayHurt(); }
                     else if (companions.TryGetValue(item.heroId, out var friend)) friend.HurtUntil = receivedAt + .5f;
                 }
-                if ((item.type == "wolf-hit" || item.type == "wolf-defeated") && item.enemyId != null && enemies.TryGetValue(item.enemyId, out var hit))
+                if ((item.type == "wolf-hit" || item.type == "wolf-defeated" || item.type == "special-hit")
+                    && item.enemyId != null && enemies.TryGetValue(item.enemyId, out var hit))
                 {
                     hit.FlashUntil = receivedAt + .12f;
                     if (item.type == "wolf-defeated") sound.PlayVictory(); else sound.PlayImpact();
@@ -203,7 +220,8 @@ namespace GalaQuest
             { ClearViews(); return; }
             traversal.Hero.position = GalaQuestGroundSurface.Project(traversal.Hero.position, .01f);
             var age = Mathf.Clamp(Time.unscaledTime - receivedAt, 0, .15f);
-            PresentHero(selfMotion, self, traversal.PredictedMotionSpeed, age, selfHurtUntil, Time.unscaledTime - predictedSwingAt < .25f);
+            PresentHero(selfMotion, self, traversal.PredictedMotionSpeed, age, selfHurtUntil,
+                Time.unscaledTime - predictedSwingAt < .25f, Time.unscaledTime - predictedSpecialAt < .72f);
             StepPet(selfPetBody, selfPetTrail, traversal.Hero, Time.unscaledDeltaTime);
             if (pendingFriendship != null)
             {
@@ -219,7 +237,7 @@ namespace GalaQuest
                 MoveBody(actor.Body.transform, target, actor.Player.heading, blend);
                 if (snapped) actor.PetTrail?.Reset(actor.Body.transform.position, actor.Body.transform.forward);
                 StepPet(actor.PetBody, actor.PetTrail, actor.Body.transform, Time.unscaledDeltaTime);
-                PresentHero(actor.Motion, actor.State, actor.Player.speed, age, actor.HurtUntil, false);
+                PresentHero(actor.Motion, actor.State, actor.Player.speed, age, actor.HurtUntil, false, false);
             }
             foreach (var actor in enemies.Values)
             {
@@ -257,11 +275,15 @@ namespace GalaQuest
             body.rotation = Quaternion.Slerp(body.rotation, GalaQuestServerCoordinates.ToUnityHeading(heading), blend);
         }
 
-        private static void PresentHero(GalaQuestCombatMotion motion, GalaQuestServerHeroCombat state, float speed, float age, float hurtUntil, bool predicted)
+        private static void PresentHero(GalaQuestCombatMotion motion, GalaQuestServerHeroCombat state, float speed,
+            float age, float hurtUntil, bool predicted, bool predictedSpecial)
         {
             if (motion == null || state == null) return;
             if (state.downSeconds >= 0) motion.Present("death", state.downSeconds + age, 1.75f);
+            else if (state.specialSeconds >= 0) motion.Present("slash",
+                Mathf.Min(.72f, state.specialSeconds + age), .72f);
             else if (state.swingSeconds >= 0) motion.Present("slash", state.swingSeconds + age, 1.5f);
+            else if (predictedSpecial) { /* Preserve immediate special prediction until authority answers. */ }
             else if (predicted) { /* Preserve immediate prediction until the first authoritative answer. */ }
             else if (Time.unscaledTime < hurtUntil) motion.Present("hit", .5f - (hurtUntil - Time.unscaledTime), 0);
             else motion.Present("idle", 0, 0, speed);
