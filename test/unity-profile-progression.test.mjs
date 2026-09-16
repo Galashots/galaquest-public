@@ -124,3 +124,58 @@ test('a device that refuses a save does not report successful reward persistence
   const bridge=createUnityProfileProgression({storage:{...storage,setItem(){throw new Error('Quota exceeded');}}});
   assert.throws(()=>bridge.applyFrame(A,'p1',snapshot([award('p1','combat:a')])),/could not save/);
 });
+
+// Exercise the addressed producer payload before any welcome/reload can mask a
+// missing pet-state journal write, as happened in the built sibling review.
+const petFacts = (profileId, petId = 'worm_green', rev = 0, value = petId) => [
+  {type:'pet-owned',eventId:`pet-owned:${profileId}:${petId}`,value:petId},
+  {type:'pet-equipped',eventId:`pet-equip:${profileId}:review-${rev}`,value,rev},
+];
+const petFrame = (id, profileFacts) => ({v:4,type:'pet-state',id,worldEpoch:0,profileFacts,events:[]});
+
+test('live private pet choices reach both device journals before reload or backend loss', () => {
+  const {storage,bridge}=setup();
+  const before=bridge.applyFrame(A,'p1',{v:4,type:'welcome',id:'p1',profileFacts:[]});
+  bridge.applyFrame(A,'p1',petFrame('p1',petFacts(A,'worm_red')));
+  const sibling=bridge.applyFrame(B,'p2',petFrame('p2',petFacts(B)));
+  for (const [profileId,petId] of [[A,'worm_red'],[B,'worm_green']]) {
+    const profiles=createProfileStore({storage});
+    const journal=profiles.journalFor(profileId);
+    assert.deepEqual(journal.filter(f=>f.type==='pet-owned').map(f=>f.value),[petId]);
+    assert.equal(journal.find(f=>f.type==='pet-equipped').value,petId);
+    const restored=createUnityProfileProgression({storage}).applyFrame(profileId,'new-player',
+      {v:4,type:'welcome',id:'new-player',profileFacts:[],events:[]});
+    assert.deepEqual(JSON.parse(restored.factsJson),journal,'empty server cannot erase live pet facts');
+    for (const key of ['xp','coins','marks','shards','power']) assert.equal(restored[key],before[key],key);
+  }
+  assert.equal(sibling.gainedXp,0); assert.equal(sibling.leveledUp,false);
+});
+
+test('private pet-state remains addressed, idempotent and honest about failed saves', () => {
+  const {storage,bridge}=setup();
+  const frame=petFrame('p1',petFacts(A));
+  assert.throws(()=>bridge.applyFrame(A,'p2',frame),/different player/);
+  assert.equal(createProfileStore({storage}).journalFor(A).length,0);
+  bridge.applyFrame(A,'p1',frame);
+  const first=createProfileStore({storage}).journalFor(A);
+  const replay=bridge.applyFrame(A,'p1',frame);
+  assert.deepEqual(JSON.parse(replay.factsJson),first);
+  assert.equal(createProfileStore({storage}).journalFor(B).length,0);
+  assert.equal(replay.gainedXp,0); assert.equal(replay.leveledUp,false);
+  const fresh=setup();
+  const blocked=createUnityProfileProgression({storage:{...fresh.storage,setItem(){throw new Error('Quota exceeded');}}});
+  assert.throws(()=>blocked.applyFrame(A,'p1',frame),/could not save/);
+  assert.equal(createProfileStore({storage:fresh.storage}).journalFor(A).length,0);
+});
+
+test('rest and follow revisions are saved from private replies without currency ceremonies', () => {
+  const {storage,bridge}=setup();
+  const initial=bridge.applyFrame(A,'p1',petFrame('p1',petFacts(A)));
+  const rest={type:'pet-equipped',eventId:`pet-equip:${A}:review-1`,value:'none',rev:1};
+  const follow={type:'pet-equipped',eventId:`pet-equip:${A}:review-2`,value:'worm_green',rev:2};
+  bridge.applyFrame(A,'p1',petFrame('p1',[...petFacts(A),rest]));
+  const after=bridge.applyFrame(A,'p1',petFrame('p1',[...petFacts(A),rest,follow]));
+  assert.deepEqual(createProfileStore({storage}).journalFor(A).filter(f=>f.type==='pet-equipped').map(f=>f.rev).sort(),[0,1,2]);
+  for (const key of ['xp','coins','marks','shards','power']) assert.equal(after[key],initial[key],key);
+  for (const key of ['gainedXp','gainedCoins','gainedMarks']) assert.equal(after[key],0,key);
+});
