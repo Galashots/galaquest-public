@@ -4,6 +4,11 @@ import { createServer } from 'node:http';
 import { attachGameServer, createRewardCoordinator, createSimulation } from '../net/gameServerCore.mjs';
 import { decode, encode, joinMessage, attackMessage, inputMessage } from '../public/src/net/protocolCore.js';
 
+// Encounter transport order is presentation-only; stable enemyId/kind is the identity seam.
+// Emberworks now has both the gremlin and Alpha roles, so these travel assertions must select the
+// gremlin by kind instead of accidentally turning array order into authority.
+const emberworksGremlin = frame => frame.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin');
+
 async function withServer(run, options = {}) {
   const http = createServer();
   const game = attachGameServer(http, { rewardStorePath: ':memory:', allowMissingOrigin: true, ...options });
@@ -65,7 +70,7 @@ test('real sockets: siblings occupy different destinations with distinct identit
       assert.deepEqual(Object.keys(snapshot.encounter.rewards), [child.welcome.id]);
     }
     assert.equal(b.welcome.destinationId, 'emberworks-deep');
-    assert.equal(b.welcome.encounter.enemies[0].kind, 'lava-gremlin');
+    assert.equal(emberworksGremlin(b.welcome).kind, 'lava-gremlin');
     assert.ok(a.messages.filter(message => message.type === 'snapshot')
       .every(message => message.destinationId !== 'emberworks-deep'));
   });
@@ -89,7 +94,7 @@ test('real sockets: travel preserves the sibling fight, acknowledges arrival and
     body.x = -4; body.z = 7.5;
     room.step(0, Date.now());
     a.send(attackMessage(1));
-    const hit = await a.wait(message => message.type === 'snapshot' && message.encounter.enemies[0].hp === 20);
+    const hit = await a.wait(message => message.type === 'snapshot' && emberworksGremlin(message).hp === 20);
     // Remove the attacker from reach without changing the enemy's health, so this test measures
     // travel continuity rather than chasing/leash timing.
     body.x = 0; body.z = 4;
@@ -101,14 +106,14 @@ test('real sockets: travel preserves the sibling fight, acknowledges arrival and
     assert.equal(arrived.id, b.welcome.id);
     const away = await a.wait(message => message.type === 'snapshot' && message.tick > hit.tick
       && message.players.length === 1);
-    assert.equal(away.encounter.enemies[0].hp, 20);
+    assert.equal(emberworksGremlin(away).hp, 20);
     assert.equal(room.players.has(b.welcome.id), false);
     const stopped = await b.wait(message => message.type === 'snapshot' && message.worldEpoch === 1);
     assert.deepEqual(stopped.players.map(({ x, z, speed }) => ({ x, z, speed })), [{ x: 0, z: 0, speed: 0 }]);
     assert.equal(stopped.encounter.heroes[b.welcome.id].swingSeconds, -1);
     b.send({ v: 4, type: 'travel', destinationId: 'emberworks-deep', worldEpoch: 1 });
     const reunited = await b.wait(message => message.type === 'destination-changed' && message.worldEpoch === 2);
-    assert.equal(reunited.encounter.enemies[0].hp, 20);
+    assert.equal(emberworksGremlin(reunited).hp, 20);
     assert.deepEqual(new Set(reunited.players.map(p => p.id)), new Set([a.welcome.id, b.welcome.id]));
     assert.equal(room, game.simulationFor('emberworks-deep'));
     b.send({ ...inputMessage(1, 1, 0, 1, false), worldEpoch: 2 });
@@ -175,18 +180,18 @@ test('real sockets: a returning contributor receives earned XP in their current 
     };
     stage(a.welcome.id);
     a.send(attackMessage(1));
-    await a.wait(message => message.type === 'snapshot' && message.encounter.enemies[0].hp === 20);
+    await a.wait(message => message.type === 'snapshot' && emberworksGremlin(message).hp === 20);
     a.socket.close();
     await b.wait(message => message.type === 'leave' && message.id === a.welcome.id);
     const returned = await connect('younger-again', 'village', 'profile-aaaaaaaa');
     stage(b.welcome.id);
     b.send(attackMessage(1));
-    const second = await b.wait(message => message.type === 'snapshot' && message.encounter.enemies[0].hp === 10);
+    const second = await b.wait(message => message.type === 'snapshot' && emberworksGremlin(message).hp === 10);
     await b.wait(message => message.type === 'snapshot' && message.tick > second.tick
       && message.encounter.heroes[b.welcome.id].cooldown === 0
       && message.encounter.heroes[b.welcome.id].swingSeconds < 0);
     stage(b.welcome.id); b.send(attackMessage(2));
-    await b.wait(message => message.type === 'snapshot' && message.encounter.enemies[0].hp === 0);
+    await b.wait(message => message.type === 'snapshot' && emberworksGremlin(message).hp === 0);
     const paid = await returned.wait(message => message.type === 'snapshot'
       && message.encounter.rewards[returned.welcome.id]?.xp > 0);
     assert.ok(paid.events.some(event => event.type === 'xp-earned' && event.heroId === returned.welcome.id));
@@ -229,7 +234,7 @@ test('unpublished contribution survives live takeover once and presents only to 
     room.step(0, Date.now());
     // Queue meaningful real combat work without publishing: takeover must settle this before remapping.
     room.applyAttack(old.welcome.id, attackMessage(1)); room.step(0.55, Date.now());
-    assert.equal(room.encounterSnapshot().enemies[0].hp, 20);
+    assert.equal(emberworksGremlin({ encounter: room.encounterSnapshot() }).hp, 20);
     const active = await connect('active', 'home-hub', 'profile-credit');
     const finisher = await connect('finisher', 'emberworks-deep', 'profile-finisher');
     const stage = () => {
@@ -237,7 +242,7 @@ test('unpublished contribution survives live takeover once and presents only to 
       room.step(0, Date.now());
     };
     stage(); finisher.send(attackMessage(1));
-    const hit = await finisher.wait(m => m.type === 'snapshot' && m.encounter.enemies[0].hp === 10);
+    const hit = await finisher.wait(m => m.type === 'snapshot' && emberworksGremlin(m).hp === 10);
     await finisher.wait(m => m.type === 'snapshot' && m.tick > hit.tick && m.encounter.heroes[finisher.welcome.id].cooldown === 0 && m.encounter.heroes[finisher.welcome.id].swingSeconds < 0);
     stage(); finisher.send(attackMessage(2));
     const paid = await active.wait(m => m.type === 'snapshot' && m.events.some(e => e.type === 'xp-earned' && e.heroId === active.welcome.id));
