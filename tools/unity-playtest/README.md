@@ -135,3 +135,22 @@ replacement, and reconnect. It records the Unity client SHA and checked-out serv
 The driver can use projected control diagnostics when the player exposes them; its fixed fallback is
 specific to the checked-in Forge pocket and still requires each physical tap to produce the expected
 authoritative server transition.
+
+## Wildwood Burst integration
+
+After building the actual U2 combat candidate, run:
+
+```powershell
+node tools/unity-playtest/burst.mjs path/to/candidate-build-manifest.json -burst
+```
+
+This driver seeds separate Level-5 and Level-4 synthetic profile journals through the shared XP law.
+It exercises the real keyboard and canvas-touch paths, a damage-bearing special, cooldown, a portrait
+button-edge drag, absence of ordinary attacks from that touch, and journal reload. It retains captures
+and checks cleanup of its own Chrome profile and backend. Synthetic unlock proof is not natural
+first-15-minute pacing, and viewport emulation is not physical-device acceptance. Inspect the pictures.
+
+For non-interactive remote Editor sessions where Ctrl+C is not delivered as a process signal, prefer
+`node tools/unity/editor-play.mjs --cycles 1 --hold 30` when a bounded play window fits the inspection.
+Keep its process and ownership receipt. Do not treat sending a control character to stdin as verified
+teardown; the helper must report stopped Play Mode, released override and exited backend.
