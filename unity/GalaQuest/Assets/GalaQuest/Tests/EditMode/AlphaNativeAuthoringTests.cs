@@ -110,7 +110,7 @@ namespace GalaQuest.Tests
                 Assert.That(prefab, Is.Not.Null);
                 var modelPath=folder+"/Alpha/Alpha.fbx";
                 var bite=AssetDatabase.LoadAllAssetsAtPath(modelPath).OfType<AnimationClip>()
-                    .Single(x=>x.name=="bite"||x.name.EndsWith("|bite"));
+                    .Where(x=>!x.name.StartsWith("__preview__")).Single(x=>x.name=="bite"||x.name.EndsWith("|bite"));
                 var heavy=AssetDatabase.LoadAssetAtPath<AnimationClip>(folder+"/Alpha/AlphaBiteRetimed.anim");
                 Assert.That(heavy.length,Is.EqualTo(1.75f).Within(.0001f));
                 var sourceBody=Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(modelPath));
