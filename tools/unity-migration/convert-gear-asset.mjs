@@ -35,6 +35,14 @@ export const PINNED_BLENDER_VERSION = '4.5.13';
 
 export const CONVERSION_SCRIPT = 'tools/blender/convert_glb_to_fbx.py';
 
+/**
+ * Exit code Blender returns when the --python script raises.
+ *
+ * Deliberately not exported: a test that imported this would be asserting the implementation
+ * against itself. The regression pins the literal 42 independently.
+ */
+const BLENDER_PYTHON_EXIT_CODE = 42;
+
 export const PROVENANCE_PATH =
   'unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json';
 
@@ -127,11 +135,36 @@ function main(argv) {
 
   if (!recordOnly) {
     mkdirSync(dirname(dest), { recursive: true });
-    execFileSync(
-      blenderPath,
-      ['--background', '--factory-startup', '--python', CONVERSION_SCRIPT, '--', source, dest, semanticId],
-      { stdio: 'inherit' },
-    );
+    try {
+      execFileSync(
+        blenderPath,
+        [
+          '--background',
+          '--factory-startup',
+          // Blender exits 0 even when a --python script raises. Without this, a conversion that
+          // failed part-way is indistinguishable from one that succeeded, and the existence check
+          // below is satisfied by whatever derivative was already on disk -- so stale bytes get
+          // hashed and recorded as the current output of the current source. tools/foundry/README.md
+          // makes this flag mandatory for any automation that trusts Blender's exit status.
+          '--python-exit-code', String(BLENDER_PYTHON_EXIT_CODE),
+          '--python', CONVERSION_SCRIPT,
+          '--', source, dest, semanticId,
+        ],
+        { stdio: 'inherit' },
+      );
+    } catch (error) {
+      // Exit before provenance is touched. A failed conversion must leave the recorded
+      // source-to-derivative identity exactly as it was.
+      process.stderr.write(
+        `Blender conversion failed for ${semanticId} (exit ${error.status ?? 'unknown'}).\n`
+        + `Provenance was not updated.\n`
+        + (existsSync(dest)
+          ? `${dest} still holds the PREVIOUS derivative. Those bytes were NOT produced by ${source} `
+            + `as it stands now -- do not ship or hash them as if they were.\n`
+          : ''),
+      );
+      process.exit(1);
+    }
   }
 
   if (!existsSync(dest)) {
