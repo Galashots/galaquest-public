@@ -7,14 +7,14 @@ const advance = (sim, frames, offset = 0) => {
   for (let i = 1; i <= frames; i++) sim.step(0.05, offset + i * 50);
 };
 
-test('Emberworks owns one gremlin, including destination selected by the first join', () => {
+test('Emberworks owns a gremlin pursuer and an Alpha heavy, including first-join selection', () => {
   for (const direct of [true, false]) {
     const sim = createSimulation(direct ? { destinationId } : {});
     if (!direct) sim.activateDestination(destinationId);
     const hero = sim.addPlayer('fighter');
     const enemies = sim.encounterSnapshot().enemies;
-    assert.equal(enemies.length, 1);
-    assert.equal(enemies[0].kind, 'lava-gremlin');
+    assert.equal(enemies.length, 2);
+    assert.deepEqual(enemies.map((enemy) => enemy.kind), ['lava-gremlin', 'alpha-wolf']);
     assert.deepEqual({ x: hero.x, z: hero.z }, { x: 0, z: 4 });
     assert.deepEqual({ x: enemies[0].x, z: enemies[0].z }, { x: -4, z: 9 });
   }
@@ -35,7 +35,7 @@ test('three starter strikes defeat the shared gremlin; replayed attack does not 
   const defeats = events.filter(e => e.type === 'wolf-defeated');
   assert.equal(defeats.length, 1);
   assert.equal(defeats[0].kind, 'lava-gremlin');
-  assert.equal(sim.encounterSnapshot().enemies[0].hp, 0);
+  assert.equal(sim.encounterSnapshot().enemies.find((enemy) => enemy.kind === 'lava-gremlin').hp, 0);
   assert.equal(sim.encounterSnapshot().heroes[sibling.id].hp, 30);
 });
 
