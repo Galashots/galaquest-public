@@ -73,6 +73,53 @@ namespace GalaQuest.Tests
         }
 
         [UnityTest]
+        public IEnumerator LevelFiveSpecialOwnsItsTouchRegionAndKeyboardChordWithoutOrdinaryAttack()
+        {
+            var touchscreen = InputSystem.AddDevice<Touchscreen>();
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var root = new GameObject("Wildwood Burst input");
+            var attack = root.AddComponent<GalaQuestAttackControl>();
+            var special = root.AddComponent<GalaQuestSpecialControl>();
+            var transport = new FakeTransport();
+            using var session = new GalaQuestConnectionSession(transport);
+            attack.BindSession(session);
+            special.BindSession(session);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Younger", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":0,\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"maxHp\":30,\"specialSeconds\":-1,\"specialCooldown\":0}}}}");
+            // The accepted progression callback is browser-owned; this fixture pins the already
+            // accepted Level-5 result so the test stays focused on one physical input owner.
+            typeof(GalaQuestSpecialControl).GetField("level",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(special, 5);
+            try
+            {
+                yield return null;
+                yield return null;
+                var viewport = new Vector2(Screen.width, Screen.height);
+                var button = GalaQuestSpecialControl.TouchRect(viewport).center;
+                BeginTouch(7, button, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(1));
+                Assert.That(transport.AttackCount, Is.Zero, "The special touch must not also trigger ordinary attack.");
+                MoveTouch(7, button + Vector2.up * 120, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(1), "Holding or dragging must not repeat the special.");
+                EndTouch(7, button, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Press(keyboard.kKey, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(2), "K must be the deliberate keyboard special chord.");
+                Assert.That(transport.AttackCount, Is.Zero);
+            }
+            finally
+            {
+                special.BindSession(null);
+                attack.BindSession(null);
+                UnityEngine.Object.Destroy(root);
+            }
+        }
+
+        [UnityTest]
         public IEnumerator RecoveryRequiresReleasingTheHeldMovementThumb()
         {
             var touchscreen = InputSystem.AddDevice<Touchscreen>();
@@ -272,6 +319,7 @@ namespace GalaQuest.Tests
             public event Action<string> Closed;
             private readonly List<string> sent = new List<string>();
             public int AttackCount => sent.Count(packet => packet.Contains("\"type\":\"attack\""));
+            public int SpecialCount => sent.Count(packet => packet.Contains("\"type\":\"special\""));
             public void Connect() { }
             public bool Send(string message) { sent.Add(message); return true; }
             public void Close() => Closed?.Invoke("interrupted");

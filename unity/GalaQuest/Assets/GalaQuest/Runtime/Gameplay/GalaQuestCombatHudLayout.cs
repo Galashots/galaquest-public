@@ -31,8 +31,10 @@ namespace GalaQuest
             Attack = new Rect(viewport.x - margin - attackSize, viewport.y - margin - attackSize,
                 attackSize, attackSize);
             var specialSize = attackSize * .48f;
-            Special = new Rect(Attack.x + Attack.width - specialSize,
-                Attack.y - specialSize - 16 * s, specialSize, specialSize);
+            // Keep the compact special beside the ordinary attack in the bottom rail. In portrait,
+            // the band above the attack belongs to Forge/travel context and must remain readable.
+            Special = new Rect(Attack.x - specialSize - 10 * s,
+                Attack.y + Attack.height - specialSize, specialSize, specialSize);
             var movementSize = Mathf.Min(144 * s, viewport.x * .34f);
             Movement = new Rect(margin, viewport.y - margin - movementSize, movementSize, movementSize);
             var travelWidth = Mathf.Min(260 * s, viewport.x - margin * 2);
