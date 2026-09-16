@@ -102,8 +102,8 @@ in [character-armoring.md](character-armoring.md). Do not disguise them as rigid
    findings alone is insufficient: a sideways shield previously passed that narrower check.
 8. **Check coverage and restoration.** Leave normal anatomy coverage enabled. Inspect face, eyes,
    brows, ears and exposed scalp in front/side/rear views; remove the item and verify restoration.
-   The current hair atom includes scalp: an open helmet cannot reuse it without exposing a cut.
-   Use the supervised coverage procedure below, not height/colour masks or a larger helmet to hide it.
+   The current hair atom includes scalp; the current Silverguard fit exposes its cut boundary.
+   Prove concealment per item using the supervised coverage procedure, not height/colour guesses.
 9. **Inspect motion and the worst loadout.** Use actual Hero clips in the Workbench: idle, locomotion,
    turn and relevant attack extremes. Check weapon grip, shield/forearm carry, shoulder/head clearance,
    silhouette and body clipping on both sides. Use existing applicable sweep tests; no generic test

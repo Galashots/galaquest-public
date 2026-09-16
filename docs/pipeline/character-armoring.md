@@ -88,7 +88,7 @@ Headgear type matters. A later hat may keep ears/beard and use a helmet-compatib
 4. Save the working `.blend` and run:
 
    ```bash
-   blender working.blend --background \
+   blender working.blend --background --python-exit-code 42 \
      --python tools/blender/bake_anatomy_regions.py -- out.glb [mesh-name]
    ```
 
@@ -101,7 +101,7 @@ The temporary marker materials are authoring UI only. If they survive into the s
 
 Do not ship a mask inferred only from texture colour, bounding boxes, or connected-component guesses. PR #26 R&D on the actual Hero showed why: hair/ears are integrated into the head topology and facial features such as brows are painted into that same textured surface. Simple colour/spatial inference can look plausible at one angle while deleting face triangles at another.
 
-Automation may **propose** region masks. Acceptance still requires fixed-angle overlays and the actual equip/unequip result in Character Studio. A production tag pass must prove:
+Automation may **propose** region masks. Unity-bound work requires fixed-angle overlays and actual equip/unequip in the Unity Workbench and running game; Character Studio is retained legacy diagnosis only. A production tag pass must prove:
 
 - hair is gone where the helmet needs clearance;
 - ears are gone when the headgear class requires it;
@@ -121,7 +121,7 @@ No generated character or armor candidate is promoted from `candidates/` until a
 3. material defaults normalized/re-exported;
 4. rigid vs deforming attachment strategy chosen correctly;
 5. coverage metadata declared where the item replaces/occludes anatomy;
-6. Studio front/side/back/3Q plus relevant animation checks pass;
+6. Unity front/side/back/3Q plus relevant motion and running-game equip/unequip review complete;
 7. gameplay-scale portrait/landscape pixels still read as the intended fantasy;
 8. shipping tests and payload/draw budgets remain green.
 

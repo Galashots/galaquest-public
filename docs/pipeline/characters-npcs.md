@@ -107,7 +107,7 @@ to reuse a humanoid rig on a worm or quadruped.
    Producer critique, fresh review, device evidence and Owner promotion remain distinct. Any changed
    relevant input invalidates the affected proof. No batch of fifty clips advances from one good idle.
 
-## Steps
+## Provider and GLB command reference
 
 1. **Reference** per [references.md](references.md), with the character additions:
    - strict T-pose, arms horizontal, fingers together, empty hands, front view, feet in frame;
