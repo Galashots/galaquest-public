@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { startOwnedServer } from '../runtime-test/owned-server.mjs';
 import { createProfileStore } from '../../public/src/progression/profiles.js';
+import { isWithinStrike } from '../../public/src/combat/encounter.js';
 import { specialAttackTargets } from '../../public/src/combat/specialAttack.js';
 import { enemyStatsForLevel } from '../../public/src/combat/enemyStats.js';
 import { cumulativeXpForLevel } from '../../public/src/progression/levels.js';
@@ -141,6 +142,7 @@ try{
   const alpha=f=>f.encounter.enemies.find(e=>e.enemyId==='emberworks-alpha-1');
   const hero=f=>f.encounter.heroes[first.id];
   const body=f=>f.players.find(p=>p.id===first.id);
+  checks.initialRest=await waitFor(()=>frame(first),f=>hero(f).hp===hero(f).maxHp,'Fixture reaches full health through normal camp recovery',25000);
   await moveAxis(first,'w','z',4.8);await tap(first,.5-100/first.rect.width,1-55/first.rect.height);
   await waitFor(()=>frame(first),f=>f.destinationId==='emberworks-deep','Enter Emberworks');
   assert.ok(alpha(await frame(first)),'This proof requires the integrated authored heavy');
@@ -150,19 +152,23 @@ try{
   const heading=alpha(windup).heading;const hp=hero(windup).hp;
   // Begin the dodge before screenshot work; observing pixels must not consume the telegraph.
   const dodgeKey=Math.abs(Math.sin(heading))>Math.abs(Math.cos(heading))?'w':'d';
-  await key(first,'keyDown',dodgeKey);
-  const windupShot=capture(first,'01-heavy-windup');
-  try {await delay(650);} finally {await key(first,'keyUp',dodgeKey);}
-  await windupShot;
   const dodgeFrames=[];
+  await key(first,'keyDown',dodgeKey);
+  try {
+    await waitFor(async()=>{const f=await frame(first);dodgeFrames.push(f);return f;},f=>{
+      const enemy=alpha(f),p=body(f);
+      return !isWithinStrike(enemy,heading,p,enemy.attack.reach,enemy.attack.halfArcRadians);
+    },'Real movement exits the committed attack cone',2000);
+  } finally {await key(first,'keyUp',dodgeKey);}
   const missed=await waitFor(async()=>{const f=await frame(first);dodgeFrames.push(f);return f;},
     f=>alpha(f)?.mode!=='bite','Heavy exits committed attack',5000);
   checks.dodge={before:windup,after:missed,frames:dodgeFrames,dodgeKey};
-  assert.ok(hero(missed).hp>=hp,'A real sidestep avoids heavy contact damage');
+  assert.ok(dodgeFrames.every(f=>hero(f).hp>=hp),'A real sidestep avoids contact damage throughout the windup');
   assert.ok(dodgeFrames.filter(f=>alpha(f).mode==='bite').every(f=>Math.abs(alpha(f).heading-heading)<.001),'Windup does not track the dodging player');
   checks.dodge={before:windup,after:missed,frames:dodgeFrames};await capture(first,'02-heavy-missed');
   const returnX=4;
   await moveAxis(first,(body(await frame(first)).x>returnX?'a':'d'),'x',returnX);
+  await moveAxis(first,(body(await frame(first)).z>6.8?'s':'w'),'z',6.8);
   const standing=await waitFor(()=>frame(first),f=>alpha(f)?.mode==='bite'&&alpha(f).modeSeconds<.2,'Standing contact control',18000);
   await capture(first,'03-standing-windup');
   const contact=await waitFor(()=>frame(first),f=>hero(f).hp<hero(standing).hp,'Heavy standing hit',4000);
