@@ -216,6 +216,12 @@ namespace GalaQuest.Editor
             material.SetFloat("_Cull", 0);
             material.EnableKeyword("_NORMALMAP"); material.EnableKeyword("_METALLICSPECGLOSSMAP");
             EditorUtility.SetDirty(material);
+            // Finish the pinned Editor's material import before receipts capture its bytes.
+            // A deferred import can otherwise alter an already-recorded material after Play Mode.
+            AssetDatabase.SaveAssetIfDirty(material);
+            AssetDatabase.ImportAsset(materialPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            AssetDatabase.SaveAssetIfDirty(material);
             return material;
         }
         private static void ImportTexture(string path, bool normal, bool srgb)
