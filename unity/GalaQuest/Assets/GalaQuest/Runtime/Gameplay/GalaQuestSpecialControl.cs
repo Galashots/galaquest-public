@@ -15,11 +15,16 @@ namespace GalaQuest
         private int pointerId = -1;
         private bool inputBlocked;
         private float pressedAt = float.NegativeInfinity;
+        private int lastSentFrame = -1;
 
         public event Action SpecialRequested;
+        // Mirrors the server gate in public/src/combat/specialAttack.js (canUseSpecialAttack):
+        // an ordinary swing in progress also blocks the Burst. The server stays authoritative;
+        // this only avoids sending an intent the server would reject.
         public bool CanPress => !inputBlocked && !GalaQuestRuneForgePresenter.IsInputCaptured
             && session != null && session.ControlsReady && level >= UnlockLevel
             && hero != null && hero.hp > 0 && hero.downSeconds < 0
+            && hero.swingSeconds < 0
             && hero.specialSeconds < 0 && hero.specialCooldown <= 0;
 
         public static Rect TouchRect(Vector2 viewport) =>
@@ -64,7 +69,12 @@ namespace GalaQuest
 
         public bool TrySpecial()
         {
+            // One successful intent per frame: touch+K or K+mouse arriving in the same
+            // Update must not send twice. Only a successful send arms the guard, so a
+            // failed send can retry and a later deliberate press (next frame) still works.
+            if (lastSentFrame == Time.frameCount) return false;
             if (!CanPress || !session.TrySendSpecialIntent()) return false;
+            lastSentFrame = Time.frameCount;
             pressedAt = Time.unscaledTime;
             SpecialRequested?.Invoke();
             return true;
