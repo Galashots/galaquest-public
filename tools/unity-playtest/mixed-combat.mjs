@@ -146,13 +146,18 @@ try{
   assert.ok(alpha(await frame(first)),'This proof requires the integrated authored heavy');
   await moveAxis(first,'d','x',4);await moveAxis(first,'w','z',6.8);
   const windup=await waitFor(()=>frame(first),f=>alpha(f)?.mode==='bite'&&alpha(f).modeSeconds<.2,'Fresh committed heavy windup',18000);
-  checks.dodgeBefore=windup;await capture(first,'01-heavy-windup');
+  checks.dodgeBefore=windup;
   const heading=alpha(windup).heading;const hp=hero(windup).hp;
-  await key(first,'keyDown','d');
-  try {await delay(650);} finally {await key(first,'keyUp','d');}
+  // Begin the dodge before screenshot work; observing pixels must not consume the telegraph.
+  const dodgeKey=Math.abs(Math.sin(heading))>Math.abs(Math.cos(heading))?'w':'d';
+  await key(first,'keyDown',dodgeKey);
+  const windupShot=capture(first,'01-heavy-windup');
+  try {await delay(650);} finally {await key(first,'keyUp',dodgeKey);}
+  await windupShot;
   const dodgeFrames=[];
   const missed=await waitFor(async()=>{const f=await frame(first);dodgeFrames.push(f);return f;},
     f=>alpha(f)?.mode!=='bite','Heavy exits committed attack',5000);
+  checks.dodge={before:windup,after:missed,frames:dodgeFrames,dodgeKey};
   assert.ok(hero(missed).hp>=hp,'A real sidestep avoids heavy contact damage');
   assert.ok(dodgeFrames.filter(f=>alpha(f).mode==='bite').every(f=>Math.abs(alpha(f).heading-heading)<.001),'Windup does not track the dodging player');
   checks.dodge={before:windup,after:missed,frames:dodgeFrames};await capture(first,'02-heavy-missed');
@@ -201,7 +206,7 @@ try{
     if(chrome.exitCode===null){chrome.kill();await Promise.race([new Promise(resolve=>chrome.once('exit',resolve)),delay(3000)]);}
   }
   if(server&&!await server.kill()){clean=false;cleanupErrors.push('Owned server exit/port release not verified');}
-  try{rmSync(profile,{recursive:true,force:true,maxRetries:8,retryDelay:250});}
+  try{rmSync(profile,{recursive:true,force:true,maxRetries:20,retryDelay:500});}
   catch(error){clean=false;cleanupErrors.push(error.message);}
   const result=completed&&!failure&&clean?'PASS':'FAIL';
   const report={clientSha:sha,serverSha,mode,manifest,origin:server?.origin,checks,
