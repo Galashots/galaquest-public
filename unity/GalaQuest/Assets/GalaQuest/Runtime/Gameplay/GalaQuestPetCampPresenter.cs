@@ -243,6 +243,15 @@ namespace GalaQuest
                     offerBodies[i] = GetComponent<GalaQuestPetAppearanceCatalog>()?.Create(
                         "Camp pet " + offer.Id, offer.Id, position, Quaternion.Euler(0, 180, 0))
                         ?? GalaQuestPetVisuals.CreateTemporaryBody("Camp pet " + offer.Id, offer.Id, position);
+                    if (offerBodies[i].GetComponent<GalaQuestWormMotion>() != null)
+                    {
+                        // Native art has a floor pivot. Seat it on the visible pad,
+                        // not inside it at the underlying Camp ground height.
+                        var pad = offerMarkers[i].GetComponent<Renderer>();
+                        var seated = offerBodies[i].transform.position;
+                        seated.y = pad.bounds.max.y;
+                        offerBodies[i].transform.position = seated;
+                    }
                 }
             }
         }
