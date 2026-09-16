@@ -100,6 +100,10 @@ namespace GalaQuest.Editor
             finally { Object.DestroyImmediate(anchor); }
 
             var alphaPrefab = AlphaCandidateAuthoring.Prepare(Temporary);
+            if(WormCompanionAuthoring.NativeReviewEnabled) {
+                WormCompanionAuthoring.Author(WormCompanionAuthoring.NativeReviewSource);
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
 
             var telegraph = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             telegraph.SetFloat("_Surface", 1);
@@ -184,6 +188,7 @@ namespace GalaQuest.Editor
             if (presentation == null) presentation = root.AddComponent<GalaQuestCombatPresentation>();
             presentation.Configure(content);
             RuneForgeAuthoring.ConfigurePreview(root, content);
+            WormCompanionAuthoring.ConfigureNativeReview(root);
             var camera = root.GetComponentsInChildren<Camera>().Single(item => item.CompareTag("MainCamera"));
             if (camera.GetComponent<AudioListener>() == null) camera.gameObject.AddComponent<AudioListener>();
             if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException("Could not save candidate preview scene");
