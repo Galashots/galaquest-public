@@ -13,7 +13,7 @@ namespace GalaQuest.Editor
     public static class WormCompanionAuthoring
     {
         public const string OutputRoot = "Assets/U2CombatPreviewTemporary/WormCompanions";
-        public const float ReviewSize = .64f;
+        public const float ReviewSize = .8f;
         private static readonly string[] Variants = { "green", "red" };
         private static readonly string[] FbxHashes = {
             "aef5592b2ce1a6758d9aa11e327d74c2ce0f5e7d730801c6979e944198c9c54a",
