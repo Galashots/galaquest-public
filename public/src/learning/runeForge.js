@@ -4,6 +4,13 @@ export const FORGE_PACK_SELECTED = 'forge-pack-selected';
 export const FORGE_TASK_ATTEMPTED = 'forge-task-attempted';
 export const FORGE_TASK_ASSISTED = 'forge-task-assisted';
 export const FORGE_TASK_COMPLETED = 'forge-task-completed';
+// P3-CP1: the completing profile's own Relight fact. A profile fact (private forge family), NOT
+// a task completion: it names the finale the profile took part in, not one more hammered rune.
+export const FORGE_RELIGHT_COMPLETED = 'forge-relight-completed';
+// P3-CP1: the ONE shared-world row the finale writes. Fixed identity on the beacon-lit pattern
+// (`beacon-lit:old-beacon`): type names the shared truth, suffix names the place. The guestId on
+// the row is provenance only, never a scope.
+export const EMBERWORKS_FORGE_LIT_EVENT_ID = 'emberworks-forge-lit:rune-forge';
 
 const ID = /^[a-z0-9][a-z0-9._-]{1,79}$/;
 
@@ -125,6 +132,32 @@ export function selectPackFact(profileId, catalogInput, packId) {
     eventId: `forge-pack:${profileId}:${catalog.entitlement.id}`,
     type: FORGE_PACK_SELECTED,
     value: packId,
+  };
+}
+
+/**
+ * P3-CP1: whether this profile has earned the finale -- the same derived state the presenter
+ * already reads, so the client's own ask and the server's allow are one rule (the discipline
+ * world/rowanSpeech.js's rowanOwesBlade already follows for the Blade). Ready OR owned: a child
+ * who hammered the runes but has not yet claimed the helmet still did the work the Relight asks
+ * about, and claiming stays its own explicit moment.
+ */
+export function isRelightEligible(forgeState) {
+  return forgeState?.readyToClaim === true || forgeState?.owned === true;
+}
+
+/**
+ * P3-CP1: the completing profile's own Relight fact, minted by the server as part of the final
+ * completion transaction (net/gameServerCore.mjs's claimForgeRelight). Stable by construction --
+ * a pure function of the profile and the entitlement line -- so a retried finale is the same row,
+ * and the later selected wearable reward joins that same transaction under its own stable id
+ * without a second framework or identity path.
+ */
+export function relightCompletionFact(profileId, entitlementId = MAGMALORD_ENTITLEMENT_ID) {
+  return {
+    eventId: `forge-relight:${profileId}:${entitlementId}`,
+    type: FORGE_RELIGHT_COMPLETED,
+    value: JSON.stringify({ entitlementId }),
   };
 }
 

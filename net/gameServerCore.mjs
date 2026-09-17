@@ -85,8 +85,9 @@ import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
 import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
 import { HELMET_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import {
-  FORGE_PACK_SELECTED, FORGE_TASK_ASSISTED, FORGE_TASK_ATTEMPTED, FORGE_TASK_COMPLETED,
-  MAGMALORD_ENTITLEMENT_ID, MAGMALORD_HELMET_ID, entitlementEventId,
+  EMBERWORKS_FORGE_LIT_EVENT_ID, FORGE_PACK_SELECTED, FORGE_RELIGHT_COMPLETED, FORGE_TASK_ASSISTED,
+  FORGE_TASK_ATTEMPTED, FORGE_TASK_COMPLETED, MAGMALORD_ENTITLEMENT_ID, MAGMALORD_HELMET_ID,
+  entitlementEventId, isRelightEligible, relightCompletionFact,
 } from '../public/src/learning/runeForge.js';
 import { createRuneForgeService } from './runeForge.mjs';
 import { evaluatePetAction } from './petCompanions.mjs';
@@ -416,6 +417,66 @@ export function createRewardCoordinator(options = {}) {
    *  (see attachGameServer) so a restart does not put the fire out. */
   function beaconLit() {
     return store.beaconLit();
+  }
+
+  /** P3-CP1: whether the Emberworks Rune Forge is already lit according to the durable store.
+   *  attachGameServer reads this before simulation creation, the same sequencing beaconLit uses. */
+  function forgeLit() {
+    return store.forgeLit();
+  }
+
+  /**
+   * P3-CP1: the final Relight completion transaction -- ONE atomic, idempotent write boundary for
+   * the shared Forge-lit row and the completing profile's own Relight completion row.
+   *
+   * A single store.applyAll batch, so the two rows land together or not at all: there is no state
+   * where the world is lit but the lighter's own completion is missing, and no state where a
+   * profile completed into a dark world. Both rows are latches under stable ids (the world's fixed
+   * eventId, the profile's `forge-relight:<guestId>:<entitlementId>`), so INSERT OR IGNORE makes a
+   * retried finale, a concurrent sibling completion, and a reconnect replay all safe: the first
+   * call writes, every later call is a no-op.
+   *
+   * The later selected wearable reward joins THIS batch as one more `gear-owned` row under its own
+   * stable per-profile id -- no second framework or identity path. Nothing here chooses or awards
+   * it yet.
+   *
+   * Adjudication (durable identity, at-forge presence, earned readiness) belongs to the caller --
+   * the same split claim-blade already takes -- because only the message layer can see position
+   * and the forge service's derived state. An ephemeral connection has no durable identity to
+   * complete with and gets a silent no-grant, the same posture claimWildwoodBlade takes.
+   *
+   * Returns { granted, worldApplied, facts }: whether THIS call wrote the personal row, whether it
+   * wrote the shared row, and the newly-written personal fact for the announcement path. The shared
+   * row is never announced -- devices journal personal history, never shared truth, and the lit
+   * forge reaches every client through the snapshot instead (see beaconLit's own non-announcement).
+   */
+  function claimForgeRelight(playerId) {
+    const guestId = guestIdByPlayer.get(playerId);
+    if (!guestId) return { granted: false, worldApplied: false, facts: [] };
+    const personal = relightCompletionFact(guestId);
+    // Read before writing: Node serialises one message handler fully before the next begins, so no
+    // interleaving can slip between these reads and the batch below. The reads decide what is NEW
+    // (and therefore announced and latched); the batch's own INSERT OR IGNORE decides what is true.
+    const worldAlreadyLit = store.forgeLit();
+    const completionAlready = store.profileFactsFor(guestId)
+      .some((fact) => fact.eventId === personal.eventId);
+    if (worldAlreadyLit && completionAlready) return { granted: false, worldApplied: false, facts: [] };
+    store.applyAll([
+      {
+        guestId, heroId: playerId, type: 'emberworks-forge-lit',
+        eventId: EMBERWORKS_FORGE_LIT_EVENT_ID, value: null,
+      },
+      {
+        guestId, heroId: playerId, type: personal.type, eventId: personal.eventId, value: personal.value,
+      },
+    ]);
+    return {
+      granted: !completionAlready,
+      worldApplied: !worldAlreadyLit,
+      facts: completionAlready ? [] : [{
+        type: personal.type, heroId: playerId, eventId: personal.eventId, value: personal.value,
+      }],
+    };
   }
 
   /** Every item this player's guest owns, including the default starter weapon and baseline Shield.
@@ -965,6 +1026,8 @@ export function createRewardCoordinator(options = {}) {
     },
     recordBeaconLit,
     beaconLit,
+    forgeLit,
+    claimForgeRelight,
     ownedItemIdsFor,
     /** What this hero is swinging, for the fight rules -- the same value rewardsFor puts on the
      *  wire, pulled out on its own because the tick needs it every frame and a whole rewards block
@@ -1171,6 +1234,22 @@ export function createSimulation(options = {}) {
     heroIds: [],
   });
   if (options.beaconLit === true) siegeState = restoreLitSiege(siegeState);
+
+  // P3-CP1: THE EMBERWORKS FORGE, lit or dark -- one latch for the whole simulation, the same
+  // shared-authority shape the siege above already is: every joined player stands at the same
+  // forge. Seeded from options.forgeLit when the caller supplies it (attachGameServer reads
+  // rewards.forgeLit() before this runs, the same sequencing beaconLit uses) so a server restart
+  // does not put it out. Unlike the siege there is no fight state to restore -- a lit forge is
+  // simply lit -- and unlike the Beacon no tick rule produces it: the one producer is the
+  // server-adjudicated forge-relight action, which latches it via markForgeLit once the durable
+  // write lands. The simulation never reaches into the reward store itself.
+  let forgeLitState = options.forgeLit === true;
+  function forgeSnapshot() {
+    return { lit: forgeLitState };
+  }
+  function markForgeLit() {
+    forgeLitState = true;
+  }
 
   // ── WHICH FIGHT EACH CHILD'S BODY IS CURRENTLY IN ──────────────────────────────────────────────
   //
@@ -2041,6 +2120,8 @@ export function createSimulation(options = {}) {
     corpsesSnapshot,
     siegeSnapshot,
     beaconIsLit,
+    forgeSnapshot,
+    markForgeLit,
     rowanClaimState,
     atHollowChest,
     atHollowClue,
@@ -2088,6 +2169,10 @@ export function attachGameServer(httpServer, options = {}) {
       destinationId,
       creditedLootIds: rewards.creditedLootIds(),
       beaconLit: rewards.beaconLit(),
+      // P3-CP1: the same before-the-simulation-exists read beaconLit just above does -- a fresh
+      // in-memory forge latch has no way to ask the store itself, so the one durable world fact it
+      // needs is handed in at construction. Without this a server restart puts the forge out.
+      forgeLit: rewards.forgeLit(),
       // G4, finally connected, and P2's whole point: the fight asks the reward store how strong this
       // hero actually is. Handed in as a function rather than a snapshot because every input changes
       // mid-session -- a child can equip a sword from the Hero screen, be handed Wren's charm, or earn
@@ -2134,6 +2219,10 @@ export function attachGameServer(httpServer, options = {}) {
       corpses: simulation.corpsesSnapshot(),
       village: rewards.villageSnapshot(),
       siege: simulation.siegeSnapshot(),
+      // P3-CP1: the shared Forge-lit latch rides every welcome and snapshot through this same
+      // assembly, so a late joiner and every connected sibling read one lit forge -- the beaconLit
+      // half of the siege block just above is the exact precedent.
+      forge: simulation.forgeSnapshot(),
     };
   }
 
@@ -2285,6 +2374,36 @@ export function attachGameServer(httpServer, options = {}) {
           destinationId: simulation.destinationId, worldEpoch: client.data.worldEpoch,
           pets: result.state, error: result.error,
           profileFacts: rewards.profileFactsFor(client.data.playerId),
+        }));
+        return;
+      }
+
+      // P3-CP1: the final Relight action. Same guards as the forge family (durable identity and
+      // at-forge presence, both re-checked server-side), plus the earned-readiness the forge
+      // service derives from this profile's own durable task history -- the client's ask and this
+      // allow are the same rule (learning/runeForge.js's isRelightEligible), the discipline
+      // claim-blade already follows for rowanOwesBlade. The epoch rule above already dropped
+      // stale-scene duplicates, and a superseded same-profile socket never reaches here.
+      //
+      // A refused relight is a clean silence, not a disconnect: a child finishing the last rune
+      // while walking up to the forge can legitimately produce one a beat early, the same posture
+      // every claim path already takes. The write itself is the atomic claimForgeRelight
+      // transaction; the in-memory latch flips only when that write actually lit the world.
+      if (message.type === 'forge-relight') {
+        if (!client.data.playerId) throw new ProtocolError('forge-relight before join');
+        if (!rewards.hasDurableIdentity(client.data.playerId)
+          || !atRuneForge(simulation, client.data.playerId)) return;
+        if (!isRelightEligible(runeForge.stateFor(client.data.playerId))) return;
+        const relight = rewards.claimForgeRelight(client.data.playerId);
+        if (relight.worldApplied) simulation.markForgeLit();
+        simulation.announceRewardFacts(relight.facts);
+        // The world's own ceremony signal, on the private state the claim path already answers
+        // with: 'relit' exactly once, when this call lit the forge -- 'already-lit' for every
+        // retry, concurrent sibling, and reconnect replay, the same no-second-ceremony shape
+        // forge-claim's own justGranted already takes.
+        sendRuneForgeState(client, runeForge.stateFor(client.data.playerId, {
+          response: relight.worldApplied ? 'relit' : 'already-lit',
+          justLit: relight.worldApplied,
         }));
         return;
       }

@@ -36,10 +36,11 @@ export const MESSAGE_TYPES = [
   'join', 'welcome', 'input', 'snapshot', 'leave', 'attack', 'special', 'equip', 'search-cart', 'collect-loot',
   'village-upgrade-purchase', 'claim-blade', 'claim-hollow', 'claim-satchel', 'claim-charm',
   'restore-profile', 'travel', 'destination-changed', 'pet-action', 'pet-state',
-  // #148 Rune Forge. The four action messages carry only the selected authored task identity;
-  // the server owns proximity, durable progress, answer correctness, and entitlement grant.
-  // `forge-state` is the private response for the joined profile and never enters a snapshot.
-  'forge-open', 'forge-select-pack', 'forge-answer', 'forge-hint', 'forge-claim', 'forge-state',
+  // #148 Rune Forge. The action messages carry only the selected authored task identity (or, for
+  // the finale, no payload at all); the server owns proximity, durable progress, answer
+  // correctness, and entitlement grant. `forge-state` is the private response for the joined
+  // profile and never enters a snapshot.
+  'forge-open', 'forge-select-pack', 'forge-answer', 'forge-hint', 'forge-claim', 'forge-relight', 'forge-state',
   // R1: kill drops -- the same client->server, no-business-rule-here shape 'collect-loot' already
   // is (see that message's own decode comment). Its dropId cap is DROP_ID_MAX_LENGTH, NOT
   // PICKUP_ID_MAX_LENGTH -- see the correction note on those constants below.
@@ -302,6 +303,14 @@ function decodeMessage(raw) {
     case 'forge-open':
     case 'forge-claim':
       return { v: PROTOCOL_VERSION, type: raw.type };
+
+    // P3-CP1: the final Relight action. No payload, exactly like 'claim-blade': the message says
+    // "I am standing at the forge asking for the finale", and every fact that decides whether that
+    // is TRUE (is this hero actually there, did this profile earn it, is it already lit) is
+    // server-side state the client cannot be trusted to assert. A resend is naturally idempotent
+    // -- the rows behind it are latches, so relighting twice lights once either way.
+    case 'forge-relight':
+      return { v: PROTOCOL_VERSION, type: 'forge-relight' };
 
     case 'forge-select-pack': {
       const packId = requireString(raw.packId, 'packId', LEARNING_ID_MAX_LENGTH);
@@ -1106,6 +1115,20 @@ function decodeSiege(siege) {
   };
 }
 
+// P3-CP1: the shared Forge-lit latch. Optional/additive, the same shape decodeSiege already
+// uses -- absent entirely (every pre-P3 fixture and caller) decodes to "the forge is dark" rather
+// than failing, so this is additive within v4 rather than another protocol-version change. Only
+// what a PRESENTER needs rides here: one boolean, because a lit forge is simply lit.
+const EMPTY_FORGE = Object.freeze({ lit: false });
+
+function decodeForge(forge) {
+  if (forge === undefined) return EMPTY_FORGE;
+  if (forge === null || typeof forge !== 'object' || Array.isArray(forge)) {
+    fail('encounter.forge must be an object');
+  }
+  return { lit: Boolean(forge.lit) };
+}
+
 function decodeEncounter(encounter) {
   if (encounter === null || typeof encounter !== 'object' || Array.isArray(encounter)) {
     fail('encounter must be an object');
@@ -1121,6 +1144,7 @@ function decodeEncounter(encounter) {
     corpses: decodeCorpses(encounter.corpses),
     village: decodeVillage(encounter.village),
     siege: decodeSiege(encounter.siege),
+    forge: decodeForge(encounter.forge),
   };
 
   // C2 compatibility bridge only. main.js is still a singular-Wolf reader until C3, so decoded
@@ -1163,6 +1187,7 @@ const EMPTY_ENCOUNTER = Object.freeze({
   corpses: Object.freeze([]),
   village: Object.freeze({ coins: 0, shards: 0, workshopOwned: false }),
   siege: EMPTY_SIEGE,
+  forge: EMPTY_FORGE,
 });
 const NO_EVENTS = Object.freeze([]);
 // An ephemeral connection (no guestId) owns no durable facts, and neither does a caller that predates

@@ -309,6 +309,13 @@ export function openRewardStore(path) {
   const beaconLitStmt = db.prepare(
     "SELECT 1 AS found FROM reward_events WHERE type = 'beacon-lit' LIMIT 1",
   );
+  // P3-CP1: THE EMBERWORKS FORGE IS LIT -- the same world-fact shape as beaconLit just above, for
+  // the same reason: one lit forge for every sibling, not one per guest. An existence check on the
+  // type rather than a count: the forge lights once, ever, and "how many times" is not a question
+  // anything can ask.
+  const forgeLitStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE type = 'emberworks-forge-lit' LIMIT 1",
+  );
 
   /**
    * What this store may record, IMPORTED rather than restated.
@@ -558,6 +565,12 @@ export function openRewardStore(path) {
     return beaconLitStmt.get() !== undefined;
   }
 
+  /** P3-CP1: whether the Emberworks Rune Forge has ever been relit, by anyone -- the forge's own
+   *  beaconLit, read before simulation creation so a restart does not put it out. */
+  function forgeLit() {
+    return forgeLitStmt.get() !== undefined;
+  }
+
   return {
     apply,
     applyAll,
@@ -578,6 +591,7 @@ export function openRewardStore(path) {
     totalShardsEarned,
     villageUpgradeOwned,
     beaconLit,
+    forgeLit,
     // Exposed for the harness/tests that want to assert a backup landed, and for a server boot log
     // line -- never read back by this module itself.
     backupPath,

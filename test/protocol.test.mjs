@@ -71,6 +71,10 @@ const ENCOUNTER_FIXTURE = {
     warden: { x: 5.2, z: 52.6, heading: -2.9, hp: 12, mode: 'dormant', modeSeconds: 0, phase: 1, targetId: null },
     beaconLit: false,
   },
+  // P3-CP1: same "present and empty, matches what a real snapshot always carries" reasoning again --
+  // the forge is dark until one profile earns the finale. See "an encounter block with no forge key
+  // at all still decodes" below for the pre-P3 backward-compatibility case.
+  forge: { lit: false },
 };
 
 const withWolf = (overrides) => ({
@@ -554,6 +558,43 @@ test('a lit Beacon rides the wire, so a late joiner never arrives to find it col
     },
   };
   assert.equal(roundTrip(snapshotMessage(9, [], won, [])).encounter.siege.beaconLit, true);
+});
+
+// ── P3-CP1: the forge-relight action and the encounter block's forge field ──────────
+
+test('forge-relight carries no payload, the same shape claim-blade already uses', () => {
+  assert.deepEqual(roundTrip({ v: PROTOCOL_VERSION, type: 'forge-relight' }), {
+    v: PROTOCOL_VERSION, type: 'forge-relight',
+  });
+});
+
+test('an encounter block with no forge key at all still decodes, defaulting to a dark forge', () => {
+  const preP3Shape = {
+    revision: 5,
+    enemies: ENEMIES_FIXTURE,
+    heroes: { p1: { hp: 3, swingSeconds: -1, cooldown: 0, downSeconds: -1 } },
+  };
+  const decoded = decode(encode(welcomeMessage('p1', 3, [], preP3Shape)));
+  assert.deepEqual(decoded.encounter.forge, { lit: false });
+});
+
+test('a lit forge rides the wire, so a late joiner never arrives to find it cold again', () => {
+  const lit = { ...ENCOUNTER_FIXTURE, forge: { lit: true } };
+  assert.deepEqual(roundTrip(snapshotMessage(9, [], lit, [])).encounter, lit);
+  assert.deepEqual(roundTrip(welcomeMessage('p1', 3, [], lit)).encounter, lit);
+});
+
+test('the forge block refuses shapes a presenter could not draw', () => {
+  assert.throws(
+    () => decode(encode(snapshotMessage(9, [], { ...ENCOUNTER_FIXTURE, forge: [] }, []))),
+    ProtocolError,
+    'the forge latch is an object, not an array',
+  );
+  assert.throws(
+    () => decode(encode(snapshotMessage(9, [], { ...ENCOUNTER_FIXTURE, forge: null }, []))),
+    ProtocolError,
+    'an explicit null is not an absent block',
+  );
 });
 
 test('the siege block refuses shapes a presenter could not draw', () => {
