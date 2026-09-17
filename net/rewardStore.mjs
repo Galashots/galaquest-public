@@ -333,6 +333,21 @@ export function openRewardStore(path) {
   const forgeLitStmt = db.prepare(
     "SELECT 1 AS found FROM reward_events WHERE type = 'emberworks-forge-lit' LIMIT 1",
   );
+  // P3-CP2: the server-observed combat read. net/gameServerCore.mjs's applyKillXpAward mints one
+  // `xp-earned` row per contributing guest per enemy life under
+  // `kill-xp:<guestId>:<enemyId>:<lifeId>`, written WITHOUT an origin -- so `origin IS NULL` IS
+  // the durable meaning of "the server saw this kill". restoreProfileFacts stamps every
+  // client-handed row `origin: 'client'`, which is exactly why a restored or fabricated kill can
+  // never satisfy this read even when its id is byte-identical to a server row's shape.
+  // The guest_id column check and the id-prefix check agree for every row the server mints; both
+  // are stated because the column is the scope and the id is the role. The prefix is compared
+  // literally with substr, never with LIKE: LIKE's wildcard/escape semantics (and the
+  // version-sensitive `ESCAPE` clause they require) have no business in an equality question, and
+  // a literal comparison needs no escaping of guest/enemy alphabets at all.
+  const serverKillXpStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE guest_id = ? AND type = 'xp-earned' "
+    + 'AND substr(id, 1, length(?)) = ? AND origin IS NULL LIMIT 1',
+  );
 
   /**
    * What this store may record, IMPORTED rather than restated.
@@ -651,6 +666,17 @@ export function openRewardStore(path) {
     return forgeLitStmt.get() !== undefined;
   }
 
+  /** P3-CP2: whether this guest has a SERVER-OBSERVED kill-XP row for this enemy id -- one durable
+   *  `kill-xp:<guestId>:<enemyId>:<lifeId>` row with `origin IS NULL`. A narrow existence proof,
+   *  not a count: how many lives of this role the guest ended is not a question the Relight gate
+   *  asks. Client-restored rows are invisible to this read by construction. */
+  function hasServerKillXpFor(guestId, enemyId) {
+    if (typeof guestId !== 'string' || guestId.length === 0) return false;
+    if (typeof enemyId !== 'string' || enemyId.length === 0) return false;
+    const prefix = `kill-xp:${guestId}:${enemyId}:`;
+    return serverKillXpStmt.get(guestId, prefix, prefix) !== undefined;
+  }
+
   return {
     apply,
     applyAll,
@@ -672,6 +698,7 @@ export function openRewardStore(path) {
     villageUpgradeOwned,
     beaconLit,
     forgeLit,
+    hasServerKillXpFor,
     // Exposed for the harness/tests that want to assert a backup landed, and for a server boot log
     // line -- never read back by this module itself.
     backupPath,

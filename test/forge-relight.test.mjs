@@ -34,6 +34,7 @@ import {
   isProfileFact,
 } from '../public/src/progression/facts.js';
 import { decode, encode, joinMessage } from '../public/src/net/protocol.js';
+import { seedServerKills } from './forge-combat-seed.mjs';
 
 const ATTACKER = 'profile-aaaaaaaa';
 const SIBLING = 'profile-bbbbbbbb';
@@ -349,6 +350,7 @@ test('P3-CP1 sockets: one shared lit forge, per-profile completion, retry-safe, 
       const first = await connect('first', ATTACKER);
       putAtForge(game, first.welcome.id);
       await completeBothTasks(first);
+      seedServerKills(game.rewards, first.welcome.id);
 
       first.send({ type: 'forge-relight' });
       const lit = await first.wait((message) => message.type === 'snapshot' && message.encounter.forge.lit === true);
@@ -390,6 +392,18 @@ test('P3-CP1 sockets: one shared lit forge, per-profile completion, retry-safe, 
         || message.id === sibling.welcome.id), 'private learning state is never broadcast');
 
       await completeBothTasks(sibling);
+      // Socket-level authority refusal: forge readiness without genuine server combat
+      // must not light, complete, or cost the connection.
+      sibling.send({ type: 'forge-relight' });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.equal(sibling.isClosed(), false, 'a combat-missing relight must not cost the connection');
+      assert.deepEqual(game.rewards.profileFactsFor(sibling.welcome.id)
+        .filter((fact) => fact.type === FORGE_RELIGHT_COMPLETED), [],
+        'readiness without genuine server kills earns no personal completion');
+      assert.ok(sibling.messages.every((message) => message.type !== 'forge-state'
+        || (message.forge.response !== 'relit' && message.forge.response !== 'already-lit')),
+        'a combat-missing relight sends no relight ceremony signal');
+      seedServerKills(game.rewards, sibling.welcome.id);
       sibling.send({ type: 'forge-relight' });
       // The lit snapshot predates this action (the world was already lit), so it cannot
       // synchronize on it: wait for the private post-action signal the handler sends only after
@@ -415,6 +429,7 @@ test('P3-CP1 sockets: reconnect replaces the session and the completion follows 
       const old = await connect('old', ATTACKER);
       putAtForge(game, old.welcome.id);
       await completeBothTasks(old);
+      seedServerKills(game.rewards, old.welcome.id);
       old.send({ type: 'forge-relight' });
       await old.wait((message) => message.type === 'snapshot' && message.encounter.forge.lit === true);
 
@@ -444,6 +459,7 @@ test('P3-CP1 sockets: a server restart restores the lit forge before any simulat
       const first = await connect('first', ATTACKER);
       putAtForge(game, first.welcome.id);
       await completeBothTasks(first);
+      seedServerKills(game.rewards, first.welcome.id);
       first.send({ type: 'forge-relight' });
       await first.wait((message) => message.type === 'snapshot' && message.encounter.forge.lit === true);
     });

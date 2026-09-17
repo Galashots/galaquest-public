@@ -120,6 +120,17 @@ export const HOLLOW_CACHE_SHARDS = 3;
 export const RUNE_FORGE_POSITION = Object.freeze({ x: 7.2, z: 17.2 });
 export const RUNE_FORGE_REACH_METERS = 3.25;
 
+// P3-CP2: the mixed-combat prerequisite the Relight gate demands. Durable SERVER-OBSERVED
+// contribution to defeating BOTH authored Emberworks combat roles -- read off store rows with
+// `origin IS NULL` (see rewardStore's hasServerKillXpFor), never off the profile's restorable
+// journal. This deliberately names no Burst input: children may solve combat naturally. The Alpha
+// has no Emberworks spawner yet (#190 owns that); the gate reads durable rows, not the spawn
+// table, so this law lands before the spawn does without touching combat, zones, or tuning.
+export const FORGE_RELIGHT_COMBAT_PREREQUISITES = Object.freeze([
+  'emberworks-gremlin-1',
+  'emberworks-alpha-1',
+]);
+
 // ARC 2's CHARM_BONUS_HEARTS USED TO LIVE HERE, and it does not any more.
 //
 // It was "one heart" against a three-heart body -- roughly a third more room, which is exactly the
@@ -1060,6 +1071,18 @@ export function createRewardCoordinator(options = {}) {
     beaconLit,
     forgeLit,
     claimForgeRelight,
+    /**
+     * P3-CP2: whether this hero's durable guest holds a SERVER-OBSERVED kill-XP row for this
+     * enemy id -- the playerId -> guestId projection of the store's own hasServerKillXpFor. An
+     * ephemeral connection has no durable guest and therefore no observed combat, the same
+     * posture every other durable read on this object takes. The forge-relight handler's own
+     * authority gate; claimForgeRelight stays the ungated atomic write it already is.
+     */
+    hasServerObservedKill(heroId, enemyId) {
+      const guestId = guestIdByPlayer.get(heroId);
+      if (!guestId) return false;
+      return store.hasServerKillXpFor(guestId, enemyId);
+    },
     ownedItemIdsFor,
     /** What this hero is swinging, for the fight rules -- the same value rewardsFor puts on the
      *  wire, pulled out on its own because the tick needs it every frame and a whole rewards block
@@ -2414,7 +2437,10 @@ export function attachGameServer(httpServer, options = {}) {
       // at-forge presence, both re-checked server-side), plus the earned-readiness the forge
       // service derives from this profile's own durable task history -- the client's ask and this
       // allow are the same rule (learning/runeForge.js's isRelightEligible), the discipline
-      // claim-blade already follows for rowanOwesBlade. The epoch rule above already dropped
+      // claim-blade already follows for rowanOwesBlade. P3-CP2 adds the separate server-only
+      // authority gate after it: durable server-observed kills for BOTH authored Emberworks
+      // roles (FORGE_RELIGHT_COMBAT_PREREQUISITES) -- personal readiness never authorises shared
+      // truth on its own. The epoch rule above already dropped
       // stale-scene duplicates, and a superseded same-profile socket never reaches here.
       //
       // A refused relight is a clean silence, not a disconnect: a child finishing the last rune
@@ -2426,6 +2452,14 @@ export function attachGameServer(httpServer, options = {}) {
         if (!rewards.hasDurableIdentity(client.data.playerId)
           || !atRuneForge(simulation, client.data.playerId)) return;
         if (!isRelightEligible(runeForge.stateFor(client.data.playerId))) return;
+        // P3-CP2: shared Forge-lit truth needs server-observed mixed combat, not just personal
+        // Forge readiness. A client-restored journal (origin 'client' on every row it brings)
+        // stays valid personal history but can never satisfy this read -- only durable
+        // server-adjudicated kill XP for BOTH authored Emberworks roles authorises the lighting.
+        // Unmet, this is the same clean silent no-op every refusal above already is.
+        if (!FORGE_RELIGHT_COMBAT_PREREQUISITES.every(
+          (enemyId) => rewards.hasServerObservedKill(client.data.playerId, enemyId),
+        )) return;
         const relight = rewards.claimForgeRelight(client.data.playerId);
         if (relight.worldApplied) simulation.markForgeLit();
         simulation.announceRewardFacts(relight.facts);
