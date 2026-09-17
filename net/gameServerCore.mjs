@@ -461,6 +461,9 @@ export function createRewardCoordinator(options = {}) {
     const completionAlready = store.profileFactsFor(guestId)
       .some((fact) => fact.eventId === personal.eventId);
     if (worldAlreadyLit && completionAlready) return { granted: false, worldApplied: false, facts: [] };
+    // A conflicting reuse of either id already on record throws inside the batch (see the store's
+    // own semantic-identity rule) and rolls both rows back: no half-lit world, no false grant, and
+    // no latch -- the caller never receives a success it can act on.
     store.applyAll([
       {
         guestId, heroId: playerId, type: 'emberworks-forge-lit',
@@ -470,12 +473,19 @@ export function createRewardCoordinator(options = {}) {
         guestId, heroId: playerId, type: personal.type, eventId: personal.eventId, value: personal.value,
       },
     ]);
+    // Report the durable truth the batch actually left behind, not the pre-write reads above. If a
+    // squatted id silently swallowed either row, these re-reads -- not the optimistic negations --
+    // are what the relit ceremony and the in-memory latch must answer to.
+    const worldNowLit = store.forgeLit();
+    const completionNow = store.profileFactsFor(guestId)
+      .some((fact) => fact.eventId === personal.eventId);
+    const granted = completionNow && !completionAlready;
     return {
-      granted: !completionAlready,
-      worldApplied: !worldAlreadyLit,
-      facts: completionAlready ? [] : [{
+      granted,
+      worldApplied: worldNowLit && !worldAlreadyLit,
+      facts: granted ? [{
         type: personal.type, heroId: playerId, eventId: personal.eventId, value: personal.value,
-      }],
+      }] : [],
     };
   }
 

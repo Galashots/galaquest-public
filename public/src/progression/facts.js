@@ -376,6 +376,29 @@ function reservedProfileEventOwner(eventId) {
   return sanitizeGuestId(owner) === owner ? owner : null;
 }
 
+// P3-CP1 identity-collision repair: each server-shared-world id namespace above names exactly
+// the fact type(s) that may ever occupy it. A personal or equipment fact arriving under one of
+// these ids is not a replay of anything -- it is a different semantic event squatting a shared
+// identity -- and the store refuses it loudly at write time rather than letting INSERT OR IGNORE
+// swallow the real world row when it arrives later. cart-loot: legitimately carries two currency
+// types (one physical haul, two denominations); every other namespace names exactly one.
+const SHARED_WORLD_EVENT_ID_TYPES = Object.freeze({
+  'cart-loot:': ['coin-earned', 'shard-earned'],
+  'hollow-cache:': ['shard-earned'],
+  'village-upgrade:': ['village-upgrade'],
+  'beacon-lit:': ['beacon-lit'],
+  'emberworks-forge-lit:': ['emberworks-forge-lit'],
+});
+
+/** The world fact type(s) allowed under this eventId, or null when the id is not shared-world. */
+export function sharedWorldTypesForEventId(eventId) {
+  if (typeof eventId !== 'string') return null;
+  for (const prefix of SERVER_SHARED_WORLD_EVENT_ID_PREFIXES) {
+    if (eventId.startsWith(prefix)) return SHARED_WORLD_EVENT_ID_TYPES[prefix] ?? null;
+  }
+  return null;
+}
+
 export function isClientRestorableProfileFact(fact, profileId) {
   if (!isProfileFact(fact) || typeof profileId !== 'string' || profileId.length === 0) return false;
   if (CLIENT_RESTORE_REFUSED_TYPES.has(fact.type)) return false;

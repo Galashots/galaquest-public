@@ -26,6 +26,7 @@ import {
   latestEquippedItemIds,
   latestEquippedWeaponId,
   parseXpFactAmount,
+  sharedWorldTypesForEventId,
   totalXpFromFacts,
 } from '../public/src/progression/facts.js';
 
@@ -179,8 +180,24 @@ export function openRewardStore(path) {
 
   // INSERT OR IGNORE against the PRIMARY KEY on id: the whole idempotency guarantee lives in this one
   // line plus the schema's PRIMARY KEY constraint, not in application code that could drift from it.
+  //
+  // The IGNORE half is narrow on purpose: it covers an IDENTICAL semantic replay of the id's own
+  // event only (same type, same value, same rev -- see insertAward). Reusing the same event ID for
+  // a DIFFERENT semantic event is never silently ignored; it fails loudly. A global durable event
+  // ID is a semantic identity: the fixed `emberworks-forge-lit:rune-forge` world row means "the
+  // forge is lit", and an equip arriving under that same id is not a replay of that lighting, it is
+  // a different event wearing its name. Silently ignoring it let the claim path below report
+  // worldApplied=true against a forge that stayed dark on disk (P3-CP1 DeepSeek reproduction).
   const insertStmt = db.prepare(
     'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value, rev, origin) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  );
+  // The semantic-identity read for the rule above: what event, if any, already owns this id.
+  // guest_id/origin are deliberately NOT compared -- they are provenance ("who was standing there",
+  // "who attested it"), never the event itself. A sibling replaying the fixed shared world row
+  // under their own guestId is the same lighting, and stays a harmless no-op; the village-upgrade
+  // idempotency test pins the same law for a second purchaser. Only type/value/rev decide.
+  const existingByIdStmt = db.prepare(
+    'SELECT guest_id, type, value, rev FROM reward_events WHERE id = ?',
   );
   const marksStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE guest_id = ? AND type = 'mark-earned'");
   // GP2: coins and Wildwood Shards, counted exactly like marks -- one row per pickup ever credited to
@@ -349,9 +366,23 @@ export function openRewardStore(path) {
     // H1 defence in depth: restoreProfileFacts filters this boundary before batching, but the store
     // must not rely on one caller forever. A client-attested row may recover personal history only;
     // it may neither author shared currency nor reserve shared-world/another-profile identities.
+    // Ordered BEFORE the P3-CP1 squat guard on purpose: a client-origin violation keeps the
+    // established client-restored-fact diagnostic rather than the shared-world one.
     if (award.origin === 'client' && !isClientRestorableProfileFact(award, award.guestId)) {
       throw new Error(
         `reward store apply() refuses client-restored fact ${JSON.stringify(award.type)} under eventId ${JSON.stringify(award.eventId)}`,
+      );
+    }
+    // P3-CP1 first-write squat guard: a shared-world-namespace id may only ever carry its own
+    // world fact type(s). An equip arriving under `emberworks-forge-lit:rune-forge` is refused
+    // HERE, loudly, before any row exists -- the conflicting-reuse rule in insertAward only fires
+    // once a row is already on record, which is too late when the squat is the first writer.
+    // Server-path only by construction: client-origin squats above already threw first.
+    const allowedWorldTypes = sharedWorldTypesForEventId(award.eventId);
+    if (allowedWorldTypes !== null && !allowedWorldTypes.includes(award.type)) {
+      throw new Error(
+        `reward store apply() refuses ${JSON.stringify(award.type)} under shared-world eventId `
+        + `${JSON.stringify(award.eventId)} (holds ${allowedWorldTypes.map((type) => JSON.stringify(type)).join(' or ')} only)`,
       );
     }
     if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isKnownItem(award.value)) {
@@ -379,8 +410,33 @@ export function openRewardStore(path) {
     }
   }
 
-  /** The write itself, once the award is known to be legal. */
+  /**
+   * The write itself, once the award is known to be legal.
+   *
+   * Semantic-identity enforcement: when the id is already on record, the incoming award must BE
+   * the recorded event (same type, same value, same rev) or this throws loudly -- never a silent
+   * IGNORE of a conflicting reuse. Provenance is excluded from the comparison on purpose: the
+   * recorded guest_id/origin say who was there and who attested, not what happened, so a sibling
+   * replaying the shared world lighting under their own guestId is the same event and stays the
+   * no-op INSERT OR IGNORE already makes it. Equip chronology is preserved, not weakened: a replay
+   * carries the rev it was minted with, and a different rev under the same id is a different order
+   * for the same choice -- a conflict, not a replay.
+   */
   function insertAward(award) {
+    const existing = existingByIdStmt.get(award.eventId);
+    if (existing !== undefined) {
+      const sameType = existing.type === award.type;
+      const sameValue = (existing.value ?? null) === (award.value ?? null);
+      const sameRev = (Number.isInteger(existing.rev) ? existing.rev : null)
+        === (Number.isInteger(award.rev) ? award.rev : null);
+      if (sameType && sameValue && sameRev) return { applied: false };
+      throw new Error(
+        `reward store refuses conflicting reuse of eventId ${JSON.stringify(award.eventId)}: `
+        + `already recorded as ${JSON.stringify(existing.type)} `
+        + `with value ${JSON.stringify(existing.value ?? null)}, `
+        + `not ${JSON.stringify(award.type)} with value ${JSON.stringify(award.value ?? null)}`,
+      );
+    }
     const result = insertStmt.run(
       award.eventId, award.guestId, award.type, new Date().toISOString(), award.value ?? null,
       Number.isInteger(award.rev) ? award.rev : null,
@@ -420,6 +476,9 @@ export function openRewardStore(path) {
    * Replay stays a no-op exactly as it is for apply(): the INSERT OR IGNORE and the PRIMARY KEY are
    * doing the idempotency here too, so a device re-sending a journal the store already holds commits
    * an empty transaction rather than double-counting. `applied` counts rows actually added.
+   * Conflicting reuse of an id already on record throws inside the transaction (see insertAward),
+   * so the whole batch rolls back: a batch that would silently half-land conflicting truth instead
+   * lands nothing at all, loudly.
    */
   function applyAll(awards) {
     const batch = [...awards];
