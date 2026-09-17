@@ -165,26 +165,76 @@ test('P3-CP1 identical equip replay is a no-op and keeps the latest choice winni
   }
 });
 
-// (5) A squatted personal relight ID cannot produce a false personal grant.
-test('P3-CP1 squatting a personal relight ID yields a loud refusal, never a grant', () => {
+// (5) F3: an equip cannot occupy the server-authored Relight completion identity -- refused
+// at the equip write boundary itself, before any row exists, so the finale never meets a
+// squatted identity at all.
+test('P3-CP1 an equip under the Relight completion identity is refused before storage', () => {
   const fixture = tempStorePath('gq-forge-collision-personal-');
   const rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
   try {
     rewards.join('hero-a', GUEST_A);
     rewards.grantOwnership('hero-a', WILDWOOD_BLADE_ID);
     const personal = relightCompletionFact(GUEST_A);
-    rewards.applyEquip('hero-a', WILDWOOD_BLADE_ID, { eventId: personal.eventId, rev: 5 });
     assert.throws(
-      () => rewards.claimForgeRelight('hero-a'),
-      /conflicting reuse/,
-      'the finale fails loudly instead of granting into a squatted identity',
+      () => rewards.applyEquip('hero-a', WILDWOOD_BLADE_ID, { eventId: personal.eventId, rev: 5 }),
+      /server-authored Relight completion identity/,
+      'the squat equip itself fails loudly, leaving no row behind',
+    );
+    assert.deepEqual(
+      rewards.profileFactsFor('hero-a').filter((fact) => fact.eventId === personal.eventId),
+      [],
+      'no equip row squats the completion identity either',
     );
     assert.deepEqual(
       rewards.profileFactsFor('hero-a').filter((fact) => fact.type === FORGE_RELIGHT_COMPLETED),
       [],
       'no personal completion was granted',
     );
-    assert.equal(rewards.forgeLit(), false, 'the rolled-back batch lit nothing either');
+    assert.equal(rewards.forgeLit(), false, 'nothing lit: the refused write left no poison behind');
+
+    // The honest finale still works after the refused attack: nothing was reserved.
+    const relight = rewards.claimForgeRelight('hero-a');
+    assert.equal(relight.worldApplied, true);
+    assert.equal(relight.granted, true);
+    assert.equal(rewards.forgeLit(), true);
+  } finally {
+    rewards.close();
+    fixture.cleanup();
+  }
+});
+
+// (5b) F3: a sender cannot reserve another profile's future forge-relight identity with an
+// equip. Refused before storage; the victim's finale and the shared Forge stay unblocked.
+test('P3-CP1 a cross-profile equip cannot squat the victim Relight identity', () => {
+  const fixture = tempStorePath('gq-forge-collision-crossprofile-');
+  const rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
+  try {
+    rewards.join('hero-a', GUEST_A);
+    rewards.join('hero-b', GUEST_B);
+    rewards.grantOwnership('hero-a', WILDWOOD_BLADE_ID);
+    const victimRelight = relightCompletionFact(GUEST_B);
+    assert.throws(
+      () => rewards.applyEquip('hero-a', WILDWOOD_BLADE_ID, { eventId: victimRelight.eventId, rev: 7 }),
+      /server-authored Relight completion identity/,
+      'an equip under the victim Relight identity is refused before storage',
+    );
+    assert.throws(
+      () => rewards.applyEquip('hero-a', WILDWOOD_BLADE_ID, { eventId: `equip:${GUEST_B}:squat`, rev: 8 }),
+      /owned by a different profile/,
+      'an equip under any profile-scoped identity owned by the victim is refused too',
+    );
+    assert.deepEqual(
+      rewards.profileFactsFor('hero-a').filter((fact) => fact.eventId === victimRelight.eventId),
+      [],
+      'no attacker row reserves the victim identity',
+    );
+
+    // The victim's own finale is unblocked, and the shared Forge lights exactly once.
+    const relight = rewards.claimForgeRelight('hero-b');
+    assert.equal(relight.worldApplied, true);
+    assert.equal(relight.granted, true);
+    assert.equal(rewards.forgeLit(), true);
+    assert.equal(countWorldRows(fixture.path), 1);
   } finally {
     rewards.close();
     fixture.cleanup();

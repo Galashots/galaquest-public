@@ -561,6 +561,65 @@ test('Village Supplies totals and Workshop I ownership survive a close and reope
   }
 });
 
+// F2 migration compatibility: a legacy stored equip row with rev NULL and the same semantic
+// fact replayed from a modern device journal carrying an integer rev are the SAME event --
+// accepted as a no-op, never a conflicting reuse -- and the restore batch around it stays usable.
+test('a legacy equip row (rev NULL) accepts the same semantic replay carrying integer rev', () => {
+  const dir = tempDir();
+  const store = openRewardStore(join(dir, 'rewards.db'));
+  try {
+    // A pre-v3 row: no rev was ever minted, so the column reads NULL.
+    assert.equal(store.apply({
+      guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+      eventId: 'equip:guest-a:legacy', value: WILDWOOD_BLADE_ID,
+    }).applied, true);
+    // The same semantic fact, replayed from a modern journal with the rev it carries now.
+    assert.equal(store.apply({
+      guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+      eventId: 'equip:guest-a:legacy', value: WILDWOOD_BLADE_ID, rev: 9,
+    }).applied, false, 'NULL-vs-integer rev is a missing order, not a conflicting one');
+    assert.equal(store.equippedWeaponFor('guest-a'), WILDWOOD_BLADE_ID);
+    // A restore batch containing that replay alongside fresh facts still lands atomically.
+    const batch = store.applyAll([
+      {
+        guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+        eventId: 'equip:guest-a:legacy', value: WILDWOOD_BLADE_ID, rev: 9,
+      },
+      markAward('guest-a', 'mark:guest-a:9'),
+    ]);
+    assert.equal(batch.applied, 1, 'the replay is a no-op inside the batch; the fresh fact lands');
+    assert.equal(store.marksFor('guest-a'), 1, 'the restore batch remains usable');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+// F2 counterpart: when BOTH sides carry an integer order and those orders differ, the conflict
+// is real chronology and still fails loudly -- migration compatibility must not erase it.
+test('the same equip id with two different integer revs is still a conflicting reuse', () => {
+  const dir = tempDir();
+  const store = openRewardStore(join(dir, 'rewards.db'));
+  try {
+    store.apply({
+      guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+      eventId: 'equip:guest-a:ordered', value: WILDWOOD_BLADE_ID, rev: 10,
+    });
+    assert.throws(
+      () => store.apply({
+        guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+        eventId: 'equip:guest-a:ordered', value: WILDWOOD_BLADE_ID, rev: 11,
+      }),
+      /conflicting reuse.*rev/,
+      'two existing integer orders that differ are a different semantic event',
+    );
+    assert.equal(store.equippedWeaponFor('guest-a'), WILDWOOD_BLADE_ID, 'the original row survives');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('the db file actually exists on disk after opening', () => {
   const dir = tempDir();
   const path = join(dir, 'rewards.db');

@@ -40,6 +40,7 @@ import {
 // and the server consumes it rather than keeping a second list that drifts.
 import {
   isClientRestorableProfileFact, isSemanticallyValidEquipmentFact, parseXpFactAmount, pendingLanternXpFact,
+  sharedWorldTypesForEventId,
 } from '../public/src/progression/facts.js';
 import { LEVEL_1_STARTER_STATS, resolveHeroStats } from '../public/src/progression/heroStats.js';
 import {
@@ -605,6 +606,27 @@ export function createRewardCoordinator(options = {}) {
       // server mints an identity ABOVE this guest's existing history so it cannot land in the middle
       // of it. That fallback is a compatibility path, not the product path.
       const eventId = identity?.eventId ?? `equip:${guestId}:${randomUUID()}`;
+      // F3 equip-identity guard (boundary half): the client controls this eventId, so it must
+      // not reserve another profile's durable identity or the server-authored Relight
+      // completion identity. Reuses the existing profile-scoped ownership law rather than a
+      // new framework; a legitimate `equip:<self>:...` passes unchanged. Thrown before the
+      // store write, so a squat attempt leaves no row behind.
+      if (eventId.startsWith('forge-relight:')) {
+        throw new Error(
+          `applyEquip refuses ${JSON.stringify(itemId)} under server-authored Relight completion identity `
+          + `${JSON.stringify(eventId)}`,
+        );
+      }
+      const equipType = slot === 'weapon' ? 'weapon-equipped' : 'gear-equipped';
+      // Shared-world namespaces keep their own established diagnostic at the store boundary
+      // below; the ownership law already refuses them too, but must not shadow that message.
+      if (sharedWorldTypesForEventId(eventId) === null
+        && !isClientRestorableProfileFact({ eventId, type: equipType, value: itemId }, guestId)) {
+        throw new Error(
+          `applyEquip refuses ${JSON.stringify(itemId)} under profile-scoped event identity `
+          + `${JSON.stringify(eventId)} owned by a different profile`,
+        );
+      }
       const rev = Number.isInteger(identity?.rev) ? identity.rev : store.maxEquipRevFor(guestId) + 1;
       const result = store.apply({
         guestId,

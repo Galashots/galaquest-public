@@ -182,7 +182,7 @@ export function openRewardStore(path) {
   // line plus the schema's PRIMARY KEY constraint, not in application code that could drift from it.
   //
   // The IGNORE half is narrow on purpose: it covers an IDENTICAL semantic replay of the id's own
-  // event only (same type, same value, same rev -- see insertAward). Reusing the same event ID for
+  // event only (same type, same value, no rev conflict -- see insertAward). Reusing the same event ID for
   // a DIFFERENT semantic event is never silently ignored; it fails loudly. A global durable event
   // ID is a semantic identity: the fixed `emberworks-forge-lit:rune-forge` world row means "the
   // forge is lit", and an equip arriving under that same id is not a replay of that lighting, it is
@@ -394,6 +394,20 @@ export function openRewardStore(path) {
     if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isEquipmentFact(award)) {
       throw new Error(`reward store apply() got an invalid slot for ${award.type} item ${JSON.stringify(award.value)}`);
     }
+    // F3 equip-identity guard (store half): the Relight completion namespace is
+    // server-authored, so an equip under it is refused HERE, before any row exists, no
+    // matter whose profile it names -- otherwise the row squats the finale's future
+    // personal row globally. Cross-profile ownership of other equip ids is enforced at
+    // the client-controlled boundary (createRewardCoordinator's applyEquip), because the
+    // store must stay permissive for legacy/harness equip rows that carry bare,
+    // non-profile-scoped ids (test/equip-authority-agreement.test.mjs).
+    if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped')
+      && typeof award.eventId === 'string' && award.eventId.startsWith('forge-relight:')) {
+      throw new Error(
+        `reward store apply() refuses ${JSON.stringify(award.type)} under server-authored Relight completion identity `
+        + `${JSON.stringify(award.eventId)}`,
+      );
+    }
     if (award.type === 'gear-owned' && !isKnownItem(award.value)) {
       throw new Error(`reward store apply() got an unknown item id ${JSON.stringify(award.value)}`);
     }
@@ -414,27 +428,34 @@ export function openRewardStore(path) {
    * The write itself, once the award is known to be legal.
    *
    * Semantic-identity enforcement: when the id is already on record, the incoming award must BE
-   * the recorded event (same type, same value, same rev) or this throws loudly -- never a silent
-   * IGNORE of a conflicting reuse. Provenance is excluded from the comparison on purpose: the
-   * recorded guest_id/origin say who was there and who attested, not what happened, so a sibling
-   * replaying the shared world lighting under their own guestId is the same event and stays the
-   * no-op INSERT OR IGNORE already makes it. Equip chronology is preserved, not weakened: a replay
-   * carries the rev it was minted with, and a different rev under the same id is a different order
-   * for the same choice -- a conflict, not a replay.
+   * the recorded event (same type, same value, and no rev conflict) or this throws loudly --
+   * never a silent IGNORE of a conflicting reuse. Provenance is excluded from the comparison on
+   * purpose: the recorded guest_id/origin say who was there and who attested, not what happened,
+   * so a sibling replaying the shared world lighting under their own guestId is the same event
+   * and stays the no-op INSERT OR IGNORE already makes it.
+   *
+   * F2 migration compatibility: a row written before schema v3 (or an additive type that carries
+   * no order) reads rev NULL, while the same semantic fact replayed from a modern device journal
+   * carries the integer rev it was minted with. NULL-vs-integer is a missing order, not a
+   * conflicting one, so eventId/type/value equality alone makes it a no-op replay. Rev is only a
+   * conflict when BOTH sides carry an integer order AND those orders differ -- real equip
+   * chronology conflicts, where both revs exist, still fail loudly.
    */
   function insertAward(award) {
     const existing = existingByIdStmt.get(award.eventId);
     if (existing !== undefined) {
       const sameType = existing.type === award.type;
       const sameValue = (existing.value ?? null) === (award.value ?? null);
-      const sameRev = (Number.isInteger(existing.rev) ? existing.rev : null)
-        === (Number.isInteger(award.rev) ? award.rev : null);
-      if (sameType && sameValue && sameRev) return { applied: false };
+      const existingRev = Number.isInteger(existing.rev) ? existing.rev : null;
+      const incomingRev = Number.isInteger(award.rev) ? award.rev : null;
+      const revConflict = existingRev !== null && incomingRev !== null && existingRev !== incomingRev;
+      if (sameType && sameValue && !revConflict) return { applied: false };
       throw new Error(
         `reward store refuses conflicting reuse of eventId ${JSON.stringify(award.eventId)}: `
         + `already recorded as ${JSON.stringify(existing.type)} `
-        + `with value ${JSON.stringify(existing.value ?? null)}, `
-        + `not ${JSON.stringify(award.type)} with value ${JSON.stringify(award.value ?? null)}`,
+        + `with value ${JSON.stringify(existing.value ?? null)} (rev ${JSON.stringify(existingRev)}), `
+        + `not ${JSON.stringify(award.type)} with value ${JSON.stringify(award.value ?? null)} `
+        + `(rev ${JSON.stringify(incomingRev)})`,
       );
     }
     const result = insertStmt.run(
