@@ -34,6 +34,12 @@ namespace GalaQuest.Tests
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 var content = U2CombatPreview.Prepare();
+                var controller = (UnityEditor.Animations.AnimatorController)content.HeroController;
+                var states = controller.layers[0].stateMachine.states.Select(item => item.state).ToArray();
+                var slash = states.Single(item => item.name == "slash");
+                var burst = states.Single(item => item.name == "burst");
+                Assert.That(((AnimationClip)slash.motion).length / slash.speed, Is.EqualTo(1.5f).Within(.0001f));
+                Assert.That(((AnimationClip)burst.motion).length / burst.speed, Is.EqualTo(.72f).Within(.0001f));
                 var scene = U2CombatPreview.PrepareScene(content);
                 var firstSeconds = watch.Elapsed.TotalSeconds;
                 var paths = Directory.GetFiles(U2CombatPreview.Temporary, "*", SearchOption.AllDirectories)

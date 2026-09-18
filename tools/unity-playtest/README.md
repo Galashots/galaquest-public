@@ -120,6 +120,25 @@ Run the Unity EditMode connection/travel tests on the WebGL target too. Keep the
 `--integrity` exercises the built-client loss/takeover paths; it complements these focused tests.
 Do not infer failure recovery from a happy-path travel run or a convenient network disconnect.
 
+## Integrated combat counterplay
+
+With a manifest-bound candidate containing the native Alpha and the Unity Burst control, run `node tools/unity-playtest/mixed-combat.mjs <manifest> -mixed`. The driver uses a synthetic Level-5 profile and ordinary keyboard input to compare a real sidestep with standing in the heavy attack, then brings both enemy roles into one forward Burst cone. It records actual snapshots, captures, client/server SHAs and owned-resource cleanup. This is integration proof, not natural unlock pacing or physical-device acceptance. Inspect its windup, contact, recovery and mixed-hit captures.
+## Native heavy combat candidate
+
+The Alpha review body is derived from the existing owned `public/assets/enemies/wolf.glb`, not from new provider art. Produce its ignored local FBX, base texture and conversion receipt with the pinned Blender executable:
+
+```powershell
+node tools/unity-migration/convert-alpha-candidate.mjs --blender <path-to-pinned-Blender>
+```
+
+The converter refuses an existing output directory; preserve an earlier candidate before making another. `AlphaCandidateAuthoring` verifies the original source, converter/recipe, Blender version and declared file bytes before import. The source remains immutable. Changed converter bytes, including checkout line-ending differences, require re-running the converter rather than editing a receipt. The heavy profile belongs to the authored Emberworks Alpha, not every Alpha in the fixed world.
+
+For a review build retaining the already-qualified native worms, stage their unchanged `green-merged-v2` and `red-merged-v2` directories beneath `.local/pet-worm-native`. Each directory contains `candidate.fbx`, `base_color.png`, `normal.png` and `metallic_roughness.png`. The existing worm authorer checks its pinned FBX identities. Recover those sources through the governed Drive custody lane; do not hunt unrelated checkouts or invent replacements.
+
+Set `GQ_REVIEW_NATIVE_WORMS=1` **inside the owned Editor process** before calling `U2CombatPreview.Prepare` and `BuildWebGL`. With a live Pipeline session, set it in the same `run_script`; setting only the caller shell's environment does not update an already-running Editor. The generated source fingerprints include these inputs and the temporary scene receives explicit native-worm bindings. This mode preserves the existing appearance/motion; it neither promotes an asset nor changes the shipping scene.
+
+Run `AlphaNativeAuthoringTests` with the actual candidate present. Its import/clip and original-versus-retimed contact-pose checks are required evidence, not optional skipped checks for a claimed native integration. Inspect both ordinary gameplay framing and meaningful heavy windup/contact/recovery frames; these tests do not accept appearance.
+
 ## Rune Forge package
 
 The bounded Forge driver exercises the authored world controls with canvas touch input, two isolated
@@ -135,3 +154,22 @@ replacement, and reconnect. It records the Unity client SHA and checked-out serv
 The driver can use projected control diagnostics when the player exposes them; its fixed fallback is
 specific to the checked-in Forge pocket and still requires each physical tap to produce the expected
 authoritative server transition.
+
+## Wildwood Burst integration
+
+After building the actual U2 combat candidate, run:
+
+```powershell
+node tools/unity-playtest/burst.mjs path/to/candidate-build-manifest.json -burst
+```
+
+This driver seeds separate Level-5 and Level-4 synthetic profile journals through the shared XP law.
+It exercises the real keyboard and canvas-touch paths, a damage-bearing special, cooldown, a portrait
+button-edge drag, absence of ordinary attacks from that touch, and journal reload. It retains captures
+and checks cleanup of its own Chrome profile and backend. Synthetic unlock proof is not natural
+first-15-minute pacing, and viewport emulation is not physical-device acceptance. Inspect the pictures.
+
+For non-interactive remote Editor sessions where Ctrl+C is not delivered as a process signal, prefer
+`node tools/unity/editor-play.mjs --cycles 1 --hold 30` when a bounded play window fits the inspection.
+Keep its process and ownership receipt. Do not treat sending a control character to stdin as verified
+teardown; the helper must report stopped Play Mode, released override and exited backend.

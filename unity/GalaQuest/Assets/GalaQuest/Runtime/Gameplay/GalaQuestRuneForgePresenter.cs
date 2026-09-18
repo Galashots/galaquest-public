@@ -112,9 +112,20 @@ namespace GalaQuest
             }
             if (session == null || frame.encounter?.rewards == null
                 || !frame.encounter.rewards.TryGetValue(session.PlayerId, out var reward)) return;
+            var wasEquipped = equipped;
             equipped = reward?.equippedItemIds != null
                 && reward.equippedItemIds.TryGetValue("helmet", out var helmet)
                 && helmet == MagmaLordItemId;
+            // Authoritative equip confirmation may dismiss the panel only while it is open. A
+            // reconnect does reset `equipped` to false (ResetPrivateState), so its restore snapshot
+            // can look like a false->true equip transition; that is safe only because the same reset
+            // closes the panel and the restore snapshot repopulates `equipped` before any forge-state
+            // can open it again.
+            if (!wasEquipped && equipped && questionPanelOpen && state?.status == "owned")
+            {
+                DismissPanel();
+                return;
+            }
             PresentWorld();
         }
 

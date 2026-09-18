@@ -31,7 +31,7 @@ function Invoke-Unity {
 
     & unity @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Unity command failed with exit code $LASTEXITCODE: unity $($Arguments -join ' ')"
+        throw "Unity command failed with exit code ${LASTEXITCODE}: unity $($Arguments -join ' ')"
     }
 }
 

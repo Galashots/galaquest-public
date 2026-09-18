@@ -73,6 +73,263 @@ namespace GalaQuest.Tests
         }
 
         [UnityTest]
+        public IEnumerator LevelFiveSpecialOwnsItsTouchRegionAndKeyboardChordWithoutOrdinaryAttack()
+        {
+            var touchscreen = InputSystem.AddDevice<Touchscreen>();
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var root = new GameObject("Wildwood Burst input");
+            var attack = root.AddComponent<GalaQuestAttackControl>();
+            var special = root.AddComponent<GalaQuestSpecialControl>();
+            var transport = new FakeTransport();
+            using var session = new GalaQuestConnectionSession(transport);
+            attack.BindSession(session);
+            special.BindSession(session);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Younger", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":0,\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"maxHp\":30,\"specialSeconds\":-1,\"specialCooldown\":0}}}}");
+            // The accepted progression callback is browser-owned; this fixture pins the already
+            // accepted Level-5 result so the test stays focused on one physical input owner.
+            typeof(GalaQuestSpecialControl).GetField("level",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(special, 5);
+            try
+            {
+                yield return null;
+                yield return null;
+                var viewport = new Vector2(Screen.width, Screen.height);
+                var button = GalaQuestSpecialControl.TouchRect(viewport).center;
+                BeginTouch(7, button, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(1));
+                Assert.That(transport.AttackCount, Is.Zero, "The special touch must not also trigger ordinary attack.");
+                MoveTouch(7, button + Vector2.up * 120, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(1), "Holding or dragging must not repeat the special.");
+                EndTouch(7, button, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Press(keyboard.kKey, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(2), "K must be the deliberate keyboard special chord.");
+                Assert.That(transport.AttackCount, Is.Zero);
+            }
+            finally
+            {
+                special.BindSession(null);
+                attack.BindSession(null);
+                UnityEngine.Object.Destroy(root);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator BurstLeftEdgeSurvivesCameraJoystickAndReadinessGates()
+        {
+            var touchscreen = InputSystem.AddDevice<Touchscreen>();
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var mouse = InputSystem.AddDevice<Mouse>();
+            var root = new GameObject("Burst seam input");
+            var joystick = root.AddComponent<GalaQuestFloatingJoystick>();
+            var attack = root.AddComponent<GalaQuestAttackControl>();
+            var special = root.AddComponent<GalaQuestSpecialControl>();
+            var cameraObject = new GameObject("Burst seam camera");
+            cameraObject.AddComponent<Camera>();
+            var camera = cameraObject.AddComponent<GalaQuestGameplayCamera>();
+            camera.Configure(root.transform);
+            var transport = new FakeTransport();
+            using var session = new GalaQuestConnectionSession(transport);
+            attack.BindSession(session);
+            special.BindSession(session);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Younger", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":0,\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"maxHp\":30,\"swingSeconds\":-1,\"specialSeconds\":-1,\"specialCooldown\":0,\"downSeconds\":-1}}}}");
+            SetSpecialLevel(special, 5);
+            try
+            {
+                yield return null;
+                yield return null;
+                // 390x844 geometry behind finding 2: the Burst left edge sits inside the
+                // real joystick capture area (x <= .45W) while clearing the painted
+                // Movement rect. The runner Screen may differ, so this pins the overlap
+                // with explicit viewports; the queued touches below prove the same
+                // exclusion code path at the live resolution.
+                var probeViewport = new Vector2(390, 844);
+                var probeSpecial = GalaQuestSpecialControl.TouchRect(probeViewport);
+                var probeLeft = new Vector2(probeSpecial.xMin + 2f, probeSpecial.center.y);
+                Assert.That(GalaQuestSpecialControl.IsInSpecialRegion(probeLeft, probeViewport), Is.True);
+                Assert.That(GalaQuestFloatingJoystickState.IsInMovementRegion(probeLeft, probeViewport), Is.True,
+                    "Burst left edge overlaps joystick capture at 390x844.");
+                var probeMovement = GalaQuestCombatHudLayout.ToTouch(
+                    new GalaQuestCombatHudLayout(probeViewport).Movement, probeViewport);
+                Assert.That(probeMovement.Contains(probeLeft), Is.False,
+                    "Burst left edge clears the painted Movement rect at 390x844.");
+
+                var viewport = new Vector2(Screen.width, Screen.height);
+                var specialRect = GalaQuestSpecialControl.TouchRect(viewport);
+                var specialLeft = new Vector2(specialRect.xMin + 2f, specialRect.center.y);
+                var specialCenter = specialRect.center;
+                var orbit = new Vector2(Screen.width * .65f, Screen.height * .7f);
+
+                // A camera orbit gesture is already active when the Burst starts.
+                BeginTouch(21, orbit, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                MoveTouch(21, orbit + Vector2.right * 70f, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                var yawBeforeBurst = camera.YawDegrees;
+                var distanceBeforeBurst = camera.Distance;
+
+                // The Burst finger begins inside the left edge of the special disc.
+                BeginTouch(22, specialLeft, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(1));
+                Assert.That(transport.AttackCount, Is.Zero, "The special touch must not also trigger ordinary attack.");
+                Assert.That(joystick.Active, Is.False, "A special press must not capture the joystick.");
+
+                // Dragging or holding the Burst finger repeats nothing and orbits nothing.
+                MoveTouch(22, specialLeft + Vector2.up * 120f, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(1), "Holding or dragging must not repeat the special.");
+                Assert.That(joystick.Active, Is.False);
+                Assert.That(camera.YawDegrees, Is.EqualTo(yawBeforeBurst).Within(.001f),
+                    "The special pointer is not shared with orbit/pinch.");
+                Assert.That(camera.Distance, Is.EqualTo(distanceBeforeBurst).Within(.001f),
+                    "The special pointer must not pinch-zoom the camera.");
+
+                // The already-active camera finger still orbits while the Burst is held.
+                MoveTouch(21, orbit + Vector2.right * 140f, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(Mathf.Abs(Mathf.DeltaAngle(yawBeforeBurst, camera.YawDegrees)), Is.GreaterThan(1f),
+                    "The live camera gesture survives the Burst press.");
+                Assert.That(transport.SpecialCount, Is.EqualTo(1));
+                Assert.That(joystick.Active, Is.False);
+
+                // Releasing allows a deliberate re-press.
+                EndTouch(22, specialLeft, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                BeginTouch(22, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(2));
+                EndTouch(22, specialCenter, screen: touchscreen, queueEventOnly: true);
+                EndTouch(21, orbit, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+
+                // Touch and K queued for the same frame send exactly one intent.
+                BeginTouch(23, specialCenter, screen: touchscreen, queueEventOnly: true);
+                Press(keyboard.kKey, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(3), "Same-frame touch+K must send one intent.");
+                Assert.That(transport.AttackCount, Is.Zero);
+                EndTouch(23, specialCenter, screen: touchscreen, queueEventOnly: true);
+                Release(keyboard.kKey, queueEventOnly: true);
+                yield return null;
+
+                // K and mouse queued for the same frame (no touches held) send exactly one.
+                Set(mouse.position, specialCenter, queueEventOnly: true);
+                Press(mouse.leftButton, queueEventOnly: true);
+                Press(keyboard.kKey, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(4), "Same-frame K+mouse must send one intent.");
+                Release(mouse.leftButton, queueEventOnly: true);
+                Release(keyboard.kKey, queueEventOnly: true);
+                yield return null;
+
+                // A later deliberate press on a new frame still works after the guard.
+                BeginTouch(26, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(5));
+                EndTouch(26, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+
+                // Low level blocks; high level allows.
+                SetSpecialLevel(special, 1);
+                Assert.That(special.CanPress, Is.False);
+                Assert.That(special.TrySpecial(), Is.False, "Retry after a failed send must stay possible, not stuck.");
+                Assert.That(transport.SpecialCount, Is.EqualTo(5));
+                BeginTouch(27, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(5), "Low level must block the touch press.");
+                EndTouch(27, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                SetSpecialLevel(special, 9);
+                BeginTouch(28, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+                Assert.That(transport.SpecialCount, Is.EqualTo(6));
+                EndTouch(28, specialCenter, screen: touchscreen, queueEventOnly: true);
+                yield return null;
+
+                // An ordinary swing in progress blocks, mirroring server canUseSpecialAttack.
+                transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"downSeconds\":-1,\"swingSeconds\":0.2,\"specialSeconds\":-1,\"specialCooldown\":0}}}}");
+                yield return null;
+                Assert.That(special.CanPress, Is.False, "swingSeconds >= 0 blocks the Burst.");
+                Assert.That(special.TrySpecial(), Is.False);
+                Assert.That(transport.SpecialCount, Is.EqualTo(6));
+                transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"downSeconds\":-1,\"swingSeconds\":-1,\"specialSeconds\":-1,\"specialCooldown\":0}}}}");
+                yield return null;
+                Assert.That(special.CanPress, Is.True);
+
+                // Cooldown blocks.
+                transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"downSeconds\":-1,\"swingSeconds\":-1,\"specialSeconds\":-1,\"specialCooldown\":5}}}}");
+                yield return null;
+                Assert.That(special.CanPress, Is.False);
+                Assert.That(special.TrySpecial(), Is.False);
+                Assert.That(transport.SpecialCount, Is.EqualTo(6));
+                transport.Receive("{\"v\":4,\"type\":\"snapshot\",\"encounter\":{\"heroes\":{\"p1\":{\"hp\":30,\"downSeconds\":-1,\"swingSeconds\":-1,\"specialSeconds\":-1,\"specialCooldown\":0}}}}");
+                yield return null;
+                Assert.That(special.CanPress, Is.True);
+
+                // Travel blocks.
+                Assert.That(session.RequestTravel(GalaQuestProtocolV4.HomeHubDestinationId), Is.True);
+                Assert.That(special.CanPress, Is.False);
+                Assert.That(special.TrySpecial(), Is.False);
+                Assert.That(transport.SpecialCount, Is.EqualTo(6));
+
+                // Disconnect blocks.
+                transport.Close();
+                yield return null;
+                Assert.That(special.TrySpecial(), Is.False);
+                Assert.That(transport.SpecialCount, Is.EqualTo(6));
+            }
+            finally
+            {
+                special.BindSession(null);
+                attack.BindSession(null);
+                UnityEngine.Object.Destroy(root);
+                UnityEngine.Object.Destroy(cameraObject);
+            }
+        }
+
+        private static void SetSpecialLevel(GalaQuestSpecialControl special, int value) =>
+            typeof(GalaQuestSpecialControl).GetField("level",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(special, value);
+
+        [UnityTest]
+        public IEnumerator OneFrameCanEmitAtMostOneAttackIntent()
+        {
+            var root = new GameObject("One-frame attack dedupe");
+            var attack = root.AddComponent<GalaQuestAttackControl>();
+            var transport = new FakeTransport();
+            using var session = new GalaQuestConnectionSession(transport);
+            attack.BindSession(session);
+            session.Begin(new GalaQuestSelectedProfile("profile-aaaaaaaa", "Younger", "[]"));
+            transport.Open();
+            transport.Receive("{\"v\":4,\"type\":\"welcome\",\"id\":\"p1\"}");
+            try
+            {
+                yield return null;
+                Assert.That(attack.TryAttack(), Is.True);
+                Assert.That(attack.TryAttack(), Is.False,
+                    "two physical input sources observed in one Update must collapse to one attack intent");
+                Assert.That(transport.AttackCount, Is.EqualTo(1));
+
+                yield return null;
+                Assert.That(attack.TryAttack(), Is.True,
+                    "frame dedupe must not suppress a later deliberate press");
+                Assert.That(transport.AttackCount, Is.EqualTo(2));
+            }
+            finally
+            {
+                attack.BindSession(null);
+                UnityEngine.Object.Destroy(root);
+            }
+        }
+        [UnityTest]
         public IEnumerator RecoveryRequiresReleasingTheHeldMovementThumb()
         {
             var touchscreen = InputSystem.AddDevice<Touchscreen>();
@@ -272,6 +529,7 @@ namespace GalaQuest.Tests
             public event Action<string> Closed;
             private readonly List<string> sent = new List<string>();
             public int AttackCount => sent.Count(packet => packet.Contains("\"type\":\"attack\""));
+            public int SpecialCount => sent.Count(packet => packet.Contains("\"type\":\"special\""));
             public void Connect() { }
             public bool Send(string message) { sent.Add(message); return true; }
             public void Close() => Closed?.Invoke("interrupted");

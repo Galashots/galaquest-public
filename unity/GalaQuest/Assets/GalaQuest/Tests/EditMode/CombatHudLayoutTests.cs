@@ -19,7 +19,7 @@ namespace GalaQuest.Tests
             Assert.That(prompt.Overlaps(new Rect(60, 180, 260, 130)), Is.False,
                 "The current prize is visible after an ordinary orbit toward the station.");
             var hud = new GalaQuestCombatHudLayout(new Vector2(390, 844));
-            foreach (var control in new[] { hud.Travel, hud.Attack, hud.Movement, hud.Mute })
+            foreach (var control in new[] { hud.Travel, hud.Attack, hud.Special, hud.Movement, hud.Mute })
                 Assert.That(prompt.Overlaps(control), Is.False);
         }
 
@@ -45,7 +45,7 @@ namespace GalaQuest.Tests
         {
             var viewport = new Vector2(width, height);
             var layout = new GalaQuestCombatHudLayout(viewport);
-            var controls = new[] { layout.Attack, layout.Movement, layout.Travel, layout.Mute };
+            var controls = new[] { layout.Attack, layout.Special, layout.Movement, layout.Travel, layout.Mute };
             for (var i = 0; i < controls.Length; i++)
             {
                 Assert.That(controls[i].xMin, Is.GreaterThanOrEqualTo(0));
@@ -56,12 +56,15 @@ namespace GalaQuest.Tests
                     Assert.That(controls[i].Overlaps(controls[j]), Is.False, $"Controls {i} and {j}");
             }
             var attack = GalaQuestCombatHudLayout.ToTouch(layout.Attack, viewport).center;
+            var special = GalaQuestCombatHudLayout.ToTouch(layout.Special, viewport).center;
             var travel = GalaQuestCombatHudLayout.ToTouch(layout.Travel, viewport).center;
             var mute = GalaQuestCombatHudLayout.ToTouch(layout.Mute, viewport).center;
             Assert.That(GalaQuestAttackControl.IsInAttackRegion(attack, viewport), Is.True);
+            Assert.That(GalaQuestSpecialControl.IsInSpecialRegion(special, viewport), Is.True);
             Assert.That(GalaQuestDestinationPresentation.IsInTravelRegion(travel, viewport), Is.True);
             Assert.That(GalaQuestCombatAudio.IsInMuteRegion(mute, viewport), Is.True);
             Assert.That(GalaQuestAttackControl.IsInAttackRegion(travel, viewport), Is.False);
+            Assert.That(GalaQuestAttackControl.IsInAttackRegion(special, viewport), Is.False);
             Assert.That(GalaQuestDestinationPresentation.IsInTravelRegion(mute, viewport), Is.False);
         }
 
