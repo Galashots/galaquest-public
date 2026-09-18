@@ -105,6 +105,7 @@ namespace GalaQuest
                 // A late hint/answer reply may update progress, not undo deliberate dismissal.
                 questionPanelOpen = state != null && !panelDismissed;
                 if (state.justGranted) Play(claimCue);
+                else if (state.justLit || state.response == "relit") Play(successCue);
                 else if (state.response == "retry") Play(machineCue);
                 else if (state.response == "independent-success" || state.response == "assisted-success") Play(successCue);
                 PresentWorld();
@@ -176,9 +177,17 @@ namespace GalaQuest
                 RecordPanelControl("hammer", string.Empty, QuestionActionRect(viewport, 2, 3));
             }
             else if (state?.status == "ready-to-claim")
-                RecordPanelControl("claim", string.Empty, QuestionActionRect(viewport, 0, 1));
-            else if (state?.status == "owned" && !equipped)
-                RecordPanelControl("equip", string.Empty, QuestionActionRect(viewport, 0, 1));
+            {
+                // CLAIM stays the primary reward beat; RELIGHT sits beside it, never over it.
+                RecordPanelControl("claim", string.Empty, QuestionActionRect(viewport, 0, 2));
+                RecordPanelControl("relight", string.Empty, QuestionActionRect(viewport, 1, 2));
+            }
+            else if (state?.status == "owned")
+            {
+                if (!equipped) RecordPanelControl("equip", string.Empty, QuestionActionRect(viewport, 0, 2));
+                RecordPanelControl("relight", string.Empty,
+                    !equipped ? QuestionActionRect(viewport, 1, 2) : QuestionActionRect(viewport, 0, 1));
+            }
             RecordPanelControl("close", string.Empty, QuestionCloseRect(viewport));
         }
 
@@ -283,11 +292,19 @@ namespace GalaQuest
                         return true;
                     }
             }
-            else if ((state?.status == "ready-to-claim" || (state?.status == "owned" && !equipped))
-                && QuestionActionRect(viewport, 0, 1).Contains(guiPoint))
+            else if (state?.status == "ready-to-claim")
             {
-                PanelAction(0);
-                return true;
+                if (QuestionActionRect(viewport, 0, 2).Contains(guiPoint)) { PanelAction(0); return true; }
+                if (QuestionActionRect(viewport, 1, 2).Contains(guiPoint)) { PanelAction(1); return true; }
+            }
+            else if (state?.status == "owned")
+            {
+                if (!equipped)
+                {
+                    if (QuestionActionRect(viewport, 0, 2).Contains(guiPoint)) { PanelAction(0); return true; }
+                    if (QuestionActionRect(viewport, 1, 2).Contains(guiPoint)) { PanelAction(1); return true; }
+                }
+                else if (QuestionActionRect(viewport, 0, 1).Contains(guiPoint)) { PanelAction(1); return true; }
             }
             return true;
         }
@@ -313,8 +330,18 @@ namespace GalaQuest
                     session.TryAnswerRuneForge(state.task.id, selectedChoiceId, state.contentVersion);
                 return;
             }
-            if (state?.status == "ready-to-claim") session.TryClaimRuneForge();
-            else if (state?.status == "owned" && !equipped) session.TryEquip(MagmaLordItemId);
+            // Relight eligibility mirrors the server's own rule (learning/runeForge.js
+            // isRelightEligible): ready-to-claim OR owned, with deliberately no claim requirement.
+            if (state?.status == "ready-to-claim")
+            {
+                if (index == 0) session.TryClaimRuneForge();
+                else session.TryRelightRuneForge();
+            }
+            else if (state?.status == "owned")
+            {
+                if (index == 0 && !equipped) session.TryEquip(MagmaLordItemId);
+                else session.TryRelightRuneForge();
+            }
         }
 
         private bool TryPress(int pointerId, Vector2 screenPoint)
@@ -415,6 +442,8 @@ namespace GalaQuest
                 "assisted-success" => "The rune holds with help.",
                 "independent-success" => "The rune locks in!",
                 "claimed" => "MagmaLord Helmet claimed! Choose EQUIP.",
+                "relit" => "The forge is lit!",
+                "already-lit" => "The forge is already lit.",
                 _ => string.Empty,
             };
         }
@@ -554,8 +583,17 @@ namespace GalaQuest
             {
                 GalaQuestCombatHudStyle.Text(new Rect(panel.x + 16*s, panel.y + 48*s, panel.width - 32*s, 54*s),
                     CurrentPrompt(state, equipped), 18*s, ink, true, TextAnchor.MiddleCenter, true);
-                if (state?.status == "ready-to-claim") DrawPanelButton(QuestionActionRect(viewport, 0, 1), "CLAIM", true, true, s);
-                else if (state?.status == "owned" && !equipped) DrawPanelButton(QuestionActionRect(viewport, 0, 1), "EQUIP", true, true, s);
+                if (state?.status == "ready-to-claim")
+                {
+                    DrawPanelButton(QuestionActionRect(viewport, 0, 2), "CLAIM", true, true, s);
+                    DrawPanelButton(QuestionActionRect(viewport, 1, 2), "RELIGHT", true, false, s);
+                }
+                else if (state?.status == "owned")
+                {
+                    if (!equipped) DrawPanelButton(QuestionActionRect(viewport, 0, 2), "EQUIP", true, true, s);
+                    DrawPanelButton(!equipped ? QuestionActionRect(viewport, 1, 2) : QuestionActionRect(viewport, 0, 1),
+                        "RELIGHT", true, false, s);
+                }
             }
             DrawPanelButton(QuestionCloseRect(viewport), "CLOSE", true, false, s);
         }
@@ -632,6 +670,7 @@ namespace GalaQuest
             state == null ? "MagmaLord Helmet waiting — tap WAKE at the Forge."
                 : state.status == "choose-pack" ? "Choose SOUND or NUMBER."
                 : state.status == "active" ? state.task?.displayPrompt
+                : state.response == "relit" ? "The forge is lit! The Emberworks glows."
                 : state.status == "ready-to-claim" ? "The cage is open — tap CLAIM."
                 : equipped ? "MagmaLord Helmet equipped · 20% damage reduction"
                 : "You own the helmet — tap EQUIP to wear it.";

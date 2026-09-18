@@ -38,6 +38,9 @@ namespace GalaQuest
         public event Action<GalaQuestServerPetState, string> PetStateChanged;
         public GalaQuestServerPetState LatestPetState { get; private set; }
         public string LastPetError { get; private set; }
+        // Shared Forge-lit latch decoded from encounter.forge. False until an accepted
+        // encounter-carrying frame says otherwise; an absent forge means not lit.
+        public bool ForgeLit { get; private set; }
 
         private void ClearPetState()
         {
@@ -72,6 +75,7 @@ namespace GalaQuest
             acceptingFrames = false;
             PlayerId = string.Empty;
             ClearPetState();
+            ForgeLit = false;
             pendingDestination = null;
             StatusChanged?.Invoke($"Reconnecting as {profile.DisplayName}...");
             transport.Connect();
@@ -188,6 +192,12 @@ namespace GalaQuest
             }
             else if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.worldEpoch != WorldEpoch) return;
 
+            // The shared Forge-lit latch rides welcome, snapshot and destination-changed
+            // (gameServerCore.mjs encounterSnapshotWithRewards). forge-state and pet-state
+            // carry no encounter, so they must never clobber it.
+            if (frame.type != "forge-state" && frame.type != "pet-state")
+                ForgeLit = frame.encounter?.forge?.lit == true;
+
             // Only messages accepted by the player/destination/epoch checks reach personal
             // progression. Its synchronous browser write refreshes the journal before restore.
             AcceptedServerMessage?.Invoke(message);
@@ -241,6 +251,7 @@ namespace GalaQuest
             }
             PlayerId = string.Empty;
             ClearPetState();
+            ForgeLit = false;
             pendingDestination = null;
             StatusChanged?.Invoke(superseded
                 ? "Profile opened elsewhere · continue in the newer session"
@@ -289,6 +300,9 @@ namespace GalaQuest
 
         public bool TryClaimRuneForge() => ControlsReady
             && transport.Send(GalaQuestProtocolV4.ForgeClaim(WorldEpoch));
+
+        public bool TryRelightRuneForge() => ControlsReady
+            && transport.Send(GalaQuestProtocolV4.ForgeRelight(WorldEpoch));
 
         public bool TryEquip(string itemId) => ControlsReady && !string.IsNullOrEmpty(itemId)
             && transport.Send(GalaQuestProtocolV4.Equip(itemId, WorldEpoch));
