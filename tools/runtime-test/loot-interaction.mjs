@@ -18,9 +18,11 @@
  *
  *   collected    the post-condition verified
  *   missed       no dispatched touch ever reached a loot control                (instrument)
+ *   no-budget    the deadline passed before even one touch was dispatched       (instrument)
  *   out-of-reach a touch reached the control but the server showed the hero out of range (instrument)
- *   refused      a touch reached the control while the server showed the hero IN reach and the
- *                server still never collected                              (product; the #113 shape)
+ *   refused      a landed, in-range touch collected nothing before the confirmation window closed;
+ *                the server never positively said "no", so this is an INFERENCE of a product
+ *                refusal (the #113 shape), not proof of one
  *   gone         the corpse/claim left the wire before confirmation            (instrument)
  *   expired      the subject's own lifetime ran out                            (instrument)
  *
@@ -53,7 +55,10 @@ function landedOnControl(tap) {
  *   expired()  -> whether the subject the interaction is spending has run out of life.
  *
  * @returns {Promise<{collected:boolean,outcome:string,attempts:number,recovered:boolean,
- *   sawOutOfReach:boolean,tap:object|null,wire:object|null}>}
+ *   sawOutOfReach:boolean,tap:object|null,wire:object|null}>} `recovered` reports the recovery on the
+ *   path to the final dispatched attempt: true when no recovery was needed or the most recent one
+ *   succeeded, false when the most recent recovery failed. It is NOT "every recovery ever succeeded",
+ *   so an early failed recovery cannot stay sticky once a later one puts the hero back in range.
  */
 export async function collectUntilEffect({
   attempt,
@@ -89,6 +94,9 @@ export async function collectUntilEffect({
         await sleep(poll);
         continue;
       }
+      // Recovery succeeded: clear any earlier failure so `recovered` describes the attempt this
+      // recovery is about to enable, not the whole run.
+      recovered = true;
       // Recovery can spend the last of the subject's life (or the deadline can pass during it). Never
       // dispatch another tap at a subject that is already gone.
       if (done()) break;
@@ -122,18 +130,21 @@ export async function collectUntilEffect({
       return { collected: false, outcome: 'gone', attempts, recovered, sawOutOfReach, tap, wire };
     }
     if (!attemptOutOfReach) {
-      // A real click reached a real control, the server's own reach rule allowed it, and the server
-      // still never reported the item taken. That is a product refusal -- the #113 shape -- not a
-      // harness miss, and it is recorded as such even if a later attempt succeeds.
+      // A real click reached a real control, the server's own reach check did not reject it, and the
+      // confirmation window closed without the item being taken. This is an INFERRED product refusal
+      // -- the #113 shape -- not a harness miss, and it is recorded as such even if a later attempt
+      // succeeds. It is only an inference: the server never positively said no, it merely did not say
+      // yes before the window ran out.
       sawInRangeLandedClick = true;
     }
   }
 
   const outcome = expired()
     ? 'expired'
-    : sawInRangeLandedClick ? 'refused'
-      : sawLandedClick ? 'out-of-reach'
-        : 'missed';
+    : attempts === 0 ? 'no-budget'
+      : sawInRangeLandedClick ? 'refused'
+        : sawLandedClick ? 'out-of-reach'
+          : 'missed';
   return {
     collected: false, outcome, attempts, recovered, sawOutOfReach, tap, wire,
   };
@@ -149,9 +160,13 @@ export function interactionClassReason(result) {
       return 'the interaction verified';
     case 'missed':
       return 'no dispatched touch ever reached a loot control (instrument miss, not a product verdict)';
+    case 'no-budget':
+      return 'the interaction ran out of budget before even one touch was dispatched (instrument: '
+        + 'zero attempts, not a product verdict)';
     case 'refused':
-      return 'a touch reached the control while the server showed the hero in reach and the server '
-        + 'still did not collect (product refusal, the #113 shape)';
+      return 'a landed, in-range touch collected nothing before the confirmation window closed; the '
+        + 'server never positively said no, so this is an INFERRED product refusal (the #113 shape), '
+        + 'not proof of one';
     case 'out-of-reach':
       return 'a touch reached the control but the server showed the hero out of interact reach';
     case 'gone':

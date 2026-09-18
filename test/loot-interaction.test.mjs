@@ -53,7 +53,30 @@ test('retries past the old three-attempt cap until the verified post-condition h
   assert.equal(recoveries, 5, 'recovery runs between attempts, never before the first');
 });
 
-test('a landed in-range click the wire never confirms is a PRODUCT refusal, not a miss', async () => {
+test('an early failed recovery does not leave `recovered` false once a later one succeeds', async () => {
+  const clock = fakeClock();
+  let recoveries = 0;
+  const result = await collectUntilEffect({
+    now: clock.now,
+    sleep: clock.sleep,
+    deadline: 60_000,
+    confirmTimeoutMs: 100,
+    pollIntervalMs: 10,
+    attempt: async () => landedTap,
+    recover: async () => { recoveries += 1; return recoveries > 1; },
+    confirm: async () => (recoveries >= 2
+      ? { verified: true, wire: { untaken: 1 } }
+      : { verified: false, gone: false, outOfReach: false, wire: { untaken: 2 } }),
+  });
+
+  assert.equal(result.collected, true);
+  assert.equal(result.outcome, 'collected');
+  assert.equal(recoveries, 2, 'the first recovery fails; only the second puts the hero back in range');
+  assert.equal(result.recovered, true,
+    'a failed recovery early in the run must not stay sticky on a later successful collect');
+});
+
+test('a landed in-range click the wire never confirms is an INFERRED product refusal, not a miss', async () => {
   const clock = fakeClock();
   let taps = 0;
   let confirms = 0;
@@ -76,6 +99,8 @@ test('a landed in-range click the wire never confirms is a PRODUCT refusal, not 
   assert.ok(taps > 3, `the old three-attempt cap must not decide the outcome (taps=${taps})`);
   assert.ok(confirms > taps, 'every landed click must be checked against the authoritative wire');
   assert.match(interactionClassReason(result), /#113 shape/);
+  assert.match(interactionClassReason(result), /INFERRED|inferred/,
+    'an in-range confirm timeout is an inference of refusal, never proof of a product refusal');
 });
 
 test('taps that never reach a control are an instrument miss and never wait on a receipt', async () => {
@@ -110,6 +135,25 @@ test('a tap whose control vanished entirely is also a miss, not a product failur
 
   assert.equal(result.outcome, 'missed');
   assert.equal(result.collected, false);
+});
+
+test('a subject whose budget is already gone dispatches nothing and is a no-budget outcome', async () => {
+  let taps = 0;
+  const result = await collectUntilEffect({
+    deadline: 0, // the budget is spent before the loop begins, but the subject has not expired
+    attempt: async () => { taps += 1; return landedTap; },
+    expired: () => false,
+    confirm: async () => { throw new Error('confirm must not run when no touch was dispatched'); },
+  });
+
+  assert.equal(taps, 0);
+  assert.equal(result.attempts, 0);
+  assert.equal(result.collected, false);
+  assert.equal(result.outcome, 'no-budget');
+  assert.match(interactionClassReason(result), /ran out of budget/);
+  assert.match(interactionClassReason(result), /zero attempts/);
+  assert.doesNotMatch(interactionClassReason(result), /dispatched touch/,
+    'the reason must not claim a dispatched touch when none was ever dispatched');
 });
 
 test('the subject leaving the wire ends the retry as an instrument outcome', async () => {

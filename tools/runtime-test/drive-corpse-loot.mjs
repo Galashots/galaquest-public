@@ -1058,9 +1058,11 @@ if (booted) {
         // control -- so neither run was making a statement about the product. The rule now lives in
         // loot-interaction.mjs: retry until the VERIFIED POST-CONDITION (one fewer untaken item)
         // holds, bounded by what the corpse has left rather than by a count, and NAME the class of a
-        // final failure. A product refusal -- a real click the server saw, in reach, that collected
-        // nothing -- stays distinct from an instrument miss, so B reads as the #113 shape instead of
-        // being laundered into noise.
+        // final failure. `refused` fires only on a landed, in-range click that collected nothing, so
+        // B's recorded signature (hitIsTarget:true, clickLanded:false) is an instrument miss: this
+        // run does NOT yet distinguish whether B is the #113 shape. A FUTURE hosted run with
+        // clickLanded:true is what would tell the two apart; until then B is never laundered into a
+        // product claim.
         const WHOLE_SUBJECT_MS = Number.MAX_SAFE_INTEGER; // clamp against the corpse, not a constant
         const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
           const raw = await collectUntilEffect({
@@ -1070,6 +1072,10 @@ if (booted) {
             deadline: deadlineAfter(
               claimLife.budgetFor(WHOLE_SUBJECT_MS, { reserveMillis }),
             ),
+            // A landed in-range click that the wire never confirms within this window is classified
+            // as `refused` -- but that classification is an INFERENCE, not a server verdict: a slow
+            // or dropped snapshot can close the window before the collect lands. interactionClassReason()
+            // states the inference, and a hosted run must never be read as proof of a product refusal.
             confirmTimeoutMs: WIRE_CONFIRM_BUDGET_MS,
             pollIntervalMs: 120,
             sleep,
@@ -1084,7 +1090,8 @@ if (booted) {
                   && wire.untaken < expectUntakenBelow,
                 gone: !present,
                 // The exact quantity world/corpseLoot.js tests before it refuses. While this is over
-                // the radius the request was already refused before the confirmation poll began.
+                // the radius the request was already refused before the confirmation poll began; at
+                // or below the radius, a confirm timeout is only an inferred refusal (see above).
                 outOfReach: wire.serverGap != null
                   && wire.serverGap > CORPSE_LOOT_INTERACT_RADIUS_METERS,
                 wire,
