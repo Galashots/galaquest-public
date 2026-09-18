@@ -38,8 +38,17 @@ namespace GalaQuest
         public event Action<GalaQuestServerPetState, string> PetStateChanged;
         public GalaQuestServerPetState LatestPetState { get; private set; }
         public string LastPetError { get; private set; }
-        // Shared Forge-lit latch decoded from encounter.forge. False until an accepted
-        // encounter-carrying frame says otherwise; an absent forge means not lit.
+        // The CURRENT DESTINATION's forge-lit flag, decoded from encounter.forge; false until an
+        // accepted encounter-carrying frame says otherwise, and an absent forge means not lit.
+        //
+        // Deliberately not called a shared world latch: forgeLitState is per-simulation on the
+        // server (gameServerCore.mjs) and a mid-session relight only marks the simulation that
+        // handled it, so travelling to a destination whose simulation predates the relight reports
+        // dark until that server restarts and reseeds from the durable store. Read this as "is the
+        // forge lit where I am standing", never as "has the world's forge ever been lit".
+        //
+        // No presenter consumes this yet. It is the decode half of the relight path; the UI that
+        // needs it is a separate package (see the relight dead-end follow-up on issue #192).
         public bool ForgeLit { get; private set; }
 
         private void ClearPetState()
