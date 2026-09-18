@@ -448,6 +448,49 @@ namespace GalaQuest.Tests
             finally { UnityEngine.Object.DestroyImmediate(root); }
         }
 
+        [Test]
+        public void AuthoritativeEquipConfirmationDismissesTheOwnedPanelSoTheHeroIsImmediatelyVisible()
+        {
+            var presenterObject = new GameObject("Forge presenter");
+            try
+            {
+                var presenter = presenterObject.AddComponent<GalaQuestRuneForgePresenter>();
+                var panelOpenField = typeof(GalaQuestRuneForgePresenter).GetField("questionPanelOpen",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Assert.That(panelOpenField, Is.Not.Null);
+
+                var wire = new Wire();
+                using var session = new GalaQuestConnectionSession(wire);
+                session.Begin(new GalaQuestSelectedProfile(ProfileId, "Aster", "[]"));
+                wire.Open();
+                wire.Receive(Welcome);
+                presenter.BindSession(session);
+
+                wire.Receive("{\"v\":4,\"type\":\"forge-state\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\","
+                    + "\"worldEpoch\":0,\"forge\":{\"status\":\"owned\"}}");
+                Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(true),
+                    "An owned-not-equipped forge-state must keep the panel open for the EQUIP action.");
+                Assert.That(GalaQuestRuneForgePresenter.CurrentPrompt(presenter.State, false),
+                    Is.EqualTo("You own the helmet — tap EQUIP to wear it."));
+
+                // The authoritative equip confirmation: a snapshot naming this exact player's
+                // helmet as newly equipped.
+                wire.Receive("{\"v\":4,\"type\":\"snapshot\",\"worldEpoch\":0,\"encounter\":{\"rewards\":{\""
+                    + session.PlayerId + "\":{\"equippedItemIds\":{\"helmet\":\"helmet_magmalord\"}}}}}");
+
+                Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(false),
+                    "Authoritative equip confirmation must dismiss the blocking panel so the equipped Hero is immediately visible.");
+
+                // A later frame that only restates the same already-equipped reward (e.g. a
+                // reconnect/restore snapshot) must not be able to reopen or otherwise disturb
+                // the dismissed panel; only a genuine false->true transition may act.
+                wire.Receive("{\"v\":4,\"type\":\"snapshot\",\"worldEpoch\":0,\"encounter\":{\"rewards\":{\""
+                    + session.PlayerId + "\":{\"equippedItemIds\":{\"helmet\":\"helmet_magmalord\"}}}}}");
+                Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(false));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(presenterObject); }
+        }
+
         private sealed class Wire : IGalaQuestTransport
         {
             public event Action Opened;

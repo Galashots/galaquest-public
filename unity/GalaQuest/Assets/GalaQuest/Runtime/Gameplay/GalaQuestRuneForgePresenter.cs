@@ -112,9 +112,20 @@ namespace GalaQuest
             }
             if (session == null || frame.encounter?.rewards == null
                 || !frame.encounter.rewards.TryGetValue(session.PlayerId, out var reward)) return;
+            var wasEquipped = equipped;
             equipped = reward?.equippedItemIds != null
                 && reward.equippedItemIds.TryGetValue("helmet", out var helmet)
                 && helmet == MagmaLordItemId;
+            // Authoritative equip confirmation is the only thing allowed to dismiss the panel here:
+            // this fires only on a genuine false->true transition of server-reported equip state
+            // while the player is looking at the owned-not-equipped panel, never on a frame that
+            // merely restates an already-equipped reward (e.g. reconnect/restore), so it cannot
+            // manufacture a fake reveal for state that was already true before this frame.
+            if (!wasEquipped && equipped && questionPanelOpen && state?.status == "owned")
+            {
+                DismissPanel();
+                return;
+            }
             PresentWorld();
         }
 
