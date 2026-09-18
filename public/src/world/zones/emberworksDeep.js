@@ -19,9 +19,15 @@ export const EMBERWORKS_DEEP_ENEMIES = Object.freeze([
   // The existing Alpha presentation gives this authored heavy a readable silhouette without
   // introducing an asset/provider dependency. Its rules role is distinct in encounter.js: a long,
   // committed smash that can be sidestepped and punished during recovery.
-  // Its bounded approach pocket cannot reach the Rune Forge controls, even after respawn.
+  // The visible spawn stays at (4, 9) while the authored home/territory center sits southwest at
+  // (2.5, 5.25) with leash 6: the spawn is strictly inside the territory (4.04 < 6, so no
+  // spawn-time return), the leash covers the full aggro range (6 >= 6, so ordinary pursuit cannot
+  // trip an unintended return/full-heal), and territory plus Heavy reach still stops 1.49m short
+  // of the Rune Forge interaction pocket (12.84 - 6 - 2.1 > 3.25). The home stays outside the
+  // recovery sanctuary and clear of the gate pillars and cavern wings.
   Object.freeze({ enemyId: 'emberworks-alpha-1', kind: 'alpha-wolf', level: 1, attackProfile: 'heavy',
-    spawn: Object.freeze({ x: 4, z: 9 }), leashRadius: 2.5 }),
+    spawn: Object.freeze({ x: 4, z: 9 }), home: Object.freeze({ x: 2.5, z: 5.25 }),
+    leashRadius: 6 }),
 ]);
 
 // Cinder Gate -> immediate-action cavern -> the flat approach to Lava Express.

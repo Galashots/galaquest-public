@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSimulation } from '../net/gameServerCore.mjs';
+import { EMBERWORKS_DEEP_ENEMIES } from '../public/src/world/zones/emberworksDeep.js';
 
 const destinationId = 'emberworks-deep';
 const advance = (sim, frames, offset = 0) => {
@@ -67,6 +68,37 @@ test('defeat and quick recovery use the Emberworks spawn', () => {
   assert.equal(respawned, true);
   assert.deepEqual({ x: hero.x, z: hero.z }, { x: 0, z: 4 });
   assert.equal(sim.encounterSnapshot().heroes[hero.id].hp, 30);
+});
+
+test('wounded authored Alpha pursues a stationary 5m target without returning or healing', () => {
+  const alphaSpawn = EMBERWORKS_DEEP_ENEMIES.find((enemy) => enemy.enemyId === 'emberworks-alpha-1').spawn;
+  const sim = createSimulation({ destinationId });
+  const hero = sim.addPlayer('pursuit', { x: alphaSpawn.x, z: alphaSpawn.z - 1.5 });
+  advance(sim, 31);
+  assert.equal(sim.applyAttack(hero.id, { seq: 1 }), true);
+  advance(sim, 31, 2000);
+  const wounded = sim.encounterSnapshot().enemies.find((enemy) => enemy.enemyId === 'emberworks-alpha-1');
+  assert.ok(wounded.hp < wounded.maxHp, 'setup must wound the authored Alpha');
+  const woundedHp = wounded.hp;
+  // Stationary target 5m south of the visible spawn: ordinary in-aggro distance.
+  hero.x = alphaSpawn.x; hero.z = alphaSpawn.z - 5;
+  sim.drainEvents();
+  let sawPursuit = false;
+  let hurtByAlpha = false;
+  for (let frame = 0; frame < 900; frame++) {
+    sim.step(0.05, 4000 + frame * 50);
+    const alpha = sim.encounterSnapshot().enemies.find((enemy) => enemy.enemyId === 'emberworks-alpha-1');
+    assert.notEqual(alpha.mode, 'returning', 'ordinary pursuit must not trip the territory escape');
+    assert.equal(alpha.hp, woundedHp, 'a wounded pursuer must not full-heal without reaching home');
+    if (alpha.mode === 'walk' || alpha.mode === 'bite') sawPursuit = true;
+    for (const event of sim.drainEvents()) {
+      if ((event.type === 'hero-hurt' || event.type === 'hero-down') && event.enemyId === 'emberworks-alpha-1') {
+        hurtByAlpha = true;
+      }
+    }
+  }
+  assert.equal(sawPursuit, true, 'the Alpha must actually pursue/attack the stationary target');
+  assert.equal(hurtByAlpha, true, 'the Heavy must land its committed smash on a standing-still target');
 });
 
 test('Emberworks recovery sanctuary prevents immediate spawn camping', () => {
