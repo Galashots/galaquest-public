@@ -455,9 +455,17 @@ namespace GalaQuest.Tests
             try
             {
                 var presenter = presenterObject.AddComponent<GalaQuestRuneForgePresenter>();
-                var panelOpenField = typeof(GalaQuestRuneForgePresenter).GetField("questionPanelOpen",
-                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var panelOpenField = typeof(GalaQuestRuneForgePresenter).GetField("questionPanelOpen", flags);
+                var panelDismissedField = typeof(GalaQuestRuneForgePresenter).GetField("panelDismissed", flags);
+                var selectedChoiceField = typeof(GalaQuestRuneForgePresenter).GetField("selectedChoiceId", flags);
+                var feedbackField = typeof(GalaQuestRuneForgePresenter).GetField("feedback", flags);
+                var equippedField = typeof(GalaQuestRuneForgePresenter).GetField("equipped", flags);
                 Assert.That(panelOpenField, Is.Not.Null);
+                Assert.That(panelDismissedField, Is.Not.Null);
+                Assert.That(selectedChoiceField, Is.Not.Null);
+                Assert.That(feedbackField, Is.Not.Null);
+                Assert.That(equippedField, Is.Not.Null);
 
                 var wire = new Wire();
                 using var session = new GalaQuestConnectionSession(wire);
@@ -475,18 +483,46 @@ namespace GalaQuest.Tests
 
                 // The authoritative equip confirmation: a snapshot naming this exact player's
                 // helmet as newly equipped.
-                wire.Receive("{\"v\":4,\"type\":\"snapshot\",\"worldEpoch\":0,\"encounter\":{\"rewards\":{\""
-                    + session.PlayerId + "\":{\"equippedItemIds\":{\"helmet\":\"helmet_magmalord\"}}}}}");
+                var equipSnapshot = "{\"v\":4,\"type\":\"snapshot\",\"worldEpoch\":0,\"encounter\":{\"rewards\":{\""
+                    + session.PlayerId + "\":{\"equippedItemIds\":{\"helmet\":\"helmet_magmalord\"}}}}}";
+                wire.Receive(equipSnapshot);
 
                 Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(false),
                     "Authoritative equip confirmation must dismiss the blocking panel so the equipped Hero is immediately visible.");
+                // DismissPanel must leave no half-open interaction behind: it sets panelDismissed,
+                // clears selectedChoiceId and leaves feedback empty; the prompt must switch to the
+                // equipped line instead of still asking for EQUIP.
+                Assert.That(panelDismissedField.GetValue(presenter), Is.EqualTo(true));
+                Assert.That(selectedChoiceField.GetValue(presenter), Is.Null);
+                Assert.That(feedbackField.GetValue(presenter), Is.EqualTo(string.Empty));
+                Assert.That(GalaQuestRuneForgePresenter.CurrentPrompt(presenter.State,
+                    (bool)equippedField.GetValue(presenter)),
+                    Is.EqualTo("MagmaLord Helmet equipped · 20% damage reduction"));
 
-                // A later frame that only restates the same already-equipped reward (e.g. a
-                // reconnect/restore snapshot) must not be able to reopen or otherwise disturb
-                // the dismissed panel; only a genuine false->true transition may act.
-                wire.Receive("{\"v\":4,\"type\":\"snapshot\",\"worldEpoch\":0,\"encounter\":{\"rewards\":{\""
-                    + session.PlayerId + "\":{\"equippedItemIds\":{\"helmet\":\"helmet_magmalord\"}}}}}");
-                Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(false));
+                // A reconnect resets private state, including `equipped` (ResetPrivateState), so
+                // the restore snapshot can genuinely look like a false->true equip transition.
+                // Drive the real reset seam the presenter subscribes to: session.Disconnected.
+                wire.Close("interrupted");
+                Assert.That(equippedField.GetValue(presenter), Is.EqualTo(false),
+                    "The reconnect reset must clear the cached equip state.");
+                Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(false),
+                    "The reconnect reset must close the panel.");
+                Assert.That(panelDismissedField.GetValue(presenter), Is.EqualTo(false));
+
+                session.Reconnect();
+                wire.Open();
+                wire.Receive(Welcome);
+
+                // The restore frame repopulates `equipped` before any forge-state can reopen the
+                // panel; it must neither reopen nor dismiss the already-closed panel. A false
+                // panelDismissed is the observable that PresentWorld ran rather than DismissPanel.
+                wire.Receive(equipSnapshot);
+                Assert.That(panelOpenField.GetValue(presenter), Is.EqualTo(false),
+                    "A restated equipped reward must not reopen the panel.");
+                Assert.That(panelDismissedField.GetValue(presenter), Is.EqualTo(false),
+                    "PresentWorld, not DismissPanel, must handle a restated reward while the panel is closed.");
+                Assert.That(equippedField.GetValue(presenter), Is.EqualTo(true),
+                    "The reconnect restore frame must repopulate the cached equip state.");
             }
             finally { UnityEngine.Object.DestroyImmediate(presenterObject); }
         }

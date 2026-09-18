@@ -116,11 +116,11 @@ namespace GalaQuest
             equipped = reward?.equippedItemIds != null
                 && reward.equippedItemIds.TryGetValue("helmet", out var helmet)
                 && helmet == MagmaLordItemId;
-            // Authoritative equip confirmation is the only thing allowed to dismiss the panel here:
-            // this fires only on a genuine false->true transition of server-reported equip state
-            // while the player is looking at the owned-not-equipped panel, never on a frame that
-            // merely restates an already-equipped reward (e.g. reconnect/restore), so it cannot
-            // manufacture a fake reveal for state that was already true before this frame.
+            // Authoritative equip confirmation may dismiss the panel only while it is open. A
+            // reconnect does reset `equipped` to false (ResetPrivateState), so its restore snapshot
+            // can look like a false->true equip transition; that is safe only because the same reset
+            // closes the panel and the restore snapshot repopulates `equipped` before any forge-state
+            // can open it again.
             if (!wasEquipped && equipped && questionPanelOpen && state?.status == "owned")
             {
                 DismissPanel();
