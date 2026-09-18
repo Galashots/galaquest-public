@@ -43,6 +43,12 @@ namespace GalaQuest.Editor
             }
             Add(Path.Combine(U2CombatPreview.CandidateDirectory, "lava-gremlin-local-v1.fbx"));
             Add(Path.Combine(U2CombatPreview.CandidateDirectory, "../gremlin-body/texture_0_base_color.png"));
+            // Bind the native Alpha candidate: the original wolf.glb, its Astra
+            // conversion receipt, and every output file the receipt declares.
+            // Only these declared paths are hashed; no sibling files are implied.
+            foreach(var path in WormCompanionAuthoring.NativeReviewInputs()) Add(path);
+            AlphaCandidateAuthoring.ValidateCandidate();
+            foreach (var path in AlphaCandidateAuthoring.DeclaredCandidatePaths()) Add(path);
             var review = Environment.GetEnvironmentVariable("GQ_U2_GRIP_REVIEW") == "1";
             if (review) Add(U2HeroGripPreview.CandidatePath);
             // Include generator/runtime code and its serialized input dependencies.

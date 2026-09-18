@@ -67,13 +67,19 @@ namespace GalaQuest
             }
 
             if (state.Active) return;
+            var viewport = new Vector2(Screen.width, Screen.height);
             foreach (var touch in touchscreen.touches)
             {
                 if (!touch.press.wasPressedThisFrame) continue;
                 if (GalaQuestRuneForgePresenter.OwnsTouch(touch.touchId.ReadValue())) continue;
+                // The Burst disc overlaps this capture region on narrow viewports (390x844)
+                // without overlapping the painted Movement rect. A press that begins inside
+                // the special region belongs to the special owner; ownership never hands over
+                // while the joystick is already dragging.
+                if (GalaQuestSpecialControl.IsInSpecialRegion(touch.position.ReadValue(), viewport)) continue;
                 if (GetComponent<GalaQuestDestinationPresentation>() != null
                     && GalaQuestDestinationPresentation.IsInTravelRegion(touch.position.ReadValue(),
-                        new Vector2(Screen.width, Screen.height))) continue;
+                        viewport)) continue;
                 if (state.TryBegin(
                         touch.touchId.ReadValue(),
                         touch.position.ReadValue(),
