@@ -1008,6 +1008,13 @@ export function createRewardCoordinator(options = {}) {
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped') && !isKnownItem(fact.value))
         && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')
           && !isSemanticallyValidEquipmentFact(fact))
+        // The store's F3 guard (net/rewardStore.mjs) throws on an equip under the server-authored
+        // Relight completion namespace, which is correct for a live award but wrong for a restore
+        // batch: one malformed row must not roll back every other valid fact in the same message.
+        // Filtered here, at the same candidate boundary as the checks around it, so the guard is
+        // never actually reached for a restore-sourced equip fact.
+        && !((fact.type === 'weapon-equipped' || fact.type === 'gear-equipped')
+          && typeof fact.eventId === 'string' && fact.eventId.startsWith('forge-relight:'))
         // Checked through the same reader the fold and the store use, so a device cannot restore an
         // amount that would later be counted differently -- or, before this check existed, counted
         // NEGATIVELY. Filtered rather than thrown on, exactly like the two lines above it: a device

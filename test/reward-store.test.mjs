@@ -279,6 +279,25 @@ test('apply() refuses a weapon-equipped award naming an item nobody defined', ()
   }
 });
 
+// #194 / F3 defence-in-depth: production tests mainly exercise this guard through
+// createRewardCoordinator's applyEquip boundary. This drives store.apply() directly, so the
+// store's own refusal (not just the coordinator's) is proven, and a rejected apply must not
+// have written anything -- exactly like the "unknown weapon id" guard beside it.
+test('apply() refuses a weapon-equipped award under the server-authored forge-relight identity, even for the owning guest', () => {
+  const dir = tempDir();
+  const store = openRewardStore(join(dir, 'rewards.db'));
+  try {
+    assert.throws(
+      () => store.apply(equipAward('guest-a', STARTER_SWORD_ID, 'forge-relight:guest-a:emberworks.rune-forge.magmalord-helmet.v1')),
+      /server-authored Relight completion identity/i,
+    );
+    assert.equal(store.equippedWeaponFor('guest-a'), null, 'a rejected apply must not have written anything');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('apply() still refuses a wholly unknown award type', () => {
   const dir = tempDir();
   const store = openRewardStore(join(dir, 'rewards.db'));
