@@ -16,6 +16,10 @@ const DIR = 'tools/runtime-test';
 // each has to say why -- an exemption without a stated reason is how this guard would rot.
 const NOT_A_HARNESS = new Set([
   'automation-timing.mjs',
+  // Issue #124: the pure retry/verdict rule for one loot interaction, imported by drive-corpse-loot.
+  // It drives no browser, starts no server and holds no verdict of its own; test/loot-interaction.test.mjs
+  // is what proves it, exactly as automation-timing.mjs is proven by test/automation-timing.test.mjs.
+  'loot-interaction.mjs',
   'in-page-driver.mjs',
   'owned-server.mjs',
   'review-suites.mjs',
