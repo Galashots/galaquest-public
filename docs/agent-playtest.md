@@ -7,7 +7,8 @@ between that knows what is supposed to happen.
 node tools/runtime-test/playtest-session.mjs --minutes 20 --persona "a seven-year-old playing for the first time"
 ```
 
-Needs the automation Chrome on port 9224 (README, "Browser harnesses"). The session spawns and owns
+Needs the automation Chrome on port 9224 -- `node tools/runtime-test/automation-chrome.mjs`, in its
+own shell (README, "Browser harnesses"). The session spawns and owns
 its own runtime server, like every other file in `tools/runtime-test/`.
 
 ## What this is for, and what it cannot do
