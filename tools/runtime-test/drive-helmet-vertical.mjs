@@ -17,7 +17,9 @@
  * report, not a pass/fail verdict. It exits 2 only when it cannot produce the evidence at all.
  */
 
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openRewardStore } from '../../net/rewardStore.mjs';
 import { HELMET_SILVERGUARD_ID } from '../../public/src/progression/items.js';
@@ -25,7 +27,17 @@ import { startOwnedServer } from './owned-server.mjs';
 
 const CHROME_PORT = 9224;
 const OUT = fileURLToPath(new URL('../../.local/runtime-test/', import.meta.url));
-const REWARD_STORE_PATH = fileURLToPath(new URL('../../data/rewards.db', import.meta.url));
+// The store this harness grants into must be the SAME one the server it started is serving from.
+// It was the repository's data/rewards.db while `startOwnedServer()` was called with no argument,
+// which hands the server its own isolated temp database (owned-server.mjs). The live grant below
+// therefore landed in a file the server never opened: the acquisition card could not fire, and the
+// run died at "acquisition card never appeared after the live grant" -- reading as a broken reward
+// ceremony when the game was fine and only the fixture was misaddressed.
+//
+// This is the same defect #198 fixed in drive-relight.mjs, and the same reasoning applies: a private
+// per-run database, handed explicitly to the server, keeps concurrent runs from sharing a fixture
+// and keeps a proof harness from writing into the path that can hold a real family save.
+const REWARD_STORE_PATH = join(mkdtempSync(join(tmpdir(), 'galaquest-helmet-')), 'rewards.db');
 mkdirSync(OUT, { recursive: true });
 const RUN_LOG = `${OUT}helmet-vertical-run.log`;
 try { writeFileSync(RUN_LOG, 'run start\n'); } catch { /* ignore */ }
@@ -37,7 +49,7 @@ const step = (m) => { console.log(m); try { appendFileSync(RUN_LOG, `${m}\n`); }
 // transition every time, which is what makes the gate deterministic across re-runs and CI reruns.
 const GUEST = `helmet-vertical-guest-${Date.now()}`;
 
-const server = await startOwnedServer();
+const server = await startOwnedServer({ rewardStorePath: REWARD_STORE_PATH });
 step(`server up: ${server.url}`);
 const ORIGIN = server.origin;
 const GAME_URL = server.url;
