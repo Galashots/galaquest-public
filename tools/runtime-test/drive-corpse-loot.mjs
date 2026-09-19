@@ -47,6 +47,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { deadlineAfter, subjectLifetime } from './automation-timing.mjs';
+import { collectUntilEffect, interactionClassReason } from './loot-interaction.mjs';
 import { authoredWolfSource, READ_WALK, startWalk, STOP_WALK } from './in-page-driver.mjs';
 import { startOwnedServer } from './owned-server.mjs';
 import { SHIELD_IRONWOOD_ID } from '../../public/src/progression/items.js';
@@ -134,6 +135,27 @@ function check(name, passed, detail) {
   if (!passed) failures += 1;
   console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
+/**
+ * A measurement this run cannot authoritatively judge.
+ *
+ * Issue #124: `drive-corpse-loot` flipped at the same SHA, and when it failed ONE interaction that
+ * did not take effect printed as roughly nine product regressions. Those downstream checks were never
+ * exercised -- their precondition (the item really left the claim) never held -- so they belong here,
+ * not in `failures`. `passed: null` means the predicate was deliberately not evaluated at all, which
+ * is the honest record for a check whose subject was never created. With `authoritative: true` it
+ * degrades to an ordinary gating check, so nothing here is a way to suppress a real product verdict.
+ */
+function diagnostic(name, passed, detail, { authoritative, reason }) {
+  if (authoritative) return check(name, passed, detail);
+  results.push({ name, passed: null, outcome: 'DIAG', actualPredicate: passed, detail });
+  const actual = passed === null ? 'not exercised' : passed ? 'held' : 'VIOLATED';
+  console.log(`DIAG  ${name}${detail ? ` — ${detail}` : ''}`
+    + ` [NOT JUDGED: ${reason}; predicate ${actual}]`);
+}
+/** Did the interaction actually take effect, and if not, why did the run not judge what followed? */
+const downstreamReason = (label, result) => `${label} did not take effect: ${interactionClassReason(result)}`;
+const interactionDetail = (label, result) => `outcome=${result.outcome} attempts=${result.attempts} `
+  + `recovered=${result.recovered} ${JSON.stringify(result)}`;
 class CDP {
   constructor(wsUrl) {
     this.ws = new WebSocket(wsUrl);
@@ -1030,54 +1052,61 @@ if (booted) {
         // So a miss now falls through to the next attempt, which recovers through the real path.
         // Attempt 0 still costs nothing extra -- no pre-flight state read -- so the panel-open ->
         // first TAKE window this suite measures is unchanged.
+        //
+        // #124: the retry is no longer a fixed count either. Hosted, signature A spent 2 attempts and
+        // B spent all 3, and `clickLanded:false` in both says the dispatched touch never reached a
+        // control -- so neither run was making a statement about the product. The rule now lives in
+        // loot-interaction.mjs: retry until the VERIFIED POST-CONDITION (one fewer untaken item)
+        // holds, bounded by what the corpse has left rather than by a count, and NAME the class of a
+        // final failure. `refused` fires only on a landed, in-range click that collected nothing, so
+        // B's recorded signature (hitIsTarget:true, clickLanded:false) is an instrument miss: this
+        // run does NOT yet distinguish whether B is the #113 shape. A FUTURE hosted run with
+        // clickLanded:true is what would tell the two apart; until then B is never laundered into a
+        // product claim.
+        const WHOLE_SUBJECT_MS = Number.MAX_SAFE_INTEGER; // clamp against the corpse, not a constant
         const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
-          let last = null;
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            if (attempt > 0 && !(await recoverIntoRange(reserveMillis))) {
-              return {
-                ...(last ?? {}), collected: false, recovered: false, attempts: attempt + 1,
-                claimAgeSeconds: claimLife.elapsedSeconds(),
-              };
-            }
-            last = await tapById(selector);
-            if (!last.found || !last.hitIsTarget || !last.clickLanded) {
-              if (attempt < 2) continue;
-              return {
-                ...last, collected: false, attempts: attempt + 1,
-                claimAgeSeconds: claimLife.elapsedSeconds(),
-              };
-            }
-            // Deadline-bounded, and abandoned the moment the server's own reach rule says the
-            // request it is waiting on was already refused. The old shape polled a fixed 25 times
-            // whatever happened, which hosted was ~15 seconds of waiting for a confirmation that was
-            // never coming -- and then handed what was left of the corpse to a 60-second re-approach.
-            const confirmDeadline = deadlineAfter(claimLife.budgetFor(WIRE_CONFIRM_BUDGET_MS));
-            let outOfReach = false;
-            for (;;) {
+          const raw = await collectUntilEffect({
+            attempt: () => tapById(selector),
+            recover: () => recoverIntoRange(reserveMillis),
+            expired: () => claimLife.expired(),
+            deadline: deadlineAfter(
+              claimLife.budgetFor(WHOLE_SUBJECT_MS, { reserveMillis }),
+            ),
+            // A landed in-range click that the wire never confirms within this window is classified
+            // as `refused` -- but that classification is an INFERENCE, not a server verdict: a slow
+            // or dropped snapshot can close the window before the collect lands. interactionClassReason()
+            // states the inference, and a hosted run must never be read as proof of a product refusal.
+            confirmTimeoutMs: WIRE_CONFIRM_BUDGET_MS,
+            pollIntervalMs: 120,
+            sleep,
+            confirm: async () => {
+              // The server snapshot is the only authority on whether the collect happened.
+              // Keep corpse/claim presence separate from the item count: a numeric sentinel would
+              // let an expired corpse satisfy "fewer untaken items" and report a false collection.
               const wire = await claimOnWire();
-              if (!wire.corpsePresent || !wire.claimPresent) {
-                return {
-                  ...last, collected: false, expired: true, wire, attempts: attempt + 1,
-                  claimAgeSeconds: claimLife.elapsedSeconds(),
-                };
-              }
-              if (wire.untaken < expectUntakenBelow) {
-                return {
-                  ...last, collected: true, wire, attempts: attempt + 1,
-                  claimAgeSeconds: claimLife.elapsedSeconds(),
-                };
-              }
-              if (wire.serverGap != null && wire.serverGap > CORPSE_LOOT_INTERACT_RADIUS_METERS) {
-                outOfReach = true;
-                break;
-              }
-              if (Date.now() >= confirmDeadline) break;
-              await sleep(120);
-            }
-            if (!outOfReach && claimLife.expired()) break;
-          }
+              const present = wire.corpsePresent && wire.claimPresent;
+              return {
+                verified: present && wire.untaken != null
+                  && wire.untaken < expectUntakenBelow,
+                gone: !present,
+                // The exact quantity world/corpseLoot.js tests before it refuses. While this is over
+                // the radius the request was already refused before the confirmation poll began; at
+                // or below the radius, a confirm timeout is only an inferred refusal (see above).
+                outOfReach: wire.serverGap != null
+                  && wire.serverGap > CORPSE_LOOT_INTERACT_RADIUS_METERS,
+                wire,
+              };
+            },
+          });
           return {
-            ...last, collected: false, attempts: 3, claimAgeSeconds: claimLife.elapsedSeconds(),
+            ...(raw.tap ?? {}),
+            collected: raw.collected,
+            outcome: raw.outcome,
+            attempts: raw.attempts,
+            recovered: raw.recovered,
+            sawOutOfReach: raw.sawOutOfReach,
+            wire: raw.wire,
+            claimAgeSeconds: claimLife.elapsedSeconds(),
           };
         };
 
@@ -1086,12 +1115,24 @@ if (booted) {
           '.corpse-loot-item:not([data-taken="true"]) .corpse-loot-item-take', 2,
           AFTER_APPROACH_RESERVE_MS,
         );
-        check('an individual TAKE really collected one item through the real wire',
-          tookOne.collected === true && tookOne.clickLanded && !tookOne.disabled && tookOne.hitIsTarget,
-          JSON.stringify(tookOne));
-        const single = await awaitReceipt(0, 0);
-        check('individual TAKE produced a short acquired-item toast', single.sawToast);
-        check('individual TAKE pulsed the Hero button -- "it went to your inventory"', single.sawPulse);
+        const takeOneTookEffect = tookOne.collected === true;
+        // THE ONE RED. Whether the tap missed (instrument) or a real click was refused (product), the
+        // single gating statement is "the interaction did not take effect"; the class is in the detail.
+        check('the individual TAKE interaction took effect through the real wire '
+          + '(the claim lost one untaken item)', takeOneTookEffect,
+          interactionDetail('individual TAKE', tookOne));
+        if (takeOneTookEffect) {
+          const single = await awaitReceipt(0, 0);
+          check('individual TAKE produced a short acquired-item toast', single.sawToast);
+          check('individual TAKE pulsed the Hero button -- "it went to your inventory"', single.sawPulse);
+        } else {
+          // Nothing was collected, so a receipt was never going to arrive. Polling for one would only
+          // spend more of the corpse on a request that was never made.
+          diagnostic('individual TAKE produced a short acquired-item toast', null,
+            JSON.stringify(tookOne), { authoritative: false, reason: downstreamReason('individual TAKE', tookOne) });
+          diagnostic('individual TAKE pulsed the Hero button -- "it went to your inventory"', null,
+            JSON.stringify(tookOne), { authoritative: false, reason: downstreamReason('individual TAKE', tookOne) });
+        }
 
         // Read the DOM rows AND the server's own wire view together. On their own, "the rows still
         // say untaken" cannot distinguish a click that never reached the server from a collect the
@@ -1115,10 +1156,15 @@ if (booted) {
             pulsesBefore: window.__corpsePulses,
           });
         })()`).then(JSON.parse);
-        check('exactly the collected item stops being offered; the other is still live',
-          afterOne.rows.filter(Boolean).length === 1 && afterOne.rows.length === EXPECTED_CLAIM_ROWS
-          && afterOne.wireTaken?.filter(Boolean).length === 1,
-          JSON.stringify(afterOne));
+        if (takeOneTookEffect) {
+          check('exactly the collected item stops being offered; the other is still live',
+            afterOne.rows.filter(Boolean).length === 1 && afterOne.rows.length === EXPECTED_CLAIM_ROWS
+            && afterOne.wireTaken?.filter(Boolean).length === 1,
+            JSON.stringify(afterOne));
+        } else {
+          diagnostic('exactly the collected item stops being offered; the other is still live', null,
+            JSON.stringify(afterOne), { authoritative: false, reason: downstreamReason('individual TAKE', tookOne) });
+        }
 
         // ── H + the dd7ce2e blocker: Take All now collects the LAST item on the corpse ─────────────
         // This is the case that used to produce NO receipt at all, because a fully-resolved corpse
@@ -1127,64 +1173,98 @@ if (booted) {
         // takes one item individually FIRST rather than opening with Take All.
         const { toastsBefore, pulsesBefore } = afterOne;
         const tookAll = await collectWithRetry('#corpse-loot-panel-take-all', 1, LAST_COLLECT_RESERVE_MS);
-        check('Take All really collected the remaining item through the real wire',
-          tookAll.collected === true && tookAll.clickLanded && !tookAll.disabled && tookAll.hitIsTarget,
-          JSON.stringify(tookAll));
-        const takeAll = await awaitReceipt(toastsBefore, pulsesBefore);
-        check('Take All on the corpse\'s LAST item still produced an acquired-item toast '
-          + '(the dd7ce2e corpse-retirement receipt blocker, live)', takeAll.sawToast);
-        check('Take All on the LAST item still pulsed the Hero button', takeAll.sawPulse);
+        const takeAllTookEffect = tookAll.collected === true;
+        // THE ONE RED for the second interaction. Skipping the assertions below when this fails is not
+        // leniency: none of them had a subject. The run still exits non-zero, and the lifetime check
+        // at the end still names an instrument that outlived the corpse.
+        check('the Take All interaction took effect through the real wire '
+          + '(the remaining claim emptied)', takeAllTookEffect,
+          interactionDetail('Take All', tookAll));
+        const takeAllReason = downstreamReason('Take All', tookAll);
+        if (takeAllTookEffect) {
+          const takeAll = await awaitReceipt(toastsBefore, pulsesBefore);
+          check('Take All on the corpse\'s LAST item still produced an acquired-item toast '
+            + '(the dd7ce2e corpse-retirement receipt blocker, live)', takeAll.sawToast);
+          check('Take All on the LAST item still pulsed the Hero button', takeAll.sawPulse);
+        } else {
+          diagnostic('Take All on the corpse\'s LAST item still produced an acquired-item toast '
+            + '(the dd7ce2e corpse-retirement receipt blocker, live)', null,
+            JSON.stringify(tookAll), { authoritative: false, reason: takeAllReason });
+          diagnostic('Take All on the LAST item still pulsed the Hero button', null,
+            JSON.stringify(tookAll), { authoritative: false, reason: takeAllReason });
+        }
         const toastText = await page.eval('JSON.stringify(window.__corpseToasts)');
         console.log(`  toast arrivals: ${toastText}`);
         await shot(page, 'corpse-loot-take-all-toast.png');
 
-        await waitFor(
-          page, "document.querySelector('#corpse-loot-panel-empty')?.hidden === false",
-          'after Take All the panel itself confirms "Already looted!"', 5_000,
-        );
-        const stillTaken = await page.eval(
-          "[...document.querySelectorAll('.corpse-loot-item')].every((el) => el.dataset.taken === 'true')",
-        );
-        check('every row in the panel now reads taken', stillTaken);
+        if (takeAllTookEffect) {
+          await waitFor(
+            page, "document.querySelector('#corpse-loot-panel-empty')?.hidden === false",
+            'after Take All the panel itself confirms "Already looted!"', 5_000,
+          );
+          const stillTaken = await page.eval(
+            "[...document.querySelectorAll('.corpse-loot-item')].every((el) => el.dataset.taken === 'true')",
+          );
+          check('every row in the panel now reads taken', stillTaken);
+        } else {
+          diagnostic('after Take All the panel itself confirms "Already looted!"', null,
+            JSON.stringify(tookAll), { authoritative: false, reason: takeAllReason });
+          diagnostic('every row in the panel now reads taken', null,
+            JSON.stringify(tookAll), { authoritative: false, reason: takeAllReason });
+        }
 
-        const promptGoneForThisHero = await waitFor(
-          page, "document.querySelector('#corpse-loot-interact')?.dataset.shown !== 'true' || document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
-          'the corpse stops advertising loot to THIS hero once they have collected their own claim', 5_000,
-        );
-        check('#87 required outcome: looted claim stops prompting for the collector', promptGoneForThisHero);
+        if (takeAllTookEffect) {
+          const promptGoneForThisHero = await waitFor(
+            page, "document.querySelector('#corpse-loot-interact')?.dataset.shown !== 'true' || document.querySelector('#corpse-loot-panel-layer')?.dataset.shown === 'true'",
+            'the corpse stops advertising loot to THIS hero once they have collected their own claim', 5_000,
+          );
+          check('#87 required outcome: looted claim stops prompting for the collector', promptGoneForThisHero);
 
-        // ...and the PHYSICAL glow really leaves the scene for this hero too, not merely the prompt.
-        // Same object, same name, measured the same way as when it appeared above -- so this pair is
-        // a real before/after on the rendered signal rather than two unrelated assertions.
-        const glowGone = await waitFor(
-          page,
-          `!window.__galaQuestRuntime.scene.getObjectByName(${JSON.stringify(`corpse-loot-glow-${corpse.id}`)})`,
-          'the personal loot glow leaves the scene once this hero has collected their own claim', 8_000,
-        );
-        check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
+          // ...and the PHYSICAL glow really leaves the scene for this hero too, not merely the prompt.
+          // Same object, same name, measured the same way as when it appeared above -- so this pair is
+          // a real before/after on the rendered signal rather than two unrelated assertions.
+          const glowGone = await waitFor(
+            page,
+            `!window.__galaQuestRuntime.scene.getObjectByName(${JSON.stringify(`corpse-loot-glow-${corpse.id}`)})`,
+            'the personal loot glow leaves the scene once this hero has collected their own claim', 8_000,
+          );
+          check('#87 required outcome: the corpse stops GLOWING for the hero who collected it', glowGone);
+        } else {
+          diagnostic('#87 required outcome: looted claim stops prompting for the collector', null,
+            JSON.stringify(tookAll), { authoritative: false, reason: takeAllReason });
+          diagnostic('#87 required outcome: the corpse stops GLOWING for the hero who collected it', null,
+            JSON.stringify(tookAll), { authoritative: false, reason: takeAllReason });
+        }
 
         // COIN OWNERSHIP MOVED, EXACTLY ONCE. Polled against the HUD the child is looking at, and
         // then held for a beat and re-read: a second read that keeps climbing would mean the same
         // claim paid twice, which is the whole risk of moving a reward off the ground onto a claim
         // that can be re-requested. The award is idempotent by construction server-side (derived,
         // stable eventIds through INSERT OR IGNORE) -- this is the live proof of it.
-        const readHudCoins = () => page.eval(
-          "Number(document.querySelector('#coin-count')?.textContent ?? '0')",
-        );
-        const coinDeadline = deadlineAfter(claimLife.budgetFor(RECEIPT_BUDGET_MS));
-        let coinsAfter = await readHudCoins();
-        while (coinsAfter < coinsBefore + claimedCoins && Date.now() < coinDeadline) {
-          await sleep(150);
-          coinsAfter = await readHudCoins();
+        if (takeAllTookEffect) {
+          const readHudCoins = () => page.eval(
+            "Number(document.querySelector('#coin-count')?.textContent ?? '0')",
+          );
+          const coinDeadline = deadlineAfter(claimLife.budgetFor(RECEIPT_BUDGET_MS));
+          let coinsAfter = await readHudCoins();
+          while (coinsAfter < coinsBefore + claimedCoins && Date.now() < coinDeadline) {
+            await sleep(150);
+            coinsAfter = await readHudCoins();
+          }
+          check("the child's own coin total went up by exactly the claim's coins",
+            coinsAfter === coinsBefore + claimedCoins,
+            `before=${coinsBefore} claimed=${claimedCoins} after=${coinsAfter}`);
+          await sleep(1200);
+          const coinsSettled = await readHudCoins();
+          check("and stays there -- a corpse claim never pays the same coins twice",
+            coinsSettled === coinsBefore + claimedCoins,
+            `after=${coinsAfter} settled=${coinsSettled}`);
+        } else {
+          diagnostic("the child's own coin total went up by exactly the claim's coins", null,
+            `before=${coinsBefore} claimed=${claimedCoins}`, { authoritative: false, reason: takeAllReason });
+          diagnostic("and stays there -- a corpse claim never pays the same coins twice", null,
+            `before=${coinsBefore} claimed=${claimedCoins}`, { authoritative: false, reason: takeAllReason });
         }
-        check("the child's own coin total went up by exactly the claim's coins",
-          coinsAfter === coinsBefore + claimedCoins,
-          `before=${coinsBefore} claimed=${claimedCoins} after=${coinsAfter}`);
-        await sleep(1200);
-        const coinsSettled = await readHudCoins();
-        check("and stays there -- a corpse claim never pays the same coins twice",
-          coinsSettled === coinsBefore + claimedCoins,
-          `after=${coinsAfter} settled=${coinsSettled}`);
 
         // ── THE COMBAT-DISMISSAL LAW, read off the recorded transitions ───────────────────────────
         // These are INVARIANTS, not event-spotting, and that distinction is the whole design. A
@@ -1237,12 +1317,22 @@ if (booted) {
         // 4. And the child can come back. Every dismissal must be followed by the panel opening
         //    again -- and the only way this file ever opens it is a real touch on the real prompt
         //    (openPanelByTouch), so a later open transition IS proof of a real reopen.
+        //
+        //    #124: this is a product claim only once the collect actually took effect. When an
+        //    interaction never landed, the last dismissal can be the one the interaction clock ran
+        //    out on, and there is no reopen to prove -- that is the instrument's boundary, not the
+        //    child's lost corpse. The single red above already gates the run.
         const reopenedAfterEveryDismissal = dismissals.every(
           (d) => panelEvents.some((e, i) => e.shown && i > panelEvents.indexOf(d)),
         );
-        check('the hero can return and reopen the corpse by real touch after a dismissal',
-          reopenedAfterEveryDismissal,
-          `dismissals=${dismissals.length}, transitions=${JSON.stringify(panelEvents.map((e) => (e.shown ? 'open' : 'close')))}`);
+        if (takeAllTookEffect) {
+          check('the hero can return and reopen the corpse by real touch after a dismissal',
+            reopenedAfterEveryDismissal,
+            `dismissals=${dismissals.length}, transitions=${JSON.stringify(panelEvents.map((e) => (e.shown ? 'open' : 'close')))}`);
+        } else {
+          diagnostic('the hero can return and reopen the corpse by real touch after a dismissal', null,
+            `dismissals=${dismissals.length}`, { authoritative: false, reason: takeAllReason });
+        }
       }
     }
 
@@ -1285,7 +1375,15 @@ if (booted) {
 // EVERY check in this file is gating now. There is no best-effort tier left, because there is no
 // unseeded roll left to be unlucky about: the corpse's contents are a fixture, so every remaining
 // assertion is about the game's own behaviour and a red one is a real regression.
-console.log(`\n${results.length - failures}/${results.length} checks passed`);
+//
+// #124: DIAG is not a fourth tier of leniency -- it is the honest record of a product assertion whose
+// subject was never created because an interaction did not take effect. It does not count toward
+// `failures` and the exit below deliberately ignores it. `results.length - failures` is not used:
+// that would count every not-judged check as a pass, which is the false statement this file exists to
+// stop telling (test/harness-verdict-semantics.test.mjs).
+const passedCount = results.filter((r) => r.passed === true).length;
+const diagCount = results.filter((r) => r.outcome === 'DIAG').length;
+console.log(`\n${passedCount} PASS / ${failures} FAIL / ${diagCount} DIAG  (${results.length} checks)`);
 await browser.send('Target.closeTarget', { targetId }).catch(() => {});
 const killed = await server.kill();
 if (!killed) console.log('  WARNING: owned server teardown could not be confirmed');

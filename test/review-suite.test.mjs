@@ -21,6 +21,10 @@ const NOT_A_HARNESS = new Set([
   // in the list is about to connect to -- which is worse than useless, it is actively wrong.
   'automation-chrome.mjs',
   'automation-timing.mjs',
+  // Issue #124: the pure retry/verdict rule for one loot interaction, imported by drive-corpse-loot.
+  // It drives no browser, starts no server and holds no verdict of its own; test/loot-interaction.test.mjs
+  // is what proves it, exactly as automation-timing.mjs is proven by test/automation-timing.test.mjs.
+  'loot-interaction.mjs',
   'in-page-driver.mjs',
   'owned-server.mjs',
   'review-suites.mjs',
