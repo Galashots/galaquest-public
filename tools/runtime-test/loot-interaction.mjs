@@ -8,9 +8,12 @@
  *   A  hitIsTarget:false, hit:"CANVAS#game-canvas",                attempts:2
  *   B  hitIsTarget:true,  hit:"BUTTON#corpse-loot-panel-take-all", attempts:3
  *
- * The old loop gave every interaction exactly three attempts. Both signatures spent that budget -- A
- * used two, B all three -- and then the harness went on to assert the product consequences of a
- * collect that had never happened. Neither signature is by itself a statement about the product.
+ * #124 warns that A and B "are different failures" and that treating them as one flake "will produce
+ * a fix that only addresses one". A is a targeting failure: the touch never reached a loot control.
+ * B reached the intended control and still produced no click and no collect -- and #124 leaves open
+ * that B is the real product defect #113 describes rather than noise. Collapsing B into "missed"
+ * would stamp it "no dispatched touch ever reached a loot control", which B's own
+ * `hitIsTarget:true` payload contradicts, and launder a possibly-product event into CI noise.
  *
  * This module is the retry rule, kept pure and injectable so it can be proven without a browser. An
  * interaction is retried until its verified post-condition holds, bounded by the subject's own
@@ -23,12 +26,19 @@
  *   refused      a landed, in-range touch collected nothing before the confirmation window closed;
  *                the server never positively said "no", so this is an INFERENCE of a product
  *                refusal (the #113 shape), not proof of one
+ *   reached-no-click a touch reached the intended loot control but no click was observed and
+ *                nothing was collected (#124 signature B). UNRESOLVED: the reach evidence rules
+ *                out a targeting failure, but a product cause is not ruled out either. This is
+ *                never an instrument miss and never asserts #113 or a refusal.
  *   gone         the corpse/claim left the wire before confirmation            (instrument)
  *   expired      the subject's own lifetime ran out                            (instrument)
  *
- * Only `collected` licenses the product assertions that follow. The rest are instrument outcomes: a
- * caller reports the single red that names the interaction and records the downstream product checks
- * as not judged, rather than billing one missed tap as ten independent product defects.
+ * Only `collected` licenses the product assertions that follow. `missed`, `no-budget`,
+ * `out-of-reach`, `gone`, and `expired` are instrument outcomes: a caller reports the single red
+ * that names the interaction and records the downstream product checks as not judged, rather than
+ * billing one missed tap as ten independent product defects. `refused` and `reached-no-click` are
+ * not instrument outcomes -- the caller still gates red on them, but must report them in a way no
+ * reader can mistake for noise, because a product cause is open in both cases.
  */
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,22 +53,36 @@ function landedOnControl(tap) {
 }
 
 /**
+ * The probe saw the intended loot control under the tap point, whether or not a click followed.
+ * Weaker than landedOnControl, and that weakness is the point: a tap can reach the control
+ * (`hitIsTarget:true`) without any click being observed (`clickLanded:false`) -- #124 signature B.
+ * That shape contradicts "no dispatched touch ever reached a loot control", so it must never be
+ * classified as `missed`, even though, like a miss, it waits on no receipt and retries.
+ */
+function reachedControl(tap) {
+  return Boolean(tap && tap.found !== false && tap.hitIsTarget);
+}
+
+/**
  * Drive one interaction until its post-condition verifies, its subject dies, or its deadline passes.
  *
  * All side effects are injected so the rule is testable on a fake clock:
  *
  *   attempt()  -> one real input dispatch; resolves to the tap probe (`found`, `hitIsTarget`,
- *                 `clickLanded`, `disabled`, ...). A tap that did not reach the control is retried.
+ *                 `clickLanded`, `disabled`, ...). A tap that produced no click is retried
+ *                 without waiting on a receipt; one that reached the control is also recorded.
  *   confirm()  -> one authoritative read of the post-condition; resolves to
  *                 `{ verified, gone, outOfReach, wire? }`.
  *   recover()  -> put the hero back in front of the control between landed-but-unconfirmed attempts.
  *   expired()  -> whether the subject the interaction is spending has run out of life.
  *
  * @returns {Promise<{collected:boolean,outcome:string,attempts:number,recovered:boolean,
- *   sawOutOfReach:boolean,tap:object|null,wire:object|null}>} `recovered` reports the recovery on the
- *   path to the final dispatched attempt: true when no recovery was needed or the most recent one
- *   succeeded, false when the most recent recovery failed. It is NOT "every recovery ever succeeded",
- *   so an early failed recovery cannot stay sticky once a later one puts the hero back in range.
+ *   sawOutOfReach:boolean,sawReachedNoClick:boolean,tap:object|null,wire:object|null}>} `recovered`
+ *   reports the recovery on the path to the final dispatched attempt: true when no recovery
+ *   was needed or the most recent one succeeded, false when the most recent recovery failed. It is
+ *   NOT "every recovery ever succeeded", so an early failed recovery cannot stay sticky once a later
+ *   one puts the hero back in range. `sawReachedNoClick` records whether any dispatched tap reached
+ *   the control without a click being observed (#124 signature B).
  */
 export async function collectUntilEffect({
   attempt,
@@ -81,6 +105,7 @@ export async function collectUntilEffect({
   let sawOutOfReach = false;
   let sawLandedClick = false;
   let sawInRangeLandedClick = false;
+  let sawReachedNoClick = false;
   let tap = null;
   let wire = null;
 
@@ -104,8 +129,15 @@ export async function collectUntilEffect({
 
     tap = (await attempt()) ?? null;
     if (!landedOnControl(tap)) {
-      // The dispatched touch never reached a loot control. Do NOT wait on a receipt: the request was
-      // never made. Retry until the subject or the deadline says stop.
+      // No click was observed, so there is no receipt to wait on: the request was never made. But
+      // "no click" is not "never reached". A tap the probe saw ON the control (hitIsTarget:true)
+      // with no click following is #124 signature B -- record it, because that reach evidence
+      // contradicts the `missed` sentence and a product cause is not ruled out for it. Retry until
+      // the subject or the deadline says stop.
+      // (Reach is the probe-time observation: the control was under the tap point when probed.
+      // A product dismissal landing between the probe and the touch can also yield this shape,
+      // which is why the outcome asserts only reach plus no-effect and rules nothing out.)
+      if (reachedControl(tap)) sawReachedNoClick = true;
       continue;
     }
     sawLandedClick = true;
@@ -124,10 +156,16 @@ export async function collectUntilEffect({
     }
 
     if (confirmed) {
-      return { collected: true, outcome: 'collected', attempts, recovered, sawOutOfReach, tap, wire };
+      return {
+        collected: true, outcome: 'collected', attempts, recovered, sawOutOfReach, sawReachedNoClick,
+        tap, wire,
+      };
     }
     if (attemptGone) {
-      return { collected: false, outcome: 'gone', attempts, recovered, sawOutOfReach, tap, wire };
+      return {
+        collected: false, outcome: 'gone', attempts, recovered, sawOutOfReach, sawReachedNoClick,
+        tap, wire,
+      };
     }
     if (!attemptOutOfReach) {
       // A real click reached a real control, the server's own reach check did not reject it, and the
@@ -139,14 +177,18 @@ export async function collectUntilEffect({
     }
   }
 
+  // Priority is by strength of evidence. A landed click says strictly more than a reached one,
+  // so the landed outcomes keep their order; but any reach evidence at all contradicts `missed`,
+  // so `reached-no-click` outranks it even in a run where other taps hit bare canvas.
   const outcome = expired()
     ? 'expired'
     : attempts === 0 ? 'no-budget'
       : sawInRangeLandedClick ? 'refused'
         : sawLandedClick ? 'out-of-reach'
-          : 'missed';
+          : sawReachedNoClick ? 'reached-no-click'
+            : 'missed';
   return {
-    collected: false, outcome, attempts, recovered, sawOutOfReach, tap, wire,
+    collected: false, outcome, attempts, recovered, sawOutOfReach, sawReachedNoClick, tap, wire,
   };
 }
 
@@ -169,6 +211,10 @@ export function interactionClassReason(result) {
         + 'not proof of one';
     case 'out-of-reach':
       return 'a touch reached the control but the server showed the hero out of interact reach';
+    case 'reached-no-click':
+      return 'a dispatched touch reached the intended loot control but produced no click and '
+        + 'nothing was collected (the control was reached, so this is not a targeting failure; '
+        + 'a product cause is not ruled out -- #124 signature B)';
     case 'gone':
       return 'the corpse/claim left the wire before the interaction could be confirmed';
     case 'expired':

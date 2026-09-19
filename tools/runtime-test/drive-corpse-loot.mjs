@@ -156,6 +156,18 @@ function diagnostic(name, passed, detail, { authoritative, reason }) {
 const downstreamReason = (label, result) => `${label} did not take effect: ${interactionClassReason(result)}`;
 const interactionDetail = (label, result) => `outcome=${result.outcome} attempts=${result.attempts} `
   + `recovered=${result.recovered} ${JSON.stringify(result)}`;
+/**
+ * The gating check name for one interaction. Signature B (`reached-no-click`: the probe saw the
+ * tap ON the control, but no click and no collect followed) gets a name no reader can mistake
+ * for the instrument flake -- it reached the control, so noise is ruled out and a product cause
+ * is not. It asserts only reach plus no-effect: never #113, never a refusal. See #124.
+ */
+const interactionCheckName = (label, effectClause, result) => (
+  result.outcome === 'reached-no-click'
+    ? `${label} REACHED the loot control but took NO effect -- NOT an instrument miss `
+      + `(#124 signature B; a product cause is not ruled out)`
+    : `the ${label} interaction took effect through the real wire (${effectClause})`
+);
 class CDP {
   constructor(wsUrl) {
     this.ws = new WebSocket(wsUrl);
@@ -1054,15 +1066,18 @@ if (booted) {
         // first TAKE window this suite measures is unchanged.
         //
         // #124: the retry is no longer a fixed count either. Hosted, signature A spent 2 attempts and
-        // B spent all 3, and `clickLanded:false` in both says the dispatched touch never reached a
-        // control -- so neither run was making a statement about the product. The rule now lives in
-        // loot-interaction.mjs: retry until the VERIFIED POST-CONDITION (one fewer untaken item)
-        // holds, bounded by what the corpse has left rather than by a count, and NAME the class of a
-        // final failure. `refused` fires only on a landed, in-range click that collected nothing, so
-        // B's recorded signature (hitIsTarget:true, clickLanded:false) is an instrument miss: this
-        // run does NOT yet distinguish whether B is the #113 shape. A FUTURE hosted run with
-        // clickLanded:true is what would tell the two apart; until then B is never laundered into a
-        // product claim.
+        // B spent all 3, and the harness went on to assert a collect that had never happened. The
+        // rule now lives in loot-interaction.mjs: retry until the VERIFIED POST-CONDITION (one fewer
+        // untaken item) holds, bounded by what the corpse has left rather than by a count, and NAME
+        // the class of a final failure -- with A and B kept apart, because #124 warns they "are
+        // different failures". A (hitIsTarget:false) is `missed`, an instrument miss, and its
+        // downstream checks stay DIAG. B (hitIsTarget:true, clickLanded:false) is
+        // `reached-no-click`: the touch reached the control and produced no click and no collect,
+        // which contradicts the missed sentence, so it gets its own outcome, its own reason, and
+        // its own loud gating name -- never "no dispatched touch ever reached a loot control" and
+        // never "instrument miss". That loudness asserts nothing about #113: B stays UNRESOLVED
+        // (a product cause is not ruled out) until evidence says more. `refused` still fires only
+        // on a landed, in-range click that collected nothing.
         const WHOLE_SUBJECT_MS = Number.MAX_SAFE_INTEGER; // clamp against the corpse, not a constant
         const collectWithRetry = async (selector, expectUntakenBelow, reserveMillis) => {
           const raw = await collectUntilEffect({
@@ -1116,11 +1131,12 @@ if (booted) {
           AFTER_APPROACH_RESERVE_MS,
         );
         const takeOneTookEffect = tookOne.collected === true;
-        // THE ONE RED. Whether the tap missed (instrument) or a real click was refused (product), the
-        // single gating statement is "the interaction did not take effect"; the class is in the detail.
-        check('the individual TAKE interaction took effect through the real wire '
-          + '(the claim lost one untaken item)', takeOneTookEffect,
-          interactionDetail('individual TAKE', tookOne));
+        // THE ONE RED. Whether the tap missed (instrument), reached the control with no effect
+        // (unresolved, possibly product -- signature B gets its own loud name), or a real click
+        // was refused (inferred product), the single gating statement is that the interaction did
+        // not take effect; the class is in the name and the detail.
+        check(interactionCheckName('individual TAKE', 'the claim lost one untaken item', tookOne),
+          takeOneTookEffect, interactionDetail('individual TAKE', tookOne));
         if (takeOneTookEffect) {
           const single = await awaitReceipt(0, 0);
           check('individual TAKE produced a short acquired-item toast', single.sawToast);
@@ -1177,9 +1193,8 @@ if (booted) {
         // THE ONE RED for the second interaction. Skipping the assertions below when this fails is not
         // leniency: none of them had a subject. The run still exits non-zero, and the lifetime check
         // at the end still names an instrument that outlived the corpse.
-        check('the Take All interaction took effect through the real wire '
-          + '(the remaining claim emptied)', takeAllTookEffect,
-          interactionDetail('Take All', tookAll));
+        check(interactionCheckName('Take All', 'the remaining claim emptied', tookAll),
+          takeAllTookEffect, interactionDetail('Take All', tookAll));
         const takeAllReason = downstreamReason('Take All', tookAll);
         if (takeAllTookEffect) {
           const takeAll = await awaitReceipt(toastsBefore, pulsesBefore);

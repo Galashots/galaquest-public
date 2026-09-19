@@ -6,8 +6,9 @@
 // false in both, and the harness then asserted the product consequences of a collect that never
 // happened -- about nine FAIL lines from one missed tap. The retry rule now lives in
 // tools/runtime-test/loot-interaction.mjs, pure and injectable, so it can be proven here without a
-// browser. These tests are what would go red if the count came back or if a miss were reclassified
-// as a product refusal.
+// browser. These tests are what would go red if the count came back, if a miss were reclassified
+// as a product refusal, or if signature B (reached, no click) were reclassified as a
+// never-reached miss.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -28,6 +29,8 @@ function fakeClock(start = 0) {
 const landedTap = { found: true, hitIsTarget: true, clickLanded: true };
 const missedTap = { found: true, hitIsTarget: false, clickLanded: false };
 const hiddenTap = { found: false };
+// #124 signature B verbatim: the probe saw the tap ON the real control, but no click followed.
+const reachedNoClickTap = { found: true, hitIsTarget: true, clickLanded: false };
 
 test('retries past the old three-attempt cap until the verified post-condition holds', async () => {
   const clock = fakeClock();
@@ -227,4 +230,98 @@ test('a click that reached a control but was refused on reach is not recorded as
   assert.equal(result.outcome, 'out-of-reach');
   assert.equal(result.sawOutOfReach, true);
   assert.match(interactionClassReason(result), /out of interact reach/);
+});
+
+test('signature B (reached, no click) is classified and worded distinctly from signature A (never reached)', async () => {
+  // At exact-head CI the B-shaped TAKE (hitIsTarget:true, clickLanded:false, attempts:7) was
+  // classified `missed` and stamped "no dispatched touch ever reached a loot control" -- a
+  // sentence its own payload contradicts, laundering a possibly-product event into CI noise.
+  //
+  // Red-capability, stated so a future reader can tell whether this test still earns it: the
+  // outcome INEQUALITY below names no B-side string, so any re-merge of the two buckets fails it
+  // no matter what the merged bucket is called; the wording assertions fail if the old
+  // never-reached sentence returns, no matter which outcome carries it. The one exact string
+  // pinned ('reached-no-click') is the caller contract drive-corpse-loot.mjs branches on for its
+  // loud gating name -- not the convention under test.
+  const runScenario = async (tap) => {
+    const clock = fakeClock();
+    return collectUntilEffect({
+      now: clock.now,
+      sleep: clock.sleep,
+      deadline: 5_000,
+      confirmTimeoutMs: 1_000,
+      attempt: async () => { clock.advance(300); return tap; },
+      recover: async () => true,
+      confirm: async () => { throw new Error('confirm must not run when no click landed'); },
+    });
+  };
+  const sigA = await runScenario(missedTap);
+  const sigB = await runScenario(reachedNoClickTap);
+
+  assert.equal(sigA.collected, false);
+  assert.equal(sigA.outcome, 'missed');
+  assert.equal(sigA.sawReachedNoClick, false);
+  assert.match(interactionClassReason(sigA), /no dispatched touch ever reached a loot control/,
+    'signature A keeps the instrument-miss wording: the genuine miss behaviour must not regress');
+  assert.equal(sigB.collected, false);
+  assert.notEqual(sigB.outcome, sigA.outcome,
+    'signature B must never share signature A\'s classification');
+  assert.equal(sigB.outcome, 'reached-no-click');
+  assert.equal(sigB.sawReachedNoClick, true);
+  const reason = interactionClassReason(sigB);
+  assert.doesNotMatch(reason, /ever reached a loot control/,
+    'B reached the control; the never-reached sentence contradicts the evidence');
+  assert.doesNotMatch(reason, /never reached/,
+    'neither the recorded sentence nor its plain paraphrase may describe B');
+  assert.doesNotMatch(reason, /instrument miss/,
+    'B may be product (#124 leaves #113 open); it must never read as noise');
+  assert.match(reason, /reached the .*control/,
+    'the reason must state the reach the probe actually observed');
+});
+
+test('one reached-but-clickless tap anywhere in the run outranks pure misses', async () => {
+  const clock = fakeClock();
+  let taps = 0;
+  const result = await collectUntilEffect({
+    now: clock.now,
+    sleep: clock.sleep,
+    deadline: 5_000,
+    confirmTimeoutMs: 1_000,
+    attempt: async () => {
+      taps += 1;
+      clock.advance(300);
+      return taps === 3 ? reachedNoClickTap : missedTap; // mostly canvas, one B
+    },
+    recover: async () => true,
+    confirm: async () => { throw new Error('confirm must not run when no click landed'); },
+  });
+
+  assert.equal(result.collected, false);
+  assert.equal(result.outcome, 'reached-no-click',
+    'reach evidence anywhere in the run contradicts the missed sentence for the whole run');
+  assert.doesNotMatch(interactionClassReason(result), /ever reached a loot control|instrument miss/);
+});
+
+test('a landed click refused on reach outranks reached-but-clickless taps', async () => {
+  const clock = fakeClock();
+  let taps = 0;
+  const result = await collectUntilEffect({
+    now: clock.now,
+    sleep: clock.sleep,
+    deadline: 5_000,
+    confirmTimeoutMs: 1_000,
+    pollIntervalMs: 100,
+    attempt: async () => {
+      taps += 1;
+      clock.advance(200);
+      return taps === 1 ? reachedNoClickTap : landedTap;
+    },
+    recover: async () => true,
+    confirm: async () => ({ verified: false, gone: false, outOfReach: true, wire: { untaken: 2 } }),
+  });
+
+  assert.equal(result.collected, false);
+  assert.equal(result.outcome, 'out-of-reach',
+    'a landed click says strictly more than a reached one');
+  assert.equal(result.sawReachedNoClick, true, 'the B evidence is still recorded');
 });
