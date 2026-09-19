@@ -154,8 +154,21 @@ function diagnostic(name, passed, detail, { authoritative, reason }) {
 }
 /** Did the interaction actually take effect, and if not, why did the run not judge what followed? */
 const downstreamReason = (label, result) => `${label} did not take effect: ${interactionClassReason(result)}`;
-const interactionDetail = (label, result) => `outcome=${result.outcome} attempts=${result.attempts} `
-  + `recovered=${result.recovered} ${JSON.stringify(result)}`;
+const interactionDetail = (label, result) => {
+  const base = `outcome=${result.outcome} attempts=${result.attempts} `
+    + `recovered=${result.recovered} `;
+  // The B headline asserts reach, so the FIRST payload tokens under it must show the reaching
+  // tap. The final tap is spread flat into the JSON below and may be a canvas miss in a mixed
+  // run -- without this prefix the label would again be refuted by its own evidence.
+  const reach = result.outcome === 'reached-no-click' && result.reachedTap
+    ? `reachEvidence=${JSON.stringify({
+      hitIsTarget: result.reachedTap.hitIsTarget,
+      hit: result.reachedTap.hit,
+      clickLanded: result.reachedTap.clickLanded,
+    })} `
+    : '';
+  return base + reach + JSON.stringify(result);
+};
 /**
  * The gating check name for one interaction. Signature B (`reached-no-click`: the probe saw the
  * tap ON the control, but no click and no collect followed) gets a name no reader can mistake
@@ -1120,6 +1133,10 @@ if (booted) {
             attempts: raw.attempts,
             recovered: raw.recovered,
             sawOutOfReach: raw.sawOutOfReach,
+            // The first tap that reached the control without a click (null when none). Spread
+            // above is the FINAL tap, which a mixed run may have spent on bare canvas -- this
+            // field is the evidence the `reached-no-click` headline rests on.
+            reachedTap: raw.reachedTap ?? null,
             wire: raw.wire,
             claimAgeSeconds: claimLife.elapsedSeconds(),
           };

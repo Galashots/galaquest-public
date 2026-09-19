@@ -302,6 +302,42 @@ test('one reached-but-clickless tap anywhere in the run outranks pure misses', a
   assert.doesNotMatch(interactionClassReason(result), /ever reached a loot control|instrument miss/);
 });
 
+test('a mixed run reports the reaching tap, not just the final canvas miss', async () => {
+  // Exact-head CI at 9057458: outcome=reached-no-click with the final tap on bare canvas and
+  // the reaching tap nowhere in the report -- a B headline refuted by its own A-shaped payload.
+  // The outcome describes the RUN, so the run must carry the evidence it rests on.
+  //
+  // Red-capability: the final tap is locked to a canvas miss below, so a run that reports only
+  // `tap` fails the reachedTap assertions no matter what the outcome string says; and dropping
+  // `reachedTap` from the result fails them no matter what the final tap shows. The field name
+  // itself is the caller contract drive-corpse-loot.mjs reads -- not the convention under test.
+  const clock = fakeClock();
+  let taps = 0;
+  const result = await collectUntilEffect({
+    now: clock.now,
+    sleep: clock.sleep,
+    deadline: 5_000,
+    confirmTimeoutMs: 1_000,
+    attempt: async () => {
+      taps += 1;
+      clock.advance(300);
+      // The reaching tap is FIRST; every later tap -- including the last -- hits bare canvas.
+      return taps === 1 ? reachedNoClickTap : missedTap;
+    },
+    recover: async () => true,
+    confirm: async () => { throw new Error('confirm must not run when no click landed'); },
+  });
+
+  assert.equal(result.collected, false);
+  assert.equal(result.outcome, 'reached-no-click');
+  assert.equal(result.tap.hitIsTarget, false,
+    'scenario lock: the final reported tap really is the canvas miss');
+  assert.ok(result.reachedTap, 'the run must carry the tap its outcome rests on');
+  assert.equal(result.reachedTap.hitIsTarget, true,
+    'the reported evidence must show the reach the headline asserts');
+  assert.equal(result.reachedTap.clickLanded, false);
+});
+
 test('a landed click refused on reach outranks reached-but-clickless taps', async () => {
   const clock = fakeClock();
   let taps = 0;

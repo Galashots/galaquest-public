@@ -30,6 +30,15 @@
  *                nothing was collected (#124 signature B). UNRESOLVED: the reach evidence rules
  *                out a targeting failure, but a product cause is not ruled out either. This is
  *                never an instrument miss and never asserts #113 or a refusal.
+ *
+ * `reached-no-click` describes the RUN, not the final attempt: it fires when ANY dispatched tap
+ * reached the control, even if other taps -- including the last one -- hit bare canvas. A mixed
+ * run is still B-shaped, because one reached tap contradicts the `missed` sentence for the whole
+ * run. The reported result therefore carries BOTH taps: `tap` is the final dispatched attempt,
+ * and `reachedTap` is the first tap that reached the control without a click. A caller that
+ * prints the outcome must show `reachedTap` alongside it -- a B headline above an A-shaped final
+ * tap, with the justifying evidence nowhere in sight, is the same failure class as the original
+ * collapse (label refuted by its own payload), merely inverted.
  *   gone         the corpse/claim left the wire before confirmation            (instrument)
  *   expired      the subject's own lifetime ran out                            (instrument)
  *
@@ -77,12 +86,15 @@ function reachedControl(tap) {
  *   expired()  -> whether the subject the interaction is spending has run out of life.
  *
  * @returns {Promise<{collected:boolean,outcome:string,attempts:number,recovered:boolean,
- *   sawOutOfReach:boolean,sawReachedNoClick:boolean,tap:object|null,wire:object|null}>} `recovered`
+ *   sawOutOfReach:boolean,sawReachedNoClick:boolean,tap:object|null,reachedTap:object|null,
+ *   wire:object|null}>} `recovered`
  *   reports the recovery on the path to the final dispatched attempt: true when no recovery
  *   was needed or the most recent one succeeded, false when the most recent recovery failed. It is
  *   NOT "every recovery ever succeeded", so an early failed recovery cannot stay sticky once a later
  *   one puts the hero back in range. `sawReachedNoClick` records whether any dispatched tap reached
- *   the control without a click being observed (#124 signature B).
+ *   the control without a click being observed (#124 signature B); `reachedTap` is the first such
+ *   tap (null when none), so a mixed run reports the evidence its outcome rests on rather than
+ *   only the final attempt.
  */
 export async function collectUntilEffect({
   attempt,
@@ -107,6 +119,7 @@ export async function collectUntilEffect({
   let sawInRangeLandedClick = false;
   let sawReachedNoClick = false;
   let tap = null;
+  let reachedTap = null;
   let wire = null;
 
   while (!done()) {
@@ -137,7 +150,12 @@ export async function collectUntilEffect({
       // (Reach is the probe-time observation: the control was under the tap point when probed.
       // A product dismissal landing between the probe and the touch can also yield this shape,
       // which is why the outcome asserts only reach plus no-effect and rules nothing out.)
-      if (reachedControl(tap)) sawReachedNoClick = true;
+      // Keep the FIRST reaching tap: it is the evidence the run-level outcome rests on, and the
+      // final tap -- reported separately as `tap` -- may be a canvas miss in a mixed run.
+      if (reachedControl(tap)) {
+        sawReachedNoClick = true;
+        reachedTap ??= tap;
+      }
       continue;
     }
     sawLandedClick = true;
@@ -158,13 +176,13 @@ export async function collectUntilEffect({
     if (confirmed) {
       return {
         collected: true, outcome: 'collected', attempts, recovered, sawOutOfReach, sawReachedNoClick,
-        tap, wire,
+        tap, reachedTap, wire,
       };
     }
     if (attemptGone) {
       return {
         collected: false, outcome: 'gone', attempts, recovered, sawOutOfReach, sawReachedNoClick,
-        tap, wire,
+        tap, reachedTap, wire,
       };
     }
     if (!attemptOutOfReach) {
@@ -188,7 +206,8 @@ export async function collectUntilEffect({
           : sawReachedNoClick ? 'reached-no-click'
             : 'missed';
   return {
-    collected: false, outcome, attempts, recovered, sawOutOfReach, sawReachedNoClick, tap, wire,
+    collected: false, outcome, attempts, recovered, sawOutOfReach, sawReachedNoClick, tap,
+    reachedTap, wire,
   };
 }
 
