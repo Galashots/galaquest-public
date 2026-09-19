@@ -24,13 +24,32 @@ import { paintItemArt } from './itemArtView.js';
 
 const STYLE_ID = 'corpse-loot-panel-style';
 
+// ── THE LOOT PROMPT'S OWN VERTICAL BAND (#119) ────────────────────────────────────────────────────
+//
+// index.html's #banner owns the centred top: 68% band, and that is exactly where the quest tracker's
+// own `LANTERN MARK  X / Y` announcement prints (main.js's celebrateMarkArrival). #87's first version
+// anchored this prompt to that same 68% line, so the instant a wolf kill credited a mark -- the same
+// instant a lootable corpse is lying on the ground -- the two pills printed on top of each other.
+// A shared band cannot hold two centred prompts; #workshop-interact (80%) is the only other centred
+// prompt on screen, and it was already given its own line for the same reason.
+//
+// So the prompt does NOT get a fourth arbitrary percentage: it keeps the banner's own anchor as its
+// reference and lifts by its OWN full box height -- 44px min-height + 0.5rem padding top and bottom
+// + 2px border top and bottom = 4rem -- plus a 0.5rem breathing gap. Because the lifted term is a
+// fixed rem and the anchor is the same percentage, the prompt's bottom edge stays 0.5rem above the
+// banner's top edge at EVERY viewport height, portrait or landscape, with no media query.
+const BANNER_TOP = '68%';
+const LOOT_PROMPT_LIFT = '4.5rem';
+
 export const CORPSE_LOOT_PANEL_CSS = `
-      /* The "Loot" prompt: same fixed-band, gold/dark-pill family as #workshop-interact, in its OWN
-         vertical position so the two can never collide (a hero who kills next to the Workshop should
-         never see both prompts merge into one unreadable line). main.js drives visible/hidden purely
-         off world/corpseLootPresenter.js's own nearestLootableCorpse -- this element only paints it. */
+      /* The "Loot" prompt: same gold/dark-pill family as #workshop-interact, and it keeps its own
+         vertical band against BOTH other centred prompts -- above #banner's 68% line (see the band
+         constants above for why) and clear of #workshop-interact at 80%, so a hero who kills next to
+         the Workshop never sees two prompts merge into one unreadable line. main.js drives
+         visible/hidden purely off world/corpseLootPresenter.js's own nearestLootableCorpse -- this
+         element only paints it. */
       #corpse-loot-interact {
-        position: absolute; top: 68%; left: 50%; transform: translateX(-50%);
+        position: absolute; top: calc(${BANNER_TOP} - ${LOOT_PROMPT_LIFT}); left: 50%; transform: translateX(-50%);
         padding: 0.5rem 1rem; min-height: ${TAP_TARGET_FLOOR_PX}px;
         display: grid; place-items: center;
         border: 2px solid rgb(242 179 61 / 75%); border-radius: 0.6rem;
