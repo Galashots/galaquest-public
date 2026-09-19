@@ -37,7 +37,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /** The port every harness in this directory dials. NOT 9223, which is the owner's signed-in browser. */
 export const AUTOMATION_CHROME_PORT = 9224;
@@ -60,8 +61,9 @@ export const AUTOMATION_CHROME_PORT = 9224;
  * sibling: the harnesses capture WebGL frames, and the headless shell is a cut-down build kept for
  * speed rather than for rendering fidelity. Both drive CDP; only one is worth photographing.
  *
- * Pure, and returns paths that may or may not exist -- resolution happens in resolveChromeExecutable
- * so the ordering can be asserted without a filesystem.
+ * Pure, and returns paths that may or may not exist or resolve. Nothing here decides which one is
+ * runnable -- plausibleChromeCandidates drops the knowably-absent ones and the launcher tries the
+ * rest in turn -- so the ordering can be asserted without a filesystem.
  */
 export function chromeExecutableCandidates({ env = process.env, listDir = safeReadDir } = {}) {
   const candidates = [];
@@ -95,16 +97,42 @@ function safeReadDir(dir) {
 }
 
 /**
- * The first candidate that is actually runnable.
+ * The candidates worth actually trying, in order.
  *
- * An absolute path is checked for existence; a bare name is left to the OS, because resolving PATH
- * by hand here would be a second, worse copy of what spawn already does.
+ * This is a pre-filter, NOT a resolution. The only thing it can decide by itself is that a path
+ * with a separator in it does not exist on disk -- that one is cheap and certain, and skipping it
+ * avoids a pointless spawn. A bare name like `chromium` is left in, because **only the OS can say
+ * whether a bare name resolves**, and re-implementing PATH lookup here (splitting PATH, honouring
+ * PATHEXT on Windows, checking the execute bit, following symlinks) would be a second and worse
+ * copy of what `spawn` already does correctly.
+ *
+ * This replaced a version that returned the first candidate whose path had no separator and called
+ * that "resolved". On a machine with no `google-chrome` but a working `chromium` that picked
+ * `google-chrome`, spawn failed with ENOENT, and the run died holding a perfectly good browser it
+ * had never tried. Falling through is now the launcher's job (see startAutomationChrome), and this
+ * function only removes candidates that are knowably absent.
  */
-export function resolveChromeExecutable(options = {}) {
-  for (const candidate of chromeExecutableCandidates(options)) {
-    if (!candidate.includes('/') || existsSync(candidate)) return candidate;
-  }
-  return null;
+export function plausibleChromeCandidates(options = {}) {
+  return chromeExecutableCandidates(options)
+    .filter((candidate) => !hasPathSeparator(candidate) || existsSync(candidate));
+}
+
+/** A separator in either direction -- `\` is one on Windows and legal in a path we were handed. */
+function hasPathSeparator(candidate) {
+  return candidate.includes('/') || candidate.includes('\\');
+}
+
+/**
+ * Is this spawn failure "wrong binary, try the next one" rather than "stop"?
+ *
+ * ENOENT is the whole reason fall-through exists: the name did not resolve. EACCES is the same
+ * class -- something is there but this process may not execute it, which a different candidate may
+ * not suffer from. Anything else (EMFILE, ENOMEM, a spawn refused by policy) is about this machine
+ * rather than this candidate, so trying eight more binaries would just print the same error eight
+ * times and bury the real one.
+ */
+export function isRetryableSpawnError(error) {
+  return error?.code === 'ENOENT' || error?.code === 'EACCES';
 }
 
 /**
@@ -190,6 +218,10 @@ export async function startAutomationChrome({
   readyTimeoutMillis = 20_000,
   quiet = false,
   env = process.env,
+  // Injected so the failure paths below can be proven against a stubbed spawn. A test cannot
+  // conjure a machine that has chromium but not google-chrome, and the fall-through is exactly the
+  // behaviour that was wrong, so it needs a seam rather than a hopeful comment.
+  spawnProcess = spawn,
 } = {}) {
   const inherited = await probeChrome(port);
   if (inherited) {
@@ -197,45 +229,102 @@ export async function startAutomationChrome({
     return { port, browser: inherited, startedHere: false, executable: null, profileDir: null, child: null, kill: () => {} };
   }
 
-  const executable = resolveChromeExecutable({ env });
-  if (!executable) {
+  // mkdtemp only when the caller asked for a throwaway; the default profile is deliberately stable.
+  const resolvedProfile = profileDir ?? mkdtempSync(join(tmpdir(), 'galaquest-chrome-'));
+  const candidates = plausibleChromeCandidates({ env });
+  if (candidates.length === 0) {
     throw new Error(
-      'no Chrome/Chromium found for the automation browser. Set GALAQUEST_CHROME to a browser '
-      + 'binary, or install one. Looked at: '
-      + chromeExecutableCandidates({ env }).join(', '),
+      `${NO_BROWSER}: no candidate was even present. Looked at `
+      + `${chromeExecutableCandidates({ env }).join(', ')}. ${SET_IT}`,
     );
   }
 
-  // mkdtemp only when the caller asked for a throwaway; the default profile is deliberately stable.
-  const resolvedProfile = profileDir ?? mkdtempSync(join(tmpdir(), 'galaquest-chrome-'));
-  const child = spawn(executable, chromeLaunchArgs({ port, profileDir: resolvedProfile, headless }), {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let stderr = '';
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
-  child.stdout.resume();
+  const attempts = [];
+  for (const executable of candidates) {
+    // eslint-disable-next-line no-await-in-loop
+    const attempt = await launchCandidate(executable, {
+      port, profileDir: resolvedProfile, headless, readyTimeoutMillis, spawnProcess,
+    });
+    if (attempt.browser) {
+      if (!quiet) console.log(`automation Chrome up on ${port} (${attempt.browser}) via ${executable}`);
+      return startedLaunch({
+        port, browser: attempt.browser, executable, profileDir: resolvedProfile, child: attempt.child,
+      });
+    }
+    attempts.push(`${executable}: ${attempt.reason}`);
+    // A live process that never spoke CDP is a port/flags/machine problem, not the wrong binary.
+    // Every later candidate would fail identically after another full timeout, so stop and say so.
+    if (attempt.fatal) {
+      throw new Error(`could not start the automation browser on ${port}.\n  ${attempts.join('\n  ')}`);
+    }
+  }
 
+  throw new Error(`${NO_BROWSER}: every candidate failed to launch.\n  ${attempts.join('\n  ')}\n${SET_IT}`);
+}
+
+const NO_BROWSER = 'no usable Chrome/Chromium for the automation browser';
+const SET_IT = 'Set GALAQUEST_CHROME to a browser binary, or install one.';
+const tail = (stderr) => (stderr ? `. stderr: ${stderr.slice(-800)}` : '');
+const describeSpawnFailure = (error) => `${error?.code ?? 'spawn failed'} (${error?.message ?? error})`;
+
+/**
+ * One candidate's turn: spawn it and wait for it to answer CDP.
+ *
+ * Resolves `{ browser, child }` on success or `{ reason, fatal }` on failure, and NEVER throws for
+ * an ordinary bad candidate -- the caller's whole job is to keep going.
+ *
+ * `fatal` separates the two failure shapes. A spawn-level error or an immediate exit means this
+ * binary is wrong and the next deserves its turn. A process that stayed alive and simply never
+ * served CDP means the port, the flags or the machine is wrong, and retrying cannot help.
+ */
+async function launchCandidate(executable, {
+  port, profileDir, headless, readyTimeoutMillis, spawnProcess,
+}) {
+  const args = chromeLaunchArgs({ port, profileDir, headless });
+  let child;
+  try {
+    child = spawnProcess(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    // spawn() normally reports ENOENT asynchronously, but a synchronous throw is possible, so both
+    // routes have to arrive at the same fall-through rather than only the one we happened to test.
+    return { reason: describeSpawnFailure(error), fatal: !isRetryableSpawnError(error) };
+  }
+
+  // ATTACHED BEFORE THE FIRST AWAIT, and this is the whole of the second defect. spawn reports
+  // ENOENT by emitting 'error' on the child, and an 'error' event with no listener is rethrown as
+  // an unhandled exception that takes the process down. The previous version listened only for
+  // 'exit', so a missing binary crashed the launcher instead of being a result it could act on.
+  let spawnError = null;
   let exited = false;
+  child.once('error', (error) => { spawnError = error; });
   child.once('exit', () => { exited = true; });
 
+  let stderr = '';
+  child.stderr?.on('data', (chunk) => { stderr += chunk; });
+  child.stderr?.on('error', () => {});
+  child.stdout?.resume();
+  child.stdout?.on('error', () => {});
+
   const deadline = Date.now() + readyTimeoutMillis;
-  let browser = null;
   while (Date.now() < deadline) {
     // eslint-disable-next-line no-await-in-loop
-    browser = await probeChrome(port);
-    if (browser) break;
-    if (exited) {
-      throw new Error(`${executable} exited before it began serving CDP on ${port}. stderr:\n${stderr.slice(-2000)}`);
+    const browser = await probeChrome(port);
+    if (browser) return { browser, child };
+    if (spawnError) {
+      return { reason: describeSpawnFailure(spawnError), fatal: !isRetryableSpawnError(spawnError) };
     }
+    if (exited) return { reason: `exited before serving CDP${tail(stderr)}`, fatal: false };
     // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => { setTimeout(resolve, 150); });
   }
-  if (!browser) {
-    child.kill('SIGKILL');
-    throw new Error(`${executable} did not answer CDP on ${port} within ${readyTimeoutMillis}ms. stderr:\n${stderr.slice(-2000)}`);
-  }
+  try { child.kill('SIGKILL'); } catch { /* already gone */ }
+  return { reason: `did not answer CDP on ${port} within ${readyTimeoutMillis}ms${tail(stderr)}`, fatal: true };
+}
 
-  if (!quiet) console.log(`automation Chrome up on ${port} (${browser}) via ${executable}`);
+/** The success shape, carrying the kill() contract this module promises. */
+function startedLaunch({ port, browser, executable, profileDir, child }) {
+  let exited = false;
+  child.once('exit', () => { exited = true; });
 
   let killed = false;
   const kill = () => {
@@ -247,11 +336,34 @@ export async function startAutomationChrome({
     setTimeout(() => { if (!exited) child.kill('SIGKILL'); }, 3000).unref?.();
   };
 
-  return { port, browser, startedHere: true, executable, profileDir: resolvedProfile, child, kill };
+  return { port, browser, startedHere: true, executable, profileDir, child, kill };
+}
+
+/**
+ * Was this module run directly, rather than imported?
+ *
+ * The obvious spelling, `import.meta.url === \`file://${process.argv[1]}\``, is wrong in more ways
+ * than it looks. On Windows argv[1] is `C:\path\to\x.mjs` while import.meta.url is
+ * `file:///C:/path/to/x.mjs` -- different separators, a drive letter, and three slashes rather than
+ * two, so the comparison is simply always false there. Even on POSIX it fails for a relative
+ * invocation (`node tools/runtime-test/automation-chrome.mjs` gives a relative argv[1] on some
+ * launchers) and for any path containing a character URL encoding escapes, such as a space.
+ *
+ * pathToFileURL does the encoding and the drive-letter/separator handling that the template string
+ * was pretending to do, and resolve() makes a relative argv[1] absolute first. Exported and pure so
+ * the Windows and relative-path shapes can be asserted from a POSIX test runner.
+ */
+export function isMainModule(metaUrl, argv1) {
+  if (!metaUrl || !argv1) return false;
+  try {
+    return pathToFileURL(resolve(argv1)).href === metaUrl;
+  } catch {
+    return false;
+  }
 }
 
 // CLI: start it and stay resident, so the harnesses can be run from another shell against it.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   const headless = !process.argv.includes('--headed');
   const chrome = await startAutomationChrome({ headless });
   if (chrome.startedHere) {
