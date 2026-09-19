@@ -47,12 +47,27 @@ Runs the full unit suite, including guidance-integrity checks.
 
 ## Browser harnesses
 
-The harnesses drive a real Chrome over the DevTools Protocol. Start Chrome with a dedicated profile
-and remote debugging on port 9224, then:
+The harnesses drive a real Chrome over the DevTools Protocol on port 9224. Start it, in its own
+shell, and leave it running:
 
 ```bash
+node tools/runtime-test/automation-chrome.mjs           # headless; --headed to watch it play
 node tools/runtime-test/play-fight.mjs
 ```
+
+`automation-chrome.mjs` finds a browser (an explicit `GALAQUEST_CHROME`, then a
+`PLAYWRIGHT_BROWSERS_PATH` pool, then the ordinary names on PATH), gives it a dedicated profile, and
+resolves only once it is really answering CDP. If something is already on 9224 it **attaches rather
+than replacing** -- the owner's signed-in browser sits one port away on 9223, and a harness does not
+get to guess who owns a port (`tools/runtime-test/owned-server.mjs` makes the same argument for the
+server half).
+
+**A cloud agent container can run these.** It has no desktop and usually no `chrome` on PATH, but a
+Chromium in the Playwright pool drives CDP identically, and the launch carries a software rasteriser
+so the WebGL captures are real frames rather than an empty canvas. Measured in a Claude Code cloud
+container on 2026-09-19 at `32ba3cd`: `drive-village.mjs` 17/17, `drive-marks.mjs` 21/21, with
+captures written. Running-game pixels therefore do not require the desktop appliance for the
+retained Three.js surface; Unity builds remain `unity/AGENTS.md`'s.
 
 **The harnesses do not use the 5201 server.** Every file in `tools/runtime-test/` spawns and owns its
 own runtime server on an isolated port and kills only that child when it finishes

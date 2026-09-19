@@ -11,6 +11,7 @@ namespace GalaQuest
         private bool restoredThisConnection;
         private int inputSequence;
         private int attackSequence;
+        private int specialSequence;
         private float lastInputSentAt = float.NegativeInfinity;
         private float lastMagnitude;
         private string pendingDestination;
@@ -99,6 +100,7 @@ namespace GalaQuest
             WorldEpoch = 0;
             inputSequence = 0;
             attackSequence = 0;
+            specialSequence = 0;
             lastInputSentAt = float.NegativeInfinity;
             lastMagnitude = 0f;
             if (!transport.Send(GalaQuestProtocolV4.Join(profile, DestinationId)))
@@ -270,6 +272,12 @@ namespace GalaQuest
         {
             if (!ControlsReady) return false;
             return transport.Send(GalaQuestProtocolV4.Attack(++attackSequence, WorldEpoch));
+        }
+
+        public bool TrySendSpecialIntent()
+        {
+            if (!ControlsReady) return false;
+            return transport.Send(GalaQuestProtocolV4.Special(++specialSequence, WorldEpoch));
         }
 
         public bool TryOpenRuneForge() => ControlsReady

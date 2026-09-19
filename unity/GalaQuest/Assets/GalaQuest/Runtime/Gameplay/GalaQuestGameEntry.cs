@@ -15,6 +15,7 @@ namespace GalaQuest
         private bool shuttingDown;
         private GalaQuestTraversalController traversal;
         private GalaQuestAttackControl attack;
+        private GalaQuestSpecialControl special;
         private GalaQuestCombatPresentation combat;
         private GalaQuestDestinationPresentation destinations;
         private GalaQuestProfileProgression progression;
@@ -43,6 +44,8 @@ namespace GalaQuest
                 gameObject.AddComponent<GalaQuestFloatingJoystick>();
             attack = GetComponent<GalaQuestAttackControl>();
             if (attack == null) attack = gameObject.AddComponent<GalaQuestAttackControl>();
+            special = GetComponent<GalaQuestSpecialControl>();
+            if (special == null) special = gameObject.AddComponent<GalaQuestSpecialControl>();
 #if UNITY_EDITOR
             // Editor-only development seam, off unless a developer enables it. It attaches a
             // synthetic profile source and a loopback transport so the Editor can play the real game
@@ -86,6 +89,8 @@ namespace GalaQuest
             if (destinations != null) destinations.BindSession(session);
             traversal.BindSession(session);
             attack.BindSession(session);
+            special.BindSession(session);
+            special.BindProgression(progression);
             if (combat != null) combat.BindSession(session);
             if (forge != null) forge.BindSession(session);
             if (petCamp != null) petCamp.BindSession(session);
@@ -142,6 +147,7 @@ namespace GalaQuest
             {
                 traversal?.BindSession(null);
                 if (attack != null) attack.BindSession(null);
+                if (special != null) { special.BindSession(null); special.BindProgression(null); }
                 if (combat != null) combat.BindSession(null);
                 if (forge != null) forge.BindSession(null);
                 if (petCamp != null) petCamp.BindSession(null);

@@ -71,6 +71,7 @@ namespace GalaQuest.Editor
             AssetDatabase.CopyAsset(HeroLocomotionAuthoring.ControllerPath, Temporary + "/HeroCombat.controller");
             var heroController = AssetDatabase.LoadAssetAtPath<AnimatorController>(Temporary + "/HeroCombat.controller");
             AddState(heroController, "slash", Clip(HeroSource, "sword_slash"), 1.5f);
+            AddState(heroController, "burst", Clip(HeroSource, "sword_slash"), .72f);
             AddState(heroController, "hit", Clip(HeroSource, "hit"));
             AddState(heroController, "death", Clip(HeroSource, "death"), 1.75f);
             var enemyController = AnimatorController.CreateAnimatorControllerAtPath(Temporary + "/Gremlin.controller");
@@ -99,6 +100,12 @@ namespace GalaQuest.Editor
             }
             finally { Object.DestroyImmediate(anchor); }
 
+            var alphaPrefab = AlphaCandidateAuthoring.Prepare(Temporary);
+            if(WormCompanionAuthoring.NativeReviewEnabled) {
+                WormCompanionAuthoring.Author(WormCompanionAuthoring.NativeReviewSource);
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
+
             var telegraph = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             telegraph.SetFloat("_Surface", 1);
             telegraph.SetFloat("_SrcBlend", (int)BlendMode.SrcAlpha);
@@ -118,7 +125,8 @@ namespace GalaQuest.Editor
             content.HeroController = heroController;
             content.StarterWeapon = PrepareStarterWeapon(content.HeroPrefab);
             content.MagmaLordHelmet = RuneForgeAuthoring.LoadHelmet();
-            content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab } };
+            content.Enemies = new[] { new GalaQuestCombatContent.EnemyPrefab { Kind = "lava-gremlin", Prefab = enemyPrefab },
+                AlphaCandidateAuthoring.NewEnemyEntry(alphaPrefab) };
             content.TelegraphMaterial = telegraph;
             content.Swing = Cue("swing"); content.Impact = Cue("impact"); content.Hurt = Cue("hurt");
             content.Victory = Cue("victory"); content.Windup = Cue("windup");
@@ -181,6 +189,7 @@ namespace GalaQuest.Editor
             if (presentation == null) presentation = root.AddComponent<GalaQuestCombatPresentation>();
             presentation.Configure(content);
             RuneForgeAuthoring.ConfigurePreview(root, content);
+            WormCompanionAuthoring.ConfigureNativeReview(root);
             var camera = root.GetComponentsInChildren<Camera>().Single(item => item.CompareTag("MainCamera"));
             if (camera.GetComponent<AudioListener>() == null) camera.gameObject.AddComponent<AudioListener>();
             if (!EditorSceneManager.SaveScene(scene)) throw new BuildFailedException("Could not save candidate preview scene");

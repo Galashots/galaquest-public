@@ -103,7 +103,7 @@ const moveAxis = async(p,k,axis,target)=>{
   await delay(150);
 };
 const faceEnemy = async p=>{
-  const f=await frame(p), hero=f.players.find(h=>h.id===p.id), enemy=f.encounter.enemies[0];
+  const f=await frame(p), hero=f.players.find(h=>h.id===p.id), enemy=f.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin');
   const dx=enemy.x-hero.x,dz=enemy.z-hero.z,length=Math.hypot(dx,dz);
   assert.ok(length>0 && length<2.5,'A real approach put the hero near the gremlin');
   const thumb=point(p,1,.18,.84);
@@ -176,8 +176,8 @@ try{
   await moveAxis(first,'w','z',6.8);
   await faceEnemy(first);
   await tap(first,.926,.886);
-  const hurt=await waitFor(()=>frame(first),f=>f.encounter.enemies[0].hp<30,'Damage shared gremlin');
-  const woundedHp=hurt.encounter.enemies[0].hp;
+  const hurt=await waitFor(()=>frame(first),f=>f.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin').hp<30,'Damage shared gremlin');
+  const woundedHp=hurt.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin').hp;
   checks.wounded=hurt;
   await capture(first,'03-wounded-encounter');
   await travelTap(first);
@@ -189,7 +189,7 @@ try{
   await moveAxis(second,'w','z',4.8);
   await travelTap(second);
   const secondArrival=await arrived(second,'emberworks-deep');
-  assert.equal(secondArrival.frame.encounter.enemies[0].hp,woundedHp,'Leaving a destination does not recreate its encounter');
+  assert.equal(secondArrival.frame.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin').hp,woundedHp,'Leaving a destination does not recreate its encounter');
   await capture(second,'05-sibling-finds-same-fight');
   checks.siblingArrival=secondArrival;
   await first.send('Page.bringToFront');
@@ -197,7 +197,7 @@ try{
   await travelTap(first);
   await arrived(first,'emberworks-deep');
   const reunion=await waitFor(()=>frame(first),f=>f.players.length===2,'Reunion in the ongoing adventure');
-  assert.equal(reunion.encounter.enemies[0].hp,woundedHp);
+  assert.equal(reunion.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin').hp,woundedHp);
   checks.reunion=reunion;
   await moveAxis(first,'d','x',1.2);
   await capture(first,'06-reunited-in-emberworks');
@@ -207,7 +207,7 @@ try{
   const reconnected=await waitFor(()=>sample(second),s=>s?.frame.destinationId==='emberworks-deep'&&s.frame.players.some(p=>p.id!==first.id&&p.id!==previousId),'Socket reconnect to last destination',20000,100);
   second.id=reconnected.frame.players.find(p=>p.id!==first.id).id;
   checks.reconnected=reconnected;
-  assert.equal(reconnected.frame.encounter.enemies[0].hp,woundedHp);
+  assert.equal(reconnected.frame.encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin').hp,woundedHp);
   await capture(second,'07-reconnected-to-adventure');
   if(progressionMode){
     // First child already contributed one real hit. Finish the same life with touch attacks;
@@ -216,7 +216,7 @@ try{
     await moveAxis(first,'a','x',-4);
     await moveAxis(first,'w','z',6.8);
     for(let tries=0;tries<8;tries++) {
-      if((await frame(first)).encounter.enemies[0].hp<=0)break;
+      if((await frame(first)).encounter.enemies.find(enemy => enemy.kind === 'lava-gremlin').hp<=0)break;
       await faceEnemy(first);
       await tap(first,.926,.886);
       await delay(850);
