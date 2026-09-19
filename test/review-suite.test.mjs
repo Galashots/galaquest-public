@@ -15,6 +15,11 @@ const DIR = 'tools/runtime-test';
 // so a silent hole. Every exemption below is something that cannot satisfy that definition, and
 // each has to say why -- an exemption without a stated reason is how this guard would rot.
 const NOT_A_HARNESS = new Set([
+  // The other half of owned-server.mjs's pair: it brings up the automation Chrome the harnesses
+  // dial, and exits with nothing to say about the game. Running it in the full suite would start a
+  // browser, assert nothing, and then either sit resident or tear down the browser the next harness
+  // in the list is about to connect to -- which is worse than useless, it is actively wrong.
+  'automation-chrome.mjs',
   'automation-timing.mjs',
   'in-page-driver.mjs',
   'owned-server.mjs',
