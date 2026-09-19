@@ -83,6 +83,8 @@ export function inspectGlb(path) {
       byte_size: image.bufferView === undefined ? null : gltf.bufferViews?.[image.bufferView]?.byteLength ?? null,
       uri: image.uri ?? null,
     })),
+    external_resource_uris: [...new Set([...(gltf.buffers ?? []), ...(gltf.images ?? [])]
+      .map((resource) => resource.uri).filter((uri) => typeof uri === 'string'))].sort(),
     skin_count: (gltf.skins ?? []).length,
     skins: (gltf.skins ?? []).map((skin, index) => ({
       index,

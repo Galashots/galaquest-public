@@ -64,6 +64,61 @@ equip/unequip visual review under [character-armoring.md](character-armoring.md)
 helmet must independently prove that it conceals the existing cut boundary. Structural coverage PASS
 does not establish either condition.
 
+## Rigid armor fitting: executable operator sequence
+
+Prerequisites: a selected player need, exact source/derivative hashes, licensed custody, the
+qualified Hero body, the item's explicit slot and carry convention, and the owned Unity checkout.
+This procedure fits rigid items; deforming garments/hybrids require the separate admission boundary
+in [character-armoring.md](character-armoring.md). Do not disguise them as rigid to pass the receipt.
+
+1. **Identify the candidate.** Run the registry entrypoint with `--class rigid-gear`, the actual
+   source and candidate, a player-use statement and controlling references. Inspect silhouette at
+   intended play size beside the Hero before paying for detail or solving a transform.
+2. **Make the versioned Unity derivative.** Use
+   `node tools/unity-migration/convert-gear-asset.mjs --source <gear.glb> --dest <candidate.fbx> --id <asset-id> --blender <executable>`.
+   Keep source and output distinct. The converter owns its pinned version, conversion settings and
+   provenance; do not use version-drift or record-only flags as proof that conversion ran correctly.
+   Refresh the owned Editor under `unity/AGENTS.md`; inspect imported mesh/materials/textures and units.
+3. **Create data, not item-specific code.** Create/select the `GearItemDefinition` using
+   `Assets > Create > GalaQuest > Gear`. Assign semantic ID, source model/path, socket, fit class,
+   intended coverage and mirror flag. Use existing qualified sockets; do not alter the Hero's rig/grip.
+4. **Author the fit profile.** In `GearAssetFitProfile`, explicitly choose the slot, raw-to-canonical
+   rotation, provenance category and evidence note. Measure a declared asset locator or author a
+   reasoned virtual cavity; put attachment landmarks where the item actually seats. Outer shell
+   bounds, convenient bone axes and symmetry do not establish a cavity or carry convention.
+5. **Register before seeding.** Select the item and run
+   `GalaQuest > Gear > Register selected gear item against fit contract`. Inspect the registration:
+   exactly one compatible socket/frame/functional seat, classified dimensions, primary measurement,
+   uniform normalization and secondary proportion bands. `NeedsAuthoring` means author the missing
+   profile/locator; it does not permit invented shell thickness, a left-side fallback or squashing.
+6. **Seed without erasing a human fit.** Run
+   `GalaQuest > Gear > Seed selected gear item from its registration` only on the intended candidate.
+   Preserve existing Owner-authored transforms; never use a destructive reseed to hide a mismatch.
+   Open `GalaQuest > Gear > Gear Workbench`, frame the item and refine with normal Scene View gizmos.
+   Judge silhouette and intended carry before saving. Do not move the Hero's body to fit the item.
+7. **Run both gates on the mounted result.** Use `Run checks on current pose` so the runtime
+   `GearFitValidator` and editor `GearFitSeedConsistency` inspect the mounted item. Resolve rejection
+   of scale, basis, landmark/seat or extents against the profile/fixture, then rerun. Zero runtime
+   findings alone is insufficient: a sideways shield previously passed that narrower check.
+8. **Check coverage and restoration.** Leave normal anatomy coverage enabled. Inspect face, eyes,
+   brows, ears and exposed scalp in front/side/rear views; remove the item and verify restoration.
+   The current hair atom includes scalp; the current Silverguard fit exposes its cut boundary.
+   Prove concealment per item using the supervised coverage procedure, not height/colour guesses.
+9. **Inspect motion and the worst loadout.** Use actual Hero clips in the Workbench: idle, locomotion,
+   turn and relevant attack extremes. Check weapon grip, shield/forearm carry, shoulder/head clearance,
+   silhouette and body clipping on both sides. Use existing applicable sweep tests; no generic test
+   name implies all slots are covered. Count the entire visible loadout, including repeated pieces,
+   materials and primitive/draw costs; a per-file budget PASS is not equipped-character approval.
+10. **Capture, bind and critique.** `GalaQuest > Gear > Capture gear review pack` uses the shared
+    `GearReviewPack`; `CaptureItem` targets one definition. Commit authoring changes first for exact-SHA
+    evidence, or explicitly mark dirty-tree diagnosis as non-exact. Bind profile, fixture, registration,
+    definition, source/FBX/textures, importer/meta, material, controller and captures in the receipt.
+    Open the front/three-quarter/side/gameplay-scale and motion images and record the strongest defect.
+11. **Prove actual equip in the game.** Use the owning gameplay package's integration seam. Exercise
+    equip/unequip, motion, real lighting/contact and the intended camera/device size beside accepted
+    content. An Editor pack does not prove connected equip or iPad readability. Fresh critique and
+    reserved Owner promotion follow; neither the registration nor the receipt promotes the item.
+
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 
 Checkpoint A answers WHERE gear attaches. The datum contract answers HOW BIG and WHICH WAY ROUND, in a
