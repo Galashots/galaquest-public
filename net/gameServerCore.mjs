@@ -2297,6 +2297,18 @@ export function attachGameServer(httpServer, options = {}) {
     ) <= RUNE_FORGE_REACH_METERS;
   }
 
+  // #192 CP2: what the Relight gate below still wants from THIS profile, so the client can say
+  // "defeat the Ember Alpha" instead of offering a button whose refusal is invisible. Read-only and
+  // private: the same durable server-observed kill reads the gate itself makes, in gate order, with
+  // the authored kind so the client can name the fight. It grants and reserves nothing.
+  function relightCombatProgress(playerId) {
+    return FORGE_RELIGHT_COMBAT_PREREQUISITES.map((enemyId) => ({
+      enemyId,
+      kind: EMBERWORKS_DEEP_ENEMIES.find((enemy) => enemy.enemyId === enemyId)?.kind ?? null,
+      defeated: rewards.hasServerObservedKill(playerId, enemyId),
+    }));
+  }
+
   function sendRuneForgeState(client, state) {
     client.send(encode({
       v: 4,
@@ -2304,7 +2316,7 @@ export function attachGameServer(httpServer, options = {}) {
       id: client.data.playerId,
       destinationId: client.data.destinationId,
       worldEpoch: client.data.worldEpoch,
-      forge: state,
+      forge: { ...state, relightCombat: relightCombatProgress(client.data.playerId) },
       profileFacts: rewards.profileFactsFor(client.data.playerId),
     }));
   }
@@ -2451,9 +2463,11 @@ export function attachGameServer(httpServer, options = {}) {
       // truth on its own. The epoch rule above already dropped
       // stale-scene duplicates, and a superseded same-profile socket never reaches here.
       //
-      // A refused relight is a clean silence, not a disconnect: a child finishing the last rune
-      // while walking up to the forge can legitimately produce one a beat early, the same posture
-      // every claim path already takes. The write itself is the atomic claimForgeRelight
+      // A refused relight is never a disconnect: a child finishing the last rune while walking up
+      // to the forge can legitimately produce one a beat early, the same posture every claim path
+      // already takes. Identity, presence and readiness refusals stay silent; only the combat gate
+      // answers ('needs-combat'), because only it is a rule the forge UI cannot otherwise show.
+      // The write itself is the atomic claimForgeRelight
       // transaction; the in-memory latch flips only when that write actually lit the world.
       if (message.type === 'forge-relight') {
         if (!client.data.playerId) throw new ProtocolError('forge-relight before join');
@@ -2464,10 +2478,15 @@ export function attachGameServer(httpServer, options = {}) {
         // Forge readiness. A client-restored journal (origin 'client' on every row it brings)
         // stays valid personal history but can never satisfy this read -- only durable
         // server-adjudicated kill XP for BOTH authored Emberworks roles authorises the lighting.
-        // Unmet, this is the same clean silent no-op every refusal above already is.
+        // Unmet, the forge answers 'needs-combat' (#192 CP2): the child has done everything the
+        // forge itself asks, so a silent refusal here is an invisible rule. The reply carries the
+        // same relightCombat progress every forge state does, and writes nothing.
         if (!FORGE_RELIGHT_COMBAT_PREREQUISITES.every(
           (enemyId) => rewards.hasServerObservedKill(client.data.playerId, enemyId),
-        )) return;
+        )) {
+          sendRuneForgeState(client, runeForge.stateFor(client.data.playerId, { response: 'needs-combat' }));
+          return;
+        }
         const relight = rewards.claimForgeRelight(client.data.playerId);
         if (relight.worldApplied) simulation.markForgeLit();
         simulation.announceRewardFacts(relight.facts);

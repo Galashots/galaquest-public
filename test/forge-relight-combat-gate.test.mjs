@@ -346,7 +346,7 @@ test('P3-CP2 hasServerKillXpFor is a literal server-origin prefix proof, nothing
 });
 
 // The gate reads durable kill rows, never the spawn table, so it cannot notice on its own when a
-// prerequisite has no spawner: Relight then refuses every live player with a clean silence. That
+// prerequisite has no spawner: Relight then refuses every live player, forever. That
 // happened once (emberworks-alpha-1 was named here before any zone authored it), so pin the
 // agreement against the population a real Emberworks simulation actually spawns.
 test('every Relight combat prerequisite is actually spawned in Emberworks, with the seeded kind', async () => {

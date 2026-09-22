@@ -422,6 +422,47 @@ test('P3-CP1 sockets: one shared lit forge, per-profile completion, retry-safe, 
   }
 });
 
+// #192 CP2: the combat gate used to refuse with a clean silence, which a child cannot diagnose. The
+// private forge state now names each Emberworks combat prerequisite and whether THIS profile's
+// server-observed kills satisfy it, and a relight refused only for missing combat answers
+// 'needs-combat' so the tap is acknowledged. Other refusals stay silent (see the no-op test above).
+test('#192 sockets: forge state reports Relight combat progress and a combat-missing relight says so', async () => {
+  const fixture = tempDir('gq-forge-relight-progress-');
+  try {
+    await withServer(join(fixture.directory, 'rewards.db'), async ({ game, connect }) => {
+      const hero = await connect('hero', ATTACKER);
+      putAtForge(game, hero.welcome.id);
+      hero.send({ type: 'forge-open' });
+      const opened = await hero.wait((message) => message.type === 'forge-state');
+      assert.deepEqual(opened.forge.relightCombat, [
+        { enemyId: 'emberworks-gremlin-1', kind: 'lava-gremlin', defeated: false },
+        { enemyId: 'emberworks-alpha-1', kind: 'alpha-wolf', defeated: false },
+      ], 'every forge state names both prerequisites, in gate order, before any fight');
+
+      await completeBothTasks(hero);
+      seedServerKills(game.rewards, hero.welcome.id, ['emberworks-gremlin-1']);
+      hero.send({ type: 'forge-relight' });
+      const refused = await hero.wait((message) => message.type === 'forge-state'
+        && message.forge.response === 'needs-combat');
+      assert.deepEqual(refused.forge.relightCombat.map((entry) => entry.defeated), [true, false],
+        'the refusal says exactly which fight is still missing');
+      assert.equal(hero.isClosed(), false, 'a combat-missing relight must not cost the connection');
+      assert.equal(game.rewards.forgeLit(), false, 'naming the gap must not light anything');
+      assert.deepEqual(game.rewards.profileFactsFor(hero.welcome.id)
+        .filter((fact) => fact.type === FORGE_RELIGHT_COMPLETED), []);
+
+      seedServerKills(game.rewards, hero.welcome.id, ['emberworks-alpha-1']);
+      hero.send({ type: 'forge-relight' });
+      const relit = await hero.wait((message) => message.type === 'forge-state'
+        && message.forge.response === 'relit');
+      assert.deepEqual(relit.forge.relightCombat.map((entry) => entry.defeated), [true, true]);
+      assert.equal(game.rewards.forgeLit(), true);
+    });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test('P3-CP1 sockets: reconnect replaces the session and the completion follows the profile', async () => {
   const fixture = tempDir('gq-forge-relight-reconnect-');
   try {
