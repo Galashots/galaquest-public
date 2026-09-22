@@ -198,7 +198,8 @@ test('P3-CP2 genuine kills for both roles open the gate and the first Relight la
     const relight = rewards.claimForgeRelight('hero-a');
     assert.equal(relight.granted, true, 'the personal row lands');
     assert.equal(relight.worldApplied, true, 'and lights the shared forge');
-    assert.equal(relight.facts.length, 1, 'only the personal fact is announced, never shared truth');
+    assert.deepEqual(relight.facts.map((fact) => fact.type), [FORGE_RELIGHT_COMPLETED, 'gear-owned'],
+      'only personal facts (completion + #192 Shoulders reward) are announced, never shared truth');
     assert.equal(rewards.forgeLit(), true);
   } finally {
     rewards.close();

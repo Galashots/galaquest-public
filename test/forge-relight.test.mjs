@@ -174,9 +174,13 @@ test('P3-CP1 one atomic transaction: shared lit row plus the completing profile 
       const first = rewards.claimForgeRelight('hero-a');
       assert.equal(first.granted, true, 'the first completion lands the personal row');
       assert.equal(first.worldApplied, true, 'and lights the shared forge');
-      assert.equal(first.facts.length, 1, 'only the personal fact is announced, never shared truth');
-      assert.equal(first.facts[0].type, FORGE_RELIGHT_COMPLETED);
-      assert.equal(first.facts[0].eventId, `forge-relight:${ATTACKER}:${MAGMALORD_ENTITLEMENT_ID}`);
+      // #192 CP2: the personal completion and the personal Shoulders reward, never shared truth.
+      assert.deepEqual(first.facts.map((fact) => [fact.type, fact.eventId, fact.value]), [
+        [FORGE_RELIGHT_COMPLETED, `forge-relight:${ATTACKER}:${MAGMALORD_ENTITLEMENT_ID}`,
+          JSON.stringify({ entitlementId: MAGMALORD_ENTITLEMENT_ID })],
+        ['gear-owned', `own:${ATTACKER}:shoulder_silverguard`, 'shoulder_silverguard'],
+      ], 'only personal facts are announced, never shared truth');
+      assert.equal(first.rewardGranted, true);
       assert.equal(rewards.forgeLit(), true);
 
       const replay = rewards.claimForgeRelight('hero-a');
@@ -457,6 +461,73 @@ test('#192 sockets: forge state reports Relight combat progress and a combat-mis
         && message.forge.response === 'relit');
       assert.deepEqual(relit.forge.relightCombat.map((entry) => entry.defeated), [true, true]);
       assert.equal(game.rewards.forgeLit(), true);
+    });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+// #192 CP2 second wearable (Owner-selected 2026-09-22): Relight grants the Silverguard Shoulders in
+// the SAME atomic batch as the personal completion, under the ordinary `own:<profile>:<item>`
+// ownership identity every other gear grant uses -- so a profile that already owns them from a
+// Village drop converges instead of conflicting, and CLAIM != EQUIP holds: nothing is auto-equipped.
+test('#192 sockets: Relight grants the Silverguard Shoulders once per profile, owned but never auto-equipped', async () => {
+  const fixture = tempDir('gq-forge-relight-reward-');
+  const shoulderRows = (rewards, playerId) => rewards.profileFactsFor(playerId)
+    .filter((fact) => fact.type === 'gear-owned' && fact.value === 'shoulder_silverguard');
+  const shoulderEquips = (rewards, playerId) => rewards.profileFactsFor(playerId)
+    .filter((fact) => fact.type === 'gear-equipped' && fact.value === 'shoulder_silverguard');
+  try {
+    await withServer(join(fixture.directory, 'rewards.db'), async ({ game, connect }) => {
+      const first = await connect('first', ATTACKER);
+      putAtForge(game, first.welcome.id);
+      first.send({ type: 'forge-open' });
+      const preview = await first.wait((message) => message.type === 'forge-state');
+      assert.equal(preview.forge.relightRewardItemId, 'shoulder_silverguard',
+        'the forge names its Relight reward before it is earned, so the child can want it');
+      assert.equal(game.rewards.ownedItemIdsFor(first.welcome.id).includes('shoulder_silverguard'), false);
+
+      await completeBothTasks(first);
+      seedServerKills(game.rewards, first.welcome.id, ['emberworks-gremlin-1']);
+      first.send({ type: 'forge-relight' });
+      await first.wait((message) => message.type === 'forge-state' && message.forge.response === 'needs-combat');
+      assert.deepEqual(shoulderRows(game.rewards, first.welcome.id), [],
+        'a refused relight grants no part of the reward');
+
+      seedServerKills(game.rewards, first.welcome.id, ['emberworks-alpha-1']);
+      first.send({ type: 'forge-relight' });
+      const relit = await first.wait((message) => message.type === 'forge-state' && message.forge.response === 'relit');
+      assert.equal(relit.forge.justRewarded, true, 'the lighting call is the one that granted the shoulders');
+      assert.ok(relit.profileFacts.some((fact) => fact.type === 'gear-owned'
+        && fact.value === 'shoulder_silverguard'), 'the grant rides the private state straight away');
+      assert.equal(game.rewards.ownedItemIdsFor(first.welcome.id).includes('shoulder_silverguard'), true);
+      assert.deepEqual(shoulderEquips(game.rewards, first.welcome.id), [],
+        'CLAIM is not EQUIP: the shoulders are owned, never silently worn');
+
+      first.send({ type: 'forge-relight' });
+      const retry = await first.wait((message) => message.type === 'forge-state'
+        && message.forge.response === 'already-lit');
+      assert.notEqual(retry.forge.justRewarded, true, 'a retry has no second reward ceremony');
+      assert.equal(shoulderRows(game.rewards, first.welcome.id).length, 1, 'retrying cannot grant twice');
+
+      // A late sibling who ALREADY owns the shoulders (say, a Village drop) still completes the
+      // finale in the lit world: the ownership row converges, nothing conflicts, and no ceremony
+      // claims a gift they already had.
+      const sibling = await connect('sibling', SIBLING);
+      game.rewards.grantOwnership(sibling.welcome.id, 'shoulder_silverguard');
+      putAtForge(game, sibling.welcome.id);
+      await completeBothTasks(sibling);
+      seedServerKills(game.rewards, sibling.welcome.id);
+      sibling.send({ type: 'forge-relight' });
+      const siblingDone = await sibling.wait((message) => message.type === 'forge-state'
+        && message.forge.response === 'already-lit');
+      assert.notEqual(siblingDone.forge.justRewarded, true, 'no ceremony for an item already owned');
+      assert.equal(shoulderRows(game.rewards, sibling.welcome.id).length, 1);
+      assert.equal(game.rewards.profileFactsFor(sibling.welcome.id)
+        .filter((fact) => fact.type === FORGE_RELIGHT_COMPLETED).length, 1,
+      'already owning the reward never blocks the sibling own completion');
+      assert.equal(shoulderRows(game.rewards, first.welcome.id).length, 1,
+        'the sibling finale leaves the first profile untouched');
     });
   } finally {
     fixture.cleanup();

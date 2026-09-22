@@ -84,7 +84,7 @@ import {
 } from '../public/src/world/zones/village.js';
 import { rowanOwesBlade } from '../public/src/world/rowanSpeech.js';
 import { rangerOwesCharm, rangerSanctuaryHolds } from '../public/src/world/rangerSpeech.js';
-import { HELMET_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
+import { HELMET_SILVERGUARD_ID, SHOULDER_SILVERGUARD_ID, WILDWOOD_BLADE_ID } from '../public/src/progression/items.js';
 import {
   EMBERWORKS_FORGE_LIT_EVENT_ID, FORGE_PACK_SELECTED, FORGE_RELIGHT_COMPLETED, FORGE_TASK_ASSISTED,
   FORGE_TASK_ATTEMPTED, FORGE_TASK_COMPLETED, MAGMALORD_ENTITLEMENT_ID, MAGMALORD_HELMET_ID,
@@ -131,6 +131,13 @@ export const FORGE_RELIGHT_COMBAT_PREREQUISITES = Object.freeze([
   'emberworks-gremlin-1',
   'emberworks-alpha-1',
 ]);
+
+// #192 CP2: the second wearable, Owner-selected 2026-09-22 -- the Relight finale's personal reward,
+// distinct from the MagmaLord Helmet's head slot. Granted inside claimForgeRelight's own atomic batch
+// under the ordinary `own:<profile>:<item>` ownership identity grantOwnership mints, so a profile that
+// already owns it (a Village drop) converges on the same row rather than conflicting. Owned, never
+// auto-equipped: the child chooses to wear it.
+export const FORGE_RELIGHT_REWARD_ITEM_ID = SHOULDER_SILVERGUARD_ID;
 
 // ARC 2's CHARM_BONUS_HEARTS USED TO LIVE HERE, and it does not any more.
 //
@@ -470,10 +477,14 @@ export function createRewardCoordinator(options = {}) {
     // Read before writing: Node serialises one message handler fully before the next begins, so no
     // interleaving can slip between these reads and the batch below. The reads decide what is NEW
     // (and therefore announced and latched); the batch's own INSERT OR IGNORE decides what is true.
+    const rewardEventId = `own:${guestId}:${FORGE_RELIGHT_REWARD_ITEM_ID}`;
     const worldAlreadyLit = store.forgeLit();
-    const completionAlready = store.profileFactsFor(guestId)
-      .some((fact) => fact.eventId === personal.eventId);
-    if (worldAlreadyLit && completionAlready) return { granted: false, worldApplied: false, facts: [] };
+    const factsBefore = store.profileFactsFor(guestId);
+    const completionAlready = factsBefore.some((fact) => fact.eventId === personal.eventId);
+    const rewardAlready = factsBefore.some((fact) => fact.eventId === rewardEventId);
+    if (worldAlreadyLit && completionAlready) {
+      return { granted: false, worldApplied: false, rewardGranted: false, facts: [] };
+    }
     // A conflicting reuse of either id already on record throws inside the batch (see the store's
     // own semantic-identity rule) and rolls both rows back: no half-lit world, no false grant, and
     // no latch -- the caller never receives a success it can act on.
@@ -485,20 +496,31 @@ export function createRewardCoordinator(options = {}) {
       {
         guestId, heroId: playerId, type: personal.type, eventId: personal.eventId, value: personal.value,
       },
+      {
+        guestId, heroId: playerId, type: 'gear-owned', eventId: rewardEventId, value: FORGE_RELIGHT_REWARD_ITEM_ID,
+      },
     ]);
     // Report the durable truth the batch actually left behind, not the pre-write reads above. If a
     // squatted id silently swallowed either row, these re-reads -- not the optimistic negations --
     // are what the relit ceremony and the in-memory latch must answer to.
     const worldNowLit = store.forgeLit();
-    const completionNow = store.profileFactsFor(guestId)
-      .some((fact) => fact.eventId === personal.eventId);
+    const factsNow = store.profileFactsFor(guestId);
+    const completionNow = factsNow.some((fact) => fact.eventId === personal.eventId);
+    const rewardNow = factsNow.some((fact) => fact.eventId === rewardEventId);
     const granted = completionNow && !completionAlready;
+    const rewardGranted = rewardNow && !rewardAlready;
     return {
       granted,
       worldApplied: worldNowLit && !worldAlreadyLit,
-      facts: granted ? [{
-        type: personal.type, heroId: playerId, eventId: personal.eventId, value: personal.value,
-      }] : [],
+      rewardGranted,
+      facts: [
+        ...(granted ? [{
+          type: personal.type, heroId: playerId, eventId: personal.eventId, value: personal.value,
+        }] : []),
+        ...(rewardGranted ? [{
+          type: 'gear-owned', heroId: playerId, eventId: rewardEventId, value: FORGE_RELIGHT_REWARD_ITEM_ID,
+        }] : []),
+      ],
     };
   }
 
@@ -2316,7 +2338,11 @@ export function attachGameServer(httpServer, options = {}) {
       id: client.data.playerId,
       destinationId: client.data.destinationId,
       worldEpoch: client.data.worldEpoch,
-      forge: { ...state, relightCombat: relightCombatProgress(client.data.playerId) },
+      forge: {
+        ...state,
+        relightCombat: relightCombatProgress(client.data.playerId),
+        relightRewardItemId: FORGE_RELIGHT_REWARD_ITEM_ID,
+      },
       profileFacts: rewards.profileFactsFor(client.data.playerId),
     }));
   }
@@ -2497,6 +2523,7 @@ export function attachGameServer(httpServer, options = {}) {
         sendRuneForgeState(client, runeForge.stateFor(client.data.playerId, {
           response: relight.worldApplied ? 'relit' : 'already-lit',
           justLit: relight.worldApplied,
+          justRewarded: relight.rewardGranted,
         }));
         return;
       }
