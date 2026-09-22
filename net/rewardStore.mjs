@@ -26,6 +26,7 @@ import {
   latestEquippedItemIds,
   latestEquippedWeaponId,
   parseXpFactAmount,
+  sharedWorldTypesForEventId,
   totalXpFromFacts,
 } from '../public/src/progression/facts.js';
 
@@ -179,8 +180,24 @@ export function openRewardStore(path) {
 
   // INSERT OR IGNORE against the PRIMARY KEY on id: the whole idempotency guarantee lives in this one
   // line plus the schema's PRIMARY KEY constraint, not in application code that could drift from it.
+  //
+  // The IGNORE half is narrow on purpose: it covers an IDENTICAL semantic replay of the id's own
+  // event only (same type, same value, no rev conflict -- see insertAward). Reusing the same event ID for
+  // a DIFFERENT semantic event is never silently ignored; it fails loudly. A global durable event
+  // ID is a semantic identity: the fixed `emberworks-forge-lit:rune-forge` world row means "the
+  // forge is lit", and an equip arriving under that same id is not a replay of that lighting, it is
+  // a different event wearing its name. Silently ignoring it let the claim path below report
+  // worldApplied=true against a forge that stayed dark on disk (P3-CP1 DeepSeek reproduction).
   const insertStmt = db.prepare(
     'INSERT OR IGNORE INTO reward_events (id, guest_id, type, created_at, value, rev, origin) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  );
+  // The semantic-identity read for the rule above: what event, if any, already owns this id.
+  // guest_id/origin are deliberately NOT compared -- they are provenance ("who was standing there",
+  // "who attested it"), never the event itself. A sibling replaying the fixed shared world row
+  // under their own guestId is the same lighting, and stays a harmless no-op; the village-upgrade
+  // idempotency test pins the same law for a second purchaser. Only type/value/rev decide.
+  const existingByIdStmt = db.prepare(
+    'SELECT guest_id, type, value, rev FROM reward_events WHERE id = ?',
   );
   const marksStmt = db.prepare("SELECT COUNT(*) AS c FROM reward_events WHERE guest_id = ? AND type = 'mark-earned'");
   // GP2: coins and Wildwood Shards, counted exactly like marks -- one row per pickup ever credited to
@@ -309,6 +326,28 @@ export function openRewardStore(path) {
   const beaconLitStmt = db.prepare(
     "SELECT 1 AS found FROM reward_events WHERE type = 'beacon-lit' LIMIT 1",
   );
+  // P3-CP1: THE EMBERWORKS FORGE IS LIT -- the same world-fact shape as beaconLit just above, for
+  // the same reason: one lit forge for every sibling, not one per guest. An existence check on the
+  // type rather than a count: the forge lights once, ever, and "how many times" is not a question
+  // anything can ask.
+  const forgeLitStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE type = 'emberworks-forge-lit' LIMIT 1",
+  );
+  // P3-CP2: the server-observed combat read. net/gameServerCore.mjs's applyKillXpAward mints one
+  // `xp-earned` row per contributing guest per enemy life under
+  // `kill-xp:<guestId>:<enemyId>:<lifeId>`, written WITHOUT an origin -- so `origin IS NULL` IS
+  // the durable meaning of "the server saw this kill". restoreProfileFacts stamps every
+  // client-handed row `origin: 'client'`, which is exactly why a restored or fabricated kill can
+  // never satisfy this read even when its id is byte-identical to a server row's shape.
+  // The guest_id column check and the id-prefix check agree for every row the server mints; both
+  // are stated because the column is the scope and the id is the role. The prefix is compared
+  // literally with substr, never with LIKE: LIKE's wildcard/escape semantics (and the
+  // version-sensitive `ESCAPE` clause they require) have no business in an equality question, and
+  // a literal comparison needs no escaping of guest/enemy alphabets at all.
+  const serverKillXpStmt = db.prepare(
+    "SELECT 1 AS found FROM reward_events WHERE guest_id = ? AND type = 'xp-earned' "
+    + 'AND substr(id, 1, length(?)) = ? AND origin IS NULL LIMIT 1',
+  );
 
   /**
    * What this store may record, IMPORTED rather than restated.
@@ -342,9 +381,23 @@ export function openRewardStore(path) {
     // H1 defence in depth: restoreProfileFacts filters this boundary before batching, but the store
     // must not rely on one caller forever. A client-attested row may recover personal history only;
     // it may neither author shared currency nor reserve shared-world/another-profile identities.
+    // Ordered BEFORE the P3-CP1 squat guard on purpose: a client-origin violation keeps the
+    // established client-restored-fact diagnostic rather than the shared-world one.
     if (award.origin === 'client' && !isClientRestorableProfileFact(award, award.guestId)) {
       throw new Error(
         `reward store apply() refuses client-restored fact ${JSON.stringify(award.type)} under eventId ${JSON.stringify(award.eventId)}`,
+      );
+    }
+    // P3-CP1 first-write squat guard: a shared-world-namespace id may only ever carry its own
+    // world fact type(s). An equip arriving under `emberworks-forge-lit:rune-forge` is refused
+    // HERE, loudly, before any row exists -- the conflicting-reuse rule in insertAward only fires
+    // once a row is already on record, which is too late when the squat is the first writer.
+    // Server-path only by construction: client-origin squats above already threw first.
+    const allowedWorldTypes = sharedWorldTypesForEventId(award.eventId);
+    if (allowedWorldTypes !== null && !allowedWorldTypes.includes(award.type)) {
+      throw new Error(
+        `reward store apply() refuses ${JSON.stringify(award.type)} under shared-world eventId `
+        + `${JSON.stringify(award.eventId)} (holds ${allowedWorldTypes.map((type) => JSON.stringify(type)).join(' or ')} only)`,
       );
     }
     if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isKnownItem(award.value)) {
@@ -355,6 +408,20 @@ export function openRewardStore(path) {
     }
     if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped') && !isEquipmentFact(award)) {
       throw new Error(`reward store apply() got an invalid slot for ${award.type} item ${JSON.stringify(award.value)}`);
+    }
+    // F3 equip-identity guard (store half): the Relight completion namespace is
+    // server-authored, so an equip under it is refused HERE, before any row exists, no
+    // matter whose profile it names -- otherwise the row squats the finale's future
+    // personal row globally. Cross-profile ownership of other equip ids is enforced at
+    // the client-controlled boundary (createRewardCoordinator's applyEquip), because the
+    // store must stay permissive for legacy/harness equip rows that carry bare,
+    // non-profile-scoped ids (test/equip-authority-agreement.test.mjs).
+    if ((award.type === 'weapon-equipped' || award.type === 'gear-equipped')
+      && typeof award.eventId === 'string' && award.eventId.startsWith('forge-relight:')) {
+      throw new Error(
+        `reward store apply() refuses ${JSON.stringify(award.type)} under server-authored Relight completion identity `
+        + `${JSON.stringify(award.eventId)}`,
+      );
     }
     if (award.type === 'gear-owned' && !isKnownItem(award.value)) {
       throw new Error(`reward store apply() got an unknown item id ${JSON.stringify(award.value)}`);
@@ -372,8 +439,40 @@ export function openRewardStore(path) {
     }
   }
 
-  /** The write itself, once the award is known to be legal. */
+  /**
+   * The write itself, once the award is known to be legal.
+   *
+   * Semantic-identity enforcement: when the id is already on record, the incoming award must BE
+   * the recorded event (same type, same value, and no rev conflict) or this throws loudly --
+   * never a silent IGNORE of a conflicting reuse. Provenance is excluded from the comparison on
+   * purpose: the recorded guest_id/origin say who was there and who attested, not what happened,
+   * so a sibling replaying the shared world lighting under their own guestId is the same event
+   * and stays the no-op INSERT OR IGNORE already makes it.
+   *
+   * F2 migration compatibility: a row written before schema v3 (or an additive type that carries
+   * no order) reads rev NULL, while the same semantic fact replayed from a modern device journal
+   * carries the integer rev it was minted with. NULL-vs-integer is a missing order, not a
+   * conflicting one, so eventId/type/value equality alone makes it a no-op replay. Rev is only a
+   * conflict when BOTH sides carry an integer order AND those orders differ -- real equip
+   * chronology conflicts, where both revs exist, still fail loudly.
+   */
   function insertAward(award) {
+    const existing = existingByIdStmt.get(award.eventId);
+    if (existing !== undefined) {
+      const sameType = existing.type === award.type;
+      const sameValue = (existing.value ?? null) === (award.value ?? null);
+      const existingRev = Number.isInteger(existing.rev) ? existing.rev : null;
+      const incomingRev = Number.isInteger(award.rev) ? award.rev : null;
+      const revConflict = existingRev !== null && incomingRev !== null && existingRev !== incomingRev;
+      if (sameType && sameValue && !revConflict) return { applied: false };
+      throw new Error(
+        `reward store refuses conflicting reuse of eventId ${JSON.stringify(award.eventId)}: `
+        + `already recorded as ${JSON.stringify(existing.type)} `
+        + `with value ${JSON.stringify(existing.value ?? null)} (rev ${JSON.stringify(existingRev)}), `
+        + `not ${JSON.stringify(award.type)} with value ${JSON.stringify(award.value ?? null)} `
+        + `(rev ${JSON.stringify(incomingRev)})`,
+      );
+    }
     const result = insertStmt.run(
       award.eventId, award.guestId, award.type, new Date().toISOString(), award.value ?? null,
       Number.isInteger(award.rev) ? award.rev : null,
@@ -413,6 +512,9 @@ export function openRewardStore(path) {
    * Replay stays a no-op exactly as it is for apply(): the INSERT OR IGNORE and the PRIMARY KEY are
    * doing the idempotency here too, so a device re-sending a journal the store already holds commits
    * an empty transaction rather than double-counting. `applied` counts rows actually added.
+   * Conflicting reuse of an id already on record throws inside the transaction (see insertAward),
+   * so the whole batch rolls back: a batch that would silently half-land conflicting truth instead
+   * lands nothing at all, loudly.
    */
   function applyAll(awards) {
     const batch = [...awards];
@@ -558,6 +660,23 @@ export function openRewardStore(path) {
     return beaconLitStmt.get() !== undefined;
   }
 
+  /** P3-CP1: whether the Emberworks Rune Forge has ever been relit, by anyone -- the forge's own
+   *  beaconLit, read before simulation creation so a restart does not put it out. */
+  function forgeLit() {
+    return forgeLitStmt.get() !== undefined;
+  }
+
+  /** P3-CP2: whether this guest has a SERVER-OBSERVED kill-XP row for this enemy id -- one durable
+   *  `kill-xp:<guestId>:<enemyId>:<lifeId>` row with `origin IS NULL`. A narrow existence proof,
+   *  not a count: how many lives of this role the guest ended is not a question the Relight gate
+   *  asks. Client-restored rows are invisible to this read by construction. */
+  function hasServerKillXpFor(guestId, enemyId) {
+    if (typeof guestId !== 'string' || guestId.length === 0) return false;
+    if (typeof enemyId !== 'string' || enemyId.length === 0) return false;
+    const prefix = `kill-xp:${guestId}:${enemyId}:`;
+    return serverKillXpStmt.get(guestId, prefix, prefix) !== undefined;
+  }
+
   return {
     apply,
     applyAll,
@@ -578,6 +697,8 @@ export function openRewardStore(path) {
     totalShardsEarned,
     villageUpgradeOwned,
     beaconLit,
+    forgeLit,
+    hasServerKillXpFor,
     // Exposed for the harness/tests that want to assert a backup landed, and for a server boot log
     // line -- never read back by this module itself.
     backupPath,

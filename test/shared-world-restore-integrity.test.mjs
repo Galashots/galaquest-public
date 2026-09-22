@@ -242,6 +242,42 @@ test('H1 refused currency restore cannot alter shared Village state or spent-loo
   }
 });
 
+// #194: a malformed/self-hostile journal can include an equip fact under the server-authored
+// Relight completion identity for the profile's own guest. The reward-store F3 guard correctly
+// refuses that equip if it ever reached apply(), but the restore path must filter it BEFORE the
+// batch, not let the store throw mid-batch and roll back every other valid fact in the message.
+test('H1 restore filters a self-scoped forge-relight equip fact instead of poisoning the whole batch', () => {
+  const fixture = tempStorePath();
+  const rewards = createRewardCoordinator({ rewardStorePath: fixture.path });
+  try {
+    rewards.join('hero-a', ATTACKER);
+
+    const facts = [
+      { eventId: `own:${ATTACKER}:${WILDWOOD_BLADE_ID}`, type: 'gear-owned', value: WILDWOOD_BLADE_ID },
+      {
+        eventId: `forge-relight:${ATTACKER}:emberworks.rune-forge.magmalord-helmet.v1`,
+        type: 'weapon-equipped',
+        value: WILDWOOD_BLADE_ID,
+      },
+      xpFact(`xp:lantern-unlocked:${ATTACKER}`, '100'),
+    ];
+
+    assert.deepEqual(
+      rewards.restoreProfileFacts('hero-a', facts),
+      { restored: 2, refused: 1 },
+      'the malformed forge-relight equip fact is refused; the other two valid facts still restore',
+    );
+
+    const own = rewards.rewardsFor(['hero-a'])['hero-a'];
+    assert.ok(own.ownedItemIds.includes(WILDWOOD_BLADE_ID), 'the sibling gear-owned fact in the same batch was not rolled back');
+    assert.equal(own.xp, 100, 'the sibling xp fact in the same batch was not rolled back');
+    assert.notEqual(own.equippedWeaponId, WILDWOOD_BLADE_ID, 'the refused equip must not have been durably written');
+  } finally {
+    rewards.close();
+    fixture.cleanup();
+  }
+});
+
 // THE HIDDEN LEARNING LAYER end-to-end: a rune chest is minted, journalled and answered entirely
 // client-side (progression/runeChests.js's own header), with NO server-side counterpart ever writing
 // this fact -- so restoreProfileFacts is the ONLY door it has into the server's own rewards block

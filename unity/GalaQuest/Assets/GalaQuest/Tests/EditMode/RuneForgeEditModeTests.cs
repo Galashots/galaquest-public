@@ -31,6 +31,7 @@ namespace GalaQuest.Tests
             Assert.That(GalaQuestProtocolV4.ForgeAnswer("task-1", "rune-2", "v1", 3), Does.Contain("\"contentVersion\":\"v1\""));
             Assert.That(GalaQuestProtocolV4.ForgeHint("task-1", "v1", 3), Does.Contain("\"type\":\"forge-hint\""));
             Assert.That(GalaQuestProtocolV4.ForgeClaim(3), Does.Contain("\"type\":\"forge-claim\""));
+            Assert.That(GalaQuestProtocolV4.ForgeRelight(3), Is.EqualTo("{\"v\":4,\"type\":\"forge-relight\",\"worldEpoch\":3}"));
             Assert.That(GalaQuestProtocolV4.Equip("helmet_magmalord", 3), Does.Contain("\"itemId\":\"helmet_magmalord\""));
         }
 
@@ -96,21 +97,77 @@ namespace GalaQuest.Tests
             using var session = new GalaQuestConnectionSession(wire);
             session.Begin(new GalaQuestSelectedProfile(ProfileId, "Aster", "[]"));
             Assert.That(session.TryOpenRuneForge(), Is.False);
+            Assert.That(session.TryRelightRuneForge(), Is.False);
             wire.Open();
             Assert.That(session.TryOpenRuneForge(), Is.False);
+            Assert.That(session.TryRelightRuneForge(), Is.False);
             wire.Receive(Welcome);
             Assert.That(session.TryOpenRuneForge(), Is.True);
             Assert.That(session.TrySelectRuneForgePack("grapheme-er-family"), Is.True);
             Assert.That(session.TryAnswerRuneForge("task-1", "rune-1", "v1"), Is.True);
             Assert.That(session.TryRequestRuneForgeHint("task-1", "v1"), Is.True);
             Assert.That(session.TryClaimRuneForge(), Is.True);
+            Assert.That(session.TryRelightRuneForge(), Is.True);
+            Assert.That(wire.Sent, Does.Contain("{\"v\":4,\"type\":\"forge-relight\"}"));
             Assert.That(session.TryEquip("helmet_magmalord"), Is.True);
 
             wire.Close("{\"code\":4001}");
             Assert.That(session.CanReconnect, Is.False);
             Assert.That(session.TryOpenRuneForge(), Is.False);
             Assert.That(session.TryClaimRuneForge(), Is.False);
+            Assert.That(session.TryRelightRuneForge(), Is.False);
             Assert.That(session.TryEquip("helmet_magmalord"), Is.False);
+        }
+
+        // Protocol-level only, deliberately: no presenter surface consumes a relight response yet,
+        // so asserting presenter text here would prove nothing a player can see. When the relight
+        // UI lands it brings its own presentation coverage.
+        [Test]
+        public void RelightForgeStateCarriesJustLitAndKeepsAlreadyLitDistinct()
+        {
+            var relitJson = ValidState.Replace("\"status\":\"ready\"",
+                "\"status\":\"owned\",\"response\":\"relit\",\"justLit\":true");
+            Assert.That(GalaQuestProtocolV4.TryReadServerFrame(relitJson, out var relit), Is.True);
+            Assert.That(relit.forge.response, Is.EqualTo("relit"));
+            Assert.That(relit.forge.justLit, Is.True);
+
+            // justLit must come off the wire, not be inferred from the response string: the server
+            // sets both from the same worldApplied value, and a client that guessed one from the
+            // other would replay the finale ceremony on a reconnect.
+            var replayJson = ValidState.Replace("\"status\":\"ready\"",
+                "\"status\":\"owned\",\"response\":\"already-lit\"");
+            Assert.That(GalaQuestProtocolV4.TryReadServerFrame(replayJson, out var replay), Is.True);
+            Assert.That(replay.forge.response, Is.EqualTo("already-lit"));
+            Assert.That(replay.forge.justLit, Is.False,
+                "An omitted justLit must default to false, never to a fresh completion.");
+        }
+
+        [Test]
+        public void EncounterForgeDefaultsToDarkAndReadsLitWhenPresent()
+        {
+            Assert.That(GalaQuestProtocolV4.TryReadServerFrame(Welcome, out var welcome), Is.True);
+            Assert.That(welcome.encounter, Is.Not.Null);
+            Assert.That(welcome.encounter.forge, Is.Not.Null);
+            Assert.That(welcome.encounter.forge.lit, Is.False);
+
+            const string litSnapshot = "{\"v\":4,\"type\":\"snapshot\",\"id\":\"p1\",\"destinationId\":\"emberworks-deep\",\"worldEpoch\":0,\"tick\":7,\"encounter\":{\"revision\":3,\"forge\":{\"lit\":true}}}";
+            Assert.That(GalaQuestProtocolV4.TryReadServerFrame(litSnapshot, out var lit), Is.True);
+            Assert.That(lit.encounter.forge.lit, Is.True);
+
+            var wire = new Wire();
+            using var session = new GalaQuestConnectionSession(wire);
+            session.Begin(new GalaQuestSelectedProfile(ProfileId, "Aster", "[]"));
+            wire.Open();
+            Assert.That(session.ForgeLit, Is.False);
+            wire.Receive(Welcome);
+            Assert.That(session.ForgeLit, Is.False);
+            wire.Receive(litSnapshot);
+            Assert.That(session.ForgeLit, Is.True);
+            // A private forge-state reply carries no encounter, so it must not clobber the latch.
+            wire.Receive(ValidState);
+            Assert.That(session.ForgeLit, Is.True);
+            wire.Close("closed");
+            Assert.That(session.ForgeLit, Is.False);
         }
 
         [Test]

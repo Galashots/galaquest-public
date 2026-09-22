@@ -55,6 +55,9 @@ export const PRIVATE_PROFILE_FACT_TYPES = Object.freeze([
   'forge-task-attempted',
   'forge-task-assisted',
   'forge-task-completed',
+  // P3-CP1: the completing profile's own Relight fact -- personal, forge-family private, restored
+  // by the rightful profile exactly like the task history above it.
+  'forge-relight-completed',
   'pet-owned',
   'pet-equipped',
 ]);
@@ -80,6 +83,10 @@ export const PROFILE_FACT_TYPES = Object.freeze([
 export const WORLD_FACT_TYPES = Object.freeze([
   'village-upgrade',
   'beacon-lit',
+  // P3-CP1: the ONE narrow Emberworks shared-world fact -- the Rune Forge is lit, for everybody.
+  // A device may not restore one (see restoreProfileFacts); the server publishes it on
+  // welcome/snapshot, exactly like beacon-lit above.
+  'emberworks-forge-lit',
 ]);
 
 /**
@@ -276,6 +283,9 @@ const SERVER_SHARED_WORLD_EVENT_ID_PREFIXES = Object.freeze([
   'hollow-cache:',
   'village-upgrade:',
   'beacon-lit:',
+  // P3-CP1: the shared Forge-lit identity is server-authored; no journal row may reserve it, under
+  // any fact type.
+  'emberworks-forge-lit:',
 ]);
 
 // These are current personal durable identity families whose id embeds the owning profile. They are
@@ -301,6 +311,10 @@ const PROFILE_SCOPED_EVENT_ID_PREFIXES = Object.freeze([
   'forge-assist:',
   'forge-complete:',
   'forge-entitlement:',
+  // P3-CP1: the personal Relight completion, minted `forge-relight:<profileId>:<entitlementId>` by
+  // the server's own completion transaction -- same treatment as every forge identity above: the
+  // profile it names may restore it, another profile may not reserve it out from under them.
+  'forge-relight:',
   // Rune chests: minted `rune-chest:<profileId>:<chestId>` by progression/runeChests.js's own
   // runeChestXpEventId, CLIENT-SIDE ONLY, the same way an offline Lantern unlock is (`lantern-
   // unlocked:<profileId>` above) -- unlike kill-xp, there is no server-side counterpart that ever
@@ -360,6 +374,29 @@ function reservedProfileEventOwner(eventId) {
   const owner = remainder.slice(0, separator);
   if (owner === OFFLINE_JOURNAL_OWNER) return null;
   return sanitizeGuestId(owner) === owner ? owner : null;
+}
+
+// P3-CP1 identity-collision repair: each server-shared-world id namespace above names exactly
+// the fact type(s) that may ever occupy it. A personal or equipment fact arriving under one of
+// these ids is not a replay of anything -- it is a different semantic event squatting a shared
+// identity -- and the store refuses it loudly at write time rather than letting INSERT OR IGNORE
+// swallow the real world row when it arrives later. cart-loot: legitimately carries two currency
+// types (one physical haul, two denominations); every other namespace names exactly one.
+const SHARED_WORLD_EVENT_ID_TYPES = Object.freeze({
+  'cart-loot:': ['coin-earned', 'shard-earned'],
+  'hollow-cache:': ['shard-earned'],
+  'village-upgrade:': ['village-upgrade'],
+  'beacon-lit:': ['beacon-lit'],
+  'emberworks-forge-lit:': ['emberworks-forge-lit'],
+});
+
+/** The world fact type(s) allowed under this eventId, or null when the id is not shared-world. */
+export function sharedWorldTypesForEventId(eventId) {
+  if (typeof eventId !== 'string') return null;
+  for (const prefix of SERVER_SHARED_WORLD_EVENT_ID_PREFIXES) {
+    if (eventId.startsWith(prefix)) return SHARED_WORLD_EVENT_ID_TYPES[prefix] ?? null;
+  }
+  return null;
 }
 
 export function isClientRestorableProfileFact(fact, profileId) {
