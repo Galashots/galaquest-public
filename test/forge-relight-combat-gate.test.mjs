@@ -344,3 +344,23 @@ test('P3-CP2 hasServerKillXpFor is a literal server-origin prefix proof, nothing
     fixture.cleanup();
   }
 });
+
+// The gate reads durable kill rows, never the spawn table, so it cannot notice on its own when a
+// prerequisite has no spawner: Relight then refuses every live player with a clean silence. That
+// happened once (emberworks-alpha-1 was named here before any zone authored it), so pin the
+// agreement against the population a real Emberworks simulation actually spawns.
+test('every Relight combat prerequisite is actually spawned in Emberworks, with the seeded kind', async () => {
+  const { createSimulation } = await import('../net/gameServerCore.mjs');
+  const { EMBERWORKS_DEEP_DESTINATION_ID } = await import('../public/src/world/zones/emberworksDeep.js');
+  const sim = createSimulation({ destinationId: EMBERWORKS_DEEP_DESTINATION_ID });
+  sim.addPlayer('relight-reachability');
+  const spawned = new Map(sim.encounterSnapshot().enemies.map((enemy) => [enemy.enemyId, enemy.kind]));
+  const seededKind = { [GREMLIN_ID]: 'lava-gremlin', [ALPHA_ID]: 'alpha-wolf' };
+  assert.equal(FORGE_RELIGHT_COMBAT_PREREQUISITES.length, 2);
+  for (const enemyId of FORGE_RELIGHT_COMBAT_PREREQUISITES) {
+    assert.ok(spawned.has(enemyId),
+      `Relight requires a server-observed kill of ${enemyId}, but Emberworks spawns only ${JSON.stringify([...spawned.keys()])}`);
+    assert.equal(spawned.get(enemyId), seededKind[enemyId],
+      `test/forge-combat-seed.mjs prices ${enemyId} as ${seededKind[enemyId]}; the live spawn must agree`);
+  }
+});

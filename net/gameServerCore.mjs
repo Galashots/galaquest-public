@@ -123,9 +123,10 @@ export const RUNE_FORGE_REACH_METERS = 3.25;
 // P3-CP2: the mixed-combat prerequisite the Relight gate demands. Durable SERVER-OBSERVED
 // contribution to defeating BOTH authored Emberworks combat roles -- read off store rows with
 // `origin IS NULL` (see rewardStore's hasServerKillXpFor), never off the profile's restorable
-// journal. This deliberately names no Burst input: children may solve combat naturally. The Alpha
-// has no Emberworks spawner yet (#190 owns that); the gate reads durable rows, not the spawn
-// table, so this law lands before the spawn does without touching combat, zones, or tuning.
+// journal. This deliberately names no Burst input: children may solve combat naturally. The gate
+// reads durable rows, not the spawn table, so every id here must also be authored in
+// EMBERWORKS_DEEP_ENEMIES or Relight is silently unreachable; test/forge-relight-combat-gate.test.mjs
+// pins that agreement against the live Emberworks simulation.
 export const FORGE_RELIGHT_COMBAT_PREREQUISITES = Object.freeze([
   'emberworks-gremlin-1',
   'emberworks-alpha-1',
