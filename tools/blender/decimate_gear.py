@@ -24,8 +24,8 @@ the atlas that collapse destroys -- which is why the collapse no longer needs de
 
 Guarantees, all verified and printed rather than assumed:
 
-* the pinned Blender is refused unless it is EXACTLY 4.5.13 LTS, and the SUMMARY line carries its
-  build hash as well -- see the determinism note;
+* the pinned Blender is refused unless it is EXACTLY 4.5.13 LTS build daeeeca98fb0, and the SUMMARY
+  line carries that build hash as well -- see the determinism note;
 * the source is refused unless it is rigid single-mesh/single-primitive/single-material gear, so this
   cannot silently mangle a skinned character with a rig (use decimate_hero.py for the naked hero);
 * every source primitive must be a glTF TRIANGLES primitive (mode 4) that declares POSITION -- the atom
@@ -49,8 +49,8 @@ angle and island margin, a fixed Cycles seed and sample count, and a fixed image
 identical inputs, target and bake size produce byte-identical output FOR ONE EXACT BLENDER BUILD. That
 is a claim about a build, not about the semantic version "4.5.13": the collapse result, the unwrap and
 the baked pixels are not promised to match a different build that reports the same version, so the gate
-below matches the full version string AND the SUMMARY line records bpy.app.build_hash, the two together
-naming the binary the bytes belong to. Verify by running twice and diffing, which is what the A1 note
+below matches the full version string AND bpy.app.build_hash, while the SUMMARY line records that same
+hash to name the binary the bytes belong to. Verify by running twice and diffing, which is what the A1 note
 records.
 """
 
@@ -190,10 +190,11 @@ def arguments() -> tuple[str, str, int, int]:
 
 
 # The GalaQuest derivative lane pins Blender 4.5.13 (see tools/unity-migration/convert-gear-asset.mjs).
-# bpy.app.version is (4, 5, 13) on that release; the full version string is what is matched, and the
-# SUMMARY line records the build hash, because the determinism claim above is per exact build -- a
-# version number alone does not name the binary, and the same version ships as more than one build.
+# bpy.app.version is (4, 5, 13) on that release; the full version string and build hash are both
+# matched, because the determinism claim above is per exact build -- a version number alone does not
+# name the binary, and the same version ships as more than one build.
 PINNED_BLENDER_VERSION_STRING = "4.5.13 LTS"
+PINNED_BLENDER_BUILD_HASH = "daeeeca98fb0"
 
 
 def blender_build_hash() -> str:
@@ -206,12 +207,14 @@ def blender_build_hash() -> str:
 
 def assert_pinned_blender() -> str:
     """Refuse any binary but the pinned one, and return its build hash for the run's SUMMARY line."""
-    if bpy.app.version_string != PINNED_BLENDER_VERSION_STRING:
+    build = blender_build_hash()
+    if bpy.app.version_string != PINNED_BLENDER_VERSION_STRING or build != PINNED_BLENDER_BUILD_HASH:
         raise SystemExit(
-            f"Blender {bpy.app.version_string} is not the pinned {PINNED_BLENDER_VERSION_STRING}; the "
-            "weld, the collapse, the unwrap and the bake are only reproducible per exact Blender build"
+            f"Blender {bpy.app.version_string} build={build} is not the pinned "
+            f"{PINNED_BLENDER_VERSION_STRING} build={PINNED_BLENDER_BUILD_HASH}; the weld, the collapse, "
+            "the unwrap and the bake are only reproducible per exact Blender build"
         )
-    return blender_build_hash()
+    return build
 
 
 def file_identity(path: str) -> tuple[int, int] | None:

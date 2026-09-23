@@ -178,9 +178,10 @@ seam-split vertices, collapse-decimate without a UV delimit, unwrap fresh UVs, a
 from the full-resolution source onto the reduced mesh — is now the reducer itself:
 `tools/blender/decimate_gear.py` performs those steps in that order, and step 2 above is the command
 that runs it. It is reproducible **byte-identical per exact Blender build**, not per version number: it
-refuses any binary whose `bpy.app.version_string` is not exactly `4.5.13 LTS`, and its `SUMMARY` line
-records `bpy.app.build_hash` beside that version, because the same version number ships as more than one
-build and the collapse, the unwrap and the baked pixels are not promised to match a different one. It
+refuses any binary unless `bpy.app.version_string` is exactly `4.5.13 LTS` **and**
+`bpy.app.build_hash` is exactly `daeeeca98fb0`; its `SUMMARY` line records that hash beside the
+version, because the same version number ships as more than one build and the collapse, the unwrap and
+the baked pixels are not promised to match a different one. It
 also measures its own work rather than trusting the operators: a bake whose ray cast reached nothing
 leaves an image of one colour everywhere and still reports success, so the baked pixels must vary, the
 fresh unwrap must own the only UV map on the reduced mesh, the reduced mesh is the only object exported,
