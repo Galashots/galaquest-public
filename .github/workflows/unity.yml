@@ -1,18 +1,13 @@
 name: unity
 
 on:
-  pull_request:
-    paths:
-      - 'unity/**'
-      - 'tools/unity/**'
+  # GalaQuest is public and this job executes on Leo's desktop.
+  # Only trusted pushes inside this repository may wake the self-hosted runner.
+  # Fork pull requests never execute here.
   push:
-    branches:
-      - main
     paths:
       - 'unity/**'
       - 'tools/unity/**'
-  # Workflow-only changes intentionally do not wake the slow Unity desktop.
-  # Use manual dispatch when validating this workflow itself.
   workflow_dispatch:
 
 concurrency:
@@ -24,8 +19,6 @@ permissions:
 
 jobs:
   editmode:
-    # This repository is public. Never execute an untrusted fork PR on Leo's desktop.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, galaquest-unity, unity-6000.3.23f1]
     timeout-minutes: 45
     env:
@@ -79,7 +72,6 @@ jobs:
           & $env:UNITY_EXE `
             -batchmode `
             -nographics `
-            -quit `
             -projectPath $env:UNITY_PROJECT_PATH `
             -buildTarget WebGL `
             -runTests `
@@ -87,15 +79,27 @@ jobs:
             -testResults $results `
             -logFile $log
 
-          $exit = $LASTEXITCODE
+          $unityExit = $LASTEXITCODE
           if (Test-Path $log) {
             Get-Content $log -Tail 160
           }
           if (-not (Test-Path $results)) {
-            throw "Unity produced no EditMode results file (exit code $exit)."
+            throw "Unity produced no EditMode results file (exit code $unityExit)."
           }
-          if ($exit -ne 0) {
-            throw "Unity EditMode tests failed with exit code $exit."
+
+          [xml]$testXml = Get-Content $results -Raw
+          $testRun = $testXml.'test-run'
+          if (-not $testRun) {
+            throw 'Unity test results did not contain an NUnit test-run root.'
+          }
+          Write-Host ("Unity tests: total={0} passed={1} failed={2} skipped={3} result={4}" -f
+            $testRun.total, $testRun.passed, $testRun.failed, $testRun.skipped, $testRun.result)
+
+          if ([int]$testRun.failed -gt 0 -or $testRun.result -eq 'Failed') {
+            throw "Unity EditMode tests reported failures."
+          }
+          if ($unityExit -ne 0) {
+            throw "Unity exited with code $unityExit despite producing results."
           }
 
       - name: Verify Unity left tracked source clean
@@ -112,7 +116,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unity-editmode-${{ github.event.pull_request.head.sha || github.sha }}
+          name: unity-editmode-${{ github.sha }}
           path: |
             ${{ runner.temp }}\galaquest-editmode-results.xml
             ${{ runner.temp }}\galaquest-unity-editmode.log
