@@ -25,31 +25,40 @@
 // cavity and visual all UNKNOWN. Promotion into shipped production stays Owner-controlled, and a
 // CANDIDATE record is not a promotion.
 //
-// Repeating the command on a real checkout is safe by construction, in two ways the dry run and the
+// Repeating the command on a real checkout is safe by construction, in three ways the dry run and the
 // record both describe:
 //
 //   * Confinement is real, not lexical, and it covers every path a run may back up or write: the three
 //     planned outputs, the FBX's texture siblings, and the converter's provenance record. Each target's
 //     parent directory is created when needed and then resolved with fs.realpathSync; a target whose
 //     resolved parent leaves its owned root, that runs through a symlink component, that already exists
-//     as a symlink, or that resolves to the source file is refused. Identity is compared as well as
-//     spelling: a hard link is a second name for the same bytes, so an existing target whose device and
-//     inode match the source's is refused before anything is backed up. No symlink or hard-link alias
-//     can overwrite the source, even with --force.
-//   * The run is transactional. Before any child command, whatever already exists (outputs, the
-//     converter's provenance file, and the FBX's texture siblings) is copied into a backup directory
-//     under os.tmpdir(), and pre-existing texture siblings are then deleted so the record can only name
-//     textures this run produced. Any failure -- a child exit, an over-budget reduction, a record write
-//     -- removes every output this run created and restores every backed-up file byte-for-byte. No
-//     partial outputs survive a failed run.
+//     as a symlink, or that resolves to the source file is refused, before anything is backed up.
+//   * A second name is never treated as a first one. An existing write target that is a symlink, that
+//     resolves to the source, or that has more than one hard link (statSync().nlink > 1) is refused even
+//     with --force: the other name of a hard link can be anywhere on the machine, so rewriting this path
+//     would change a file outside every owned root.
+//   * The run is transactional, and it only ever adds or replaces files it is allowed to write. Before
+//     any child command, whatever already exists (the three planned outputs, the FBX's
+//     `<Name>.texture-<digits>.<jpg|jpeg|png>` siblings, and the converter's provenance file) is copied
+//     into a backup directory under os.tmpdir(). Any failure -- a child
+//     exit, an over-budget reduction, a record write -- removes every output this run created and
+//     restores every backed-up file byte-for-byte. No partial outputs survive a failed run.
+//
+// Nothing is ever deleted to make room. A sibling beside the FBX that is not exactly
+// `<Name>.texture-<digits>.<jpg|jpeg|png>` -- a Unity `.meta`, another extension, a non-numeric index --
+// is a file this run did not write and may not overwrite, so the run refuses and names it; `--force` does
+// not change that, and no `*.meta` file is ever touched.
 //
 // Usage:
 //   node tools/assets/gear-intake.mjs --source <candidate.glb> --id <gear.slot.name> \
 //     --name <PascalName> --tris <budget> [--dry-run] [--force] [--blender <path>]
 //
-//   --dry-run  print the exact planned commands and output paths, run nothing, write nothing
-//   --force    allow replacing outputs that already exist (a real run refuses this by default; the
-//              replaced bytes are backed up and restored if the run then fails)
+//   --dry-run  print the exact planned commands, output paths and refusals; run nothing, write nothing
+//   --force    allow overwriting exactly the files this run writes: the three planned outputs, the
+//              `<Name>.texture-<digits>.<jpg|jpeg|png>` siblings beside the FBX, and a converter
+//              provenance record that already uses this semantic id. It never deletes a file and never
+//              overrides a refusal (a symlink, a shared hard link, a foreign sibling); replaced bytes are
+//              backed up and restored if the run then fails.
 //   --blender  the Blender binary; the converter still enforces its own pinned-version gate
 
 import { createHash } from 'node:crypto';
@@ -109,6 +118,15 @@ export const OUTPUT_ROOTS = Object.freeze([REDUCED_GLB_DIR, FBX_DIR, INTAKE_RECO
  * recorded.
  */
 export const TEXTURE_SIBLING_INFIX = '.texture-';
+
+/**
+ * The only sibling names this run may ever overwrite: `<Name>.texture-<digits>.<jpg|jpeg|png>`.
+ *
+ * Everything else that starts with `<Name>.texture-` -- a Unity `.meta`, another extension, a
+ * non-numeric index -- is a file this run did not write. It is refused and named for the operator to
+ * move, never deleted and never overwritten, with or without --force.
+ */
+export const CONVERTER_TEXTURE_SIBLING = /\.texture-\d+\.(?:jpg|jpeg|png)$/i;
 
 /**
  * The directory the converter's provenance record belongs to.
@@ -339,6 +357,51 @@ export function textureSiblings(plan, { readdir = readdirSync } = {}) {
 }
 
 /**
+ * The siblings this run may overwrite: exactly `<Name>.texture-<digits>.<jpg|jpeg|png>`.
+ *
+ * Split out from `textureSiblings` because the two answer different questions. This one is the
+ * permission set -- these are the files a conversion writes, so --force may replace them. Everything
+ * else the prefix matches is somebody else's file (see `foreignTextureSiblings`).
+ */
+export function converterTextureSiblings(plan, { readdir = readdirSync } = {}) {
+  return textureSiblings(plan, { readdir })
+    .filter((sibling) => CONVERTER_TEXTURE_SIBLING.test(basename(sibling.path)));
+}
+
+/**
+ * Siblings that share the `<Name>.texture-` prefix but are not a name the converter writes.
+ *
+ * A Unity `.meta` is the case that matters: Unity puts `<Name>.texture-0.jpg.meta` beside the texture,
+ * so a prefix glob "for stale textures" will happily match and destroy the import metadata of every
+ * already-imported derivative. A foreign sibling is not this run's file, so the run refuses and names
+ * it rather than deleting it or writing over it -- with --force included.
+ */
+export function foreignTextureSiblings(plan, { readdir = readdirSync } = {}) {
+  return textureSiblings(plan, { readdir })
+    .filter((sibling) => !CONVERTER_TEXTURE_SIBLING.test(basename(sibling.path)));
+}
+
+/**
+ * Refuse a real run when a foreign sibling sits beside the FBX.
+ *
+ * There is no delete path in this tool at all: the operator moves the file, because only the operator
+ * knows whether it is a Unity import artifact, a hand-placed file, or debris worth removing.
+ */
+export function assertNoForeignTextureSiblings(plan, { readdir = readdirSync } = {}) {
+  const foreign = foreignTextureSiblings(plan, { readdir });
+  if (!foreign.length) return;
+  throw new IntakeError(
+    `refusing to write beside the FBX: ${foreign.length} file(s) match ${plan.name}${TEXTURE_SIBLING_INFIX}* `
+    + `but are not a ${plan.name}.texture-<digits>.<jpg|jpeg|png> sibling this run writes:\n`
+    + foreign.map((sibling) => `  ${sibling.repoPath}`).join('\n')
+    + `\nMove them out of the way yourself${foreign.some((sibling) => sibling.path.endsWith('.meta'))
+      ? ' (a *.meta file is Unity import metadata; never let a tool delete it)' : ''}. `
+    + 'This tool never deletes or overwrites them, and --force does not change that.',
+    'foreign-sibling',
+  );
+}
+
+/**
  * Every path a run may back up or write, each carrying the owned directory it must resolve inside.
  *
  * The three planned outputs are not the whole story: the converter writes an FBX beside texture
@@ -362,10 +425,17 @@ export function writeTargets(plan, { readdir = readdirSync } = {}) {
   ];
 }
 
+/**
+ * The files this run writes that already exist, so --force has to be stated for them.
+ *
+ * Only converter-shaped texture siblings count: a foreign sibling is refused outright (even with
+ * --force) rather than treated as a replaceable conflict, so listing it here would offer the operator a
+ * permission this tool never grants.
+ */
 export function existingOutputs(plan, { exists = existsSync, readdir = readdirSync } = {}) {
   return [
     ...plan.outputs.filter((output) => exists(output.path)),
-    ...textureSiblings(plan, { readdir }),
+    ...converterTextureSiblings(plan, { readdir }),
   ];
 }
 
@@ -374,7 +444,8 @@ export function existingOutputs(plan, { exists = existsSync, readdir = readdirSy
  *
  * Refusing is deliberate: replacing a reduced GLB invalidates the hash recorded in both the intake
  * record and the converter's provenance, so it is a decision the operator states with --force
- * rather than a side effect of re-running a command.
+ * rather than a side effect of re-running a command. --force only ever grants permission to overwrite
+ * these files; it grants nothing else and deletes nothing.
  */
 export function assertOutputsAbsent(plan, { force = false, exists = existsSync, readdir = readdirSync } = {}) {
   if (force) return;
@@ -386,6 +457,84 @@ export function assertOutputsAbsent(plan, { force = false, exists = existsSync, 
       'exists',
     );
   }
+}
+
+/**
+ * Existing write targets that have more than one hard link.
+ *
+ * Only this path can see the hazard: the extra name of a hard link is indistinguishable from the file
+ * itself, so the write would land on whatever else shares those bytes -- inside the checkout or
+ * anywhere else on the machine. The count comes from statSync().nlink rather than from comparing inodes
+ * with the source, so a link that shares bytes with a file this tool has never heard of is refused too.
+ */
+export function sharedLinkTargets(plan, runtime) {
+  return writeTargets(plan, { readdir: runtime.readdir })
+    .filter((target) => runtime.nlink(target.path) > 1);
+}
+
+/**
+ * Refuse any existing write target with more than one hard link, even with --force.
+ *
+ * There is no way to unlink the other name from here, and no way to tell whether it is a scratch copy
+ * or the only copy of something that matters: the operator removes the extra link, or points --name at a
+ * different file, before this tool touches anything.
+ */
+export function assertNoSharedWriteTargets(plan, runtime) {
+  const shared = sharedLinkTargets(plan, runtime);
+  if (!shared.length) return;
+  throw new IntakeError(
+    `refusing to write ${shared.length} file(s) that already have more than one hard link:\n`
+    + shared.map((target) => `  ${target.repoPath} (${runtime.nlink(target.path)} links)`).join('\n')
+    + '\nA hard link is another name for the same bytes, and that other name can be anywhere on this '
+    + 'machine, so rewriting this path would change a file outside every owned root. Remove the extra '
+    + 'link first; --force does not override this.',
+    'unsafe-output',
+  );
+}
+
+/**
+ * The converter's provenance record for this semantic id, as it exists right now, or null.
+ *
+ * tools/unity-migration/convert-gear-asset.mjs upserts by semanticId: a record for the same id is
+ * replaced rather than added, which silently drops the previous derivative's hash and Blender version.
+ * The tool reads that file before running so the replacement is a decision the operator states with
+ * --force instead of a side effect of re-running a command.
+ */
+export function existingProvenanceRecord(plan, runtime) {
+  if (!runtime.exists(plan.provenancePath)) return null;
+  let provenance;
+  try {
+    provenance = JSON.parse(runtime.readFile(plan.provenancePath));
+  } catch (error) {
+    throw new IntakeError(
+      `cannot read ${plan.provenanceRepoPath} as JSON (${error.message}); the converter merges its record `
+      + 'into that file, so fix or remove it before running',
+      'provenance',
+    );
+  }
+  if (!Array.isArray(provenance?.records)) {
+    throw new IntakeError(
+      `cannot read ${plan.provenanceRepoPath}: it has no records array, so the converter could not merge `
+      + 'into it either; fix or remove the file before running',
+      'provenance',
+    );
+  }
+  return provenance.records.find((record) => record?.semanticId === plan.id) ?? null;
+}
+
+/** Refuse replacing an existing provenance record for this id unless the operator says --force. */
+export function assertSemanticIdUnused(plan, runtime, { force = false } = {}) {
+  const record = existingProvenanceRecord(plan, runtime);
+  if (!record || force) return;
+  throw new IntakeError(
+    `${plan.provenanceRepoPath} already records ${plan.id}`
+    + `${typeof record.derivativeRepoPath === 'string' ? ` (${record.derivativeRepoPath})` : ''}; `
+    + 'refusing to replace provenance for an existing semantic id without --force:\n'
+    + `  ${plan.id}\n`
+    + 'The converter upserts by id, so re-running would drop the recorded hash and Blender version of '
+    + 'the derivative that is there now.',
+    'provenance-id',
+  );
 }
 
 /**
@@ -440,13 +589,13 @@ function assertNoSymlinkComponents(plan, target, runtime) {
  *
  * The checks, in order: the target is inside an owned root and holds no `..`; no component of its path
  * is a symlink; its realpath'd parent is the owned root or below it; the target does not already exist
- * as a symlink (dangling included); the resolved target is not the source file; and an existing target
- * is not the source under another name. Created directories are recorded on `journal` so a rollback can
- * remove them.
+ * as a symlink (dangling included); and the resolved target is not the source file. Created directories
+ * are recorded on `journal` so a rollback can remove them. A hard link -- any second name for the same
+ * bytes, whether or not it is the source's -- is refused separately by `assertNoSharedWriteTargets`,
+ * which reads the link count instead of guessing at identity.
  */
 export function assertOutputsConfined(plan, runtime, journal) {
   const sourceRealPath = runtime.realpath(plan.sourcePath);
-  const sourceIdentity = runtime.identity(plan.sourcePath);
   const targets = [];
   for (const output of writeTargets(plan, { readdir: runtime.readdir })) {
     if (output.repoPath.split('/').includes('..')) {
@@ -493,19 +642,6 @@ export function assertOutputsConfined(plan, runtime, journal) {
         'unsafe-output',
       );
     }
-    // A hard link is a second name for the same bytes, so two different resolved paths do not prove two
-    // different files. Device + inode do: a target that shares the source's identity would be rewritten
-    // in place by the child commands this run executes.
-    const identity = runtime.identity(output.path);
-    if (identity && sourceIdentity
-      && identity.dev === sourceIdentity.dev && identity.ino === sourceIdentity.ino) {
-      throw new IntakeError(
-        `refusing to write ${output.repoPath}: it is the same file as the source, `
-        + `${displayPath(plan.sourcePath, plan.root)} (same device and inode, i.e. a hard link); `
-        + 'a second name must not overwrite the source, even with --force',
-        'unsafe-output',
-      );
-    }
     targets.push({ ...output, resolvedPath });
   }
   return targets;
@@ -527,19 +663,18 @@ function beginIntakeJournal(runtime) {
 }
 
 /**
- * Copy every file a failure might have to put back, then take stale texture siblings out of the way.
+ * Copy every file a failure might have to put back.
  *
- * The copy is what makes the run reversible; the deletion is what makes the record honest. A sibling
- * left over from an earlier conversion shares the `<Name>.texture-<N>.<ext>` shape this run's textures
- * have, so leaving it in place would put a file this run did not produce into the record -- and a
- * successful run would appear to have produced more textures than it did. It is deleted only after it
- * has been backed up, and a rollback restores it byte-for-byte.
+ * This is the whole pre-write phase, and it only ever reads: nothing is moved out of the way, and
+ * nothing is deleted. The targets are exactly the files this run is allowed to write -- the three
+ * planned outputs, the `<Name>.texture-<digits>.<jpg|jpeg|png>` siblings the converter writes, and its
+ * provenance record. A sibling with any other `<Name>.texture-` name, a Unity `.meta` included, is
+ * refused earlier by name rather than adopted as a write target, so no `.meta` is ever copied over.
  */
 function backUpIntakeInputs(plan, runtime, journal) {
-  const textures = textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path);
   const backupTargets = [
     ...plan.outputs.map((output) => output.path),
-    ...textures,
+    ...converterTextureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
     plan.provenancePath,
   ];
   for (const path of [...new Set(backupTargets)]) {
@@ -548,10 +683,8 @@ function backUpIntakeInputs(plan, runtime, journal) {
     runtime.copyFile(path, backupPath);
     journal.backups.push({ path, backupPath });
   }
-  for (const path of textures) {
-    if (runtime.exists(path)) runtime.remove(path);
-  }
-  // From here the tree can already differ from the pre-state, so a failure has to restore it.
+  // The pre-state is now held in the backup directory, so from here a failure has to put every one of
+  // these files back -- the child commands that follow are the ones allowed to overwrite them.
   journal.dirty = true;
 }
 
@@ -564,24 +697,23 @@ function commitIntake(runtime, journal) {
  * created, then take back out any directory this run created that is now empty.
  */
 function rollbackIntake(plan, runtime, journal) {
-  const backups = new Map(journal.backups.map((entry) => [entry.path, entry.backupPath]));
   if (journal.dirty) {
+    // Restore first, then remove what is left over: a path that was backed up is never removed, because
+    // putting its original bytes back is the point of the backup.
+    const restored = new Set();
+    for (const { path, backupPath } of journal.backups) {
+      ensureDirectory(plan, runtime, journal, dirname(path));
+      runtime.copyFile(backupPath, path);
+      restored.add(path);
+    }
     const written = [
       ...plan.outputs.map((output) => output.path),
-      ...textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
+      ...converterTextureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
       plan.provenancePath,
-      // A backed-up file this run deleted rather than rewrote -- a stale texture sibling taken out
-      // before the conversion -- is missing from the listing above and still has to come back.
-      ...journal.backups.map((entry) => entry.path),
     ];
     for (const path of [...new Set(written)]) {
-      const backupPath = backups.get(path);
-      if (backupPath !== undefined) {
-        ensureDirectory(plan, runtime, journal, dirname(path));
-        runtime.copyFile(backupPath, path);
-      } else if (runtime.exists(path)) {
-        runtime.remove(path);
-      }
+      if (restored.has(path)) continue;
+      if (runtime.exists(path)) runtime.remove(path);
     }
   }
   runtime.remove(journal.directory);
@@ -594,8 +726,16 @@ function rollbackIntake(plan, runtime, journal) {
   }
 }
 
-/** The dry-run/human view of a plan. Pure: `--dry-run` prints exactly what a real run would do. */
-export function formatPlan(plan, { conflicts = [] } = {}) {
+/**
+ * The dry-run/human view of a plan. Pure: `--dry-run` prints exactly what a real run would do, including
+ * the refusals, so the two cannot drift apart.
+ *
+ * `conflicts` are the existing files a real run refuses without --force. `foreign` and `shared` are the
+ * ones it refuses with --force as well, and `duplicateId` is the provenance record --force would replace.
+ */
+export function formatPlan(plan, {
+  conflicts = [], foreign = [], shared = [], duplicateId = null,
+} = {}) {
   const lines = [
     `Gear intake plan for ${plan.id}`,
     '',
@@ -603,20 +743,41 @@ export function formatPlan(plan, { conflicts = [] } = {}) {
     `  triangle budget  ${plan.tris}`,
     `  source           ${plan.sourceDisplay}`,
     '',
-    '  writes',
+    '  writes — the three output roots',
     ...plan.outputs.map((output) => `    ${output.repoPath}`),
-    `    ${plan.provenanceRepoPath}  (side effect of ${GEAR_CONVERT_TOOL}, not of this tool)`,
-    `    ${plan.fbxRepoPath.replace(/\.fbx$/i, '')}${TEXTURE_SIBLING_INFIX}*.*  `
-      + '(also written next to the FBX by the converter)',
+    `  writes — the converter this run reuses, ${GEAR_CONVERT_TOOL}`,
+    `    ${plan.fbxRepoPath.replace(/\.fbx$/i, '')}.texture-<digits>.<jpg|jpeg|png>`,
+    `    ${plan.provenanceRepoPath}`,
     '',
     '  commands',
     ...plan.commands.map((entry, index) => `    ${index + 1}. ${entry.display}`),
   ];
+  if (foreign.length) {
+    lines.push(
+      '',
+      '  refused even with --force — not a file this run writes; move them yourself',
+      ...foreign.map((sibling) => `    ${sibling.repoPath}`),
+    );
+  }
+  if (shared.length) {
+    lines.push(
+      '',
+      '  refused even with --force — these have more than one hard link',
+      ...shared.map((target) => `    ${target.repoPath}`),
+    );
+  }
   if (conflicts.length) {
     lines.push(
       '',
       '  already present — a real run refuses this without --force',
       ...conflicts.map((output) => `    ${output.repoPath}`),
+    );
+  }
+  if (duplicateId) {
+    lines.push(
+      '',
+      `  ${plan.provenanceRepoPath} already records ${duplicateId} — `
+      + 'a real run refuses this without --force',
     );
   }
   return `${lines.join('\n')}\n`;
@@ -683,13 +844,13 @@ export function defaultRuntime() {
       }
     },
     realpath: (path) => realpathSync(path),
-    // Device + inode, i.e. file identity rather than a path string. Missing files have no identity.
-    identity: (path) => {
+    // How many names these bytes have. Missing files have none, and a file that cannot be stat'd is not
+    // a file this run may overwrite, so the failure answers 0 rather than throwing mid-check.
+    nlink: (path) => {
       try {
-        const stats = statSync(path);
-        return { dev: stats.dev, ino: stats.ino };
+        return statSync(path).nlink;
       } catch {
-        return null;
+        return 0;
       }
     },
     mkdir: (path) => mkdirSync(path, { recursive: true }),
@@ -730,13 +891,20 @@ export function runIntake(options, runtime = defaultRuntime()) {
 
   if (options.dryRun) {
     assertSourceExists(plan, { exists: runtime.exists });
-    // Nothing is written, so an existing output is information here, not yet a refusal.
-    const conflicts = existingOutputs(plan, { exists: runtime.exists, readdir: runtime.readdir });
-    runtime.log(formatPlan(plan, { conflicts }));
+    // Nothing is written, so an existing file is information here, not yet a refusal. The plan reports
+    // the same conditions a real run refuses on -- computed by the same functions -- so the operator can
+    // see which flags the next run needs, and which refusals --force will not lift.
+    runtime.log(formatPlan(plan, {
+      conflicts: existingOutputs(plan, { exists: runtime.exists, readdir: runtime.readdir }),
+      foreign: foreignTextureSiblings(plan, { readdir: runtime.readdir }),
+      shared: sharedLinkTargets(plan, runtime),
+      duplicateId: existingProvenanceRecord(plan, runtime)?.semanticId ?? null,
+    }));
     return { plan, dryRun: true, record: null, commands: [] };
   }
 
   assertSourceExists(plan, { exists: runtime.exists });
+  assertNoForeignTextureSiblings(plan, { readdir: runtime.readdir });
   assertOutputsAbsent(plan, { force: options.force, exists: runtime.exists, readdir: runtime.readdir });
 
   // From here on the run can leave bytes behind, so it is wrapped in a transaction: the pre-state is
@@ -750,6 +918,13 @@ export function runIntake(options, runtime = defaultRuntime()) {
     // copied anywhere, and a symlinked texture sibling or provenance file must never be accepted as an
     // output this run may overwrite.
     assertOutputsConfined(plan, runtime, journal);
+    // A hard link is a write outside the roots that no path check can see, so the link count is read
+    // before anything is copied or overwritten.
+    assertNoSharedWriteTargets(plan, runtime);
+    // The provenance read comes after both safety checks so a symlinked or hard-linked record is
+    // refused as an unsafe destination rather than merely reported as an unreadable file. It still
+    // happens before the backup and before any child command.
+    assertSemanticIdUnused(plan, runtime, { force: options.force });
     backUpIntakeInputs(plan, runtime, journal);
 
     const commands = [];
@@ -801,7 +976,10 @@ export function runIntake(options, runtime = defaultRuntime()) {
 
     // List the directory rather than assume `.texture-0.jpg`: the converter writes one sibling per
     // packed image, so a multi-material source produces several and the record must name all of them.
-    const textures = textureSiblings(plan, { readdir: runtime.readdir })
+    // Only converter-shaped names are listed -- a Unity `.meta` is not a texture this run produced, and
+    // one may well appear here when the Editor is open and imports the new derivative (irrelevant ones
+    // would have refused the run before it started).
+    const textures = converterTextureSiblings(plan, { readdir: runtime.readdir })
       .map((sibling) => ({
         repoPath: sibling.repoPath,
         sha256: runtime.sha256(sibling.path),

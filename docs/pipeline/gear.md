@@ -90,43 +90,59 @@ stems, so `IronwoodShield` becomes `unity/GalaQuest/GearSources/ironwood-shield-
 `<Name>.texture-<N>.<ext>` sibling beside the FBX per packed image, so those files are outputs of the
 run as well.
 
-**Where a run may write is decided by resolved paths, not by spelling.** Writing is confined to those
-two directories plus `docs/asset-production/intake/<id>.json`, the record. The tool refuses a
-destination under `public/assets` — that tree is runtime payload and registry-declared territory, and a
-candidate has no registry entry yet — and it never writes the source. Each destination's parent
-directory is created when needed and then resolved with `fs.realpathSync`; a destination is refused when
-its path holds a `..` segment, when it resolves outside the checkout, when its resolved parent is not
-inside its owned root, when any parent component of its path is a symlink, when the destination itself
-already exists as a symlink (a dangling one included, which `fs.existsSync` cannot see), or when it
-resolves to the source file. That last check is why a symlink alias pointing at the source cannot
-overwrite it even with `--force`: the comparison is between resolved paths, not path strings.
+**Where a run may write is decided by resolved paths, not by spelling.** A run writes to exactly four
+locations: the three output roots — `unity/GalaQuest/GearSources/` for the reduced GLB,
+`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/` for the FBX and the
+`<Name>.texture-<digits>.<jpg|jpeg|png>` siblings beside it, and `docs/asset-production/intake/` for the
+record — plus the converter's own provenance file at
+`unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json`, which this tool does not own but
+reuses. The tool refuses a destination under `public/assets` — that tree is runtime payload and
+registry-declared territory, and a candidate has no registry entry yet — and it never writes the source.
+Each destination's parent directory is created when needed and then resolved with `fs.realpathSync`; a
+destination is refused when its path holds a `..` segment, when it resolves outside the checkout, when
+its resolved parent is not inside its owned root, when any parent component of its path is a symlink,
+when the destination itself already exists as a symlink (a dangling one included, which `fs.existsSync`
+cannot see), or when it resolves to the source file. That last check is why a symlink alias pointing at
+the source cannot overwrite it even with `--force`: the comparison is between resolved paths, not path
+strings. The same confinement covers every path a run may back up or write, not only the three planned
+outputs: each texture sibling and the provenance file are checked before either is backed up or written,
+so a symlinked sibling or provenance file cannot carry the run's writes out of the checkout. Path
+spelling proves nothing about the bytes on either side of it either — a second name for the same bytes
+is invisible to a resolved-path comparison — so an existing output, texture sibling or provenance file
+with more than one hard link (`statSync().nlink > 1`) is refused even with `--force`, because the other
+name of that link can be anywhere on the machine and rewriting this path would change a file outside
+every owned root.
 
-The same confinement is applied to every path a run may back up or write, not only to the three planned
-outputs: each `<Name>.texture-<N>.<ext>` sibling and the converter's own
-`unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` are checked before either is
-backed up or written, so a symlinked sibling or provenance file cannot carry the run's writes out of the
-checkout. `--force` does not relax any of this. Different resolved paths do not prove different files
-either — a hard link is a second name for the same bytes — so an existing output or texture sibling
-whose device and inode match the source's is refused even with `--force`, because writing that path
-would rewrite the candidate in place.
-
-**A run is transactional.** Before the first child command, whatever already exists — each planned
-output, the FBX's texture siblings, and the converter's own provenance file at
+**A run is transactional, and it never deletes anything.** Before the first child command, whatever
+already exists — each planned output, the FBX's `<Name>.texture-<digits>.<jpg|jpeg|png>` siblings, and
+the converter's own provenance file at
 `unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` — is copied into a backup
-directory under the OS temp directory. Pre-existing `<Name>.texture-<N>.<ext>` siblings are then deleted
-before the conversion runs, so a texture an earlier conversion left behind cannot survive into this
-run's record as if this run had produced it; a rollback puts the deleted siblings back byte-for-byte. Any
-failure, whether a child exits non-zero, the reduction misses the triangle budget, or the record cannot
-be written, deletes every file and directory this run created, restores every backed-up file
-byte-for-byte, removes the backup directory and exits non-zero with the reason. No partial output
-survives a failed run, and a run refused before it wrote anything leaves the tree exactly as it found it
-— and if the rollback itself fails, the tool reports that incomplete rollback rather than also claiming
-that no outputs remain.
+directory under the OS temp directory. Nothing is moved out of the way and no file is ever deleted, by
+this tool or on its behalf. Any failure, whether a child exits non-zero, the reduction misses the
+triangle budget, or the record cannot be written, deletes only the files and directories this run itself
+created, restores every backed-up file byte-for-byte, removes the backup directory and exits non-zero
+with the reason. No partial output survives a failed run, and a run refused before it wrote anything
+leaves the tree exactly as it found it — and if the rollback itself fails, the tool reports that
+incomplete rollback rather than also claiming that no outputs remain.
 
 **Existing files are refused unless you say otherwise.** A real run refuses to replace an existing
-output — including any existing `<Name>.texture-<N>.<ext>` sibling — unless `--force` is given, and the
-bytes it replaces are backed up and put back if the run then fails. Add `--dry-run` to print the exact
-commands, the output paths and the texture pattern while running and writing nothing.
+output — including an existing `<Name>.texture-<digits>.<jpg|jpeg|png>` sibling — or a
+`GearDerivativeProvenance.json` record that already uses this `--id`, unless `--force` is given; the
+bytes it replaces are backed up and put back if the run then fails. `--force` grants exactly that and
+nothing else: it permits overwriting the files this run writes, it never deletes a file, and it never
+overrides a refusal — a symlink, a file that already has more than one hard link, a foreign sibling, or
+a provenance file the tool cannot read as JSON.
+
+A sibling beside the FBX whose name only *starts* like a texture this run writes — a Unity
+`<Name>.texture-0.jpg.meta`, another extension such as `.tga`, or a non-numeric index — is somebody
+else's file. The run refuses and names it, telling the operator to move it manually, with or without
+`--force`; no `*.meta` file is ever touched. Add `--dry-run` to print the exact commands, the four write
+locations and every refusal the next real run would raise — including an existing provenance record for
+this `--id` — while running and writing nothing.
+
+Known follow-up, out of scope for this command: `tools/unity-migration/convert-gear-asset.mjs` records
+only a `texture-0.jpg` sibling in the shared provenance file, so a derivative with several packed images
+is under-described there even though this run's intake record lists them all.
 
 The record is a machine-readable account of what ran — paths, sha256, triangle counts, the Blender
 version, every texture sibling the conversion produced (path, sha256 and size, sorted) and the exact
