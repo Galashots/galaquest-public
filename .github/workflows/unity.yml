@@ -5,14 +5,14 @@ on:
     paths:
       - 'unity/**'
       - 'tools/unity/**'
-      - '.github/workflows/unity.yml'
   push:
     branches:
       - main
     paths:
       - 'unity/**'
       - 'tools/unity/**'
-      - '.github/workflows/unity.yml'
+  # Workflow-only changes intentionally do not wake the slow Unity desktop.
+  # Use manual dispatch when validating this workflow itself.
   workflow_dispatch:
 
 concurrency:
