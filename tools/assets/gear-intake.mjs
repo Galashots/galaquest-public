@@ -1,0 +1,518 @@
+#!/usr/bin/env node
+// One command: a generated rigid-gear GLB -> a Unity-ready candidate plus a machine-readable record.
+//
+// Rigid gear arrives from a generator at 10-100x the triangles the game budget allows, and
+// docs/pipeline/character-armoring.md prescribes the order:
+//
+//   reference -> generate -> silhouette review -> remesh/decimate -> material normalization ->
+//   fit/mount -> Studio -> running game
+//
+// The first two mechanical steps of that order -- reduce to a stated budget, then record the Unity
+// FBX derivative -- were first performed by hand for the Dawnwarden helmet, one shell command at a
+// time, and the transcript had to be reconstructed into prose afterwards. Reconstructing evidence by
+// hand is where numbers drift and where a step silently gets skipped, so this orchestrates the
+// EXISTING tools and writes down what actually ran.
+//
+// It adds no reducer, no converter, no fit and no acceptance of its own. It is deliberately not:
+//
+//   * a fit or a mount (no socket, no GearItemDefinition, no cavity);
+//   * material normalization;
+//   * a Unity import (no .meta/.asset/C#, no Editor run);
+//   * visual acceptance. Reduced bytes still need the review in
+//     docs/review-guides/asset-visual-review.md, and running-game pixels remain final authority.
+//
+// The record it writes says exactly that in machine-readable form: status CANDIDATE with fit,
+// cavity and visual all UNKNOWN. Promotion into shipped production stays Owner-controlled, and a
+// CANDIDATE record is not a promotion.
+//
+// Usage:
+//   node tools/assets/gear-intake.mjs --source <candidate.glb> --id <gear.slot.name> \
+//     --name <PascalName> --tris <budget> [--dry-run] [--force] [--blender <path>]
+//
+//   --dry-run  print the exact planned commands and output paths, run nothing, write nothing
+//   --force    allow replacing outputs that already exist (a real run refuses this by default)
+//   --blender  the Blender binary; the converter still enforces its own pinned-version gate
+
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+// Reuse the converter's own version probe rather than inventing a second one: "which Blender produced
+// these bytes" is part of a derivative's identity, and two probes could disagree.
+import { PINNED_BLENDER_VERSION, PROVENANCE_PATH, blenderVersion } from '../unity-migration/convert-gear-asset.mjs';
+
+export const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
+export const GLB_REPORT_TOOL = 'tools/assets/glb-intake-report.mjs';
+export const DECIMATE_TOOL = 'tools/blender/decimate_gear.py';
+export const GEAR_CONVERT_TOOL = 'tools/unity-migration/convert-gear-asset.mjs';
+
+// The reduced GLB is the SOURCE of a Unity derivative, not a runtime asset, so it lives outside
+// Assets/ (Unity would otherwise import it) and outside public/assets (everything there must be
+// declared in the asset registry, and a candidate has no registry entry yet).
+export const REDUCED_GLB_DIR = 'unity/GalaQuest/GearSources';
+export const FBX_DIR = 'unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets';
+export const INTAKE_RECORD_DIR = 'docs/asset-production/intake';
+
+/**
+ * Every directory this tool is allowed to write into.
+ *
+ * A whitelist rather than a public/assets blacklist, so a future edit cannot quietly add a fourth
+ * output location. The converter's own provenance record is NOT in this list: it is a side effect of
+ * reusing that tool, not an output of this one, and `plan.provenanceRepoPath` declares it so the dry
+ * run never hides it.
+ */
+export const OUTPUT_ROOTS = Object.freeze([REDUCED_GLB_DIR, FBX_DIR, INTAKE_RECORD_DIR]);
+
+export const GEAR_ID_PATTERN = /^gear\.[a-z]+\.[a-z0-9-]+$/;
+
+// PascalCase: one or more Capitalized runs. Rejects snake_case, kebab-case, a leading digit and
+// anything carrying a path separator, so a name can never steer an output path out of its directory.
+export const PASCAL_NAME_PATTERN = /^(?:[A-Z][a-z0-9]*)+$/;
+
+export class IntakeError extends Error {
+  constructor(message, code = 'usage') {
+    super(message);
+    this.name = 'IntakeError';
+    this.code = code;
+  }
+}
+
+/** Display a path the way it was asked for: repo-relative inside the checkout, absolute outside. */
+function displayPath(absolute) {
+  const rootPrefix = `${REPO_ROOT}${sep}`;
+  return absolute.startsWith(rootPrefix) ? absolute.slice(rootPrefix.length).split(sep).join('/') : absolute;
+}
+
+function quoteArgument(value) {
+  return /[\s'"]/.test(value) ? `'${value.replaceAll("'", "'\\''")}'` : value;
+}
+
+/** `DawnwardenSword` -> `dawnwarden-sword`, matching the existing GearSources file naming. */
+export function kebabCase(name) {
+  return name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase();
+}
+
+function command(step, file, args, { capture = false, note = null } = {}) {
+  return {
+    step,
+    file,
+    args,
+    capture,
+    note,
+    display: [file, ...args].map(quoteArgument).join(' '),
+  };
+}
+
+/**
+ * Plan the intake: the output paths and the exact commands, and nothing else.
+ *
+ * Pure on purpose -- no filesystem, no child processes, no clock. That is what makes `--dry-run`
+ * trustworthy: the dry run prints the plan a real run executes, so the two cannot drift apart.
+ * Filesystem state (does the source exist, do the outputs already exist) is checked separately by
+ * `assertSourceExists` / `assertOutputsAbsent`.
+ */
+export function planGearIntake(options) {
+  const { source, id, name } = options;
+  const blender = options.blender ?? 'blender';
+  const tris = options.tris;
+  const problems = [];
+
+  if (typeof source !== 'string' || !source.trim()) problems.push('--source <candidate.glb> is required');
+  if (typeof id !== 'string' || !id.trim()) problems.push('--id <gear.slot.name> is required');
+  else if (!GEAR_ID_PATTERN.test(id)) {
+    problems.push(`--id must match gear.<slot>.<name> in lower-case (got ${JSON.stringify(id)})`);
+  }
+  if (typeof name !== 'string' || !name.trim()) problems.push('--name <PascalName> is required');
+  else if (!PASCAL_NAME_PATTERN.test(name)) {
+    problems.push(`--name must be PascalCase (got ${JSON.stringify(name)})`);
+  }
+  if (!Number.isInteger(tris) || tris <= 0) {
+    problems.push(`--tris must be a positive whole triangle budget (got ${JSON.stringify(tris)})`);
+  }
+  if (typeof blender !== 'string' || !blender.trim()) problems.push('--blender requires a path');
+  if (problems.length) throw new IntakeError(problems.join('\n'));
+
+  if (!source.toLowerCase().endsWith('.glb')) {
+    throw new IntakeError(`--source must be a .glb (got ${JSON.stringify(source)})`);
+  }
+
+  const sourcePath = resolve(REPO_ROOT, source);
+  const kebab = kebabCase(name);
+  const reducedRepoPath = `${REDUCED_GLB_DIR}/${kebab}-lod.glb`;
+  const fbxRepoPath = `${FBX_DIR}/${name}.fbx`;
+  const recordRepoPath = `${INTAKE_RECORD_DIR}/${id}.json`;
+  const reducedPath = resolve(REPO_ROOT, reducedRepoPath);
+  const fbxPath = resolve(REPO_ROOT, fbxRepoPath);
+  const recordPath = resolve(REPO_ROOT, recordRepoPath);
+
+  const outputs = [
+    { kind: 'reduced-glb', repoPath: reducedRepoPath, path: reducedPath },
+    { kind: 'unity-fbx', repoPath: fbxRepoPath, path: fbxPath },
+    { kind: 'intake-record', repoPath: recordRepoPath, path: recordPath },
+  ];
+  for (const output of outputs) assertOutputPathAllowed(output.repoPath);
+
+  // "Never modify the source" is not only about opening the file read-only: a source that already
+  // sits at one of our output paths would be replaced a step later.
+  for (const output of outputs) {
+    if (sourcePath === output.path) {
+      throw new IntakeError(
+        `--source is the same file as the planned output ${output.repoPath}; refusing to overwrite the source`,
+        'unsafe-output',
+      );
+    }
+  }
+
+  const sourceDisplay = displayPath(sourcePath);
+  const commands = [
+    command('report-source', 'node', [GLB_REPORT_TOOL, '--json', sourceDisplay], { capture: true }),
+    command('decimate', blender, [
+      '--background', '--factory-startup', '--python', DECIMATE_TOOL, '--',
+      sourceDisplay, reducedRepoPath, String(tris),
+    ], { note: 'reduces the candidate to the stated budget and never writes the source' }),
+    command('report-reduced', 'node', [GLB_REPORT_TOOL, '--json', reducedRepoPath], { capture: true }),
+    command('convert-fbx', 'node', [
+      GEAR_CONVERT_TOOL,
+      '--source', reducedRepoPath,
+      '--dest', fbxRepoPath,
+      '--id', id,
+      '--blender', blender,
+    ], { note: 'drives the pinned Blender FBX converter; its own version gate still applies' }),
+  ];
+
+  return {
+    id,
+    name,
+    kebab,
+    tris,
+    blender,
+    sourcePath,
+    sourceDisplay,
+    reducedPath,
+    reducedRepoPath,
+    fbxPath,
+    fbxRepoPath,
+    recordPath,
+    recordRepoPath,
+    provenanceRepoPath: PROVENANCE_PATH,
+    outputs,
+    commands,
+  };
+}
+
+/**
+ * Refuse an output path outside the three owned directories.
+ *
+ * public/assets is called out by name because it is the mistake someone will actually make: it is
+ * where gear already lives, but it is the runtime payload plus the asset registry's declared
+ * territory, and the migration bridge pins registry records. A candidate derivative is neither.
+ */
+export function assertOutputPathAllowed(repoPath) {
+  const normalized = String(repoPath).split('\\').join('/').replace(/^\.\//, '');
+  if (normalized === 'public/assets' || normalized.startsWith('public/assets/')) {
+    throw new IntakeError(
+      `refusing to write ${normalized}: public/assets is runtime payload and registry-declared territory, `
+      + `not an intake destination. Reduced gear belongs in ${REDUCED_GLB_DIR}.`,
+      'unsafe-output',
+    );
+  }
+  if (!OUTPUT_ROOTS.some((root) => normalized.startsWith(`${root}/`))) {
+    throw new IntakeError(
+      `refusing to write ${normalized}: outputs are confined to ${OUTPUT_ROOTS.join(', ')}`,
+      'unsafe-output',
+    );
+  }
+  return normalized;
+}
+
+export function assertSourceExists(plan, { exists = existsSync } = {}) {
+  if (!exists(plan.sourcePath)) throw new IntakeError(`--source not found: ${plan.sourceDisplay}`, 'missing-source');
+}
+
+export function existingOutputs(plan, { exists = existsSync } = {}) {
+  return plan.outputs.filter((output) => exists(output.path));
+}
+
+/**
+ * Refuse a real run that would replace existing outputs.
+ *
+ * Refusing is deliberate: replacing a reduced GLB invalidates the hash recorded in both the intake
+ * record and the converter's provenance, so it is a decision the operator states with --force
+ * rather than a side effect of re-running a command.
+ */
+export function assertOutputsAbsent(plan, { force = false, exists = existsSync } = {}) {
+  if (force) return;
+  const present = existingOutputs(plan, { exists });
+  if (present.length) {
+    throw new IntakeError(
+      'outputs already exist; refusing to overwrite without --force:\n'
+      + present.map((output) => `  ${output.repoPath}`).join('\n'),
+      'exists',
+    );
+  }
+}
+
+/** The dry-run/human view of a plan. Pure: `--dry-run` prints exactly what a real run would do. */
+export function formatPlan(plan, { conflicts = [] } = {}) {
+  const lines = [
+    `Gear intake plan for ${plan.id}`,
+    '',
+    `  name             ${plan.name}`,
+    `  triangle budget  ${plan.tris}`,
+    `  source           ${plan.sourceDisplay}`,
+    '',
+    '  writes',
+    ...plan.outputs.map((output) => `    ${output.repoPath}`),
+    `    ${plan.provenanceRepoPath}  (side effect of ${GEAR_CONVERT_TOOL}, not of this tool)`,
+    '',
+    '  commands',
+    ...plan.commands.map((entry, index) => `    ${index + 1}. ${entry.display}`),
+  ];
+  if (conflicts.length) {
+    lines.push(
+      '',
+      '  already present — a real run refuses this without --force',
+      ...conflicts.map((output) => `    ${output.repoPath}`),
+    );
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The durable record for one intake.
+ *
+ * Pure, and deliberately without a timestamp: identical inputs must produce identical bytes, so two
+ * records that differ mean their inputs differed. `fit`/`cavity`/`visual` stay UNKNOWN until the
+ * stages that own those questions have actually run -- an intake run answers none of them.
+ */
+export function buildIntakeRecord({ plan, source, reduced, fbx, texture = null, blender, commands }) {
+  return {
+    schema: 'galaquest.gear-intake-record',
+    schemaVersion: 1,
+    id: plan.id,
+    name: plan.name,
+    status: 'CANDIDATE',
+    triangleBudget: plan.tris,
+    source: {
+      repoPath: source.repoPath,
+      sha256: source.sha256,
+      sizeBytes: source.sizeBytes,
+      triangles: source.triangles,
+      vertices: source.vertices,
+    },
+    reduced: {
+      repoPath: reduced.repoPath,
+      sha256: reduced.sha256,
+      sizeBytes: reduced.sizeBytes,
+      triangles: reduced.triangles,
+      vertices: reduced.vertices,
+    },
+    fbx: {
+      repoPath: fbx.repoPath,
+      sha256: fbx.sha256,
+      sizeBytes: fbx.sizeBytes,
+      ...(texture
+        ? { texture: { repoPath: texture.repoPath, sha256: texture.sha256, sizeBytes: texture.sizeBytes } }
+        : {}),
+    },
+    blender: {
+      path: plan.blender,
+      version: blender.version,
+      pinnedVersion: blender.pinnedVersion,
+    },
+    commands,
+    fit: 'UNKNOWN',
+    cavity: 'UNKNOWN',
+    visual: 'UNKNOWN',
+  };
+}
+
+/** Real side effects, isolated so tests can drive `runIntake` without Blender or a filesystem. */
+export function defaultRuntime() {
+  return {
+    exists: existsSync,
+    mkdir: (path) => mkdirSync(path, { recursive: true }),
+    writeFile: (path, data) => writeFileSync(path, data),
+    size: (path) => statSync(path).size,
+    sha256: (path) => createHash('sha256').update(readFileSync(path)).digest('hex'),
+    blenderVersion,
+    log: (line) => process.stdout.write(`${line}\n`),
+    run: (entry) => execFileSync(entry.file, entry.args, {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: entry.capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
+    }),
+  };
+}
+
+function execute(plan, runtime, step) {
+  const entry = plan.commands.find((candidate) => candidate.step === step);
+  if (!entry) throw new IntakeError(`no planned command for step ${step}`, 'internal');
+  const output = runtime.run(entry);
+  return { entry, output: typeof output === 'string' ? output : '' };
+}
+
+/**
+ * Validate, then execute the plan in order.
+ *
+ * Returns the outcome instead of exiting, so the CLI and the tests drive the same function; only
+ * `main` turns a throw into an exit code.
+ */
+export function runIntake(options, runtime = defaultRuntime()) {
+  const plan = planGearIntake(options);
+
+  if (options.dryRun) {
+    assertSourceExists(plan, { exists: runtime.exists });
+    // Nothing is written, so an existing output is information here, not yet a refusal.
+    const conflicts = existingOutputs(plan, { exists: runtime.exists });
+    runtime.log(formatPlan(plan, { conflicts }));
+    return { plan, dryRun: true, record: null, commands: [] };
+  }
+
+  assertSourceExists(plan, { exists: runtime.exists });
+  assertOutputsAbsent(plan, { force: options.force, exists: runtime.exists });
+
+  const commands = [];
+  const report = (step) => {
+    const { entry, output } = execute(plan, runtime, step);
+    commands.push(entry.display);
+    if (output) runtime.log(output.trimEnd());
+    let parsed;
+    try {
+      parsed = JSON.parse(output);
+    } catch {
+      throw new IntakeError(`${entry.display} did not print JSON to read the triangle count from`, 'report');
+    }
+    // tools/assets/glb-intake-report.mjs --json prints an ARRAY, one entry per requested file, and this
+    // plan asks about exactly one file. The array shape is checked rather than assumed: reading
+    // `triangles` off the array itself would yield `undefined`, the budget gate would compare
+    // `undefined > budget` (false) and every over-budget reduction would pass unnoticed.
+    if (!Array.isArray(parsed) || parsed.length !== 1 || !Number.isInteger(parsed[0]?.triangles)) {
+      throw new IntakeError(`${entry.display} did not report exactly one triangle count`, 'report');
+    }
+    return parsed[0];
+  };
+
+  const sourceReport = report('report-source');
+
+  const decimate = execute(plan, runtime, 'decimate');
+  commands.push(decimate.entry.display);
+
+  const reducedReport = report('report-reduced');
+
+  // Fail closed: an unreadable triangle count is not a passing budget. The report tool reports such
+  // primitives as unknownTrianglePrimitives rather than counting them as zero.
+  if (reducedReport.unknownTrianglePrimitives > 0) {
+    throw new IntakeError(
+      `reduced GLB has ${reducedReport.unknownTrianglePrimitives} primitive(s) whose triangle count could not be `
+      + `read; cannot claim the ${plan.tris} triangle budget`,
+      'budget',
+    );
+  }
+  if (reducedReport.triangles > plan.tris) {
+    throw new IntakeError(
+      `reduced GLB reports ${reducedReport.triangles} triangles, over the ${plan.tris} budget`,
+      'budget',
+    );
+  }
+
+  const convert = execute(plan, runtime, 'convert-fbx');
+  commands.push(convert.entry.display);
+
+  const textureRepoPath = plan.fbxRepoPath.replace(/\.fbx$/i, '.texture-0.jpg');
+  const texturePath = resolve(REPO_ROOT, textureRepoPath);
+  const record = buildIntakeRecord({
+    plan,
+    source: {
+      repoPath: displayPath(plan.sourcePath),
+      sha256: runtime.sha256(plan.sourcePath),
+      sizeBytes: runtime.size(plan.sourcePath),
+      triangles: sourceReport.triangles,
+      vertices: sourceReport.vertices,
+    },
+    reduced: {
+      repoPath: plan.reducedRepoPath,
+      sha256: runtime.sha256(plan.reducedPath),
+      sizeBytes: runtime.size(plan.reducedPath),
+      triangles: reducedReport.triangles,
+      vertices: reducedReport.vertices,
+    },
+    fbx: {
+      repoPath: plan.fbxRepoPath,
+      sha256: runtime.sha256(plan.fbxPath),
+      sizeBytes: runtime.size(plan.fbxPath),
+    },
+    texture: runtime.exists(texturePath)
+      ? { repoPath: textureRepoPath, sha256: runtime.sha256(texturePath), sizeBytes: runtime.size(texturePath) }
+      : null,
+    blender: { version: runtime.blenderVersion(plan.blender), pinnedVersion: PINNED_BLENDER_VERSION },
+    commands,
+  });
+
+  runtime.mkdir(dirname(plan.recordPath));
+  runtime.writeFile(plan.recordPath, `${JSON.stringify(record, null, 2)}\n`);
+  runtime.log(`Wrote ${plan.recordRepoPath} (status CANDIDATE; fit/cavity/visual UNKNOWN).`);
+  runtime.log('Next: GearItemDefinition + Workbench fit, then visual review — this record is not acceptance.');
+
+  return { plan, dryRun: false, record, commands };
+}
+
+export function usage() {
+  return 'usage: node tools/assets/gear-intake.mjs --source <candidate.glb> --id <gear.slot.name> '
+    + '--name <PascalName> --tris <budget> [--dry-run] [--force] [--blender <path>]';
+}
+
+function parseTriangleBudget(value) {
+  if (!/^\d+$/.test(value)) {
+    throw new IntakeError(`--tris must be a positive whole number of triangles (got ${JSON.stringify(value)})`);
+  }
+  const tris = Number(value);
+  if (!Number.isSafeInteger(tris) || tris <= 0) {
+    throw new IntakeError(`--tris must be a positive whole number of triangles (got ${JSON.stringify(value)})`);
+  }
+  return tris;
+}
+
+export function parseArgs(argv) {
+  const options = { source: null, id: null, name: null, tris: null, blender: null, dryRun: false, force: false };
+  const valued = new Set(['--source', '--id', '--name', '--tris', '--blender']);
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === '--dry-run') { options.dryRun = true; continue; }
+    if (argument === '--force') { options.force = true; continue; }
+    if (!valued.has(argument)) {
+      throw new IntakeError(`unknown argument ${JSON.stringify(argument)}\n${usage()}`);
+    }
+    const value = argv[index + 1];
+    // A missing value must not swallow the next flag: `--name --force` is a typo, not a name.
+    if (value === undefined || valued.has(value) || value.startsWith('--')) {
+      throw new IntakeError(`${argument} requires a value\n${usage()}`);
+    }
+    index += 1;
+    options[argument.slice(2)] = argument === '--tris' ? parseTriangleBudget(value) : value;
+  }
+  return options;
+}
+
+export function main(argv = process.argv.slice(2)) {
+  try {
+    runIntake(parseArgs(argv));
+    return 0;
+  } catch (error) {
+    if (error instanceof IntakeError) {
+      process.stderr.write(`${error.message}\n`);
+      return error.code === 'usage' ? 2 : 1;
+    }
+    throw error;
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main());
+}

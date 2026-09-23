@@ -64,6 +64,43 @@ equip/unequip visual review under [character-armoring.md](character-armoring.md)
 helmet must independently prove that it conceals the existing cut boundary. Structural coverage PASS
 does not establish either condition.
 
+### One-command rigid intake
+
+A generated rigid-gear GLB becomes a Unity-ready candidate, with its own evidence record, in one
+command from the repository root:
+
+```bash
+node tools/assets/gear-intake.mjs \
+  --source public/assets/gear/candidates/<candidate>.glb \
+  --id gear.shield.ironwood --name IronwoodShield --tris 1500
+```
+
+It orchestrates the existing tools in the order this lane already prescribes, and adds no reducer,
+converter, fit or acceptance of its own:
+
+1. `node tools/assets/glb-intake-report.mjs` — the before report;
+2. `blender --background --factory-startup --python tools/blender/decimate_gear.py -- <source> <reduced> <tris>`;
+3. the same report on the reduced GLB, which must be at or under `--tris` or the run fails;
+4. `node tools/unity-migration/convert-gear-asset.mjs` — the Unity FBX, with `--blender` passed through
+   so one Blender binary drives both steps.
+
+`--id` is the semantic `gear.<slot>.<name>` id and `--name` is PascalCase; the name supplies the file
+stems, so `IronwoodShield` becomes `unity/GalaQuest/GearSources/ironwood-shield-lod.glb` and
+`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx`. Writing is confined to those
+two directories and `docs/asset-production/intake/<id>.json`. The tool refuses a destination under
+`public/assets` — that tree is runtime payload and registry-declared territory, and a candidate has no
+registry entry yet — never writes the source, and refuses to replace an existing output unless
+`--force`. Add `--dry-run` to print the exact commands and output paths while running and writing
+nothing.
+
+The record is a machine-readable account of what ran — paths, sha256, triangle counts, the Blender
+version and the exact commands — and it states `"status": "CANDIDATE"` with `fit`, `cavity` and
+`visual` all `"UNKNOWN"`. That is the honest claim: intake reduces bytes and records the derivative,
+and it answers none of the fit, cavity or appearance questions. Reduced bytes still need the human
+review in [asset-visual-review.md](../review-guides/asset-visual-review.md); running-game pixels remain
+the final appearance authority; and promotion into shipped production stays Owner-controlled. The
+record directory is described in [intake/README.md](../asset-production/intake/README.md).
+
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 
 Checkpoint A answers WHERE gear attaches. The datum contract answers HOW BIG and WHICH WAY ROUND, in a
