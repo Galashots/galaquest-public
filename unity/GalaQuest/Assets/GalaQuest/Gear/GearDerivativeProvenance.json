@@ -14,6 +14,42 @@
   },
   "records": [
     {
+      "semanticId": "gear.helmet.dawnwarden",
+      "displayName": "DawnwardenHelmet",
+      "sourceRepoPath": "unity/GalaQuest/GearSources/dawnwarden-helmet-v1-lod.glb",
+      "sourceSha256": "28e550fd3830d236d562e46ea649941d43dc1895e11026b1322ad1c881b4fb50",
+      "sourceSizeBytes": 2398152,
+      "conversionTool": "Blender",
+      "conversionToolVersion": "4.5.13 LTS",
+      "pinnedBlenderVersion": "4.5.13",
+      "versionDrift": false,
+      "conversionScript": "tools/blender/convert_glb_to_fbx.py",
+      "conversionOptions": {
+        "axisForward": "-Z",
+        "axisUp": "Y",
+        "applyUnitScale": true,
+        "embedTextures": true,
+        "pathMode": "COPY",
+        "retarget": false,
+        "materialRepair": false
+      },
+      "derivativeRepoPath": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/DawnwardenHelmet.fbx",
+      "derivativeFiles": [
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/DawnwardenHelmet.fbx",
+          "kind": "model",
+          "sha256": "33a36c612ecf85daae59abc8eb476cf6d79bc535b59f590acc8334643a6a28a2",
+          "sizeBytes": 2448748
+        },
+        {
+          "path": "unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/DawnwardenHelmet.texture-0.jpg",
+          "kind": "source-material-texture",
+          "sha256": "229ccec351f2cd452ff24384da61f1f626191f6fac64c2eb0a8e4276a1f7d01c",
+          "sizeBytes": 2310434
+        }
+      ]
+    },
+    {
       "semanticId": "gear.shield.ironwood",
       "displayName": "IronwoodShield",
       "sourceRepoPath": "public/assets/gear/shield_ironwood.glb",
