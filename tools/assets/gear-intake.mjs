@@ -28,14 +28,19 @@
 // Repeating the command on a real checkout is safe by construction, in two ways the dry run and the
 // record both describe:
 //
-//   * Confinement is real, not lexical. Each output's parent directory is created when needed and then
-//     resolved with fs.realpathSync; an output whose resolved parent leaves its owned root, that runs
-//     through a symlink component, that already exists as a symlink, or that resolves to the source
-//     file is refused. A symlink alias cannot overwrite the source, even with --force.
+//   * Confinement is real, not lexical, and it covers every path a run may back up or write: the three
+//     planned outputs, the FBX's texture siblings, and the converter's provenance record. Each target's
+//     parent directory is created when needed and then resolved with fs.realpathSync; a target whose
+//     resolved parent leaves its owned root, that runs through a symlink component, that already exists
+//     as a symlink, or that resolves to the source file is refused. Identity is compared as well as
+//     spelling: a hard link is a second name for the same bytes, so an existing target whose device and
+//     inode match the source's is refused before anything is backed up. No symlink or hard-link alias
+//     can overwrite the source, even with --force.
 //   * The run is transactional. Before any child command, whatever already exists (outputs, the
 //     converter's provenance file, and the FBX's texture siblings) is copied into a backup directory
-//     under os.tmpdir(). Any failure -- a child exit, an over-budget reduction, a record write --
-//     removes every output this run created and restores every backed-up file byte-for-byte. No
+//     under os.tmpdir(), and pre-existing texture siblings are then deleted so the record can only name
+//     textures this run produced. Any failure -- a child exit, an over-budget reduction, a record write
+//     -- removes every output this run created and restores every backed-up file byte-for-byte. No
 //     partial outputs survive a failed run.
 //
 // Usage:
@@ -104,6 +109,14 @@ export const OUTPUT_ROOTS = Object.freeze([REDUCED_GLB_DIR, FBX_DIR, INTAKE_RECO
  * recorded.
  */
 export const TEXTURE_SIBLING_INFIX = '.texture-';
+
+/**
+ * The directory the converter's provenance record belongs to.
+ *
+ * The record is not one of this tool's declared outputs -- OUTPUT_ROOTS holds those -- but a run backs
+ * it up and the converter rewrites it, so it is a write target and needs an owned root of its own.
+ */
+export const PROVENANCE_DIR = PROVENANCE_PATH.split('/').slice(0, -1).join('/');
 
 export const GEAR_ID_PATTERN = /^gear\.[a-z]+\.[a-z0-9-]+$/;
 
@@ -319,9 +332,34 @@ export function textureSiblings(plan, { readdir = readdirSync } = {}) {
     .sort()
     .map((entry) => ({
       kind: 'fbx-texture',
+      ownedRoot: FBX_DIR,
       path: join(directory, entry),
       repoPath: displayPath(join(directory, entry), plan.root),
     }));
+}
+
+/**
+ * Every path a run may back up or write, each carrying the owned directory it must resolve inside.
+ *
+ * The three planned outputs are not the whole story: the converter writes an FBX beside texture
+ * siblings and rewrites its own provenance record. Those are write targets too, so confinement that
+ * covered only the planned paths would still let a symlinked sibling or provenance file carry a write
+ * out of the checkout.
+ */
+export function writeTargets(plan, { readdir = readdirSync } = {}) {
+  return [
+    ...plan.outputs.map((output) => ({
+      ...output,
+      ownedRoot: OUTPUT_ROOTS.find((root) => output.repoPath.startsWith(`${root}/`)),
+    })),
+    ...textureSiblings(plan, { readdir }),
+    {
+      kind: 'converter-provenance',
+      ownedRoot: PROVENANCE_DIR,
+      path: plan.provenancePath,
+      repoPath: plan.provenanceRepoPath,
+    },
+  ];
 }
 
 export function existingOutputs(plan, { exists = existsSync, readdir = readdirSync } = {}) {
@@ -398,24 +436,27 @@ function assertNoSymlinkComponents(plan, target, runtime) {
 }
 
 /**
- * Create each output's parent directory, resolve it for real, and refuse an unsafe destination.
+ * Create each write target's parent directory, resolve it for real, and refuse an unsafe destination.
  *
- * The checks, in order: the output is inside an owned root and holds no `..`; no component of its path
- * is a symlink; its realpath'd parent is the owned root or below it; the output does not already exist
- * as a symlink; and the resolved output is not the source file. Created directories are recorded on
- * `journal` so a rollback can remove them.
+ * The checks, in order: the target is inside an owned root and holds no `..`; no component of its path
+ * is a symlink; its realpath'd parent is the owned root or below it; the target does not already exist
+ * as a symlink (dangling included); the resolved target is not the source file; and an existing target
+ * is not the source under another name. Created directories are recorded on `journal` so a rollback can
+ * remove them.
  */
 export function assertOutputsConfined(plan, runtime, journal) {
   const sourceRealPath = runtime.realpath(plan.sourcePath);
+  const sourceIdentity = runtime.identity(plan.sourcePath);
   const targets = [];
-  for (const output of plan.outputs) {
+  for (const output of writeTargets(plan, { readdir: runtime.readdir })) {
     if (output.repoPath.split('/').includes('..')) {
       throw new IntakeError(
         `refusing to write ${output.repoPath}: '..' escapes the owned output roots`,
         'unsafe-output',
       );
     }
-    const ownedRoot = OUTPUT_ROOTS.find((root) => output.repoPath.startsWith(`${root}/`));
+    const ownedRoot = output.ownedRoot
+      ?? OUTPUT_ROOTS.find((root) => output.repoPath.startsWith(`${root}/`));
     if (!ownedRoot) {
       throw new IntakeError(
         `refusing to write ${output.repoPath}: outputs are confined to ${OUTPUT_ROOTS.join(', ')}`,
@@ -452,32 +493,66 @@ export function assertOutputsConfined(plan, runtime, journal) {
         'unsafe-output',
       );
     }
+    // A hard link is a second name for the same bytes, so two different resolved paths do not prove two
+    // different files. Device + inode do: a target that shares the source's identity would be rewritten
+    // in place by the child commands this run executes.
+    const identity = runtime.identity(output.path);
+    if (identity && sourceIdentity
+      && identity.dev === sourceIdentity.dev && identity.ino === sourceIdentity.ino) {
+      throw new IntakeError(
+        `refusing to write ${output.repoPath}: it is the same file as the source, `
+        + `${displayPath(plan.sourcePath, plan.root)} (same device and inode, i.e. a hard link); `
+        + 'a second name must not overwrite the source, even with --force',
+        'unsafe-output',
+      );
+    }
     targets.push({ ...output, resolvedPath });
   }
   return targets;
 }
 
 /**
- * Copy everything a failing run might have to put back into a temp directory under os.tmpdir().
+ * Start the transaction: a temp directory under os.tmpdir() for whatever a failing run has to put back.
  *
- * `journal.dirty` stays false until the first command that can leave bytes behind: a refusal before
- * that (a symlinked output, a `..` escape) must not "restore" a file nothing touched.
+ * `journal.dirty` stays false until the backup phase has finished, so a refusal before it (a symlinked
+ * target, a `..` escape) does not claim to "restore" a file nothing touched.
  */
-function beginIntakeJournal(plan, runtime) {
-  const directory = runtime.makeTempDir('galaquest-gear-intake-');
+function beginIntakeJournal(runtime) {
+  return {
+    directory: runtime.makeTempDir('galaquest-gear-intake-'),
+    backups: [],
+    createdDirs: [],
+    dirty: false,
+  };
+}
+
+/**
+ * Copy every file a failure might have to put back, then take stale texture siblings out of the way.
+ *
+ * The copy is what makes the run reversible; the deletion is what makes the record honest. A sibling
+ * left over from an earlier conversion shares the `<Name>.texture-<N>.<ext>` shape this run's textures
+ * have, so leaving it in place would put a file this run did not produce into the record -- and a
+ * successful run would appear to have produced more textures than it did. It is deleted only after it
+ * has been backed up, and a rollback restores it byte-for-byte.
+ */
+function backUpIntakeInputs(plan, runtime, journal) {
+  const textures = textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path);
   const backupTargets = [
     ...plan.outputs.map((output) => output.path),
-    ...textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
+    ...textures,
     plan.provenancePath,
   ];
-  const backups = [];
   for (const path of [...new Set(backupTargets)]) {
     if (!runtime.exists(path)) continue;
-    const backupPath = join(directory, `backup-${backups.length}`);
+    const backupPath = join(journal.directory, `backup-${journal.backups.length}`);
     runtime.copyFile(path, backupPath);
-    backups.push({ path, backupPath });
+    journal.backups.push({ path, backupPath });
   }
-  return { directory, backups, createdDirs: [], dirty: false };
+  for (const path of textures) {
+    if (runtime.exists(path)) runtime.remove(path);
+  }
+  // From here the tree can already differ from the pre-state, so a failure has to restore it.
+  journal.dirty = true;
 }
 
 function commitIntake(runtime, journal) {
@@ -495,6 +570,9 @@ function rollbackIntake(plan, runtime, journal) {
       ...plan.outputs.map((output) => output.path),
       ...textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
       plan.provenancePath,
+      // A backed-up file this run deleted rather than rewrote -- a stale texture sibling taken out
+      // before the conversion -- is missing from the listing above and still has to come back.
+      ...journal.backups.map((entry) => entry.path),
     ];
     for (const path of [...new Set(written)]) {
       const backupPath = backups.get(path);
@@ -605,6 +683,15 @@ export function defaultRuntime() {
       }
     },
     realpath: (path) => realpathSync(path),
+    // Device + inode, i.e. file identity rather than a path string. Missing files have no identity.
+    identity: (path) => {
+      try {
+        const stats = statSync(path);
+        return { dev: stats.dev, ino: stats.ino };
+      } catch {
+        return null;
+      }
+    },
     mkdir: (path) => mkdirSync(path, { recursive: true }),
     rmdir: (path) => rmdirSync(path),
     readdir: (path) => readdirSync(path),
@@ -654,9 +741,16 @@ export function runIntake(options, runtime = defaultRuntime()) {
 
   // From here on the run can leave bytes behind, so it is wrapped in a transaction: the pre-state is
   // copied to a backup directory first, and any failure restores it and removes what this run created.
-  const journal = beginIntakeJournal(plan, runtime);
+  // Setup lives inside the rollback scope, so a backup that fails halfway takes its temp directory out
+  // with it instead of leaking it.
+  let journal = null;
   try {
+    journal = beginIntakeJournal(runtime);
+    // Confinement runs before the first backup or write: a refused destination must not have its bytes
+    // copied anywhere, and a symlinked texture sibling or provenance file must never be accepted as an
+    // output this run may overwrite.
     assertOutputsConfined(plan, runtime, journal);
+    backUpIntakeInputs(plan, runtime, journal);
 
     const commands = [];
     const report = (step) => {
@@ -680,9 +774,6 @@ export function runIntake(options, runtime = defaultRuntime()) {
     };
 
     const sourceReport = report('report-source');
-
-    // The reduction is the first step that writes an output, so rollback is on the hook from here.
-    journal.dirty = true;
 
     const decimate = execute(plan, runtime, 'decimate');
     commands.push(decimate.entry.display);
@@ -752,18 +843,24 @@ export function runIntake(options, runtime = defaultRuntime()) {
     commitIntake(runtime, journal);
     return { plan, dryRun: false, record, commands };
   } catch (error) {
-    // A refusal that happens before the first writing command (a symlinked parent, a `..` escape) has
-    // nothing to put back, so it must not claim a rollback it did not perform. Only a `dirty` journal
-    // -- one where a command could have left bytes behind -- gets the transaction guarantee.
+    // A refusal that happens before the backup phase (a symlinked target, a `..` escape) has nothing to
+    // put back, so it must not claim a rollback it did not perform. Only a `dirty` journal -- one where
+    // bytes may already have moved -- gets the transaction guarantee.
     let rollbackNote = '';
-    try {
-      rollbackIntake(plan, runtime, journal);
-    } catch (rollbackError) {
-      rollbackNote = `\nWARNING: rollback was incomplete: ${rollbackError.message}`;
+    let rollbackFailed = false;
+    if (journal) {
+      try {
+        rollbackIntake(plan, runtime, journal);
+      } catch (rollbackError) {
+        rollbackFailed = true;
+        rollbackNote = `\nWARNING: rollback itself failed: ${rollbackError.message}`;
+      }
     }
     const code = error instanceof IntakeError ? error.code : 'runtime';
     const message = error instanceof IntakeError ? error.message : `intake failed: ${error.message}`;
-    const guarantee = journal.dirty
+    // An incomplete rollback is the more important fact, and it is the one the operator has to act on:
+    // claiming "no outputs remain" beside it would be exactly the claim the tool just failed to honour.
+    const guarantee = journal?.dirty && !rollbackFailed
       ? '\nThe run failed and was rolled back: no outputs or backups remain.'
       : '';
     throw new IntakeError(`${message}${guarantee}${rollbackNote}`, code);

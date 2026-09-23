@@ -97,18 +97,31 @@ candidate has no registry entry yet — and it never writes the source. Each des
 directory is created when needed and then resolved with `fs.realpathSync`; a destination is refused when
 its path holds a `..` segment, when it resolves outside the checkout, when its resolved parent is not
 inside its owned root, when any parent component of its path is a symlink, when the destination itself
-already exists as a symlink, or when it resolves to the source file. That last check is why a symlink
-alias pointing at the source cannot overwrite it even with `--force`: the comparison is between resolved
-paths, not path strings.
+already exists as a symlink (a dangling one included, which `fs.existsSync` cannot see), or when it
+resolves to the source file. That last check is why a symlink alias pointing at the source cannot
+overwrite it even with `--force`: the comparison is between resolved paths, not path strings.
+
+The same confinement is applied to every path a run may back up or write, not only to the three planned
+outputs: each `<Name>.texture-<N>.<ext>` sibling and the converter's own
+`unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` are checked before either is
+backed up or written, so a symlinked sibling or provenance file cannot carry the run's writes out of the
+checkout. `--force` does not relax any of this. Different resolved paths do not prove different files
+either — a hard link is a second name for the same bytes — so an existing output or texture sibling
+whose device and inode match the source's is refused even with `--force`, because writing that path
+would rewrite the candidate in place.
 
 **A run is transactional.** Before the first child command, whatever already exists — each planned
 output, the FBX's texture siblings, and the converter's own provenance file at
 `unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` — is copied into a backup
-directory under the OS temp directory. Any failure, whether a child exits non-zero, the reduction
-misses the triangle budget, or the record cannot be written, deletes every file and directory this run
-created, restores every backed-up file byte-for-byte, removes the backup directory and exits non-zero
-with the reason. No partial output survives a failed run, and a run refused before it wrote anything
-leaves the tree exactly as it found it.
+directory under the OS temp directory. Pre-existing `<Name>.texture-<N>.<ext>` siblings are then deleted
+before the conversion runs, so a texture an earlier conversion left behind cannot survive into this
+run's record as if this run had produced it; a rollback puts the deleted siblings back byte-for-byte. Any
+failure, whether a child exits non-zero, the reduction misses the triangle budget, or the record cannot
+be written, deletes every file and directory this run created, restores every backed-up file
+byte-for-byte, removes the backup directory and exits non-zero with the reason. No partial output
+survives a failed run, and a run refused before it wrote anything leaves the tree exactly as it found it
+— and if the rollback itself fails, the tool reports that incomplete rollback rather than also claiming
+that no outputs remain.
 
 **Existing files are refused unless you say otherwise.** A real run refuses to replace an existing
 output — including any existing `<Name>.texture-<N>.<ext>` sibling — unless `--force` is given, and the
@@ -123,6 +136,16 @@ fit, cavity or appearance questions. Reduced bytes still need the human review i
 [asset-visual-review.md](../review-guides/asset-visual-review.md); running-game pixels remain the final
 appearance authority; and promotion into shipped production stays Owner-controlled. The record
 directory is described in [intake/README.md](../asset-production/intake/README.md).
+
+**An intake output is a candidate that requires producer visual self-review before handoff.** Render it
+from front, three-quarter, side and back — for example with `tools/blender/render_glb.py` — and look at
+the result rather than trusting the triangle count. An aggressive budget on a fragmented Meshy atlas can
+open **cracks in the geometry**: the glTF import splits vertices at every UV seam, and a UV-delimited
+collapse reduces each side of a seam separately, so the seams pull apart. The decimated Dawnwarden helmet
+at 2,000 triangles showed dark cracks across its dome for exactly that reason; rebaking the texture alone
+did not remove them. The fix found in a runner self-review is to weld the seam-split vertices, decimate,
+unwrap fresh UVs, and bake the base colour from the full-resolution source onto the reduced mesh. That
+weld-and-bake step is not yet part of this command.
 
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 

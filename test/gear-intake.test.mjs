@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -32,6 +34,7 @@ import {
   parseArgs,
   planGearIntake,
   runIntake,
+  writeTargets,
 } from '../tools/assets/gear-intake.mjs';
 
 // tools/assets/gear-intake.mjs turns one generated rigid-gear GLB into a Unity-ready candidate with
@@ -479,6 +482,149 @@ test('a symlink alias that resolves to the source is refused even with --force',
   assert.equal(lstatSync(join(root, SAMPLE_SOURCE)).isSymbolicLink(), true);
 });
 
+test('the confinement check covers every path a run may write, not only the planned outputs', () => {
+  // The children write more than the three planned paths: the FBX's texture siblings and the
+  // converter's provenance record. Confinement that stopped at plan.outputs would leave those two
+  // kinds of path unchecked, so they are enumerated as write targets with their own owned roots.
+  const root = sandbox();
+  const plan = planGearIntake(sampleOptions({ root }));
+  put(root, `${FBX_DIR}/DawnwardenSword.texture-1.png`, 'EXISTING');
+
+  const kinds = writeTargets(plan, { readdir: readdirSync }).map((target) => target.kind);
+  assert.deepEqual(kinds, [
+    'reduced-glb', 'unity-fbx', 'intake-record', 'fbx-texture', 'converter-provenance',
+  ]);
+  for (const target of writeTargets(plan, { readdir: readdirSync })) {
+    assert.equal(typeof target.ownedRoot, 'string', `${target.kind} needs an owned root`);
+    assert.ok(target.repoPath.startsWith(`${target.ownedRoot}/`), `${target.repoPath} vs ${target.ownedRoot}`);
+  }
+});
+
+test('an output hard-linked to the source is refused even with --force, and the source survives', () => {
+  // A hard link is a second name for the same bytes: the two paths differ, and realpathSync agrees they
+  // differ, so a resolved-path comparison cannot see it -- yet the reduction would write through the
+  // alias and rewrite the candidate in place. Device + inode are what refuse it.
+  const root = sandbox();
+  const plan = planGearIntake(sampleOptions({ root }));
+  const source = join(root, SAMPLE_SOURCE);
+  mkdirSync(join(root, REDUCED_DIR), { recursive: true });
+  linkSync(source, join(root, plan.reducedRepoPath));
+  assert.equal(statSync(source).ino, statSync(join(root, plan.reducedRepoPath)).ino, 'fixture must be a hard link');
+
+  const { calls, runtime } = sandboxRun(root);
+  const before = tree(root);
+
+  assert.throws(() => runIntake(sampleOptions({ root }), runtime), (error) => {
+    assert.equal(error.code, 'exists');
+    assert.match(error.message, /refusing to overwrite without --force/);
+    return true;
+  });
+  assert.throws(() => runIntake(sampleOptions({ root, force: true }), runtime), (error) => {
+    assert.equal(error.code, 'unsafe-output');
+    assert.match(error.message, /same file as the source/);
+    assert.match(error.message, /hard link/);
+    return true;
+  });
+
+  assert.deepEqual(calls, [], 'no child command may run once an alias is refused');
+  assert.equal(readFileSync(source, 'utf8'), 'SOURCE-GLB-BYTES', 'the source bytes must be untouched');
+  assert.equal(statSync(join(root, plan.reducedRepoPath)).ino, statSync(source).ino,
+    'the refused hard link must be left alone');
+  assert.deepEqual(tree(root), before, 'the refusal must leave the tree exactly as it found it');
+});
+
+test('a texture sibling hard-linked to the source is refused too, even with --force', () => {
+  // The identity check is not limited to plan.outputs: a texture sibling the converter would rewrite is
+  // the same hazard under a different name.
+  const root = sandbox();
+  const source = join(root, SAMPLE_SOURCE);
+  const texture = `${FBX_DIR}/DawnwardenSword.texture-0.jpg`;
+  mkdirSync(join(root, FBX_DIR), { recursive: true });
+  linkSync(source, join(root, texture));
+
+  const { calls, runtime } = sandboxRun(root, { textures: { 'DawnwardenSword.texture-0.jpg': 'NEW' } });
+  const before = tree(root);
+  assert.throws(() => runIntake(sampleOptions({ root, force: true }), runtime), (error) => {
+    assert.equal(error.code, 'unsafe-output');
+    assert.match(error.message, /same file as the source/);
+    assert.ok(error.message.includes(texture), 'the refusal must name the linked sibling');
+    return true;
+  });
+
+  assert.deepEqual(calls, []);
+  assert.equal(readFileSync(source, 'utf8'), 'SOURCE-GLB-BYTES');
+  assert.deepEqual(tree(root), before);
+});
+
+test('a texture sibling that is a symlink is refused, with and without --force, and writes nothing through it', () => {
+  // Live and dangling: a dangling symlink is invisible to existsSync, so only lstat-based confinement
+  // refuses it before the converter would create a file wherever it points.
+  for (const force of [false, true]) {
+    for (const dangling of [false, true]) {
+      const root = sandbox();
+      const outside = mkdtempSync(join(tmpdir(), 'gq-gear-outside-'));
+      sandboxes.push(outside);
+      const decoy = join(outside, 'texture-decoy.png');
+      if (!dangling) writeFileSync(decoy, 'DECOY-TEXTURE');
+      mkdirSync(join(root, FBX_DIR), { recursive: true });
+      const texture = join(root, FBX_DIR, 'DawnwardenSword.texture-1.png');
+      symlinkSync(dangling ? join(outside, 'missing.png') : decoy, texture);
+
+      const { calls, runtime } = sandboxRun(root);
+      const before = tree(root);
+      assert.throws(() => runIntake(sampleOptions({ root, force }), runtime), (error) => {
+        // Without --force the existing-file rule refuses it first; with --force confinement has to.
+        if (force) {
+          assert.equal(error.code, 'unsafe-output');
+          assert.match(error.message, /already exists as a symlink/);
+        } else {
+          assert.equal(error.code, 'exists');
+          assert.match(error.message, /refusing to overwrite without --force/);
+        }
+        return true;
+      });
+
+      assert.deepEqual(calls, []);
+      assert.equal(lstatSync(texture).isSymbolicLink(), true, 'the refused symlink must be left alone');
+      if (!dangling) assert.equal(readFileSync(decoy, 'utf8'), 'DECOY-TEXTURE');
+      assert.deepEqual(tree(root), before, 'the refusal must leave the tree exactly as it found it');
+      assert.deepEqual(readdirSync(outside), dangling ? [] : ['texture-decoy.png'],
+        'no bytes may be created outside the checkout');
+    }
+  }
+});
+
+test('a provenance record that is a symlink is refused, with and without --force, and writes nothing through it', () => {
+  // The converter rewrites this file, so a symlink here would carry a write out of the checkout even
+  // though the file is not one of this tool's three declared outputs.
+  for (const force of [false, true]) {
+    for (const dangling of [false, true]) {
+      const root = sandbox();
+      const outside = mkdtempSync(join(tmpdir(), 'gq-gear-outside-'));
+      sandboxes.push(outside);
+      const decoy = join(outside, 'provenance-decoy.json');
+      if (!dangling) writeFileSync(decoy, 'DECOY-PROVENANCE');
+      mkdirSync(join(root, dirname(PROVENANCE_FILE)), { recursive: true });
+      symlinkSync(dangling ? join(outside, 'missing.json') : decoy, join(root, PROVENANCE_FILE));
+
+      const { calls, runtime } = sandboxRun(root);
+      const before = tree(root);
+      assert.throws(() => runIntake(sampleOptions({ root, force }), runtime), (error) => {
+        assert.equal(error.code, 'unsafe-output');
+        assert.match(error.message, /already exists as a symlink/);
+        return true;
+      });
+
+      assert.deepEqual(calls, [], 'no child command may run once a write target is refused');
+      assert.equal(lstatSync(join(root, PROVENANCE_FILE)).isSymbolicLink(), true);
+      if (!dangling) assert.equal(readFileSync(decoy, 'utf8'), 'DECOY-PROVENANCE');
+      assert.deepEqual(tree(root), before, 'the refusal must leave the tree exactly as it found it');
+      assert.deepEqual(readdirSync(outside), dangling ? [] : ['provenance-decoy.json'],
+        'no bytes may be created outside the checkout');
+    }
+  }
+});
+
 // --- transactional rollback ----------------------------------------------------------------------
 
 test('a failing child rolls back: the reduced GLB is gone and provenance and --force backups are byte-for-byte', () => {
@@ -507,6 +653,42 @@ test('a failing child rolls back: the reduced GLB is gone and provenance and --f
   assert.ok(!existsSync(join(root, plan.reducedRepoPath)), 'the reduced GLB this run created must be deleted');
   assert.ok(!existsSync(join(root, plan.recordRepoPath)));
   assert.deepEqual(backupDirs().filter((name) => !beforeBackups.has(name)), [], 'the backup directory must be removed');
+});
+
+test('a rollback that itself fails reports the incomplete rollback instead of claiming nothing remains', () => {
+  // The honest failure mode: when the restore is what breaks, the tool must not also assert the
+  // guarantee the restore exists to deliver. Only the rollback failure is added to the reason.
+  const root = sandbox();
+  const plan = planGearIntake(sampleOptions({ root }));
+  put(root, plan.fbxRepoPath, 'ORIGINAL-FBX-BYTES');
+  put(root, PROVENANCE_FILE, 'ORIGINAL-PROVENANCE');
+  const beforeBackups = new Set(backupDirs());
+
+  const { runtime } = sandboxRun(root, { failAt: 'convert-fbx', fbx: 'PARTIAL-FBX-BYTES' });
+  let copies = 0;
+  const failing = {
+    ...runtime,
+    copyFile: (from, to) => {
+      copies += 1;
+      // The first two copies are the pre-run backups; every later copy is a rollback restore.
+      if (copies > 2) throw new Error('restore failed: EACCES');
+      runtime.copyFile(from, to);
+    },
+  };
+
+  assert.throws(() => runIntake(sampleOptions({ root, force: true }), failing), (error) => {
+    assert.match(error.message, /fake converter exited 1/);
+    assert.match(error.message, /WARNING: rollback itself failed: restore failed: EACCES/);
+    assert.doesNotMatch(error.message, /no outputs or backups remain/,
+      'an incomplete rollback must not also claim the transaction guarantee');
+    return true;
+  });
+
+  // A rollback that threw cannot clean up after itself, so the test does it rather than leaking the
+  // backup directory into os.tmpdir() for the rest of the suite.
+  for (const name of backupDirs().filter((entry) => !beforeBackups.has(entry))) {
+    rmSync(join(tmpdir(), name), { recursive: true, force: true });
+  }
 });
 
 test('a failed record write rolls back the converted FBX, its textures and the provenance file', () => {
@@ -623,6 +805,46 @@ test('an existing texture sibling is refused without --force', () => {
   const result = runIntake(sampleOptions({ root, force: true }), forced.runtime);
   assert.equal(result.record.status, 'CANDIDATE');
   assert.equal(readFileSync(join(root, texture), 'utf8'), 'NEW-TEXTURE');
+});
+
+test('--force drops a stale texture sibling so the record names only the textures this run produced', () => {
+  // A sibling from an earlier conversion shares the `<Name>.texture-<N>.<ext>` shape a fresh run's
+  // textures have. Left in place it would make this run's record claim a texture it never wrote.
+  const root = sandbox();
+  const stale = `${FBX_DIR}/DawnwardenSword.texture-1.png`;
+  put(root, stale, 'STALE-TEXTURE-FROM-AN-EARLIER-CONVERSION');
+
+  const { runtime } = sandboxRun(root, { textures: { 'DawnwardenSword.texture-0.jpg': 'FRESH-TEXTURE' } });
+  const { record } = runIntake(sampleOptions({ root, force: true }), runtime);
+
+  assert.ok(!existsSync(join(root, stale)), 'a sibling this run did not produce must not survive');
+  assert.deepEqual(record.fbx.textures.map((entry) => entry.repoPath),
+    [`${FBX_DIR}/DawnwardenSword.texture-0.jpg`],
+    'the record must name only the textures this run produced');
+});
+
+test('a failed forced run restores the stale texture sibling it deleted', () => {
+  // The stale sibling is deleted, not skipped, so the transaction has to put it back byte-for-byte --
+  // a failed run may not quietly cost the operator a file it was only supposed to refresh.
+  const root = sandbox();
+  const stale = `${FBX_DIR}/DawnwardenSword.texture-1.png`;
+  put(root, stale, 'STALE-TEXTURE');
+  const before = tree(root);
+
+  const { runtime } = sandboxRun(root, {
+    failAt: 'convert-fbx',
+    textures: { 'DawnwardenSword.texture-0.jpg': 'FRESH-TEXTURE' },
+  });
+  assert.throws(() => runIntake(sampleOptions({ root, force: true }), runtime), (error) => {
+    assert.match(error.message, /fake converter exited 1/);
+    assert.match(error.message, /rolled back: no outputs or backups remain/);
+    return true;
+  });
+
+  assert.equal(readFileSync(join(root, stale), 'utf8'), 'STALE-TEXTURE', 'the deleted sibling must come back');
+  assert.ok(!existsSync(join(root, `${FBX_DIR}/DawnwardenSword.texture-0.jpg`)),
+    'the texture this run wrote must be deleted');
+  assert.deepEqual(tree(root), before);
 });
 
 test('the record lists every texture sibling the converter wrote, sorted, with hash and size', () => {
