@@ -80,7 +80,9 @@ converter, fit or acceptance of its own:
 
 1. `node tools/assets/glb-intake-report.mjs` — the before report;
 2. `blender --background --factory-startup --python tools/blender/decimate_gear.py -- <source> <reduced> <tris>`;
-3. the same report on the reduced GLB, which must be at or under `--tris` or the run fails;
+3. the same report on the reduced GLB, which must be at or under `--tris` or the run fails. The report
+   must carry a non-negative whole `unknownTrianglePrimitives`: a missing, fractional or negative count
+   fails the run closed rather than passing an unmeasured reduction off as a measured one;
 4. `node tools/unity-migration/convert-gear-asset.mjs` — the Unity FBX, with `--blender` passed through
    so one Blender binary drives both steps.
 
@@ -108,37 +110,42 @@ strings. The same confinement covers every path a run may back up or write, not 
 outputs: each texture sibling and the provenance file are checked before either is backed up or written,
 so a symlinked sibling or provenance file cannot carry the run's writes out of the checkout. Path
 spelling proves nothing about the bytes on either side of it either — a second name for the same bytes
-is invisible to a resolved-path comparison — so an existing output, texture sibling or provenance file
-with more than one hard link (`statSync().nlink > 1`) is refused even with `--force`, because the other
-name of that link can be anywhere on the machine and rewriting this path would change a file outside
-every owned root.
+is invisible to a resolved-path comparison — so an existing output or provenance file with more than
+one hard link (`statSync().nlink > 1`) is refused even with `--force`, because the other name of that
+link can be anywhere on the machine and rewriting this path would change a file outside every owned
+root. (A texture sibling never reaches that check: whatever it is, it is refused by name first.)
 
-**A run is transactional, and it never deletes anything.** Before the first child command, whatever
-already exists — each planned output, the FBX's `<Name>.texture-<digits>.<jpg|jpeg|png>` siblings, and
-the converter's own provenance file at
+**A run is transactional, and it never deletes a file it did not create in this run.** Before the first
+child command, whatever already exists — each planned output, the FBX's
+`<Name>.texture-<digits>.<jpg|jpeg|png>` siblings, and the converter's own provenance file at
 `unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` — is copied into a backup
-directory under the OS temp directory. Nothing is moved out of the way and no file is ever deleted, by
-this tool or on its behalf. Any failure, whether a child exits non-zero, the reduction misses the
-triangle budget, or the record cannot be written, deletes only the files and directories this run itself
-created, restores every backed-up file byte-for-byte, removes the backup directory and exits non-zero
-with the reason. No partial output survives a failed run, and a run refused before it wrote anything
-leaves the tree exactly as it found it — and if the rollback itself fails, the tool reports that
-incomplete rollback rather than also claiming that no outputs remain.
+directory under the OS temp directory. (An existing texture sibling refuses the run before this point,
+so in practice only the outputs and the provenance file are ever copied.) Nothing that already exists is
+moved out of the way, and nothing that already exists is deleted, by this tool or on its behalf. Any
+failure, whether a child exits non-zero, the reduction misses the triangle budget, or the record cannot
+be written, deletes only the files and directories this run itself created, restores every backed-up
+file byte-for-byte, removes its own backup directory and exits non-zero with the reason. Rollback is the
+only delete path there is: it removes a file only when this run created it and did not back it up first,
+plus the backup directory it made for itself. No partial output survives a failed run, and a run refused
+before it wrote anything leaves the tree exactly as it found it — and if the rollback itself fails, the
+tool reports that incomplete rollback rather than also claiming that no outputs remain.
 
 **Existing files are refused unless you say otherwise.** A real run refuses to replace an existing
-output — including an existing `<Name>.texture-<digits>.<jpg|jpeg|png>` sibling — or a
-`GearDerivativeProvenance.json` record that already uses this `--id`, unless `--force` is given; the
-bytes it replaces are backed up and put back if the run then fails. `--force` grants exactly that and
-nothing else: it permits overwriting the files this run writes, it never deletes a file, and it never
-overrides a refusal — a symlink, a file that already has more than one hard link, a foreign sibling, or
-a provenance file the tool cannot read as JSON.
+output or a `GearDerivativeProvenance.json` record that already uses this `--id`, unless `--force` is
+given; the bytes it replaces are backed up and put back if the run then fails. `--force` grants exactly
+that and nothing else: it permits overwriting the files this run writes, it never deletes a file it did
+not create in this run, and it never overrides a refusal — a symlink, a file that already has more than
+one hard link, a texture sibling, or a provenance file the tool cannot read as JSON.
 
-A sibling beside the FBX whose name only *starts* like a texture this run writes — a Unity
-`<Name>.texture-0.jpg.meta`, another extension such as `.tga`, or a non-numeric index — is somebody
-else's file. The run refuses and names it, telling the operator to move it manually, with or without
-`--force`; no `*.meta` file is ever touched. Add `--dry-run` to print the exact commands, the four write
-locations and every refusal the next real run would raise — including an existing provenance record for
-this `--id` — while running and writing nothing.
+**Any existing `<Name>.texture-*` file beside the FBX refuses the run, `--force` included.** That covers
+an earlier derivative's textures in the very shape this run writes, a Unity `<Name>.texture-0.jpg.meta`,
+another extension such as `.tga`, and a non-numeric index. A forced rerun cannot tell which siblings its
+conversion actually rewrote, so a sibling left in place would be recorded as this run's output — a false
+provenance claim. There is no delete path for any of them: the run names each file and stops, and the
+operator moves an earlier derivative's textures and `.meta` files aside by hand before re-intaking;
+no `*.meta` file is ever touched. Add `--dry-run` to print the exact commands, the four write locations
+and every refusal the next real run would raise — an existing texture sibling, an existing provenance
+record for this `--id` and a shared-link target included — while running and writing nothing.
 
 Known follow-up, out of scope for this command: `tools/unity-migration/convert-gear-asset.mjs` records
 only a `texture-0.jpg` sibling in the shared provenance file, so a derivative with several packed images

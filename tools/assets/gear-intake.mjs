@@ -357,11 +357,14 @@ export function textureSiblings(plan, { readdir = readdirSync } = {}) {
 }
 
 /**
- * The siblings this run may overwrite: exactly `<Name>.texture-<digits>.<jpg|jpeg|png>`.
+ * The sibling names a conversion writes: exactly `<Name>.texture-<digits>.<jpg|jpeg|png>`.
  *
- * Split out from `textureSiblings` because the two answer different questions. This one is the
- * permission set -- these are the files a conversion writes, so --force may replace them. Everything
- * else the prefix matches is somebody else's file (see `foreignTextureSiblings`).
+ * Split out from `textureSiblings` because the two answer different questions. This one is the name
+ * shape the converter produces, which is what the record lists and what the backup set enumerates.
+ * It is NOT a permission to overwrite: an existing sibling refuses the run whether or not it has this
+ * shape (`assertNoForeignTextureSiblings`), because a forced rerun cannot tell which siblings its
+ * conversion rewrote. Everything else the prefix matches is somebody else's file (see
+ * `foreignTextureSiblings`).
  */
 export function converterTextureSiblings(plan, { readdir = readdirSync } = {}) {
   return textureSiblings(plan, { readdir })
@@ -374,7 +377,9 @@ export function converterTextureSiblings(plan, { readdir = readdirSync } = {}) {
  * A Unity `.meta` is the case that matters: Unity puts `<Name>.texture-0.jpg.meta` beside the texture,
  * so a prefix glob "for stale textures" will happily match and destroy the import metadata of every
  * already-imported derivative. A foreign sibling is not this run's file, so the run refuses and names
- * it rather than deleting it or writing over it -- with --force included.
+ * it rather than deleting it or writing over it -- with --force included. The run now refuses an
+ * existing sibling of the converter's shape too, so `assertNoForeignTextureSiblings` asks
+ * `textureSiblings` for the refusal and this filter only answers "not a name the converter writes".
  */
 export function foreignTextureSiblings(plan, { readdir = readdirSync } = {}) {
   return textureSiblings(plan, { readdir })
@@ -382,17 +387,21 @@ export function foreignTextureSiblings(plan, { readdir = readdirSync } = {}) {
 }
 
 /**
- * Refuse a real run when a foreign sibling sits beside the FBX.
+ * Refuse a real run when any `<Name>.texture-*` sibling sits beside the FBX.
  *
  * There is no delete path in this tool at all: the operator moves the file, because only the operator
- * knows whether it is a Unity import artifact, a hand-placed file, or debris worth removing.
+ * knows whether it is an earlier derivative's texture, a Unity import artifact, a hand-placed file, or
+ * debris worth removing -- and a forced rerun cannot tell which of them its own conversion rewrote.
  */
 export function assertNoForeignTextureSiblings(plan, { readdir = readdirSync } = {}) {
-  const foreign = foreignTextureSiblings(plan, { readdir });
+  // Every existing <Name>.texture-* file is refused, converter-shaped ones included: a forced rerun
+  // cannot tell which siblings its conversion actually rewrote, so an old sibling left in place would be
+  // recorded as this run's output (false provenance). Refusing keeps the record provably fresh.
+  const foreign = textureSiblings(plan, { readdir });
   if (!foreign.length) return;
   throw new IntakeError(
-    `refusing to write beside the FBX: ${foreign.length} file(s) match ${plan.name}${TEXTURE_SIBLING_INFIX}* `
-    + `but are not a ${plan.name}.texture-<digits>.<jpg|jpeg|png> sibling this run writes:\n`
+    `refusing to write beside the FBX: ${foreign.length} existing file(s) match ${plan.name}${TEXTURE_SIBLING_INFIX}* `
+    + `(an earlier derivative's textures or Unity import metadata):\n`
     + foreign.map((sibling) => `  ${sibling.repoPath}`).join('\n')
     + `\nMove them out of the way yourself${foreign.some((sibling) => sibling.path.endsWith('.meta'))
       ? ' (a *.meta file is Unity import metadata; never let a tool delete it)' : ''}. `
@@ -432,11 +441,9 @@ export function writeTargets(plan, { readdir = readdirSync } = {}) {
  * --force) rather than treated as a replaceable conflict, so listing it here would offer the operator a
  * permission this tool never grants.
  */
-export function existingOutputs(plan, { exists = existsSync, readdir = readdirSync } = {}) {
-  return [
-    ...plan.outputs.filter((output) => exists(output.path)),
-    ...converterTextureSiblings(plan, { readdir }),
-  ];
+export function existingOutputs(plan, { exists = existsSync } = {}) {
+  // Texture siblings are not listed: any existing one is refused outright (assertNoForeignTextureSiblings).
+  return plan.outputs.filter((output) => exists(output.path));
 }
 
 /**
@@ -896,7 +903,7 @@ export function runIntake(options, runtime = defaultRuntime()) {
     // see which flags the next run needs, and which refusals --force will not lift.
     runtime.log(formatPlan(plan, {
       conflicts: existingOutputs(plan, { exists: runtime.exists, readdir: runtime.readdir }),
-      foreign: foreignTextureSiblings(plan, { readdir: runtime.readdir }),
+      foreign: textureSiblings(plan, { readdir: runtime.readdir }),
       shared: sharedLinkTargets(plan, runtime),
       duplicateId: existingProvenanceRecord(plan, runtime)?.semanticId ?? null,
     }));
@@ -942,7 +949,8 @@ export function runIntake(options, runtime = defaultRuntime()) {
       // plan asks about exactly one file. The array shape is checked rather than assumed: reading
       // `triangles` off the array itself would yield `undefined`, the budget gate would compare
       // `undefined > budget` (false) and every over-budget reduction would pass unnoticed.
-      if (!Array.isArray(parsed) || parsed.length !== 1 || !Number.isInteger(parsed[0]?.triangles)) {
+      if (!Array.isArray(parsed) || parsed.length !== 1 || !Number.isInteger(parsed[0]?.triangles)
+        || !Number.isInteger(parsed[0]?.unknownTrianglePrimitives) || parsed[0].unknownTrianglePrimitives < 0) {
         throw new IntakeError(`${entry.display} did not report exactly one triangle count`, 'report');
       }
       return parsed[0];

@@ -582,13 +582,15 @@ test('an output with more than one hard link is refused even with --force, and t
   assert.deepEqual(tree(root), before, 'the refusal must leave the tree exactly as it found it');
 });
 
-test('a texture sibling or provenance file with more than one hard link is refused even with --force', () => {
+test('a planned output or the provenance file with more than one hard link is refused even with --force', () => {
   // The hazard is not "the source": a link's other name can be a file this tool has never heard of,
   // anywhere on the machine, so rewriting the path would change bytes outside every owned root. The
   // check therefore reads the count rather than comparing identity with the source, and covers every
-  // write target -- the FBX's texture siblings and the converter's provenance record included.
+  // write target -- a planned output and the converter's provenance record included. (A texture sibling
+  // is never reached by this check any more: any existing `<Name>.texture-*` file is refused by name
+  // before the link count is even read, so the link rule is pinned on the other two kinds of target.)
   const cases = [
-    { label: 'texture sibling', target: `${FBX_DIR}/DawnwardenSword.texture-0.jpg` },
+    { label: 'planned output', target: `${REDUCED_DIR}/dawnwarden-sword-lod.glb` },
     { label: 'provenance file', target: PROVENANCE_FILE },
   ];
   for (const { label, target } of cases) {
@@ -601,7 +603,7 @@ test('a texture sibling or provenance file with more than one hard link is refus
     linkSync(outsider, join(root, target));
     assert.equal(statSync(outsider).nlink, 2, `${label} fixture must be a hard link`);
 
-    const { calls, runtime } = sandboxRun(root, { textures: { 'DawnwardenSword.texture-0.jpg': 'NEW' } });
+    const { calls, runtime } = sandboxRun(root);
     const before = tree(root);
     assert.throws(() => runIntake(sampleOptions({ root, force: true }), runtime), (error) => {
       assert.equal(error.code, 'unsafe-output');
@@ -624,8 +626,9 @@ test('a texture sibling or provenance file with more than one hard link is refus
 });
 
 test('a texture sibling that is a symlink is refused, with and without --force, and writes nothing through it', () => {
-  // Live and dangling: a dangling symlink is invisible to existsSync, so only lstat-based confinement
-  // refuses it before the converter would create a file wherever it points.
+  // Live and dangling. The sibling rule refuses any existing `<Name>.texture-*` file by name, whatever
+  // it is, before a child command runs -- so the exact refusal code is not what this test pins: what it
+  // pins is that the link is never written through and nothing outside the checkout is created.
   for (const force of [false, true]) {
     for (const dangling of [false, true]) {
       const root = sandbox();
@@ -634,25 +637,19 @@ test('a texture sibling that is a symlink is refused, with and without --force, 
       const decoy = join(outside, 'texture-decoy.png');
       if (!dangling) writeFileSync(decoy, 'DECOY-TEXTURE');
       mkdirSync(join(root, FBX_DIR), { recursive: true });
-      const texture = join(root, FBX_DIR, 'DawnwardenSword.texture-1.png');
-      symlinkSync(dangling ? join(outside, 'missing.png') : decoy, texture);
+      const texture = `${FBX_DIR}/DawnwardenSword.texture-1.png`;
+      symlinkSync(dangling ? join(outside, 'missing.png') : decoy, join(root, texture));
 
       const { calls, runtime } = sandboxRun(root);
       const before = tree(root);
       assert.throws(() => runIntake(sampleOptions({ root, force }), runtime), (error) => {
-        // Without --force the existing-file rule refuses it first; with --force confinement has to.
-        if (force) {
-          assert.equal(error.code, 'unsafe-output');
-          assert.match(error.message, /already exists as a symlink/);
-        } else {
-          assert.equal(error.code, 'exists');
-          assert.match(error.message, /refusing to overwrite without --force/);
-        }
+        assert.ok(error.message.includes(texture), `the refusal must name the sibling: ${error.message}`);
         return true;
       });
 
       assert.deepEqual(calls, []);
-      assert.equal(lstatSync(texture).isSymbolicLink(), true, 'the refused symlink must be left alone');
+      assert.equal(lstatSync(join(root, texture)).isSymbolicLink(), true,
+        'the refused symlink must be left alone');
       if (!dangling) assert.equal(readFileSync(decoy, 'utf8'), 'DECOY-TEXTURE');
       assert.deepEqual(tree(root), before, 'the refusal must leave the tree exactly as it found it');
       assert.deepEqual(readdirSync(outside), dangling ? [] : ['texture-decoy.png'],
@@ -844,90 +841,150 @@ test('a report whose JSON shape is not the documented one fails closed', () => {
   assert.ok(!existsSync(join(root, plan.recordRepoPath)));
 });
 
+test('a report whose unknownTrianglePrimitives is missing or negative fails closed', () => {
+  // The budget gate reads this field to decide whether every primitive was countable: `undefined > 0`
+  // and `-1 > 0` are both false, so a report that never said how many primitives it could not read
+  // would pass an unmeasured reduction off as a measured one. The shape is checked, not trusted.
+  const reports = [
+    { triangles: 1500, vertices: 900 },
+    { triangles: 1500, vertices: 900, unknownTrianglePrimitives: '0' },
+    { triangles: 1500, vertices: 900, unknownTrianglePrimitives: 1.5 },
+    { triangles: 1500, vertices: 900, unknownTrianglePrimitives: -1 },
+  ];
+  for (const reducedReport of reports) {
+    const root = sandbox();
+    const plan = planGearIntake(sampleOptions({ root }));
+    const before = tree(root);
+    const { calls, runtime } = sandboxRun(root, { reducedReport });
+
+    assert.throws(() => runIntake(sampleOptions({ root }), runtime), (error) => {
+      assert.equal(error.code, 'report');
+      assert.match(error.message, /did not report exactly one triangle count/);
+      return true;
+    });
+
+    assert.deepEqual(calls, ['report-source', 'decimate', 'report-reduced'],
+      'the converter must not run on a report the gate could not read');
+    assert.ok(!existsSync(join(root, plan.reducedRepoPath)), 'the reduced GLB must be rolled back');
+    assert.ok(!existsSync(join(root, plan.recordRepoPath)));
+    assert.deepEqual(tree(root), before, `no file may survive a refused report: ${JSON.stringify(reducedReport)}`);
+  }
+});
+
 // --- texture siblings ----------------------------------------------------------------------------
 
-test('an existing texture sibling is refused without --force', () => {
+test('an existing converter-shaped texture sibling is refused with and without --force', () => {
+  // Index 2, not 0: the converter numbers textures by Blender image index, so a check that only looked
+  // for `.texture-0.jpg` would miss this one. A sibling in the very shape this run writes is refused
+  // too: a forced rerun cannot tell which siblings its conversion actually rewrote, so an old one left
+  // beside the FBX would be recorded as this run's output. Refusing keeps the record provably fresh.
   const root = sandbox();
-  const plan = planGearIntake(sampleOptions({ root }));
-  // Index 2, not 0: the converter numbers textures by Blender image index, so a conflict check that
-  // only looked for `.texture-0.jpg` would miss this one.
   const texture = `${FBX_DIR}/DawnwardenSword.texture-2.png`;
   put(root, texture, 'EXISTING-TEXTURE');
 
-  const { calls, runtime } = sandboxRun(root);
-  assert.throws(() => runIntake(sampleOptions({ root }), runtime), (error) => {
-    assert.equal(error.code, 'exists');
-    assert.match(error.message, /refusing to overwrite without --force/);
-    assert.ok(error.message.includes(texture), 'the refusal must name the texture sibling');
-    return true;
-  });
-  assert.deepEqual(calls, [], 'the refusal must happen before any command runs');
-  assert.equal(readFileSync(join(root, texture), 'utf8'), 'EXISTING-TEXTURE');
+  for (const force of [false, true]) {
+    const { calls, runtime } = sandboxRun(root, {
+      textures: { 'DawnwardenSword.texture-2.png': 'NEW-TEXTURE' },
+    });
+    const before = tree(root);
+    assert.throws(() => runIntake(sampleOptions({ root, force }), runtime), (error) => {
+      assert.equal(error.code, 'foreign-sibling');
+      assert.ok(error.message.includes(texture), 'the refusal must name the texture sibling');
+      assert.match(error.message, /--force does not change that/);
+      return true;
+    });
+    assert.deepEqual(calls, [], 'the refusal must happen before any command runs');
+    assert.deepEqual(tree(root), before, 'a refused run must not write or delete anything');
+  }
+  assert.equal(readFileSync(join(root, texture), 'utf8'), 'EXISTING-TEXTURE',
+    'the sibling must survive both refusals byte-for-byte');
 
+  // --dry-run reports the same sibling as a refusal --force would not lift, and writes nothing.
   const dry = sandboxRun(root);
   const outcome = runIntake(sampleOptions({ root, dryRun: true }), dry.runtime);
-  assert.match(dry.logs.join('\n'), /already present — a real run refuses this without --force/);
-  assert.ok(dry.logs.join('\n').includes(texture));
-
-  // --force accepts the conflict, backs the texture up, and replaces it on a successful run.
-  const forced = sandboxRun(root, { textures: { 'DawnwardenSword.texture-2.png': 'NEW-TEXTURE' } });
-  const result = runIntake(sampleOptions({ root, force: true }), forced.runtime);
-  assert.equal(result.record.status, 'CANDIDATE');
-  assert.equal(readFileSync(join(root, texture), 'utf8'), 'NEW-TEXTURE');
+  assert.equal(outcome.dryRun, true);
+  const printed = dry.logs.join('\n');
+  assert.match(printed, /refused even with --force — not a file this run writes; move them yourself/);
+  assert.ok(printed.includes(texture), printed);
+  assert.equal(readFileSync(join(root, texture), 'utf8'), 'EXISTING-TEXTURE');
 });
 
-test('--force overwrites the files this run writes and deletes nothing else', () => {
-  // --force is a write permission, not a delete permission. A sibling the converter does not rewrite is
-  // still there afterwards: the record names the converter-shaped siblings present after the run, and
-  // nothing sweeps a pre-existing file out of the way to make that list convenient.
+test('--force overwrites the planned outputs and deletes nothing else', () => {
+  // --force is a write permission over the files this run writes, never a delete permission: every
+  // file this run does not write is still there afterwards, byte-for-byte.
   const root = sandbox();
   const plan = planGearIntake(sampleOptions({ root }));
-  const stale = `${FBX_DIR}/DawnwardenSword.texture-1.png`;
+  put(root, plan.reducedRepoPath, 'ORIGINAL-REDUCED-BYTES');
   put(root, plan.fbxRepoPath, 'ORIGINAL-FBX-BYTES');
-  put(root, stale, 'STALE-TEXTURE');
+  put(root, plan.recordRepoPath, 'ORIGINAL-RECORD-BYTES');
+  const bystanders = {
+    [`${FBX_DIR}/DawnwardenSword.other.png`]: 'OTHER-BYTES',
+    [`${FBX_DIR}/DawnwardenSword.notes.txt`]: 'NOTES',
+    'public/kept.bin': 'KEPT-BYTES',
+  };
+  for (const [path, data] of Object.entries(bystanders)) put(root, path, data);
+  const before = tree(root);
 
   const { calls, runtime } = sandboxRun(root, { textures: { 'DawnwardenSword.texture-0.jpg': 'FRESH-TEXTURE' } });
   const outcome = runIntake(sampleOptions({ root, force: true }), runtime);
 
   assert.deepEqual(calls, ['report-source', 'decimate', 'report-reduced', 'convert-fbx']);
+  assert.equal(readFileSync(join(root, plan.reducedRepoPath), 'utf8'), 'REDUCED-GLB-BYTES',
+    'the reduced GLB is replaced');
   assert.equal(readFileSync(join(root, plan.fbxRepoPath), 'utf8'), 'NEW-FBX-BYTES', 'the FBX is replaced');
   assert.equal(readFileSync(join(root, `${FBX_DIR}/DawnwardenSword.texture-0.jpg`), 'utf8'), 'FRESH-TEXTURE');
-  assert.equal(readFileSync(join(root, stale), 'utf8'), 'STALE-TEXTURE',
-    'a sibling this run did not rewrite must still be there, byte-for-byte');
   assert.equal(outcome.record.id, 'gear.sword.dawnwarden');
+  assert.equal(JSON.parse(readFileSync(join(root, plan.recordRepoPath), 'utf8')).status, 'CANDIDATE',
+    'the record this run wrote replaced the one that was there');
+
+  for (const [path, data] of Object.entries(bystanders)) {
+    assert.equal(readFileSync(join(root, path), 'utf8'), data,
+      `${path} must survive byte-for-byte: --force deletes nothing`);
+  }
+  const after = tree(root);
+  for (const path of before) {
+    assert.ok(after.includes(path), `${path} existed before the run and must still be there`);
+  }
 });
 
-test('a failed forced run leaves a pre-existing sibling in place rather than losing it', () => {
-  // The transaction covers the siblings --force may overwrite exactly as it covers an output: a run that
-  // fails after the converter started must not cost the operator a file, and it must not delete one to
-  // make the record convenient either.
+test('a refused forced run leaves every pre-existing file in place, sibling included', () => {
+  // The sibling refusal happens before the transaction starts, so it cannot lose a file the way a
+  // half-finished run could: the sibling, the outputs --force would have replaced and the backup
+  // directory are all exactly as the run found them.
   const root = sandbox();
+  const plan = planGearIntake(sampleOptions({ root }));
   const stale = `${FBX_DIR}/DawnwardenSword.texture-1.png`;
   put(root, stale, 'STALE-TEXTURE');
+  put(root, plan.fbxRepoPath, 'ORIGINAL-FBX-BYTES');
+  put(root, plan.recordRepoPath, 'ORIGINAL-RECORD-BYTES');
   const before = tree(root);
+  const beforeBackups = new Set(backupDirs());
 
-  const { runtime } = sandboxRun(root, {
-    failAt: 'convert-fbx',
+  const { calls, runtime } = sandboxRun(root, {
     textures: { 'DawnwardenSword.texture-0.jpg': 'FRESH-TEXTURE' },
   });
   assert.throws(() => runIntake(sampleOptions({ root, force: true }), runtime), (error) => {
-    assert.match(error.message, /fake converter exited 1/);
-    assert.match(error.message, /rolled back: no outputs or backups remain/);
+    assert.equal(error.code, 'foreign-sibling');
+    assert.ok(error.message.includes(stale), error.message);
     return true;
   });
 
+  assert.deepEqual(calls, [], 'nothing may run while a sibling is present');
   assert.equal(readFileSync(join(root, stale), 'utf8'), 'STALE-TEXTURE',
-    'a pre-existing sibling must survive the failed run byte-for-byte');
-  assert.ok(!existsSync(join(root, `${FBX_DIR}/DawnwardenSword.texture-0.jpg`)),
-    'the texture this run wrote must be deleted');
-  assert.deepEqual(tree(root), before);
+    'the sibling the refusal named must survive byte-for-byte');
+  assert.equal(readFileSync(join(root, plan.fbxRepoPath), 'utf8'), 'ORIGINAL-FBX-BYTES',
+    'a refused run must not overwrite the output --force would have replaced');
+  assert.equal(readFileSync(join(root, plan.recordRepoPath), 'utf8'), 'ORIGINAL-RECORD-BYTES');
+  assert.deepEqual(tree(root), before, 'the refusal must leave the tree exactly as it found it');
+  assert.deepEqual(backupDirs().filter((name) => !beforeBackups.has(name)), [],
+    'the refusal comes before the transaction, so no backup directory is created');
 });
 
 test('a *.meta or foreign texture sibling is refused even with --force, and nothing is deleted', () => {
-  // A prefix glob over `<Name>.texture-*` matches a Unity `<Name>.texture-0.jpg.meta`, so the old
-  // stale-texture sweep could delete the import metadata of a derivative it was only refreshing. The
-  // permission set is now exactly the name the converter writes; everything else is somebody else's
-  // file, refused by name for the operator to move, with or without --force.
+  // A prefix glob over `<Name>.texture-*` matches a Unity `<Name>.texture-0.jpg.meta`, so a
+  // stale-texture sweep would delete the import metadata of a derivative it was only refreshing. Every
+  // existing sibling is somebody else's file here -- the converter-shaped one staged below included --
+  // and the run refuses it by name for the operator to move, with or without --force.
   const foreign = [
     'DawnwardenSword.texture-0.jpg.meta',
     'DawnwardenSword.texture-1.png.meta',
@@ -964,9 +1021,10 @@ test('a *.meta or foreign texture sibling is refused even with --force, and noth
   }
 });
 
-test('the sibling permission set is the converter name shape and nothing else', () => {
-  // The two sets have to be exhaustive and disjoint: everything the prefix matches is either a file
-  // this run may overwrite or a file it must refuse, so nothing can fall between them.
+test('the converter name shape and the foreign set partition every sibling', () => {
+  // The two sets have to be exhaustive and disjoint so the record and the refusal each see every
+  // sibling: `converterTextureSiblings` is the name shape a conversion writes (what the record lists),
+  // and `assertNoForeignTextureSiblings` refuses any existing sibling of either shape.
   const root = sandbox();
   const plan = planGearIntake(sampleOptions({ root }));
   put(root, `${FBX_DIR}/DawnwardenSword.texture-0.jpg`, 'A');
