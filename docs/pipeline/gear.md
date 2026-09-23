@@ -151,9 +151,12 @@ no `*.meta` file is ever touched. Add `--dry-run` to print the exact commands, t
 and every refusal the next real run would raise — an existing texture sibling, an existing provenance
 record for this `--id` and a shared-link target included — while running and writing nothing.
 
-Known follow-up, out of scope for this command: `tools/unity-migration/convert-gear-asset.mjs` records
-only a `texture-0.jpg` sibling in the shared provenance file, so a derivative with several packed images
-is under-described there even though this run's intake record lists them all.
+`tools/unity-migration/convert-gear-asset.mjs` records only a `texture-0.jpg` sibling in the shared
+provenance file, which is narrower than the list this run's intake record keeps — but the reducer this
+lane drives bakes exactly one Base Color image and refuses any export that declares more or fewer, so a
+derivative produced here always carries exactly one packed image and that single record describes it
+completely. The converter's narrower record is therefore unreachable from this command, and matters only
+for an FBX converted by running that converter outside this intake.
 
 The record is a machine-readable account of what ran — paths, sha256, triangle counts, the Blender
 version, every texture sibling the conversion produced (path, sha256 and size, sorted) and the exact
@@ -174,9 +177,17 @@ rebaking the texture alone did not remove them. The fix found in a runner self-r
 seam-split vertices, collapse-decimate without a UV delimit, unwrap fresh UVs, and bake the base colour
 from the full-resolution source onto the reduced mesh — is now the reducer itself:
 `tools/blender/decimate_gear.py` performs those steps in that order, and step 2 above is the command
-that runs it. A clean reduced mesh is still only a candidate: the weld, the collapse and the bake can
-each be correct and the result still wrong for the slot, so the render review above remains the check
-that matters.
+that runs it. It is reproducible **byte-identical per exact Blender build**, not per version number: it
+refuses any binary whose `bpy.app.version_string` is not exactly `4.5.13 LTS`, and its `SUMMARY` line
+records `bpy.app.build_hash` beside that version, because the same version number ships as more than one
+build and the collapse, the unwrap and the baked pixels are not promised to match a different one. It
+also measures its own work rather than trusting the operators: a bake whose ray cast reached nothing
+leaves an image of one colour everywhere and still reports success, so the baked pixels must vary, the
+fresh unwrap must own the only UV map on the reduced mesh, the reduced mesh is the only object exported,
+and the re-read GLB must show TRIANGLES primitives whose index counts are whole triangles matching the
+reported total, with the Base Color following `baseColorTexture` to the one embedded image. A clean
+reduced mesh is still only a candidate: the weld, the collapse and the bake can each be correct and the
+result still wrong for the slot, so the render review above remains the check that matters.
 
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 
