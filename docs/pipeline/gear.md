@@ -86,20 +86,43 @@ converter, fit or acceptance of its own:
 
 `--id` is the semantic `gear.<slot>.<name>` id and `--name` is PascalCase; the name supplies the file
 stems, so `IronwoodShield` becomes `unity/GalaQuest/GearSources/ironwood-shield-lod.glb` and
-`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx`. Writing is confined to those
-two directories and `docs/asset-production/intake/<id>.json`. The tool refuses a destination under
-`public/assets` — that tree is runtime payload and registry-declared territory, and a candidate has no
-registry entry yet — never writes the source, and refuses to replace an existing output unless
-`--force`. Add `--dry-run` to print the exact commands and output paths while running and writing
-nothing.
+`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx`. The converter also writes one
+`<Name>.texture-<N>.<ext>` sibling beside the FBX per packed image, so those files are outputs of the
+run as well.
+
+**Where a run may write is decided by resolved paths, not by spelling.** Writing is confined to those
+two directories plus `docs/asset-production/intake/<id>.json`, the record. The tool refuses a
+destination under `public/assets` — that tree is runtime payload and registry-declared territory, and a
+candidate has no registry entry yet — and it never writes the source. Each destination's parent
+directory is created when needed and then resolved with `fs.realpathSync`; a destination is refused when
+its path holds a `..` segment, when it resolves outside the checkout, when its resolved parent is not
+inside its owned root, when any parent component of its path is a symlink, when the destination itself
+already exists as a symlink, or when it resolves to the source file. That last check is why a symlink
+alias pointing at the source cannot overwrite it even with `--force`: the comparison is between resolved
+paths, not path strings.
+
+**A run is transactional.** Before the first child command, whatever already exists — each planned
+output, the FBX's texture siblings, and the converter's own provenance file at
+`unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` — is copied into a backup
+directory under the OS temp directory. Any failure, whether a child exits non-zero, the reduction
+misses the triangle budget, or the record cannot be written, deletes every file and directory this run
+created, restores every backed-up file byte-for-byte, removes the backup directory and exits non-zero
+with the reason. No partial output survives a failed run, and a run refused before it wrote anything
+leaves the tree exactly as it found it.
+
+**Existing files are refused unless you say otherwise.** A real run refuses to replace an existing
+output — including any existing `<Name>.texture-<N>.<ext>` sibling — unless `--force` is given, and the
+bytes it replaces are backed up and put back if the run then fails. Add `--dry-run` to print the exact
+commands, the output paths and the texture pattern while running and writing nothing.
 
 The record is a machine-readable account of what ran — paths, sha256, triangle counts, the Blender
-version and the exact commands — and it states `"status": "CANDIDATE"` with `fit`, `cavity` and
-`visual` all `"UNKNOWN"`. That is the honest claim: intake reduces bytes and records the derivative,
-and it answers none of the fit, cavity or appearance questions. Reduced bytes still need the human
-review in [asset-visual-review.md](../review-guides/asset-visual-review.md); running-game pixels remain
-the final appearance authority; and promotion into shipped production stays Owner-controlled. The
-record directory is described in [intake/README.md](../asset-production/intake/README.md).
+version, every texture sibling the conversion produced (path, sha256 and size, sorted) and the exact
+commands — and it states `"status": "CANDIDATE"` with `fit`, `cavity` and `visual` all `"UNKNOWN"`.
+That is the honest claim: intake reduces bytes and records the derivative, and it answers none of the
+fit, cavity or appearance questions. Reduced bytes still need the human review in
+[asset-visual-review.md](../review-guides/asset-visual-review.md); running-game pixels remain the final
+appearance authority; and promotion into shipped production stays Owner-controlled. The record
+directory is described in [intake/README.md](../asset-production/intake/README.md).
 
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 

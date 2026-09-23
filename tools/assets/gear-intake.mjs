@@ -25,18 +25,46 @@
 // cavity and visual all UNKNOWN. Promotion into shipped production stays Owner-controlled, and a
 // CANDIDATE record is not a promotion.
 //
+// Repeating the command on a real checkout is safe by construction, in two ways the dry run and the
+// record both describe:
+//
+//   * Confinement is real, not lexical. Each output's parent directory is created when needed and then
+//     resolved with fs.realpathSync; an output whose resolved parent leaves its owned root, that runs
+//     through a symlink component, that already exists as a symlink, or that resolves to the source
+//     file is refused. A symlink alias cannot overwrite the source, even with --force.
+//   * The run is transactional. Before any child command, whatever already exists (outputs, the
+//     converter's provenance file, and the FBX's texture siblings) is copied into a backup directory
+//     under os.tmpdir(). Any failure -- a child exit, an over-budget reduction, a record write --
+//     removes every output this run created and restores every backed-up file byte-for-byte. No
+//     partial outputs survive a failed run.
+//
 // Usage:
 //   node tools/assets/gear-intake.mjs --source <candidate.glb> --id <gear.slot.name> \
 //     --name <PascalName> --tris <budget> [--dry-run] [--force] [--blender <path>]
 //
 //   --dry-run  print the exact planned commands and output paths, run nothing, write nothing
-//   --force    allow replacing outputs that already exist (a real run refuses this by default)
+//   --force    allow replacing outputs that already exist (a real run refuses this by default; the
+//              replaced bytes are backed up and restored if the run then fails)
 //   --blender  the Blender binary; the converter still enforces its own pinned-version gate
 
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Reuse the converter's own version probe rather than inventing a second one: "which Blender produced
@@ -66,6 +94,17 @@ export const INTAKE_RECORD_DIR = 'docs/asset-production/intake';
  */
 export const OUTPUT_ROOTS = Object.freeze([REDUCED_GLB_DIR, FBX_DIR, INTAKE_RECORD_DIR]);
 
+/**
+ * The infix of the texture siblings the converter writes beside the FBX: `<Name>.texture-<N>.<ext>`.
+ *
+ * tools/blender/convert_glb_to_fbx.py writes one per packed image (the index is the Blender image
+ * index and the extension follows the image format), so a source with two materials produces more
+ * than the single `.texture-0.jpg` the converter's own provenance record names. Those files are
+ * outputs of a run exactly like the FBX: they are conflicts, they are backed up, and they are
+ * recorded.
+ */
+export const TEXTURE_SIBLING_INFIX = '.texture-';
+
 export const GEAR_ID_PATTERN = /^gear\.[a-z]+\.[a-z0-9-]+$/;
 
 // PascalCase: one or more Capitalized runs. Rejects snake_case, kebab-case, a leading digit and
@@ -80,14 +119,24 @@ export class IntakeError extends Error {
   }
 }
 
-/** Display a path the way it was asked for: repo-relative inside the checkout, absolute outside. */
-function displayPath(absolute) {
-  const rootPrefix = `${REPO_ROOT}${sep}`;
+/** Display a path the way it was asked for: root-relative inside the checkout, absolute outside. */
+function displayPath(absolute, root = REPO_ROOT) {
+  const rootPrefix = `${root}${sep}`;
   return absolute.startsWith(rootPrefix) ? absolute.slice(rootPrefix.length).split(sep).join('/') : absolute;
 }
 
+// A shell word needing no quoting: every character is one the shell passes through untouched.
+const SHELL_SAFE_ARGUMENT = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+/**
+ * Quote one command argument so the displayed command can be pasted back unmodified.
+ *
+ * A `--source` holding a space (or an apostrophe, or a `$`) would otherwise display a command that
+ * runs with a different argument than the one this tool actually used -- exactly the drift the
+ * recorded command exists to prevent.
+ */
 function quoteArgument(value) {
-  return /[\s'"]/.test(value) ? `'${value.replaceAll("'", "'\\''")}'` : value;
+  return SHELL_SAFE_ARGUMENT.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 /** `DawnwardenSword` -> `dawnwarden-sword`, matching the existing GearSources file naming. */
@@ -121,6 +170,9 @@ export function planGearIntake(options) {
   const { source, id, name } = options;
   const blender = options.blender ?? 'blender';
   const tris = options.tris;
+  // The checkout the plan is expressed against. Defaults to this tool's own repository; tests drive a
+  // disposable sandbox through the same code path rather than a parallel one.
+  const root = resolve(options.root ?? REPO_ROOT);
   const problems = [];
 
   if (typeof source !== 'string' || !source.trim()) problems.push('--source <candidate.glb> is required');
@@ -142,14 +194,14 @@ export function planGearIntake(options) {
     throw new IntakeError(`--source must be a .glb (got ${JSON.stringify(source)})`);
   }
 
-  const sourcePath = resolve(REPO_ROOT, source);
+  const sourcePath = resolve(root, source);
   const kebab = kebabCase(name);
   const reducedRepoPath = `${REDUCED_GLB_DIR}/${kebab}-lod.glb`;
   const fbxRepoPath = `${FBX_DIR}/${name}.fbx`;
   const recordRepoPath = `${INTAKE_RECORD_DIR}/${id}.json`;
-  const reducedPath = resolve(REPO_ROOT, reducedRepoPath);
-  const fbxPath = resolve(REPO_ROOT, fbxRepoPath);
-  const recordPath = resolve(REPO_ROOT, recordRepoPath);
+  const reducedPath = resolve(root, reducedRepoPath);
+  const fbxPath = resolve(root, fbxRepoPath);
+  const recordPath = resolve(root, recordRepoPath);
 
   const outputs = [
     { kind: 'reduced-glb', repoPath: reducedRepoPath, path: reducedPath },
@@ -169,7 +221,7 @@ export function planGearIntake(options) {
     }
   }
 
-  const sourceDisplay = displayPath(sourcePath);
+  const sourceDisplay = displayPath(sourcePath, root);
   const commands = [
     command('report-source', 'node', [GLB_REPORT_TOOL, '--json', sourceDisplay], { capture: true }),
     command('decimate', blender, [
@@ -192,6 +244,7 @@ export function planGearIntake(options) {
     kebab,
     tris,
     blender,
+    root,
     sourcePath,
     sourceDisplay,
     reducedPath,
@@ -200,6 +253,7 @@ export function planGearIntake(options) {
     fbxRepoPath,
     recordPath,
     recordRepoPath,
+    provenancePath: resolve(root, PROVENANCE_PATH),
     provenanceRepoPath: PROVENANCE_PATH,
     outputs,
     commands,
@@ -215,6 +269,14 @@ export function planGearIntake(options) {
  */
 export function assertOutputPathAllowed(repoPath) {
   const normalized = String(repoPath).split('\\').join('/').replace(/^\.\//, '');
+  // A `..` segment is the one spelling that can lexically satisfy the root prefix below while still
+  // pointing outside it, so it is rejected by name before the prefix is even considered.
+  if (normalized.split('/').includes('..')) {
+    throw new IntakeError(
+      `refusing to write ${normalized}: '..' escapes the owned output roots`,
+      'unsafe-output',
+    );
+  }
   if (normalized === 'public/assets' || normalized.startsWith('public/assets/')) {
     throw new IntakeError(
       `refusing to write ${normalized}: public/assets is runtime payload and registry-declared territory, `
@@ -235,8 +297,38 @@ export function assertSourceExists(plan, { exists = existsSync } = {}) {
   if (!exists(plan.sourcePath)) throw new IntakeError(`--source not found: ${plan.sourceDisplay}`, 'missing-source');
 }
 
-export function existingOutputs(plan, { exists = existsSync } = {}) {
-  return plan.outputs.filter((output) => exists(output.path));
+/**
+ * The FBX's texture siblings that exist right now, sorted by path.
+ *
+ * The directory listing, not the converter's recorded output, is the authority: the conversion writes
+ * `<Name>.texture-<N>.<ext>` for every packed image, so a source can legitimately produce several of
+ * them and the record must name all of them.
+ */
+export function textureSiblings(plan, { readdir = readdirSync } = {}) {
+  const directory = dirname(plan.fbxPath);
+  const prefix = `${plan.name}${TEXTURE_SIBLING_INFIX}`;
+  let entries;
+  try {
+    entries = readdir(directory);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.startsWith(prefix))
+    .sort()
+    .map((entry) => ({
+      kind: 'fbx-texture',
+      path: join(directory, entry),
+      repoPath: displayPath(join(directory, entry), plan.root),
+    }));
+}
+
+export function existingOutputs(plan, { exists = existsSync, readdir = readdirSync } = {}) {
+  return [
+    ...plan.outputs.filter((output) => exists(output.path)),
+    ...textureSiblings(plan, { readdir }),
+  ];
 }
 
 /**
@@ -246,15 +338,181 @@ export function existingOutputs(plan, { exists = existsSync } = {}) {
  * record and the converter's provenance, so it is a decision the operator states with --force
  * rather than a side effect of re-running a command.
  */
-export function assertOutputsAbsent(plan, { force = false, exists = existsSync } = {}) {
+export function assertOutputsAbsent(plan, { force = false, exists = existsSync, readdir = readdirSync } = {}) {
   if (force) return;
-  const present = existingOutputs(plan, { exists });
+  const present = existingOutputs(plan, { exists, readdir });
   if (present.length) {
     throw new IntakeError(
       'outputs already exist; refusing to overwrite without --force:\n'
       + present.map((output) => `  ${output.repoPath}`).join('\n'),
       'exists',
     );
+  }
+}
+
+/**
+ * Create `directory` and its missing ancestors, remembering on the journal which ones this run
+ * created so a failed run can take them back out instead of leaving an empty skeleton behind.
+ */
+function ensureDirectory(plan, runtime, journal, directory) {
+  const missing = [];
+  let current = directory;
+  while (!runtime.exists(current)) {
+    const parent = dirname(current);
+    // The filesystem root is never a directory this run created; stop without recording it.
+    if (parent === current) break;
+    missing.push(current);
+    current = parent;
+  }
+  if (!missing.length) return;
+  runtime.mkdir(directory);
+  for (const path of missing.reverse()) journal.createdDirs.push(path);
+}
+
+/**
+ * Refuse to write through a symlink anywhere on the checkout's path to a target.
+ *
+ * fs.realpathSync alone is not enough: a symlink that points *inside* the owned root resolves to a
+ * legal path, yet the write still travels through an alias a later edit could silently repoint. Walking
+ * the components from the plan root down rejects that case, and rejects a parent that leaves the root
+ * before realpathSync even sees it. Components that do not exist yet cannot be symlinks.
+ */
+function assertNoSymlinkComponents(plan, target, runtime) {
+  const suffix = relative(plan.root, target);
+  if (suffix === '..' || suffix.startsWith(`..${sep}`)) {
+    throw new IntakeError(
+      `refusing to write ${displayPath(target, plan.root)}: it leaves the checkout root`,
+      'unsafe-output',
+    );
+  }
+  let current = plan.root;
+  for (const segment of suffix.split(sep).filter(Boolean)) {
+    current = join(current, segment);
+    if (runtime.isSymlink(current)) {
+      throw new IntakeError(
+        `refusing to write ${displayPath(target, plan.root)}: ${displayPath(current, plan.root)} is a symlink`,
+        'unsafe-output',
+      );
+    }
+  }
+}
+
+/**
+ * Create each output's parent directory, resolve it for real, and refuse an unsafe destination.
+ *
+ * The checks, in order: the output is inside an owned root and holds no `..`; no component of its path
+ * is a symlink; its realpath'd parent is the owned root or below it; the output does not already exist
+ * as a symlink; and the resolved output is not the source file. Created directories are recorded on
+ * `journal` so a rollback can remove them.
+ */
+export function assertOutputsConfined(plan, runtime, journal) {
+  const sourceRealPath = runtime.realpath(plan.sourcePath);
+  const targets = [];
+  for (const output of plan.outputs) {
+    if (output.repoPath.split('/').includes('..')) {
+      throw new IntakeError(
+        `refusing to write ${output.repoPath}: '..' escapes the owned output roots`,
+        'unsafe-output',
+      );
+    }
+    const ownedRoot = OUTPUT_ROOTS.find((root) => output.repoPath.startsWith(`${root}/`));
+    if (!ownedRoot) {
+      throw new IntakeError(
+        `refusing to write ${output.repoPath}: outputs are confined to ${OUTPUT_ROOTS.join(', ')}`,
+        'unsafe-output',
+      );
+    }
+    const parent = dirname(output.path);
+    assertNoSymlinkComponents(plan, parent, runtime);
+    ensureDirectory(plan, runtime, journal, parent);
+    const resolvedParent = runtime.realpath(parent);
+    const resolvedRoot = runtime.realpath(resolve(plan.root, ownedRoot));
+    if (resolvedParent !== resolvedRoot && !resolvedParent.startsWith(`${resolvedRoot}${sep}`)) {
+      throw new IntakeError(
+        `refusing to write ${output.repoPath}: its parent resolves to `
+        + `${displayPath(resolvedParent, plan.root)}, outside ${ownedRoot}`,
+        'unsafe-output',
+      );
+    }
+    // lstat, not `exists`: a dangling symlink is still a symlink, and writing through it would create a
+    // file this tool does not own wherever it points.
+    if (runtime.isSymlink(output.path)) {
+      throw new IntakeError(
+        `refusing to write ${output.repoPath}: it already exists as a symlink, and writing through it `
+        + 'would change a file this tool does not own',
+        'unsafe-output',
+      );
+    }
+    const resolvedPath = join(resolvedParent, basename(output.path));
+    if (resolvedPath === sourceRealPath) {
+      throw new IntakeError(
+        `refusing to write ${output.repoPath}: it resolves to the source, `
+        + `${displayPath(plan.sourcePath, plan.root)}; a symlink alias must not overwrite the source, `
+        + 'even with --force',
+        'unsafe-output',
+      );
+    }
+    targets.push({ ...output, resolvedPath });
+  }
+  return targets;
+}
+
+/**
+ * Copy everything a failing run might have to put back into a temp directory under os.tmpdir().
+ *
+ * `journal.dirty` stays false until the first command that can leave bytes behind: a refusal before
+ * that (a symlinked output, a `..` escape) must not "restore" a file nothing touched.
+ */
+function beginIntakeJournal(plan, runtime) {
+  const directory = runtime.makeTempDir('galaquest-gear-intake-');
+  const backupTargets = [
+    ...plan.outputs.map((output) => output.path),
+    ...textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
+    plan.provenancePath,
+  ];
+  const backups = [];
+  for (const path of [...new Set(backupTargets)]) {
+    if (!runtime.exists(path)) continue;
+    const backupPath = join(directory, `backup-${backups.length}`);
+    runtime.copyFile(path, backupPath);
+    backups.push({ path, backupPath });
+  }
+  return { directory, backups, createdDirs: [], dirty: false };
+}
+
+function commitIntake(runtime, journal) {
+  runtime.remove(journal.directory);
+}
+
+/**
+ * Undo a failed run: restore every backed-up file byte-for-byte and delete every output this run
+ * created, then take back out any directory this run created that is now empty.
+ */
+function rollbackIntake(plan, runtime, journal) {
+  const backups = new Map(journal.backups.map((entry) => [entry.path, entry.backupPath]));
+  if (journal.dirty) {
+    const written = [
+      ...plan.outputs.map((output) => output.path),
+      ...textureSiblings(plan, { readdir: runtime.readdir }).map((texture) => texture.path),
+      plan.provenancePath,
+    ];
+    for (const path of [...new Set(written)]) {
+      const backupPath = backups.get(path);
+      if (backupPath !== undefined) {
+        ensureDirectory(plan, runtime, journal, dirname(path));
+        runtime.copyFile(backupPath, path);
+      } else if (runtime.exists(path)) {
+        runtime.remove(path);
+      }
+    }
+  }
+  runtime.remove(journal.directory);
+  for (const directory of [...journal.createdDirs].reverse()) {
+    try {
+      runtime.rmdir(directory);
+    } catch {
+      // Left in place when it still holds something; only empty, run-created directories go away.
+    }
   }
 }
 
@@ -270,6 +528,8 @@ export function formatPlan(plan, { conflicts = [] } = {}) {
     '  writes',
     ...plan.outputs.map((output) => `    ${output.repoPath}`),
     `    ${plan.provenanceRepoPath}  (side effect of ${GEAR_CONVERT_TOOL}, not of this tool)`,
+    `    ${plan.fbxRepoPath.replace(/\.fbx$/i, '')}${TEXTURE_SIBLING_INFIX}*.*  `
+      + '(also written next to the FBX by the converter)',
     '',
     '  commands',
     ...plan.commands.map((entry, index) => `    ${index + 1}. ${entry.display}`),
@@ -291,7 +551,7 @@ export function formatPlan(plan, { conflicts = [] } = {}) {
  * records that differ mean their inputs differed. `fit`/`cavity`/`visual` stay UNKNOWN until the
  * stages that own those questions have actually run -- an intake run answers none of them.
  */
-export function buildIntakeRecord({ plan, source, reduced, fbx, texture = null, blender, commands }) {
+export function buildIntakeRecord({ plan, source, reduced, fbx, textures = [], blender, commands }) {
   return {
     schema: 'galaquest.gear-intake-record',
     schemaVersion: 1,
@@ -317,9 +577,9 @@ export function buildIntakeRecord({ plan, source, reduced, fbx, texture = null, 
       repoPath: fbx.repoPath,
       sha256: fbx.sha256,
       sizeBytes: fbx.sizeBytes,
-      ...(texture
-        ? { texture: { repoPath: texture.repoPath, sha256: texture.sha256, sizeBytes: texture.sizeBytes } }
-        : {}),
+      // Every texture sibling the conversion produced, sorted by path. Omitted when there are none,
+      // so a record without textures does not pretend the key means something.
+      ...(textures.length ? { textures } : {}),
     },
     blender: {
       path: plan.blender,
@@ -337,8 +597,22 @@ export function buildIntakeRecord({ plan, source, reduced, fbx, texture = null, 
 export function defaultRuntime() {
   return {
     exists: existsSync,
+    isSymlink: (path) => {
+      try {
+        return lstatSync(path).isSymbolicLink();
+      } catch {
+        return false;
+      }
+    },
+    realpath: (path) => realpathSync(path),
     mkdir: (path) => mkdirSync(path, { recursive: true }),
+    rmdir: (path) => rmdirSync(path),
+    readdir: (path) => readdirSync(path),
+    readFile: (path) => readFileSync(path),
     writeFile: (path, data) => writeFileSync(path, data),
+    copyFile: (source, destination) => copyFileSync(source, destination),
+    remove: (path) => rmSync(path, { recursive: true, force: true }),
+    makeTempDir: (prefix) => mkdtempSync(join(tmpdir(), prefix)),
     size: (path) => statSync(path).size,
     sha256: (path) => createHash('sha256').update(readFileSync(path)).digest('hex'),
     blenderVersion,
@@ -370,97 +644,130 @@ export function runIntake(options, runtime = defaultRuntime()) {
   if (options.dryRun) {
     assertSourceExists(plan, { exists: runtime.exists });
     // Nothing is written, so an existing output is information here, not yet a refusal.
-    const conflicts = existingOutputs(plan, { exists: runtime.exists });
+    const conflicts = existingOutputs(plan, { exists: runtime.exists, readdir: runtime.readdir });
     runtime.log(formatPlan(plan, { conflicts }));
     return { plan, dryRun: true, record: null, commands: [] };
   }
 
   assertSourceExists(plan, { exists: runtime.exists });
-  assertOutputsAbsent(plan, { force: options.force, exists: runtime.exists });
+  assertOutputsAbsent(plan, { force: options.force, exists: runtime.exists, readdir: runtime.readdir });
 
-  const commands = [];
-  const report = (step) => {
-    const { entry, output } = execute(plan, runtime, step);
-    commands.push(entry.display);
-    if (output) runtime.log(output.trimEnd());
-    let parsed;
+  // From here on the run can leave bytes behind, so it is wrapped in a transaction: the pre-state is
+  // copied to a backup directory first, and any failure restores it and removes what this run created.
+  const journal = beginIntakeJournal(plan, runtime);
+  try {
+    assertOutputsConfined(plan, runtime, journal);
+
+    const commands = [];
+    const report = (step) => {
+      const { entry, output } = execute(plan, runtime, step);
+      commands.push(entry.display);
+      if (output) runtime.log(output.trimEnd());
+      let parsed;
+      try {
+        parsed = JSON.parse(output);
+      } catch {
+        throw new IntakeError(`${entry.display} did not print JSON to read the triangle count from`, 'report');
+      }
+      // tools/assets/glb-intake-report.mjs --json prints an ARRAY, one entry per requested file, and this
+      // plan asks about exactly one file. The array shape is checked rather than assumed: reading
+      // `triangles` off the array itself would yield `undefined`, the budget gate would compare
+      // `undefined > budget` (false) and every over-budget reduction would pass unnoticed.
+      if (!Array.isArray(parsed) || parsed.length !== 1 || !Number.isInteger(parsed[0]?.triangles)) {
+        throw new IntakeError(`${entry.display} did not report exactly one triangle count`, 'report');
+      }
+      return parsed[0];
+    };
+
+    const sourceReport = report('report-source');
+
+    // The reduction is the first step that writes an output, so rollback is on the hook from here.
+    journal.dirty = true;
+
+    const decimate = execute(plan, runtime, 'decimate');
+    commands.push(decimate.entry.display);
+
+    const reducedReport = report('report-reduced');
+
+    // Fail closed: an unreadable triangle count is not a passing budget. The report tool reports such
+    // primitives as unknownTrianglePrimitives rather than counting them as zero.
+    if (reducedReport.unknownTrianglePrimitives > 0) {
+      throw new IntakeError(
+        `reduced GLB has ${reducedReport.unknownTrianglePrimitives} primitive(s) whose triangle count could not be `
+        + `read; cannot claim the ${plan.tris} triangle budget`,
+        'budget',
+      );
+    }
+    if (reducedReport.triangles > plan.tris) {
+      throw new IntakeError(
+        `reduced GLB reports ${reducedReport.triangles} triangles, over the ${plan.tris} budget`,
+        'budget',
+      );
+    }
+
+    const convert = execute(plan, runtime, 'convert-fbx');
+    commands.push(convert.entry.display);
+
+    // List the directory rather than assume `.texture-0.jpg`: the converter writes one sibling per
+    // packed image, so a multi-material source produces several and the record must name all of them.
+    const textures = textureSiblings(plan, { readdir: runtime.readdir })
+      .map((sibling) => ({
+        repoPath: sibling.repoPath,
+        sha256: runtime.sha256(sibling.path),
+        sizeBytes: runtime.size(sibling.path),
+      }))
+      .sort((a, b) => (a.repoPath < b.repoPath ? -1 : a.repoPath > b.repoPath ? 1 : 0));
+
+    const record = buildIntakeRecord({
+      plan,
+      source: {
+        repoPath: displayPath(plan.sourcePath, plan.root),
+        sha256: runtime.sha256(plan.sourcePath),
+        sizeBytes: runtime.size(plan.sourcePath),
+        triangles: sourceReport.triangles,
+        vertices: sourceReport.vertices,
+      },
+      reduced: {
+        repoPath: plan.reducedRepoPath,
+        sha256: runtime.sha256(plan.reducedPath),
+        sizeBytes: runtime.size(plan.reducedPath),
+        triangles: reducedReport.triangles,
+        vertices: reducedReport.vertices,
+      },
+      fbx: {
+        repoPath: plan.fbxRepoPath,
+        sha256: runtime.sha256(plan.fbxPath),
+        sizeBytes: runtime.size(plan.fbxPath),
+      },
+      textures,
+      blender: { version: runtime.blenderVersion(plan.blender), pinnedVersion: PINNED_BLENDER_VERSION },
+      commands,
+    });
+
+    ensureDirectory(plan, runtime, journal, dirname(plan.recordPath));
+    runtime.writeFile(plan.recordPath, `${JSON.stringify(record, null, 2)}\n`);
+    runtime.log(`Wrote ${plan.recordRepoPath} (status CANDIDATE; fit/cavity/visual UNKNOWN).`);
+    runtime.log('Next: GearItemDefinition + Workbench fit, then visual review — this record is not acceptance.');
+
+    commitIntake(runtime, journal);
+    return { plan, dryRun: false, record, commands };
+  } catch (error) {
+    // A refusal that happens before the first writing command (a symlinked parent, a `..` escape) has
+    // nothing to put back, so it must not claim a rollback it did not perform. Only a `dirty` journal
+    // -- one where a command could have left bytes behind -- gets the transaction guarantee.
+    let rollbackNote = '';
     try {
-      parsed = JSON.parse(output);
-    } catch {
-      throw new IntakeError(`${entry.display} did not print JSON to read the triangle count from`, 'report');
+      rollbackIntake(plan, runtime, journal);
+    } catch (rollbackError) {
+      rollbackNote = `\nWARNING: rollback was incomplete: ${rollbackError.message}`;
     }
-    // tools/assets/glb-intake-report.mjs --json prints an ARRAY, one entry per requested file, and this
-    // plan asks about exactly one file. The array shape is checked rather than assumed: reading
-    // `triangles` off the array itself would yield `undefined`, the budget gate would compare
-    // `undefined > budget` (false) and every over-budget reduction would pass unnoticed.
-    if (!Array.isArray(parsed) || parsed.length !== 1 || !Number.isInteger(parsed[0]?.triangles)) {
-      throw new IntakeError(`${entry.display} did not report exactly one triangle count`, 'report');
-    }
-    return parsed[0];
-  };
-
-  const sourceReport = report('report-source');
-
-  const decimate = execute(plan, runtime, 'decimate');
-  commands.push(decimate.entry.display);
-
-  const reducedReport = report('report-reduced');
-
-  // Fail closed: an unreadable triangle count is not a passing budget. The report tool reports such
-  // primitives as unknownTrianglePrimitives rather than counting them as zero.
-  if (reducedReport.unknownTrianglePrimitives > 0) {
-    throw new IntakeError(
-      `reduced GLB has ${reducedReport.unknownTrianglePrimitives} primitive(s) whose triangle count could not be `
-      + `read; cannot claim the ${plan.tris} triangle budget`,
-      'budget',
-    );
+    const code = error instanceof IntakeError ? error.code : 'runtime';
+    const message = error instanceof IntakeError ? error.message : `intake failed: ${error.message}`;
+    const guarantee = journal.dirty
+      ? '\nThe run failed and was rolled back: no outputs or backups remain.'
+      : '';
+    throw new IntakeError(`${message}${guarantee}${rollbackNote}`, code);
   }
-  if (reducedReport.triangles > plan.tris) {
-    throw new IntakeError(
-      `reduced GLB reports ${reducedReport.triangles} triangles, over the ${plan.tris} budget`,
-      'budget',
-    );
-  }
-
-  const convert = execute(plan, runtime, 'convert-fbx');
-  commands.push(convert.entry.display);
-
-  const textureRepoPath = plan.fbxRepoPath.replace(/\.fbx$/i, '.texture-0.jpg');
-  const texturePath = resolve(REPO_ROOT, textureRepoPath);
-  const record = buildIntakeRecord({
-    plan,
-    source: {
-      repoPath: displayPath(plan.sourcePath),
-      sha256: runtime.sha256(plan.sourcePath),
-      sizeBytes: runtime.size(plan.sourcePath),
-      triangles: sourceReport.triangles,
-      vertices: sourceReport.vertices,
-    },
-    reduced: {
-      repoPath: plan.reducedRepoPath,
-      sha256: runtime.sha256(plan.reducedPath),
-      sizeBytes: runtime.size(plan.reducedPath),
-      triangles: reducedReport.triangles,
-      vertices: reducedReport.vertices,
-    },
-    fbx: {
-      repoPath: plan.fbxRepoPath,
-      sha256: runtime.sha256(plan.fbxPath),
-      sizeBytes: runtime.size(plan.fbxPath),
-    },
-    texture: runtime.exists(texturePath)
-      ? { repoPath: textureRepoPath, sha256: runtime.sha256(texturePath), sizeBytes: runtime.size(texturePath) }
-      : null,
-    blender: { version: runtime.blenderVersion(plan.blender), pinnedVersion: PINNED_BLENDER_VERSION },
-    commands,
-  });
-
-  runtime.mkdir(dirname(plan.recordPath));
-  runtime.writeFile(plan.recordPath, `${JSON.stringify(record, null, 2)}\n`);
-  runtime.log(`Wrote ${plan.recordRepoPath} (status CANDIDATE; fit/cavity/visual UNKNOWN).`);
-  runtime.log('Next: GearItemDefinition + Workbench fit, then visual review — this record is not acceptance.');
-
-  return { plan, dryRun: false, record, commands };
 }
 
 export function usage() {
