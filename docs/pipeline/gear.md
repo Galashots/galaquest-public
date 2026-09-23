@@ -64,6 +64,112 @@ equip/unequip visual review under [character-armoring.md](character-armoring.md)
 helmet must independently prove that it conceals the existing cut boundary. Structural coverage PASS
 does not establish either condition.
 
+### One-command rigid intake
+
+A generated rigid-gear GLB becomes a Unity-ready candidate, with its own evidence record, in one
+command from the repository root:
+
+```bash
+node tools/assets/gear-intake.mjs \
+  --source public/assets/gear/candidates/<candidate>.glb \
+  --id gear.shield.ironwood --name IronwoodShield --tris 1500
+```
+
+It orchestrates the existing tools in the order this lane already prescribes, and adds no reducer,
+converter, fit or acceptance of its own:
+
+1. `node tools/assets/glb-intake-report.mjs` — the before report;
+2. `blender --background --factory-startup --python tools/blender/decimate_gear.py -- <source> <reduced> <tris>`;
+3. the same report on the reduced GLB, which must be at or under `--tris` or the run fails. The report
+   must carry a non-negative whole `unknownTrianglePrimitives`: a missing, fractional or negative count
+   fails the run closed rather than passing an unmeasured reduction off as a measured one;
+4. `node tools/unity-migration/convert-gear-asset.mjs` — the Unity FBX, with `--blender` passed through
+   so one Blender binary drives both steps.
+
+`--id` is the semantic `gear.<slot>.<name>` id and `--name` is PascalCase; the name supplies the file
+stems, so `IronwoodShield` becomes `unity/GalaQuest/GearSources/ironwood-shield-lod.glb` and
+`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx`. The converter also writes one
+`<Name>.texture-<N>.<ext>` sibling beside the FBX per packed image, so those files are outputs of the
+run as well.
+
+**Where a run may write is decided by resolved paths, not by spelling.** A run writes to exactly four
+locations: the three output roots — `unity/GalaQuest/GearSources/` for the reduced GLB,
+`unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/` for the FBX and the
+`<Name>.texture-<digits>.<jpg|jpeg|png>` siblings beside it, and `docs/asset-production/intake/` for the
+record — plus the converter's own provenance file at
+`unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json`, which this tool does not own but
+reuses. The tool refuses a destination under `public/assets` — that tree is runtime payload and
+registry-declared territory, and a candidate has no registry entry yet — and it never writes the source.
+Each destination's parent directory is created when needed and then resolved with `fs.realpathSync`; a
+destination is refused when its path holds a `..` segment, when it resolves outside the checkout, when
+its resolved parent is not inside its owned root, when any parent component of its path is a symlink,
+when the destination itself already exists as a symlink (a dangling one included, which `fs.existsSync`
+cannot see), or when it resolves to the source file. That last check is why a symlink alias pointing at
+the source cannot overwrite it even with `--force`: the comparison is between resolved paths, not path
+strings. The same confinement covers every path a run may back up or write, not only the three planned
+outputs: each texture sibling and the provenance file are checked before either is backed up or written,
+so a symlinked sibling or provenance file cannot carry the run's writes out of the checkout. Path
+spelling proves nothing about the bytes on either side of it either — a second name for the same bytes
+is invisible to a resolved-path comparison — so an existing output or provenance file with more than
+one hard link (`statSync().nlink > 1`) is refused even with `--force`, because the other name of that
+link can be anywhere on the machine and rewriting this path would change a file outside every owned
+root. (A texture sibling never reaches that check: whatever it is, it is refused by name first.)
+
+**A run is transactional, and it never deletes a file it did not create in this run.** Before the first
+child command, whatever already exists — each planned output, the FBX's
+`<Name>.texture-<digits>.<jpg|jpeg|png>` siblings, and the converter's own provenance file at
+`unity/GalaQuest/Assets/GalaQuest/Gear/GearDerivativeProvenance.json` — is copied into a backup
+directory under the OS temp directory. (An existing texture sibling refuses the run before this point,
+so in practice only the outputs and the provenance file are ever copied.) Nothing that already exists is
+moved out of the way, and nothing that already exists is deleted, by this tool or on its behalf. Any
+failure, whether a child exits non-zero, the reduction misses the triangle budget, or the record cannot
+be written, deletes only the files and directories this run itself created, restores every backed-up
+file byte-for-byte, removes its own backup directory and exits non-zero with the reason. Rollback is the
+only delete path there is: it removes a file only when this run created it and did not back it up first,
+plus the backup directory it made for itself. No partial output survives a failed run, and a run refused
+before it wrote anything leaves the tree exactly as it found it — and if the rollback itself fails, the
+tool reports that incomplete rollback rather than also claiming that no outputs remain.
+
+**Existing files are refused unless you say otherwise.** A real run refuses to replace an existing
+output or a `GearDerivativeProvenance.json` record that already uses this `--id`, unless `--force` is
+given; the bytes it replaces are backed up and put back if the run then fails. `--force` grants exactly
+that and nothing else: it permits overwriting the files this run writes, it never deletes a file it did
+not create in this run, and it never overrides a refusal — a symlink, a file that already has more than
+one hard link, a texture sibling, or a provenance file the tool cannot read as JSON.
+
+**Any existing `<Name>.texture-*` file beside the FBX refuses the run, `--force` included.** That covers
+an earlier derivative's textures in the very shape this run writes, a Unity `<Name>.texture-0.jpg.meta`,
+another extension such as `.tga`, and a non-numeric index. A forced rerun cannot tell which siblings its
+conversion actually rewrote, so a sibling left in place would be recorded as this run's output — a false
+provenance claim. There is no delete path for any of them: the run names each file and stops, and the
+operator moves an earlier derivative's textures and `.meta` files aside by hand before re-intaking;
+no `*.meta` file is ever touched. Add `--dry-run` to print the exact commands, the four write locations
+and every refusal the next real run would raise — an existing texture sibling, an existing provenance
+record for this `--id` and a shared-link target included — while running and writing nothing.
+
+Known follow-up, out of scope for this command: `tools/unity-migration/convert-gear-asset.mjs` records
+only a `texture-0.jpg` sibling in the shared provenance file, so a derivative with several packed images
+is under-described there even though this run's intake record lists them all.
+
+The record is a machine-readable account of what ran — paths, sha256, triangle counts, the Blender
+version, every texture sibling the conversion produced (path, sha256 and size, sorted) and the exact
+commands — and it states `"status": "CANDIDATE"` with `fit`, `cavity` and `visual` all `"UNKNOWN"`.
+That is the honest claim: intake reduces bytes and records the derivative, and it answers none of the
+fit, cavity or appearance questions. Reduced bytes still need the human review in
+[asset-visual-review.md](../review-guides/asset-visual-review.md); running-game pixels remain the final
+appearance authority; and promotion into shipped production stays Owner-controlled. The record
+directory is described in [intake/README.md](../asset-production/intake/README.md).
+
+**An intake output is a candidate that requires producer visual self-review before handoff.** Render it
+from front, three-quarter, side and back — for example with `tools/blender/render_glb.py` — and look at
+the result rather than trusting the triangle count. An aggressive budget on a fragmented Meshy atlas can
+open **cracks in the geometry**: the glTF import splits vertices at every UV seam, and a UV-delimited
+collapse reduces each side of a seam separately, so the seams pull apart. The decimated Dawnwarden helmet
+at 2,000 triangles showed dark cracks across its dome for exactly that reason; rebaking the texture alone
+did not remove them. The fix found in a runner self-review is to weld the seam-split vertices, decimate,
+unwrap fresh UVs, and bake the base colour from the full-resolution source onto the reduced mesh. That
+weld-and-bake step is not yet part of this command.
+
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 
 Checkpoint A answers WHERE gear attaches. The datum contract answers HOW BIG and WHICH WAY ROUND, in a
