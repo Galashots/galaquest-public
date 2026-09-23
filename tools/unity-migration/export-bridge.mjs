@@ -9,7 +9,10 @@
  *
  * The originating SHA is an explicit input to make provenance reproducible after this exporter is
  * committed. The exporter refuses to proceed if the checked-out authority files differ from that
- * commit, so the SHA cannot become a decorative label.
+ * commit, so the SHA cannot become a decorative label. speed.js and each selected GLB are pinned
+ * whole-file; the registry is pinned record-level, because the Bridge reads only the `asset_id` and
+ * `display_name` of the single record whose `source.path` is a selected asset. Growing the registry
+ * with unrelated records therefore does not invalidate a manifest exported from an earlier snapshot.
  */
 
 import { createHash } from 'node:crypto';
@@ -25,6 +28,8 @@ const BRIDGE_VERSION = '0.1.0';
 const REPOSITORY = 'Galashots/galaquest-public';
 const SPEED_PATH = 'public/src/character/speed.js';
 const REGISTRY_PATH = 'docs/asset-production/asset-registry-v1.json';
+// Exactly the record fields this exporter copies into the manifest.
+const CONSUMED_REGISTRY_FIELDS = ['asset_id', 'display_name', 'source.path'];
 const ASSET_PATHS = [
   'public/assets/gear/sword_ironwood.glb',
   'public/assets/world/keeper.glb',
@@ -104,19 +109,73 @@ function importSourceModule(path) {
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 }
 
-function readRegistry() {
-  const registry = JSON.parse(readFileSync(resolve(ROOT, REGISTRY_PATH), 'utf8'));
+function registryRecordsFrom(registry) {
   const records = registry.assets ?? registry.records ?? [];
   if (!Array.isArray(records)) throw new Error(`${REGISTRY_PATH}: assets is not an array`);
   return records;
 }
 
-function registryAssetFor(path, records) {
-  const matches = records.filter((record) => record.source?.path === path);
+function readRegistry() {
+  const absolute = resolve(ROOT, REGISTRY_PATH);
+  if (!existsSync(absolute)) throw new Error(`missing source authority: ${REGISTRY_PATH}`);
+  return registryRecordsFrom(JSON.parse(readFileSync(absolute, 'utf8')));
+}
+
+function readPinnedRegistry(sourceSha) {
+  let text;
+  try {
+    text = git(['show', `${sourceSha}:${REGISTRY_PATH}`]);
+  } catch {
+    throw new Error(`${REGISTRY_PATH} is not readable at originating commit ${sourceSha}`);
+  }
+  return registryRecordsFrom(JSON.parse(text));
+}
+
+function fieldValue(record, field) {
+  return field.split('.').reduce((value, key) => (value == null ? undefined : value[key]), record);
+}
+
+function singleRegistryRecordFor(path, records, registryLabel) {
+  const matches = (Array.isArray(records) ? records : []).filter((record) => record.source?.path === path);
   if (matches.length !== 1) {
-    throw new Error(`${REGISTRY_PATH}: expected one asset record for ${path}, found ${matches.length}`);
+    throw new Error(
+      `${REGISTRY_PATH}: expected exactly one record whose source.path is ${path} in the `
+      + `${registryLabel}, found ${matches.length}`,
+    );
   }
   return matches[0];
+}
+
+/**
+ * The Bridge consumes, per selected path, only the one registry record whose `source.path` is that
+ * path, and only its `asset_id` and `display_name`. Pin exactly those fields for exactly those
+ * paths: unrelated registry churn (a new candidate record elsewhere) must not invalidate a manifest
+ * that was exported from an earlier snapshot, while a change to a consumed identity still does.
+ *
+ * Pure and total for a registry shape that is a list of records, so it can be unit-tested without
+ * the repository or Git. Throws on any mismatch, missing consumed record, or ambiguous path.
+ */
+export function assertConsumedRegistryRecordsMatch(
+  currentRecords,
+  pinnedRecords,
+  paths,
+  currentLabel = 'working-tree registry',
+  pinnedLabel = 'originating-commit registry',
+) {
+  for (const path of paths) {
+    const current = singleRegistryRecordFor(path, currentRecords, currentLabel);
+    const pinned = singleRegistryRecordFor(path, pinnedRecords, pinnedLabel);
+    for (const field of CONSUMED_REGISTRY_FIELDS) {
+      const currentValue = fieldValue(current, field);
+      const pinnedValue = fieldValue(pinned, field);
+      if (currentValue !== pinnedValue) {
+        throw new Error(
+          `${REGISTRY_PATH}: consumed record for ${path} changed field ${field}: `
+          + `${pinnedLabel} has ${JSON.stringify(pinnedValue)}, ${currentLabel} has ${JSON.stringify(currentValue)}`,
+        );
+      }
+    }
+  }
 }
 
 async function movementContract(sourceSha) {
@@ -139,7 +198,7 @@ async function movementContract(sourceSha) {
 
 function assetRecord(path, sourceSha, records) {
   assertSourceMatchesCommit(path, sourceSha);
-  const registryRecord = registryAssetFor(path, records);
+  const registryRecord = singleRegistryRecordFor(path, records, 'working-tree registry');
   const bytes = readFileSync(resolve(ROOT, path));
   const facts = inspectGlb(path);
   const role = facts.hasSkin || facts.hasAnimation ? 'rigged-animated-character' : 'static-asset';
@@ -164,8 +223,14 @@ function assertSha(sourceSha) {
 
 export async function buildManifest({ sourceSha = git(['rev-parse', 'HEAD']) } = {}) {
   assertSha(sourceSha);
-  assertSourceMatchesCommit(REGISTRY_PATH, sourceSha);
   const records = readRegistry();
+  assertConsumedRegistryRecordsMatch(
+    records,
+    readPinnedRegistry(sourceSha),
+    ASSET_PATHS,
+    'working-tree registry',
+    `registry at ${sourceSha}`,
+  );
   const movement = await movementContract(sourceSha);
   const assets = ASSET_PATHS.map((path) => assetRecord(path, sourceSha, records));
   return {

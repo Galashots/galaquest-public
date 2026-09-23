@@ -7,8 +7,15 @@ it does not implement gameplay or a second movement law.
 ## Export
 
 The originating SHA is explicit so a committed manifest can continue to identify the exact source
-snapshot it describes. The exporter checks that every authority file and selected asset still matches
-that commit before writing.
+snapshot it describes. The exporter checks that each authority file and selected asset it consumes
+still matches that commit before writing.
+
+`speed.js` and each selected GLB are pinned whole-file to that commit. The asset registry is pinned
+per consumed record instead: the Bridge reads only the `asset_id` and `display_name` of the one record
+whose `source.path` is a selected asset, so the export compares exactly those fields, for exactly
+those paths, against the registry at the originating commit. Adding an unrelated record (a new gear
+candidate, say) leaves an already-committed manifest valid, while a change, removal, or duplication
+of a consumed record still fails the export with the path and field named.
 
 ```text
 node tools/unity-migration/export-bridge.mjs --source-sha <source-commit> \
