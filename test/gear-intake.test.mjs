@@ -226,12 +226,45 @@ test('a sample plan names the exact output paths and the exact commands', () => 
 test('the decimate command is the one the reducer documents, in its own argument order', () => {
   // tools/blender/decimate_gear.py reads `<in.glb> <out.glb> <target_tris>` after `--`; swapping the
   // order would silently feed the budget to the wrong operand.
-  const [decimate] = planGearIntake(sampleOptions()).commands.filter((entry) => entry.step === 'decimate');
+  const plan = planGearIntake(sampleOptions());
+  // The bake size is the reducer's own default unless this run names one, so the plan carries it in
+  // the returned options for the record and appends it as the fourth reducer argument when set.
+  assert.equal(plan.bakePx, null);
+  const [decimate] = plan.commands.filter((entry) => entry.step === 'decimate');
   assert.equal(decimate.file, 'blender');
   assert.deepEqual(decimate.args, [
     '--background', '--factory-startup', '--python', 'tools/blender/decimate_gear.py', '--',
     SAMPLE_SOURCE, `${REDUCED_DIR}/dawnwarden-sword-lod.glb`, '1500',
   ]);
+});
+
+test('--bake-px is passed to the reducer as its fourth argument only when set', () => {
+  // The reducer's CLI is `<in.glb> <out.glb> <target_tris> [bake_px]`, so a chosen bake size must land
+  // after the budget and a defaulted one must not be appended at all: passing the reducer's default
+  // back to it would make this tool a second owner of a number the reducer already owns.
+  const chosen = planGearIntake(sampleOptions({ bakePx: 2048 }));
+  assert.equal(chosen.bakePx, 2048);
+  const [decimate] = chosen.commands.filter((entry) => entry.step === 'decimate');
+  assert.deepEqual(decimate.args.slice(-4), [SAMPLE_SOURCE, `${REDUCED_DIR}/dawnwarden-sword-lod.glb`, '1500', '2048']);
+  assert.ok(decimate.display.endsWith(`${REDUCED_DIR}/dawnwarden-sword-lod.glb 1500 2048`), decimate.display);
+
+  const defaulted = planGearIntake(sampleOptions());
+  const [plain] = defaulted.commands.filter((entry) => entry.step === 'decimate');
+  assert.equal(plain.args.length, decimate.args.length - 1, 'no bake size means no fourth argument');
+});
+
+test('--bake-px refuses anything that is not a power of two in the reducer range', () => {
+  // The reducer rejects a bake size it cannot serve; failing here names the flag the user typed rather
+  // than surfacing later as a Blender-side int() error.
+  // `null` is deliberately not here: it means "this run chose no size", which is the reducer-default
+  // case rather than a value to validate.
+  for (const bakePx of [0, 128, 5120, 1000, 1023, 4096 * 2, 1.5, '2048']) {
+    assert.throws(() => planGearIntake(sampleOptions({ bakePx })),
+      /--bake-px must be a power of two between 256 and 4096/, `bakePx=${JSON.stringify(bakePx)}`);
+  }
+  for (const bakePx of [256, 512, 1024, 2048, 4096]) {
+    assert.doesNotThrow(() => planGearIntake(sampleOptions({ bakePx })));
+  }
 });
 
 test('a custom --blender is used for the reduction and passed through to the converter', () => {
@@ -294,8 +327,10 @@ test('PascalCase allows the names gear actually uses and nothing path-like', () 
 
 test('argument parsing rejects unknown flags and flags missing their value', () => {
   assert.deepEqual(parseArgs(['--source', 'a.glb', '--id', 'gear.a.b', '--name', 'Ab', '--tris', '10']),
-    { source: 'a.glb', id: 'gear.a.b', name: 'Ab', tris: 10, blender: null, dryRun: false, force: false });
+    { source: 'a.glb', id: 'gear.a.b', name: 'Ab', tris: 10, blender: null, bakePx: null, dryRun: false,
+      force: false });
   assert.equal(parseArgs(['--source', 'a.glb', '--dry-run', '--force']).force, true);
+  assert.equal(parseArgs(['--source', 'a.glb', '--bake-px', '2048']).bakePx, 2048);
 
   // A near-miss flag must fail loudly: `--dryrun` silently doing a real Blender run is the failure
   // this rejection exists to prevent.
@@ -303,6 +338,9 @@ test('argument parsing rejects unknown flags and flags missing their value', () 
   assert.throws(() => parseArgs(['--source']), /--source requires a value/);
   assert.throws(() => parseArgs(['--name', '--force']), /--name requires a value/);
   assert.throws(() => parseArgs(['--tris', 'lots']), /--tris must be a positive whole number/);
+  assert.throws(() => parseArgs(['--bake-px', '1023']), /--bake-px must be a power of two between 256 and 4096/);
+  assert.throws(() => parseArgs(['--bake-px', '2048.5']), /--bake-px must be a power of two between 256 and 4096/);
+  assert.throws(() => parseArgs(['--bake-px']), /--bake-px requires a value/);
 });
 
 test('a run refuses outputs that already exist unless --force is given', () => {
