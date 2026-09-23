@@ -79,6 +79,7 @@ def declared_shape(gltf: dict) -> dict:
         "images": len(gltf.get("images", [])),
         "skins": len(gltf.get("skins", [])),
         "animations": len(gltf.get("animations", [])),
+        "morph_targets": sum(len(p.get("targets", [])) for p in primitives),
         "triangles": sum(t for t in (primitive_triangles(gltf, p) for p in primitives) if t is not None),
     }
 
@@ -89,11 +90,34 @@ def arguments() -> tuple[str, str, int]:
     values = sys.argv[sys.argv.index("--") + 1 :]
     if len(values) != 3:
         raise SystemExit("expected Blender arguments after --: <in.glb> <out.glb> <target_tris>")
-    return os.path.abspath(values[0]), os.path.abspath(values[1]), int(values[2])
+    try:
+        target = int(values[2])
+    except ValueError:
+        raise SystemExit(f"target_tris must be a whole number, got {values[2]!r}")
+    if target < 1:
+        raise SystemExit(f"target_tris must be at least 1, got {target}")
+    return os.path.abspath(values[0]), os.path.abspath(values[1]), target
+
+
+# The GalaQuest derivative lane pins Blender 4.5 (see tools/unity-migration/convert-gear-asset.mjs);
+# the determinism claim above only holds for one version, so refuse any other.
+PINNED_BLENDER = (4, 5)
+
+
+def assert_pinned_blender() -> None:
+    if tuple(bpy.app.version[:2]) != PINNED_BLENDER:
+        raise SystemExit(
+            f"Blender {bpy.app.version_string} is not the pinned {PINNED_BLENDER[0]}.{PINNED_BLENDER[1]}.x; "
+            "decimation output is only deterministic per Blender version"
+        )
 
 
 def import_single_rigid_mesh(source: str, declared: dict) -> bpy.types.Object:
     """Import the source and refuse anything that is not one rigid mesh with one material."""
+    if declared["morph_targets"]:
+        raise SystemExit(
+            f"{source}: declares {declared['morph_targets']} morph targets; this tool reduces rigid gear only"
+        )
     if declared["skins"] or declared["animations"]:
         raise SystemExit(
             f"{source}: declares {declared['skins']} skins / {declared['animations']} animations; "
@@ -129,8 +153,11 @@ def evaluated_triangles(obj: bpy.types.Object) -> int:
 
 def main() -> None:
     source, destination, target = arguments()
+    assert_pinned_blender()
     if not os.path.isfile(source):
         raise SystemExit(f"missing source GLB: {source}")
+    if os.path.realpath(destination) == os.path.realpath(source):
+        raise SystemExit(f"destination is the source file; refusing to overwrite {source}")
     if not destination.lower().endswith(".glb"):
         raise SystemExit(f"destination must be GLB: {destination}")
 
