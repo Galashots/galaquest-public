@@ -1,0 +1,124 @@
+name: unity
+
+on:
+  # GalaQuest is public and this job executes on Leo's desktop.
+  # Only trusted pushes inside this repository may wake the self-hosted runner.
+  # Fork pull requests never execute here.
+  push:
+    paths:
+      - 'unity/**'
+      - 'tools/unity/**'
+  workflow_dispatch:
+
+concurrency:
+  group: unity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  editmode:
+    runs-on: [self-hosted, Windows, X64, galaquest-unity, unity-6000.3.23f1]
+    timeout-minutes: 45
+    env:
+      UNITY_PROJECT_PATH: ${{ github.workspace }}\unity\GalaQuest
+
+    steps:
+      - name: Refuse an occupied Unity desktop
+        shell: powershell
+        run: |
+          $active = Get-Process Unity -ErrorAction SilentlyContinue
+          if ($active) {
+            $active | Select-Object Id, ProcessName, Path | Format-Table -AutoSize
+            throw 'Unity is already running on the self-hosted desktop. Refusing to collide with an interactive Editor session.'
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Preserve the ignored Unity Library cache on this dedicated CI workspace.
+          clean: false
+
+      - name: Normalize workspace while preserving Unity Library
+        shell: powershell
+        run: |
+          git reset --hard HEAD
+          git clean -ffdx -e unity/GalaQuest/Library/
+
+      - name: Verify pinned Unity runner
+        shell: powershell
+        run: |
+          if (-not $env:UNITY_EXE) {
+            throw 'UNITY_EXE is not configured on this self-hosted runner.'
+          }
+          if (-not (Test-Path $env:UNITY_EXE)) {
+            throw "Configured UNITY_EXE does not exist: $env:UNITY_EXE"
+          }
+          $projectVersion = Get-Content "$env:UNITY_PROJECT_PATH\ProjectSettings\ProjectVersion.txt" -Raw
+          if ($projectVersion -notmatch 'm_EditorVersion:\s*6000\.3\.23f1') {
+            throw "ProjectVersion.txt is not pinned to 6000.3.23f1: $projectVersion"
+          }
+          Write-Host "Unity executable: $env:UNITY_EXE"
+          Write-Host "Project: $env:UNITY_PROJECT_PATH"
+
+      - name: Run Unity EditMode tests
+        shell: powershell
+        run: |
+          $results = Join-Path $env:RUNNER_TEMP 'galaquest-editmode-results.xml'
+          $log = Join-Path $env:RUNNER_TEMP 'galaquest-unity-editmode.log'
+          Remove-Item $results, $log -Force -ErrorAction SilentlyContinue
+
+          & $env:UNITY_EXE `
+            -batchmode `
+            -nographics `
+            -projectPath $env:UNITY_PROJECT_PATH `
+            -buildTarget WebGL `
+            -runTests `
+            -testPlatform EditMode `
+            -testResults $results `
+            -logFile $log
+
+          $unityExit = $LASTEXITCODE
+          if (Test-Path $log) {
+            Get-Content $log -Tail 160
+          }
+          if (-not (Test-Path $results)) {
+            throw "Unity produced no EditMode results file (exit code $unityExit)."
+          }
+
+          [xml]$testXml = Get-Content $results -Raw
+          $testRun = $testXml.'test-run'
+          if (-not $testRun) {
+            throw 'Unity test results did not contain an NUnit test-run root.'
+          }
+          Write-Host ("Unity tests: total={0} passed={1} failed={2} skipped={3} result={4}" -f
+            $testRun.total, $testRun.passed, $testRun.failed, $testRun.skipped, $testRun.result)
+
+          if ([int]$testRun.failed -gt 0 -or $testRun.result -eq 'Failed') {
+            throw "Unity EditMode tests reported failures."
+          }
+          if ($unityExit -ne 0) {
+            throw "Unity exited with code $unityExit despite producing results."
+          }
+
+      - name: Verify Unity left tracked source clean
+        if: always()
+        shell: powershell
+        run: |
+          $dirty = git status --porcelain --untracked-files=no
+          if ($dirty) {
+            Write-Host $dirty
+            throw 'Unity CI modified tracked repository files.'
+          }
+
+      - name: Upload Unity test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-editmode-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}\galaquest-editmode-results.xml
+            ${{ runner.temp }}\galaquest-unity-editmode.log
+          if-no-files-found: warn
+          retention-days: 14
