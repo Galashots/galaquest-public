@@ -10,12 +10,21 @@ leaving two current answers.
 
 ## Core promise
 
-GalaQuest is a **fun-first, MMO-inspired action-adventure**. A child should want to play because the game
-feels exciting, rewarding, collectible, social, and full of things worth discovering — not because they
-were told it is educational.
+GalaQuest is a **fun-first creature-collecting farm adventure**. A child should want to play because there
+is always something growing, something about to hatch, something cool to wear, and a friend or sibling to
+show it to — not because they were told it is educational.
+
+> **Owner decision 2026-09-23 — farm pivot.** This supersedes the earlier identity of a "fun-first,
+> MMO-inspired action-adventure" and its real-time-combat-first north star. The pivot takes effect **after**
+> the Emberworks "Relight the Forge" finale (#192) ships; Emberworks is finished under the current systems
+> rather than rebuilt. Evidence: the primary child players' strongest hooks in comparable games are
+> collecting, how things look, and breeding/hatching — not battles; repetitive "go around and kill stuff"
+> play is an explicit dislike; farming and buying/selling were well received in early prototypes; and
+> confusion about what to do next quickly becomes boredom.
 
 Curriculum learning is embedded inside the actions required to progress. Learning should support the
-fantasy and the reward loop rather than interrupting it with a separate "school mode" whenever practical.
+fantasy and the reward loop rather than interrupting it, and real schoolwork should be the single best-paying
+job in the game (see **Learning philosophy**).
 
 ## Engagement north star
 
@@ -23,131 +32,147 @@ Prefer loops that repeatedly create this feeling:
 
 `want something -> do a meaningful activity -> visibly become stronger/richer/cooler -> show or use it -> discover the next thing worth wanting`
 
+The core loop that delivers it:
+
+`plant and harvest -> feed creatures / forge gear / sell at market -> creatures grow and visibly transform, the Hero looks cooler -> breed for eggs and hatch new creatures -> take the team on a short expedition for rare rewards -> back to the farm`
+
 High-value engagement ingredients include:
 
-- obvious power growth and kid-readable progression;
-- collecting, rarity, discovery, and ownership;
-- companions and other things players can become attached to;
-- multiplayer presence, cooperation, generosity, comparison, and healthy flexing;
+- collecting, rarity, discovery, and ownership — many creatures, many armor pieces;
+- things that visibly change as they grow: creatures, the Hero's armor, the farm;
+- companions players become attached to, name, and raise;
+- multiplayer presence, cooperation, trading, generosity, and healthy flexing;
 - spectacle, satisfying feedback, and moments that feel surprisingly powerful or cool;
-- reasons to return that come from unfinished goals, new discoveries, relationships, and mastery.
+- reasons to return that come from unfinished goals — a crop to harvest, an egg to hatch, a set to complete.
 
 Retention should come from satisfying play and meaningful goals, not deliberately manipulative dark
-patterns.
+patterns. **GalaQuest has no premium currency and no pay-to-skip.** Wait timers exist to pace the loop, and
+the only accelerators are play and learning.
 
 ## Current production north star
 
-**Give the player somewhere new to go, something cool to wear, something different to fight, and something they feel ownership over — fast.**
-
-Fresh 2026-09-02 child-play evidence materially changed the production priority. A child player who had
-become excited by helping create GalaQuest models voluntarily initiated a play session, then immediately
-identified three concrete reasons the current game still runs out of energy: repeated geography, invisible
-or insufficiently visible armor progression, and repeated Wolf combat. That evidence means content breadth
-and visible ownership are now part of the active engagement bottleneck rather than deferred future polish.
+**Always an obvious next step, always something growing, something to hatch, and something cool to wear.**
 
 Use these principles to judge near-term player-facing work:
 
-- **New places quickly.** Preserve a persistent MMO-like home/hub identity, but connect it to clearly
-  distinct authored adventure zones/levels rather than continuously enlarging one seamless map. Prefer
-  short transitions, strong visual changes, dense meaningful encounters, a clear destination, and a
-  decisive finish/reward beat. Minimize empty traversal. Minecraft Dungeons is a useful pacing/structure
-  reference, not a specification to copy.
-- **Visible gear now.** Armor and equipment must visibly transform the Hero as qualified assets become
-  available. A stat upgrade that the child cannot see leaves major engagement value unused. The production
-  pipeline should make it cheap to qualify, fit, vary, and ship more armor rather than treating visible gear
-  as a late cosmetic layer.
-- **Fight more than Wolves.** Ordinary play needs multiple readable enemy silhouettes and behaviors so
-  combat spaces feel different and Hero/gear growth has different things to overpower. New zones should
-  normally introduce or recombine enemy types rather than reproducing the same encounter population.
-- **Exploit creative ownership.** Child/player participation in inventing pets, enemies, gear, characters,
-  or places is a high-value engagement signal. GalaQuest does not need an in-game creator platform to use
-  this advantage: when player-created concepts are good and production-qualifiable, turning them into real
-  game content can strengthen attachment and desire to return.
-- **Fast before vast.** Prefer one short, exciting, visually distinct authored level over a large empty
-  geography expansion or generalized procedural-world framework. Prove the level loop before building the
-  system for dozens of levels.
-- **Player-facing proof beats infrastructure completion.** Migration, networking, asset tooling, and other
-  engineering foundations matter because they enable better play. Once a technical seam is sufficiently
-  proven, the next deliberate child playtest should contain meaningful new player-visible value rather than
-  knowingly asking players to retest the same exhausted slice.
+- **Always an obvious next step.** A goal tracker, markers, or equivalent guidance must make the next useful
+  action unmistakable at every moment. This is a hard requirement, not polish: an unclear next step is the
+  fastest route to boredom for the target players.
+- **The farm feeds everything.** Crops are the root resource: pet food that levels creatures, materials for
+  forging gear, and goods to sell for coins. New systems should plug into the farm economy rather than inventing
+  unrelated currencies.
+- **Visible gear, lots of it.** Armor and equipment must visibly transform the Hero. Armor comes from all four
+  sources: the market, forging from farm and expedition materials, expedition rewards, and homework-board-only
+  pieces. The production pipeline should make it cheap to qualify, fit, vary, and ship more armor.
+- **Less combat, better combat.** Combat is a smaller, occasional part of play and uses **team turn-based
+  battles** (see **Combat direction**). Expeditions are short destinations with a clear reward purpose, not
+  the main activity.
+- **Exploit creative ownership — as a treat.** Child/player-invented creatures, gear, or places may
+  occasionally become real game content when they are good and production-qualifiable. This is an occasional
+  reward, not a regular content pipeline or an in-game creator platform.
+- **Fast before vast.** Prove one small, complete loop before building the system for dozens of crops,
+  creatures, or destinations.
+- **Player-facing proof beats infrastructure completion.** Engineering foundations matter because they enable
+  better play. The next deliberate child playtest should contain meaningful new player-visible value.
 
-The current Unity migration should therefore converge on a first genuinely kid-facing slice that combines
-**a new destination + visible armor + multiple enemy types + a clear completion/reward beat**, with pets and
-other personally meaningful content layered in as qualified assets become available. Deliver those outcomes
-through bounded PRs; this north star is not permission to create one giant implementation package.
+### First post-Emberworks slice
+
+The first slice after Emberworks is **farm + egg + market, with no battles yet**: plant and harvest a few
+crops, sell them at a market, buy a visible armor piece, and hatch a first egg — with the goal tracker
+guiding every step. Deliver it through bounded PRs; this is not permission for one giant implementation
+package.
+
+## Platform
+
+**iPad first.** The primary play device is an iPad running the Unity WebGL build in Safari. Player-facing
+work must be touch-operable (no hover-only or keyboard-only interactions), readable at tablet size, and
+within an iPad Safari performance and memory budget. Desktop remains a supported development and play
+surface.
 
 ## Learning philosophy
 
 Hide the vegetables without hiding the learning outcome from the adults designing the game.
 
-Prefer learning that is required to achieve something the player already wants: winning, unlocking,
-upgrading, exploring, helping another player, solving a world problem, or earning a desirable reward.
-The educational layer should be measured and intentional even when the child experiences it simply as
-part of the adventure.
+Prefer learning that is required to achieve something the player already wants: hatching an egg sooner,
+growing a rare crop, unlocking or earning gear, helping another player, or solving a world problem. The
+educational layer should be measured and intentional even when the child experiences it simply as part of
+the farm.
+
+Two settled learning surfaces:
+
+- **Homework board.** A job board on the farm where real schoolwork is the best-paying job in the game,
+  including homework-only armor. Homework content is supplied by the Owner (or the Director on the Owner's
+  behalf) from each child's actual classwork. Children's classwork and profile data are private: they must
+  never be committed to this public repository, and #148 owns the learning-content and public-safe source
+  boundary.
+- **Timer acceleration.** Eggs and rare crops have longer timers; basic crops are quick. Answering learning
+  questions shortens the long timers. This is the in-game replacement for the paid speed-ups common in the
+  genre.
 
 Meaningful learning should be one of the strongest progression/reward sources, but it should not be
-trivially farmable. Ordinary combat may still award repeatable XP so grinding remains legitimate MMO play,
-while authored progression and learning provide stronger and more reliable advancement. Badly outleveled
-combat should not remain an optimal leveling strategy merely because the player can defeat it instantly.
+trivially farmable — acceleration and homework rewards need bounds so the loop cannot be skipped by
+repeating easy questions.
 
-## Current coordinated progression direction
+## Combat direction
 
-The current major gameplay/progression direction is a coordinated push across **Hero XP/levels**, **meaningful visible gear progression**, **pet companions**, **supporting enemy variety**, and **fast-paced destination expansion**. These systems should be designed against one shared progression/scaling and reward contract where applicable rather than independently inventing unrelated number economies. This shared direction does not imply one giant implementation PR; delivery should use bounded PRs and checkpoints where appropriate.
+> **Owner decision 2026-09-23.** After Emberworks, combat moves from real-time action to **team turn-based
+> battles**. This supersedes the real-time "fight more than Wolves" framing, the single special-attack slot,
+> and the fixed-world enemy-farming model for post-Emberworks content.
 
-The Hero is the primary source of power. Early levels should arrive very quickly, then lengthen gradually. Every Hero level should increase HP and damage; selected milestone levels may add bounded movement-speed growth. GalaQuest should keep one special-attack slot rather than growing a large hotbar, with the first special attack arriving around Level 5 and future design allowing the player to choose what occupies that slot.
+- The player's team is **the Hero plus two creatures**.
+- Turn order is readable (for example a visible turn-order bar), with a small number of clear actions per
+  turn.
+- Creatures have **elements** with kid-readable strengths and weaknesses, and team roles (attacker, tank,
+  support/control) matter.
+- Battles happen on short expeditions for rewards — rare materials, eggs, and armor — and are never the only
+  way to progress.
 
-GalaQuest uses a prominent kid-facing **POWER** value. POWER is derived from real underlying strength but may exaggerate magnitude for excitement. It should make upgrades and Hero growth immediately legible without becoming the source of combat stats. Early progression should remain Hero-dominant, with gear making a meaningful secondary contribution and pets a smaller contribution until their systems deepen.
+The shared progression/scaling contract (`PROGRESSION_CONTRACT_V0.md`) was written for real-time combat.
+The POWER value, Hero leveling, and gear contribution remain useful ideas, but their tuning must be
+re-decided against turn-based team combat and farm-fed creature leveling before post-Emberworks combat is
+built. Until then, that contract applies to Emberworks only.
 
-Gear should be frequent and readable, use familiar rarity language, create repeated visible upgrade moments,
-and visibly transform the Hero as qualified assets become available. Quests/progression/learning provide
-reliable upgrades; ordinary enemies may drop gear at a comparatively low rate. Clear upgrades should
-present an explicit before/after choice rather than silently auto-equipping.
+## Current creature direction
 
-Enemy progression follows a classic fixed-world MMO model rather than universal player-level scaling: old
-enemies remain weak and eventually become trivial as the Hero grows, while stronger enemies and content
-provide forward challenge. The world needs enough ordinary enemy population for the player to repeatedly
-feel that growth. Enemy nameplates should clearly communicate name, level, health, and dangerous level gaps;
-high-level threats may be visible early but must not be able to repeatedly farm newly respawned children.
+Creatures (pets) are the central engagement surface: attachment, collection, identity, visible power,
+progression, rarity, breeding, and social play.
 
-World expansion should use **clearly distinct, fast-to-reach destinations/levels** rather than defaulting to
-one ever-larger seamless map. The current preferred design lead is a persistent MMO-like hub connected to
-bounded authored adventure zones/scenes with strong visual identity, different enemy mixes, clear reward
-purposes, decisive endings/transitions, and little empty traversal. The exact portal/gate/teleport structure
-remains to be proven through bounded Unity work. See #46 and #131.
+Settled direction:
 
-The current selected production scope is **Hub/Camp + Emberworks only**; Sunroot is not selected for
-implementation. Learning in that scope must be personalized by profile/subject rather than treated as
-math-only; #148 owns the learning-content and public-safe source boundary. These decisions define scope and
-learning direction, not a newly dispatched package.
+- **Many creatures.** The roster mixes the three starter animals with wilder **elemental monsters**
+  discovered later, each with an element and a rarity.
+- The player chooses **one of three starters**: **Fox** = fast/aggressive, **Bear** = protector/tank,
+  **Frog** = magic/ranged with a signature tongue poke.
+- Players **own many and bring two** into a battle team.
+- Creatures level up by being **fed crops from the farm**, and **visibly transform** as they grow.
+- **Breeding:** pair two creatures to produce an **egg**; eggs **hatch on the farm** on a timer (shortened
+  by learning, see above).
+- Children can name their creatures; creatures should feel like companions, not only stat cards.
 
-## Current pet direction
+The current wolf companion is a placeholder for the future Fox. For the Emberworks opening, the green/red
+worm companions remain a scope-specific override and do not replace the starter direction. New paid creature
+model generation remains subject to the Meshy/provider spend rule in `AGENTS.md`.
 
-Pets remain a major engagement surface because they can combine attachment, collection, identity, visible power, progression, rarity, and eventually social play.
+## Social direction
 
-Settled direction for the first pet system:
+> **Owner decision 2026-09-23.** Each player has **their own farm and collection**. Players can **visit**
+> each other's farms, **trade**, and go on **co-op expeditions** together.
 
-- a starter pet should be available essentially immediately once the real starter system is built;
-- the player chooses **one of three starters**;
-- **Fox** = fast/aggressive soft archetype;
-- **Bear** = protector/tank soft archetype;
-- **Frog** = magic/ranged soft archetype with a signature tongue poke;
-- pets should feel like meaningful companions, not only stat cards;
-- the player can **own many and equip one**;
-- children should be able to name pets;
-- pets should eventually have nameplates and a small party-style health presence;
-- first-pass pet combat contribution is modest and does not require a separate pet-level grind.
+Trading and visiting should favour generosity and healthy showing-off and must stay safe for young
+children (no open chat with strangers is implied by this direction). Corpse/body-return death friction and
+transmog remain product candidates until separately decided.
 
-The current wolf companion is a placeholder for the future Fox. New paid pet model generation/rig-tuning is
-deferred until the Hero/gear progression spine is functioning and a separate asset-production package is
-authorized.
+## Scope and sequencing
 
-For the selected opening adventure direction, the green/red worm companions are a scope-specific opening
-override to the later Fox/Bear/Frog starter system. They do not replace that three-starter direction or
-authorize worm production outside a separately selected package.
+1. **Now:** finish Emberworks "Relight the Forge" (#192) within the selected **Hub/Camp + Emberworks** scope
+   under the current systems. Sunroot is not selected.
+2. **Next:** the first post-Emberworks slice (farm + egg + market, goal tracker, no battles).
+3. **Then:** turn-based team expeditions, breeding depth, homework board, and sibling visiting/trading, each
+   as separately framed bounded packages.
 
-Pet rarity economy, eggs/hatching, trading/gifting, broader social/economic systems, corpse/body-return death
-friction, and transmog remain product candidates until separately decided and recorded through the
-product-memory system.
+Learning in every scope must be personalized by profile/subject rather than treated as math-only; #148 owns
+the learning-content and public-safe source boundary. These decisions define direction and sequencing, not a
+newly dispatched package.
 
 ## Current asset-use direction
 
@@ -157,9 +182,9 @@ actually pass those gates. Cheap retexturing/material variants of strong meshes 
 additional loot variety. Use the resulting inventory/gap count to size any later paid asset-production push.
 
 Asset tooling should increasingly optimize for **content throughput**: once a class of asset is qualified,
-make it easier to move additional gear, enemies, pets, NPCs, and environment pieces through the same proven
-source-custody, optimization, Unity-import, prefab, and visual-review lane without weakening provenance or
-running-game acceptance.
+make it easier to move additional gear, creatures, crops, farm props, NPCs, and environment pieces through the
+same proven source-custody, optimization, Unity-import, prefab, and visual-review lane without weakening
+provenance or running-game acceptance. iPad Safari runtime budgets are part of qualification.
 
 ## Decision discipline
 
