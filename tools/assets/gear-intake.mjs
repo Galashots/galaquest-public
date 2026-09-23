@@ -13,6 +13,13 @@
 // hand is where numbers drift and where a step silently gets skipped, so this orchestrates the
 // EXISTING tools and writes down what actually ran.
 //
+// The reducer it drives is tools/blender/decimate_gear.py, which welds the vertices glTF split at
+// every UV seam, collapse-decimates to the stated budget, unwraps a fresh UV set and bakes the
+// source's base colour onto the reduced mesh -- the fix a runner self-review found for the cracks a
+// UV-delimited collapse opened, and the reason a reduced candidate is not a torn atlas. `--bake-px`
+// passes the baked texture size through to it; the weld threshold, the bake cage and the pinned
+// Blender stay that tool's own contract rather than knobs here.
+//
 // It adds no reducer, no converter, no fit and no acceptance of its own. It is deliberately not:
 //
 //   * a fit or a mount (no socket, no GearItemDefinition, no cavity);
@@ -51,7 +58,7 @@
 //
 // Usage:
 //   node tools/assets/gear-intake.mjs --source <candidate.glb> --id <gear.slot.name> \
-//     --name <PascalName> --tris <budget> [--dry-run] [--force] [--blender <path>]
+//     --name <PascalName> --tris <budget> [--bake-px <px>] [--dry-run] [--force] [--blender <path>]
 //
 //   --dry-run  print the exact planned commands, output paths and refusals; run nothing, write nothing
 //   --force    allow overwriting exactly the files this run writes: the three planned outputs, the
@@ -60,6 +67,8 @@
 //              overrides a refusal (a symlink, a shared hard link, a foreign sibling); replaced bytes are
 //              backed up and restored if the run then fails.
 //   --blender  the Blender binary; the converter still enforces its own pinned-version gate
+//   --bake-px  baked Base Color texture size, a power of two 256..4096 (default 1024), passed to the
+//              reducer as its fourth argument
 
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -138,6 +147,13 @@ export const PROVENANCE_DIR = PROVENANCE_PATH.split('/').slice(0, -1).join('/');
 
 export const GEAR_ID_PATTERN = /^gear\.[a-z]+\.[a-z0-9-]+$/;
 
+// The baked texture size, in the same shape tools/blender/decimate_gear.py validates: a power of two
+// in this range. Checked here too so a typo fails before a Blender run starts, named by the flag that
+// carried it rather than as a Blender-side `int()` failure. The DEFAULT size is deliberately not
+// mirrored here: the reducer owns it, prints it, and a copy on this side could only drift from it.
+export const MIN_BAKE_PX = 256;
+export const MAX_BAKE_PX = 4096;
+
 // PascalCase: one or more Capitalized runs. Rejects snake_case, kebab-case, a leading digit and
 // anything carrying a path separator, so a name can never steer an output path out of its directory.
 export const PASCAL_NAME_PATTERN = /^(?:[A-Z][a-z0-9]*)+$/;
@@ -201,6 +217,9 @@ export function planGearIntake(options) {
   const { source, id, name } = options;
   const blender = options.blender ?? 'blender';
   const tris = options.tris;
+  // Absent unless asked for: the reducer's own default bake size is part of its contract, so the
+  // planned command names it only when this run chose one. A recorded command should say what ran.
+  const bakePx = options.bakePx ?? null;
   // The checkout the plan is expressed against. Defaults to this tool's own repository; tests drive a
   // disposable sandbox through the same code path rather than a parallel one.
   const root = resolve(options.root ?? REPO_ROOT);
@@ -217,6 +236,10 @@ export function planGearIntake(options) {
   }
   if (!Number.isInteger(tris) || tris <= 0) {
     problems.push(`--tris must be a positive whole triangle budget (got ${JSON.stringify(tris)})`);
+  }
+  if (bakePx !== null && !isBakePixels(bakePx)) {
+    problems.push(`--bake-px must be a power of two between ${MIN_BAKE_PX} and ${MAX_BAKE_PX} `
+      + `(got ${JSON.stringify(bakePx)})`);
   }
   if (typeof blender !== 'string' || !blender.trim()) problems.push('--blender requires a path');
   if (problems.length) throw new IntakeError(problems.join('\n'));
@@ -258,7 +281,11 @@ export function planGearIntake(options) {
     command('decimate', blender, [
       '--background', '--factory-startup', '--python', DECIMATE_TOOL, '--',
       sourceDisplay, reducedRepoPath, String(tris),
-    ], { note: 'reduces the candidate to the stated budget and never writes the source' }),
+      ...(bakePx === null ? [] : [String(bakePx)]),
+    ], {
+      note: 'welds the glTF seam splits, reduces to the stated budget, re-unwraps fresh UVs and bakes '
+        + 'the base colour onto the reduced mesh; never writes the source',
+    }),
     command('report-reduced', 'node', [GLB_REPORT_TOOL, '--json', reducedRepoPath], { capture: true }),
     command('convert-fbx', 'node', [
       GEAR_CONVERT_TOOL,
@@ -274,6 +301,7 @@ export function planGearIntake(options) {
     name,
     kebab,
     tris,
+    bakePx,
     blender,
     root,
     sourcePath,
@@ -1055,7 +1083,7 @@ export function runIntake(options, runtime = defaultRuntime()) {
 
 export function usage() {
   return 'usage: node tools/assets/gear-intake.mjs --source <candidate.glb> --id <gear.slot.name> '
-    + '--name <PascalName> --tris <budget> [--dry-run] [--force] [--blender <path>]';
+    + '--name <PascalName> --tris <budget> [--bake-px <px>] [--dry-run] [--force] [--blender <path>]';
 }
 
 function parseTriangleBudget(value) {
@@ -1069,9 +1097,37 @@ function parseTriangleBudget(value) {
   return tris;
 }
 
+/** A baked texture size the reducer will also accept: a power of two between 256 and 4096. */
+export function isBakePixels(value) {
+  return Number.isInteger(value) && value >= MIN_BAKE_PX && value <= MAX_BAKE_PX && (value & (value - 1)) === 0;
+}
+
+function parseBakePixels(value) {
+  const pixels = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  if (!isBakePixels(pixels)) {
+    throw new IntakeError(
+      `--bake-px must be a power of two between ${MIN_BAKE_PX} and ${MAX_BAKE_PX} (got ${JSON.stringify(value)})`,
+    );
+  }
+  return pixels;
+}
+
+// Flags that carry a value, mapped to the option key they set. A Map rather than `slice(2)`, because
+// `--bake-px` would otherwise be stored under a hyphenated key nothing else reads.
+const VALUED_ARGUMENTS = new Map([
+  ['--source', 'source'],
+  ['--id', 'id'],
+  ['--name', 'name'],
+  ['--tris', 'tris'],
+  ['--blender', 'blender'],
+  ['--bake-px', 'bakePx'],
+]);
+
 export function parseArgs(argv) {
-  const options = { source: null, id: null, name: null, tris: null, blender: null, dryRun: false, force: false };
-  const valued = new Set(['--source', '--id', '--name', '--tris', '--blender']);
+  const options = {
+    source: null, id: null, name: null, tris: null, blender: null, bakePx: null, dryRun: false, force: false,
+  };
+  const valued = new Set(VALUED_ARGUMENTS.keys());
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--dry-run') { options.dryRun = true; continue; }
@@ -1085,7 +1141,10 @@ export function parseArgs(argv) {
       throw new IntakeError(`${argument} requires a value\n${usage()}`);
     }
     index += 1;
-    options[argument.slice(2)] = argument === '--tris' ? parseTriangleBudget(value) : value;
+    const key = VALUED_ARGUMENTS.get(argument);
+    if (key === 'tris') options.tris = parseTriangleBudget(value);
+    else if (key === 'bakePx') options.bakePx = parseBakePixels(value);
+    else options[key] = value;
   }
   return options;
 }

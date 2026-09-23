@@ -72,14 +72,16 @@ command from the repository root:
 ```bash
 node tools/assets/gear-intake.mjs \
   --source public/assets/gear/candidates/<candidate>.glb \
-  --id gear.shield.ironwood --name IronwoodShield --tris 1500
+  --id gear.shield.ironwood --name IronwoodShield --tris 1500 [--bake-px <px>]
 ```
 
 It orchestrates the existing tools in the order this lane already prescribes, and adds no reducer,
 converter, fit or acceptance of its own:
 
 1. `node tools/assets/glb-intake-report.mjs` — the before report;
-2. `blender --background --factory-startup --python tools/blender/decimate_gear.py -- <source> <reduced> <tris>`;
+2. `blender --background --factory-startup --python tools/blender/decimate_gear.py -- <source> <reduced> <tris> [bake_px]`
+   — welds the vertices glTF split at every UV seam, collapse-decimates to the budget, unwraps a fresh
+   UV set and bakes the source's base colour onto the reduced mesh;
 3. the same report on the reduced GLB, which must be at or under `--tris` or the run fails. The report
    must carry a non-negative whole `unknownTrianglePrimitives`: a missing, fractional or negative count
    fails the run closed rather than passing an unmeasured reduction off as a measured one;
@@ -90,7 +92,9 @@ converter, fit or acceptance of its own:
 stems, so `IronwoodShield` becomes `unity/GalaQuest/GearSources/ironwood-shield-lod.glb` and
 `unity/GalaQuest/Assets/GalaQuest/Gear/SourceAssets/IronwoodShield.fbx`. The converter also writes one
 `<Name>.texture-<N>.<ext>` sibling beside the FBX per packed image, so those files are outputs of the
-run as well.
+run as well. `--bake-px` is the baked Base Color size, a power of two between 256 and 4096; it is
+passed through to the reducer as its optional fourth argument, and the reducer's own default applies
+when the flag is omitted.
 
 **Where a run may write is decided by resolved paths, not by spelling.** A run writes to exactly four
 locations: the three output roots — `unity/GalaQuest/GearSources/` for the reduced GLB,
@@ -147,9 +151,12 @@ no `*.meta` file is ever touched. Add `--dry-run` to print the exact commands, t
 and every refusal the next real run would raise — an existing texture sibling, an existing provenance
 record for this `--id` and a shared-link target included — while running and writing nothing.
 
-Known follow-up, out of scope for this command: `tools/unity-migration/convert-gear-asset.mjs` records
-only a `texture-0.jpg` sibling in the shared provenance file, so a derivative with several packed images
-is under-described there even though this run's intake record lists them all.
+`tools/unity-migration/convert-gear-asset.mjs` records only a `texture-0.jpg` sibling in the shared
+provenance file, which is narrower than the list this run's intake record keeps — but the reducer this
+lane drives bakes exactly one Base Color image and refuses any export that declares more or fewer, so a
+derivative produced here always carries exactly one packed image and that single record describes it
+completely. The converter's narrower record is therefore unreachable from this command, and matters only
+for an FBX converted by running that converter outside this intake.
 
 The record is a machine-readable account of what ran — paths, sha256, triangle counts, the Blender
 version, every texture sibling the conversion produced (path, sha256 and size, sorted) and the exact
@@ -162,13 +169,26 @@ directory is described in [intake/README.md](../asset-production/intake/README.m
 
 **An intake output is a candidate that requires producer visual self-review before handoff.** Render it
 from front, three-quarter, side and back — for example with `tools/blender/render_glb.py` — and look at
-the result rather than trusting the triangle count. An aggressive budget on a fragmented Meshy atlas can
-open **cracks in the geometry**: the glTF import splits vertices at every UV seam, and a UV-delimited
-collapse reduces each side of a seam separately, so the seams pull apart. The decimated Dawnwarden helmet
-at 2,000 triangles showed dark cracks across its dome for exactly that reason; rebaking the texture alone
-did not remove them. The fix found in a runner self-review is to weld the seam-split vertices, decimate,
-unwrap fresh UVs, and bake the base colour from the full-resolution source onto the reduced mesh. That
-weld-and-bake step is not yet part of this command.
+the result rather than trusting the triangle count. An aggressive budget on a fragmented Meshy atlas used
+to open **cracks in the geometry**: the glTF import splits vertices at every UV seam, and the old
+UV-delimited collapse reduced each side of a seam separately, so the seams pulled apart. The decimated
+Dawnwarden helmet at 2,000 triangles showed dark cracks across its dome for exactly that reason, and
+rebaking the texture alone did not remove them. The fix found in a runner self-review — weld the
+seam-split vertices, collapse-decimate without a UV delimit, unwrap fresh UVs, and bake the base colour
+from the full-resolution source onto the reduced mesh — is now the reducer itself:
+`tools/blender/decimate_gear.py` performs those steps in that order, and step 2 above is the command
+that runs it. It is reproducible **byte-identical per exact Blender build**, not per version number: it
+refuses any binary unless `bpy.app.version_string` is exactly `4.5.13 LTS` **and**
+`bpy.app.build_hash` is exactly `daeeeca98fb0`; its `SUMMARY` line records that hash beside the
+version, because the same version number ships as more than one build and the collapse, the unwrap and
+the baked pixels are not promised to match a different one. It
+also measures its own work rather than trusting the operators: a bake whose ray cast reached nothing
+leaves an image of one colour everywhere and still reports success, so the baked pixels must vary, the
+fresh unwrap must own the only UV map on the reduced mesh, the reduced mesh is the only object exported,
+and the re-read GLB must show TRIANGLES primitives whose index counts are whole triangles matching the
+reported total, with the Base Color following `baseColorTexture` to the one embedded image. A clean
+reduced mesh is still only a candidate: the weld, the collapse and the bake can each be correct and the
+result still wrong for the slot, so the render review above remains the check that matters.
 
 ## Gear Datum Contract V0 — what the Hero requires, and what an asset intends
 
