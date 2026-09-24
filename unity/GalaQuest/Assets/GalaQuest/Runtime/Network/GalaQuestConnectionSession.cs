@@ -39,6 +39,18 @@ namespace GalaQuest
         public event Action<GalaQuestServerPetState, string> PetStateChanged;
         public GalaQuestServerPetState LatestPetState { get; private set; }
         public string LastPetError { get; private set; }
+        // The CURRENT DESTINATION's forge-lit flag, decoded from encounter.forge; false until an
+        // accepted encounter-carrying frame says otherwise, and an absent forge means not lit.
+        //
+        // Deliberately not called a shared world latch: forgeLitState is per-simulation on the
+        // server (gameServerCore.mjs) and a mid-session relight only marks the simulation that
+        // handled it, so travelling to a destination whose simulation predates the relight reports
+        // dark until that server restarts and reseeds from the durable store. Read this as "is the
+        // forge lit where I am standing", never as "has the world's forge ever been lit".
+        //
+        // No presenter consumes this yet. It is the decode half of the relight path; the UI that
+        // needs it is a separate package (see the relight dead-end follow-up on issue #192).
+        public bool ForgeLit { get; private set; }
 
         private void ClearPetState()
         {
@@ -73,6 +85,7 @@ namespace GalaQuest
             acceptingFrames = false;
             PlayerId = string.Empty;
             ClearPetState();
+            ForgeLit = false;
             pendingDestination = null;
             StatusChanged?.Invoke($"Reconnecting as {profile.DisplayName}...");
             transport.Connect();
@@ -190,6 +203,12 @@ namespace GalaQuest
             }
             else if (IsTravelling || string.IsNullOrEmpty(PlayerId) || frame.worldEpoch != WorldEpoch) return;
 
+            // The shared Forge-lit latch rides welcome, snapshot and destination-changed
+            // (gameServerCore.mjs encounterSnapshotWithRewards). forge-state and pet-state
+            // carry no encounter, so they must never clobber it.
+            if (frame.type != "forge-state" && frame.type != "pet-state")
+                ForgeLit = frame.encounter?.forge?.lit == true;
+
             // Only messages accepted by the player/destination/epoch checks reach personal
             // progression. Its synchronous browser write refreshes the journal before restore.
             AcceptedServerMessage?.Invoke(message);
@@ -243,6 +262,7 @@ namespace GalaQuest
             }
             PlayerId = string.Empty;
             ClearPetState();
+            ForgeLit = false;
             pendingDestination = null;
             StatusChanged?.Invoke(superseded
                 ? "Profile opened elsewhere · continue in the newer session"
@@ -297,6 +317,9 @@ namespace GalaQuest
 
         public bool TryClaimRuneForge() => ControlsReady
             && transport.Send(GalaQuestProtocolV4.ForgeClaim(WorldEpoch));
+
+        public bool TryRelightRuneForge() => ControlsReady
+            && transport.Send(GalaQuestProtocolV4.ForgeRelight(WorldEpoch));
 
         public bool TryEquip(string itemId) => ControlsReady && !string.IsNullOrEmpty(itemId)
             && transport.Send(GalaQuestProtocolV4.Equip(itemId, WorldEpoch));

@@ -279,6 +279,25 @@ test('apply() refuses a weapon-equipped award naming an item nobody defined', ()
   }
 });
 
+// #194 / F3 defence-in-depth: production tests mainly exercise this guard through
+// createRewardCoordinator's applyEquip boundary. This drives store.apply() directly, so the
+// store's own refusal (not just the coordinator's) is proven, and a rejected apply must not
+// have written anything -- exactly like the "unknown weapon id" guard beside it.
+test('apply() refuses a weapon-equipped award under the server-authored forge-relight identity, even for the owning guest', () => {
+  const dir = tempDir();
+  const store = openRewardStore(join(dir, 'rewards.db'));
+  try {
+    assert.throws(
+      () => store.apply(equipAward('guest-a', STARTER_SWORD_ID, 'forge-relight:guest-a:emberworks.rune-forge.magmalord-helmet.v1')),
+      /server-authored Relight completion identity/i,
+    );
+    assert.equal(store.equippedWeaponFor('guest-a'), null, 'a rejected apply must not have written anything');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test('apply() still refuses a wholly unknown award type', () => {
   const dir = tempDir();
   const store = openRewardStore(join(dir, 'rewards.db'));
@@ -557,6 +576,65 @@ test('Village Supplies totals and Workshop I ownership survive a close and reope
     assert.equal(store2.villageUpgradeOwned('village-upgrade:workshop:1'), true);
     store2.close();
   } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+// F2 migration compatibility: a legacy stored equip row with rev NULL and the same semantic
+// fact replayed from a modern device journal carrying an integer rev are the SAME event --
+// accepted as a no-op, never a conflicting reuse -- and the restore batch around it stays usable.
+test('a legacy equip row (rev NULL) accepts the same semantic replay carrying integer rev', () => {
+  const dir = tempDir();
+  const store = openRewardStore(join(dir, 'rewards.db'));
+  try {
+    // A pre-v3 row: no rev was ever minted, so the column reads NULL.
+    assert.equal(store.apply({
+      guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+      eventId: 'equip:guest-a:legacy', value: WILDWOOD_BLADE_ID,
+    }).applied, true);
+    // The same semantic fact, replayed from a modern journal with the rev it carries now.
+    assert.equal(store.apply({
+      guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+      eventId: 'equip:guest-a:legacy', value: WILDWOOD_BLADE_ID, rev: 9,
+    }).applied, false, 'NULL-vs-integer rev is a missing order, not a conflicting one');
+    assert.equal(store.equippedWeaponFor('guest-a'), WILDWOOD_BLADE_ID);
+    // A restore batch containing that replay alongside fresh facts still lands atomically.
+    const batch = store.applyAll([
+      {
+        guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+        eventId: 'equip:guest-a:legacy', value: WILDWOOD_BLADE_ID, rev: 9,
+      },
+      markAward('guest-a', 'mark:guest-a:9'),
+    ]);
+    assert.equal(batch.applied, 1, 'the replay is a no-op inside the batch; the fresh fact lands');
+    assert.equal(store.marksFor('guest-a'), 1, 'the restore batch remains usable');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+// F2 counterpart: when BOTH sides carry an integer order and those orders differ, the conflict
+// is real chronology and still fails loudly -- migration compatibility must not erase it.
+test('the same equip id with two different integer revs is still a conflicting reuse', () => {
+  const dir = tempDir();
+  const store = openRewardStore(join(dir, 'rewards.db'));
+  try {
+    store.apply({
+      guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+      eventId: 'equip:guest-a:ordered', value: WILDWOOD_BLADE_ID, rev: 10,
+    });
+    assert.throws(
+      () => store.apply({
+        guestId: 'guest-a', heroId: 'p1', type: 'weapon-equipped',
+        eventId: 'equip:guest-a:ordered', value: WILDWOOD_BLADE_ID, rev: 11,
+      }),
+      /conflicting reuse.*rev/,
+      'two existing integer orders that differ are a different semantic event',
+    );
+    assert.equal(store.equippedWeaponFor('guest-a'), WILDWOOD_BLADE_ID, 'the original row survives');
+  } finally {
+    store.close();
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });

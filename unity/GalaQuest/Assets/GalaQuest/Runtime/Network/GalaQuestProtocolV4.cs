@@ -86,6 +86,9 @@ namespace GalaQuest
         public static string ForgeClaim(int worldEpoch) => WithEpoch(
             JsonUtility.ToJson(new SimpleMessage { v = Version, type = "forge-claim" }), worldEpoch);
 
+        public static string ForgeRelight(int worldEpoch) => WithEpoch(
+            JsonUtility.ToJson(new SimpleMessage { v = Version, type = "forge-relight" }), worldEpoch);
+
         public static string Equip(string itemId, int worldEpoch) => WithEpoch(
             JsonUtility.ToJson(new EquipMessage { v = Version, type = "equip", itemId = itemId }), worldEpoch);
 
@@ -154,6 +157,7 @@ namespace GalaQuest
             frame.encounter ??= new GalaQuestServerEncounter();
             frame.encounter.heroes ??= new Dictionary<string, GalaQuestServerHeroCombat>();
             frame.encounter.enemies ??= Array.Empty<GalaQuestServerEnemy>();
+            frame.encounter.forge ??= new GalaQuestServerForge();
             frame.events ??= Array.Empty<GalaQuestServerCombatEvent>();
             if (frame.pets != null) frame.pets.ownedPetIds ??= Array.Empty<string>();
             foreach (var reward in frame.encounter.rewards.Values)
@@ -282,6 +286,15 @@ namespace GalaQuest
         public GalaQuestServerEnemy[] enemies = Array.Empty<GalaQuestServerEnemy>();
         public Dictionary<string, GalaQuestServerHeroCombat> heroes = new Dictionary<string, GalaQuestServerHeroCombat>();
         public Dictionary<string, GalaQuestServerRewards> rewards = new Dictionary<string, GalaQuestServerRewards>();
+        // Shared Forge-lit latch (gameServerCore.mjs encounterSnapshotWithRewards). Absent on the
+        // wire means the forge is dark, exactly like the normalisation above guarantees.
+        public GalaQuestServerForge forge = new GalaQuestServerForge();
+    }
+
+    [Serializable]
+    public sealed class GalaQuestServerForge
+    {
+        public bool lit;
     }
 
     [Serializable]
@@ -321,6 +334,7 @@ namespace GalaQuest
         public string response;
         public string hint;
         public bool justGranted;
+        public bool justLit;
     }
 
     [Serializable]
