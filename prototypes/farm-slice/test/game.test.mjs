@@ -128,6 +128,15 @@ function fullPath(offerId, expectedCoins, expectedCarrots, expectedSunberries) {
 
 test('contract path A: 5 carrots for 10, helmet, hatch, feed, replant', () => fullPath('pip_crate', 10, 1, 2));
 test('contract path B: bundle for 12 and 2 coins left after helmet', () => fullPath('pip_bundle', 12, 4, 1));
+
+test('FREE only points at the market when a crate can be filled', () => {
+  const state = fullPath('pip_crate', 10, 1, 2);
+  assert.equal(game.currentGoal(state, content, 385_000).targetKey, 'market');
+  const empty = { ...state, basket: { ...state.basket, crops: {} } };
+  const goal = game.currentGoal(empty, content, 385_000);
+  assert.equal(goal.targetKey, 'plot');
+  assert.ok(goal.plotIndex >= 0);
+});
 test('each first seed needs its own plot and watering halves remaining time', () => {
   let state = game.createGameState(0);
   assert.equal(game.plantPlot(state, content, 0, 'sunberry', 0).planted, true);

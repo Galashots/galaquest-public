@@ -166,8 +166,18 @@ export function currentGoal(state, content, now) {
     }
 
     case 'free':
-    default:
-      return { step, text: "Pip wants more carrots", targetKey: 'market' };
+    default: {
+      // Always an obvious next step: only send the child to Pip when a
+      // crate can actually be filled; otherwise pick, plant or wait.
+      if (content.OFFERS.some((o) => economy.canFulfillOffer(state.basket, o))) {
+        return { step, text: 'Pip wants more carrots', targetKey: 'market' };
+      }
+      const ready = readyPlotIndexes(state, content, now);
+      if (ready.length) return { step, text: 'Pick your crops', targetKey: 'ripeCrop', plotIndex: ready[0] };
+      const empty = state.farm.plots.findIndex((p) => !p.cropId);
+      if (empty >= 0) return { step, text: 'Plant more carrots', targetKey: 'plot', plotIndex: empty };
+      return { step, text: 'Your crops are growing...', targetKey: 'sprout', plotIndex: 0 };
+    }
   }
 }
 
