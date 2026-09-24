@@ -1,152 +1,162 @@
-// End-to-end coverage of the goal-tracker walking through every beat of the
-// ten-minute slice, tuned to CONTRACT.md's numbers, using the real
-// placeholder content pack.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as game from '../src/rules/game.js';
 import * as goals from '../src/rules/goals.js';
+import { loadGame, saveGame, clearSave } from '../src/save.js';
 import * as content from '../content/index.js';
 
-function readyAllPlots(state, content, now) {
-  return game.readyPlotIndexes(state, content, now);
+const storage = new Map();
+globalThis.window = { localStorage: {
+  getItem: (key) => storage.get(key) || null,
+  setItem: (key, value) => storage.set(key, value),
+  removeItem: (key) => storage.delete(key),
+} };
+
+function reload(state, now) {
+  assert.equal(saveGame(state), true);
+  assert.ok(storage.has('gq.farmSlice.v1'));
+  const loaded = loadGame(now);
+  assert.equal(loaded.isNewGame, false);
+  const goal = game.currentGoal(loaded.state, content, now);
+  assert.equal(goal.step, game.currentGoal(state, content, now).step);
+  assert.ok(goal.targetKey, `${goal.step} needs an arrow target after reload`);
+  return loaded.state;
 }
-
-test('goal tracker walks through every beat in order with no gaps and no dead ends', () => {
-  let now = 0;
-  let state = game.createGameState(now);
-  assert.equal(game.currentGoal(state).step, 'plant');
-
-  // Beat 2: plant -> first crack. Recipe is 1 sunberry (distinctive) + 2 carrots.
-  let res = game.plantAll(state, content, now);
-  state = res.state;
-  assert.equal(res.planted.length, 3, 'should plant all 3 plots at once');
+function plant(state, index, crop, now) {
+  const result = game.plantPlot(state, content, index, crop, now);
+  assert.equal(result.planted, true);
+  return result.state;
+}
+function harvest(state, index, now) {
+  const result = game.harvestPlot(state, content, index, now);
+  assert.ok(result.harvestedCropId);
+  return result.state;
+}
+function toFirstHarvest() {
+  let state = game.createGameState(0);
+  state = game.setBand(state, 'younger');
+  state = reload(state, 0);
+  assert.deepEqual(goals.GOAL_STEPS, ['plant','grow','harvest','market','offer','armor','hatch','name','book','feed','replant','free']);
+  state = plant(state, 0, 'carrot', 0);
+  assert.equal(game.currentGoal(state, content, 0).step, 'plant');
+  state = reload(state, 0);
+  state = plant(state, 1, 'sunberry', 0);
+  assert.equal(game.currentGoal(state, content, 0).step, 'plant');
+  state = plant(state, 2, 'carrot', 0);
   assert.equal(state.egg.cracks, 1);
-  assert.equal(game.currentGoal(state).step, 'harvest');
-
-  // Let everything grow (sunberry takes the longest: 40s).
-  now += 45_000;
-  const ready = readyAllPlots(state, content, now);
-  assert.equal(ready.length, 3);
-
-  // Beat 3: harvest each ripe plot. Yield: 3 carrots/plant, 2 sunberries/plant.
-  for (const plotIndex of ready) {
-    const harvestRes = game.harvestPlot(state, content, plotIndex, now);
-    state = harvestRes.state;
-  }
+  assert.equal(game.currentGoal(state, content, 0).step, 'grow');
+  state = reload(state, 0);
+  assert.equal(game.readyPlotIndexes(state, content, 19_999).length, 0);
+  state = game.waterPlot(state, content, 1, 10_000).state;
+  assert.equal(game.getGrowthProgress(state, content, 1, 24_999) < 1, true);
+  assert.equal(game.getGrowthProgress(state, content, 1, 25_000), 1);
+  state = reload(state, 10_000);
+  state = game.checkTimeGates(state, content, 20_000);
+  assert.equal(game.currentGoal(state, content, 20_000).step, 'harvest');
+  state = reload(state, 20_000);
+  state = harvest(state, 0, 20_000);
+  assert.equal(game.currentGoal(state, content, 20_000).step, 'harvest');
+  state = harvest(state, 2, 20_000);
+  assert.equal(game.currentGoal(state, content, 20_000).step, 'harvest', 'market waits for the sunberry');
+  assert.equal(state.egg.cracks, 1);
+  state = reload(state, 20_000);
+  state = harvest(state, 1, 25_000);
+  assert.deepEqual({ carrot: state.basket.crops.carrot, sunberry: state.basket.crops.sunberry }, { carrot: 6, sunberry: 2 });
   assert.equal(state.egg.cracks, 2);
-  assert.equal(game.currentGoal(state).step, 'market');
-  assert.equal(state.egg.elementHint, 'sun', 'sunberry is the distinctive sun crop');
-
-  const sunberryCount = state.basket.crops.sunberry || 0;
-  const carrotCount = state.basket.crops.carrot || 0;
-  assert.equal(sunberryCount, 2, 'one sunberry plant yields 2');
-  assert.equal(carrotCount, 6, 'two carrot plants yield 3 each');
-
-  // Beat 4: fulfil the bundle offer (2 carrots + 1 sunberry -> 12 coins).
-  const offerRes = game.fulfillOffer(state, content, 'pip_bundle', now);
-  assert.equal(offerRes.success, true);
-  state = offerRes.state;
-  assert.equal(state.basket.coins, 12);
-  assert.equal(state.basket.crops.carrot, 4);
-  assert.equal(state.basket.crops.sunberry, 1);
+  assert.equal(game.currentGoal(state, content, 25_000).step, 'market');
+  return reload(state, 25_000);
+}
+function fullPath(offerId, expectedCoins, expectedCarrots, expectedSunberries) {
+  let state = toFirstHarvest();
+  state = game.openMarket(state);
+  assert.equal(game.currentGoal(state, content, 25_000).step, 'offer');
+  state = reload(state, 25_000);
+  const sale = game.fulfillOffer(state, content, offerId, 25_000);
+  assert.equal(sale.success, true);
+  state = sale.state;
+  assert.equal(state.basket.coins, expectedCoins);
+  assert.equal(state.basket.crops.carrot, expectedCarrots);
+  assert.equal(state.basket.crops.sunberry, expectedSunberries);
+  assert.equal(state.offersFilled[offerId === 'pip_crate' ? 'crate' : 'bundle'], 1);
+  assert.equal(game.fulfillOffer(state, content, offerId, 25_000).success, false, 'only the chosen first sale commits');
   assert.equal(state.egg.cracks, 3);
-  assert.equal(game.currentGoal(state).step, 'armor');
-
-  // Beat 5: buy the Leaf Crest Helmet (price 10) and it equips immediately.
-  const armorRes = game.buyArmor(state, content, 'leaf_crest_helmet', now);
-  assert.equal(armorRes.success, true);
-  state = armorRes.state;
-  assert.equal(state.basket.coins, 2);
+  assert.equal(game.currentGoal(state, content, 25_000).step, 'armor');
+  state = reload(state, 25_000);
+  state = game.buyArmor(state, content, 'leaf_crest_helmet', 25_000).state;
   assert.equal(state.armor.equipped.helmet, 'leaf_crest_helmet');
+  assert.equal(state.basket.coins, expectedCoins - 10);
   assert.equal(state.egg.cracks, 4);
   assert.equal(state.egg.readyToHatch, true);
-  assert.equal(game.currentGoal(state).step, 'hatch');
-
-  // Beat 6: hatch requires 3 taps -- no question gate, ever.
-  let tap1 = game.tapEgg(state, content, now);
-  assert.equal(tap1.hatched, false);
-  state = tap1.state;
-  let tap2 = game.tapEgg(state, content, now);
-  assert.equal(tap2.hatched, false);
-  state = tap2.state;
-  assert.equal(game.currentGoal(state).step, 'hatch', 'still on the hatch beat until the 3rd tap');
-
-  const tap3 = game.tapEgg(state, content, now);
-  assert.equal(tap3.hatched, true);
-  state = tap3.state;
-  assert.equal(tap3.hatchedCreatureId, 'sprout', 'sun hint should hatch the sun creature');
-  assert.equal(state.collection.owned.sprout, true);
-  assert.equal(game.currentGoal(state).step, 'name');
-
-  // Name the hatchling.
-  const nameRes = game.nameCreature(state, content, 'Sparky', now);
-  assert.equal(nameRes.success, true);
-  state = nameRes.state;
-  assert.equal(state.collection.names.sprout, 'Sparky');
-
-  // Beat 7: loop tease -- feed a sunberry (still have 1 in the basket).
-  assert.equal(game.currentGoal(state).step, 'loop');
-  const feedRes = game.feedSunberry(state, content, now);
-  assert.equal(feedRes.success, true);
-  state = feedRes.state;
-  assert.equal(state.basket.crops.sunberry, 0);
+  assert.equal(game.currentGoal(state, content, 25_000).step, 'hatch');
+  state = reload(state, 25_000);
+  state = game.tapEgg(state, content, 360_000).state;
+  assert.equal(state.egg.hatchTaps, 1);
+  state = reload(state, 360_000);
+  assert.equal(state.egg.hatchTaps, 0, 'hatch taps are transient');
+  state = game.tapEgg(state, content, 360_000).state;
+  state = game.tapEgg(state, content, 360_000).state;
+  state = game.tapEgg(state, content, 360_000).state;
+  assert.equal(state.egg.hatchedCreatureId, 'sprout');
+  assert.equal(game.currentGoal(state, content, 360_000).step, 'name');
+  state = reload(state, 360_000);
+  assert.equal(game.currentGoal(state, content, 360_000).targetKey, 'nameDialog');
+  state = game.nameCreature(state, content, 'VeryLongNameIndeed', 365_000).state;
+  assert.equal(state.collection.names.sprout.length, 12);
+  assert.equal(game.currentGoal(state, content, 365_000).step, 'book');
+  state = reload(state, 365_000);
+  assert.equal(game.feedSunberry(state, content, 365_000).success, false, 'feeding early cannot consume the last berry');
+  state = game.closeBook(state);
+  assert.equal(state.bookSeen, true);
+  assert.equal(game.currentGoal(state, content, 365_000).step, 'feed');
+  state = reload(state, 365_000);
+  state = game.feedSunberry(state, content, 365_000).state;
   assert.equal(state.collection.fed.sprout, 1);
+  assert.equal(state.basket.crops.sunberry, expectedSunberries - 1);
+  assert.equal(game.currentGoal(state, content, 365_000).step, 'replant');
+  state = reload(state, 365_000);
+  for (let i = 0; i < 3; i++) state = plant(state, i, 'carrot', 365_000);
+  assert.equal(game.currentGoal(state, content, 365_000).step, 'replant');
+  state = reload(state, 365_000);
+  for (let i = 0; i < 3; i++) state = harvest(state, i, 385_000);
+  assert.equal(state.basket.crops.carrot, expectedCarrots + 9);
+  assert.equal(game.currentGoal(state, content, 385_000).step, 'free');
+  state = reload(state, 385_000);
+  assert.equal(state.egg.cracks, 4);
+  assert.equal(state.basket.coins, expectedCoins - 10);
+  return state;
+}
 
-  // Terminal, free-play state, never expires: planting again still works.
-  const again = game.plantAll(state, content, now);
-  assert.equal(again.planted.length > 0, true, 'planting again in the loop still works');
-  assert.equal(again.state.egg.cracks, 4, 'no more cracks after hatching');
+test('contract path A: 5 carrots for 10, helmet, hatch, feed, replant', () => fullPath('pip_crate', 10, 1, 2));
+test('contract path B: bundle for 12 and 2 coins left after helmet', () => fullPath('pip_bundle', 12, 4, 1));
+test('each first seed needs its own plot and watering halves remaining time', () => {
+  let state = game.createGameState(0);
+  assert.equal(game.plantPlot(state, content, 0, 'sunberry', 0).planted, true);
+  state = plant(state, 0, 'sunberry', 0);
+  assert.equal(game.plantPlot(state, content, 1, 'sunberry', 0).planted, false);
+  state = plant(state, 1, 'carrot', 0);
+  state = plant(state, 2, 'carrot', 0);
+  assert.equal(game.getGrowthProgress(state, content, 0, 39_999) < 1, true);
+  assert.equal(game.getGrowthProgress(state, content, 0, 40_000), 1);
+  state = game.waterPlot(state, content, 0, 10_000).state;
+  assert.equal(game.getGrowthProgress(state, content, 0, 24_999) < 1, true);
+  assert.equal(game.getGrowthProgress(state, content, 0, 25_000), 1);
 });
-
-test('an offer the player cannot yet afford does not advance the goal or crack the egg', () => {
-  let now = 0;
-  let state = game.createGameState(now);
-  state = game.plantAll(state, content, now).state; // goal -> harvest, cracks=1
-  const res = game.fulfillOffer(state, content, 'pip_crate', now);
-  assert.equal(res.success, false);
-  assert.equal(res.state.egg.cracks, 1);
-  assert.equal(game.currentGoal(res.state).step, 'harvest');
+test('one volunteer carrot only on return to an empty plot, none before first planting', () => {
+  let state = game.createGameState(0);
+  state = reload(state, 100_000);
+  assert.equal(game.applyVolunteerCarrots(state, content, 100_000), state);
+  state = toFirstHarvest();
+  state = game.applyVolunteerCarrots(state, content, 100_000);
+  assert.equal(state.farm.plots.filter((p) => p.cropId === 'carrot').length, 1);
+  const again = game.applyVolunteerCarrots(state, content, 200_000);
+  assert.equal(again, state);
+  assert.equal(game.readyPlotIndexes(state, content, 100_000).length, 1);
 });
-
-test('unknown offer/armor ids fail safely without throwing', () => {
+test('unavailable storage never interrupts play', () => {
+  const original = globalThis.window;
+  globalThis.window = { localStorage: { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } } };
   const state = game.createGameState(0);
-  assert.equal(game.fulfillOffer(state, content, 'nope', 0).success, false);
-  assert.equal(game.buyArmor(state, content, 'nope', 0).success, false);
-});
-
-test('GOAL_STEPS covers exactly the documented beats in order', () => {
-  assert.deepEqual(goals.GOAL_STEPS, ['plant', 'harvest', 'market', 'armor', 'hatch', 'name', 'loop']);
-});
-
-test('setBand only accepts younger/older and is otherwise a no-op', () => {
-  let state = game.createGameState(0);
-  assert.equal(state.band, null);
-  state = game.setBand(state, 'younger');
-  assert.equal(state.band, 'younger');
-  const unchanged = game.setBand(state, 'nonsense');
-  assert.equal(unchanged.band, 'younger');
-});
-
-test('applyVolunteerCarrots fills every empty plot with an already-ripe carrot', () => {
-  const now = 1_000_000;
-  let state = game.createGameState(0);
-  state = game.applyVolunteerCarrots(state, content, now);
-  const ready = game.readyPlotIndexes(state, content, now);
-  assert.equal(ready.length, 3);
-  state.farm.plots.forEach((plot) => assert.equal(plot.cropId, 'carrot'));
-});
-
-test('applyVolunteerCarrots does not overwrite plots that are already growing', () => {
-  const now = 0;
-  let state = game.createGameState(now);
-  state = game.plantAll(state, content, now).state;
-  const before = JSON.stringify(state.farm);
-  state = game.applyVolunteerCarrots(state, content, now + 500);
-  assert.equal(JSON.stringify(state.farm), before, 'occupied plots are left untouched');
-});
-
-test('feedSunberry requires both a hatched creature and a sunberry in the basket', () => {
-  let state = game.createGameState(0);
-  const noCreature = game.feedSunberry(state, content, 0);
-  assert.equal(noCreature.success, false);
+  assert.equal(saveGame(state), false);
+  assert.equal(loadGame(0).isNewGame, true);
+  globalThis.window = original;
 });

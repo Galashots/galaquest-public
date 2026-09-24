@@ -18,7 +18,7 @@ export function discoverCreature(collectionState, creatureId) {
 /** Name a discovered creature. No-op if it hasn't been discovered yet. */
 export function nameCreature(collectionState, creatureId, name) {
   if (!collectionState.owned[creatureId]) return collectionState;
-  const trimmed = String(name || '').trim().slice(0, 16);
+  const trimmed = String(name || '').trim().slice(0, 12);
   if (!trimmed) return collectionState;
   return { ...collectionState, names: { ...collectionState.names, [creatureId]: trimmed } };
 }

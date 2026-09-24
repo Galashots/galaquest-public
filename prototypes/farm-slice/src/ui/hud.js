@@ -23,6 +23,14 @@ export class Hud {
     this.ring.className = 'gq-ring';
     this.ring.style.display = 'none';
     this.overlay.appendChild(this.ring);
+    this.progressRings = [];
+    for (let i = 0; i < 3; i++) {
+      const ring = document.createElement('div');
+      ring.className = 'gq-progress-ring';
+      ring.style.display = 'none';
+      this.overlay.appendChild(ring);
+      this.progressRings.push(ring);
+    }
 
     this.hudCluster = document.createElement('div');
     this.hudCluster.className = 'gq-hud-cluster';
@@ -30,7 +38,7 @@ export class Hud {
 
     this.coinPill = document.createElement('div');
     this.coinPill.className = 'gq-pill';
-    this.coinPill.innerHTML = '<span class="gq-icon">\u{1FA99}</span><span class="gq-coin-count">0</span>';
+    this.coinPill.innerHTML = '<span class="gq-icon">🪙</span><span class="gq-coin-count">0</span>';
     this.hudCluster.appendChild(this.coinPill);
 
     this.basketPill = document.createElement('div');
@@ -44,11 +52,27 @@ export class Hud {
     this.muteBtn.textContent = '\u{1F50A}';
     this.hudCluster.appendChild(this.muteBtn);
 
+    this.gearBtn = document.createElement('button');
+    this.gearBtn.className = 'gq-round-btn';
+    this.gearBtn.textContent = '⚙';
+    this.gearBtn.setAttribute('aria-label', 'Hold for grown-up settings');
+    this.hudCluster.appendChild(this.gearBtn);
+
     this.bookBtn = document.createElement('button');
     this.bookBtn.className = 'gq-book-btn';
     this.bookBtn.setAttribute('aria-label', 'Open collection book');
     this.bookBtn.textContent = '\u{1F4D6}';
     this.overlay.appendChild(this.bookBtn);
+
+    this.feedBtn = document.createElement('button');
+    this.feedBtn.className = 'gq-feed-btn';
+    this.feedBtn.textContent = '☀️ Feed Sprout';
+    this.feedBtn.style.display = 'none';
+    this.overlay.appendChild(this.feedBtn);
+    this.feedMeter = document.createElement('div');
+    this.feedMeter.className = 'gq-feed-meter';
+    this.feedMeter.style.display = 'none';
+    this.overlay.appendChild(this.feedMeter);
 
     this.toast = document.createElement('div');
     this.toast.className = 'gq-toast';
@@ -57,8 +81,16 @@ export class Hud {
     this._toastTimer = null;
   }
 
+  onGearHold(cb) {
+    let timer;
+    this.gearBtn.addEventListener('pointerdown', () => { timer = setTimeout(cb, 2000); });
+    for (const event of ['pointerup', 'pointercancel', 'pointerleave']) this.gearBtn.addEventListener(event, () => clearTimeout(timer));
+  }
   onMuteToggle(cb) { this.muteBtn.addEventListener('click', cb); }
   onBookOpen(cb) { this.bookBtn.addEventListener('click', cb); }
+  onFeed(cb) { this.feedBtn.addEventListener('click', cb); }
+  setFeedVisible(on) { this.feedBtn.style.display = on ? 'block' : 'none'; }
+  setFeedMeter(fed, visible) { this.feedMeter.style.display = visible ? 'block' : 'none'; this.feedMeter.textContent = `☀️ Sprout ${Math.min(fed, 3)}/3`; }
 
   setGoalText(text) {
     if (this.chip.textContent === text) return;
@@ -82,6 +114,14 @@ export class Hud {
     this.arrow.style.top = `${pos.y}px`;
     this.ring.style.left = `${pos.x}px`;
     this.ring.style.top = `${pos.y + 40}px`;
+  }
+
+  setProgressRings(items) {
+    this.progressRings.forEach((ring, i) => {
+      const item = items[i];
+      ring.style.display = item ? 'block' : 'none';
+      if (item) { ring.style.left = `${item.x}px`; ring.style.top = `${item.y}px`; ring.style.setProperty('--progress', `${Math.round(item.progress * 100)}%`); }
+    });
   }
 
   setCoins(n) {

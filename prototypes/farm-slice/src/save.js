@@ -4,17 +4,34 @@
 
 import { SAVE_VERSION, createGameState } from './rules/game.js';
 
-const SAVE_KEY = 'galaquest-farm-slice-save';
+const SAVE_KEY = 'gq.farmSlice.v1';
 
 export function saveGame(state) {
   try {
-    const payload = JSON.stringify({ version: SAVE_VERSION, savedAt: Date.now(), state });
+    // Hatch taps are UI-only drama, not part of the saved goal state
+    // (CONTRACT.md section 4: "Taps aren't saved") -- always persist zero so
+    // a reload mid-hatch doesn't skip ahead or get stuck on a stale count.
+    const toSave = state.egg && state.egg.hatchTaps
+      ? { ...state, egg: { ...state.egg, hatchTaps: 0 } }
+      : state;
+    const payload = JSON.stringify({ version: SAVE_VERSION, savedAt: Date.now(), state: toSave });
     window.localStorage.setItem(SAVE_KEY, payload);
     return true;
   } catch (err) {
     console.warn('[save] could not save game', err);
     return false;
   }
+}
+
+function readKey(key) {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+  const payload = JSON.parse(raw);
+  if (!payload || payload.version !== SAVE_VERSION || !payload.state) return null;
+  const state = payload.state;
+  if (!Array.isArray(state.farm?.plots) || state.farm.plots.length !== 3 ||
+      !Number.isInteger(state.goals?.stepIndex) || !state.egg || !state.basket || !state.collection) return null;
+  return state;
 }
 
 /**
@@ -26,13 +43,10 @@ export function saveGame(state) {
  */
 export function loadGame(now) {
   try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return { state: createGameState(now), isNewGame: true };
-    const payload = JSON.parse(raw);
-    if (!payload || payload.version !== SAVE_VERSION || !payload.state) {
-      return { state: createGameState(now), isNewGame: true };
-    }
-    return { state: payload.state, isNewGame: false };
+    const current = readKey(SAVE_KEY);
+    if (current) return { state: current, isNewGame: false };
+
+    return { state: createGameState(now), isNewGame: true };
   } catch (err) {
     console.warn('[save] could not load game, starting fresh', err);
     return { state: createGameState(now), isNewGame: true };

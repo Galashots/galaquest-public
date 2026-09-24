@@ -2,7 +2,7 @@
 
 A self-contained, ten-minute playable slice of GalaQuest's farm loop. Plain ES
 modules, three.js for the diorama, DOM for the touch UI, no build step, no
-npm dependencies. See `CONTRACT.md` (in the integration branch) for the
+npm dependencies. See `CONTRACT.md` for the
 tuned experience spec this build follows, and `../../co-ceo-brief.md` for the
 original product brief.
 
@@ -35,9 +35,7 @@ node --test test/
 - `src/audio.js` -- short generated WebAudio blips (no audio files), with a
   mute toggle and unlock-on-first-tap for iOS Safari.
 - `src/main.js` -- glue between all of the above.
-- `content/` -- game content (crops, armor, creatures, offers, dialog). See
-  `content/index.js` for how the placeholder and the real content pack are
-  wired together.
+- `content/` -- game content (crops, armor, creatures, offers, dialog), exported by `content/index.js`.
 - `test/*.test.mjs` -- `node --test` unit tests for the rules modules.
 - `vendor/three.module.min.js` -- vendored copy of three.js.
 

@@ -72,6 +72,39 @@ export function buildPlot(THREE) {
   return group;
 }
 
+export function buildWateringCan(THREE) {
+  const group = new THREE.Group();
+  const metal = mat(THREE, '#4a90d9');
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.28, 0.42, 10), metal);
+  body.position.y = 0.43;
+  group.add(body);
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.45, 8), mat(THREE, '#83c7f3'));
+  spout.position.set(0.33, 0.56, 0);
+  spout.rotation.z = -0.85;
+  group.add(spout);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.045, 6, 12), mat(THREE, '#295f9a'));
+  handle.position.set(-0.24, 0.5, 0);
+  handle.rotation.y = Math.PI / 2;
+  group.add(handle);
+  group.add(shadowAt(THREE, 0, 0, 0.35));
+  return group;
+}
+
+export function buildSeedSack(THREE) {
+  const group = new THREE.Group();
+  const bag = new THREE.Mesh(new THREE.SphereGeometry(0.38, 10, 8), mat(THREE, '#e8bd70', { emissive: '#ffd54f', emissiveIntensity: 0.25 }));
+  bag.scale.set(1, 1.3, 0.7);
+  bag.position.y = 0.48;
+  group.add(bag);
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.045, 6, 10), mat(THREE, '#b86d11'));
+  tie.rotation.x = Math.PI / 2;
+  tie.position.y = 0.83;
+  group.add(tie);
+  group.add(shadowAt(THREE, 0, 0, 0.45));
+  group.userData.bag = bag;
+  return group;
+}
+
 /** Builds (or rebuilds) the crop mesh for a plot at a given growth progress 0..1. */
 export function buildCrop(THREE, cropDef, progress) {
   const group = new THREE.Group();

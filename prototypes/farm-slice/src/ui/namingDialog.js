@@ -1,5 +1,5 @@
 // The naming dialog for a freshly hatched creature. No question gate, no
-// wrong answer: pick a suggestion or type your own (capped at 16 chars).
+// wrong answer: pick a suggestion or type your own (capped at 12 chars).
 
 const SUGGESTIONS = ['Sprout', 'Buddy', 'Sunny', 'Pip', 'Ember', 'Star'];
 
@@ -20,7 +20,8 @@ export class NamingDialog {
 
     this.input = document.createElement('input');
     this.input.className = 'gq-name-input';
-    this.input.maxLength = 16;
+    this.input.maxLength = 12;
+    this.input.style.display = 'none';
     this.input.setAttribute('placeholder', 'Type a name...');
     this.panel.appendChild(this.input);
 
@@ -30,17 +31,24 @@ export class NamingDialog {
       const chip = document.createElement('button');
       chip.className = 'gq-name-chip';
       chip.textContent = name;
-      chip.addEventListener('click', () => { this.input.value = name; });
+      chip.addEventListener('click', () => onSubmit && onSubmit(name));
       this.suggestionsEl.appendChild(chip);
     });
     this.panel.appendChild(this.suggestionsEl);
 
+    this.typeBtn = document.createElement('button');
+    this.typeBtn.className = 'gq-btn gq-btn-back';
+    this.typeBtn.textContent = 'Type my own';
+    this.typeBtn.addEventListener('click', () => { this.input.style.display = 'block'; this.submitBtn.style.display = 'block'; this.typeBtn.style.display = 'none'; this.input.focus(); });
+    this.panel.appendChild(this.typeBtn);
+
     this.submitBtn = document.createElement('button');
     this.submitBtn.className = 'gq-btn';
     this.submitBtn.style.width = '100%';
+    this.submitBtn.style.display = 'none';
     this.submitBtn.textContent = "That's the name!";
     this.submitBtn.addEventListener('click', () => {
-      const name = this.input.value.trim() || this._defaultName || 'Buddy';
+      const name = this.input.value.trim();
       onSubmit && onSubmit(name);
     });
     this.panel.appendChild(this.submitBtn);
@@ -50,7 +58,10 @@ export class NamingDialog {
 
   open(defaultName) {
     this._defaultName = defaultName;
-    this.input.value = defaultName || '';
+    this.input.value = '';
+    this.input.style.display = 'none';
+    this.submitBtn.style.display = 'none';
+    this.typeBtn.style.display = 'block';
     this.backdrop.style.display = 'flex';
   }
 

@@ -46,6 +46,16 @@ function chord(freqs, opts) {
   freqs.forEach((freq, i) => setTimeout(() => blip({ ...opts, freq }), i * 60));
 }
 
+export function say(words) {
+  if (muted || !('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(String(words));
+    utterance.rate = 0.85;
+    window.speechSynthesis.speak(utterance);
+  } catch { /* generated visual feedback remains available */ }
+}
+
 export const sfx = {
   tap: () => blip({ freq: 520, duration: 0.06, type: 'square', gain: 0.1 }),
   plant: () => blip({ freq: 300, duration: 0.16, type: 'triangle', gain: 0.15, slideTo: 500 }),
@@ -54,6 +64,6 @@ export const sfx = {
   crack: () => blip({ freq: 200, duration: 0.1, type: 'sawtooth', gain: 0.14, slideTo: 120 }),
   hatch: () => chord([440, 660, 880, 1100], { duration: 0.22, type: 'sine', gain: 0.18 }),
   equip: () => chord([520, 780], { duration: 0.16, type: 'triangle', gain: 0.15 }),
-  denied: () => blip({ freq: 180, duration: 0.15, type: 'square', gain: 0.12, slideTo: 140 }),
   open: () => blip({ freq: 400, duration: 0.1, type: 'sine', gain: 0.12, slideTo: 550 }),
+  water: () => blip({ freq: 480, duration: 0.12, type: 'sine', gain: 0.1, slideTo: 360 }),
 };

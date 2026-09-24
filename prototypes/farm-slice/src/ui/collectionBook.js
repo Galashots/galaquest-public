@@ -14,6 +14,7 @@ export class CollectionBook {
     this.backdrop.appendChild(this.panel);
 
     const closeBtn = document.createElement('button');
+    this.closeBtn = closeBtn;
     closeBtn.className = 'gq-panel-close';
     closeBtn.textContent = '✕';
     closeBtn.addEventListener('click', () => onClose && onClose());
@@ -32,6 +33,7 @@ export class CollectionBook {
     });
   }
 
+  get isOpen() { return this.backdrop.style.display === 'flex'; }
   open() { this.backdrop.style.display = 'flex'; }
   close() { this.backdrop.style.display = 'none'; }
 

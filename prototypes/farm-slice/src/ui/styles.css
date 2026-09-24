@@ -287,6 +287,85 @@ html, body {
 
 .gq-btn.gq-btn-gold { background: var(--gq-orange); box-shadow: 0 5px 0 #b95d1c; }
 
+.gq-btn.gq-btn-back {
+  background: #eee;
+  color: var(--gq-ink);
+  box-shadow: 0 5px 0 #b9b9b9;
+  margin-bottom: 12px;
+}
+
+/* A brief, silent nudge toward the right target -- never a fail sound. */
+.gq-pulse {
+  animation: gq-target-pulse 0.4s ease;
+}
+
+@keyframes gq-target-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.gq-fill-view { text-align: center; }
+
+.gq-fill-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.gq-fill-hint {
+  font-size: 0.95rem;
+  color: var(--gq-brown);
+  margin: 0 0 6px;
+}
+
+.gq-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.gq-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  border: 3px solid var(--gq-green);
+  border-radius: 16px;
+  padding: 10px 14px;
+  background: #f3fff0;
+}
+
+.gq-slot-label {
+  font-weight: 800;
+  min-width: 70px;
+}
+
+.gq-slot-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.gq-slot-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid var(--gq-green);
+  background: transparent;
+}
+
+.gq-slot-dot.gq-slot-filled {
+  background: var(--gq-green);
+}
+
+.gq-slot-tap {
+  min-height: 44px;
+  padding: 6px 14px;
+  font-size: 0.95rem;
+}
+
 .gq-armor-row {
   margin-top: 18px;
   border-top: 3px dashed var(--gq-brown);
@@ -409,3 +488,29 @@ html, body {
   :root { font-size: 17px; }
   .gq-panel { padding: 16px; }
 }
+
+/* Seed tray and scale stay above the canvas with large iPad touch targets. */
+.gq-seed-tray { position: absolute; left: 50%; bottom: max(94px, calc(env(safe-area-inset-bottom) + 94px)); transform: translateX(-50%); z-index: 4; background: #fffaf0; border: 4px solid #6d4a30; border-radius: 22px; padding: 10px; text-align: center; box-shadow: 0 6px 0 #6d4a3060; }
+.gq-seed-tray[hidden] { display: none; }
+.gq-seed-choice { min-height: 56px; margin: 5px; border: 3px solid #43a047; border-radius: 14px; background: #f3fff0; font: inherit; font-weight: 800; }
+.gq-seed-selected { background: #ffdf80; border-color: #b86d11; }
+.gq-scale { font-size: 1.3rem; font-weight: 800; transform: rotate(var(--tilt, 0deg)); transition: transform .2s ease; margin: 12px; }
+.gq-coin-outlines { font-size: 1.2rem; white-space: nowrap; }
+.gq-modal-backdrop { z-index: 6; }
+.gq-arrow, .gq-ring { z-index: 9; pointer-events: none; }
+.gq-goal-chip { z-index: 10; pointer-events: none; }
+
+.gq-feed-btn { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); min-height: 68px; padding: 10px 18px; border: 4px solid #b86d11; border-radius: 18px; background: #ffe69b; font: inherit; font-weight: 800; z-index: 5; }
+
+.gq-feed-meter { position: absolute; bottom: max(94px, calc(env(safe-area-inset-bottom) + 94px)); right: max(16px, env(safe-area-inset-right)); background: #fffaf0; border: 3px solid #ff8f3c; border-radius: 999px; padding: 8px 16px; font-weight: 800; }
+
+.gq-hud-cluster .gq-round-btn:last-child { touch-action: none; -webkit-touch-callout: none; }
+
+.gq-progress-ring { position: absolute; width: 48px; height: 48px; margin: -24px; border-radius: 50%; background: conic-gradient(#ffca28 var(--progress), #ffffff88 0); mask: radial-gradient(transparent 52%, black 54%); -webkit-mask: radial-gradient(transparent 52%, black 54%); pointer-events: none; }
+
+.gq-toast { z-index: 11; }
+
+.gq-basket-items { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: 12px 0; }
+.gq-basket-items strong { flex-basis: 100%; }
+.gq-basket-item { min-height: 56px; border: 3px solid #b86d11; border-radius: 14px; background: #fff8df; padding: 8px 12px; font: inherit; font-weight: 800; }
+.gq-basket-needed { border-color: #43a047; box-shadow: 0 0 0 3px #b1eab5; }

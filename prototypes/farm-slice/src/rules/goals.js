@@ -1,9 +1,16 @@
-// Pure goal-tracker state machine. No three.js, no DOM.
-// Drives the always-visible goal chip and tells the UI which on-screen
-// target the bouncing arrow should point at. `loop` is a terminal, free-play
-// state -- nothing ever expires or fails past it.
+// Pure goal-tracker step bookkeeping. No three.js, no DOM, and no knowledge
+// of crops/offers/etc -- that context-aware description lives in game.js
+// (currentGoal), which can inspect farm/basket state to phrase the chip and
+// pick a target. This module only knows the step order.
+//
+// Full machine per CONTRACT.md section 4 "State model":
+//   PLANT -> GROW -> HARVEST -> MARKET -> OFFER -> ARMOR -> HATCH -> NAME
+//   -> BOOK -> FEED -> REPLANT -> FREE (terminal, loops forever)
 
-export const GOAL_STEPS = ['plant', 'harvest', 'market', 'armor', 'hatch', 'name', 'loop'];
+export const GOAL_STEPS = [
+  'plant', 'grow', 'harvest', 'market', 'offer', 'armor',
+  'hatch', 'name', 'book', 'feed', 'replant', 'free',
+];
 
 export function createGoalState() {
   return { stepIndex: 0 };
@@ -21,28 +28,9 @@ export function advanceGoal(goalState) {
   return { stepIndex: Math.min(goalState.stepIndex + 1, GOAL_STEPS.length - 1) };
 }
 
-/**
- * @returns {{step: string, text: string, targetKey: string|null}}
- * targetKey is a hint the renderer maps to a 3D-projected screen point:
- * 'plot' | 'ripeCrop' | 'market' | 'mannequin' | 'egg' | 'nameDialog' | null.
- */
-export function describeGoal(goalState) {
-  const step = currentStep(goalState);
-  switch (step) {
-    case 'plant':
-      return { step, text: 'Plant a seed', targetKey: 'plot' };
-    case 'harvest':
-      return { step, text: 'Pick your crops', targetKey: 'ripeCrop' };
-    case 'market':
-      return { step, text: 'Go to the market', targetKey: 'market' };
-    case 'armor':
-      return { step, text: 'Buy the helmet', targetKey: 'mannequin' };
-    case 'hatch':
-      return { step, text: 'Tap the egg!', targetKey: 'egg' };
-    case 'name':
-      return { step, text: 'Name your creature', targetKey: 'nameDialog' };
-    case 'loop':
-    default:
-      return { step, text: 'Feed your friend, or plant again', targetKey: 'plot' };
-  }
+/** Jump directly to a named step (e.g. reverting OFFER/ARMOR back to MARKET when the player leaves mid-goal). Unknown ids are a no-op. */
+export function setStep(goalState, stepId) {
+  const index = GOAL_STEPS.indexOf(stepId);
+  if (index === -1) return goalState;
+  return { stepIndex: index };
 }
