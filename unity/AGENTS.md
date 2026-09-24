@@ -1,6 +1,8 @@
 # Unity foundation guidance
 
-This directory is the Unity production foundation. Keep these rules durable and project-local.
+**Parked.** The 2026-09-24 engine decision (`docs/product/PRODUCT_VISION.md`, Platform) moved active
+development to the three.js farm game in `prototypes/farm-slice/`. This project is kept as reference,
+not deleted. Work here only when a task is explicitly Unity-scoped; the rules below still apply then.
 
 ## Foundation authority
 
@@ -22,7 +24,7 @@ This directory is the Unity production foundation. Keep these rules durable and 
 
 ## Migration boundaries
 
-- Unity is the production client. The retained Three.js client is a legacy/reference diagnostic surface and does not define Unity acceptance.
+- Unity is parked and is not the production client (see the top of this file). The retained Three.js client in `public/` is a legacy/reference diagnostic surface and does not define Unity acceptance.
 - The existing Node server and protocol remain authoritative until an approved package explicitly changes them.
 - Networking libraries stay behind a GalaQuest-owned abstraction; do not let provider APIs become gameplay contracts.
 - Centralize future coordinate conversion rather than scattering axis or unit fixes through content code.

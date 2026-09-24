@@ -203,17 +203,31 @@ Classify noisy coverage deliberately: repair, quarantine with a return condition
 
 ```bash
 node --test test/*.test.mjs
+node --test prototypes/farm-slice/test/*.test.mjs prototypes/farm-slice/test/depth/*.test.mjs
 ```
 
-The protected branch requires the hosted `unit` context. The checked-in `.github/workflows/test.yml` is the authority for its runtime version and command. Guidance integrity runs here too, so Markdown-only changes still receive the cheap required gate.
+The protected branch requires the hosted `unit` context. The checked-in `.github/workflows/test.yml` is the authority for its runtime version and commands; it also runs the farm game's own suite (`prototypes/farm-slice/test/`). Guidance integrity runs here too, so Markdown-only changes still receive the cheap required gate.
 
-### 2. Legacy Three.js local running-game harnesses
+### 2. Farm game running pixels
+
+The farm game (`prototypes/farm-slice/`) is the active client. Its rules are covered by its suite in
+the required gate; its appearance and touch flow need the running game. Serve it (`node server.mjs`,
+then `/farm/`, or its own `node prototypes/farm-slice/serve.mjs`), start a browser with
+`node tools/runtime-test/automation-chrome.mjs`, and over CDP set an iPad viewport (1024x768 and
+768x1024, `Emulation.setDeviceMetricsOverride` plus `Emulation.setTouchEmulationEnabled`), capture,
+and check the console for errors. No checked-in farm driver does this yet; the legacy harnesses below
+do not cover the farm game. Emulated headless captures are diagnostic: acceptance is iPad Safari and
+human visual judgment (`AGENTS.md`, visual and product acceptance). The hosted instance
+(`docs/public-playtest.md`) serves the same route for a real iPad; fetch its `/source-sha.json` first.
+
+### 3. Legacy Three.js local running-game harnesses
 
 `tools/runtime-test/` drives the retained Three.js client in real Chrome over CDP. The harnesses own their isolated runtime server; **do not pre-start `server.mjs` for them unless a specific harness explicitly says otherwise**. Open the produced captures when visual evidence matters.
 
-### 3. Unity manifest-based browser evidence
+### 4. Unity manifest-based browser evidence (parked)
 
-For the Unity production client, use the checked-in manifest-bound browser route in
+Unity is parked (`docs/product/PRODUCT_VISION.md`, Platform); this applies only to explicitly
+Unity-scoped work. For the Unity client, use the checked-in manifest-bound browser route in
 [`tools/unity-playtest/README.md`](../tools/unity-playtest/README.md). It identifies the local Unity
 build, its client/server SHAs, and the assertions it can prove. The legacy Three.js harnesses, Render
 relay, and their captures do not provision or substitute for Unity browser evidence. A successful Unity
@@ -221,7 +235,7 @@ driver is behavior evidence only; inspect running-game pixels and physical-devic
 
 `unity/AGENTS.md` owns project safety. `.agents/skills/galaquest-unity-web-playtest/SKILL.md` owns the live-Editor, focused-test, build-reuse and timeout procedures; do not substitute repeated cold builds for that loop.
 
-### 4. Legacy Three.js on-demand Director relay on a PR
+### 5. Legacy Three.js on-demand Director relay on a PR
 
 For an exact PR-head browser run in Actions, the repository owner can comment a whitelisted command such as:
 
@@ -233,11 +247,11 @@ For an exact PR-head browser run in Actions, the repository owner can comment a 
 
 `.github/workflows/director-playtest.yml` is the scenario whitelist and implementation authority. It checks out the actual PR head, runs PR code in a read-only job, uploads evidence, and reports from a separate write-capable job. Do not collapse that security boundary merely to simplify reporting.
 
-### 5. Legacy Three.js public hosted playtest
+### 6. Public hosted playtest
 
-Use the Render instance when a tester has a browser but cannot reach a local machine. Follow `docs/public-playtest.md` and fetch `/source-sha.json` **before** treating the session as evidence for a commit. Per-PR preview instances are opt-in with `[render preview]` in the PR title. This is retained Three.js coverage, not a Unity build/deployment guarantee.
+Use the Render instance when a tester has a browser but cannot reach a local machine. Follow `docs/public-playtest.md` and fetch `/source-sha.json` **before** treating the session as evidence for a commit. Per-PR preview instances are opt-in with `[render preview]` in the PR title. The same instance serves the farm game at `/farm/`. The root is retained Three.js coverage, not a Unity build/deployment guarantee.
 
-### 6. Full browser matrix
+### 7. Full browser matrix
 
 `.github/workflows/full-playtest-matrix.yml` is broad diagnostic coverage, not the protected required gate. It is intentionally more expensive and historically noisier than `unit`; use it when the changed surface warrants broad browser coverage and interpret failures from the exact run rather than from remembered pass counts.
 

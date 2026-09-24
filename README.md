@@ -1,23 +1,24 @@
 # GalaQuest
 
-A browser-based, MMO-inspired action-adventure built for tablets and desktops. Tab-target combat, a
-persistent village, co-op play over WebSockets, and learning content built into the world rather than
-bolted onto it. Under active development.
+A browser game for tablets and desktops, built in three.js with plain ES modules and no build step.
+The active game is **Hatch & Harvest**, a creature-collector farm in `prototypes/farm-slice/`
+(direction: `docs/product/PRODUCT_VISION.md`). Under active development.
 
-The Unity project at `unity/GalaQuest/` is the production client. The existing three.js r170,
-plain-ES-module client is retained as reference and legacy review tooling; it is not the production
-Unity build route.
+The Unity project at `unity/GalaQuest/` is parked by the 2026-09-24 engine decision: kept as
+reference, not the production client. The older three.js action-adventure client in `public/` is
+retained as reference and legacy review tooling.
 
 ## What's here
 
 | Area | What it is |
 | --- | --- |
-| `unity/GalaQuest/` | The Unity production project. Start with [`unity/AGENTS.md`](unity/AGENTS.md) for its project-local authoring, build, and validation boundaries. |
+| `prototypes/farm-slice/` | The active three.js farm game: rules, diorama renderer, touch UI, content pack, and its own `node --test` suite. `CONTRACT.md` is its experience contract. |
+| `unity/GalaQuest/` | The parked Unity project. If you do touch it, [`unity/AGENTS.md`](unity/AGENTS.md) owns its authoring, build, and validation boundaries. |
 | `public/` | The retained three.js reference client — rendering, input, combat, world zones, progression, and shipped assets used by the legacy review surface. |
 | `net/` | The authoritative game server: WebSocket framing, server loop, reward store. |
-| `server.mjs` | The local static + WebSocket host; it can serve an existing Unity build at `/unity/` and sockets at `/ws`. |
+| `server.mjs` | The local static + WebSocket host: the farm game at `/farm/`, the retained client at `/`, sockets at `/ws`, and an existing local Unity build at `/unity/`. |
 | `test/` | The unit suite. Plain `node --test`, no framework. |
-| `tools/runtime-test/` | Chrome DevTools Protocol harnesses that drive the real game in a real browser. |
+| `tools/runtime-test/` | Chrome DevTools Protocol harnesses that drive the retained client in `public/` in a real browser. |
 | `tools/unity-playtest/` | Manifest-bound Unity browser evidence. Read its [`README.md`](tools/unity-playtest/README.md) rather than using the legacy harnesses for Unity. |
 | `docs/` | Workflow, guidance, pipeline, visual-authority, and asset documentation. |
 | `AGENTS.md` | Hard conventions and guardrails for anyone — human or agent — working in this repo. |
@@ -32,18 +33,17 @@ Chrome is required for the browser harnesses.
 node server.mjs
 ```
 
-Serves the game at `http://localhost:5201/` and prints the LAN URL for testing on a tablet.
-When a local Unity WebGL build exists, its browser route is `http://localhost:5201/unity/`.
-
-Unity authoring/build authority is `unity/AGENTS.md`; its manifest-based browser evidence route is
-`tools/unity-playtest/README.md`. Those local candidate-build surfaces do not promise a public hosted
-Unity deployment.
+Serves the farm game at `http://localhost:5201/farm/` (the retained client stays at `/`) and prints
+the LAN URL for testing on a tablet. The hosted playtest instance serves the same route at
+`<service-url>/farm/` (`docs/public-playtest.md`).
 
 ```bash
 node --test test/*.test.mjs
+node --test prototypes/farm-slice/test/*.test.mjs prototypes/farm-slice/test/depth/*.test.mjs
 ```
 
-Runs the full unit suite, including guidance-integrity checks.
+The first runs the repo unit suite, including guidance-integrity checks; the second runs the farm
+game's own suite. The required hosted `unit` job runs both.
 
 ## Browser harnesses
 

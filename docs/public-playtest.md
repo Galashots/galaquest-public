@@ -5,6 +5,9 @@ authoritative WebSocket server -- as a single Render web service on the free pla
 browser-driving agents (ChatGPT agent mode, or any tester without LAN access) can play the actual
 game at a public URL.
 
+The active farm game (`prototypes/farm-slice/`) is served by the same instance at
+`<service-url>/farm/`; that is the URL to open on an iPad. The root stays the retained client.
+
 ## What this does and does not solve
 
 It complements the CI harnesses and the `/director-playtest` relay; it does not replace them. Those
