@@ -1,14 +1,14 @@
 export const CROPS = [
-  { id: 'carrot', name: 'Carrot', growSeconds: 8, sellPrice: 1, color: '#f28c28', element: null, distinctive: false },
-  { id: 'wheat', name: 'Wheat', growSeconds: 10, sellPrice: 1, color: '#f5d061', element: null, distinctive: false },
-  { id: 'pumpkin', name: 'Pumpkin', growSeconds: 14, sellPrice: 3, color: '#ff8c00', element: null, distinctive: false },
-  { id: 'sunberry', name: 'Sunberry', growSeconds: 16, sellPrice: 3, color: '#ff5722', element: 'fire', distinctive: true },
-  { id: 'dewmelon', name: 'Dewmelon', growSeconds: 18, sellPrice: 3, color: '#4fc3f7', element: 'water', distinctive: true },
-  { id: 'glowleaf', name: 'Glowleaf', growSeconds: 20, sellPrice: 4, color: '#8bc34a', element: 'leaf', distinctive: true },
+  { id: 'carrot', name: 'Carrot', growSeconds: 20, yield: 3, rarity: 'common', sellPrice: 2, color: '#f28c28', element: null, distinctive: false },
+  { id: 'wheat', name: 'Wheat', growSeconds: 10, yield: 1, rarity: 'common', sellPrice: 1, color: '#f5d061', element: null, distinctive: false },
+  { id: 'pumpkin', name: 'Pumpkin', growSeconds: 14, yield: 1, rarity: 'common', sellPrice: 3, color: '#ff8c00', element: null, distinctive: false },
+  { id: 'sunberry', name: 'Sunberry', growSeconds: 40, yield: 2, rarity: 'special', sellPrice: 5, color: '#ff5722', element: 'sun', distinctive: true },
+  { id: 'dewmelon', name: 'Dewmelon', growSeconds: 18, yield: 1, rarity: 'common', sellPrice: 3, color: '#4fc3f7', element: 'water', distinctive: true },
+  { id: 'glowleaf', name: 'Glowleaf', growSeconds: 20, yield: 1, rarity: 'common', sellPrice: 4, color: '#8bc34a', element: 'leaf', distinctive: true },
 ];
 
 export const ARMOR = [
-  { id: 'sprout_helmet', name: 'Sprout Helmet', slot: 'helmet', price: 5, color: '#6cc24a', accent: '#2e7d32', set: 'Sprout' },
+  { id: 'leaf_crest_helmet', name: 'Leaf Crest Helmet', slot: 'helmet', price: 10, color: '#6cc24a', accent: '#2e7d32', set: 'Sprout' },
   { id: 'sprout_chest', name: 'Sprout Vest', slot: 'chest', price: 6, color: '#6cc24a', accent: '#2e7d32', set: 'Sprout' },
   { id: 'sprout_boots', name: 'Sprout Boots', slot: 'boots', price: 5, color: '#6cc24a', accent: '#2e7d32', set: 'Sprout' },
   { id: 'sprout_shield', name: 'Sprout Shield', slot: 'shield', price: 8, color: '#6cc24a', accent: '#2e7d32', set: 'Sprout' },
@@ -19,7 +19,7 @@ export const ARMOR = [
 ];
 
 export const CREATURES = [
-  { id: 'emberpup', name: 'Emberpup', element: 'fire', rarity: 'common', shape: 'round',
+  { id: 'sprout', name: 'Sprout', element: 'sun', rarity: 'common', shape: 'round',
     colors: { body: '#ff7043', accent: '#ffd54f' }, blurb: 'Loves warm sunberries.' },
   { id: 'cinderkit', name: 'Cinderkit', element: 'fire', rarity: 'rare', shape: 'tall',
     colors: { body: '#e64a19', accent: '#ffab91' }, blurb: 'Dances near warm stones.' },
@@ -46,14 +46,16 @@ export const CREATURES = [
 ];
 
 export const NPCS = [
-  { id: 'pip', name: 'Farmer Pip', color: '#8d6e63', greeting: 'Howdy, farmer!' },
+  { id: 'pip', name: 'Pip', color: '#8d6e63', greeting: 'Hi, farmer!' },
   { id: 'maple', name: 'Maple', color: '#e57373', greeting: 'Hey there, friend!' },
   { id: 'reed', name: 'Reed', color: '#64b5f6', greeting: 'Adventure awaits!' },
 ];
 
 export const OFFERS = [
-  { id: 'pip_carrots', npc: 'pip', band: 'younger', text: 'Three carrots please! I will pay six coins.',
-    wants: { carrot: 3 }, coins: 6, teach: 'counting to 10' },
+  { id: 'pip_crate', npc: 'pip', text: '5 carrots → 10 coins',
+    wants: { carrot: 5 }, coins: 10, teach: 'count by 2s' },
+  { id: 'pip_bundle', npc: 'pip', text: '2 carrots + 1 sunberry → 12 coins',
+    wants: { carrot: 2, sunberry: 1 }, coins: 12, teach: 'compare two deals' },
   { id: 'maple_wheat', npc: 'maple', band: 'younger', text: 'Two wheat bundles, please!',
     wants: { wheat: 2 }, coins: 4, teach: 'counting by 2s' },
   { id: 'pip_pumpkins_big', npc: 'pip', band: 'younger', text: 'Two pumpkins? I will pay eight coins!',
