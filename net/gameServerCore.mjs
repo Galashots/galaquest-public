@@ -456,9 +456,9 @@ export function createRewardCoordinator(options = {}) {
    * retried finale, a concurrent sibling completion, and a reconnect replay all safe: the first
    * call writes, every later call is a no-op.
    *
-   * The later selected wearable reward joins THIS batch as one more `gear-owned` row under its own
-   * stable per-profile id -- no second framework or identity path. Nothing here chooses or awards
-   * it yet.
+   * The Owner-selected wearable reward (the Silverguard Shoulders, #192) joins THIS batch as one
+   * more `gear-owned` row under the ordinary `own:<profile>:<item>` id -- no second framework or
+   * identity path. Whether it is NEW is judged by ownership under any id, not by that row alone.
    *
    * Adjudication (durable identity, at-forge presence, earned readiness) belongs to the caller --
    * the same split claim-blade already takes -- because only the message layer can see position
@@ -481,8 +481,13 @@ export function createRewardCoordinator(options = {}) {
     const worldAlreadyLit = store.forgeLit();
     const factsBefore = store.profileFactsFor(guestId);
     const completionAlready = factsBefore.some((fact) => fact.eventId === personal.eventId);
-    const rewardAlready = factsBefore.some((fact) => fact.eventId === rewardEventId);
-    if (worldAlreadyLit && completionAlready) {
+    // Owned under ANY id, not only this path's own: an offline Village drop journals the Shoulders
+    // as `gear-owned:offline:<item>:<life>` and restores them under that id, and a child who already
+    // has them must not be told they just earned them.
+    const rewardAlready = store.ownedItemIdsFor(guestId).includes(FORGE_RELIGHT_REWARD_ITEM_ID);
+    // Only a finale complete in EVERY part may skip the batch. A completion restored from a device
+    // journal into a world a sibling already lit has no reward yet, and the batch below grants it.
+    if (worldAlreadyLit && completionAlready && rewardAlready) {
       return { granted: false, worldApplied: false, rewardGranted: false, facts: [] };
     }
     // A conflicting reuse of either id already on record throws inside the batch (see the store's
@@ -506,7 +511,7 @@ export function createRewardCoordinator(options = {}) {
     const worldNowLit = store.forgeLit();
     const factsNow = store.profileFactsFor(guestId);
     const completionNow = factsNow.some((fact) => fact.eventId === personal.eventId);
-    const rewardNow = factsNow.some((fact) => fact.eventId === rewardEventId);
+    const rewardNow = store.ownedItemIdsFor(guestId).includes(FORGE_RELIGHT_REWARD_ITEM_ID);
     const granted = completionNow && !completionAlready;
     const rewardGranted = rewardNow && !rewardAlready;
     return {
