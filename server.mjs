@@ -82,7 +82,7 @@ export function createRuntimeServer(options = {}) {
       // `./src/main.js` can resolve under the mount rather than at the site root.
       const requestPath = new URL(request.url ?? '/', 'http://runtime.local').pathname;
       if (requestPath === '/farm') {
-        response.writeHead(301, { location: '/farm/' });
+        response.writeHead(302, { location: '/farm/' });
         response.end();
         return;
       }

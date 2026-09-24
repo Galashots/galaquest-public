@@ -123,10 +123,15 @@ test('/farm/ is the farm game, and its modules come back runnable', async () => 
     const page = await fetch(`${origin}/farm/`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get('content-type') ?? '', /text\/html/);
-    assert.match(await page.text(), /src="\.\/src\/main\.js"/, 'the farm page, not the legacy game');
+    // Markers only the farm page has. `./src/main.js` alone would not do: public/index.html loads a
+    // module by that same relative path, so a mount pointed at public/ would still match it.
+    const html = await page.text();
+    assert.match(html, /<title>Hatch &amp; Harvest<\/title>/, 'the farm page, not the legacy game');
+    assert.match(html, /id="scene-canvas"/);
     const module = await fetch(`${origin}/farm/src/main.js`);
     assert.equal(module.status, 200);
     assert.match(module.headers.get('content-type') ?? '', /javascript/);
+    assert.match(await module.text(), /\.\/render\/diorama\.js/, "the farm game's own entry module");
   });
 });
 
@@ -134,8 +139,9 @@ test('/farm without a slash redirects, because the page loads ./src/main.js rela
   // Served in place, `./src/main.js` would resolve to /src/main.js at the site root and the game
   // would load nothing.
   await serving(async (origin) => {
+    // Temporary on purpose: browsers cache a 301 indefinitely, which would pin the mount's shape.
     const response = await fetch(`${origin}/farm`, { redirect: 'manual' });
-    assert.equal(response.status, 301);
+    assert.equal(response.status, 302);
     assert.equal(response.headers.get('location'), '/farm/');
   });
 });

@@ -1,6 +1,6 @@
 # Farm slice: ten-minute experience contract
 
-This is the authoritative tuning target for `prototypes/farm-slice/`. Where it differs from the brief's beats, this file wins (see §8). The players are "the younger player" (about 7, Grade 2) and "the older player" (about 10, Grade 5). No real names are used anywhere.
+This is the authoritative tuning target for `prototypes/farm-slice/`. Where it differs from the brief's beats, this file wins (see §8). The players are "the younger player" (Grade 2 curriculum band) and "the older player" (Grade 5 curriculum band). No real names are used anywhere.
 
 **Cast.** The Hero, Pip (the market keeper), the egg, and the creature (default name **Sprout**, Sun element).
 **Band.** Before 0:00, a one-time grown-up card offers two buttons: **Counting helper (6–8)** and **Deal helper (9–11)**. It saves `band: "younger" | "older"`; to change it later, hold the gear icon for 2 s. The economy is identical in both bands; only the presentation differs.
@@ -75,7 +75,7 @@ LearnAlberta blocks automated fetches, so the outcome wording was cross-checked 
 | Filling the slots (younger) | Gr 2: "Students investigate addition and subtraction within 100." Skill: find a missing quantity | Pip is waiting, and the empty slots *are* the "how many more". There is no question text | The wrong crop hops back with a boing and Pip says "Carrots, please!" while the right slot pulses. A full crate wiggles "Full!" |
 | Coins by 2s (younger) | Gr 2: "Students analyze quantity to 1000." Skill: value of same-denomination coins by skip counting | The coins clink and the helmet tag fills | Overpaying is impossible, so the next outline pulses. If the purse is short, the tag says "Need 2 more", and the arrow points at the stall |
 | The scale levels (younger) | Gr 2 Algebra skill: model equality and inequality with a balance | The scale is a toy that tips and then levels with a chime | A partial fill just leaves the scale tipped. There is no timer |
-| Choosing a deal (older) | Gr 5: "Students employ ratios to represent relationships between quantities."; "Students multiply and divide natural numbers within 100 000…" | He picks what *he* wants: coins or Sprout's food. Both choices afford the helmet | There's no wrong pick. The ledger shows "3 crops → 12 coins", and the other deal stays up |
+| Choosing a deal (older) | Gr 5: "Students employ ratios to represent relationships between quantities."; "Students multiply and divide natural numbers within 100 000…" | The player picks what *they* want: coins or Sprout's food. Both choices afford the helmet | There's no wrong pick. The ledger shows "3 crops → 12 coins", and the other deal stays up |
 | Change (older, path B) | Gr 5: "Students add and subtract within 1 000 000…" Skill: solve problems using money | The purse animates the change | Display only |
 
 ## 4. State model
@@ -122,20 +122,20 @@ Nothing withers or expires, and no text mentions how long the player was away.
 
 1. **Feed loop.** 3 sunberries bloom Sprout's sun crest, its first new look. The meter only goes up.
 2. **Second egg.** Filling 2 more orders earns Pip's gift: a star seed and a Leaf egg. The egg's type is visible and its hatch is ungated.
-3. **Order-board seed (older player).** A third card appears: 6 carrots + 2 sunberries → 26. He can fill it now, save for it, or feed Sprout instead.
+3. **Order-board seed (older player).** A third card appears: 6 carrots + 2 sunberries → 26. They can fill it now, save for it, or feed Sprout instead.
 
 ## 6. Child-test protocol (gate 2)
 
-Each boy plays alone. The adult says only "Do whatever you like." Record each item as pass or fail, with the time. Items marked * must pass for both boys.
+Each player plays alone. The adult says only "Do whatever you like." Record each item as pass or fail, with the time. Items marked * must pass for both players.
 
-1. *He makes his first plot tap within 30 s.
-2. *He has at most 2 stalls, meaning pauses of more than 10 s with no purposeful touch. Log the goal state of each.
-3. He looks at or touches **both** offer cards before committing.
+1. *The player makes their first plot tap within 30 s.
+2. *The player has at most 2 stalls, meaning pauses of more than 10 s with no purposeful touch. Log the goal state of each.
+3. The player looks at or touches **both** offer cards before committing.
 4. The older player compares the offers aloud or by pointing. The younger player fills the crate correctly within 2 tries.
-5. *He reacts to the hatch: a smile, an exclamation, leaning in, or a comment.
-6. He picks or types a name instead of skipping past it.
-7. He notices the helmet on the Hero: he points, comments, or lingers on it.
-8. *At 10:00, when told "you can stop now", he keeps playing or asks to.
+5. *The player reacts to the hatch: a smile, an exclamation, leaning in, or a comment.
+6. The player picks or types a name instead of skipping past it.
+7. The player notices the helmet on the Hero: they point, comment, or linger on it.
+8. *At 10:00, when told "you can stop now", the player keeps playing or asks to.
 
 **Afterwards, ask:**
 - "What would you do next?"
