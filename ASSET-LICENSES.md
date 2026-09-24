@@ -15,6 +15,9 @@ Nothing here grants rights over third-party assets beyond what their own licence
 | `public/vendor/loaders/GLTFLoader.js` | three.js example loader | MIT, same project |
 | `public/vendor/utils/BufferGeometryUtils.js` | three.js example util | MIT, same project |
 | `public/vendor/utils/SkeletonUtils.js` | three.js example util | MIT, same project |
+| `prototypes/farm-slice/vendor/three.module.min.js` | three.js r170 (byte-identical to `public/vendor/`) | MIT, same project |
+| `prototypes/farm-slice/vendor/loaders/GLTFLoader.js` | three.js example loader (copy of `public/vendor/`) | MIT, same project |
+| `prototypes/farm-slice/vendor/utils/BufferGeometryUtils.js` | three.js example util (copy of `public/vendor/`) | MIT, same project |
 
 The upstream licence headers are intact in these files and must stay intact in any redistribution.
 
@@ -62,6 +65,28 @@ is `tools/assets/author-hero-grip-candidate.py`; Unity admission uses `HeroGripA
 The [receipt](docs/asset-production/HERO_RIGHT_GRIP_CANDIDATE_2026-09-07.json) pins source/candidate
 hashes and the Owner's playtest approval. These derivatives inherit the paid-plan character basis
 above, not CC0. The personal grip reference photographs are not redistributed.
+
+## Farm game creatures, egg and hero — Owner-authorized, agent-produced on a paid plan
+
+`prototypes/farm-slice/assets/creatures/*.glb` (12 files), `prototypes/farm-slice/assets/egg.glb`,
+and `prototypes/farm-slice/assets/candidates/hero.glb`
+
+Generated on the project's **paid Meshy plan** on 2026-09-24, under the Owner's explicit authorization
+of up to 500 credits for new farm-game assets. An agent produced them, not the owner by hand, and they
+were **not** Blender-finished. Each shipped file is the provider mesh with its texture recompressed to
+one 1024 JPEG and its material set to metallic 0 / roughness 0.8. Two texture edits are
+project-authored: the egg's texture was redrawn by script (both paid attempts had a ghosted band), and
+Zapkit's dark ear tips were recoloured to yellow to avoid a franchise-like cue. The hero is a
+candidate that the game does not load yet.
+
+Redistribution rests on the owner's rights in that generated output together with the paid-plan terms
+in force at generation time — **not** CC0 and **not** the source licence in [`NOTICE`](NOTICE).
+
+**Input-provenance check.** Every prompt is recorded, with its hash, in the batch ledger. All prompts
+share one house-style template that asks for a wholly original design resembling no existing franchise
+character. Per-asset provider task IDs, SHA-256 hashes, credits and rejected attempts are in
+[`docs/asset-production/farm-creatures-2026-09-24/`](docs/asset-production/farm-creatures-2026-09-24/README.md).
+Owner visual acceptance in the running game remains a separate gate.
 
 ## Gear — owner-created, generated on a paid plan
 

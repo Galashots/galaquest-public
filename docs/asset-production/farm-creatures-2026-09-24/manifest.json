@@ -1,0 +1,1094 @@
+{
+  "batch": "GalaQuest farm creatures + egg + hero, 2026-09-24",
+  "authorization": "Owner 2026-09-24 (relayed by director): up to 500 Meshy credits for new farm-game assets; stop at 460.",
+  "credits": {
+    "balanceStart": 4801,
+    "balanceEnd": 4448,
+    "balanceDelta": 353,
+    "ledgerSum": 353,
+    "paidCalls": 36,
+    "byOperation": {
+      "text-to-image": 102,
+      "image-to-3d": 240,
+      "rigging": 5,
+      "animation-idle": 3,
+      "animation-idle11": 3
+    },
+    "note": "Balance delta equals the sum of per-task consumed_credits exactly: no other account activity during the batch. Stopped at 353 (reserve 107 before the 460 stop, 147 before the 500 cap)."
+  },
+  "houseStyle": "tools/prompts.mjs (one shared template: HOUSE + creature look + RARITY + SHAPE + RULES; hex codes stripped from sent prompts)",
+  "referenceModel": "Meshy text-to-image nano-banana-2 (6 credits); hero with pose_mode t-pose",
+  "meshModel": "Meshy image-to-3d meshy-t2 smart-topology, triangle, 2k texture (15 credits); shipped via tools/budget/recompress_glb.py --size 1024 --quality 85 (egg: procedural 1024 JPEG q88)",
+  "commonIntegrationNotes": [
+    "All creatures: forward +Z, up +Y, one mesh / one material / one 1024 JPEG atlas, doubleSided, metallic 0 roughness 0.8, no skin/animation. Meshy normalises the largest extent to 1.0 centred on the origin, so ground them with position.y = -minY and scale from measured bounds per shape (long creatures are length-normalised: height ~0.44-0.51).",
+    "No creature is rigged; idle life must be procedural (bob/squash/turn) in code.",
+    "Boltbun needs presentationYawDeg +40 for face-to-camera.",
+    "Hero: origin at feet, 1.2 m, clips idle/walk/run, T-pose bind; per-clip foot offset advised."
+  ],
+  "assets": [
+    {
+      "id": "sprout",
+      "name": "Sprout",
+      "element": "sun",
+      "rarity": "common",
+      "shape": "round",
+      "status": "accepted",
+      "shipped": "ship/sprout.glb",
+      "reference": "refs/sprout.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Sprout\", a sun-element lion-dragon cub. Deep orange body with a sunny golden-yellow belly, muzzle and paws. A thick mane of chunky triangular golden sun-ray spikes frames its face like a blazing sun. Two thick golden leaf-shaped sprout tufts stand up on top of its head. Short stubby tail ending in a solid golden flame-shaped sun flare. Small arms at its sides with little fists clenched, a cocky confident grin showing one tiny fang. Rarity COMMON: compact and cool-cute, small sturdy body, simple strong shapes. Body plan: round chunky body standing on two short sturdy feet. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3809,
+      "fileBytes": 307968,
+      "sha256": "7f9c0a0eea77b381c9ee3aa0f52313def5730e1b47d13592d3b4dcee6103ccdb",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.3828,
+        -0.5,
+        -0.4336
+      ],
+      "boundsMax": [
+        0.3887,
+        0.5,
+        0.4355
+      ],
+      "size": [
+        0.7715,
+        1,
+        0.8691
+      ],
+      "minY": -0.5,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59a-67a1-77ec-a0a5-f0152d8f3d4d",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "clean lone subject, pale-grey bg, full body w/ margins, solid mane+flame, colors on brief"
+        },
+        {
+          "taskId": "01a0d59b-4401-709d-b2b7-1d23ebb23b66",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful to ref, clean closed geometry, mane/leaf/flame silhouette reads at 120px; shipped as ship/sprout.glb"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "First hatch. Sun lion-dragon cub: golden sun-ray mane, leaf sprout tufts, flame-tipped tail. Faithful to reference; clean closed geometry; reads at 120px.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "puddlefin",
+      "name": "Puddlefin",
+      "element": "water",
+      "rarity": "common",
+      "shape": "round",
+      "status": "accepted",
+      "shipped": "ship/puddlefin.glb",
+      "reference": "refs/puddlefin.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Puddlefin\", a water-element baby sea-dragon. Bright sky-blue body with a pale icy-blue belly and cheeks. A big solid curling wave-shaped fin crest runs from its forehead down its back like a breaking wave, two fin-shaped ears, stubby arms with little webbed hands, a short thick tail with a solid fish-fin tip. Confident smirk with one tiny fang. Rarity COMMON: compact and cool-cute, small sturdy body, simple strong shapes. Body plan: round chunky body standing on two short sturdy feet. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3296,
+      "fileBytes": 281448,
+      "sha256": "4b827d35ff5ac3ff23a66bfe630341c6a73ce353b9bf191d218f3353c63f1584",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.2598,
+        -0.5,
+        -0.4688
+      ],
+      "boundsMax": [
+        0.2617,
+        0.5,
+        0.4688
+      ],
+      "size": [
+        0.5215,
+        1,
+        0.9375
+      ],
+      "minY": -0.5,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59b-a3a5-737a-bf6b-5a17387a6c8e",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "clean lone subject, pale bg, full body, solid wave crest/fin; 3D input"
+        },
+        {
+          "taskId": "01a0d59e-755a-757e-a9cc-5cf60df4f914",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful, clean geometry, wave crest continues down back; reads at 120px"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Baby sea-dragon with curling wave crest running down the back, fin ears, fish-fin tail. Clean.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "mossbun",
+      "name": "Mossbun",
+      "element": "leaf",
+      "rarity": "common",
+      "shape": "round",
+      "status": "accepted",
+      "shipped": "ship/mossbun.glb",
+      "reference": "refs/mossbun.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Mossbun\", a leaf-element forest rabbit beast. Fresh leaf-green body with a creamy off-white belly, muzzle and paws. Two long thick ears shaped like broad solid leaves with painted leaf veins, a chunky mossy tuft crest on its head, a round moss-ball tail, big sturdy hind feet. Brave determined grin with two buck teeth. Rarity COMMON: compact and cool-cute, small sturdy body, simple strong shapes. Body plan: round chunky body standing on two short sturdy feet. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3292,
+      "fileBytes": 250128,
+      "sha256": "80187aceea79e0221bda108e301cd8d69ebac388ab10e4481d879e659221256c",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.2793,
+        -0.5,
+        -0.3418
+      ],
+      "boundsMax": [
+        0.2813,
+        0.5,
+        0.3457
+      ],
+      "size": [
+        0.5605,
+        1,
+        0.6875
+      ],
+      "minY": -0.5,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59c-78ce-721d-a998-5d1b797fdecc",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "clean lone subject, pale bg, full body, solid leaf ears/moss tail; 3D input"
+        },
+        {
+          "taskId": "01a0d59e-f4e3-72c4-b5b2-b3ba4c8b50e7",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful, leaf ears solid, clean; reads at 120px (lower contrast on grass)"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Leaf-eared forest rabbit with moss crest and moss-ball tail. Clean. Green body has lower contrast on grass; cream belly/ears carry the read.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "zapkit",
+      "name": "Zapkit",
+      "element": "spark",
+      "rarity": "common",
+      "shape": "round",
+      "status": "accepted",
+      "shipped": "ship/zapkit.glb",
+      "reference": "refs/zapkit.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Zapkit\", a spark-element electric fox kit. Bright lemon-yellow body with a pale cream-yellow belly and muzzle, bold charcoal-navy zigzag stripe markings on its back and ear tips. Two thick zigzag lightning-bolt horns on its forehead, pointed fox ears, and a big fluffy tail shaped like a solid spiky spark burst. Mischievous confident grin. Rarity COMMON: compact and cool-cute, small sturdy body, simple strong shapes. Body plan: round chunky body standing on two short sturdy feet. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3310,
+      "fileBytes": 259356,
+      "sha256": "38283772def6c030a4d6ec2995a480ba52943a0612857422312a92755e91fc61",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.4746,
+        -0.457,
+        -0.4688
+      ],
+      "boundsMax": [
+        0.4785,
+        0.457,
+        0.5
+      ],
+      "size": [
+        0.9531,
+        0.9141,
+        0.9688
+      ],
+      "minY": -0.457,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59d-1ddb-7662-b8b0-d7237d4b99ab",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "clean lone subject, pale bg, full body, solid horns/burst tail; dark ear tips noted for franchise-resemblance review; 3D input"
+        },
+        {
+          "taskId": "01a0d59f-5fc5-71f7-8a3e-7d73c5fcbd60",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful, clean; dark ear tips recoloured to ear yellow post-generation (tools/recolor_region.py, zero credits) to drop a franchise cue; shipped"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Chubby electric fox kit: twin zigzag horns (thin but solid plates), navy tiger stripes, spark-burst tail. Dark ear tips were recoloured to ear yellow AFTER generation (tools/recolor_region.py, zero credits) to drop a well-known yellow-electric-mascot cue. Largest extent is length (Y height 0.914).",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0). Texture: provider output with a project-authored recolour of the ear tips."
+    },
+    {
+      "id": "cinderkit",
+      "name": "Cinderkit",
+      "element": "fire",
+      "rarity": "rare",
+      "shape": "tall",
+      "status": "accepted",
+      "shipped": "ship/cinderkit.glb",
+      "reference": "refs/cinderkit.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Cinderkit\", a sleek agile fire-element lynx dancer. Burnt red-orange fur with a soft peach chest, muzzle and paws, long athletic legs, a big solid sculpted flame crest sweeping back from its forehead like a blazing mohawk, tall pointed ears with solid flame-shaped tufts, solid sculpted flame cuffs wrapped around its wrists and ankles, dark ember stripe markings on its arms and thighs, and a long tail ending in a large solid sculpted flame. Fierce playful grin showing a fang, arms relaxed at its sides in a balanced ready stance. Rarity RARE: sleeker, more agile proportions and extra element features, clearly fancier than a basic creature. Body plan: upright and taller than wide, standing on two strong legs. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3836,
+      "fileBytes": 344456,
+      "sha256": "2e2807d8d71e5ed39591a88ca724f1c01592dd3f5aa30087258fdf82ab64f7f5",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.2617,
+        -0.5,
+        -0.2676
+      ],
+      "boundsMax": [
+        0.2578,
+        0.5,
+        0.2695
+      ],
+      "size": [
+        0.5195,
+        1,
+        0.5371
+      ],
+      "minY": -0.5,
+      "credits": 42,
+      "tasks": [
+        {
+          "taskId": "01a0d5a2-3a69-762b-99d0-cd6079486ec9",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "rejected",
+          "why": "superseded by ref2 (see 3d1 note)"
+        },
+        {
+          "taskId": "01a0d5a7-0832-7195-9693-47ee42e447b9",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "rejected",
+          "why": "superseded by v2: faithful and clean but read plainer than the common Sprout, undermining rarity; kept in raw/ as alternate"
+        },
+        {
+          "taskId": "01a0d5ba-3c51-757a-afaf-b06396b98906",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "v2: flame mohawk, flame ear tufts, flame cuffs, stripes, flame tail - reads clearly rare; thin ear-tuft stalks = 3D risk; 3D input"
+        },
+        {
+          "taskId": "01a0d5bb-0605-7342-bee1-19ec15699f0e",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "v2 reads clearly rare (flame mohawk/cuffs/ear tufts/tail), clean, reads at 120px; shipped"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "v2 (v1 rejected as plainer than the common Sprout). Upright lynx dancer: flame mohawk, flame-tipped ear tufts on thin stalks (read as dark hairlines), flame wrist/ankle cuffs, flame tail. Clean.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "splashpuff",
+      "name": "Splashpuff",
+      "element": "water",
+      "rarity": "rare",
+      "shape": "winged",
+      "status": "accepted",
+      "shipped": "ship/splashpuff.glb",
+      "reference": "refs/splashpuff.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Splashpuff\", a water-element puffin-seal creature. Bright blue body with a snowy white-blue belly and face, a pair of thick solid fin-shaped wings, a solid water-droplet crest on its head with a small painted rainbow stripe across it, webbed feet, a short fan tail. Cheerful confident expression. Rarity RARE: sleeker, more agile proportions and extra element features, clearly fancier than a basic creature. Body plan: compact body standing on two sturdy feet with one pair of thick, solid, chunky wings folded half-open at its sides. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3876,
+      "fileBytes": 297896,
+      "sha256": "46b6b4e07ead996e0d22481bef4417a1bd0912c90d44f9b0036c9bff780b1838",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.3438,
+        -0.4824,
+        -0.5
+      ],
+      "boundsMax": [
+        0.3457,
+        0.4805,
+        0.5
+      ],
+      "size": [
+        0.6895,
+        0.9629,
+        1
+      ],
+      "minY": -0.4824,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d5a2-6e45-71b0-8168-93cc08ae06dc",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "puffin-seal, two thick wings visible, rainbow crest stripe, clean; 3D input"
+        },
+        {
+          "taskId": "01a0d5a7-87e9-7332-af49-47115570c14d",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful, clean; rainbow crest + two wings read"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Puffin-seal with two thick fin-wings, water-drop crest with a painted rainbow stripe (\"makes tiny rainbows\"), fan tail. Clean. Largest extent is length (Z).",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "fernsprout",
+      "name": "Fernsprout",
+      "element": "leaf",
+      "rarity": "rare",
+      "shape": "tall",
+      "status": "accepted",
+      "shipped": "ship/fernsprout.glb",
+      "reference": "refs/fernsprout.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Fernsprout\", a leaf-element forest lizard scout. Mossy green scales with pale sage-green belly and face, a tall crest of thick solid fern fronds on its head, broad leaf-shaped tail, wrapped vine bands on its forearms, sturdy clawed feet. Alert brave expression, arms at its sides. Rarity RARE: sleeker, more agile proportions and extra element features, clearly fancier than a basic creature. Body plan: upright and taller than wide, standing on two strong legs. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3760,
+      "fileBytes": 275356,
+      "sha256": "35182a9e8d21243538239f48c22ed071d202523a6d1a5112671f560fac1530db",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.2158,
+        -0.5,
+        -0.3145
+      ],
+      "boundsMax": [
+        0.2168,
+        0.5,
+        0.3164
+      ],
+      "size": [
+        0.4326,
+        1,
+        0.6309
+      ],
+      "minY": -0.5,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d5a2-a1bb-7621-80e8-5f5d4f548aa7",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "lizard scout, fern crest + leaf tail (thin plates = 3D risk), clean; 3D input"
+        },
+        {
+          "taskId": "01a0d5a7-f371-718c-8306-55b42ac95660",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful, clean; fronds became smooth solid blades; olive palette low contrast on grass"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Lizard scout with a crest of solid fern blades, vine armbands, broad leaf tail. Clean. Olive palette (per content.js #689f38) has low contrast on grass.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "glimmerpup",
+      "name": "Glimmerpup",
+      "element": "spark",
+      "rarity": "rare",
+      "shape": "winged",
+      "status": "accepted",
+      "shipped": "ship/glimmerpup.glb",
+      "reference": "refs/glimmerpup.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Glimmerpup\", a spark-element puppy. Golden-yellow fur with lighter lemon chest and muzzle, bold deep-violet star-shaped markings on its back, one short zigzag lightning horn on its forehead, a pair of thick solid chunky wings shaped like lightning bolts, a spiky spark-burst tail tip. Eager daring grin. Rarity RARE: sleeker, more agile proportions and extra element features, clearly fancier than a basic creature. Body plan: compact body standing on two sturdy feet with one pair of thick, solid, chunky wings folded half-open at its sides. IMPORTANT: it has TWO chunky lightning-bolt wings, one growing from each shoulder, both fully visible and spread outward to the left and right in a symmetrical V shape; it stands on four sturdy legs. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 3792,
+      "fileBytes": 280356,
+      "sha256": "52a0a7c0f06b54c4c6ebaf8a4b3ec79de06dc0b44d4dc4daa07227a5c18e318f",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.498,
+        -0.3359,
+        -0.5
+      ],
+      "boundsMax": [
+        0.498,
+        0.3379,
+        0.5
+      ],
+      "size": [
+        0.9961,
+        0.6738,
+        1
+      ],
+      "minY": -0.3359,
+      "credits": 27,
+      "tasks": [
+        {
+          "taskId": "01a0d5a4-a91f-7421-9810-528e51fb7f45",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "rejected",
+          "why": "only ONE wing visible in 3/4 view; image-to-3D would build an asymmetric one-winged model; re-prompted"
+        },
+        {
+          "taskId": "01a0d5a7-129b-76de-b3f6-400bb932b628",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "two symmetrical lightning wings visible, horn, violet stars, clean; 3D input"
+        },
+        {
+          "taskId": "01a0d5a7-91cf-744b-9f92-ab0af9d45ffb",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "two wings present, clean; texture more amber than ref yellow; violet stars read"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Puppy with two big lightning-blade wings in a V, zigzag horn, violet star markings, spark tail. Texture came out more amber than the content.js yellow (#fdd835). Wingspan dominates width (X 0.996); body is small relative to bounds, so scale by body height ~0.67 rather than max extent.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "flamewhisk",
+      "name": "Flamewhisk",
+      "element": "fire",
+      "rarity": "epic",
+      "shape": "long",
+      "status": "accepted",
+      "shipped": "ship/flamewhisk.glb",
+      "reference": "refs/flamewhisk.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Flamewhisk\", a legendary fire-element fox-dragon. Deep red-orange body with warm light-orange belly and chest. Dark ember-rock armor plates along its back and shoulders with glowing molten-orange crack markings painted on them, swept-back horns, a mane of solid sculpted flames, and a long thick tail ending in a huge glowing solid flame plume - its tail glows brightest. Fierce proud expression. Rarity EPIC: big, powerful and legendary-looking, armored plates and an ornate element crest, with glowing accent markings painted onto the armor. Body plan: long low powerful four-legged body with a long thick tail, all four feet planted on the floor. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 5198,
+      "fileBytes": 434000,
+      "sha256": "95e2e2cd0fd5f030bb9c93cfdb0532878f085a5ab6d46d09bfeb45c2609b6d44",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.1138,
+        -0.2207,
+        -0.5
+      ],
+      "boundsMax": [
+        0.1138,
+        0.2227,
+        0.5
+      ],
+      "size": [
+        0.2275,
+        0.4434,
+        1
+      ],
+      "minY": -0.2207,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59e-a262-708b-9c00-1abf80cf83bd",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "armored fire fox-dragon, solid flame plume tail, clean bg; 3D input"
+        },
+        {
+          "taskId": "01a0d5a1-56ab-75ca-a17f-80f74c0996ea",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful; horns, flame mane, lava-crack armor, glowing flame tail all read at small size; clean"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Legendary fire fox-dragon: swept horns, flame mane, lava-crack armour plates, huge glowing flame-plume tail. Long axis is Z (length 1.0, height 0.443) - scale by height or length, not by max extent, or it will look tiny next to upright creatures.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "tidekit",
+      "name": "Tidekit",
+      "element": "water",
+      "rarity": "epic",
+      "shape": "long",
+      "status": "accepted",
+      "shipped": "ship/tidekit.glb",
+      "reference": "refs/tidekit.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Tidekit\", a legendary water-element sea-otter-dragon. Deep ocean-blue body with light aqua belly and fins. Pearly shell armor plates along its back with glowing aqua spiral markings painted on them, a big solid curling wave-crest mane, fin-shaped ears, and a long thick tail ending in a broad solid tail fin. Calm powerful heroic expression. Rarity EPIC: big, powerful and legendary-looking, armored plates and an ornate element crest, with glowing accent markings painted onto the armor. Body plan: long low powerful four-legged body with a long thick tail, all four feet planted on the floor. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 5201,
+      "fileBytes": 359920,
+      "sha256": "f5e5b496af9a6f429f2c089623792c3f321397f32029f5f0c1852f003b805c9f",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.1504,
+        -0.2373,
+        -0.5
+      ],
+      "boundsMax": [
+        0.1504,
+        0.2354,
+        0.5
+      ],
+      "size": [
+        0.3008,
+        0.4727,
+        1
+      ],
+      "minY": -0.2373,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59e-d661-7680-9880-791a51d06d2a",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "shell-armored otter-dragon, solid wave crest + fluke, clean bg; fin-ears flagged for resemblance review; 3D input"
+        },
+        {
+          "taskId": "01a0d5a1-eb8b-737f-b8fe-cc249faa7336",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful; shell armor w/ glowing spirals, wave crest, fluke; clean"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Legendary sea-otter-dragon: pearly shell armour with glowing aqua spirals, wave-crest mane, whale-fluke tail. Long axis Z (height 0.473). Fin-ears on a blue quadruped are a mild generic-water-creature resemblance; flagged for review.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "bloomtail",
+      "name": "Bloomtail",
+      "element": "leaf",
+      "rarity": "epic",
+      "shape": "long",
+      "status": "accepted",
+      "shipped": "ship/bloomtail.glb",
+      "reference": "refs/bloomtail.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Bloomtail\", a legendary leaf-element forest wolf-lizard. Deep forest-green body with light lime-green belly and paws. Bark-brown armor plates along its back with glowing green vine markings painted on them, a crown of short thick branch antlers with broad solid leaves, a few chunky flowers on its shoulders, and a long thick tail ending in a big solid pink-and-white flower bloom. Noble fierce expression. Rarity EPIC: big, powerful and legendary-looking, armored plates and an ornate element crest, with glowing accent markings painted onto the armor. Body plan: long low powerful four-legged body with a long thick tail, all four feet planted on the floor. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 5213,
+      "fileBytes": 409168,
+      "sha256": "0291404251b8ff40b06456ef502a91feb039e554206bbe02bf1ae2a4d79f0310",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.2188,
+        -0.2578,
+        -0.5
+      ],
+      "boundsMax": [
+        0.2168,
+        0.2559,
+        0.5
+      ],
+      "size": [
+        0.4355,
+        0.5137,
+        1
+      ],
+      "minY": -0.2578,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59f-2a0b-731a-91fa-235fd0a0b1a8",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "bark-armored forest wolf, solid bloom tail, clean bg; thin antler leaves are a 3D risk; 3D input"
+        },
+        {
+          "taskId": "01a0d5a2-935a-73ca-8ce7-e4c0e154dc50",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful; antler leaves survived as closed shapes, bloom tail, vine-glow bark armor; clean"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Legendary forest wolf: branch antlers with solid leaves, bark armour with glowing vine marks, shoulder flowers, big pink bloom tail (open cup, reads as flower). Long axis Z (height 0.514). Clean from all sides.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "boltbun",
+      "name": "Boltbun",
+      "element": "spark",
+      "rarity": "epic",
+      "shape": "tall",
+      "status": "accepted",
+      "shipped": "ship/boltbun.glb",
+      "reference": "refs/boltbun.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Boltbun\", a legendary spark-element rabbit warrior. Amber-gold fur with a pale cream chest and muzzle, powerful legs built for speed, two tall thick ears shaped like solid zigzag lightning bolts, dark steel-blue armored shoulder pads and gauntlets with glowing electric-cyan lightning markings painted on them, a fluffy spark-burst tail. Fists clenched, fearless competitive grin. Rarity EPIC: big, powerful and legendary-looking, armored plates and an ornate element crest, with glowing accent markings painted onto the armor. Body plan: upright and taller than wide, standing on two strong legs. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "presentationYawDeg": 40,
+      "triangles": 5493,
+      "fileBytes": 403984,
+      "sha256": "d01e729015d1537234daa00455d5e650f6079e713fdf168758df742e9a4f082c",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.2363,
+        -0.5,
+        -0.2324
+      ],
+      "boundsMax": [
+        0.2402,
+        0.5,
+        0.2295
+      ],
+      "size": [
+        0.4766,
+        1,
+        0.4619
+      ],
+      "minY": -0.5,
+      "credits": 21,
+      "tasks": [
+        {
+          "taskId": "01a0d59f-5cd9-77d1-b934-0cba266c71c4",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "armored lightning rabbit warrior, solid bolt ears, clean bg; 3D input"
+        },
+        {
+          "taskId": "01a0d5a3-2625-7206-9946-bc539fcb118c",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "faithful + awesome from front-left; head turned ~40deg to its right vs body (+Z): presentation yaw +40deg documented; minor cream texture guess on back"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Legendary lightning rabbit warrior: bolt ears, steel pauldrons/gauntlets with glowing cyan bolts, spark tail. SPECIAL: body faces +Z but the HEAD is turned ~40deg to its own right (toward -X). For face-to-camera presentation rotate the model +40deg about +Y (presentationYawDeg). From front-right 3/4 the two ears merge; from front-left it looks best. Minor cream texture guess on the back.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    },
+    {
+      "id": "egg",
+      "name": "Mystery Egg",
+      "element": null,
+      "rarity": null,
+      "shape": "egg",
+      "status": "accepted",
+      "shipped": "ship/egg.glb",
+      "reference": "refs/egg.png",
+      "refPrompt": "Original prop design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: a big chunky legendary mystery creature egg standing upright on a slightly flattened rounded base, wider at the bottom. Thick glossy warm ivory shell decorated with about a dozen LARGE bold rounded spots in bright orange, sky-blue, leaf-green and golden yellow spread evenly all around the egg, plus THICK bright glowing golden-yellow zigzag crack lines PAINTED flat on the surface that wrap around the whole egg - the shell is completely intact, smooth and not cracked open. Soft even studio lighting, bold clean color blocks, exciting and magical. Composition: exactly one egg, alone, centered, fully visible with generous empty margins, neutral three-quarter view. Plain solid flat pale-grey background, no nest, no floor, no scenery, only a tiny soft contact shadow. No text, no logos, no watermark.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "bounds centre (Meshy normalises largest extent to 1.0, centred on origin)"
+      },
+      "triangles": 1244,
+      "fileBytes": 184848,
+      "sha256": "2ccd365ea34313cda8f31d82ffd0ec4a02eb4d566d23e3dd33987a3322a933d5",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 0,
+      "joints": 0,
+      "animations": [],
+      "boundsMin": [
+        -0.3809,
+        -0.5,
+        -0.3789
+      ],
+      "boundsMax": [
+        0.3809,
+        0.5,
+        0.3789
+      ],
+      "size": [
+        0.7617,
+        1,
+        0.7578
+      ],
+      "minY": -0.5,
+      "credits": 42,
+      "tasks": [
+        {
+          "taskId": "01a0d5a5-ee91-762d-b447-9717090320b6",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "intact speckled egg, painted gold crack lines, clean; 3D input"
+        },
+        {
+          "taskId": "01a0d5a8-5ffd-7183-81eb-173525d0697e",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "rejected",
+          "why": "texture view-blend seam: ghosted/blurred spots band on one side; gold crack lines nearly lost; reads as plain Easter egg"
+        },
+        {
+          "taskId": "01a0d5ab-860d-736a-b3cf-a8a3bc0c6bcf",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "bold spots + thick glowing zigzag painted line, intact shell, clean bg; slight emboss/gloss risk; 3D input"
+        },
+        {
+          "taskId": "01a0d5ad-6ec2-716f-b55f-cf7372951977",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "geometry+UVs accepted (clean ellipsoid, 1244 tri); provider texture had the same ghosted view-blend band as 3d1, so the base-color texture was re-baked procedurally (tools/rebake_egg.py) -> ship/egg.glb"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Geometry + UVs are paid Meshy attempt 2 (clean 1244-tri ellipsoid). Both paid attempts had a ghosted multi-view texture band, so the base-colour texture was RE-BAKED procedurally from 3D surface position (tools/rebake_egg.py, zero credits): ivory shell, bold spots, speckles, thick golden zigzag painted flat all round; shell intact. The texture is project-authored.",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0). Texture: project-authored procedural re-bake."
+    },
+    {
+      "id": "hero",
+      "name": "Hero (kid farmer-adventurer)",
+      "element": null,
+      "rarity": null,
+      "shape": "humanoid",
+      "status": "accepted",
+      "shipped": "ship/hero.glb",
+      "reference": "refs/hero.png",
+      "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. Character: a brave 10-year-old kid farmer-adventurer hero with chibi proportions - big head about one third of total height, short sturdy body, chunky boots. Short messy brown hair under a wide-brimmed woven straw hat with a leaf-green band and a small leaf pin. Snug teal adventurer vest with two big pockets over a cream short-sleeved shirt, brown belt with a small pouch, knee-length olive cargo shorts, sturdy brown lace-up boots, and a compact rounded orange backpack strapped tight to the back with a rolled blanket on top. Confident friendly grin, determined bright eyes. No weapons, no tools, nothing in the hands. Pose: strict T-pose, front view facing the viewer straight on, arms stretched straight out horizontally to the sides, palms down, fingers together, empty open hands, legs straight and slightly apart, feet flat on the floor, entire body visible from hat to boots with generous empty margins. Clothing is snug and connected to the body: no loose flaps, no dangling straps, no scarf. Plain solid flat pale-grey background, no floor, no scenery, only a tiny soft contact shadow. No text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
+      "orientation": {
+        "forward": "+Z",
+        "up": "+Y",
+        "origin": "feet (y=0), real scale 1.2 m tall"
+      },
+      "triangles": 5416,
+      "fileBytes": 625736,
+      "sha256": "bc12beb635a9972aa273eee0a4075d43a42d53b3dad9acbed3364a8d5e7332cd",
+      "textures": [
+        "1024x1024 jpeg"
+      ],
+      "materials": [
+        {
+          "metallic": 0,
+          "roughness": 0.8,
+          "doubleSided": true,
+          "alphaMode": "OPAQUE"
+        }
+      ],
+      "skins": 1,
+      "joints": 24,
+      "animations": [
+        "idle",
+        "walk",
+        "run"
+      ],
+      "boundsMin": [
+        -0.4605,
+        0,
+        -0.2766
+      ],
+      "boundsMax": [
+        0.4605,
+        1.2,
+        0.2766
+      ],
+      "size": [
+        0.9211,
+        1.2,
+        0.5531
+      ],
+      "minY": 0,
+      "credits": 32,
+      "tasks": [
+        {
+          "taskId": "01a0d5ae-32ef-7458-a677-e7c31e76113b",
+          "operation": "text-to-image",
+          "credits": 6,
+          "status": "accepted",
+          "why": "clean strict T-pose front view, feet in frame, empty hands, connected clothing, green hat band (no franchise cue); 3D input"
+        },
+        {
+          "taskId": "01a0d5b0-4c3e-70d5-a45b-81a6767e74dd",
+          "operation": "image-to-3d",
+          "credits": 15,
+          "status": "accepted",
+          "why": "clean faithful T-pose body; rigged + merged -> ship/hero.glb"
+        },
+        {
+          "taskId": "01a0d5b3-61ae-751b-96fd-85364c878863",
+          "operation": "rigging",
+          "credits": 5,
+          "status": "accepted",
+          "why": "strict-native 24-joint rig at 1.2m; free walking/running candidates qualified (walk, run shipped)"
+        },
+        {
+          "taskId": "01a0d5b5-91cd-73ec-8976-a9889d26056d",
+          "operation": "animation-idle",
+          "credits": 3,
+          "status": "rejected",
+          "why": "action 0 'Idle': 4s look-around with ~90deg upper-body twist and bowed head hiding the face under the hat for ~half the cycle; wide turned stance (hips 41deg). Bought Idle_11 instead."
+        },
+        {
+          "taskId": "01a0d5b7-426a-7664-b25c-0712c6e536dc",
+          "operation": "animation-idle11",
+          "credits": 3,
+          "status": "accepted",
+          "why": "Idle_11: calm steady loop, face visible, arms relaxed; feet float ~4cm (documented)"
+        }
+      ],
+      "budget": "glb_budget.mjs: all hero_contract gates PASS",
+      "notes": "Chibi kid: straw hat (green band, leaf pin - deliberately not red), teal vest, backpack with bedroll, cargo shorts, boots; no weapons. Meshy 24-joint biped rig at 1.2 m; clips: idle (Idle_11, 1.90s), walk (1.03s), run (0.63s, free with rig) - all strict-native (verify_native_clip PASS). Rest/bind pose is a T-pose: always play a clip. Feet: idle floats ~0.037-0.040 m above y=0; walk dips 0.02-0.08 m below (mocap retarget) - apply a small per-clip y offset or let grass hide it. Rig output material had glTF-default metallic=1/roughness=1 plus emissive=baseColor at full strength and a 2x specular extension; fixed to metallic 0 / roughness 0.8, no emissive (matches creatures). pose_anatomy: forearm:upper-arm 1.26 (chibi proportion, rig not clip); Idle_11 calm (hip height range 0.72%).",
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+    }
+  ],
+  "rejected": [
+    {
+      "asset": "cinderkit",
+      "operation": "text-to-image",
+      "taskId": "01a0d5a2-3a69-762b-99d0-cd6079486ec9",
+      "credits": 6,
+      "why": "superseded by ref2 (see 3d1 note)"
+    },
+    {
+      "asset": "glimmerpup",
+      "operation": "text-to-image",
+      "taskId": "01a0d5a4-a91f-7421-9810-528e51fb7f45",
+      "credits": 6,
+      "why": "only ONE wing visible in 3/4 view; image-to-3D would build an asymmetric one-winged model; re-prompted"
+    },
+    {
+      "asset": "cinderkit",
+      "operation": "image-to-3d",
+      "taskId": "01a0d5a7-0832-7195-9693-47ee42e447b9",
+      "credits": 15,
+      "why": "superseded by v2: faithful and clean but read plainer than the common Sprout, undermining rarity; kept in raw/ as alternate"
+    },
+    {
+      "asset": "egg",
+      "operation": "image-to-3d",
+      "taskId": "01a0d5a8-5ffd-7183-81eb-173525d0697e",
+      "credits": 15,
+      "why": "texture view-blend seam: ghosted/blurred spots band on one side; gold crack lines nearly lost; reads as plain Easter egg"
+    },
+    {
+      "asset": "hero",
+      "operation": "animation-idle",
+      "taskId": "01a0d5b5-91cd-73ec-8976-a9889d26056d",
+      "credits": 3,
+      "why": "action 0 'Idle': 4s look-around with ~90deg upper-body twist and bowed head hiding the face under the hat for ~half the cycle; wide turned stance (hips 41deg). Bought Idle_11 instead."
+    }
+  ]
+}

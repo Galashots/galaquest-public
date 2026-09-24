@@ -95,7 +95,9 @@ function refresh() {
   const trayKey = `${trayOpened}:${seeds.join(',')}:${selectedSeed}:${step()}`;
   if (trayKey !== lastTrayKey) { tray.render(trayOpened ? seeds : [], selectedSeed, step() !== 'plant'); lastTrayKey = trayKey; }
   let target = null;
-  if (bandDialog.backdrop.style.display === 'flex') target = rectPoint(bandDialog.panel.getBoundingClientRect());
+  // The band picker is the grown-up's choice between two equal options: no
+  // child-facing arrow, which would also sit on top of its text.
+  if (bandDialog.backdrop.style.display === 'flex') target = null;
   else if (namingDialog.backdrop.style.display === 'flex') target = rectPoint(namingDialog.suggestionsEl.getBoundingClientRect());
   else if (book.isOpen) target = rectPoint(book.closeBtn.getBoundingClientRect());
   else if (market.isOpen) target = rectPoint(market.getArrowTargetRect(step()));

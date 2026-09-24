@@ -4,4 +4,5 @@ import './economy.test.mjs';
 import './egg.test.mjs';
 import './farm.test.mjs';
 import './game.test.mjs';
+import './models.test.mjs';
 import './depth/index.js';

@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import * as gen from './procgen.js';
 import { TweenManager, SparkleBurst } from './juice.js';
+import { CreatureModels } from './models.js';
 
 const PLOT_POSITIONS = [
   new THREE.Vector3(-2, 0, 2.4),
@@ -75,6 +76,11 @@ export class Diorama {
     this._lastFarm = null;
     this._lastArmor = null;
     this._lastEgg = null;
+
+    // Outlives _buildScene: a lost context rebuilds the scene from the same
+    // loaded templates instead of fetching the models again.
+    this.models = new CreatureModels(THREE);
+    setTimeout(() => { this.models.preloadAll(); }, 1500);
 
     this._buildScene();
 
@@ -154,7 +160,10 @@ export class Diorama {
     this.eggGroup = gen.buildEgg(THREE);
     this.eggGroup.position.copy(EGG_POSITION);
     this.eggGroup.traverse((o) => { o.userData.pickType = 'egg'; });
+    this.eggGroup.userData.surfaces = [this.eggGroup.userData.shell];
+    this.eggGroup.userData.glow = [this.eggGroup.userData.shell.material];
     this.scene.add(this.eggGroup);
+    this._upgradeEgg(this.eggGroup);
     this.eggVisible = true;
 
     this.creatureGroup = null; // built on hatch
@@ -266,18 +275,12 @@ export class Diorama {
     this._lastEgg = eggState;
     const cracksShown = this.eggGroup.userData.cracks.length;
     for (let i = cracksShown; i < eggState.cracks + eggState.hatchTaps; i++) {
-      gen.addCrackDecal(THREE, this.eggGroup, i);
+      this._seatCrack(gen.addCrackDecal(THREE, this.eggGroup, i), i);
       this.sparkles.spawn(this.eggGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 10);
     }
     this._eggWobbleSpeed = 3 + eggState.cracks * 1.6;
 
-    const shell = this.eggGroup.userData.shell;
-    if (eggState.elementHint) {
-      const hint = this.content.CROPS.find((c) => c.element === eggState.elementHint);
-      const glowColor = hint ? hint.color : '#ffd54f';
-      shell.material.emissive = new THREE.Color(glowColor);
-      shell.material.emissiveIntensity = 0.35;
-    }
+    if (eggState.elementHint) this._glowEgg(eggState.elementHint);
 
     if (eggState.hatched && this.eggVisible) {
       this.eggVisible = false;
@@ -285,7 +288,7 @@ export class Diorama {
       this.sparkles.spawn(this.eggGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#ffd54f', 28);
       const creatureDef = this.content.CREATURES.find((c) => c.id === eggState.hatchedCreatureId);
       if (creatureDef) {
-        this.creatureGroup = gen.buildCreature(THREE, creatureDef);
+        this.creatureGroup = this._buildCreature(creatureDef);
         this.creatureGroup.position.copy(this.eggGroup.position);
         this.creatureGroup.scale.setScalar(0.01);
         this.creatureGroup.traverse((o) => { o.userData.pickType = 'creature'; });
@@ -301,6 +304,96 @@ export class Diorama {
       this.eggVisible = true;
       this.eggGroup.visible = true;
     }
+  }
+
+  /** Tints the egg toward the hinted element (procedural shell and sculpted egg alike). */
+  _glowEgg(element) {
+    const hint = this.content.CROPS.find((c) => c.element === element);
+    const glowColor = new THREE.Color(hint ? hint.color : '#ffd54f');
+    for (const material of this.eggGroup.userData.glow) {
+      material.emissive = glowColor;
+      material.emissiveIntensity = 0.35;
+    }
+  }
+
+  /**
+   * Swaps the procedural shell for the sculpted egg once it loads. The group,
+   * its picking, wobble and cracks stay; only what they sit on changes.
+   */
+  _upgradeEgg(eggGroup) {
+    const apply = () => {
+      const egg = this.models.eggInstance();
+      if (!egg || this.eggGroup !== eggGroup || eggGroup.userData.model) return;
+      eggGroup.userData.shell.visible = false;
+      eggGroup.add(egg);
+      egg.traverse((o) => { o.userData.pickType = 'egg'; });
+      const meshes = [];
+      egg.traverse((o) => { if (o.isMesh) meshes.push(o); });
+      eggGroup.userData.model = egg;
+      eggGroup.userData.surfaces = meshes;
+      eggGroup.userData.glow = meshes.map((m) => m.material);
+      eggGroup.userData.cracks.forEach((crack, i) => this._seatCrack(crack, i));
+      if (this._lastEgg?.elementHint) this._glowEgg(this._lastEgg.elementHint);
+    };
+    if (this.models.eggInstance()) apply();
+    else this.models.loadEgg().then(apply);
+  }
+
+  /** Distance from the egg's axis to the visible shell at height y along `out`, or null. */
+  _shellRadius(out, y) {
+    const group = this.eggGroup;
+    const origin = group.localToWorld(out.clone().multiplyScalar(3).setY(y));
+    const target = group.localToWorld(new THREE.Vector3(0, y, 0));
+    this._raycaster.set(origin, target.sub(origin).normalize());
+    const hit = this._raycaster.intersectObjects(group.userData.surfaces, false)[0];
+    if (!hit) return null;
+    const local = group.worldToLocal(hit.point.clone());
+    return Math.hypot(local.x, local.z);
+  }
+
+  /**
+   * Seats a crack on the visible shell along its own bearing, each segment at
+   * its own height, so it shows on whatever shape the shell is (the old fixed
+   * radius sat inside it) and never pokes out past a curve.
+   */
+  _seatCrack(crack, index) {
+    const angle = (index / 4) * Math.PI * 2 + 0.4;
+    const out = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+    const y = crack.position.y;
+    this.eggGroup.updateMatrixWorld(true);
+    const middle = this._shellRadius(out, y);
+    if (middle === null) return;
+    crack.position.set(out.x * (middle + 0.01), y, out.z * (middle + 0.01));
+    for (const piece of crack.children) {
+      const radius = this._shellRadius(out, y + piece.position.y);
+      piece.position.z = radius === null ? 0 : radius - middle;
+    }
+  }
+
+  /**
+   * The hatched creature: its sculpted model when loaded, else the procedural
+   * body, upgraded in place (same group, so tweens and idle motion carry on)
+   * the moment a still-loading model arrives.
+   */
+  _buildCreature(creatureDef) {
+    const group = new THREE.Group();
+    group.userData.creatureId = creatureDef.id;
+    const model = this.models.instance(creatureDef.id, creatureDef.shape);
+    group.add(model ?? gen.buildCreature(THREE, creatureDef));
+    if (model) group.add(gen.creatureShadow(THREE));
+    else if (this.models.has(creatureDef.id)) {
+      this.models.load(creatureDef.id).then(() => {
+        const upgrade = this.models.instance(creatureDef.id, creatureDef.shape);
+        if (!upgrade || this.creatureGroup !== group) return;
+        clearGroupDisposing(group);
+        group.add(upgrade, gen.creatureShadow(THREE));
+        // No pop here: a pop restores the scale it started from, which could
+        // freeze a half-grown creature if this lands during the hatch grow-in.
+        group.traverse((o) => { o.userData.pickType = 'creature'; });
+        this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 12);
+      });
+    }
+    return group;
   }
 
   // -- One-shot juice hooks (called right after a successful action) ------

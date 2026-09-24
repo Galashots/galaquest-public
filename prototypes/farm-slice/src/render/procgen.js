@@ -366,6 +366,11 @@ const SHAPE_BUILDERS = {
   },
 };
 
+/** The soft contact shadow every creature stands on, procedural or sculpted. */
+export function creatureShadow(THREE) {
+  return shadowAt(THREE, 0, 0, 0.45);
+}
+
 /** Procedural creature body from CREATURES content: {shape, colors}. */
 export function buildCreature(THREE, creatureDef) {
   const builder = SHAPE_BUILDERS[creatureDef.shape] || SHAPE_BUILDERS.round;
@@ -397,16 +402,26 @@ export function buildEgg(THREE) {
   return group;
 }
 
+/**
+ * A zigzag crack of short segments. The group faces outward along its bearing
+ * (local +z); the renderer seats each segment on the shell (see the diorama's
+ * _seatCrack), which a single long straight piece could not do on a curve.
+ */
 export function addCrackDecal(THREE, eggGroup, index) {
   const angle = (index / 4) * Math.PI * 2 + 0.4;
-  const crack = new THREE.Mesh(
-    new THREE.BoxGeometry(0.03, 0.32 + index * 0.03, 0.01),
-    new THREE.MeshBasicMaterial({ color: '#5d4531' })
-  );
+  const crack = new THREE.Group();
+  crack.name = 'crack';
+  const material = new THREE.MeshBasicMaterial({ color: '#4a3526' });
+  const segment = new THREE.BoxGeometry(0.03, 0.11, 0.012);
+  [-0.09, 0, 0.09].forEach((dy, i) => {
+    const piece = new THREE.Mesh(segment, material);
+    piece.position.set(i % 2 ? 0.022 : -0.022, dy, 0);
+    piece.rotation.z = i % 2 ? -0.55 : 0.55;
+    crack.add(piece);
+  });
   const radius = 0.36;
   crack.position.set(Math.sin(angle) * radius * 0.85, 0.55 + index * 0.03, Math.cos(angle) * radius * 0.85);
   crack.rotation.y = angle;
-  crack.rotation.z = (Math.random() - 0.5) * 0.6;
   eggGroup.add(crack);
   eggGroup.userData.cracks.push(crack);
   return crack;

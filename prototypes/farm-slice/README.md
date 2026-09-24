@@ -30,6 +30,12 @@ node --test test/
   try/catch.
 - `src/render/*.js` -- the three.js diorama: procedural low-poly geometry,
   lighting, camera sway, tweens, and a small sparkle-particle system.
+  `models.js` loads the sculpted creature and egg models (GLB) and falls back
+  to the procedural bodies if a model is missing or fails to load.
+- `assets/` -- `creatures/<id>.glb` (one per creature in `content/`),
+  `egg.glb`, and `candidates/` (made but not loaded yet). Provenance and
+  licence: `docs/asset-production/farm-creatures-2026-09-24/` and
+  `ASSET-LICENSES.md`.
 - `src/ui/*.js` -- the DOM overlay: goal chip, arrow, market panel, naming
   dialog, collection book, band picker, HUD.
 - `src/audio.js` -- short generated WebAudio blips (no audio files), with a
@@ -37,7 +43,8 @@ node --test test/
 - `src/main.js` -- glue between all of the above.
 - `content/` -- game content (crops, armor, creatures, offers, dialog), exported by `content/index.js`.
 - `test/*.test.mjs` -- `node --test` unit tests for the rules modules.
-- `vendor/three.module.min.js` -- vendored copy of three.js.
+- `vendor/three.module.min.js` -- vendored copy of three.js; `vendor/loaders/`
+  and `vendor/utils/` hold its GLTFLoader.
 
 ## Third-party licences
 
