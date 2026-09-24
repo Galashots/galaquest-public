@@ -159,8 +159,8 @@ test('required guidance files exist', () => {
 });
 
 const TASK_CATEGORIES = [
-  'Unity gameplay / scene / prefab', 'Unity WebGL / browser acceptance', 'Player-visible assets',
-  'HUD / UI', 'Network / protocol / session', 'Persistence / progression',
+  'Farm game (three.js)', 'Unity gameplay / scene / prefab', 'Unity WebGL / browser acceptance',
+  'Player-visible assets', 'HUD / UI', 'Network / protocol / session', 'Persistence / progression',
   'Product / content expansion', 'Consequential acceptance / review',
   'Provider-backed asset work', 'Legacy Three.js diagnostics',
 ];
@@ -183,7 +183,7 @@ function taskRouterFailures(source, pathExists = (path) => existsSync(join(REPO,
     const row = matches[0];
     if (row.length !== 4 || !row[3]) { failures.push(`${category}: guidance/proof/tags required`); continue; }
     for (const [column, label] of [[1, 'guidance'], [2, 'proof']]) {
-      const paths = [...row[column].matchAll(/`((?:\.agents|\.github|docs|tools|public|test|net|data|unity)\/[^`]+)`/g)]
+      const paths = [...row[column].matchAll(/`((?:\.agents|\.github|docs|tools|public|test|net|data|unity|prototypes)\/[^`]+)`/g)]
         .map((match) => match[1]);
       if (!paths.length) failures.push(`${category}: missing ${label} path`);
       for (const path of paths) if (!pathExists(path)) failures.push(`${category}: missing path ${path}`);
@@ -219,6 +219,11 @@ test('sabotage: route labels elsewhere, empty proof and wrong codec do not satis
   assert.ok(taskRouterFailures(wrongCodec).some((failure) => failure.includes('missing proof public/src/net/protocolCore.js')));
   const deadPath = source.replace(row, row.replace('public/src/net/protocolCore.js', 'unity/missing-router-proof.cs'));
   assert.ok(taskRouterFailures(deadPath).some((failure) => failure.includes('missing path unity/missing-router-proof.cs')));
+  // The farm game lives under prototypes/, so its route paths must be checked like every other root.
+  const farmRow = source.split(/\r?\n/).find((line) => line.startsWith('| **Farm game (three.js)** |'));
+  assert.ok(farmRow, 'farm route fixture must exist');
+  const deadFarmPath = source.replace(farmRow, farmRow.replace('prototypes/farm-slice/CONTRACT.md', 'prototypes/missing-contract.md'));
+  assert.ok(taskRouterFailures(deadFarmPath).some((failure) => failure.includes('missing path prototypes/missing-contract.md')));
 });
 
 test('Claude bootstrap imports the canonical root authority exactly', () => {
