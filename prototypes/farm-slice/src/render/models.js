@@ -56,6 +56,7 @@ export function normalizeModel(THREE, root, { height = CREATURE_MODEL_HEIGHT, ma
   );
   const wrapper = new THREE.Group();
   wrapper.add(root);
+  wrapper.userData.height = size.y * scale;
   return wrapper;
 }
 

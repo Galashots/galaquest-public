@@ -380,6 +380,8 @@ export class Diorama {
     group.userData.creatureId = creatureDef.id;
     const model = this.models.instance(creatureDef.id, creatureDef.shape);
     group.add(model ?? gen.buildCreature(THREE, creatureDef));
+    // Unparented and unscaled here, so the world box is the creature's own height.
+    group.userData.height = model ? model.userData.height : new THREE.Box3().setFromObject(group).max.y;
     if (model) group.add(gen.creatureShadow(THREE));
     else if (this.models.has(creatureDef.id)) {
       this.models.load(creatureDef.id).then(() => {
@@ -387,6 +389,7 @@ export class Diorama {
         if (!upgrade || this.creatureGroup !== group) return;
         clearGroupDisposing(group);
         group.add(upgrade, gen.creatureShadow(THREE));
+        group.userData.height = upgrade.userData.height;
         // No pop here: a pop restores the scale it started from, which could
         // freeze a half-grown creature if this lands during the hatch grow-in.
         group.traverse((o) => { o.userData.pickType = 'creature'; });
@@ -467,8 +470,9 @@ export class Diorama {
       case 'egg':
         return this.eggGroup.position.clone().add(new THREE.Vector3(0, 1, 0));
       case 'creature':
+        // Just above its head, as for the egg: a fixed low offset put the arrow on its face.
         return this.creatureGroup
-          ? this.creatureGroup.position.clone().add(new THREE.Vector3(0, 0.3, 0))
+          ? this.creatureGroup.position.clone().add(new THREE.Vector3(0, this.creatureGroup.userData.height + 0.1, 0))
           : null;
       default:
         return null;

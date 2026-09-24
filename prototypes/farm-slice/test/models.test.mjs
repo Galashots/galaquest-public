@@ -62,6 +62,8 @@ test('normalizing stands a model on the ground, centred, at the creature height'
   assert.ok(Math.abs(box.min.y) < 1e-6, `stands on y=0, min.y=${box.min.y}`);
   assert.ok(Math.abs(box.max.y - CREATURE_MODEL_HEIGHT) < 1e-6, `height ${box.max.y}`);
   assert.ok(Math.abs(box.min.x + box.max.x) < 1e-6 && Math.abs(box.min.z + box.max.z) < 1e-6, 'centred on x/z');
+  assert.ok(Math.abs(wrapper.userData.height - CREATURE_MODEL_HEIGHT) < 1e-6, 'records its height for the guide arrow');
+  assert.equal(wrapper.clone(true).userData.height, wrapper.userData.height, 'instances carry it');
 });
 
 test('a long body is capped by its length, not blown up by its height', () => {
