@@ -182,7 +182,7 @@ export function currentGoal(state, content, now) {
       // (at most half a crop's grow time). Point at the most-grown plot.
       const byId = cropsById(content);
       const soonest = state.farm.plots
-        .map((p, i) => ({ i, progress: farm.getGrowthProgress(p, byId[p.cropId], now) }))
+        .map((p, i) => ({ i, progress: farm.getGrowthProgress(p, byId.get(p.cropId), now) }))
         .sort((a, b) => b.progress - a.progress)[0].i;
       return { step, text: 'Your crops are growing...', targetKey: 'sprout', plotIndex: soonest };
     }

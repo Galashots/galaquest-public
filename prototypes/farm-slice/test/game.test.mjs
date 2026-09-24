@@ -147,6 +147,14 @@ test('FREE only points at the market when a crate can be filled', () => {
   const wait = game.currentGoal(s, content, 392_000);
   assert.equal(wait.text, 'Your crops are growing...');
   assert.ok(s.farm.plots[wait.plotIndex].cropId);
+
+  // Staggered plantings: the wait arrow picks the most-grown plot, not plot 0.
+  let t = empty;
+  t = plant(t, 1, 'carrot', 390_000);
+  t = plant(t, 0, 'carrot', 395_000);
+  t = plant(t, 2, 'carrot', 396_000);
+  for (let i = 0; i < 3; i++) t = game.waterPlot(t, content, i, 396_000).state;
+  assert.deepEqual(pick(game.currentGoal(t, content, 397_000)), ['sprout', 1]);
 });
 
 function pick(goal) { return [goal.targetKey, goal.plotIndex]; }
