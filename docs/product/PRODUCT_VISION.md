@@ -21,6 +21,9 @@ show it to — not because they were told it is educational.
 > collecting, how things look, and breeding/hatching — not battles; repetitive "go around and kill stuff"
 > play is an explicit dislike; farming and buying/selling were well received in early prototypes; and
 > confusion about what to do next quickly becomes boredom.
+>
+> *Timing superseded 2026-09-24:* the pivot takes effect now, and Emberworks is parked rather than finished
+> (see **Platform** and **Scope and sequencing**).
 
 Curriculum learning is embedded inside the actions required to progress. Learning should support the
 fantasy and the reward loop rather than interrupting it, and real schoolwork should be the single best-paying
@@ -84,7 +87,17 @@ package.
 
 ## Platform
 
-**iPad first.** The primary play device is an iPad running the Unity WebGL build in Safari. Player-facing
+> **Owner decision 2026-09-24 — engine.** The Owner delegated the engine call and accepted the
+> recommendation: GalaQuest is built on the browser **three.js** stack (plain ES modules, no build step),
+> not Unity WebGL. Reasons: a three.js client runs in any browser with nothing to compile, so any local or
+> cloud session can build, test and look at the running game; every Unity compile and build depends on the
+> Owner's Windows desktop, and no Unity build ever reached players; and Unity WebGL is a heavy load for
+> iPad Safari's memory budget. The three.js farm prototype (#212) already runs at iPad sizes. The Unity
+> project is **parked, not deleted**: it stays in the repository as reference and is not the production
+> client. Guidance that still names Unity as the production client is stale and is repaired when the
+> three.js farm client lands on `main`.
+
+**iPad first.** The primary play device is an iPad running the three.js web client in Safari. Player-facing
 work must be touch-operable (no hover-only or keyboard-only interactions), readable at tablet size, and
 within an iPad Safari performance and memory budget. Desktop remains a supported development and play
 surface.
@@ -164,11 +177,14 @@ transmog remain product candidates until separately decided.
 
 ## Scope and sequencing
 
-1. **Now:** finish Emberworks "Relight the Forge" (#192) within the selected **Hub/Camp + Emberworks** scope
-   under the current systems. Sunroot is not selected.
-2. **Next:** the first post-Emberworks slice (farm + egg + market, goal tracker, no battles).
-3. **Then:** turn-based team expeditions, breeding depth, homework board, and sibling visiting/trading, each
+1. **Now:** the first farm slice (farm + egg + market, goal tracker, no battles) on the three.js stack,
+   landed on `main` and playable on an iPad.
+2. **Then:** turn-based team expeditions, breeding depth, homework board, and sibling visiting/trading, each
    as separately framed bounded packages.
+
+> **Owner decision 2026-09-24 — sequencing.** This supersedes "finish Emberworks first". Emberworks'
+> remaining work (#192) is Unity client work, so it is parked with the Unity project. Its server authority
+> and Silverguard Shoulders reward are already merged (#202, #213). Sunroot is not selected.
 
 Learning in every scope must be personalized by profile/subject rather than treated as math-only; #148 owns
 the learning-content and public-safe source boundary. These decisions define direction and sequencing, not a
@@ -183,7 +199,7 @@ additional loot variety. Use the resulting inventory/gap count to size any later
 
 Asset tooling should increasingly optimize for **content throughput**: once a class of asset is qualified,
 make it easier to move additional gear, creatures, crops, farm props, NPCs, and environment pieces through the
-same proven source-custody, optimization, Unity-import, prefab, and visual-review lane without weakening
+same proven source-custody, optimization, runtime-import, and visual-review lane without weakening
 provenance or running-game acceptance. iPad Safari runtime budgets are part of qualification.
 
 ## Decision discipline
