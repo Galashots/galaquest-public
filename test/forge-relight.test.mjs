@@ -193,6 +193,7 @@ test('P3-CP1 one atomic transaction: shared lit row plus the completing profile 
       const concurrent = rewards.claimForgeRelight('hero-b');
       assert.equal(concurrent.granted, true, 'a concurrent sibling still earns their own completion');
       assert.equal(concurrent.worldApplied, false, 'but the already-lit world is not written twice');
+      assert.equal(concurrent.rewardGranted, true, 'and earns their own Shoulders in the lit world');
       assert.equal(countWorldRows(path), 1, 'one shared world result however many profiles complete');
 
       const personal = (hero) => rewards.profileFactsFor(hero).filter((fact) => fact.type === FORGE_RELIGHT_COMPLETED);
@@ -203,6 +204,94 @@ test('P3-CP1 one atomic transaction: shared lit row plus the completing profile 
 
       rewards.join('hero-ghost', undefined);
       assert.deepEqual(rewards.claimForgeRelight('hero-ghost'), { granted: false, worldApplied: false, facts: [] });
+    } finally {
+      rewards.close();
+    }
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+// #192: the reward is a member of the completion batch, not a write after it. A conflicting row
+// already squatting the reward's own id (same id, another item) makes the store refuse the batch; if
+// the reward were written separately, the world would already be lit and the completion recorded
+// with no reward behind them.
+test('#192 the Shoulders reward is inside the atomic batch: a reward conflict lights and completes nothing', () => {
+  const fixture = tempDir('gq-forge-relight-reward-atomic-');
+  const path = join(fixture.directory, 'rewards.db');
+  try {
+    const seed = openRewardStore(path);
+    try {
+      seed.apply({
+        guestId: ATTACKER, heroId: 'seed', type: 'gear-owned',
+        eventId: `own:${ATTACKER}:shoulder_silverguard`, value: 'helmet_silverguard',
+      });
+    } finally {
+      seed.close();
+    }
+    const rewards = createRewardCoordinator({ rewardStorePath: path });
+    try {
+      rewards.join('hero-a', ATTACKER);
+      assert.throws(() => rewards.claimForgeRelight('hero-a'), 'the conflicting reward id refuses the batch');
+      assert.equal(rewards.forgeLit(), false, 'no lit world without its reward');
+      assert.deepEqual(rewards.profileFactsFor('hero-a')
+        .filter((fact) => fact.type === FORGE_RELIGHT_COMPLETED), [], 'no completion without its reward');
+    } finally {
+      rewards.close();
+    }
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('#192 Shoulders already owned under another id: the finale completes with no second grant or ceremony', () => {
+  const fixture = tempDir('gq-forge-relight-reward-owned-');
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath: join(fixture.directory, 'rewards.db') });
+    try {
+      rewards.join('hero-a', ATTACKER);
+      // The web client's offline Village drop journals the Shoulders under its own id, not `own:`.
+      assert.deepEqual(rewards.restoreProfileFacts('hero-a', [{
+        eventId: 'gear-owned:offline:shoulder_silverguard:life-1', type: 'gear-owned', value: 'shoulder_silverguard',
+      }]), { restored: 1, refused: 0 }, 'test setup: the offline drop restores under its own id');
+
+      const relight = rewards.claimForgeRelight('hero-a');
+      assert.equal(relight.granted, true, 'already owning the reward never blocks the completion');
+      assert.equal(relight.worldApplied, true);
+      assert.equal(relight.rewardGranted, false, 'no reward ceremony for Shoulders the child already has');
+      assert.deepEqual(relight.facts.map((fact) => fact.type), [FORGE_RELIGHT_COMPLETED],
+        'only the completion is announced');
+      assert.equal(rewards.ownedItemIdsFor('hero-a').includes('shoulder_silverguard'), true);
+    } finally {
+      rewards.close();
+    }
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('#192 a completion restored into an already-lit world is not stranded without its reward', () => {
+  const fixture = tempDir('gq-forge-relight-reward-stranded-');
+  try {
+    const rewards = createRewardCoordinator({ rewardStorePath: join(fixture.directory, 'rewards.db') });
+    try {
+      rewards.join('hero-a', ATTACKER);
+      rewards.join('hero-b', SIBLING);
+      assert.equal(rewards.claimForgeRelight('hero-a').worldApplied, true, 'test setup: a sibling lights the world');
+      assert.deepEqual(rewards.restoreProfileFacts('hero-b', [relightCompletionFact(SIBLING)]),
+        { restored: 1, refused: 0 }, 'test setup: a device journal restores the completion alone');
+
+      const repaired = rewards.claimForgeRelight('hero-b');
+      assert.equal(repaired.granted, false, 'the completion was already on record');
+      assert.equal(repaired.worldApplied, false);
+      assert.equal(repaired.rewardGranted, true, 'the missing reward is granted, not skipped');
+      assert.deepEqual(repaired.facts.map((fact) => [fact.type, fact.value]),
+        [['gear-owned', 'shoulder_silverguard']]);
+      assert.equal(rewards.ownedItemIdsFor('hero-b').includes('shoulder_silverguard'), true);
+
+      assert.deepEqual(rewards.claimForgeRelight('hero-b'),
+        { granted: false, worldApplied: false, rewardGranted: false, facts: [] },
+        'once complete in every part, a retry is a no-op');
     } finally {
       rewards.close();
     }
@@ -321,18 +410,27 @@ test('P3-CP1 sockets: an unready, displaced, or ephemeral relight is a clean sil
   const fixture = tempDir('gq-forge-relight-noop-');
   try {
     await withServer(join(fixture.directory, 'rewards.db'), async ({ game, connect }) => {
+      // Each peer's message count just before its relight, so "silent" means no forge-state reply
+      // to THAT ask, not merely no lit forge.
+      const marks = new Map();
+      const relight = (peer) => { marks.set(peer, peer.messages.length); peer.send({ type: 'forge-relight' }); };
+      const forgeRepliesSince = (peer) => peer.messages.slice(marks.get(peer))
+        .filter((message) => message.type === 'forge-state');
       const unready = await connect('unready', ATTACKER);
       putAtForge(game, unready.welcome.id);
-      unready.send({ type: 'forge-relight' });
+      relight(unready);
       const displaced = await connect('displaced', SIBLING);
       putAtForge(game, displaced.welcome.id);
       await completeBothTasks(displaced);
       moveTo(game, displaced.welcome.id, 0, 4);
-      displaced.send({ type: 'forge-relight' });
+      relight(displaced);
       const ghost = await connect('ghost', undefined);
       putAtForge(game, ghost.welcome.id);
-      ghost.send({ type: 'forge-relight' });
+      relight(ghost);
       await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.deepEqual(forgeRepliesSince(unready), [], 'a readiness refusal stays silent');
+      assert.deepEqual(forgeRepliesSince(displaced), [], 'a presence refusal stays silent');
+      assert.deepEqual(forgeRepliesSince(ghost), [], 'an identity refusal stays silent');
       assert.equal(unready.isClosed(), false, 'an early ask must not cost the connection');
       assert.equal(displaced.isClosed(), false, 'asking from across the room must not cost the connection');
       assert.equal(game.rewards.forgeLit(), false, 'no ask without readiness AND presence AND identity lights anything');
