@@ -176,7 +176,15 @@ export function currentGoal(state, content, now) {
       if (ready.length) return { step, text: 'Pick your crops', targetKey: 'ripeCrop', plotIndex: ready[0] };
       const empty = state.farm.plots.findIndex((p) => !p.cropId);
       if (empty >= 0) return { step, text: 'Plant more carrots', targetKey: 'plot', plotIndex: empty };
-      return { step, text: 'Your crops are growing...', targetKey: 'sprout', plotIndex: 0 };
+      const unwatered = unwateredGrowingPlotIndexes(state, content, now);
+      if (unwatered.length) return { step, text: 'Water your sprouts', targetKey: 'sprout', plotIndex: unwatered[0] };
+      // Every plot is planted and watered: the shortest wait in the slice
+      // (at most half a crop's grow time). Point at the most-grown plot.
+      const byId = cropsById(content);
+      const soonest = state.farm.plots
+        .map((p, i) => ({ i, progress: farm.getGrowthProgress(p, byId[p.cropId], now) }))
+        .sort((a, b) => b.progress - a.progress)[0].i;
+      return { step, text: 'Your crops are growing...', targetKey: 'sprout', plotIndex: soonest };
     }
   }
 }

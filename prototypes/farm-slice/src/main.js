@@ -50,7 +50,7 @@ function syncVisuals(now) {
     step() === 'armor' || step() === 'offer' || step() === 'market' ? content.ARMOR[0] : null);
   diorama.syncEgg(state.egg);
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
-  diorama.setWateringCanVisible(['grow', 'replant'].includes(step()) &&
+  diorama.setWateringCanVisible(['grow', 'replant', 'free'].includes(step()) &&
     game.unwateredGrowingPlotIndexes(state, content, now).length > 0);
 }
 function remainingSeeds() {

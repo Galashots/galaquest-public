@@ -136,7 +136,20 @@ test('FREE only points at the market when a crate can be filled', () => {
   const goal = game.currentGoal(empty, content, 385_000);
   assert.equal(goal.targetKey, 'plot');
   assert.ok(goal.plotIndex >= 0);
+
+  let s = empty;
+  for (let i = 0; i < 3; i++) s = plant(s, i, 'carrot', 390_000);
+  assert.deepEqual(pick(game.currentGoal(s, content, 391_000)), ['sprout', 0]);
+  s = game.waterPlot(s, content, 0, 391_000).state;
+  assert.deepEqual(pick(game.currentGoal(s, content, 391_000)), ['sprout', 1]);
+  s = game.waterPlot(s, content, 1, 391_000).state;
+  s = game.waterPlot(s, content, 2, 391_000).state;
+  const wait = game.currentGoal(s, content, 392_000);
+  assert.equal(wait.text, 'Your crops are growing...');
+  assert.ok(s.farm.plots[wait.plotIndex].cropId);
 });
+
+function pick(goal) { return [goal.targetKey, goal.plotIndex]; }
 test('each first seed needs its own plot and watering halves remaining time', () => {
   let state = game.createGameState(0);
   assert.equal(game.plantPlot(state, content, 0, 'sunberry', 0).planted, true);
