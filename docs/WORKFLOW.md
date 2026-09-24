@@ -203,6 +203,7 @@ Classify noisy coverage deliberately: repair, quarantine with a return condition
 
 ```bash
 node --test test/*.test.mjs
+node --test prototypes/farm-slice/test/*.test.mjs prototypes/farm-slice/test/depth/*.test.mjs
 ```
 
 The protected branch requires the hosted `unit` context. The checked-in `.github/workflows/test.yml` is the authority for its runtime version and commands; it also runs the farm game's own suite (`prototypes/farm-slice/test/`). Guidance integrity runs here too, so Markdown-only changes still receive the cheap required gate.
@@ -210,11 +211,14 @@ The protected branch requires the hosted `unit` context. The checked-in `.github
 ### 2. Farm game running pixels
 
 The farm game (`prototypes/farm-slice/`) is the active client. Its rules are covered by its suite in
-the required gate; its appearance and touch flow are proven only by the running game. Serve it
-(`node server.mjs`, then `/farm/`, or its own `node prototypes/farm-slice/serve.mjs`) and capture
-it in the automation Chrome at iPad viewports (1024x768 and 768x1024, touch emulation on), checking
-the console for errors. The hosted instance (`docs/public-playtest.md`) serves the same route for a
-real iPad; fetch its `/source-sha.json` first. The legacy harnesses below do not cover the farm game.
+the required gate; its appearance and touch flow need the running game. Serve it (`node server.mjs`,
+then `/farm/`, or its own `node prototypes/farm-slice/serve.mjs`), start a browser with
+`node tools/runtime-test/automation-chrome.mjs`, and over CDP set an iPad viewport (1024x768 and
+768x1024, `Emulation.setDeviceMetricsOverride` plus `Emulation.setTouchEmulationEnabled`), capture,
+and check the console for errors. No checked-in farm driver does this yet; the legacy harnesses below
+do not cover the farm game. Emulated headless captures are diagnostic: acceptance is iPad Safari and
+human visual judgment (`AGENTS.md`, visual and product acceptance). The hosted instance
+(`docs/public-playtest.md`) serves the same route for a real iPad; fetch its `/source-sha.json` first.
 
 ### 3. Legacy Three.js local running-game harnesses
 

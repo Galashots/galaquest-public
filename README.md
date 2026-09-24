@@ -18,7 +18,7 @@ retained as reference and legacy review tooling.
 | `net/` | The authoritative game server: WebSocket framing, server loop, reward store. |
 | `server.mjs` | The local static + WebSocket host: the farm game at `/farm/`, the retained client at `/`, sockets at `/ws`, and an existing local Unity build at `/unity/`. |
 | `test/` | The unit suite. Plain `node --test`, no framework. |
-| `tools/runtime-test/` | Chrome DevTools Protocol harnesses that drive the real game in a real browser. |
+| `tools/runtime-test/` | Chrome DevTools Protocol harnesses that drive the retained client in `public/` in a real browser. |
 | `tools/unity-playtest/` | Manifest-bound Unity browser evidence. Read its [`README.md`](tools/unity-playtest/README.md) rather than using the legacy harnesses for Unity. |
 | `docs/` | Workflow, guidance, pipeline, visual-authority, and asset documentation. |
 | `AGENTS.md` | Hard conventions and guardrails for anyone — human or agent — working in this repo. |

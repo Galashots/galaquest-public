@@ -131,7 +131,7 @@ function brokenRelativeLinks(relFile, source, root = REPO) {
   return failures;
 }
 
-const REPO_PATH = /(?:^|[\s`'"(=])((?:\.agents|\.github|docs|tools|public|test|net|data)[\\/][A-Za-z0-9_.@+~\\/-]+)/gm;
+const REPO_PATH = /(?:^|[\s`'"(=])((?:\.agents|\.github|docs|tools|public|test|net|data|prototypes)[\\/][A-Za-z0-9_.@+~\\/-]+)/gm;
 
 function repoPathReferences(source) {
   const refs = [];
@@ -175,6 +175,7 @@ function taskRouterFailures(source, pathExists = (path) => existsSync(join(REPO,
     ['Network / protocol / session', 'public/src/net/protocolCore.js'],
     ['Persistence / progression', 'net/rewardStore.mjs'],
     ['Player-visible assets', 'docs/asset-production/asset-registry-v1.json'],
+    ['Farm game (three.js)', 'prototypes/farm-slice/test/'],
   ]);
   const failures = [];
   for (const category of TASK_CATEGORIES) {

@@ -10,6 +10,7 @@ in the same PR.
 ```bash
 node server.mjs            # serve the game locally (default port 5201)
 node --test test/*.test.mjs  # the required unit gate, including guidance/ledger integrity
+node --test prototypes/farm-slice/test/*.test.mjs prototypes/farm-slice/test/depth/*.test.mjs  # farm suite, also in the gate
 ```
 
 `tools/runtime-test/` harnesses own their isolated runtime server — do not pre-start `server.mjs`
@@ -53,8 +54,8 @@ Parked by the 2026-09-24 engine decision (`docs/product/PRODUCT_VISION.md`, Plat
 reference, not the production client.
 
 - `unity/GalaQuest/` — the Unity project. Its project-local authority is
-  [`unity/AGENTS.md`](../unity/AGENTS.md); it pins the Editor/URP baseline and the production-client
-  migration boundaries.
+  [`unity/AGENTS.md`](../unity/AGENTS.md); it pins the Editor/URP baseline and the migration
+  boundaries.
 - `unity/GalaQuest/Assets/GalaQuest/Runtime/` — Unity runtime, identity, network, movement, combat,
   destination, and progression code. `Assets/GalaQuest/Editor/` holds checked-in Editor validation and
   WebGL build entry points; generated output is `unity/GalaQuest/Builds/GalaQuestWebGL/` and is not

@@ -1,16 +1,20 @@
 # Gear lane — generated gear, mounted on the hero, judged in the running game
 
+> **Parked with Unity (2026-09-24 engine decision, `docs/product/PRODUCT_VISION.md`, Platform).** The
+> Unity Gear Production V1 lane below applies only to explicitly Unity-scoped work. No gear lane is
+> currently selected for the three.js farm game; its armour is content in `prototypes/farm-slice/`.
+
 ## Which pipeline am I in?
 
 | Question | Answer |
 | --- | --- |
-| Fitting a NEW rigid gear item? | **Unity Gear Production V1** — the next section. This is the only current answer. |
+| Fitting a NEW rigid gear item for the parked Unity client? | **Unity Gear Production V1** — the next section. |
 | Repairing a mount that already ships in the Three.js client? | The LEGACY section at the bottom of this file. |
 | Diagnosing a Three.js runtime gear defect? | The LEGACY section. |
 | Fitting skinned/deformable armour? | Not yet supported. Checkpoint B is not built; do not improvise it. |
 
 
-## Unity is the gear authoring surface from here (Gear Production V1, Checkpoint A)
+## Unity gear authoring surface (parked) (Gear Production V1, Checkpoint A)
 
 Rigid gear is now fitted in Unity, not by deriving quaternions in a headless harness. The Three.js
 records in `public/src/character/gear.js` remain the RUNTIME authority for the shipping Three.js client
