@@ -40,3 +40,6 @@ jobs:
       # Scoped on purpose: test/ is the runtime unit suite. Keeping the glob explicit means a future
       # tool directory that carries its own differently-runnered tests cannot break this gate.
       - run: node --test test/*.test.mjs
+      # The three.js farm game carries its own node --test suite (game rules, economy, egg, depth
+      # rules). Same runner, explicit globs, so it gates the product without widening the one above.
+      - run: node --test prototypes/farm-slice/test/*.test.mjs prototypes/farm-slice/test/depth/*.test.mjs
