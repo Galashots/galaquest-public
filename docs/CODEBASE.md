@@ -36,9 +36,23 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
   law (`public/src/character/speed.js`) and the collision resolver
   (`public/src/world/obstacles.js`), each imported by both the server and client prediction.
 
-## Unity production client
+## Farm game (three.js)
 
-- `unity/GalaQuest/` — the Unity production project. Its project-local authority is
+- `prototypes/farm-slice/` — the three.js farm game the product vision now builds on
+  (`docs/product/PRODUCT_VISION.md`, Platform): plain ES modules, its own vendored three.js, no build
+  step. `CONTRACT.md` is the ten-minute experience contract; `src/rules/` is pure game state,
+  `src/render/` the diorama, `src/ui/` the touch UI, `content/` the content pack, and `test/` its own
+  `node --test` suite (run by the required `unit` job).
+- `server.mjs` mounts it at `/farm/`, so the hosted playtest instance (`docs/public-playtest.md`)
+  serves it at `<service-url>/farm/`. Locally: `node server.mjs`, then `http://localhost:5201/farm/`,
+  or the game's own `node prototypes/farm-slice/serve.mjs` on port 5310.
+
+## Unity client (parked)
+
+Parked by the 2026-09-24 engine decision (`docs/product/PRODUCT_VISION.md`, Platform): kept as
+reference, not the production client.
+
+- `unity/GalaQuest/` — the Unity project. Its project-local authority is
   [`unity/AGENTS.md`](../unity/AGENTS.md); it pins the Editor/URP baseline and the production-client
   migration boundaries.
 - `unity/GalaQuest/Assets/GalaQuest/Runtime/` — Unity runtime, identity, network, movement, combat,

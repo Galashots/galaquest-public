@@ -113,3 +113,42 @@ test('nothing is cached, which is why an edit shows up on the tablet without a h
     assert.equal((await fetch(`${origin}/vendor/three.module.min.js`)).headers.get('cache-control'), 'no-store');
   });
 });
+
+// The three.js farm game (docs/product/PRODUCT_VISION.md, Platform) is mounted at /farm/ so the hosted
+// playtest instance serves it to an iPad. Same guarantees as the root: the page, runnable modules,
+// and no way out of its own directory.
+
+test('/farm/ is the farm game, and its modules come back runnable', async () => {
+  await serving(async (origin) => {
+    const page = await fetch(`${origin}/farm/`);
+    assert.equal(page.status, 200);
+    assert.match(page.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(await page.text(), /src="\.\/src\/main\.js"/, 'the farm page, not the legacy game');
+    const module = await fetch(`${origin}/farm/src/main.js`);
+    assert.equal(module.status, 200);
+    assert.match(module.headers.get('content-type') ?? '', /javascript/);
+  });
+});
+
+test('/farm without a slash redirects, because the page loads ./src/main.js relative to it', async () => {
+  // Served in place, `./src/main.js` would resolve to /src/main.js at the site root and the game
+  // would load nothing.
+  await serving(async (origin) => {
+    const response = await fetch(`${origin}/farm`, { redirect: 'manual' });
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/farm/');
+  });
+});
+
+test('nothing outside the farm directory is reachable through /farm/', async () => {
+  // Percent-encoded separators survive URL parsing and are decoded by the mount, so these are the
+  // spellings that actually reach the containment check; a refusal must be 403, never a fall
+  // through to public/.
+  await serving(async (origin) => {
+    for (const path of ['/farm/..%2Fserve.mjs', '/farm/..%2F..%2Fserver.mjs', '/farm/..%2F..%2Fpublic%2Findex.html']) {
+      const response = await fetch(`${origin}${path}`);
+      assert.equal(response.status, 403, `${path} answered ${response.status}`);
+      assert.doesNotMatch(await response.text(), /createRuntimeServer|<canvas/, `${path} escaped the mount`);
+    }
+  });
+});

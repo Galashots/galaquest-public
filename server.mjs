@@ -14,6 +14,9 @@ export const DEFAULT_PORT = 5201;
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
 export const PUBLIC_DIR = join(HERE, 'public');
 export const UNITY_WEB_BUILD_DIR = join(HERE, 'unity', 'GalaQuest', 'Builds', 'GalaQuestWebGL');
+// The three.js farm game (docs/product/PRODUCT_VISION.md, Platform). Mounted at /farm/ so the hosted
+// playtest instance serves it to an iPad from the same origin as everything else.
+export const FARM_DIR = join(HERE, 'prototypes', 'farm-slice');
 const decompressBrotli = promisify(brotliDecompress);
 
 const CONTENT_TYPES = {
@@ -40,22 +43,23 @@ function safePath(requestUrl) {
   return full;
 }
 
-function safeUnityWebPath(requestUrl, buildRoot) {
+/** A directory mounted at `/<mount>/`: undefined for any other URL, null for a path that escapes it. */
+function safeMountedPath(requestUrl, mount, root) {
   const pathname = new URL(requestUrl, 'http://runtime.local').pathname;
-  if (pathname !== '/unity' && pathname !== '/unity/' && !pathname.startsWith('/unity/')) {
-    return undefined;
-  }
+  const prefix = `/${mount}`;
+  if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) return undefined;
 
-  const suffix = pathname === '/unity' ? '' : pathname.slice('/unity/'.length);
+  const suffix = pathname === prefix ? '' : pathname.slice(prefix.length + 1);
   const decoded = decodeURIComponent(suffix);
   const relative = decoded.length === 0 ? 'index.html' : normalize(decoded).replace(/^[/\\]+/, '');
-  const full = resolve(buildRoot, relative);
-  if (full !== buildRoot && !full.startsWith(buildRoot + sep)) return null;
+  const full = resolve(root, relative);
+  if (full !== root && !full.startsWith(root + sep)) return null;
   return full;
 }
 
 export function createRuntimeServer(options = {}) {
   const unityWebBuildDir = resolve(options.unityWebBuildDir ?? UNITY_WEB_BUILD_DIR);
+  const farmDir = resolve(options.farmDir ?? FARM_DIR);
   return createServer(async (request, response) => {
     try {
       // The Asset Forge API is same-origin with the game so generated model bytes can move directly
@@ -74,8 +78,23 @@ export function createRuntimeServer(options = {}) {
         return;
       }
 
-      const unityPath = safeUnityWebPath(request.url ?? '/', unityWebBuildDir);
-      const fullPath = unityPath === undefined ? safePath(request.url ?? '/') : unityPath;
+      // The farm page loads its modules by relative path, so `/farm` must become `/farm/` before
+      // `./src/main.js` can resolve under the mount rather than at the site root.
+      const requestPath = new URL(request.url ?? '/', 'http://runtime.local').pathname;
+      if (requestPath === '/farm') {
+        response.writeHead(301, { location: '/farm/' });
+        response.end();
+        return;
+      }
+
+      // Each mount answers undefined for "not mine" and null for "mine, but escapes the root", so a
+      // refused mount path is a 403 here and never falls through to public/.
+      const unityPath = safeMountedPath(request.url ?? '/', 'unity', unityWebBuildDir);
+      const farmPath = safeMountedPath(request.url ?? '/', 'farm', farmDir);
+      let fullPath;
+      if (unityPath !== undefined) fullPath = unityPath;
+      else if (farmPath !== undefined) fullPath = farmPath;
+      else fullPath = safePath(request.url ?? '/');
       if (!fullPath) {
         response.writeHead(403);
         response.end('forbidden');
