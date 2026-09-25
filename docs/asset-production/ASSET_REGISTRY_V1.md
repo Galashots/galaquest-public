@@ -37,6 +37,15 @@ The current Drive intake evidence is `ASSET_INTAKE_2026-08-29.json`.
 source recovery conclusion. Neither file promotes raw binaries into the public
 runtime tree.
 
+## Farm game models: outside the registry for now
+
+`tools/asset-registry/build-registry.mjs` scans `public/assets` only, so the farm game's models in
+`prototypes/farm-slice/assets/` are not registry records yet. Until they are registered, their inventory
+authority is the batch manifest
+[`farm-creatures-2026-09-24/manifest.json`](farm-creatures-2026-09-24/README.md) (task IDs, SHA-256,
+credits, held models), bound to the shipped bytes by `test/farm-asset-provenance.test.mjs`. Registering
+them, rather than adding a second parallel inventory for the next farm batch, is the intended repair.
+
 ## Package B interface
 
 Animation Lab v1 consumes registry records and emits evidence references for

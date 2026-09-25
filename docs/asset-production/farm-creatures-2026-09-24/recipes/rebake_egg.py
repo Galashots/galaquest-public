@@ -1,6 +1,6 @@
 """Re-bake the mystery egg's base-color texture procedurally onto the Meshy mesh's own UV layout.
 
-  python tools/rebake_egg.py <in.glb> <out.glb> [--size 1024] [--quality 88] [--preview out.png]
+  python docs/asset-production/farm-creatures-2026-09-24/recipes/rebake_egg.py <in.glb> <out.glb> [--size 1024] [--quality 88] [--preview out.png]
 
 Why: both paid egg generations (raw/egg/3d1, raw/egg/3d2) came back with clean ellipsoid geometry but a
 multi-view texture-blend defect -- ghosted/doubled spots in a band on one side -- because a smooth,

@@ -1,6 +1,6 @@
 {
   "batch": "GalaQuest farm creatures + egg + hero, 2026-09-24",
-  "authorization": "Owner 2026-09-24 (relayed by director): up to 500 Meshy credits for new farm-game assets; stop at 460.",
+  "authorization": "Owner, 2026-09-24, in the agent session that authored this batch's commits (https://claude.ai/code/session_01FeT6ChFs5JJR7EecZ3VyHW; recorded on PR #218): up to 500 Meshy credits for new farm-game assets. The producing agent set itself a stop at 460.",
   "credits": {
     "balanceStart": 4801,
     "balanceEnd": 4448,
@@ -239,7 +239,7 @@
       "element": "spark",
       "rarity": "common",
       "shape": "round",
-      "status": "accepted",
+      "status": "held",
       "shipped": "ship/zapkit.glb",
       "reference": "refs/zapkit.png",
       "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Zapkit\", a spark-element electric fox kit. Bright lemon-yellow body with a pale cream-yellow belly and muzzle, bold charcoal-navy zigzag stripe markings on its back and ear tips. Two thick zigzag lightning-bolt horns on its forehead, pointed fox ears, and a big fluffy tail shaped like a solid spiky spark burst. Mischievous confident grin. Rarity COMMON: compact and cool-cute, small sturdy body, simple strong shapes. Body plan: round chunky body standing on two short sturdy feet. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
@@ -300,7 +300,12 @@
       ],
       "budget": "glb_budget.mjs: all hero_contract gates PASS",
       "notes": "Chubby electric fox kit: twin zigzag horns (thin but solid plates), navy tiger stripes, spark-burst tail. Dark ear tips were recoloured to ear yellow AFTER generation (tools/recolor_region.py, zero credits) to drop a well-known yellow-electric-mascot cue. Largest extent is length (Y height 0.914).",
-      "licence": "Owner-directed generation on a paid Meshy plan (not CC0). Texture: provider output with a project-authored recolour of the ear tips."
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0). Texture: provider output with a project-authored recolour of the ear tips.",
+      "held": {
+        "reason": "Yellow body with pointed ears, dark zigzag back stripes and a jagged spark tail read close to a well-known franchise electric mouse, even after the ear-tip recolour.",
+        "decision": "Owner resemblance review. Not in the shipped game tree; the game draws its procedural body instead.",
+        "recover": "git show aadcdab522e720570d3b50735502f7450780758a:prototypes/farm-slice/assets/creatures/zapkit.glb (sha256 above)"
+      }
     },
     {
       "id": "cinderkit",
@@ -460,7 +465,7 @@
       "element": "leaf",
       "rarity": "rare",
       "shape": "tall",
-      "status": "accepted",
+      "status": "held",
       "shipped": "ship/fernsprout.glb",
       "reference": "refs/fernsprout.png",
       "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Fernsprout\", a leaf-element forest lizard scout. Mossy green scales with pale sage-green belly and face, a tall crest of thick solid fern fronds on its head, broad leaf-shaped tail, wrapped vine bands on its forearms, sturdy clawed feet. Alert brave expression, arms at its sides. Rarity RARE: sleeker, more agile proportions and extra element features, clearly fancier than a basic creature. Body plan: upright and taller than wide, standing on two strong legs. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
@@ -521,7 +526,12 @@
       ],
       "budget": "glb_budget.mjs: all hero_contract gates PASS",
       "notes": "Lizard scout with a crest of solid fern blades, vine armbands, broad leaf tail. Clean. Olive palette (per content.js #689f38) has low contrast on grass.",
-      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0).",
+      "held": {
+        "reason": "Upright green gecko with a leaf crest and leafy tail reads close to a well-known franchise grass-starter gecko.",
+        "decision": "Owner resemblance review. Not in the shipped game tree; the game draws its procedural body instead.",
+        "recover": "git show aadcdab522e720570d3b50735502f7450780758a:prototypes/farm-slice/assets/creatures/fernsprout.glb (sha256 above)"
+      }
     },
     {
       "id": "glimmerpup",
@@ -812,7 +822,7 @@
       "element": "spark",
       "rarity": "epic",
       "shape": "tall",
-      "status": "accepted",
+      "status": "held",
       "shipped": "ship/boltbun.glb",
       "reference": "refs/boltbun.png",
       "refPrompt": "Original character design for a 3D creature-collector farm adventure game, shown as a single finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted color blocks, soft even studio lighting. House style: a bold-silhouette monster with a confident, slightly fierce, heroic attitude - cool, never babyish - big expressive eyes with a determined look, thick sturdy limbs, vibrant saturated colors. Creature \"Boltbun\", a legendary spark-element rabbit warrior. Amber-gold fur with a pale cream chest and muzzle, powerful legs built for speed, two tall thick ears shaped like solid zigzag lightning bolts, dark steel-blue armored shoulder pads and gauntlets with glowing electric-cyan lightning markings painted on them, a fluffy spark-burst tail. Fists clenched, fearless competitive grin. Rarity EPIC: big, powerful and legendary-looking, armored plates and an ornate element crest, with glowing accent markings painted onto the armor. Body plan: upright and taller than wide, standing on two strong legs. Composition: exactly one creature, alone, centered, the entire body visible from ears to feet and tail tip with generous empty margins on all sides, neutral three-quarter front view, standing in a stable pose with feet on the floor. Plain solid flat pale-grey background, no floor, no scenery, no props, only a tiny soft contact shadow under the feet. Every element effect (fire, water, leaves, lightning) is a SOLID sculpted shape attached to the body - no floating particles, no sparks or droplets in the air, no smoke, no thin whiskers, no wires, no text, no logos, no watermark. Wholly original design that does not resemble any existing franchise character.",
@@ -874,7 +884,12 @@
       ],
       "budget": "glb_budget.mjs: all hero_contract gates PASS",
       "notes": "Legendary lightning rabbit warrior: bolt ears, steel pauldrons/gauntlets with glowing cyan bolts, spark tail. SPECIAL: body faces +Z but the HEAD is turned ~40deg to its own right (toward -X). For face-to-camera presentation rotate the model +40deg about +Y (presentationYawDeg). From front-right 3/4 the two ears merge; from front-left it looks best. Minor cream texture guess on the back.",
-      "licence": "Owner-directed generation on a paid Meshy plan (not CC0)."
+      "licence": "Owner-directed generation on a paid Meshy plan (not CC0).",
+      "held": {
+        "reason": "Orange body with a cream belly and a lightning-bolt ear reads close to a well-known franchise electric mouse evolution.",
+        "decision": "Owner resemblance review. Not in the shipped game tree; the game draws its procedural body instead.",
+        "recover": "git show aadcdab522e720570d3b50735502f7450780758a:prototypes/farm-slice/assets/creatures/boltbun.glb (sha256 above)"
+      }
     },
     {
       "id": "egg",

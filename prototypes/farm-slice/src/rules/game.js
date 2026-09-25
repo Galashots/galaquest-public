@@ -327,6 +327,12 @@ export function buyArmor(state, content, armorId, now) {
   return { state: next, success: true };
 }
 
+/** The creature the egg would hatch into right now, or null once hatched (lets the renderer fetch just that one). */
+export function nextHatchCreatureId(state, content) {
+  if (state.egg.hatched) return null;
+  return egg.pickCreature(state.egg, content.CREATURES)?.id ?? null;
+}
+
 /**
  * One child tap on a ready egg. No question gate, ever -- just
  * `egg.REQUIRED_HATCH_TAPS` (3) taps of rising drama, the last of which

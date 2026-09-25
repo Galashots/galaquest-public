@@ -1,6 +1,6 @@
 """Recolour texels selected by 3D surface position AND colour, via the mesh's own UV layout.
 
-  python tools/recolor_region.py <in.glb> <out.glb> --ymin Y --maxlum L [--report]
+  python docs/asset-production/farm-creatures-2026-09-24/recipes/recolor_region.py <in.glb> <out.glb> --ymin Y --maxlum L [--report]
 
 Used for Zapkit: the dark-navy EAR TIPS (a well-known yellow-electric-mascot cue) are recoloured to the
 surrounding ear yellow, while the navy tiger stripes on the body/back of the head (below --ymin) are kept.

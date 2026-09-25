@@ -5,7 +5,7 @@ import test from 'node:test';
 import * as THREE from '../vendor/three.module.min.js';
 import { CREATURES } from '../content/content.js';
 import {
-  CREATURE_MODEL_FACING, CREATURE_MODEL_HEIGHT, CREATURE_MODEL_IDS, CREATURE_MODEL_MAX_LENGTH,
+  CREATURE_MODEL_HEIGHT, CREATURE_MODEL_IDS, CREATURE_MODEL_MAX_LENGTH,
   CREATURE_MODEL_YAW, CreatureModels, EGG_MODEL_HEIGHT, normalizeModel,
 } from '../src/render/models.js';
 
@@ -127,14 +127,4 @@ test('a failed egg load leaves the procedural egg', async () => {
   const models = new CreatureModels(THREE, { ids: [], loader: { loadAsync: () => Promise.reject(new Error('404')) } });
   assert.equal(await models.loadEgg(), null);
   assert.equal(models.eggInstance(), null);
-});
-
-test('per-model facing corrections apply on top of the shape turn, and only name real models', async () => {
-  for (const id of Object.keys(CREATURE_MODEL_FACING)) assert.ok(CREATURE_MODEL_IDS.includes(id), id);
-  const models = new CreatureModels(THREE, {
-    ids: ['boltbun'],
-    loader: { loadAsync: async () => ({ scene: new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)) }) },
-  });
-  await models.load('boltbun');
-  assert.equal(models.instance('boltbun', 'tall').rotation.y, CREATURE_MODEL_FACING.boltbun);
 });

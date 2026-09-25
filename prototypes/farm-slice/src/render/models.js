@@ -4,10 +4,14 @@
 // so a missing asset can never block the hatch.
 import { GLTFLoader } from '../../vendor/loaders/GLTFLoader.js';
 
-/** Creatures with a shipped model in assets/creatures/<id>.glb. */
+/**
+ * Creatures with a shipped model in assets/creatures/<id>.glb. Zapkit, Fernsprout and Boltbun
+ * keep their procedural bodies: their models are held for an Owner resemblance review (see the
+ * batch README in docs/asset-production/farm-creatures-2026-09-24/).
+ */
 export const CREATURE_MODEL_IDS = Object.freeze([
   'sprout', 'cinderkit', 'flamewhisk', 'puddlefin', 'splashpuff', 'tidekit',
-  'mossbun', 'fernsprout', 'bloomtail', 'zapkit', 'glimmerpup', 'boltbun',
+  'mossbun', 'bloomtail', 'glimmerpup',
 ]);
 
 /** World height of a normalized model, sized against the egg (~1 unit tall). */
@@ -19,8 +23,6 @@ export const CREATURE_MODEL_MAX_LENGTH = 1.6;
  * camera hides its length behind its head, so it turns side-on instead.
  */
 export const CREATURE_MODEL_YAW = Object.freeze({ long: 1.1 });
-/** Per-model facing corrections: Boltbun's sculpt has its head turned ~40 degrees off +Z. */
-export const CREATURE_MODEL_FACING = Object.freeze({ boltbun: 0.7 });
 
 /** The mystery egg's height, matching the procedural egg it replaces. */
 export const EGG_MODEL_HEIGHT = 0.98;
@@ -100,15 +102,6 @@ export class CreatureModels {
     return this._pending.get(key);
   }
 
-  /**
-   * The egg first (it is on screen from the start), then every creature one
-   * after another, so a slow link never gets 13 parallel fetches.
-   */
-  async preloadAll() {
-    await this.loadEgg();
-    for (const id of this.ids) await this.load(id);
-  }
-
   /** A fresh egg with its own materials (the element hint tints them), or null if not loaded. */
   eggInstance() {
     const template = this._ready.get(EGG_MODEL_KEY);
@@ -123,7 +116,7 @@ export class CreatureModels {
     const template = this._ready.get(id);
     if (!template) return null;
     const model = template.clone(true);
-    model.rotation.y = (CREATURE_MODEL_YAW[shape] ?? 0) + (CREATURE_MODEL_FACING[id] ?? 0);
+    model.rotation.y = CREATURE_MODEL_YAW[shape] ?? 0;
     return model;
   }
 }

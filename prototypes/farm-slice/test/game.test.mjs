@@ -129,6 +129,19 @@ function fullPath(offerId, expectedCoins, expectedCarrots, expectedSunberries) {
 test('contract path A: 5 carrots for 10, helmet, hatch, feed, replant', () => fullPath('pip_crate', 10, 1, 2));
 test('contract path B: bundle for 12 and 2 coins left after helmet', () => fullPath('pip_bundle', 12, 4, 1));
 
+test('the creature fetched ahead of the hatch is the one that hatches, for every element hint', () => {
+  const hints = [null, ...new Set(content.CROPS.map((crop) => crop.element).filter(Boolean))];
+  for (const hint of hints) {
+    let state = game.createGameState(0);
+    state = { ...state, egg: { ...state.egg, cracks: 4, readyToHatch: true, elementHint: hint } };
+    const expected = game.nextHatchCreatureId(state, content);
+    assert.ok(expected, `a creature is predicted for hint ${hint}`);
+    for (let i = 0; i < 3; i++) state = game.tapEgg(state, content, 0).state;
+    assert.equal(state.egg.hatchedCreatureId, expected, `hint ${hint}`);
+    assert.equal(game.nextHatchCreatureId(state, content), null, 'nothing left to fetch once hatched');
+  }
+});
+
 test('FREE only points at the market when a crate can be filled', () => {
   const state = fullPath('pip_crate', 10, 1, 2);
   assert.equal(game.currentGoal(state, content, 385_000).targetKey, 'market');

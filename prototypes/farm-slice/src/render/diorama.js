@@ -5,6 +5,7 @@ import * as THREE from '../../vendor/three.module.min.js';
 import * as gen from './procgen.js';
 import { TweenManager, SparkleBurst } from './juice.js';
 import { CreatureModels } from './models.js';
+import { addCrack, seatCrack } from './cracks.js';
 
 const PLOT_POSITIONS = [
   new THREE.Vector3(-2, 0, 2.4),
@@ -80,7 +81,6 @@ export class Diorama {
     // Outlives _buildScene: a lost context rebuilds the scene from the same
     // loaded templates instead of fetching the models again.
     this.models = new CreatureModels(THREE);
-    setTimeout(() => { this.models.preloadAll(); }, 1500);
 
     this._buildScene();
 
@@ -275,7 +275,7 @@ export class Diorama {
     this._lastEgg = eggState;
     const cracksShown = this.eggGroup.userData.cracks.length;
     for (let i = cracksShown; i < eggState.cracks + eggState.hatchTaps; i++) {
-      this._seatCrack(gen.addCrackDecal(THREE, this.eggGroup, i), i);
+      addCrack(THREE, this.eggGroup, i, this._raycaster);
       this.sparkles.spawn(this.eggGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 10);
     }
     this._eggWobbleSpeed = 3 + eggState.cracks * 1.6;
@@ -332,42 +332,22 @@ export class Diorama {
       eggGroup.userData.model = egg;
       eggGroup.userData.surfaces = meshes;
       eggGroup.userData.glow = meshes.map((m) => m.material);
-      eggGroup.userData.cracks.forEach((crack, i) => this._seatCrack(crack, i));
+      eggGroup.userData.cracks.forEach((crack) => seatCrack(THREE, eggGroup, crack, this._raycaster));
       if (this._lastEgg?.elementHint) this._glowEgg(this._lastEgg.elementHint);
     };
     if (this.models.eggInstance()) apply();
     else this.models.loadEgg().then(apply);
   }
 
-  /** Distance from the egg's axis to the visible shell at height y along `out`, or null. */
-  _shellRadius(out, y) {
-    const group = this.eggGroup;
-    const origin = group.localToWorld(out.clone().multiplyScalar(3).setY(y));
-    const target = group.localToWorld(new THREE.Vector3(0, y, 0));
-    this._raycaster.set(origin, target.sub(origin).normalize());
-    const hit = this._raycaster.intersectObjects(group.userData.surfaces, false)[0];
-    if (!hit) return null;
-    const local = group.worldToLocal(hit.point.clone());
-    return Math.hypot(local.x, local.z);
-  }
-
   /**
-   * Seats a crack on the visible shell along its own bearing, each segment at
-   * its own height, so it shows on whatever shape the shell is (the old fixed
-   * radius sat inside it) and never pokes out past a curve.
+   * Fetches the one creature this egg will hatch into (after the egg itself),
+   * so it is ready by the hatch; the rest of the roster is never downloaded.
    */
-  _seatCrack(crack, index) {
-    const angle = (index / 4) * Math.PI * 2 + 0.4;
-    const out = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
-    const y = crack.position.y;
-    this.eggGroup.updateMatrixWorld(true);
-    const middle = this._shellRadius(out, y);
-    if (middle === null) return;
-    crack.position.set(out.x * (middle + 0.01), y, out.z * (middle + 0.01));
-    for (const piece of crack.children) {
-      const radius = this._shellRadius(out, y + piece.position.y);
-      piece.position.z = radius === null ? 0 : radius - middle;
-    }
+  preloadCreature(id) {
+    // Called every frame; only a new id starts anything.
+    if (!id || id === this._preloadId || !this.models.has(id)) return;
+    this._preloadId = id;
+    this.models.loadEgg().then(() => this.models.load(id));
   }
 
   /**

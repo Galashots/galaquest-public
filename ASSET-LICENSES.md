@@ -68,7 +68,7 @@ above, not CC0. The personal grip reference photographs are not redistributed.
 
 ## Farm game creatures, egg and hero — Owner-authorized, agent-produced on a paid plan
 
-`prototypes/farm-slice/assets/creatures/*.glb` (12 files), `prototypes/farm-slice/assets/egg.glb`,
+`prototypes/farm-slice/assets/creatures/*.glb` (9 files), `prototypes/farm-slice/assets/egg.glb`,
 and `prototypes/farm-slice/assets/candidates/hero.glb`
 
 Generated on the project's **paid Meshy plan** on 2026-09-24, under the Owner's explicit authorization
@@ -86,7 +86,10 @@ in force at generation time — **not** CC0 and **not** the source licence in [`
 share one house-style template that asks for a wholly original design resembling no existing franchise
 character. Per-asset provider task IDs, SHA-256 hashes, credits and rejected attempts are in
 [`docs/asset-production/farm-creatures-2026-09-24/`](docs/asset-production/farm-creatures-2026-09-24/README.md).
-Owner visual acceptance in the running game remains a separate gate.
+**Output-side resemblance check.** The finished models were also compared against well-known franchise
+characters (batch README). Zapkit, Fernsprout and Boltbun read too close and are **held out of the game
+tree** pending an Owner review; the game draws their procedural bodies. Owner visual acceptance in the
+running game remains a separate gate.
 
 ## Gear — owner-created, generated on a paid plan
 

@@ -31,9 +31,12 @@ node --test test/
 - `src/render/*.js` -- the three.js diorama: procedural low-poly geometry,
   lighting, camera sway, tweens, and a small sparkle-particle system.
   `models.js` loads the sculpted creature and egg models (GLB) and falls back
-  to the procedural bodies if a model is missing or fails to load.
-- `assets/` -- `creatures/<id>.glb` (one per creature in `content/`),
-  `egg.glb`, and `candidates/` (made but not loaded yet). Provenance and
+  to the procedural bodies if a model is missing or fails to load. Only the
+  egg and the creature this egg will hatch into are downloaded.
+  `cracks.js` draws the egg's cracks as strips laid on the shell.
+- `assets/` -- `creatures/<id>.glb` (the creatures listed in `models.js`;
+  three are held for review and use their procedural bodies), `egg.glb`,
+  and `candidates/` (made but not loaded yet). Provenance and
   licence: `docs/asset-production/farm-creatures-2026-09-24/` and
   `ASSET-LICENSES.md`.
 - `src/ui/*.js` -- the DOM overlay: goal chip, arrow, market panel, naming

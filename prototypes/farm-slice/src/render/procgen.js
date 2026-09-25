@@ -401,28 +401,3 @@ export function buildEgg(THREE) {
   group.userData.cracks = [];
   return group;
 }
-
-/**
- * A zigzag crack of short segments. The group faces outward along its bearing
- * (local +z); the renderer seats each segment on the shell (see the diorama's
- * _seatCrack), which a single long straight piece could not do on a curve.
- */
-export function addCrackDecal(THREE, eggGroup, index) {
-  const angle = (index / 4) * Math.PI * 2 + 0.4;
-  const crack = new THREE.Group();
-  crack.name = 'crack';
-  const material = new THREE.MeshBasicMaterial({ color: '#4a3526' });
-  const segment = new THREE.BoxGeometry(0.03, 0.11, 0.012);
-  [-0.09, 0, 0.09].forEach((dy, i) => {
-    const piece = new THREE.Mesh(segment, material);
-    piece.position.set(i % 2 ? 0.022 : -0.022, dy, 0);
-    piece.rotation.z = i % 2 ? -0.55 : 0.55;
-    crack.add(piece);
-  });
-  const radius = 0.36;
-  crack.position.set(Math.sin(angle) * radius * 0.85, 0.55 + index * 0.03, Math.cos(angle) * radius * 0.85);
-  crack.rotation.y = angle;
-  eggGroup.add(crack);
-  eggGroup.userData.cracks.push(crack);
-  return crack;
-}

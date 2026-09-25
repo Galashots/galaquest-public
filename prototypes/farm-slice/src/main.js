@@ -49,6 +49,7 @@ function syncVisuals(now) {
   diorama.syncArmor(game.equippedArmorDefs(state, content),
     step() === 'armor' || step() === 'offer' || step() === 'market' ? content.ARMOR[0] : null);
   diorama.syncEgg(state.egg);
+  diorama.preloadCreature(game.nextHatchCreatureId(state, content));
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
   diorama.setWateringCanVisible(['grow', 'replant', 'free'].includes(step()) &&
     game.unwateredGrowingPlotIndexes(state, content, now).length > 0);
