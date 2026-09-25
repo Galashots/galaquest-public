@@ -55,3 +55,17 @@ test('Meshy animation preflight is fully offline unless --go is explicit', () =>
   assert.match(result.stdout, /"rig_task_id": "rig-task-456"/);
   assert.match(result.stdout, /"action_id": 17/);
 });
+
+test('Meshy text-to-image preflight is fully offline unless --go is explicit', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gq-meshy-'));
+  try {
+    const result = run('tools/meshy/text_to_image.mjs', [join(dir, 'out'), '--prompt', 'an original farm creature',
+      '--model', 'nano-banana-2', '--aspect', '1:1', '--key-file', join(dir, 'missing-secret')]);
+    assertOfflineDryRun(result, 'text-to-image');
+    assert.match(result.stdout, /"ai_model": "nano-banana-2"/);
+    assert.match(result.stdout, /"aspect_ratio": "1:1"/);
+    assert.match(result.stdout, /nominal cost: 6 credits/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

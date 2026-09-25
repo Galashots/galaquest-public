@@ -13,6 +13,16 @@ These tools are **guarded**:
 
 **A dry run, budget, nominal credit estimate, stop ceiling, or presence of `--go` does not grant spend authority.** Before every paid task, the operator still needs explicit owner authorization for that specific current work. Do not carry an authorization forward from an old chat, branch, asset lane, or repository note.
 
+## Text to image (reference art)
+
+```bash
+node tools/meshy/text_to_image.mjs tmp/<asset>-ref --prompt-file tmp/<asset>.txt --model nano-banana-2 --aspect 1:1 --name <asset>
+# after explicit authorization for this spend:
+node tools/meshy/text_to_image.mjs tmp/<asset>-ref --prompt-file tmp/<asset>.txt --model nano-banana-2 --aspect 1:1 --name <asset> --go
+```
+
+One prompt to one reference image, to feed `image_to_3d.mjs`. Models are `nano-banana` (3 credits), `nano-banana-2` (6), `nano-banana-pro` and `gpt-image-2` (9). The dry run prints the request with the prompt shown by length and hash plus its text, and a nominal cost. It persists `submission.json` like the image and rig clients; recover a failed poll with `--recover <task-id>`. The 2026-09-24 farm batch (`docs/asset-production/farm-creatures-2026-09-24/`) records its house-style prompt template, per-task ledger and the reference images it used.
+
 ## Image to 3D
 
 ```bash

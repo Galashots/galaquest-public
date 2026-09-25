@@ -366,6 +366,11 @@ const SHAPE_BUILDERS = {
   },
 };
 
+/** The soft contact shadow every creature stands on, procedural or sculpted. */
+export function creatureShadow(THREE) {
+  return shadowAt(THREE, 0, 0, 0.45);
+}
+
 /** Procedural creature body from CREATURES content: {shape, colors}. */
 export function buildCreature(THREE, creatureDef) {
   const builder = SHAPE_BUILDERS[creatureDef.shape] || SHAPE_BUILDERS.round;
@@ -395,19 +400,4 @@ export function buildEgg(THREE) {
   group.userData.shell = shell;
   group.userData.cracks = [];
   return group;
-}
-
-export function addCrackDecal(THREE, eggGroup, index) {
-  const angle = (index / 4) * Math.PI * 2 + 0.4;
-  const crack = new THREE.Mesh(
-    new THREE.BoxGeometry(0.03, 0.32 + index * 0.03, 0.01),
-    new THREE.MeshBasicMaterial({ color: '#5d4531' })
-  );
-  const radius = 0.36;
-  crack.position.set(Math.sin(angle) * radius * 0.85, 0.55 + index * 0.03, Math.cos(angle) * radius * 0.85);
-  crack.rotation.y = angle;
-  crack.rotation.z = (Math.random() - 0.5) * 0.6;
-  eggGroup.add(crack);
-  eggGroup.userData.cracks.push(crack);
-  return crack;
 }

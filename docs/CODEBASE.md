@@ -44,6 +44,9 @@ for them (see `docs/WORKFLOW.md`, verification surfaces).
   step. `CONTRACT.md` is the ten-minute experience contract; `src/rules/` is pure game state,
   `src/render/` the diorama, `src/ui/` the touch UI, `content/` the content pack, and `test/` its own
   `node --test` suite (run by the required `unit` job).
+- `prototypes/farm-slice/assets/` — sculpted creature and egg models (GLB) that
+  `src/render/models.js` loads; a missing or failed model falls back to the procedural body. Provenance
+  and licence: `docs/asset-production/farm-creatures-2026-09-24/` and `ASSET-LICENSES.md`.
 - `server.mjs` mounts it at `/farm/`, so the hosted playtest instance (`docs/public-playtest.md`)
   serves it at `<service-url>/farm/`. Locally: `node server.mjs`, then `http://localhost:5201/farm/`,
   or the game's own `node prototypes/farm-slice/serve.mjs` on port 5310.

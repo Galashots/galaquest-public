@@ -33,7 +33,8 @@ export function setElementHint(eggState, element) {
   return { ...eggState, elementHint: element };
 }
 
-function pickCreature(eggState, creaturesList) {
+/** The creature this egg hatches into: the first matching its element hint, else the first creature. */
+export function pickCreature(eggState, creaturesList) {
   const match = creaturesList.find((c) => c.element === eggState.elementHint);
   return match || creaturesList[0] || null;
 }
