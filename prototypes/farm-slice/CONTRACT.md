@@ -123,6 +123,7 @@ Nothing withers or expires, and no text mentions how long the player was away.
 1. **Feed loop.** 3 sunberries bloom Sprout's sun crest, its first new look. The meter only goes up.
 2. **Second egg.** Filling 2 more orders earns Pip's gift: a star seed and a Leaf egg. The egg's type is visible and its hatch is ungated.
 3. **Order-board seed (older player).** A third card appears: 6 carrots + 2 sunberries → 26. They can fill it now, save for it, or feed Sprout instead.
+4. **Breeding.** Once two creatures are owned, the 💕 button opens the breeding dialog: pick two parents, see the full inheritance odds *before* choosing (never hidden), and an egg lands in the nest. It hatches on a 5-minute timer — never gated behind a question — and only the child's tap hatches it. The child is a uniquely-owned creature that can itself breed later. A rare/epic egg past the third breeding may offer one learning question (📖) that shortens the timer; wrong answers give a hint and a free retry. No crop or coin charge, no premium skip.
 
 ## 6. Child-test protocol (gate 2)
 

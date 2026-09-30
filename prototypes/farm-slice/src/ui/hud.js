@@ -74,6 +74,25 @@ export class Hud {
     this.feedMeter.style.display = 'none';
     this.overlay.appendChild(this.feedMeter);
 
+    this.breedBtn = document.createElement('button');
+    this.breedBtn.className = 'gq-breed-btn';
+    this.breedBtn.setAttribute('aria-label', 'Breed two creatures');
+    this.breedBtn.textContent = '💕';
+    this.breedBtn.style.display = 'none';
+    this.overlay.appendChild(this.breedBtn);
+
+    this.eggStatus = document.createElement('div');
+    this.eggStatus.className = 'gq-egg-status';
+    this.eggStatus.style.display = 'none';
+    this.overlay.appendChild(this.eggStatus);
+
+    this.helpBtn = document.createElement('button');
+    this.helpBtn.className = 'gq-help-btn';
+    this.helpBtn.setAttribute('aria-label', 'Answer a question to help the egg hatch sooner');
+    this.helpBtn.textContent = '📖';
+    this.helpBtn.style.display = 'none';
+    this.overlay.appendChild(this.helpBtn);
+
     this.toast = document.createElement('div');
     this.toast.className = 'gq-toast';
     this.overlay.appendChild(this.toast);
@@ -89,6 +108,16 @@ export class Hud {
   onMuteToggle(cb) { this.muteBtn.addEventListener('click', cb); }
   onBookOpen(cb) { this.bookBtn.addEventListener('click', cb); }
   onFeed(cb) { this.feedBtn.addEventListener('click', cb); }
+  onBreedOpen(cb) { this.breedBtn.addEventListener('click', cb); }
+  onHelpOpen(cb) { this.helpBtn.addEventListener('click', cb); }
+  setBreedVisible(on) { this.breedBtn.style.display = on ? 'block' : 'none'; }
+  setBreedAttract(on) { this.breedBtn.classList.toggle('gq-attract', !!on); }
+  setHelpVisible(on) { this.helpBtn.style.display = on ? 'block' : 'none'; }
+  /** text like "🥚 hatches in 4:32" / "🥚 tap the egg!" / null to hide. */
+  setEggStatus(text) {
+    this.eggStatus.style.display = text ? 'block' : 'none';
+    if (text) this.eggStatus.textContent = text;
+  }
   setFeedVisible(on) { this.feedBtn.style.display = on ? 'block' : 'none'; }
   setFeedMeter(fed, visible) { this.feedMeter.style.display = visible ? 'block' : 'none'; this.feedMeter.textContent = `☀️ Sprout ${Math.min(fed, 3)}/3`; }
 
