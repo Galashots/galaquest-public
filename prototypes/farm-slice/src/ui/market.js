@@ -351,6 +351,10 @@ export class MarketPanel {
       return this.backBtn.getBoundingClientRect();
     }
     if (step === 'offer' && this.offerCards?.length) return this.offerCards[Math.floor(Date.now() / 1400) % this.offerCards.length].getBoundingClientRect();
+    // In FREE play the board holds 2-3 refillable cards, so the panel center
+    // would land on one of them. Point at the title instead: the arrow means
+    // "go to the market", never "pick this card" (CONTRACT.md section 7).
+    if (step === 'free') return this.titleEl.getBoundingClientRect();
     return this.bodyEl.getBoundingClientRect();
   }
 }
