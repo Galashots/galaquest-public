@@ -88,7 +88,7 @@ const TERNARY_TRUE = /\?\s*true\s*:/;
 
 const harnesses = readdirSync(HARNESS_DIR)
   .filter((f) => f.endsWith('.mjs'))
-  .filter((f) => /^(drive|play|fit|review)-/.test(f));
+  .filter((f) => /^(drive|play|fit|review|capture)-/.test(f));
 
 test('gating harnesses exist to scan', () => {
   assert.ok(harnesses.length >= 15, `expected the harness fleet, found ${harnesses.length}`);

@@ -275,7 +275,7 @@ function receiptMarkdown(receipt) {
     '',
     `- generated: ${receipt.generatedAt}`,
     `- driver worktree: \`${receipt.driver.source.path}\``,
-    `- driver commit: \`${receipt.driver.source.headSha}\` (${receipt.driver.source.branch}`,
+    `- driver commit: \`${receipt.driver.source.headSha}\` (${receipt.driver.source.branch},`,
     `  dirty: ${receipt.driver.source.dirty})`,
     `- served worktree: \`${receipt.served.source.path}\``,
     `- served commit: \`${receipt.served.source.headSha}\` (${receipt.served.source.branch},`,
@@ -328,6 +328,15 @@ async function main(argv = process.argv.slice(2)) {
     console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
   };
   const say = (line) => { if (!options.quiet) console.log(line); };
+
+  // The receipt's whole value is binding the pixels to a SHA. `readSourceIdentity` reports a
+  // non-checkout instead of throwing (so `--repo` can be diagnosed), but the driver has to actually
+  // gate that report -- otherwise a bad checkout writes a receipt with an undefined SHA that still
+  // says 10 PASS.
+  check('the driver checkout is a git checkout, so the receipt can bind its SHA', driverSource.available,
+    driverSource.available ? driverSource.headSha : driverSource.reason);
+  check('the served checkout is a git checkout, so the receipt can bind its SHA', servedSource.available,
+    servedSource.available ? servedSource.headSha : servedSource.reason);
 
   let server = null;
   let chrome = null;

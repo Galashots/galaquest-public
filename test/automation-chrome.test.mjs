@@ -326,6 +326,11 @@ test('headless carries a software rasteriser, or the WebGL captures come back em
   assert.ok(args.includes('--enable-unsafe-swiftshader'));
 });
 
+test('--disable-dev-shm-usage is passed so a small runner /dev/shm cannot crash Chrome', () => {
+  assert.ok(chromeLaunchArgs({ profileDir: '/tmp/p' }).includes('--disable-dev-shm-usage'));
+  assert.ok(chromeLaunchArgs({ profileDir: '/tmp/p', headless: false }).includes('--disable-dev-shm-usage'));
+});
+
 test('headed drops --headless and --no-sandbox -- a desktop browser has no excuse for either', () => {
   const args = chromeLaunchArgs({ profileDir: '/tmp/p', headless: false });
   assert.ok(!args.includes('--headless=new'));
