@@ -3,7 +3,7 @@
 // track which ids are owned and what name (if any) the child gave them.
 
 export function createCollectionState() {
-  return { owned: {}, names: {}, fed: {} };
+  return { owned: {}, names: {}, fed: {}, bred: {} };
 }
 
 export function isDiscovered(collectionState, creatureId) {
@@ -36,4 +36,38 @@ export function feedCreature(collectionState, creatureId) {
 
 export function getFedCount(collectionState, creatureId) {
   return collectionState.fed[creatureId] || 0;
+}
+
+/**
+ * Record a breeding-hatched creature: it becomes owned, and its resolved
+ * traits (element, shape, rarity, colors) are kept so the shell can render
+ * and re-breed it exactly as hatched. No-op if the id is already owned.
+ */
+export function recordBredCreature(collectionState, creatureId, traits) {
+  if (!creatureId || collectionState.owned[creatureId]) return collectionState;
+  return {
+    ...collectionState,
+    owned: { ...collectionState.owned, [creatureId]: true },
+    bred: { ...(collectionState.bred || {}), [creatureId]: { ...traits } },
+  };
+}
+
+/**
+ * The visible traits of any owned creature instance: content creatures look
+ * up CREATURES, bred creatures use their recorded hatch traits. Returns null
+ * for unowned or unknown ids.
+ */
+export function creatureTraits(collectionState, creatureId, creaturesList) {
+  if (!collectionState.owned[creatureId]) return null;
+  const bred = (collectionState.bred || {})[creatureId];
+  if (bred) return { id: creatureId, ...bred };
+  const def = (creaturesList || []).find((c) => c.id === creatureId);
+  if (!def) return null;
+  return {
+    id: def.id,
+    element: def.element,
+    shape: def.shape,
+    rarity: def.rarity,
+    colors: { ...def.colors },
+  };
 }

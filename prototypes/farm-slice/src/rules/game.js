@@ -16,6 +16,8 @@ import * as egg from './egg.js';
 import * as collection from './collection.js';
 import * as goals from './goals.js';
 import * as orderBoard from '../depth/orders.js';
+import * as breedingLane from '../depth/breeding.js';
+import * as helpLane from '../depth/help-along.js';
 
 export const SAVE_VERSION = 1;
 export const NUM_PLOTS = 3;
@@ -39,6 +41,17 @@ export const SECOND_EGG_ELEMENT = 'leaf';
  */
 export const BIG_ORDER_OFFER_ID = 'pip_big_order';
 export const BOARD_SEED = 1;
+
+/**
+ * Breeding v1 (PRODUCT_VISION.md creature direction, 2026-09-23): pair two
+ * owned creatures to produce an egg that hatches on the farm on a timer,
+ * shortened by learning. One nest slot (bounded v1); the pure lane contract
+ * lives in `src/depth/breeding.js`, the learning hook in
+ * `src/depth/help-along.js`. The 5-minute timer fits a single play session;
+ * a correct learning answer shortens it per the help lane's bound.
+ */
+export const BREEDING_HATCH_MS = 5 * 60 * 1000;
+export const BREEDING_SEED_DEFAULT = 0x9e3779b9;
 
 /** Builds a cropId->def lookup map from content.CROPS. */
 export function cropsById(content) {
@@ -93,11 +106,31 @@ export function createGameState(now, numPlots = NUM_PLOTS) {
     // P2 order board (CONTRACT.md section 5 item 3): persistent refillable
     // orders in FREE play. Created on FREE entry; old saves gain it on load.
     orderBoard: null,
+    // Breeding v1: a single nest slot. `egg` is the lane's JSON egg (or null);
+    // `seed` feeds the lane's deterministic rolls; `ordinal` counts lifetime
+    // breeding eggs; `help` holds the help-along lane state.
+    breeding: {
+      egg: null,
+      seed: BREEDING_SEED_DEFAULT,
+      ordinal: 0,
+      help: {},
+    },
   };
 }
 
 /** Fill additive P1/P2 defaults onto a loaded state (pre-P1 v1 saves stay valid). */
 export function migrateRetention(state) {
+  const breeding = {
+    egg: null,
+    seed: BREEDING_SEED_DEFAULT,
+    ordinal: 0,
+    help: {},
+    ...(state.breeding || {}),
+  };
+  const collectionState = {
+    ...(state.collection || {}),
+    bred: { ...((state.collection || {}).bred || {}) },
+  };
   return {
     giftEarned: false,
     giftOpened: false,
@@ -106,6 +139,8 @@ export function migrateRetention(state) {
     secondEgg: null,
     orderBoard: null,
     ...state,
+    breeding,
+    collection: collectionState,
   };
 }
 
@@ -644,4 +679,172 @@ export function feedSunberry(state, content, now) {
     next = { ...next, goals: goals.advanceGoal(next.goals) }; // FEED -> REPLANT
   }
   return { state: next, success: true };
+}
+
+/* ------------------------------------------------------------------ */
+/* Breeding v1 (PRODUCT_VISION.md creature direction, 2026-09-23)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Every creature the player can breed with, as parent instances for the
+ * breeding lane: content creatures (sprout, mossbun, ...) plus any
+ * breeding-hatched creatures, each with its visible traits. Sorted by id
+ * for a stable picker order.
+ */
+export function breedableParents(state, content) {
+  const ids = Object.keys(state.collection.owned || {}).filter((id) =>
+    collection.creatureTraits(state.collection, id, content.CREATURES));
+  ids.sort();
+  return ids.map((id) => {
+    const traits = collection.creatureTraits(state.collection, id, content.CREATURES);
+    return { ...traits, name: collection.getName(state.collection, id, traits.id) };
+  });
+}
+
+/** True when the nest is free and at least two creatures are owned. */
+export function canBreed(state, content) {
+  return !state.breeding.egg && breedableParents(state, content).length >= 2;
+}
+
+/**
+ * Pair two owned creatures: the lane resolves the child's traits now (shown
+ * in full by the preview before the choice -- never hidden odds), the egg
+ * lands in the nest with a 5-minute hatch timer. No crop or coin charge.
+ * Returns { state, egg } on success or { state, error } on invalid input.
+ */
+export function startBreeding(state, content, parentAId, parentBId, now) {
+  if (!Number.isSafeInteger(now)) return { state, error: 'invalid-time' };
+  if (state.breeding.egg) return { state, error: 'nest-occupied' };
+  const byId = new Map(breedableParents(state, content).map((p) => [p.id, p]));
+  const parentA = byId.get(parentAId) || null;
+  const parentB = byId.get(parentBId) || null;
+  if (!parentA || !parentB) return { state, error: 'parent-not-owned' };
+  if (parentAId === parentBId) return { state, error: 'same-parent' };
+  const ordinal = state.breeding.ordinal + 1;
+  let made;
+  try {
+    made = breedingLane.createBreedingEgg({
+      parentA,
+      parentB,
+      ownedCreatureIds: [...byId.keys()],
+      eggId: `breeding-${ordinal}`,
+      ordinal,
+      now,
+      hatchMs: BREEDING_HATCH_MS,
+      seed: state.breeding.seed >>> 0,
+    });
+  } catch (err) {
+    return { state, error: 'invalid-parents' };
+  }
+  return {
+    state: {
+      ...state,
+      breeding: { ...state.breeding, egg: made.egg, seed: made.nextSeed, ordinal },
+    },
+    egg: made.egg,
+  };
+}
+
+/**
+ * Advance the nest egg's observed clock (call on load and each tick). The
+ * lane never un-observes on clock rollback. Returns the state, unchanged
+ * when there is no active egg.
+ */
+export function observeBreedingEgg(state, now) {
+  const eggState = state.breeding.egg;
+  if (!eggState || eggState.hatchedAt !== null) return state;
+  const { egg } = breedingLane.observeEgg(eggState, now);
+  if (egg.lastObservedAt === eggState.lastObservedAt) return state;
+  return { ...state, breeding: { ...state.breeding, egg } };
+}
+
+/** The nest egg's hatch status, or null when the nest is empty. */
+export function breedingEggStatus(state, now) {
+  const eggState = state.breeding.egg;
+  if (!eggState) return null;
+  const { ready, remainingMs } = breedingLane.observeEgg(eggState, now);
+  return { ready, remainingMs, hatched: eggState.hatchedAt !== null };
+}
+
+/**
+ * Hatch a ready nest egg: the resolved child becomes a uniquely-owned
+ * creature (traits recorded for rendering and re-breeding) and the nest
+ * frees up. Safe no-op when the egg is not ready yet.
+ */
+export function hatchBreedingEgg(state, content, now) {
+  const eggState = state.breeding.egg;
+  if (!eggState || eggState.hatchedAt !== null) return { state, success: false };
+  let hatched;
+  try {
+    hatched = breedingLane.hatchEgg(eggState, now);
+  } catch (err) {
+    return { state, success: false };
+  }
+  const creature = hatched.creature;
+  const collectionState = collection.recordBredCreature(state.collection, creature.id, {
+    element: creature.element,
+    shape: creature.shape,
+    rarity: creature.rarity,
+    colors: creature.colors,
+  });
+  return {
+    state: {
+      ...state,
+      collection: collectionState,
+      breeding: { ...state.breeding, egg: null },
+    },
+    creature,
+    success: true,
+  };
+}
+
+/**
+ * The learning hook (PRODUCT_VISION.md: the hatch timer "shortened by
+ * learning"). Wraps the help-along lane: a rare/epic nest egg past the
+ * first three qualifies for one question; a correct answer shortens its
+ * timer within the lane's bound. Wrong answers give a hint and a free
+ * retry -- never a fail state.
+ */
+function breedingHelpTarget(state) {
+  const eggState = state.breeding.egg;
+  if (!eggState || eggState.hatchedAt !== null) return null;
+  return {
+    id: eggState.id,
+    kind: 'egg',
+    rarity: eggState.child.rarity,
+    ordinal: eggState.ordinal,
+    startedAt: eggState.createdAt,
+    readyAt: eggState.readyAt,
+  };
+}
+
+export function breedingHelpOffer(state, grade, questions, now) {
+  const target = breedingHelpTarget(state);
+  if (!target) return { offer: null, state };
+  const { offer, state: helpState } = helpLane.getHelpOffer({
+    target, state: state.breeding.help, grade, questions, now,
+  });
+  if (helpState === state.breeding.help && !offer) return { offer: null, state };
+  return { offer, state: { ...state, breeding: { ...state.breeding, help: helpState } } };
+}
+
+export function answerBreedingHelpQuestion(state, grade, questions, questionId, choiceIndex, now) {
+  const target = breedingHelpTarget(state);
+  if (!target) return { state, correct: false, error: 'no-egg' };
+  const question = (questions || []).find((q) => q.id === questionId);
+  if (!question) return { state, correct: false, error: 'unknown-question' };
+  let result;
+  try {
+    result = helpLane.answerHelpQuestion({
+      target, state: state.breeding.help, question, choiceIndex, grade, questions, now,
+    });
+  } catch (err) {
+    return { state, correct: false, error: 'not-offered' };
+  }
+  const eggState = { ...state.breeding.egg, readyAt: result.target.readyAt };
+  const next = {
+    ...state,
+    breeding: { ...state.breeding, egg: eggState, help: result.state },
+  };
+  return { state: next, correct: result.correct, hint: result.hint, shortenedMs: result.shortenedMs };
 }
