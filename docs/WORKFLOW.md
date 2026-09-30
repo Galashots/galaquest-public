@@ -211,14 +211,20 @@ The protected branch requires the hosted `unit` context. The checked-in `.github
 ### 2. Farm game running pixels
 
 The farm game (`prototypes/farm-slice/`) is the active client. Its rules are covered by its suite in
-the required gate; its appearance and touch flow need the running game. Serve it (`node server.mjs`,
-then `/farm/`, or its own `node prototypes/farm-slice/serve.mjs`), start a browser with
-`node tools/runtime-test/automation-chrome.mjs`, and over CDP set an iPad viewport (1024x768 and
-768x1024, `Emulation.setDeviceMetricsOverride` plus `Emulation.setTouchEmulationEnabled`), capture,
-and check the console for errors. No checked-in farm driver does this yet; the legacy harnesses below
-do not cover the farm game. Emulated headless captures are diagnostic: acceptance is iPad Safari and
-human visual judgment (`AGENTS.md`, visual and product acceptance). The hosted instance
-(`docs/public-playtest.md`) serves the same route for a real iPad; fetch its `/source-sha.json` first.
+the required gate; its appearance and touch flow need the running game. `node
+tools/runtime-test/capture-farm.mjs` serves the checkout at `/farm/`, drives the checked-in
+automation browser over CDP at both iPad viewports (1024x768 and 768x1024,
+`Emulation.setDeviceMetricsOverride` plus `Emulation.setTouchEmulationEnabled`), writes one PNG per
+viewport, checks the browser console/runtime for errors, and leaves a receipt naming the exact served
+and driver worktrees and SHAs. Pass `--repo <checkout>` to capture a farm game served from another
+checkout (for example a Muse gameplay worktree) without copying the tool into it or conflating the
+two source SHAs. The driver starts and tears down its own throwaway browser, so no resident
+automation Chrome is needed first; the underlying pieces remain available for a manual pass: `node
+server.mjs` (then `/farm/`) or its own `node prototypes/farm-slice/serve.mjs`, plus `node
+tools/runtime-test/automation-chrome.mjs`. The legacy harnesses below do not cover the farm game.
+Emulated headless captures are diagnostic: acceptance is iPad Safari and human visual judgment
+(`AGENTS.md`, visual and product acceptance). The hosted instance (`docs/public-playtest.md`) serves
+the same route for a real iPad; fetch its `/source-sha.json` first.
 
 ### 3. Legacy Three.js local running-game harnesses
 

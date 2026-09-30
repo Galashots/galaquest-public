@@ -161,6 +161,10 @@ export function isRetryableSpawnError(error) {
  *   --no-sandbox                       required inside the container images these harnesses run in,
  *                                      which are already an isolation boundary. Omitted when headed,
  *                                      because a desktop browser has no such excuse.
+ *   --disable-dev-shm-usage            /dev/shm is small in the container images these harnesses run
+ *                                      in, and Chrome dies without this; run-review-suite.mjs and the
+ *                                      full-playtest matrix pass it for the same reason, and this
+ *                                      module is itself a self-launch path.
  *   --no-first-run / --no-default-browser-check / --disable-...
  *                                      first-run interstitials and background work steal the first
  *                                      frames of a run that is about to photograph the first frames.
@@ -175,6 +179,7 @@ export function chromeLaunchArgs({ port = AUTOMATION_CHROME_PORT, profileDir, he
     '--disable-background-networking',
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
+    '--disable-dev-shm-usage',
     '--use-gl=angle',
     '--use-angle=swiftshader',
     '--enable-unsafe-swiftshader',
