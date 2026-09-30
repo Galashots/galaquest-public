@@ -176,6 +176,25 @@ export function consoleErrorFromCdpMessage(message) {
   return null;
 }
 
+/**
+ * Is this console error a benign 404 the browser itself provoked, rather than a farm runtime error?
+ *
+ * A full Chrome requests `/favicon.ico` for a page that declares no icon, and the static server has
+ * no such route; the request logs as an error and would fail the console gate over something the
+ * farm never did. The legacy harnesses carry the same narrow allowlist (drive-cart-loot.mjs,
+ * drive-first-level-up.mjs, drive-hero-screen.mjs). It is deliberately pinned to a missing favicon
+ * WITH a 404: a missing game asset, a 500, or a thrown exception is still a failure.
+ *
+ * This is why it exists in the driver at all: the local headless-shell never fetches a favicon, so a
+ * full Chrome on the hosted runner is the first environment to surface it.
+ */
+export const COSMETIC_404_PATTERNS = Object.freeze(['/favicon.ico']);
+
+export function isCosmeticConsoleError(text) {
+  return COSMETIC_404_PATTERNS.some((pattern) => text.includes(pattern))
+    && /404|not found/i.test(text);
+}
+
 /** A port nobody is bound to, so `startAutomationChrome` genuinely owns (and can kill) the browser. */
 function findFreePort() {
   return new Promise((found, failed) => {
@@ -239,7 +258,8 @@ function stamp() {
 
 /** Everything a reader needs to bind the pixels to a source, in both machine and prose form. */
 function buildReceipt({
-  driverSource, servedSource, server, chrome, viewports, consoleErrors, checks, cleanup, startedAt,
+  driverSource, servedSource, server, chrome, viewports, consoleErrors, cosmeticErrors, checks,
+  cleanup, startedAt,
 }) {
   return {
     note: RECEIPT_NOTE,
@@ -262,6 +282,7 @@ function buildReceipt({
     },
     viewports,
     consoleErrors: [...new Set(consoleErrors)],
+    cosmeticErrors: [...new Set(cosmeticErrors)],
     checks,
     cleanup,
   };
@@ -298,6 +319,10 @@ function receiptMarkdown(receipt) {
   lines.push(receipt.consoleErrors.length === 0
     ? '- none observed'
     : receipt.consoleErrors.map((error) => `- ${error}`).join('\n'));
+  lines.push('', '## Cosmetic browser 404s (not gated)', '');
+  lines.push(receipt.cosmeticErrors.length === 0
+    ? '- none observed'
+    : receipt.cosmeticErrors.map((error) => `- ${error}`).join('\n'));
   lines.push('', '## Cleanup', '', '```json', JSON.stringify(receipt.cleanup, null, 2), '```', '');
   return lines.join('\n');
 }
@@ -344,6 +369,7 @@ async function main(argv = process.argv.slice(2)) {
   let targetId = null;
   let profileDir = null;
   const consoleErrors = [];
+  const cosmeticErrors = [];
   const viewports = [];
   let cleanedUp = false;
 
@@ -421,7 +447,9 @@ async function main(argv = process.argv.slice(2)) {
     await page.send('Log.enable');
     page.ws.addEventListener('message', (event) => {
       const error = consoleErrorFromCdpMessage(JSON.parse(event.data));
-      if (error !== null) consoleErrors.push(error);
+      if (error === null) return;
+      if (isCosmeticConsoleError(error)) cosmeticErrors.push(error);
+      else consoleErrors.push(error);
     });
 
     for (const viewport of CAPTURE_VIEWPORTS) {
@@ -476,10 +504,12 @@ async function main(argv = process.argv.slice(2)) {
   check('the throwaway browser profile was removed', cleanupState.profileRemoved === true,
     JSON.stringify(cleanupState));
   check('no browser console or runtime errors during the captures', consoleErrors.length === 0,
-    [...new Set(consoleErrors)].slice(0, 3).join(' | ') || 'clean');
+    [...new Set(consoleErrors)].slice(0, 3).join(' | ')
+      || (cosmeticErrors.length ? `clean apart from ${cosmeticErrors.length} cosmetic 404(s)` : 'clean'));
 
   const receipt = buildReceipt({
-    driverSource, servedSource, server, chrome, viewports, consoleErrors, checks: results, cleanup: cleanupState, startedAt,
+    driverSource, servedSource, server, chrome, viewports, consoleErrors, cosmeticErrors,
+    checks: results, cleanup: cleanupState, startedAt,
   });
   writeFileSync(join(runDir, 'receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`);
   writeFileSync(join(runDir, 'receipt.md'), receiptMarkdown(receipt));

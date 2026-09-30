@@ -17,6 +17,7 @@ import {
   RECEIPT_NOTE,
   consoleErrorFromCdpMessage,
   farmUrlFor,
+  isCosmeticConsoleError,
   parseArgs,
   readSourceIdentity,
 } from '../tools/runtime-test/capture-farm.mjs';
@@ -109,6 +110,26 @@ test('console errors are classified as errors, not warnings or logs', () => {
   assert.equal(consoleErrorFromCdpMessage({ method: 'Network.loadingFailed' }), null);
 });
 
+test('a browser-provoked favicon 404 is cosmetic, a real error is not', () => {
+  // The full Chrome on the hosted runner fetches /favicon.ico for the farm page; the local
+  // headless-shell never does. That 404 must not fail the console gate, or CI rejects a clean run.
+  assert.equal(isCosmeticConsoleError(
+    'Failed to load resource: the server responded with a status of 404 (Not Found) '
+    + '[http://127.0.0.1:5202/favicon.ico]',
+  ), true);
+  // ...but the allowlist must stay narrow: a 500 on the same URL is not a benign 404, and a real
+  // missing game asset is not a favicon.
+  assert.equal(isCosmeticConsoleError(
+    'Failed to load resource: the server responded with a status of 500 (Internal Server Error) '
+    + '[http://127.0.0.1:5202/favicon.ico]',
+  ), false);
+  assert.equal(isCosmeticConsoleError(
+    'Failed to load resource: the server responded with a status of 404 (Not Found) '
+    + '[http://127.0.0.1:5202/assets/egg.glb]',
+  ), false);
+  assert.equal(isCosmeticConsoleError('TypeError: nope'), false);
+});
+
 test('the receipt note never lets an emulated capture read as human acceptance', () => {
   assert.match(RECEIPT_NOTE, /never accept/);
   assert.match(RECEIPT_NOTE, /real iPad/);
@@ -120,4 +141,14 @@ test('the --repo choice reaches the owned server and storage is cleared before n
     'the served checkout must be the --repo checkout, or the receipt names the wrong source');
   assert.ok(source.indexOf('Storage.clearDataForOrigin') < source.indexOf('Page.navigate'),
     'GQ-008: the clear must precede the first navigation');
+});
+
+test('the driver gates that both checkouts are git checkouts, so the receipt can bind a SHA', () => {
+  const source = readFileSync(join(DRIVER_ROOT, 'tools', 'runtime-test', 'capture-farm.mjs'), 'utf8');
+  // readSourceIdentity reports a non-checkout instead of throwing; if the driver never gates that
+  // report, a bad --repo writes an undefined-SHA receipt under a wall of PASS.
+  assert.match(source,
+    /check\('the driver checkout is a git checkout[^']*',\s*driverSource\.available/);
+  assert.match(source,
+    /check\('the served checkout is a git checkout[^']*',\s*servedSource\.available/);
 });
