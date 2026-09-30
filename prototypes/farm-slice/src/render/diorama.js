@@ -13,6 +13,7 @@ const PLOT_POSITIONS = [
   new THREE.Vector3(2, 0, 2.4),
 ];
 const EGG_POSITION = new THREE.Vector3(-3.8, 0, 2.4);
+const EGG2_POSITION = new THREE.Vector3(-2.85, 0, 3.55);
 const MARKET_POSITION = new THREE.Vector3(2.6, 0, -2.2);
 const MANNEQUIN_POSITION = new THREE.Vector3(4.15, 0, -1.5);
 const HERO_POSITION = new THREE.Vector3(0.7, 0, -0.7);
@@ -77,6 +78,9 @@ export class Diorama {
     this._lastFarm = null;
     this._lastArmor = null;
     this._lastEgg = null;
+    this._lastSecondEgg = null;
+    this._lastCrest = false;
+    this._preloadIds = new Set();
 
     // Outlives _buildScene: a lost context rebuilds the scene from the same
     // loaded templates instead of fetching the models again.
@@ -94,6 +98,8 @@ export class Diorama {
       if (this._lastFarm) this.syncFarm(this._lastFarm.farmState, this._lastFarm.now);
       if (this._lastArmor) this.syncArmor(this._lastArmor.equippedDefs, this._lastArmor.forSaleDef);
       if (this._lastEgg) this.syncEgg(this._lastEgg);
+      if (this._lastSecondEgg) this.syncSecondEgg(this._lastSecondEgg);
+      if (this.creatureGroup && this._lastCrest) this.syncCrest(true);
     };
     canvas.addEventListener('webglcontextlost', this._onContextLost, false);
     canvas.addEventListener('webglcontextrestored', this._onContextRestored, false);
@@ -167,6 +173,10 @@ export class Diorama {
     this.eggVisible = true;
 
     this.creatureGroup = null; // built on hatch
+    this.egg2Group = null; // built when Pip's gift is earned
+    this.egg2Visible = false;
+    this.creatureGroup2 = null; // built on the Leaf-egg hatch
+    this._crest = null; // Sprout's sun crest adornment, added at 3 feeds
   }
 
   _setupLighting() {
@@ -345,8 +355,8 @@ export class Diorama {
    */
   preloadCreature(id) {
     // Called every frame; only a new id starts anything.
-    if (!id || id === this._preloadId || !this.models.has(id)) return;
-    this._preloadId = id;
+    if (!id || this._preloadIds.has(id) || !this.models.has(id)) return;
+    this._preloadIds.add(id);
     this.models.loadEgg().then(() => this.models.load(id));
   }
 
@@ -355,9 +365,10 @@ export class Diorama {
    * body, upgraded in place (same group, so tweens and idle motion carry on)
    * the moment a still-loading model arrives.
    */
-  _buildCreature(creatureDef) {
+  _buildCreature(creatureDef, pickType = 'creature') {
     const group = new THREE.Group();
     group.userData.creatureId = creatureDef.id;
+    group.userData.pickType = pickType;
     const model = this.models.instance(creatureDef.id, creatureDef.shape);
     group.add(model ?? gen.buildCreature(THREE, creatureDef));
     // Unparented and unscaled here, so the world box is the creature's own height.
@@ -366,17 +377,94 @@ export class Diorama {
     else if (this.models.has(creatureDef.id)) {
       this.models.load(creatureDef.id).then(() => {
         const upgrade = this.models.instance(creatureDef.id, creatureDef.shape);
-        if (!upgrade || this.creatureGroup !== group) return;
+        if (!upgrade || (this.creatureGroup !== group && this.creatureGroup2 !== group)) return;
         clearGroupDisposing(group);
         group.add(upgrade, gen.creatureShadow(THREE));
         group.userData.height = upgrade.userData.height;
         // No pop here: a pop restores the scale it started from, which could
         // freeze a half-grown creature if this lands during the hatch grow-in.
-        group.traverse((o) => { o.userData.pickType = 'creature'; });
+        group.traverse((o) => { o.userData.pickType = group.userData.pickType; });
+        if (this.creatureGroup === group) {
+          // The sculpted upgrade replaces the whole subtree, so a bloomed
+          // crest must be re-attached rather than assumed to survive.
+          this._crest = null;
+          if (this._lastCrest) this.syncCrest(true);
+        }
         this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 12);
       });
     }
+    group.traverse((o) => { o.userData.pickType = pickType; });
     return group;
+  }
+
+  /**
+   * Pip's gift Leaf egg (CONTRACT.md section 5 item 2): a second egg with a
+   * visible leaf-green tint beside the first, then a second creature on its
+   * ungated hatch. Mirrors syncEgg's show/hide shape but never touches the
+   * first egg or creature.
+   */
+  syncSecondEgg(secondEgg) {
+    this._lastSecondEgg = secondEgg;
+    if (!secondEgg) {
+      if (this.egg2Group) this.egg2Group.visible = false;
+      this.egg2Visible = false;
+      return;
+    }
+    if (!secondEgg.hatched) {
+      if (!this.egg2Group) {
+        this.egg2Group = gen.buildEgg(THREE);
+        this.egg2Group.position.copy(EGG2_POSITION);
+        this.egg2Group.userData.shell.material.emissive = new THREE.Color('#8bc34a');
+        this.egg2Group.userData.shell.material.emissiveIntensity = 0.5;
+        this.egg2Group.traverse((o) => { o.userData.pickType = 'egg2'; });
+        this.scene.add(this.egg2Group);
+      }
+      this.egg2Group.visible = true;
+      this.egg2Visible = true;
+      return;
+    }
+    if (this.egg2Visible) {
+      this.egg2Visible = false;
+      if (this.egg2Group) this.egg2Group.visible = false;
+      this.sparkles.spawn(EGG2_POSITION.clone().add(new THREE.Vector3(0, 0.6, 0)), '#aed581', 28);
+    }
+    if (!this.creatureGroup2) {
+      const creatureDef = this.content.CREATURES.find((c) => c.id === secondEgg.hatchedCreatureId);
+      if (creatureDef) {
+        this.creatureGroup2 = this._buildCreature(creatureDef, 'creature2');
+        this.creatureGroup2.position.copy(EGG2_POSITION);
+        this.creatureGroup2.scale.setScalar(0.01);
+        this.scene.add(this.creatureGroup2);
+        this.tweens.add({
+          target: this.creatureGroup2.scale, prop: null, from: 0, to: 1, duration: 0.5,
+          onUpdate: (v) => this.creatureGroup2.scale.setScalar(v),
+        });
+      }
+    }
+  }
+
+  /**
+   * Sprout's sun crest adornment (CONTRACT.md section 5 item 1). An added
+   * group perched on the creature's head; idempotent across frames, and the
+   * body/rig underneath is never edited.
+   */
+  syncCrest(show) {
+    this._lastCrest = !!show;
+    if (show && this.creatureGroup && !this._crest) {
+      const height = this.creatureGroup.userData.height || 0.5;
+      const crest = gen.buildSunCrest(THREE);
+      crest.scale.setScalar(THREE.MathUtils.clamp(height / 0.6, 0.9, 1.8));
+      crest.position.set(0, height - 0.02, 0);
+      crest.traverse((o) => { o.userData.pickType = 'creature'; });
+      this.creatureGroup.add(crest);
+      this._crest = crest;
+      this.sparkles.spawn(this.creatureGroup.position.clone().add(new THREE.Vector3(0, 0.8, 0)), '#ffd54f', 16);
+    } else if (!show && this._crest) {
+      const parent = this._crest.parent;
+      if (parent) parent.remove(this._crest);
+      disposeObject3D(this._crest);
+      this._crest = null;
+    }
   }
 
   // -- One-shot juice hooks (called right after a successful action) ------
@@ -427,6 +515,10 @@ export class Diorama {
     if (this.creatureGroup) this.tweens.pop(this.creatureGroup, { peak: 1.3, duration: 0.45 });
   }
 
+  playCreature2Hop() {
+    if (this.creatureGroup2) this.tweens.pop(this.creatureGroup2, { peak: 1.3, duration: 0.45 });
+  }
+
   playFeedSparkle() {
     if (!this.creatureGroup) return;
     this.tweens.pop(this.creatureGroup, { peak: 1.3, duration: 0.4 });
@@ -449,6 +541,10 @@ export class Diorama {
         return MANNEQUIN_POSITION.clone().add(new THREE.Vector3(0, 2, 0));
       case 'egg':
         return this.eggGroup.position.clone().add(new THREE.Vector3(0, 1, 0));
+      case 'egg2':
+        return this.creatureGroup2
+          ? this.creatureGroup2.position.clone().add(new THREE.Vector3(0, this.creatureGroup2.userData.height + 0.1, 0))
+          : EGG2_POSITION.clone().add(new THREE.Vector3(0, 1, 0));
       case 'creature':
         // Just above its head, as for the egg: a fixed low offset put the arrow on its face.
         return this.creatureGroup
@@ -538,10 +634,20 @@ export class Diorama {
       }
     });
 
+    // Egg-2 wobble while it waits for its taps.
+    if (this.egg2Visible && this.egg2Group) {
+      this.egg2Group.rotation.z = Math.sin(this._sway * 4) * 0.06;
+      this.egg2Group.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 2)) * 0.04;
+    }
+
     // Hatched creature idle hop.
     if (this.creatureGroup) {
       this.creatureGroup.position.y = Math.abs(Math.sin(this._sway * 3)) * 0.15;
       this.creatureGroup.rotation.y = Math.sin(this._sway * 0.7) * 0.4;
+    }
+    if (this.creatureGroup2) {
+      this.creatureGroup2.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 3 + 1)) * 0.15;
+      this.creatureGroup2.rotation.y = Math.sin(this._sway * 0.7 + 1) * 0.4;
     }
 
     this.tweens.update();

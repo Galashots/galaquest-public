@@ -2,7 +2,7 @@
 // disabled storage must never crash the game). Versioned JSON so future
 // shape changes can migrate instead of silently breaking old saves.
 
-import { SAVE_VERSION, createGameState } from './rules/game.js';
+import { SAVE_VERSION, createGameState, migrateRetention } from './rules/game.js';
 
 const SAVE_KEY = 'gq.farmSlice.v1';
 
@@ -11,9 +11,14 @@ export function saveGame(state) {
     // Hatch taps are UI-only drama, not part of the saved goal state
     // (CONTRACT.md section 4: "Taps aren't saved") -- always persist zero so
     // a reload mid-hatch doesn't skip ahead or get stuck on a stale count.
-    const toSave = state.egg && state.egg.hatchTaps
-      ? { ...state, egg: { ...state.egg, hatchTaps: 0 } }
-      : state;
+    let toSave = state;
+    if (state.egg && state.egg.hatchTaps) {
+      toSave = { ...toSave, egg: { ...toSave.egg, hatchTaps: 0 } };
+    }
+    // Second-egg taps are transient drama too, like the first egg's.
+    if (state.secondEgg && state.secondEgg.hatchTaps) {
+      toSave = { ...toSave, secondEgg: { ...toSave.secondEgg, hatchTaps: 0 } };
+    }
     const payload = JSON.stringify({ version: SAVE_VERSION, savedAt: Date.now(), state: toSave });
     window.localStorage.setItem(SAVE_KEY, payload);
     return true;
@@ -44,7 +49,8 @@ function readKey(key) {
 export function loadGame(now) {
   try {
     const current = readKey(SAVE_KEY);
-    if (current) return { state: current, isNewGame: false };
+    // Additive P1 retention fields default in; the schema stays version 1.
+    if (current) return { state: migrateRetention(current), isNewGame: false };
 
     return { state: createGameState(now), isNewGame: true };
   } catch (err) {
