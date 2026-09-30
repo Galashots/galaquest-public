@@ -193,8 +193,11 @@ export function buildMannequin(THREE) {
   slots.boots.position.y = 0.15;
   group.add(slots.boots);
 
+  // Hung on the front of the stand facing the camera, clear of the torso:
+  // a side-hung disc hid behind the body and the stall roof from the fixed
+  // camera, while the face-camera disc reads as a displayed shield.
   slots.shield = new THREE.Group();
-  slots.shield.position.set(0.3, 1.3, 0);
+  slots.shield.position.set(0, 1.35, 0.5);
   group.add(slots.shield);
 
   group.add(shadowAt(THREE, 0, 0, 0.5));
@@ -221,10 +224,13 @@ export function buildArmorPiece(THREE, armorDef) {
       break;
     }
     case 'chest': {
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.6, 0.2), mat(THREE, color));
+      // A chunky shell that encloses the torso (hero r=0.3, mannequin
+      // r=0.28): the previous 0.2-deep plate sat entirely INSIDE the body
+      // and was invisible from every angle once equipped.
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.62, 0.7), mat(THREE, color));
       group.add(plate);
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.1, 0.24), mat(THREE, accent));
-      belt.position.y = -0.2;
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.12, 0.74), mat(THREE, accent));
+      belt.position.y = -0.22;
       group.add(belt);
       break;
     }
@@ -238,11 +244,14 @@ export function buildArmorPiece(THREE, armorDef) {
     }
     case 'shield':
     default: {
+      // Faces the fixed camera (disc in the XY plane): the previous
+      // edge-on (YZ plane) disc read as a thin line from the game's camera
+      // and vanished on the mannequin.
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.06, 12), mat(THREE, color));
-      disc.rotation.z = Math.PI / 2;
+      disc.rotation.x = Math.PI / 2;
       group.add(disc);
       const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), mat(THREE, accent));
-      boss.position.x = 0.04;
+      boss.position.z = 0.04;
       group.add(boss);
       break;
     }
@@ -305,8 +314,10 @@ export function buildHero(THREE) {
   slots.boots.position.y = 0.05;
   group.add(slots.boots);
 
+  // Beside and slightly ahead of the arm: the torso-covering vest would
+  // otherwise swallow the disc from the fixed camera.
   slots.shield = new THREE.Group();
-  slots.shield.position.set(0.42, 0.68, 0.1);
+  slots.shield.position.set(0.52, 0.68, 0.22);
   group.add(slots.shield);
 
   group.add(shadowAt(THREE, 0, 0, 0.5));
