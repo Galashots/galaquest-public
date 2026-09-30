@@ -12,6 +12,8 @@ import { CollectionBook } from './ui/collectionBook.js';
 import { BandDialog } from './ui/bandDialog.js';
 import { GiftDialog } from './ui/giftDialog.js';
 import { SeedTray } from './ui/seedTray.js';
+import { BreedingDialog } from './ui/breedingDialog.js';
+import { HelpDialog } from './ui/helpDialog.js';
 import * as content from '../content/index.js';
 
 const app = document.getElementById('app');
@@ -19,6 +21,7 @@ const canvas = document.getElementById('scene-canvas');
 let { state, isNewGame } = loadGame(Date.now());
 if (!isNewGame) state = game.applyVolunteerCarrots(state, content, Date.now());
 state = game.checkTimeGates(state, content, Date.now());
+state = game.observeBreedingEgg(state, Date.now()); // advance the nest clock past any away time
 const diorama = new Diorama(canvas, content);
 const hud = new Hud(app);
 const market = new MarketPanel(app, { onFulfillOffer: handleFulfillOffer, onBuyArmor: handleBuyArmor, onClose: closeMarket,
@@ -28,6 +31,8 @@ const namingDialog = new NamingDialog(app, { onSubmit: handleSubmitName });
 const book = new CollectionBook(app, { onClose: closeBook });
 const bandDialog = new BandDialog(app, { onPick: handlePickBand });
 const giftDialog = new GiftDialog(app, { onTake: handleTakeGift });
+const breedingDialog = new BreedingDialog(app, { onBreed: handleBreed, onClose: () => refresh() });
+const helpDialog = new HelpDialog(app, { onAnswer: handleHelpAnswer, onClose: () => refresh() });
 const tray = new SeedTray(app, (cropId) => { selectedSeed = cropId; refresh(); });
 let selectedSeed = null;
 let namingTargetId = null;
@@ -56,6 +61,8 @@ function syncVisuals(now) {
   diorama.syncSecondEgg(state.secondEgg);
   diorama.syncCrest(game.hasSunCrest(state));
   diorama.preloadCreature(game.nextSecondHatchCreatureId(state, content));
+  diorama.syncBreedingEgg(state.breeding.egg);
+  diorama.syncBredCreatures(bredCreatureDefs());
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
   diorama.setWateringCanVisible(['grow', 'replant', 'free'].includes(step()) &&
     game.unwateredGrowingPlotIndexes(state, content, now).length > 0);
@@ -77,6 +84,11 @@ function remainingSeeds() {
   return game.freeRemainingSeeds(state);
 }
 function rectPoint(rect) { return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; }
+/** Kid-readable m:ss countdown for the nest egg. */
+function fmtMs(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 function refresh() {
   const now = Date.now();
   syncVisuals(now);
@@ -101,6 +113,19 @@ function refresh() {
   hud.setFeedVisible((step() === 'feed' || step() === 'free') && economy.countOf(state.basket, 'sunberry') > 0);
   const firstCreatureId = state.egg.hatchedCreatureId;
   hud.setFeedMeter(firstCreatureId ? state.collection.fed?.[firstCreatureId] || 0 : 0, !!firstCreatureId);
+  // Breeding v1: the 💕 button only appears in FREE play once two creatures
+  // are owned and the nest is free; the nest status line shows whenever an
+  // egg is waiting. The 📖 help button shows for rare/epic eggs past the
+  // first three breedings (the help lane's eligibility), when not yet ready.
+  const breedingEgg = state.breeding.egg;
+  const eggStatus = breedingEgg ? game.breedingEggStatus(state, now) : null;
+  hud.setBreedVisible(step() === 'free' && game.canBreed(state, content));
+  hud.setBreedAttract(step() === 'free' && game.canBreed(state, content));
+  hud.setEggStatus(eggStatus
+    ? (eggStatus.ready ? '🥚 The nest egg is ready — tap it!' : `🥚 hatches in ${fmtMs(eggStatus.remainingMs)}`)
+    : null);
+  hud.setHelpVisible(step() === 'free' && !!breedingEgg && !eggStatus.ready &&
+    (breedingEgg.child.rarity === 'rare' || breedingEgg.child.rarity === 'epic') && breedingEgg.ordinal > 3);
   const seeds = remainingSeeds();
   if (seeds.length && !seeds.includes(selectedSeed)) selectedSeed = seeds[0];
   const trayKey = `${trayOpened}:${seeds.join(',')}:${selectedSeed}:${step()}`;
@@ -222,6 +247,11 @@ function handleSubmitName(name) {
   hud.showToast(`${state.collection.names[targetId]} joined your book!`);
   applyResult(previous);
 }
+/** Breeding-hatched creatures as { id, shape, colors } render defs, oldest first. */
+function bredCreatureDefs() {
+  const bred = state.collection.bred || {};
+  return Object.keys(bred).sort().map((id) => ({ id, ...bred[id] }));
+}
 function renderBook() {
   const owned = content.CREATURES.filter((c) => state.collection.owned[c.id]);
   const rest = content.CREATURES.filter((c) => !state.collection.owned[c.id])
@@ -230,7 +260,15 @@ function renderBook() {
     id: c.id, name: state.collection.names[c.id] || c.name,
     color: c.colors.body, discovered: !!state.collection.owned[c.id],
   }));
-  book.render({ foundCount: owned.length, total: 6, entries });
+  // Breeding-hatched creatures join the book after the content creatures.
+  const bredDefs = bredCreatureDefs();
+  for (const def of bredDefs) {
+    entries.push({
+      id: def.id, name: state.collection.names[def.id] || 'A new friend',
+      color: def.colors.body, discovered: true,
+    });
+  }
+  book.render({ foundCount: owned.length + bredDefs.length, total: 6 + bredDefs.length, entries });
 }
 function feedSprout(now = Date.now()) {
   const previous = state;
@@ -261,6 +299,80 @@ function handleSecondEggTap(now) {
   } else audio.sfx.crack();
   applyResult(previous);
 }
+
+/* -- Breeding v1 ------------------------------------------------------ */
+
+const BRED_NAME_SUGGESTIONS = ['Miso', 'Taffy', 'Noodle', 'Bramble', 'Waffles', 'Clover',
+  'Juniper', 'Pebble', 'Sprinkles', 'Nugget', 'Biscuit', 'Maple'];
+
+/** Deterministic friendly name suggestion for a breeding-hatched creature. */
+function bredNameSuggestion(creature) {
+  let h = 0;
+  for (const ch of creature.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return BRED_NAME_SUGGESTIONS[h % BRED_NAME_SUGGESTIONS.length];
+}
+
+function helpGrade() { return state.band === 'older' ? 5 : 2; }
+
+function handleBreed(parentAId, parentBId) {
+  const previous = state;
+  const result = game.startBreeding(state, content, parentAId, parentBId, Date.now());
+  if (result.error) { hud.showToast('Hmm, that pair did not work.'); return; }
+  state = result.state;
+  breedingDialog.close();
+  audio.sfx.plant();
+  hud.showToast('An egg is in the nest! 🥚', 2500);
+  applyResult(previous);
+}
+
+function handleNestEggTap(now) {
+  const status = game.breedingEggStatus(state, now);
+  if (!status) return;
+  if (!status.ready) { hud.showToast(`Hatches in ${fmtMs(status.remainingMs)}`); audio.sfx.tap(); return; }
+  const previous = state;
+  const result = game.hatchBreedingEgg(state, content, now);
+  state = result.state;
+  if (!result.success) return;
+  audio.sfx.hatch();
+  namingTargetId = result.creature.id;
+  hud.showToast('Your new friend hatched!', 2500);
+  namingDialog.open(bredNameSuggestion(result.creature));
+  applyResult(previous);
+}
+
+function handleHelpOpen() {
+  const previous = state;
+  const { offer, state: next } = game.breedingHelpOffer(state, helpGrade(), content.QUESTIONS, Date.now());
+  state = next;
+  saveGame(state);
+  if (!offer) { hud.showToast('No questions right now.'); refresh(); return; }
+  audio.sfx.open();
+  helpDialog.open(offer);
+  refresh();
+  if (state !== previous) saveGame(state);
+}
+
+function handleHelpAnswer(questionId, choiceIndex) {
+  const previous = state;
+  const result = game.answerBreedingHelpQuestion(state, helpGrade(), content.QUESTIONS, questionId, choiceIndex, Date.now());
+  state = result.state;
+  if (result.error) { helpDialog.close(); applyResult(previous); return; }
+  if (result.correct) {
+    helpDialog.close();
+    audio.sfx.equip();
+    const status = game.breedingEggStatus(state, Date.now());
+    hud.showToast(status && !status.ready
+      ? `The egg feels warmer! ${fmtMs(status.remainingMs)} left`
+      : 'The egg feels warmer!', 2500);
+  } else {
+    helpDialog.showHint(result.hint);
+    audio.sfx.tap();
+  }
+  applyResult(previous);
+}
+
+hud.onBreedOpen(() => { audio.unlockAudio(); breedingDialog.open(game.breedableParents(state, content)); refresh(); });
+hud.onHelpOpen(handleHelpOpen);
 function closeBook() {
   book.close();
   if (step() === 'book') {
@@ -281,7 +393,7 @@ function handlePickBand(band) {
 }
 hud.onGearHold(() => bandDialog.open());
 function anyModalOpen() {
-  return market.isOpen || namingDialog.backdrop.style.display === 'flex' || book.isOpen || bandDialog.backdrop.style.display === 'flex' || giftDialog.isOpen;
+  return market.isOpen || namingDialog.backdrop.style.display === 'flex' || book.isOpen || bandDialog.backdrop.style.display === 'flex' || giftDialog.isOpen || breedingDialog.isOpen || helpDialog.isOpen;
 }
 function handlePlotTap(index, now, type) {
   const plot = state.farm.plots[index];
@@ -340,8 +452,10 @@ canvas.addEventListener('pointerdown', (e) => {
   else if (hit.type === 'market' || hit.type === 'mannequin') openMarket();
   else if (hit.type === 'egg') handleEggTap(now);
   else if (hit.type === 'egg2') handleSecondEggTap(now);
+  else if (hit.type === 'egg3') handleNestEggTap(now);
   else if (hit.type === 'creature') feedSprout(now);
   else if (hit.type === 'creature2') diorama.playCreature2Hop();
+  else if (hit.type === 'creature3') diorama.playCreature2Hop();
 });
 document.addEventListener('pointerdown', () => audio.unlockAudio(), { once: true });
 if (!state.band) bandDialog.open();
@@ -349,7 +463,8 @@ if (step() === 'name') openNaming();
 refresh();
 function tick() {
   const now = Date.now();
-  const next = game.checkTimeGates(state, content, now);
+  let next = game.checkTimeGates(state, content, now);
+  next = game.observeBreedingEgg(next, now); // the nest clock never un-observes
   if (next !== state) { state = next; saveGame(state); }
   refresh();
   diorama.update();

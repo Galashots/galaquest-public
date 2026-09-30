@@ -14,6 +14,8 @@ const PLOT_POSITIONS = [
 ];
 const EGG_POSITION = new THREE.Vector3(-3.8, 0, 2.4);
 const EGG2_POSITION = new THREE.Vector3(-2.85, 0, 3.55);
+// Breeding v1: the nest sits beside the other eggs, clear of the plots.
+const NEST_POSITION = new THREE.Vector3(-4.6, 0, 1.2);
 const MARKET_POSITION = new THREE.Vector3(2.6, 0, -2.2);
 const MANNEQUIN_POSITION = new THREE.Vector3(4.15, 0, -1.5);
 const HERO_POSITION = new THREE.Vector3(0.7, 0, -0.7);
@@ -176,6 +178,9 @@ export class Diorama {
     this.egg2Group = null; // built when Pip's gift is earned
     this.egg2Visible = false;
     this.creatureGroup2 = null; // built on the Leaf-egg hatch
+    this.egg3Group = null; // built when breeding starts (the nest egg)
+    this.egg3Visible = false;
+    this.bredGroups = null; // breeding-hatched creatures, keyed by id
     this._crest = null; // Sprout's sun crest adornment, added at 3 feeds
   }
 
@@ -444,6 +449,66 @@ export class Diorama {
   }
 
   /**
+   * Breeding v1 nest (one slot). Shows the breeding egg at the nest with a
+   * shell tint toward the child's element while the timer runs. Pass null
+   * to hide the egg (e.g. right after the hatch).
+   */
+  syncBreedingEgg(breedingEgg) {
+    if (breedingEgg) {
+      if (!this.egg3Group) {
+        this.egg3Group = gen.buildEgg(THREE);
+        this.egg3Group.position.copy(NEST_POSITION);
+        this.egg3Group.traverse((o) => { o.userData.pickType = 'egg3'; });
+        this.scene.add(this.egg3Group);
+      }
+      // Re-apply the tint every show: the group persists across breedings.
+      const elementColor = this._elementEggTint(breedingEgg.child.element);
+      this.egg3Group.userData.shell.material.emissive = new THREE.Color(elementColor);
+      this.egg3Group.visible = true;
+      this.egg3Visible = true;
+    } else if (this.egg3Group && this.egg3Visible) {
+      this.egg3Group.visible = false;
+      this.egg3Visible = false;
+    }
+  }
+
+  /**
+   * All breeding-hatched creatures stand in a row behind the nest, built
+   * procedurally from their recorded hatch traits. `creatures` is an array
+   * of { id, shape, colors } from the collection; the map keeps every one
+   * rendered exactly once across reloads.
+   */
+  syncBredCreatures(creatures) {
+    if (!this.bredGroups) this.bredGroups = new Map();
+    const list = creatures || [];
+    for (const [id, group] of this.bredGroups) {
+      if (!list.some((c) => c.id === id)) {
+        this.scene.remove(group);
+        disposeObject3D(group);
+        this.bredGroups.delete(id);
+      }
+    }
+    list.forEach((def, i) => {
+      if (this.bredGroups.has(def.id)) return;
+      const group = this._buildCreature({ id: def.id, shape: def.shape, colors: def.colors }, 'creature3');
+      group.position.copy(NEST_POSITION).add(new THREE.Vector3(0.25 * (i % 3), 0, -0.9 * Math.floor(i / 3) - 0.5));
+      group.scale.setScalar(0.01);
+      this.scene.add(group);
+      this.tweens.add({
+        target: group.scale, prop: null, from: 0, to: 1, duration: 0.5,
+        onUpdate: (v) => group.scale.setScalar(v),
+      });
+      this.bredGroups.set(def.id, group);
+    });
+  }
+
+  /** Shell tint for a breeding egg from the child's element crop color. */
+  _elementEggTint(element) {
+    const crop = this.content.CROPS.find((c) => c.element === element);
+    return crop ? crop.color : '#ffffff';
+  }
+
+  /**
    * Sprout's sun crest adornment (CONTRACT.md section 5 item 1). An added
    * group perched on the creature's head; idempotent across frames, and the
    * body/rig underneath is never edited.
@@ -615,6 +680,19 @@ export class Diorama {
 
     // Idle hero bob.
     this.heroGroup.position.y = HERO_POSITION.y + Math.sin(this._sway * 1.6) * 0.03;
+
+    // Nest-egg wobble while a breeding egg waits; gentle idle bob for
+    // breeding-hatched creatures once they stand by the nest.
+    if (this.egg3Visible && this.egg3Group) {
+      this.egg3Group.rotation.z = Math.sin(this._sway * 2.2) * 0.06;
+    }
+    if (this.bredGroups) {
+      let i = 0;
+      for (const group of this.bredGroups.values()) {
+        group.position.y = Math.abs(Math.sin(this._sway * 1.6 + i * 1.7)) * 0.05;
+        i++;
+      }
+    }
 
     // Ripe-crop "tap me" bounce; a gentle sway for unwatered sprouts too.
     this.plotStates.forEach((s, i) => {
