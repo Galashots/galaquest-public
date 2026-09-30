@@ -440,3 +440,91 @@ export function buildEgg(THREE) {
   group.userData.cracks = [];
   return group;
 }
+
+// -- Garden Festival decor (one builder per stage; each group arrives in
+// world coordinates, placed clear of the stall, plots, eggs, hero and the
+// rim bushes from the fixed camera). Chunky toy-like primitives in the
+// farm's existing flat-color vocabulary.
+
+const FESTIVAL_COLORS = ['#f06292', '#ffd54f', '#4dd0e1', '#ba68c8', '#8ee6a3'];
+
+/** Triangle-flag bunting strung across the stall front, below the roof. */
+export function buildFestivalBunting(THREE) {
+  const group = new THREE.Group();
+  const from = new THREE.Vector3(1.7, 1.5, -1.6);
+  const to = new THREE.Vector3(3.5, 1.5, -1.6);
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([from, to]);
+  group.add(new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: '#7a4a12' })));
+  const flagGeo = new THREE.ConeGeometry(0.09, 0.22, 4);
+  for (let i = 0; i < 7; i++) {
+    const t = (i + 0.5) / 7;
+    const sag = Math.sin(Math.PI * t) * 0.18;
+    const flag = new THREE.Mesh(flagGeo, mat(THREE, FESTIVAL_COLORS[i % FESTIVAL_COLORS.length]));
+    flag.position.lerpVectors(from, to, t);
+    flag.position.y -= sag;
+    flag.rotation.x = Math.PI;
+    flag.rotation.y = Math.PI / 4;
+    group.add(flag);
+  }
+  return group;
+}
+
+/** Two flower pots flanking the outer plots. */
+export function buildFestivalPots(THREE) {
+  const group = new THREE.Group();
+  [[-3.2, 2.2], [3.2, 2.2]].forEach(([x, z], potIndex) => {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.24, 10), mat(THREE, '#d2691e'));
+    pot.position.set(x, 0.12, z);
+    group.add(pot);
+    for (let i = 0; i < 3; i++) {
+      const bloom = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 0),
+        mat(THREE, FESTIVAL_COLORS[(potIndex + i) % FESTIVAL_COLORS.length]));
+      bloom.position.set(x + (i - 1) * 0.12, 0.34 + (i % 2) * 0.06, z);
+      group.add(bloom);
+    }
+    group.add(shadowAt(THREE, x, z, 0.22));
+  });
+  return group;
+}
+
+/** Two glowing lantern posts along the middle path. */
+export function buildFestivalLanterns(THREE) {
+  const group = new THREE.Group();
+  [[-1.6, 0.9], [2.4, 0.6]].forEach(([x, z], i) => {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.5, 8), mat(THREE, '#6d4c41'));
+    post.position.set(x, 0.75, z);
+    group.add(post);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10),
+      mat(THREE, '#ffd54f', { emissive: '#ffb300', emissiveIntensity: 0.9 }));
+    lamp.position.set(x, 1.62, z);
+    lamp.name = 'festivalLamp' + i;
+    group.add(lamp);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.14, 8), mat(THREE, '#a1662f'));
+    cap.position.set(x, 1.8, z);
+    group.add(cap);
+    group.add(shadowAt(THREE, x, z, 0.2));
+  });
+  return group;
+}
+
+/**
+ * A striped cloth banner across the stall's roof front, on two short posts.
+ * It sits just in front of the roof's front edge (z -1.14) and well below the
+ * HUD coin/basket pills: an earlier version strung it above the roof apex,
+ * where those pills covered its middle and it read as two stray colour chips.
+ */
+export function buildFestivalBanner(THREE) {
+  const group = new THREE.Group();
+  [-0.9, 0.9].forEach((dx) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.6, 8), mat(THREE, '#6d4c41'));
+    pole.position.set(2.6 + dx, 1.9, -1.05);
+    group.add(pole);
+  });
+  for (let i = 0; i < 5; i++) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.46, 0.04),
+      mat(THREE, FESTIVAL_COLORS[i % FESTIVAL_COLORS.length]));
+    stripe.position.set(2.6 - 0.68 + i * 0.34, 1.95, -1.05);
+    group.add(stripe);
+  }
+  return group;
+}

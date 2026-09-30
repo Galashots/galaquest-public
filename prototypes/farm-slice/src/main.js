@@ -54,8 +54,12 @@ function syncVisuals(now) {
   diorama.syncEgg(state.egg);
   diorama.preloadCreature(game.nextHatchCreatureId(state, content));
   diorama.syncSecondEgg(state.secondEgg);
+  diorama.syncThirdEgg(state.thirdEgg);
   diorama.syncCrest(game.hasSunCrest(state));
   diorama.preloadCreature(game.nextSecondHatchCreatureId(state, content));
+  diorama.preloadCreature(game.nextThirdHatchCreatureId(state, content));
+  diorama.syncFestival(game.festivalStageCount(state.freeOrderFills || 0));
+  diorama.syncGrowth(game.creatureGrowthScale(state));
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
   diorama.setWateringCanVisible(['grow', 'replant', 'free'].includes(step()) &&
     game.unwateredGrowingPlotIndexes(state, content, now).length > 0);
@@ -139,7 +143,17 @@ function renderMarket() {
     perCropRate: o.coins / Object.values(o.wants).reduce((a, b) => a + b, 0),
   }));
   const armorDef = game.nextArmorForSale(state, content);
-  market.render({ npcGreeting: content.NPCS[0].greeting, band: state.band, offers,
+  // Deterministic festival progress, shown only in FREE play: what is
+  // earned, what comes next, and exactly how many fills it takes.
+  let festivalLine = null;
+  if (step() === 'free') {
+    const fills = state.freeOrderFills || 0;
+    const next = game.festivalNext(fills);
+    festivalLine = next
+      ? `🎪 Festival ${fills}/${game.FESTIVAL_PRIZE_FILLS} · ${next.name} in ${next.fillsNeeded} more order${next.fillsNeeded > 1 ? 's' : ''}`
+      : '🎪 Festival complete! Thank you for building it!';
+  }
+  market.render({ npcGreeting: content.NPCS[0].greeting, band: state.band, offers, festivalLine,
     armor: armorDef ? {
       id: armorDef.id, name: armorDef.name, price: armorDef.price,
       canAfford: economy.canAfford(state.basket, armorDef.price), coins: state.basket.coins,
@@ -175,8 +189,21 @@ function handleFulfillOffer(id) {
   hud.showToast(`+${paid} coins · ${Array.from({length: paid / 2}, (_, i) => (i + 1) * 2).join(', ')}`, 2500);
   market.selectedOfferId = null;
   market._fill = {};
+  const beforeStage = game.festivalStageCount(previous.freeOrderFills || 0);
+  const beforePrize = !!previous.thirdEgg;
   applyResult(previous);
   renderMarket();
+  const afterStage = game.festivalStageCount(state.freeOrderFills || 0);
+  if (afterStage > beforeStage) {
+    const name = game.FESTIVAL_STAGES[afterStage - 1].name;
+    audio.sfx.equip();
+    hud.showToast(`🎪 ${name[0].toUpperCase() + name.slice(1)} up! ${state.freeOrderFills}/${game.FESTIVAL_PRIZE_FILLS} to the Water egg`, 2500);
+  }
+  if (state.thirdEgg && !beforePrize) {
+    audio.sfx.hatch();
+    diorama.playCelebration(8);
+    hud.showToast('🎪 Festival complete! Pip\'s Water egg is here!', 3000);
+  }
   if (state.giftEarned && !state.giftOpened) giftDialog.open();
 }
 
@@ -254,6 +281,21 @@ function handleSecondEggTap(now) {
   if (state === previous) return;
   if (result.hatched) {
     audio.sfx.hatch();
+    namingTargetId = result.hatchedCreatureId;
+    const def = content.CREATURES.find((c) => c.id === result.hatchedCreatureId);
+    hud.showToast(`${def ? def.name : 'A friend'} hatched!`, 2500);
+    namingDialog.open(def ? def.name : 'Buddy');
+  } else audio.sfx.crack();
+  applyResult(previous);
+}
+function handleThirdEggTap(now) {
+  const previous = state;
+  const result = game.tapThirdEgg(state, content, now);
+  state = result.state;
+  if (state === previous) return;
+  if (result.hatched) {
+    audio.sfx.hatch();
+    diorama.playCelebration(8);
     namingTargetId = result.hatchedCreatureId;
     const def = content.CREATURES.find((c) => c.id === result.hatchedCreatureId);
     hud.showToast(`${def ? def.name : 'A friend'} hatched!`, 2500);
@@ -340,8 +382,10 @@ canvas.addEventListener('pointerdown', (e) => {
   else if (hit.type === 'market' || hit.type === 'mannequin') openMarket();
   else if (hit.type === 'egg') handleEggTap(now);
   else if (hit.type === 'egg2') handleSecondEggTap(now);
+  else if (hit.type === 'egg3') handleThirdEggTap(now);
   else if (hit.type === 'creature') feedSprout(now);
   else if (hit.type === 'creature2') diorama.playCreature2Hop();
+  else if (hit.type === 'creature3') diorama.playCreature3Hop();
 });
 document.addEventListener('pointerdown', () => audio.unlockAudio(), { once: true });
 if (!state.band) bandDialog.open();

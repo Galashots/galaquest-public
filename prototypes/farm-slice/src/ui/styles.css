@@ -243,6 +243,13 @@ html, body {
   margin-bottom: 14px;
 }
 
+.gq-festival-line {
+  text-align: center;
+  font-weight: bold;
+  color: var(--gq-green);
+  margin-bottom: 14px;
+}
+
 .gq-offers {
   display: flex;
   flex-direction: column;

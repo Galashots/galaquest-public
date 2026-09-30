@@ -14,6 +14,7 @@ const PLOT_POSITIONS = [
 ];
 const EGG_POSITION = new THREE.Vector3(-3.8, 0, 2.4);
 const EGG2_POSITION = new THREE.Vector3(-2.85, 0, 3.55);
+const EGG3_POSITION = new THREE.Vector3(-1.55, 0, 3.9);
 const MARKET_POSITION = new THREE.Vector3(2.6, 0, -2.2);
 const MANNEQUIN_POSITION = new THREE.Vector3(4.15, 0, -1.5);
 const HERO_POSITION = new THREE.Vector3(0.7, 0, -0.7);
@@ -79,7 +80,11 @@ export class Diorama {
     this._lastArmor = null;
     this._lastEgg = null;
     this._lastSecondEgg = null;
+    this._lastThirdEgg = null;
     this._lastCrest = false;
+    this._lastFestival = 0;
+    this._growth1 = 1;
+    this._danceUntil = 0;
     this._preloadIds = new Set();
 
     // Outlives _buildScene: a lost context rebuilds the scene from the same
@@ -99,6 +104,9 @@ export class Diorama {
       if (this._lastArmor) this.syncArmor(this._lastArmor.equippedDefs, this._lastArmor.forSaleDef);
       if (this._lastEgg) this.syncEgg(this._lastEgg);
       if (this._lastSecondEgg) this.syncSecondEgg(this._lastSecondEgg);
+      if (this._lastThirdEgg) this.syncThirdEgg(this._lastThirdEgg);
+      if (this._lastFestival) this.syncFestival(this._lastFestival);
+      if (this._growth1 !== 1) this.syncGrowth(this._growth1);
       if (this.creatureGroup && this._lastCrest) this.syncCrest(true);
     };
     canvas.addEventListener('webglcontextlost', this._onContextLost, false);
@@ -176,6 +184,10 @@ export class Diorama {
     this.egg2Group = null; // built when Pip's gift is earned
     this.egg2Visible = false;
     this.creatureGroup2 = null; // built on the Leaf-egg hatch
+    this.egg3Group = null; // built when the festival prize is earned
+    this.egg3Visible = false;
+    this.creatureGroup3 = null; // built on the Water-egg hatch
+    this.festivalGroups = []; // one group per earned decor stage, additive
     this._crest = null; // Sprout's sun crest adornment, added at 3 feeds
   }
 
@@ -305,7 +317,8 @@ export class Diorama {
         this.scene.add(this.creatureGroup);
         this.tweens.add({
           target: this.creatureGroup.scale, prop: null, from: 0, to: 1, duration: 0.5,
-          onUpdate: (v) => this.creatureGroup.scale.setScalar(v),
+          // Compose with fed-driven growth so a mid-hatch feed cannot lose a stage.
+          onUpdate: (v) => this.creatureGroup.scale.setScalar(v * (this._growth1 || 1)),
         });
       }
     } else if (!eggState.hatched && !this.eggVisible) {
@@ -377,7 +390,7 @@ export class Diorama {
     else if (this.models.has(creatureDef.id)) {
       this.models.load(creatureDef.id).then(() => {
         const upgrade = this.models.instance(creatureDef.id, creatureDef.shape);
-        if (!upgrade || (this.creatureGroup !== group && this.creatureGroup2 !== group)) return;
+        if (!upgrade || (this.creatureGroup !== group && this.creatureGroup2 !== group && this.creatureGroup3 !== group)) return;
         clearGroupDisposing(group);
         group.add(upgrade, gen.creatureShadow(THREE));
         group.userData.height = upgrade.userData.height;
@@ -440,6 +453,94 @@ export class Diorama {
           onUpdate: (v) => this.creatureGroup2.scale.setScalar(v),
         });
       }
+    }
+  }
+
+  /**
+   * The festival prize Water egg: a third egg with a visible blue tint
+   * beside the others, then a third creature on its ungated hatch. Mirrors
+   * syncSecondEgg's show/hide shape but never touches the earlier eggs.
+   */
+  syncThirdEgg(thirdEgg) {
+    this._lastThirdEgg = thirdEgg;
+    if (!thirdEgg) {
+      if (this.egg3Group) this.egg3Group.visible = false;
+      this.egg3Visible = false;
+      return;
+    }
+    if (!thirdEgg.hatched) {
+      if (!this.egg3Group) {
+        this.egg3Group = gen.buildEgg(THREE);
+        this.egg3Group.position.copy(EGG3_POSITION);
+        this.egg3Group.userData.shell.material.emissive = new THREE.Color('#4fc3f7');
+        this.egg3Group.userData.shell.material.emissiveIntensity = 0.5;
+        this.egg3Group.traverse((o) => { o.userData.pickType = 'egg3'; });
+        this.scene.add(this.egg3Group);
+      }
+      this.egg3Group.visible = true;
+      this.egg3Visible = true;
+      return;
+    }
+    if (this.egg3Visible) {
+      this.egg3Visible = false;
+      if (this.egg3Group) this.egg3Group.visible = false;
+      this.sparkles.spawn(EGG3_POSITION.clone().add(new THREE.Vector3(0, 0.6, 0)), '#b3e5fc', 28);
+    }
+    if (!this.creatureGroup3) {
+      const creatureDef = this.content.CREATURES.find((c) => c.id === thirdEgg.hatchedCreatureId);
+      if (creatureDef) {
+        this.creatureGroup3 = this._buildCreature(creatureDef, 'creature3');
+        this.creatureGroup3.position.copy(EGG3_POSITION);
+        this.creatureGroup3.scale.setScalar(0.01);
+        this.scene.add(this.creatureGroup3);
+        this.tweens.add({
+          target: this.creatureGroup3.scale, prop: null, from: 0, to: 1, duration: 0.5,
+          onUpdate: (v) => this.creatureGroup3.scale.setScalar(v),
+        });
+      }
+    }
+  }
+
+  /**
+   * Garden Festival decor stages, earned by FREE order fills (derived from
+   * the saved fill counter, so reloads and context restores rebuild the
+   * same party). Additive: newly reached stages pop in with sparkles and
+   * earlier stages are never rebuilt or removed.
+   */
+  syncFestival(stageCount) {
+    this._lastFestival = stageCount || 0;
+    if (!this.festivalGroups) this.festivalGroups = [];
+    const builders = [gen.buildFestivalBunting, gen.buildFestivalPots, gen.buildFestivalLanterns, gen.buildFestivalBanner];
+    while (this.festivalGroups.length < Math.min(this._lastFestival, builders.length)) {
+      const index = this.festivalGroups.length;
+      const stage = builders[index](THREE);
+      this.scene.add(stage);
+      this.festivalGroups.push(stage);
+      const center = new THREE.Box3().setFromObject(stage).getCenter(new THREE.Vector3());
+      this.sparkles.spawn(center, '#ffd54f', 18);
+      this.tweens.pop(stage, { peak: 1.12, duration: 0.45 });
+    }
+  }
+
+  /**
+   * Fed-driven growth for the first creature (scale only -- the body/rig
+   * underneath is never edited). Called every frame; the hatch grow-in
+   * tween composes with it, and feed pops restore to it.
+   */
+  syncGrowth(scale) {
+    this._growth1 = scale || 1;
+    if (this.creatureGroup) this.creatureGroup.scale.setScalar(this._growth1);
+  }
+
+  /**
+   * The festival dance: every hatched creature hops high and spins for a
+   * few seconds -- unmistakably bigger than the idle hop. Session-only joy,
+   * never saved.
+   */
+  playCelebration(seconds = 6) {
+    this._danceUntil = this._sway + seconds;
+    for (const group of [this.creatureGroup, this.creatureGroup2, this.creatureGroup3]) {
+      if (group) this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.8, 0)), '#ffd54f', 14);
     }
   }
 
@@ -519,6 +620,10 @@ export class Diorama {
     if (this.creatureGroup2) this.tweens.pop(this.creatureGroup2, { peak: 1.3, duration: 0.45 });
   }
 
+  playCreature3Hop() {
+    if (this.creatureGroup3) this.tweens.pop(this.creatureGroup3, { peak: 1.3, duration: 0.45 });
+  }
+
   playFeedSparkle() {
     if (!this.creatureGroup) return;
     this.tweens.pop(this.creatureGroup, { peak: 1.3, duration: 0.4 });
@@ -545,6 +650,10 @@ export class Diorama {
         return this.creatureGroup2
           ? this.creatureGroup2.position.clone().add(new THREE.Vector3(0, this.creatureGroup2.userData.height + 0.1, 0))
           : EGG2_POSITION.clone().add(new THREE.Vector3(0, 1, 0));
+      case 'egg3':
+        return this.creatureGroup3
+          ? this.creatureGroup3.position.clone().add(new THREE.Vector3(0, this.creatureGroup3.userData.height + 0.1, 0))
+          : EGG3_POSITION.clone().add(new THREE.Vector3(0, 1, 0));
       case 'creature':
         // Just above its head, as for the egg: a fixed low offset put the arrow on its face.
         return this.creatureGroup
@@ -640,14 +749,41 @@ export class Diorama {
       this.egg2Group.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 2)) * 0.04;
     }
 
-    // Hatched creature idle hop.
+    // Water-egg wobble while it waits for its taps.
+    if (this.egg3Visible && this.egg3Group) {
+      this.egg3Group.rotation.z = Math.sin(this._sway * 4 + 2) * 0.06;
+      this.egg3Group.position.y = EGG3_POSITION.y + Math.abs(Math.sin(this._sway * 2 + 1)) * 0.04;
+    }
+
+    // Hatched creature idle hop -- or the festival dance (higher, spinning,
+    // unmistakable) while a celebration is running.
+    const dancing = this._sway < (this._danceUntil || 0);
     if (this.creatureGroup) {
-      this.creatureGroup.position.y = Math.abs(Math.sin(this._sway * 3)) * 0.15;
-      this.creatureGroup.rotation.y = Math.sin(this._sway * 0.7) * 0.4;
+      if (dancing) {
+        this.creatureGroup.position.y = Math.abs(Math.sin(this._sway * 7)) * 0.45;
+        this.creatureGroup.rotation.y += dt * 7;
+      } else {
+        this.creatureGroup.position.y = Math.abs(Math.sin(this._sway * 3)) * 0.15;
+        this.creatureGroup.rotation.y = Math.sin(this._sway * 0.7) * 0.4;
+      }
     }
     if (this.creatureGroup2) {
-      this.creatureGroup2.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 3 + 1)) * 0.15;
-      this.creatureGroup2.rotation.y = Math.sin(this._sway * 0.7 + 1) * 0.4;
+      if (dancing) {
+        this.creatureGroup2.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 7 + 1)) * 0.45;
+        this.creatureGroup2.rotation.y += dt * 7;
+      } else {
+        this.creatureGroup2.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 3 + 1)) * 0.15;
+        this.creatureGroup2.rotation.y = Math.sin(this._sway * 0.7 + 1) * 0.4;
+      }
+    }
+    if (this.creatureGroup3) {
+      if (dancing) {
+        this.creatureGroup3.position.y = EGG3_POSITION.y + Math.abs(Math.sin(this._sway * 7 + 2)) * 0.45;
+        this.creatureGroup3.rotation.y += dt * 7;
+      } else {
+        this.creatureGroup3.position.y = EGG3_POSITION.y + Math.abs(Math.sin(this._sway * 3 + 2)) * 0.15;
+        this.creatureGroup3.rotation.y = Math.sin(this._sway * 0.7 + 2) * 0.4;
+      }
     }
 
     this.tweens.update();

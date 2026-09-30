@@ -32,6 +32,11 @@ export class MarketPanel {
     this.npcLine.className = 'gq-npc-line';
     this.panel.appendChild(this.npcLine);
 
+    this.festivalEl = document.createElement('div');
+    this.festivalEl.className = 'gq-festival-line';
+    this.festivalEl.style.display = 'none';
+    this.panel.appendChild(this.festivalEl);
+
     this.bodyEl = document.createElement('div');
     this.panel.appendChild(this.bodyEl);
 
@@ -83,11 +88,14 @@ export class MarketPanel {
    *   offers: Array<{id:string, text:string, wants:Object, coins:number,
    *     canFulfill:boolean, haveByCrop:Object, cropNames:Object,
    *     perCropRate:number, keepByCrop:Object}>,
-   *   armor: {id:string,name:string,price:number,canAfford:boolean}|{soldOut:true}|null}} viewModel
+   *   armor: {id:string,name:string,price:number,canAfford:boolean}|{soldOut:true}|null,
+   *   festivalLine: string|null}} viewModel
    */
   render(viewModel) {
     this._lastViewModel = viewModel;
     this.npcLine.textContent = viewModel.npcGreeting || '';
+    this.festivalEl.textContent = viewModel.festivalLine || '';
+    this.festivalEl.style.display = viewModel.festivalLine ? 'block' : 'none';
 
     if (this.selectedOfferId) {
       const offer = viewModel.offers.find((o) => o.id === this.selectedOfferId);

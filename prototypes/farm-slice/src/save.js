@@ -20,6 +20,10 @@ export function saveGame(state) {
     if (state.secondEgg && state.secondEgg.hatchTaps) {
       toSave = { ...toSave, secondEgg: { ...toSave.secondEgg, hatchTaps: 0 } };
     }
+    // Water-egg taps likewise.
+    if (state.thirdEgg && state.thirdEgg.hatchTaps) {
+      toSave = { ...toSave, thirdEgg: { ...toSave.thirdEgg, hatchTaps: 0 } };
+    }
     const payload = JSON.stringify({ version: SAVE_VERSION, savedAt: Date.now(), state: toSave });
     window.localStorage.setItem(SAVE_KEY, payload);
     return true;

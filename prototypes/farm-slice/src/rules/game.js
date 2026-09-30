@@ -31,6 +31,80 @@ export const SECOND_EGG_CREATURE_ID = 'mossbun';
 export const SECOND_EGG_ELEMENT = 'leaf';
 
 /**
+ * Pip's Garden Festival (this package): every FREE order fill builds the
+ * visible party. Stages derive from the already-saved `freeOrderFills`
+ * counter, so decor needs no new save fields and any fill counts --
+ * including the always-growable 5-carrot crate, so the prize can never
+ * soft-lock behind finite seeds. The Water-egg prize lands at
+ * FESTIVAL_PRIZE_FILLS fills via the existing gift-counting path.
+ */
+export const FESTIVAL_STAGES = [
+  { fills: 1, id: 'bunting', name: 'bunting' },
+  { fills: 3, id: 'pots', name: 'flower pots' },
+  { fills: 5, id: 'lanterns', name: 'lanterns' },
+  { fills: 7, id: 'banner', name: 'festival banner' },
+];
+export const FESTIVAL_PRIZE_FILLS = 8;
+export const FESTIVAL_PRIZE_NAME = 'Water egg';
+export const THIRD_EGG_ELEMENT = 'water';
+
+/** Fed-driven growth for the first creature: small visible stages, capped. */
+export const GROWTH_PER_FED = 0.08;
+export const GROWTH_MAX_FEDS = 4;
+
+/** How many decor stages the given fill count has earned (0..4). */
+export function festivalStageCount(freeOrderFills) {
+  return FESTIVAL_STAGES.filter((s) => (freeOrderFills || 0) >= s.fills).length;
+}
+
+/**
+ * The deterministic next festival target, or null once the prize is
+ * earned: { fillsNeeded, name } where name is a stage or the prize.
+ */
+export function festivalNext(freeOrderFills) {
+  const fills = freeOrderFills || 0;
+  if (fills >= FESTIVAL_PRIZE_FILLS) return null;
+  const stage = FESTIVAL_STAGES.find((s) => fills < s.fills);
+  if (stage) return { fillsNeeded: stage.fills - fills, name: stage.name };
+  return { fillsNeeded: FESTIVAL_PRIZE_FILLS - fills, name: FESTIVAL_PRIZE_NAME };
+}
+
+/** True once the Water-egg prize has been earned (the egg exists). */
+export function festivalPrizeEarned(state) {
+  return !!state.thirdEgg;
+}
+
+/** The first creature's visible growth scale from its saved feed count. */
+export function creatureGrowthScale(state) {
+  const id = state.egg.hatchedCreatureId;
+  const fed = id ? state.collection.fed?.[id] || 0 : 0;
+  return 1 + GROWTH_PER_FED * Math.min(fed, GROWTH_MAX_FEDS);
+}
+
+/** The creature the Water egg would hatch into right now, or null once hatched (or before the prize). */
+export function nextThirdHatchCreatureId(state, content) {
+  if (!state.thirdEgg || state.thirdEgg.hatched) return null;
+  return egg.pickCreature(state.thirdEgg, content.CREATURES)?.id ?? null;
+}
+
+/**
+ * One child tap on the Water egg. Ungated like the earlier hatches: drama
+ * until the last tap, then the creature joins the collection and can be
+ * named like any other. Safe no-op before the prize or after hatching.
+ */
+export function tapThirdEgg(state, content, now) {
+  if (!state.thirdEgg || state.thirdEgg.hatched) {
+    return { state, hatchedCreatureId: null, hatched: false };
+  }
+  const { eggState, hatchedCreatureId, hatched } = egg.tapEgg(state.thirdEgg, content.CREATURES);
+  let next = { ...state, thirdEgg: eggState };
+  if (hatched) {
+    next = { ...next, collection: collection.discoverCreature(next.collection, hatchedCreatureId) };
+  }
+  return { state: next, hatchedCreatureId, hatched };
+}
+
+/**
  * Minutes 10-30 tease (CONTRACT.md section 5 item 3): the older player's
  * third card (6 carrots + 2 sunberries → 26), served on a persistent
  * refillable order board in FREE play. The board lane
@@ -90,6 +164,9 @@ export function createGameState(now, numPlots = NUM_PLOTS) {
     starSeeds: 0,
     freeOrderFills: 0,
     secondEgg: null,
+    // Garden Festival prize (this package): Pip's Water egg. Old saves gain
+    // it as null via migrateRetention and earn it through the same fills.
+    thirdEgg: null,
     // P2 order board (CONTRACT.md section 5 item 3): persistent refillable
     // orders in FREE play. Created on FREE entry; old saves gain it on load.
     orderBoard: null,
@@ -104,6 +181,7 @@ export function migrateRetention(state) {
     starSeeds: 0,
     freeOrderFills: 0,
     secondEgg: null,
+    thirdEgg: null,
     orderBoard: null,
     ...state,
   };
@@ -258,6 +336,9 @@ export function currentGoal(state, content, now) {
       }
       if (state.secondEgg && !state.secondEgg.hatched) {
         return { step, text: 'Tap the Leaf egg!', targetKey: 'egg2' };
+      }
+      if (state.thirdEgg && !state.thirdEgg.hatched) {
+        return { step, text: 'Tap the Water egg!', targetKey: 'egg3' };
       }
       // Always an obvious next step: only send the child to Pip when a
       // board order can actually be filled; otherwise pick, plant or wait.
@@ -429,8 +510,10 @@ export function canFulfillOffer(state, offerDef) {
 /**
  * Count one FREE order fill toward Pip's gift (CONTRACT.md section 5 item 2:
  * 2 more FREE fills earn one plantable star seed plus a ready (ungated) Leaf
- * second egg). Granted exactly once; the gift dialog is announcement-only.
- * Shared by direct and board fills so both count identically.
+ * second egg) and toward the Garden Festival prize (FESTIVAL_PRIZE_FILLS
+ * fills earn a ready (ungated) Water third egg). Each granted exactly once;
+ * the gift dialog is announcement-only. Shared by direct and board fills so
+ * both count identically.
  */
 function applyFreeFillReward(state) {
   const fills = (state.freeOrderFills || 0) + 1;
@@ -448,6 +531,21 @@ function applyFreeFillReward(state) {
         requiredHatchTaps: egg.REQUIRED_HATCH_TAPS,
         hatched: false,
         elementHint: SECOND_EGG_ELEMENT,
+        hatchedCreatureId: null,
+      },
+    };
+  }
+  if (fills >= FESTIVAL_PRIZE_FILLS && !state.thirdEgg) {
+    next = {
+      ...next,
+      thirdEgg: {
+        cracks: 0,
+        maxCracks: egg.MAX_CRACKS,
+        readyToHatch: true,
+        hatchTaps: 0,
+        requiredHatchTaps: egg.REQUIRED_HATCH_TAPS,
+        hatched: false,
+        elementHint: THIRD_EGG_ELEMENT,
         hatchedCreatureId: null,
       },
     };
