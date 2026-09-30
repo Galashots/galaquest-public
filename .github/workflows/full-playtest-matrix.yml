@@ -84,6 +84,7 @@ jobs:
           - drive-helmet-vertical
           - drive-drop-collect
           - drive-corpse-loot
+          - capture-farm
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

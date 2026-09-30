@@ -99,6 +99,12 @@ export const HARNESSES = {
   // wire, touch interactions, presenter, collection round trip, final-item receipt, toast and Hero
   // button pulse all stay real. A non-zero exit therefore means the player-facing loop did not prove.
   'drive-corpse-loot': { gate: true, why: 'personal corpse loot client presenter, end to end and fully gating: a real fought kill spawns a real personal claim (contents fixtured through net/gameServerCore.mjs\'s opt-in guaranteedCorpseItemIds, so no unseeded gear roll decides whether this gate can run), then real touch dispatch drives glow/prompt -> panel -> individual TAKE -> Take All on the last item -> acquired-item toast and Hero-button pulse. No best-effort tier: a red run is a real regression' },
+  // The farm game's own running-pixels capture. It is a gate, but only over the mechanical facts a
+  // script can answer honestly -- the checkout serves /farm/, the game boots at 1024x768 and
+  // 768x1024 with touch emulation live, no browser console/runtime error fires, and cleanup is
+  // confirmed. Its PNGs are diagnostic evidence for a person, never an appearance PASS: the receipt
+  // says so in as many words, and acceptance remains iPad Safari and human visual judgment.
+  'capture-farm': { gate: true, why: 'farm running-pixels capture: serves /farm/ from the named checkout at both iPad viewports with touch emulation, gates boot and console/runtime errors, confirms its own server/browser/profile teardown, and binds the captures to exact served+driver SHAs' },
 };
 /**
  * `full` is deliberately every RUNNING-GAME harness and nothing else. It is not "the whole test
@@ -117,5 +123,6 @@ export const SUITES = {
     'drive-village-board', 'drive-old-beacon', 'drive-beacon-siege', 'drive-ranger',
     'drive-profile-gate', 'drive-recovery', 'drive-guidance-rescue', 'drive-first-level-up',
     'drive-e2-enemy', 'drive-helmet-vertical', 'drive-drop-collect', 'drive-corpse-loot',
+    'capture-farm',
   ],
 };
