@@ -2,7 +2,8 @@
 // disabled storage must never crash the game). Versioned JSON so future
 // shape changes can migrate instead of silently breaking old saves.
 
-import { SAVE_VERSION, createGameState, migrateRetention } from './rules/game.js';
+import { SAVE_VERSION, createGameState, migrateRetention, ensureOrderBoard } from './rules/game.js';
+import * as content from '../content/index.js';
 
 const SAVE_KEY = 'gq.farmSlice.v1';
 
@@ -49,8 +50,9 @@ function readKey(key) {
 export function loadGame(now) {
   try {
     const current = readKey(SAVE_KEY);
-    // Additive P1 retention fields default in; the schema stays version 1.
-    if (current) return { state: migrateRetention(current), isNewGame: false };
+    // Additive P1/P2 retention fields default in; the schema stays version 1.
+    // FREE saves gain the persistent order board on load (deterministic).
+    if (current) return { state: ensureOrderBoard(migrateRetention(current), content), isNewGame: false };
 
     return { state: createGameState(now), isNewGame: true };
   } catch (err) {

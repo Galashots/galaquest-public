@@ -15,6 +15,7 @@ import * as armor from './armor.js';
 import * as egg from './egg.js';
 import * as collection from './collection.js';
 import * as goals from './goals.js';
+import * as orderBoard from '../depth/orders.js';
 
 export const SAVE_VERSION = 1;
 export const NUM_PLOTS = 3;
@@ -28,6 +29,16 @@ export const SUN_CREST_FEDS = 3;
 export const GIFT_FILLS_REQUIRED = 2;
 export const SECOND_EGG_CREATURE_ID = 'mossbun';
 export const SECOND_EGG_ELEMENT = 'leaf';
+
+/**
+ * Minutes 10-30 tease (CONTRACT.md section 5 item 3): the older player's
+ * third card (6 carrots + 2 sunberries → 26), served on a persistent
+ * refillable order board in FREE play. The board lane
+ * (`src/depth/orders.js`) is reused read-only; the shell curates which
+ * offers reach it (below) and owns inventory, coins and saves.
+ */
+export const BIG_ORDER_OFFER_ID = 'pip_big_order';
+export const BOARD_SEED = 1;
 
 /** Builds a cropId->def lookup map from content.CROPS. */
 export function cropsById(content) {
@@ -79,10 +90,13 @@ export function createGameState(now, numPlots = NUM_PLOTS) {
     starSeeds: 0,
     freeOrderFills: 0,
     secondEgg: null,
+    // P2 order board (CONTRACT.md section 5 item 3): persistent refillable
+    // orders in FREE play. Created on FREE entry; old saves gain it on load.
+    orderBoard: null,
   };
 }
 
-/** Fill additive P1 defaults onto a loaded state (pre-P1 v1 saves stay valid). */
+/** Fill additive P1/P2 defaults onto a loaded state (pre-P1 v1 saves stay valid). */
 export function migrateRetention(state) {
   return {
     giftEarned: false,
@@ -90,8 +104,50 @@ export function migrateRetention(state) {
     starSeeds: 0,
     freeOrderFills: 0,
     secondEgg: null,
+    orderBoard: null,
     ...state,
   };
+}
+
+/**
+ * The offers the FREE order board may serve, curated to what FREE play can
+ * actually grow (P2 seed-economy review): Pip's crate + bundle for both
+ * bands, plus the third big order for the older band. Wheat, pumpkin,
+ * dewmelon, glowleaf and 4-sunberry band offers stay off the board -- the
+ * slice never grows those, so surfacing them would ship impossible orders.
+ * The lane requires a `band` per offer; the shell stamps it on copies while
+ * the shared content stays untouched.
+ */
+export function boardOffers(content, band) {
+  const curated = content.OFFERS
+    .filter((o) => o.id === 'pip_crate' || o.id === 'pip_bundle' ||
+      (band === 'older' && o.id === BIG_ORDER_OFFER_ID))
+    .map((o) => ({ ...o, band }));
+  return curated;
+}
+
+/**
+ * Create the FREE order board once (deterministic seed, one slot per curated
+ * offer). No-op before the band is known, outside FREE, or once built --
+ * board fills never shrink it, the lane redraws fulfilled orders in place.
+ */
+export function ensureOrderBoard(state, content) {
+  if (!state.band || goals.currentStep(state.goals) !== 'free') return state;
+  // A later band switch rebuilds the board for the new band (2 vs 3 cards);
+  // fills never shrink it, the lane redraws fulfilled orders in place.
+  if (state.orderBoard && state.orderBoard.band === state.band) return state;
+  const curated = boardOffers(content, state.band);
+  if (!curated.length) return state;
+  return {
+    ...state,
+    orderBoard: orderBoard.createOrderBoard({ offers: curated, band: state.band, seed: BOARD_SEED, slots: curated.length }),
+  };
+}
+
+/** The board's open orders with content text, or [] before FREE play. */
+export function openBoardOrders(state, content) {
+  if (!state.orderBoard) return [];
+  return orderBoard.getOpenOrders(state.orderBoard, boardOffers(content, state.orderBoard.band));
 }
 
 /** A grown-up picks the band once at the start; the economy never changes, only presentation. */
@@ -204,8 +260,13 @@ export function currentGoal(state, content, now) {
         return { step, text: 'Tap the Leaf egg!', targetKey: 'egg2' };
       }
       // Always an obvious next step: only send the child to Pip when a
-      // crate can actually be filled; otherwise pick, plant or wait.
-      if (content.OFFERS.some((o) => economy.canFulfillOffer(state.basket, o))) {
+      // board order can actually be filled; otherwise pick, plant or wait.
+      // (Board-aware once FREE opens it, so unreachable band-catalog offers
+      // can never summon the arrow; legacy boardless states keep the old check.)
+      const fillable = state.orderBoard
+        ? openBoardOrders(state, content).some((o) => economy.canFulfillOffer(state.basket, o))
+        : content.OFFERS.some((o) => economy.canFulfillOffer(state.basket, o));
+      if (fillable) {
         return { step, text: 'Pip wants more carrots', targetKey: 'market' };
       }
       const ready = readyPlotIndexes(state, content, now);
@@ -330,6 +391,7 @@ export function harvestPlot(state, content, plotIndex, now) {
     next = { ...next, egg: egg.addCrack(next.egg), goals: goals.advanceGoal(next.goals) }; // HARVEST -> MARKET, crack 2
   } else if (step === 'replant' && (state.replantPlanted || 0) >= 3 && farm.allPlotsEmpty(farmState)) {
     next = { ...next, goals: goals.advanceGoal(next.goals) }; // REPLANT -> FREE, no crack
+    next = ensureOrderBoard(next, content); // the persistent board opens with FREE play
   }
   return { state: next, harvestedCropId };
 }
@@ -357,42 +419,95 @@ export function canFulfillOffer(state, offerDef) {
   return ['offer', 'free'].includes(goals.currentStep(state.goals)) && economy.canFulfillOffer(state.basket, offerDef);
 }
 
+/**
+ * Count one FREE order fill toward Pip's gift (CONTRACT.md section 5 item 2:
+ * 2 more FREE fills earn one plantable star seed plus a ready (ungated) Leaf
+ * second egg). Granted exactly once; the gift dialog is announcement-only.
+ * Shared by direct and board fills so both count identically.
+ */
+function applyFreeFillReward(state) {
+  const fills = (state.freeOrderFills || 0) + 1;
+  let next = { ...state, freeOrderFills: fills };
+  if (fills >= GIFT_FILLS_REQUIRED && !state.giftEarned) {
+    next = {
+      ...next,
+      giftEarned: true,
+      starSeeds: (state.starSeeds || 0) + 1,
+      secondEgg: {
+        cracks: 0,
+        maxCracks: egg.MAX_CRACKS,
+        readyToHatch: true,
+        hatchTaps: 0,
+        requiredHatchTaps: egg.REQUIRED_HATCH_TAPS,
+        hatched: false,
+        elementHint: SECOND_EGG_ELEMENT,
+        hatchedCreatureId: null,
+      },
+    };
+  }
+  return next;
+}
+
+function offersFilledKey(offerId) {
+  if (offerId === 'pip_crate') return 'crate';
+  if (offerId === 'pip_bundle') return 'bundle';
+  if (offerId === BIG_ORDER_OFFER_ID) return 'big';
+  return null;
+}
+
+/**
+ * Fill one open board order by its instance id. The lane spends the crops
+ * and redraws the board (persistent refillable orders, never expiring); the
+ * shell adds the coins and applies the same FREE-fill counting as a direct
+ * fill. Lane errors (unknown or unfillable order) are safe no-ops.
+ */
+export function fulfillBoardOrder(state, content, orderId, now) {
+  if (goals.currentStep(state.goals) !== 'free' || !state.orderBoard) return { state, success: false };
+  let filled;
+  try {
+    filled = orderBoard.fulfillOrder({
+      board: state.orderBoard,
+      orderId,
+      inventory: { ...state.basket.crops },
+      offers: boardOffers(content, state.orderBoard.band),
+    });
+  } catch {
+    return { state, success: false };
+  }
+  const key = offersFilledKey(filled.fulfilledOfferId);
+  let next = {
+    ...state,
+    orderBoard: filled.board,
+    basket: { ...state.basket, crops: filled.inventory, coins: state.basket.coins + filled.coinsEarned },
+    offersFilled: key
+      ? { ...state.offersFilled, [key]: (state.offersFilled?.[key] || 0) + 1 } : state.offersFilled,
+  };
+  next = applyFreeFillReward(next);
+  return { state: next, success: true, fulfilledOfferId: filled.fulfilledOfferId, coinsEarned: filled.coinsEarned };
+}
+
 /** Fulfil a market offer. Never punishes a short/wrong pick -- a failed attempt changes nothing. */
 export function fulfillOffer(state, content, offerId, now) {
+  // In FREE play with a board, route through the matching open order so the
+  // board and the basket stay consistent (one code path for coins/gifts).
+  if (goals.isStep(state.goals, 'free') && state.orderBoard) {
+    const open = openBoardOrders(state, content).find((o) => o.offerId === offerId);
+    if (open) return fulfillBoardOrder(state, content, open.id, now);
+  }
   const offerDef = findById(content.OFFERS, offerId);
   if (!offerDef || !canFulfillOffer(state, offerDef)) return { state, success: false };
 
   const { basketState, success } = economy.fulfillOffer(state.basket, offerDef);
   if (!success) return { state, success: false };
 
-  const key = offerId === 'pip_crate' ? 'crate' : offerId === 'pip_bundle' ? 'bundle' : null;
+  const key = offersFilledKey(offerId);
   let next = { ...state, basket: basketState, offersFilled: key
     ? { ...state.offersFilled, [key]: (state.offersFilled?.[key] || 0) + 1 } : state.offersFilled };
   if (goals.isStep(state.goals, 'offer')) {
     next = { ...next, egg: egg.addCrack(next.egg), goals: goals.advanceGoal(next.goals) }; // OFFER -> ARMOR, crack 3
   } else if (goals.isStep(state.goals, 'free')) {
-    // CONTRACT.md section 5 item 2: 2 more FREE fills earn Pip's gift -- one
-    // plantable star seed plus a ready (ungated) Leaf second egg. Granted
-    // exactly once; the gift dialog is announcement-only.
-    const fills = (state.freeOrderFills || 0) + 1;
-    next = { ...next, freeOrderFills: fills };
-    if (fills >= GIFT_FILLS_REQUIRED && !state.giftEarned) {
-      next = {
-        ...next,
-        giftEarned: true,
-        starSeeds: (state.starSeeds || 0) + 1,
-        secondEgg: {
-          cracks: 0,
-          maxCracks: egg.MAX_CRACKS,
-          readyToHatch: true,
-          hatchTaps: 0,
-          requiredHatchTaps: egg.REQUIRED_HATCH_TAPS,
-          hatched: false,
-          elementHint: SECOND_EGG_ELEMENT,
-          hatchedCreatureId: null,
-        },
-      };
-    }
+    next = applyFreeFillReward(next);
+    next = ensureOrderBoard(next, content); // boardless FREE states gain the board on first fill
   }
   return { state: next, success: true };
 }

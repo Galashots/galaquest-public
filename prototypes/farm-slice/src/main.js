@@ -124,7 +124,13 @@ function refresh() {
 
 function renderMarket() {
   const cropNames = Object.fromEntries(content.CROPS.map((c) => [c.id, c.name]));
-  const offers = content.OFFERS.slice(0, 2).map((o) => ({
+  // In FREE play the market shows the persistent order board (both bands see
+  // open/fillable orders; the older band additionally sees the third card).
+  // Before FREE, the contract-path crate/bundle choice stays exactly two cards.
+  const defs = step() === 'free' && state.orderBoard
+    ? game.openBoardOrders(state, content)
+    : content.OFFERS.slice(0, 2);
+  const offers = defs.map((o) => ({
     ...o,
     canFulfill: game.canFulfillOffer(state, o),
     paused: !['offer', 'free'].includes(step()),
@@ -151,14 +157,20 @@ function openMarket() {
   audio.say(content.NPCS[0].greeting);
 }
 function closeMarket() { market.close(); diorama.setMarketOpen(false); refresh(); }
-function handleFulfillOffer(offerId) {
+function handleFulfillOffer(id) {
   const previous = state;
-  const result = game.fulfillOffer(state, content, offerId, Date.now());
+  // Board cards carry order instance ids in FREE play; legacy states use offer ids.
+  const useBoard = step() === 'free' && state.orderBoard;
+  const result = useBoard
+    ? game.fulfillBoardOrder(state, content, id, Date.now())
+    : game.fulfillOffer(state, content, id, Date.now());
   if (!result.success) return;
   state = result.state;
   audio.sfx.coin();
   diorama.playOfferSparkle();
-  const paid = content.OFFERS.find((o) => o.id === offerId).coins;
+  const paid = useBoard
+    ? (result.coinsEarned || 0)
+    : (content.OFFERS.find((o) => o.id === id)?.coins || 0);
   audio.say(Array.from({length: paid / 2}, (_, i) => (i + 1) * 2).join(', '));
   hud.showToast(`+${paid} coins · ${Array.from({length: paid / 2}, (_, i) => (i + 1) * 2).join(', ')}`, 2500);
   market.selectedOfferId = null;
@@ -260,6 +272,7 @@ hud.onMuteToggle(() => hud.setMuted(audio.toggleMuted()));
 function handlePickBand(band) {
   const previous = state;
   state = game.setBand(state, band);
+  state = game.ensureOrderBoard(state, content); // a band switch rebuilds the FREE board
   bandDialog.close();
   applyResult(previous);
 }
