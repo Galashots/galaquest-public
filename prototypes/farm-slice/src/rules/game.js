@@ -289,9 +289,16 @@ export function currentGoal(state, content, now) {
   }
 }
 
-/** The next armor piece standing on the market mannequin, or null once every piece is owned. */
+/**
+ * The next armor piece standing on the market mannequin: the first unowned
+ * piece of the Sprout set in content order (helmet -> vest -> boots ->
+ * shield), or null once the whole set is owned (the sold-out state). Later
+ * sets (Ember and beyond) are never offered here -- this package is the
+ * Sprout outfit only, so no other set can leak onto the mannequin.
+ */
+export const SHOP_ARMOR_SET = 'Sprout';
 export function nextArmorForSale(state, content) {
-  return content.ARMOR.find((a) => !state.armor.owned.includes(a.id)) || null;
+  return content.ARMOR.find((a) => a.set === SHOP_ARMOR_SET && !state.armor.owned.includes(a.id)) || null;
 }
 
 /** All armor pieces currently equipped, resolved to their content defs (for the renderer). */
@@ -547,10 +554,10 @@ export function tapSecondEgg(state, content, now) {
   return { state: next, hatchedCreatureId, hatched };
 }
 
-/** Buy + immediately equip armor from the mannequin. */
+/** Buy + immediately equip armor from the mannequin (Sprout set only -- other sets are never for sale in this package). */
 export function buyArmor(state, content, armorId, now) {
   const armorDef = findById(content.ARMOR, armorId);
-  if (!armorDef) return { state, success: false };
+  if (!armorDef || armorDef.set !== SHOP_ARMOR_SET) return { state, success: false };
 
   const { armorState, basketState, success } = armor.buyArmor(state.armor, state.basket, armorDef);
   if (!success) return { state, success: false };

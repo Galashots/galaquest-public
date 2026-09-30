@@ -83,7 +83,7 @@ export class MarketPanel {
    *   offers: Array<{id:string, text:string, wants:Object, coins:number,
    *     canFulfill:boolean, haveByCrop:Object, cropNames:Object,
    *     perCropRate:number, keepByCrop:Object}>,
-   *   armor: {id:string,name:string,price:number,canAfford:boolean}|null}} viewModel
+   *   armor: {id:string,name:string,price:number,canAfford:boolean}|{soldOut:true}|null}} viewModel
    */
   render(viewModel) {
     this._lastViewModel = viewModel;
@@ -292,7 +292,23 @@ export class MarketPanel {
   }
 
   _renderArmorRow(viewModel) {
-    if (viewModel.armor) {
+    if (viewModel.armor && viewModel.armor.soldOut) {
+      // The whole Sprout set is owned: celebrate, offer nothing more.
+      this.armorRow.style.display = 'flex';
+      this.armorRow.innerHTML = '';
+      const done = document.createElement('div');
+      done.className = 'gq-armor-name';
+      done.textContent = 'Sprout set complete! 🎉';
+      this.armorRow.appendChild(done);
+      this.armorBuyBtn = null;
+    } else if (viewModel.armor) {
+      // A new piece rotates onto the row: drop any leftover coin taps.
+      if (viewModel.armor.id !== this._armorId) {
+        this._armorId = viewModel.armor.id;
+        this._coinTaps = 0;
+      }
+      // Every shop price is even (2-coin economy): taps needed = price / 2.
+      const tapsNeeded = viewModel.armor.price / 2;
       this.armorRow.style.display = 'flex';
       this.armorRow.innerHTML = '';
 
@@ -313,7 +329,7 @@ export class MarketPanel {
       if (viewModel.band === 'younger') {
         const outlines = document.createElement('div');
         outlines.className = 'gq-coin-outlines';
-        outlines.textContent = Array.from({length: 5}, (_, i) => i < (this._coinTaps || 0) ? '🪙' : '◯').join(' ');
+        outlines.textContent = Array.from({length: tapsNeeded}, (_, i) => i < (this._coinTaps || 0) ? '🪙' : '◯').join(' ');
         this.armorRow.appendChild(outlines);
       }
       buyBtn.addEventListener('click', () => {
@@ -321,7 +337,7 @@ export class MarketPanel {
         if (viewModel.band === 'younger') {
           this._coinTaps = (this._coinTaps || 0) + 1;
           this._onCoinTap?.(this._coinTaps * 2);
-          if (this._coinTaps < 5) { this.render(this._lastViewModel); return; }
+          if (this._coinTaps < tapsNeeded) { this.render(this._lastViewModel); return; }
           this._coinTaps = 0;
         }
         this._onBuyArmor && this._onBuyArmor(viewModel.armor.id);

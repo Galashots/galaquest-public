@@ -46,7 +46,7 @@ The sign is for reference only; the offers are the only way to sell. Both offers
 | Trade-off | Fewer coins, but an extra sunberry for Sprout | 3 more coins' worth, but one less sunberry |
 | The other card then shows | "Needs 1 more carrot" | "Needs 1 more carrot" |
 
-**Armor.** The Leaf Crest Helmet costs **10 coins**. It is cosmetic only and has no stats.
+**Armor.** Pip's mannequin sells the full **Sprout set**, one piece at a time in content order: Leaf Crest Helmet **10**, Sprout Vest **6**, Sprout Boots **6**, Sprout Shield **8**. Every piece is cosmetic only and has no stats. Each purchase equips immediately with the existing fanfare; once the set is complete the mannequin stands empty and the market row reads "Sprout set complete!". Every price is even (payable in 2-coins) and fits inside the biggest single payout, so the set stays reachable in FREE play. Later sets are never offered here.
 
 **Always affordable.** Either offer covers the helmet: min(10, 12) = 10 ≥ 10. The first harvest (6C, 2S) fills either offer: for A, 6 ≥ 5; for B, 6 ≥ 2 and 2 ≥ 1.
 

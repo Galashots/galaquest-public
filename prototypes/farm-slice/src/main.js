@@ -50,7 +50,7 @@ function applyResult(previous) {
 function syncVisuals(now) {
   diorama.syncFarm(state.farm, now);
   diorama.syncArmor(game.equippedArmorDefs(state, content),
-    step() === 'armor' || step() === 'offer' || step() === 'market' ? content.ARMOR[0] : null);
+    ['market', 'offer', 'armor', 'free'].includes(step()) ? game.nextArmorForSale(state, content) : null);
   diorama.syncEgg(state.egg);
   diorama.preloadCreature(game.nextHatchCreatureId(state, content));
   diorama.syncSecondEgg(state.secondEgg);
@@ -138,12 +138,12 @@ function renderMarket() {
     keepByCrop: Object.fromEntries(['carrot', 'sunberry'].map((id) => [id, Math.max(0, economy.countOf(state.basket, id) - (o.wants[id] || 0))])),
     perCropRate: o.coins / Object.values(o.wants).reduce((a, b) => a + b, 0),
   }));
-  const armorDef = content.ARMOR[0];
+  const armorDef = game.nextArmorForSale(state, content);
   market.render({ npcGreeting: content.NPCS[0].greeting, band: state.band, offers,
-    armor: state.armor.owned.includes(armorDef.id) ? null : {
+    armor: armorDef ? {
       id: armorDef.id, name: armorDef.name, price: armorDef.price,
       canAfford: economy.canAfford(state.basket, armorDef.price), coins: state.basket.coins,
-    } });
+    } : { soldOut: true } });
 }
 function openMarket() {
   const previous = state;
@@ -196,7 +196,10 @@ function handleBuyArmor(armorId) {
   state = result.state;
   audio.sfx.equip();
   diorama.playEquipSparkle();
-  hud.showToast(previous.basket.coins === 12 ? '12 − 10 = 2' : 'Helmet on!');
+  const boughtDef = content.ARMOR.find((a) => a.id === armorId);
+  const paid = previous.basket.coins - state.basket.coins;
+  hud.showToast(state.band === 'younger' ? `${boughtDef ? boughtDef.name : 'Gear'} on!`
+    : `${previous.basket.coins} − ${paid} = ${state.basket.coins}`);
   applyResult(previous);
   renderMarket();
   if (step() === 'hatch') setTimeout(closeMarket, 700);
