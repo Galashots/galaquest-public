@@ -19,6 +19,16 @@ import * as goals from './goals.js';
 export const SAVE_VERSION = 1;
 export const NUM_PLOTS = 3;
 
+/**
+ * Minutes 10-30 tease (CONTRACT.md section 5): 3 fed sunberries bloom the
+ * first creature's sun crest; 2 FREE order fills earn Pip's gift (one
+ * plantable star seed plus a ready Leaf egg for SECOND_EGG_CREATURE_ID).
+ */
+export const SUN_CREST_FEDS = 3;
+export const GIFT_FILLS_REQUIRED = 2;
+export const SECOND_EGG_CREATURE_ID = 'mossbun';
+export const SECOND_EGG_ELEMENT = 'leaf';
+
 /** Builds a cropId->def lookup map from content.CROPS. */
 export function cropsById(content) {
   const map = new Map();
@@ -62,6 +72,25 @@ export function createGameState(now, numPlots = NUM_PLOTS) {
     offersFilled: { crate: 0, bundle: 0 },
     createdAt: now,
     replantPlanted: 0,
+    // P1 retention (CONTRACT.md section 5): Pip's gift + second egg. Old v1
+    // saves predate these fields; save.js migrates them to these defaults.
+    giftEarned: false,
+    giftOpened: false,
+    starSeeds: 0,
+    freeOrderFills: 0,
+    secondEgg: null,
+  };
+}
+
+/** Fill additive P1 defaults onto a loaded state (pre-P1 v1 saves stay valid). */
+export function migrateRetention(state) {
+  return {
+    giftEarned: false,
+    giftOpened: false,
+    starSeeds: 0,
+    freeOrderFills: 0,
+    secondEgg: null,
+    ...state,
   };
 }
 
@@ -167,6 +196,13 @@ export function currentGoal(state, content, now) {
 
     case 'free':
     default: {
+      // Retention novelties first: an unopened gift, then the Leaf egg.
+      if (state.giftEarned && !state.giftOpened) {
+        return { step, text: 'Pip has a gift for you!', targetKey: 'market' };
+      }
+      if (state.secondEgg && !state.secondEgg.hatched) {
+        return { step, text: 'Tap the Leaf egg!', targetKey: 'egg2' };
+      }
       // Always an obvious next step: only send the child to Pip when a
       // crate can actually be filled; otherwise pick, plant or wait.
       if (content.OFFERS.some((o) => economy.canFulfillOffer(state.basket, o))) {
@@ -175,7 +211,10 @@ export function currentGoal(state, content, now) {
       const ready = readyPlotIndexes(state, content, now);
       if (ready.length) return { step, text: 'Pick your crops', targetKey: 'ripeCrop', plotIndex: ready[0] };
       const empty = state.farm.plots.findIndex((p) => !p.cropId);
-      if (empty >= 0) return { step, text: 'Plant more carrots', targetKey: 'plot', plotIndex: empty };
+      if (empty >= 0) {
+        if ((state.starSeeds || 0) > 0) return { step, text: 'Plant your star seed!', targetKey: 'plot', plotIndex: empty };
+        return { step, text: 'Plant more carrots', targetKey: 'plot', plotIndex: empty };
+      }
       const unwatered = unwateredGrowingPlotIndexes(state, content, now);
       if (unwatered.length) return { step, text: 'Water your sprouts', targetKey: 'sprout', plotIndex: unwatered[0] };
       // Every plot is planted and watered: the shortest wait in the slice
@@ -205,10 +244,33 @@ export function equippedArmorDefs(state, content) {
 
 // -- Actions --------------------------------------------------------------
 
+/**
+ * Seeds still plantable right now in FREE play: unlimited carrots plus one
+ * slot per gifted star seed (CONTRACT.md section 5: the gift's star seed is
+ * the only non-carrot seed past 10:00, so the crest stays reachable without
+ * changing the first tray or the REPLANT carrot beat).
+ */
+export function freeRemainingSeeds(state) {
+  const empty = state.farm.plots.filter((p) => !p.cropId).length;
+  const seeds = new Array(empty).fill('carrot');
+  const stars = Math.min(state.starSeeds || 0, empty);
+  for (let i = 0; i < stars; i++) seeds[i] = 'sunberry';
+  return seeds;
+}
+
 /** Plant one selected seed in one empty hole. The first tray has two carrots and one star seed. */
 export function plantPlot(state, content, plotIndex, cropId, now) {
   const step = goals.currentStep(state.goals);
   if (!['plant', 'replant', 'free'].includes(step)) return { state, planted: false };
+  if (step === 'free') {
+    if (cropId !== 'carrot' && cropId !== 'sunberry') return { state, planted: false };
+    if (cropId === 'sunberry' && (state.starSeeds || 0) < 1) return { state, planted: false };
+    const farmState = farm.plantSeed(state.farm, plotIndex, cropId, now);
+    if (farmState === state.farm) return { state, planted: false };
+    const next = { ...state, farm: farmState };
+    if (cropId === 'sunberry') next.starSeeds = (state.starSeeds || 0) - 1;
+    return { state: next, planted: true };
+  }
   const allowed = step === 'plant'
     ? choosePlantingRecipe(content, state.farm.plots.length)
     : new Array(state.farm.plots.length).fill('carrot');
@@ -308,8 +370,66 @@ export function fulfillOffer(state, content, offerId, now) {
     ? { ...state.offersFilled, [key]: (state.offersFilled?.[key] || 0) + 1 } : state.offersFilled };
   if (goals.isStep(state.goals, 'offer')) {
     next = { ...next, egg: egg.addCrack(next.egg), goals: goals.advanceGoal(next.goals) }; // OFFER -> ARMOR, crack 3
+  } else if (goals.isStep(state.goals, 'free')) {
+    // CONTRACT.md section 5 item 2: 2 more FREE fills earn Pip's gift -- one
+    // plantable star seed plus a ready (ungated) Leaf second egg. Granted
+    // exactly once; the gift dialog is announcement-only.
+    const fills = (state.freeOrderFills || 0) + 1;
+    next = { ...next, freeOrderFills: fills };
+    if (fills >= GIFT_FILLS_REQUIRED && !state.giftEarned) {
+      next = {
+        ...next,
+        giftEarned: true,
+        starSeeds: (state.starSeeds || 0) + 1,
+        secondEgg: {
+          cracks: 0,
+          maxCracks: egg.MAX_CRACKS,
+          readyToHatch: true,
+          hatchTaps: 0,
+          requiredHatchTaps: egg.REQUIRED_HATCH_TAPS,
+          hatched: false,
+          elementHint: SECOND_EGG_ELEMENT,
+          hatchedCreatureId: null,
+        },
+      };
+    }
   }
   return { state: next, success: true };
+}
+
+/** The gift dialog was opened and its contents announced; the grant itself happened at earn time. */
+export function openGift(state) {
+  if (!state.giftEarned || state.giftOpened) return state;
+  return { ...state, giftOpened: true };
+}
+
+/** True once the first creature has been fed SUN_CREST_FEDS sunberries: its sun crest blooms. */
+export function hasSunCrest(state) {
+  const id = state.egg.hatchedCreatureId;
+  return !!id && (state.collection.fed?.[id] || 0) >= SUN_CREST_FEDS;
+}
+
+/** The creature the Leaf egg would hatch into right now, or null once hatched (or before the gift). */
+export function nextSecondHatchCreatureId(state, content) {
+  if (!state.secondEgg || state.secondEgg.hatched) return null;
+  return egg.pickCreature(state.secondEgg, content.CREATURES)?.id ?? null;
+}
+
+/**
+ * One child tap on the Leaf egg. Ungated like the first hatch: the first
+ * `requiredHatchTaps - 1` taps only add drama, the last hatches it and files
+ * the creature in the collection. Safe no-op before the gift or after hatching.
+ */
+export function tapSecondEgg(state, content, now) {
+  if (!state.secondEgg || state.secondEgg.hatched) {
+    return { state, hatchedCreatureId: null, hatched: false };
+  }
+  const { eggState, hatchedCreatureId, hatched } = egg.tapEgg(state.secondEgg, content.CREATURES);
+  let next = { ...state, secondEgg: eggState };
+  if (hatched) {
+    next = { ...next, collection: collection.discoverCreature(next.collection, hatchedCreatureId) };
+  }
+  return { state: next, hatchedCreatureId, hatched };
 }
 
 /** Buy + immediately equip armor from the mannequin. */
@@ -356,10 +476,20 @@ export function tapEgg(state, content, now) {
 /** Name the hatchling. Advances into the BOOK beat. */
 export function nameCreature(state, content, name, now) {
   if (!state.egg.hatchedCreatureId) return { state, success: false };
-  const collectionState = collection.nameCreature(state.collection, state.egg.hatchedCreatureId, name);
+  return nameCreatureById(state, content, state.egg.hatchedCreatureId, name, now);
+}
+
+/**
+ * Name any discovered creature (the first hatchling or a later one). Only
+ * naming the first hatchling during the NAME beat advances the goal machine;
+ * later namings just file the name.
+ */
+export function nameCreatureById(state, content, creatureId, name, now) {
+  if (!creatureId || !collection.isDiscovered(state.collection, creatureId)) return { state, success: false };
+  const collectionState = collection.nameCreature(state.collection, creatureId, name);
   if (collectionState === state.collection) return { state, success: false };
   let next = { ...state, collection: collectionState };
-  if (goals.isStep(state.goals, 'name')) {
+  if (goals.isStep(state.goals, 'name') && creatureId === state.egg.hatchedCreatureId) {
     next = { ...next, goals: goals.advanceGoal(next.goals) }; // NAME -> BOOK
   }
   return { state: next, success: true };

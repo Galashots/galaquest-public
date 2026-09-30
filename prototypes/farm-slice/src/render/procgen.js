@@ -389,6 +389,34 @@ export function buildCreature(THREE, creatureDef) {
   return group;
 }
 
+/**
+ * Sprout's sun crest (CONTRACT.md section 5 item 1): a small upright golden
+ * sunburst -- a round sunberry-orange center ringed by short gold ray spikes
+ * -- that perches top-center on the creature's head like a chick's feather
+ * tuft. An added adornment only; it never touches the body or rig.
+ */
+export function buildSunCrest(THREE) {
+  const group = new THREE.Group();
+  group.name = 'sunCrest';
+  const center = new THREE.Mesh(
+    new THREE.SphereGeometry(0.11, 12, 10),
+    mat(THREE, '#ff5722', { emissive: '#ff5722', emissiveIntensity: 0.25 })
+  );
+  center.scale.set(1, 0.85, 0.7);
+  group.add(center);
+  const rayGeo = new THREE.ConeGeometry(0.045, 0.2, 6);
+  const rayMat = mat(THREE, '#ffd54f', { emissive: '#ffd54f', emissiveIntensity: 0.2 });
+  const RAYS = 7;
+  for (let i = 0; i < RAYS; i++) {
+    const angle = (-60 + (120 * i) / (RAYS - 1)) * (Math.PI / 180);
+    const ray = new THREE.Mesh(rayGeo, rayMat);
+    ray.position.set(Math.sin(angle) * 0.16, Math.cos(angle) * 0.16, 0);
+    ray.rotation.z = -angle;
+    group.add(ray);
+  }
+  return group;
+}
+
 export function buildEgg(THREE) {
   const group = new THREE.Group();
   const shell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 16), mat(THREE, '#fff6e0', { emissive: '#000000', emissiveIntensity: 0 }));
