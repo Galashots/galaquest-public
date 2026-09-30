@@ -56,6 +56,8 @@ export const OFFERS = [
     wants: { carrot: 5 }, coins: 10, teach: 'count by 2s' },
   { id: 'pip_bundle', npc: 'pip', text: '2 carrots + 1 sunberry → 12 coins',
     wants: { carrot: 2, sunberry: 1 }, coins: 12, teach: 'compare two deals' },
+  { id: 'pip_big_order', npc: 'pip', band: 'older', text: '6 carrots + 2 sunberries → 26 coins',
+    wants: { carrot: 6, sunberry: 2 }, coins: 26, teach: 'saving for a big deal' },
   { id: 'maple_wheat', npc: 'maple', band: 'younger', text: 'Two wheat bundles, please!',
     wants: { wheat: 2 }, coins: 4, teach: 'counting by 2s' },
   { id: 'pip_pumpkins_big', npc: 'pip', band: 'younger', text: 'Two pumpkins? I will pay eight coins!',
