@@ -1,0 +1,83 @@
+{
+ "version": 1,
+ "savedAt": 1791055291178,
+ "state": {
+  "version": 1,
+  "band": "younger",
+  "createdAt": 1791055291178,
+  "farm": {
+   "plots": [
+    {
+     "cropId": null,
+     "plantedAt": null,
+     "watered": false
+    },
+    {
+     "cropId": null,
+     "plantedAt": null,
+     "watered": false
+    },
+    {
+     "cropId": null,
+     "plantedAt": null,
+     "watered": false
+    }
+   ]
+  },
+  "basket": {
+   "crops": {
+    "carrot": 4,
+    "sunberry": 1
+   },
+   "coins": 12
+  },
+  "armor": {
+   "owned": [],
+   "equipped": {
+    "helmet": null,
+    "chest": null,
+    "boots": null,
+    "shield": null
+   }
+  },
+  "collection": {
+   "owned": {},
+   "names": {},
+   "fed": {}
+  },
+  "goals": {
+   "stepIndex": 11
+  },
+  "bookSeen": true,
+  "offersFilled": {
+   "crate": 1,
+   "bundle": 0
+  },
+  "replantPlanted": 0,
+  "freeOrderFills": 2,
+  "egg": {
+   "cracks": 4,
+   "maxCracks": 4,
+   "readyToHatch": true,
+   "hatchTaps": 0,
+   "requiredHatchTaps": 3,
+   "hatched": false,
+   "elementHint": "sun",
+   "hatchedCreatureId": null
+  },
+  "secondEgg": {
+   "cracks": 4,
+   "maxCracks": 4,
+   "readyToHatch": true,
+   "hatchTaps": 0,
+   "requiredHatchTaps": 3,
+   "hatched": false,
+   "elementHint": "leaf",
+   "hatchedCreatureId": null
+  },
+  "starSeeds": 1,
+  "giftEarned": true,
+  "giftOpened": false,
+  "orderBoard": null
+ }
+}

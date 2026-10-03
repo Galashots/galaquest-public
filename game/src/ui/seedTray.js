@@ -1,6 +1,7 @@
 // Transient seed choice. Each plot still needs its own tap.
 export class SeedTray {
-  constructor(root, onChoose) {
+  constructor(root, onChoose, labelFor = (id) => id) {
+    this.labelFor = labelFor;
     this.el = document.createElement('div');
     this.el.className = 'gq-seed-tray';
     this.el.hidden = true;
@@ -19,7 +20,7 @@ export class SeedTray {
       const count = remaining.filter((id) => id === cropId).length;
       const button = document.createElement('button');
       button.className = 'gq-seed-choice' + (cropId === selected ? ' gq-seed-selected' : '');
-      button.textContent = cropId === 'sunberry' ? `✦ Star seed ×${count}` : `🥕 Carrot seed ×${count}`;
+      button.textContent = `${this.labelFor(cropId)} ×${count}`;
       button.addEventListener('click', () => this.onChoose(cropId));
       this.el.appendChild(button);
     }

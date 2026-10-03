@@ -12,8 +12,20 @@ const PLOT_POSITIONS = [
   new THREE.Vector3(0, 0, 2.4),
   new THREE.Vector3(2, 0, 2.4),
 ];
-const EGG_POSITION = new THREE.Vector3(-3.8, 0, 2.4);
-const EGG2_POSITION = new THREE.Vector3(-2.85, 0, 3.55);
+// Where each egg (and the creature that hatches from it) sits, by egg order.
+// Slots 0 and 1 are the starter and Pip's gift; the rest are the open meadow
+// behind the plots, clear of the hero, stall and mannequin.
+const EGG_SLOTS = [
+  new THREE.Vector3(-3.8, 0, 2.4),
+  new THREE.Vector3(-2.85, 0, 3.55),
+  new THREE.Vector3(-4.1, 0, 0.0),
+  new THREE.Vector3(-2.7, 0, -0.3),
+  new THREE.Vector3(-1.0, 0, -1.2),
+  new THREE.Vector3(-3.6, 0, -1.7),
+];
+const ADORNMENTS = {
+  sunCrest: { build: (THREE_, gen_) => gen_.buildSunCrest(THREE_), spark: '#ffd54f' },
+};
 const MARKET_POSITION = new THREE.Vector3(2.6, 0, -2.2);
 const MANNEQUIN_POSITION = new THREE.Vector3(4.15, 0, -1.5);
 const HERO_POSITION = new THREE.Vector3(0.7, 0, -0.7);
@@ -68,7 +80,6 @@ export class Diorama {
 
     this._raycaster = new THREE.Raycaster();
     this._sway = 0;
-    this._eggWobbleSpeed = 0;
     this._marketFocus = 0;
     this._marketOpen = false;
 
@@ -77,9 +88,8 @@ export class Diorama {
     // back into the correct visual state without main.js having to know.
     this._lastFarm = null;
     this._lastArmor = null;
-    this._lastEgg = null;
-    this._lastSecondEgg = null;
-    this._lastCrest = false;
+    this._lastEggs = null;
+    this._lastAdornments = {};
     this._preloadIds = new Set();
 
     // Outlives _buildScene: a lost context rebuilds the scene from the same
@@ -97,9 +107,8 @@ export class Diorama {
       this._contextLost = false;
       if (this._lastFarm) this.syncFarm(this._lastFarm.farmState, this._lastFarm.now);
       if (this._lastArmor) this.syncArmor(this._lastArmor.equippedDefs, this._lastArmor.forSaleDef);
-      if (this._lastEgg) this.syncEgg(this._lastEgg);
-      if (this._lastSecondEgg) this.syncSecondEgg(this._lastSecondEgg);
-      if (this.creatureGroup && this._lastCrest) this.syncCrest(true);
+      if (this._lastEggs) this.syncEggs(this._lastEggs);
+      this.syncAdornments(this._lastAdornments);
     };
     canvas.addEventListener('webglcontextlost', this._onContextLost, false);
     canvas.addEventListener('webglcontextrestored', this._onContextRestored, false);
@@ -163,20 +172,8 @@ export class Diorama {
     this.heroSlots = heroSlots;
     this.heroEquipped = {};
 
-    this.eggGroup = gen.buildEgg(THREE);
-    this.eggGroup.position.copy(EGG_POSITION);
-    this.eggGroup.traverse((o) => { o.userData.pickType = 'egg'; });
-    this.eggGroup.userData.surfaces = [this.eggGroup.userData.shell];
-    this.eggGroup.userData.glow = [this.eggGroup.userData.shell.material];
-    this.scene.add(this.eggGroup);
-    this._upgradeEgg(this.eggGroup);
-    this.eggVisible = true;
-
-    this.creatureGroup = null; // built on hatch
-    this.egg2Group = null; // built when Pip's gift is earned
-    this.egg2Visible = false;
-    this.creatureGroup2 = null; // built on the Leaf-egg hatch
-    this._crest = null; // Sprout's sun crest adornment, added at 3 feeds
+    // One view per egg id, made by syncEggs: { group, slot, visible, wobble, creature, adorned }.
+    this.eggViews = new Map();
   }
 
   _setupLighting() {
@@ -281,48 +278,79 @@ export class Diorama {
     }
   }
 
-  syncEgg(eggState) {
-    this._lastEgg = eggState;
-    const cracksShown = this.eggGroup.userData.cracks.length;
-    for (let i = cracksShown; i < eggState.cracks + eggState.hatchTaps; i++) {
-      addCrack(THREE, this.eggGroup, i, this._raycaster);
-      this.sparkles.spawn(this.eggGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 10);
+  /** One view per egg, in egg order: wobble, cracks, element glow, then a creature on hatch. */
+  syncEggs(eggs) {
+    this._lastEggs = eggs;
+    const ids = new Set(eggs.map((e) => e.id));
+    for (const [id, view] of this.eggViews) {
+      if (!ids.has(id)) { view.group.visible = false; view.visible = false; if (view.creature) view.creature.visible = false; }
     }
-    this._eggWobbleSpeed = 3 + eggState.cracks * 1.6;
+    eggs.forEach((egg, i) => this._syncEgg(egg, i));
+  }
 
-    if (eggState.elementHint) this._glowEgg(eggState.elementHint);
+  _syncEgg(egg, index) {
+    let view = this.eggViews.get(egg.id);
+    if (!view) view = this._makeEggView(egg, index);
+    const group = view.group;
+    const cracksShown = group.userData.cracks.length;
+    for (let i = cracksShown; i < egg.cracks + egg.hatchTaps; i++) {
+      addCrack(THREE, group, i, this._raycaster);
+      this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 10);
+    }
+    view.wobble = 3 + egg.cracks * 1.6;
+    view.hint = egg.elementHint;
+    if (egg.elementHint) this._glowEgg(view, egg.elementHint);
 
-    if (eggState.hatched && this.eggVisible) {
-      this.eggVisible = false;
-      this.eggGroup.visible = false;
-      this.sparkles.spawn(this.eggGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#ffd54f', 28);
-      const creatureDef = this.content.CREATURES.find((c) => c.id === eggState.hatchedCreatureId);
-      if (creatureDef) {
-        this.creatureGroup = this._buildCreature(creatureDef);
-        this.creatureGroup.position.copy(this.eggGroup.position);
-        this.creatureGroup.scale.setScalar(0.01);
-        this.creatureGroup.traverse((o) => { o.userData.pickType = 'creature'; });
-        this.scene.add(this.creatureGroup);
-        this.tweens.add({
-          target: this.creatureGroup.scale, prop: null, from: 0, to: 1, duration: 0.5,
-          onUpdate: (v) => this.creatureGroup.scale.setScalar(v),
-        });
-      }
-    } else if (!eggState.hatched && !this.eggVisible) {
-      // A fresh save reloaded pre-hatch after a hatch happened in a previous
-      // session isn't expected, but keep this defensive for symmetry.
-      this.eggVisible = true;
-      this.eggGroup.visible = true;
+    if (egg.hatched && view.visible) {
+      view.visible = false;
+      group.visible = false;
+      this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), view.slot === 0 ? '#ffd54f' : '#aed581', 28);
+    }
+    if (egg.hatched) {
+      if (!view.creature) this._hatchView(view, egg);
+    } else if (!view.visible) {
+      view.visible = true;
+      group.visible = true;
     }
   }
 
-  /** Tints the egg toward the hinted element (procedural shell and sculpted egg alike). */
-  _glowEgg(element) {
+  _makeEggView(egg, index) {
+    const slot = index % EGG_SLOTS.length;
+    const group = gen.buildEgg(THREE);
+    group.position.copy(EGG_SLOTS[slot]);
+    group.userData.surfaces = [group.userData.shell];
+    group.userData.glow = [group.userData.shell.material];
+    const view = { id: egg.id, group, slot, visible: true, wobble: 3, hint: null, creature: null, adorned: {} };
+    group.traverse((o) => { o.userData.pickType = 'egg'; o.userData.eggId = egg.id; });
+    this.scene.add(group);
+    this.eggViews.set(egg.id, view);
+    this._upgradeEgg(view);
+    return view;
+  }
+
+  _hatchView(view, egg) {
+    const creatureDef = this.content.CREATURES.find((c) => c.id === egg.hatchedCreatureId);
+    if (!creatureDef) return;
+    const creature = this._buildCreature(creatureDef, egg.id);
+    creature.position.copy(EGG_SLOTS[view.slot]);
+    creature.scale.setScalar(0.01);
+    this.scene.add(creature);
+    view.creature = creature;
+    this.tweens.add({
+      target: creature.scale, prop: null, from: 0, to: 1, duration: 0.5,
+      onUpdate: (v) => creature.scale.setScalar(v),
+    });
+    if (this._lastAdornments) this.syncAdornments(this._lastAdornments);
+  }
+
+  /** Tints an egg toward the hinted element (procedural shell and sculpted egg alike). */
+  _glowEgg(view, element) {
     const hint = this.content.CROPS.find((c) => c.element === element);
     const glowColor = new THREE.Color(hint ? hint.color : '#ffd54f');
-    for (const material of this.eggGroup.userData.glow) {
+    const intensity = view.slot === 0 ? 0.35 : 0.5;
+    for (const material of view.group.userData.glow) {
       material.emissive = glowColor;
-      material.emissiveIntensity = 0.35;
+      material.emissiveIntensity = intensity;
     }
   }
 
@@ -330,20 +358,21 @@ export class Diorama {
    * Swaps the procedural shell for the sculpted egg once it loads. The group,
    * its picking, wobble and cracks stay; only what they sit on changes.
    */
-  _upgradeEgg(eggGroup) {
+  _upgradeEgg(view) {
+    const eggGroup = view.group;
     const apply = () => {
       const egg = this.models.eggInstance();
-      if (!egg || this.eggGroup !== eggGroup || eggGroup.userData.model) return;
+      if (!egg || this.eggViews.get(view.id) !== view || eggGroup.userData.model) return;
       eggGroup.userData.shell.visible = false;
       eggGroup.add(egg);
-      egg.traverse((o) => { o.userData.pickType = 'egg'; });
+      egg.traverse((o) => { o.userData.pickType = 'egg'; o.userData.eggId = view.id; });
       const meshes = [];
       egg.traverse((o) => { if (o.isMesh) meshes.push(o); });
       eggGroup.userData.model = egg;
       eggGroup.userData.surfaces = meshes;
       eggGroup.userData.glow = meshes.map((m) => m.material);
       eggGroup.userData.cracks.forEach((crack) => seatCrack(THREE, eggGroup, crack, this._raycaster));
-      if (this._lastEgg?.elementHint) this._glowEgg(this._lastEgg.elementHint);
+      if (view.hint) this._glowEgg(view, view.hint);
     };
     if (this.models.eggInstance()) apply();
     else this.models.loadEgg().then(apply);
@@ -365,10 +394,13 @@ export class Diorama {
    * body, upgraded in place (same group, so tweens and idle motion carry on)
    * the moment a still-loading model arrives.
    */
-  _buildCreature(creatureDef, pickType = 'creature') {
+  _buildCreature(creatureDef, eggId) {
     const group = new THREE.Group();
+    const tag = (root) => root.traverse((o) => {
+      o.userData.pickType = 'creature'; o.userData.eggId = eggId; o.userData.creatureId = creatureDef.id;
+    });
     group.userData.creatureId = creatureDef.id;
-    group.userData.pickType = pickType;
+    group.userData.eggId = eggId;
     const model = this.models.instance(creatureDef.id, creatureDef.shape);
     group.add(model ?? gen.buildCreature(THREE, creatureDef));
     // Unparented and unscaled here, so the world box is the creature's own height.
@@ -377,93 +409,63 @@ export class Diorama {
     else if (this.models.has(creatureDef.id)) {
       this.models.load(creatureDef.id).then(() => {
         const upgrade = this.models.instance(creatureDef.id, creatureDef.shape);
-        if (!upgrade || (this.creatureGroup !== group && this.creatureGroup2 !== group)) return;
+        const view = this.eggViews.get(eggId);
+        if (!upgrade || !view || view.creature !== group) return;
         clearGroupDisposing(group);
         group.add(upgrade, gen.creatureShadow(THREE));
         group.userData.height = upgrade.userData.height;
         // No pop here: a pop restores the scale it started from, which could
         // freeze a half-grown creature if this lands during the hatch grow-in.
-        group.traverse((o) => { o.userData.pickType = group.userData.pickType; });
-        if (this.creatureGroup === group) {
-          // The sculpted upgrade replaces the whole subtree, so a bloomed
-          // crest must be re-attached rather than assumed to survive.
-          this._crest = null;
-          if (this._lastCrest) this.syncCrest(true);
-        }
+        tag(group);
+        // The sculpted upgrade replaces the whole subtree, so bloomed
+        // adornments must be re-attached rather than assumed to survive.
+        view.adorned = {};
+        this.syncAdornments(this._lastAdornments);
         this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 12);
       });
     }
-    group.traverse((o) => { o.userData.pickType = pickType; });
+    tag(group);
     return group;
   }
 
-  /**
-   * Pip's gift Leaf egg (CONTRACT.md section 5 item 2): a second egg with a
-   * visible leaf-green tint beside the first, then a second creature on its
-   * ungated hatch. Mirrors syncEgg's show/hide shape but never touches the
-   * first egg or creature.
-   */
-  syncSecondEgg(secondEgg) {
-    this._lastSecondEgg = secondEgg;
-    if (!secondEgg) {
-      if (this.egg2Group) this.egg2Group.visible = false;
-      this.egg2Visible = false;
-      return;
+  /** The view whose creature has this id (first match), or null. */
+  _creatureView(creatureId) {
+    for (const view of this.eggViews.values()) {
+      if (view.creature && (!creatureId || view.creature.userData.creatureId === creatureId)) return view;
     }
-    if (!secondEgg.hatched) {
-      if (!this.egg2Group) {
-        this.egg2Group = gen.buildEgg(THREE);
-        this.egg2Group.position.copy(EGG2_POSITION);
-        this.egg2Group.userData.shell.material.emissive = new THREE.Color('#8bc34a');
-        this.egg2Group.userData.shell.material.emissiveIntensity = 0.5;
-        this.egg2Group.traverse((o) => { o.userData.pickType = 'egg2'; });
-        this.scene.add(this.egg2Group);
-      }
-      this.egg2Group.visible = true;
-      this.egg2Visible = true;
-      return;
-    }
-    if (this.egg2Visible) {
-      this.egg2Visible = false;
-      if (this.egg2Group) this.egg2Group.visible = false;
-      this.sparkles.spawn(EGG2_POSITION.clone().add(new THREE.Vector3(0, 0.6, 0)), '#aed581', 28);
-    }
-    if (!this.creatureGroup2) {
-      const creatureDef = this.content.CREATURES.find((c) => c.id === secondEgg.hatchedCreatureId);
-      if (creatureDef) {
-        this.creatureGroup2 = this._buildCreature(creatureDef, 'creature2');
-        this.creatureGroup2.position.copy(EGG2_POSITION);
-        this.creatureGroup2.scale.setScalar(0.01);
-        this.scene.add(this.creatureGroup2);
-        this.tweens.add({
-          target: this.creatureGroup2.scale, prop: null, from: 0, to: 1, duration: 0.5,
-          onUpdate: (v) => this.creatureGroup2.scale.setScalar(v),
-        });
-      }
-    }
+    return null;
   }
 
   /**
-   * Sprout's sun crest adornment (CONTRACT.md section 5 item 1). An added
-   * group perched on the creature's head; idempotent across frames, and the
+   * Adornments grown by feeding, as { [creatureId]: ['sunCrest', ...] }. Added
+   * groups perched on the creature; idempotent across frames, and the
    * body/rig underneath is never edited.
    */
-  syncCrest(show) {
-    this._lastCrest = !!show;
-    if (show && this.creatureGroup && !this._crest) {
-      const height = this.creatureGroup.userData.height || 0.5;
-      const crest = gen.buildSunCrest(THREE);
-      crest.scale.setScalar(THREE.MathUtils.clamp(height / 0.6, 0.9, 1.8));
-      crest.position.set(0, height - 0.02, 0);
-      crest.traverse((o) => { o.userData.pickType = 'creature'; });
-      this.creatureGroup.add(crest);
-      this._crest = crest;
-      this.sparkles.spawn(this.creatureGroup.position.clone().add(new THREE.Vector3(0, 0.8, 0)), '#ffd54f', 16);
-    } else if (!show && this._crest) {
-      const parent = this._crest.parent;
-      if (parent) parent.remove(this._crest);
-      disposeObject3D(this._crest);
-      this._crest = null;
+  syncAdornments(map) {
+    this._lastAdornments = map || {};
+    for (const view of this.eggViews.values()) {
+      const creature = view.creature;
+      if (!creature) continue;
+      const wanted = this._lastAdornments[creature.userData.creatureId] || [];
+      for (const [name, def] of Object.entries(ADORNMENTS)) {
+        const has = view.adorned[name];
+        if (wanted.includes(name) && !has) {
+          const height = creature.userData.height || 0.5;
+          const piece = def.build(THREE, gen);
+          piece.scale.setScalar(THREE.MathUtils.clamp(height / 0.6, 0.9, 1.8));
+          piece.position.set(0, height - 0.02, 0);
+          piece.traverse((o) => {
+            o.userData.pickType = 'creature'; o.userData.eggId = view.id; o.userData.creatureId = creature.userData.creatureId;
+          });
+          creature.add(piece);
+          view.adorned[name] = piece;
+          this.sparkles.spawn(creature.position.clone().add(new THREE.Vector3(0, 0.8, 0)), def.spark, 16);
+        } else if (!wanted.includes(name) && has) {
+          if (has.parent) has.parent.remove(has);
+          disposeObject3D(has);
+          delete view.adorned[name];
+        }
+      }
     }
   }
 
@@ -511,18 +513,18 @@ export class Diorama {
 
   setSeedSackVisible(visible) { this.seedSack.visible = !!visible; }
 
-  playNameHop() {
-    if (this.creatureGroup) this.tweens.pop(this.creatureGroup, { peak: 1.3, duration: 0.45 });
+  playNameHop(creatureId) {
+    const view = this._creatureView(creatureId);
+    if (view) this.tweens.pop(view.creature, { peak: 1.3, duration: 0.45 });
   }
 
-  playCreature2Hop() {
-    if (this.creatureGroup2) this.tweens.pop(this.creatureGroup2, { peak: 1.3, duration: 0.45 });
-  }
+  playCreatureHop(creatureId) { this.playNameHop(creatureId); }
 
-  playFeedSparkle() {
-    if (!this.creatureGroup) return;
-    this.tweens.pop(this.creatureGroup, { peak: 1.3, duration: 0.4 });
-    this.sparkles.spawn(this.creatureGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#ff8fa3', 10);
+  playFeedSparkle(creatureId) {
+    const view = this._creatureView(creatureId);
+    if (!view) return;
+    this.tweens.pop(view.creature, { peak: 1.3, duration: 0.4 });
+    this.sparkles.spawn(view.creature.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#ff8fa3', 10);
   }
 
   // -- Screen-space projection for the goal arrow --------------------------
@@ -539,17 +541,20 @@ export class Diorama {
         return MARKET_POSITION.clone().add(new THREE.Vector3(0, 1.6, 0));
       case 'mannequin':
         return MANNEQUIN_POSITION.clone().add(new THREE.Vector3(0, 2, 0));
-      case 'egg':
-        return this.eggGroup.position.clone().add(new THREE.Vector3(0, 1, 0));
-      case 'egg2':
-        return this.creatureGroup2
-          ? this.creatureGroup2.position.clone().add(new THREE.Vector3(0, this.creatureGroup2.userData.height + 0.1, 0))
-          : EGG2_POSITION.clone().add(new THREE.Vector3(0, 1, 0));
-      case 'creature':
+      case 'egg': {
+        const view = this.eggViews.get(descriptor.eggId ?? 'starter');
+        if (!view) return null;
+        return view.creature
+          ? view.creature.position.clone().add(new THREE.Vector3(0, view.creature.userData.height + 0.1, 0))
+          : EGG_SLOTS[view.slot].clone().add(new THREE.Vector3(0, 1, 0));
+      }
+      case 'creature': {
         // Just above its head, as for the egg: a fixed low offset put the arrow on its face.
-        return this.creatureGroup
-          ? this.creatureGroup.position.clone().add(new THREE.Vector3(0, this.creatureGroup.userData.height + 0.1, 0))
+        const view = this._creatureView(descriptor.creatureId);
+        return view
+          ? view.creature.position.clone().add(new THREE.Vector3(0, view.creature.userData.height + 0.1, 0))
           : null;
+      }
       default:
         return null;
     }
@@ -582,7 +587,10 @@ export class Diorama {
       o = hit.object;
       while (o) {
         if (o.userData && o.userData.pickType) {
-          return { type: o.userData.pickType, plotIndex: o.userData.plotIndex };
+          const { pickType, plotIndex, eggId, creatureId } = o.userData;
+          if (pickType === 'egg') return { type: 'egg', eggId };
+          if (pickType === 'creature') return { type: 'creature', eggId, creatureId };
+          return { type: pickType, plotIndex };
         }
         o = o.parent;
       }
@@ -606,11 +614,19 @@ export class Diorama {
     if (this.wateringCan.visible) this.wateringCan.position.y = Math.sin(this._sway * 4) * 0.08;
     if (this.seedSack.visible) this.seedSack.userData.bag.material.emissiveIntensity = 0.25 + (Math.sin(this._sway * 3) + 1) * 0.15;
 
-    // Egg wobble, ramping up with crack count.
-    if (this.eggVisible) {
-      const amp = 0.05 + this._eggWobbleSpeed * 0.01;
-      this.eggGroup.rotation.z = Math.sin(this._sway * this._eggWobbleSpeed) * amp;
-      this.eggGroup.position.y = EGG_POSITION.y + Math.abs(Math.sin(this._sway * this._eggWobbleSpeed * 0.5)) * 0.04;
+    // Egg wobble, ramping up with crack count; hatched creatures hop in place.
+    for (const view of this.eggViews.values()) {
+      const base = EGG_SLOTS[view.slot];
+      if (view.visible) {
+        const amp = 0.05 + view.wobble * 0.01;
+        view.group.rotation.z = Math.sin(this._sway * view.wobble) * amp;
+        view.group.position.y = base.y + Math.abs(Math.sin(this._sway * view.wobble * 0.5)) * 0.04;
+      }
+      if (view.creature) {
+        const phase = view.slot;
+        view.creature.position.y = base.y + Math.abs(Math.sin(this._sway * 3 + phase)) * 0.15;
+        view.creature.rotation.y = Math.sin(this._sway * 0.7 + phase) * 0.4;
+      }
     }
 
     // Idle hero bob.
@@ -633,22 +649,6 @@ export class Diorama {
         mesh.rotation.z = 0;
       }
     });
-
-    // Egg-2 wobble while it waits for its taps.
-    if (this.egg2Visible && this.egg2Group) {
-      this.egg2Group.rotation.z = Math.sin(this._sway * 4) * 0.06;
-      this.egg2Group.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 2)) * 0.04;
-    }
-
-    // Hatched creature idle hop.
-    if (this.creatureGroup) {
-      this.creatureGroup.position.y = Math.abs(Math.sin(this._sway * 3)) * 0.15;
-      this.creatureGroup.rotation.y = Math.sin(this._sway * 0.7) * 0.4;
-    }
-    if (this.creatureGroup2) {
-      this.creatureGroup2.position.y = EGG2_POSITION.y + Math.abs(Math.sin(this._sway * 3 + 1)) * 0.15;
-      this.creatureGroup2.rotation.y = Math.sin(this._sway * 0.7 + 1) * 0.4;
-    }
 
     this.tweens.update();
     this.sparkles.update(dt);

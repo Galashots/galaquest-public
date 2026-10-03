@@ -19,9 +19,6 @@ export class GiftDialog {
 
     this.body = document.createElement('p');
     this.body.className = 'gq-gift-text';
-    this.body.textContent = '“Two more orders filled — you’re a true farmer now! ' +
-      'For you: a twinkling ✦ star seed for your sack, and this speckled Leaf egg. ' +
-      'I can hear a little Mossbun inside!” — Pip';
     this.panel.appendChild(this.body);
 
     this.takeBtn = document.createElement('button');
@@ -35,7 +32,12 @@ export class GiftDialog {
 
   get isOpen() { return this.backdrop.style.display !== 'none'; }
 
-  open() { this.backdrop.style.display = 'flex'; }
+  /** reward: a content.REWARDS entry; `title` heads the dialog and optional `text` is the message. */
+  open(reward) {
+    this.title.textContent = reward?.title || "Pip's gift!";
+    this.body.textContent = reward?.text || '';
+    this.backdrop.style.display = 'flex';
+  }
 
   close() { this.backdrop.style.display = 'none'; }
 }

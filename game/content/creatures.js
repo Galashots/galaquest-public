@@ -1,0 +1,28 @@
+// Every creature that can hatch. Models live in game/assets/creatures/<id>.glb (see
+// game/src/render/models.js); creatures without a model use a procedural body.
+export const CREATURES = [
+  { id: 'sprout', name: 'Sprout', element: 'sun', rarity: 'common', shape: 'round',
+    colors: { body: '#ff7043', accent: '#ffd54f' }, blurb: 'Loves warm sunberries.' },
+  { id: 'cinderkit', name: 'Cinderkit', element: 'fire', rarity: 'rare', shape: 'tall',
+    colors: { body: '#e64a19', accent: '#ffab91' }, blurb: 'Dances near warm stones.' },
+  { id: 'flamewhisk', name: 'Flamewhisk', element: 'fire', rarity: 'epic', shape: 'long',
+    colors: { body: '#d84315', accent: '#ffcc80' }, blurb: 'Its tail glows brightest.' },
+  { id: 'puddlefin', name: 'Puddlefin', element: 'water', rarity: 'common', shape: 'round',
+    colors: { body: '#4fc3f7', accent: '#b3e5fc' }, blurb: 'Splashes happily in dewmelons.' },
+  { id: 'splashpuff', name: 'Splashpuff', element: 'water', rarity: 'rare', shape: 'winged',
+    colors: { body: '#29b6f6', accent: '#e1f5fe' }, blurb: 'Makes tiny rainbows.' },
+  { id: 'tidekit', name: 'Tidekit', element: 'water', rarity: 'epic', shape: 'long',
+    colors: { body: '#0288d1', accent: '#81d4fa' }, blurb: 'Hums a quiet wave song.' },
+  { id: 'mossbun', name: 'Mossbun', element: 'leaf', rarity: 'common', shape: 'round',
+    colors: { body: '#8bc34a', accent: '#f1f8e9' }, blurb: 'Hops between glowleaf patches.' },
+  { id: 'fernsprout', name: 'Fernsprout', element: 'leaf', rarity: 'rare', shape: 'tall',
+    colors: { body: '#689f38', accent: '#c5e1a5' }, blurb: 'Grows a new leaf daily.' },
+  { id: 'bloomtail', name: 'Bloomtail', element: 'leaf', rarity: 'epic', shape: 'long',
+    colors: { body: '#558b2f', accent: '#aed581' }, blurb: 'Leaves flowers where it walks.' },
+  { id: 'zapkit', name: 'Zapkit', element: 'spark', rarity: 'common', shape: 'round',
+    colors: { body: '#ffee58', accent: '#fff9c4' }, blurb: 'Zips around wheat fields.' },
+  { id: 'glimmerpup', name: 'Glimmerpup', element: 'spark', rarity: 'rare', shape: 'winged',
+    colors: { body: '#fdd835', accent: '#fff176' }, blurb: 'Sparks light up the barn.' },
+  { id: 'boltbun', name: 'Boltbun', element: 'spark', rarity: 'epic', shape: 'tall',
+    colors: { body: '#f9a825', accent: '#ffecb3' }, blurb: 'Runs faster than Pip.' },
+];

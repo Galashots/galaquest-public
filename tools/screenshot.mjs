@@ -1,7 +1,9 @@
 // Headless-Chromium screenshots of the game at two iPad viewports, over raw CDP.
-// Usage: node tools/screenshot.mjs [--out <dir>]   (default tmp/screenshots)
+// Usage: node tools/screenshot.mjs [--out <dir>] [--save <file.json>]   (default tmp/screenshots)
+// --save writes that JSON (a full localStorage payload) to the save key before capture, so a
+// mid-game state can be photographed.
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createGameServer } from '../server.mjs';
@@ -26,6 +28,9 @@ function findChrome() {
 
 const outIndex = process.argv.indexOf('--out');
 const outDir = resolve(outIndex > 0 ? process.argv[outIndex + 1] : 'tmp/screenshots');
+const saveIndex = process.argv.indexOf('--save');
+const saveJson = saveIndex > 0 ? readFileSync(resolve(process.argv[saveIndex + 1]), 'utf8') : null;
+const SAVE_KEY = 'gq.farmSlice.v1';
 const errors = [];
 let chrome, server, profile, ws;
 
@@ -80,7 +85,15 @@ async function launchChrome() {
 async function capture(sessionId, url, vp) {
   await send('Emulation.setDeviceMetricsOverride',
     { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: true }, sessionId);
-  await send('Page.navigate', { url }, sessionId);
+  if (saveJson) {
+    // Seed localStorage on the page origin, then reload so the game boots from it.
+    await send('Page.navigate', { url }, sessionId);
+    await sleep(800);
+    await send('Runtime.evaluate', {
+      expression: `localStorage.setItem(${JSON.stringify(SAVE_KEY)}, ${JSON.stringify(saveJson)})`,
+    }, sessionId);
+  }
+  await send('Page.navigate', { url: saveJson ? url + '?r=' + Date.now() : url }, sessionId);
   const start = Date.now();
   for (;;) {
     const { result } = await send('Runtime.evaluate', {

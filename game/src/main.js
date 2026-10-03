@@ -2,7 +2,6 @@
 import { Diorama } from './render/diorama.js';
 import * as game from './rules/game.js';
 import * as economy from './rules/economy.js';
-import * as goals from './rules/goals.js';
 import { loadGame, saveGame } from './save.js';
 import * as audio from './audio.js';
 import { Hud } from './ui/hud.js';
@@ -28,7 +27,12 @@ const namingDialog = new NamingDialog(app, { onSubmit: handleSubmitName });
 const book = new CollectionBook(app, { onClose: closeBook });
 const bandDialog = new BandDialog(app, { onPick: handlePickBand });
 const giftDialog = new GiftDialog(app, { onTake: handleTakeGift });
-const tray = new SeedTray(app, (cropId) => { selectedSeed = cropId; refresh(); });
+let giftRewardId = null;
+const seedLabel = (cropId) => {
+  const crop = content.CROPS.find((c) => c.id === cropId);
+  return crop?.starSeed ? '✦ Star seed' : `${crop?.icon ? `${crop.icon} ` : ''}${crop ? crop.name : cropId} seed`;
+};
+const tray = new SeedTray(app, (cropId) => { selectedSeed = cropId; refresh(); }, seedLabel);
 let selectedSeed = null;
 let namingTargetId = null;
 let lastTrayKey = null;
@@ -36,14 +40,13 @@ let trayOpened = false;
 let bookOpenedOnce = false;
 let hatchPauseUntil = 0;
 
-function step() { return goals.currentStep(state.goals); }
+function step() { return game.step(state); }
 function resize() { diorama.resize(app.clientWidth, app.clientHeight); }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 60));
 resize();
 
 function applyResult(previous) {
-  if (state.egg.cracks > previous.egg.cracks) audio.sfx.crack();
   saveGame(state);
   refresh();
 }
@@ -51,30 +54,13 @@ function syncVisuals(now) {
   diorama.syncFarm(state.farm, now);
   diorama.syncArmor(game.equippedArmorDefs(state, content),
     ['market', 'offer', 'armor', 'free'].includes(step()) ? game.nextArmorForSale(state, content) : null);
-  diorama.syncEgg(state.egg);
-  diorama.preloadCreature(game.nextHatchCreatureId(state, content));
-  diorama.syncSecondEgg(state.secondEgg);
-  diorama.syncCrest(game.hasSunCrest(state));
-  diorama.preloadCreature(game.nextSecondHatchCreatureId(state, content));
+  diorama.syncEggs(state.eggs);
+  for (const egg of game.unhatchedEggs(state)) diorama.preloadCreature(game.hatchCreatureId(egg, content));
+  diorama.syncAdornments(Object.fromEntries(game.hatchedCreatures(state)
+    .map(({ creatureId }) => [creatureId, game.adornments(state, content, creatureId)])));
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
   diorama.setWateringCanVisible(['grow', 'replant', 'free'].includes(step()) &&
     game.unwateredGrowingPlotIndexes(state, content, now).length > 0);
-}
-function remainingSeeds() {
-  if (!['plant', 'replant', 'free'].includes(step())) return [];
-  if (step() === 'plant') {
-    const recipe = game.choosePlantingRecipe(content);
-    for (const plot of state.farm.plots) {
-      const idx = recipe.indexOf(plot.cropId);
-      if (idx !== -1) recipe.splice(idx, 1);
-    }
-    return recipe;
-  }
-  if (step() === 'replant') {
-    const slots = Math.max(0, 3 - (state.replantPlanted || 0));
-    return new Array(Math.min(slots, state.farm.plots.filter((p) => !p.cropId).length)).fill('carrot');
-  }
-  return game.freeRemainingSeeds(state);
 }
 function rectPoint(rect) { return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; }
 function refresh() {
@@ -84,7 +70,7 @@ function refresh() {
   hud.chip.style.visibility = Date.now() < hatchPauseUntil ? 'hidden' : 'visible';
   const chipText = !market.isOpen && ['offer', 'armor'].includes(step()) ? 'Go to the market'
     : market.isOpen && step() === 'offer' && market.selectedOfferId
-      ? (market.selectedOfferId === 'pip_crate' ? "Fill Pip's crate" : 'Fill the bundle')
+      ? (market.selectedOfferId === content.MARKET.firstVisit[0] ? "Fill Pip's crate" : 'Fill the bundle')
       : goal.text;
   hud.setGoalText(chipText);
   hud.setCoins(state.basket.coins);
@@ -98,10 +84,12 @@ function refresh() {
     return [{ ...diorama.projectToScreen(point, app.clientWidth, app.clientHeight), progress: value }];
   });
   hud.setProgressRings(progress);
-  hud.setFeedVisible((step() === 'feed' || step() === 'free') && economy.countOf(state.basket, 'sunberry') > 0);
-  const firstCreatureId = state.egg.hatchedCreatureId;
-  hud.setFeedMeter(firstCreatureId ? state.collection.fed?.[firstCreatureId] || 0 : 0, !!firstCreatureId);
-  const seeds = remainingSeeds();
+  hud.setFeedVisible(game.canFeed(state, content));
+  const firstCreatureId = game.firstCreatureId(state);
+  const stage = firstCreatureId ? game.nextGrowthStage(state, content, firstCreatureId) : null;
+  hud.setFeedMeter(firstCreatureId ? state.collection.fed?.[firstCreatureId] || 0 : 0, !!firstCreatureId,
+    stage ? stage.feeds : null, firstCreatureId ? creatureName(firstCreatureId) : '');
+  const seeds = game.remainingSeeds(state, content);
   if (seeds.length && !seeds.includes(selectedSeed)) selectedSeed = seeds[0];
   const trayKey = `${trayOpened}:${seeds.join(',')}:${selectedSeed}:${step()}`;
   if (trayKey !== lastTrayKey) { tray.render(trayOpened ? seeds : [], selectedSeed, step() !== 'plant'); lastTrayKey = trayKey; }
@@ -113,7 +101,7 @@ function refresh() {
   else if (namingDialog.backdrop.style.display === 'flex') target = rectPoint(namingDialog.suggestionsEl.getBoundingClientRect());
   else if (book.isOpen) target = rectPoint(book.closeBtn.getBoundingClientRect());
   else if (market.isOpen) target = rectPoint(market.getArrowTargetRect(step()));
-  else if (step() === 'feed' && hud.feedBtn.style.display !== 'none') target = rectPoint(hud.feedBtn.getBoundingClientRect());
+  else if (goal.targetKey === 'creature' && hud.feedBtn.style.display !== 'none') target = rectPoint(hud.feedBtn.getBoundingClientRect());
   else {
     const point = diorama.worldPositionFor(goal);
     if (point) target = diorama.projectToScreen(point, app.clientWidth, app.clientHeight);
@@ -124,18 +112,14 @@ function refresh() {
 
 function renderMarket() {
   const cropNames = Object.fromEntries(content.CROPS.map((c) => [c.id, c.name]));
-  // In FREE play the market shows the persistent order board (both bands see
-  // open/fillable orders; the older band additionally sees the third card).
-  // Before FREE, the contract-path crate/bundle choice stays exactly two cards.
-  const defs = step() === 'free' && state.orderBoard
-    ? game.openBoardOrders(state, content)
-    : content.OFFERS.slice(0, 2);
+  const defs = game.visibleOffers(state, content);
   const offers = defs.map((o) => ({
     ...o,
     canFulfill: game.canFulfillOffer(state, o),
     paused: !['offer', 'free'].includes(step()),
     haveByCrop: { ...state.basket.crops }, cropNames,
-    keepByCrop: Object.fromEntries(['carrot', 'sunberry'].map((id) => [id, Math.max(0, economy.countOf(state.basket, id) - (o.wants[id] || 0))])),
+    valueByCrop: Object.fromEntries(content.CROPS.map((c) => [c.id, c.sellPrice])),
+    keepByCrop: Object.fromEntries([...new Set([...Object.keys(state.basket.crops), ...Object.keys(o.wants)])].map((id) => [id, Math.max(0, economy.countOf(state.basket, id) - (o.wants[id] || 0))])),
     perCropRate: o.coins / Object.values(o.wants).reduce((a, b) => a + b, 0),
   }));
   const armorDef = game.nextArmorForSale(state, content);
@@ -147,7 +131,7 @@ function renderMarket() {
 }
 function openMarket() {
   const previous = state;
-  state = game.openMarket(state);
+  state = game.openMarket(state, content);
   market.open();
   diorama.setMarketOpen(true);
   renderMarket();
@@ -162,36 +146,42 @@ function handleFulfillOffer(id) {
   // Board cards carry order instance ids in FREE play; legacy states use offer ids.
   const useBoard = step() === 'free' && state.orderBoard;
   const result = useBoard
-    ? game.fulfillBoardOrder(state, content, id, Date.now())
-    : game.fulfillOffer(state, content, id, Date.now());
+    ? game.fulfillBoardOrder(state, content, id)
+    : game.fulfillOffer(state, content, id);
   if (!result.success) return;
   state = result.state;
   audio.sfx.coin();
   diorama.playOfferSparkle();
-  const paid = useBoard
-    ? (result.coinsEarned || 0)
-    : (content.OFFERS.find((o) => o.id === id)?.coins || 0);
+  const paid = result.coinsEarned || 0;
   audio.say(Array.from({length: paid / 2}, (_, i) => (i + 1) * 2).join(', '));
   hud.showToast(`+${paid} coins · ${Array.from({length: paid / 2}, (_, i) => (i + 1) * 2).join(', ')}`, 2500);
   market.selectedOfferId = null;
   market._fill = {};
   applyResult(previous);
   renderMarket();
-  if (state.giftEarned && !state.giftOpened) giftDialog.open();
+  openNextReward();
 }
 
+function openNextReward() {
+  const reward = game.unseenRewards(state, content)[0];
+  if (!reward || !state.band) return;
+  giftRewardId = reward.id;
+  giftDialog.open(reward);
+}
 function handleTakeGift() {
-  if (!state.giftEarned || state.giftOpened) { giftDialog.close(); return; }
-  const previous = state;
-  state = game.openGift(state);
+  const reward = game.unseenRewards(state, content).find((r) => r.id === giftRewardId);
   giftDialog.close();
+  giftRewardId = null;
+  if (!reward) return;
+  const previous = state;
+  state = game.markRewardSeen(state, reward.id);
   audio.sfx.open();
-  hud.showToast('Star seed in your sack — plant it! ✦', 2500);
+  if (reward.toast) hud.showToast(reward.toast, 2500);
   applyResult(previous);
 }
 function handleBuyArmor(armorId) {
   const previous = state;
-  const result = game.buyArmor(state, content, armorId, Date.now());
+  const result = game.buyArmor(state, content, armorId);
   if (!result.success) return;
   state = result.state;
   audio.sfx.equip();
@@ -207,18 +197,18 @@ function handleBuyArmor(armorId) {
 function openNaming() {
   if (step() !== 'name') return;
   namingTargetId = null;
-  namingDialog.open('Sprout');
+  namingDialog.open(content.STARTER_EGG.defaultName);
   refresh();
 }
 function handleSubmitName(name) {
   const previous = state;
-  const targetId = namingTargetId || state.egg.hatchedCreatureId;
-  const result = game.nameCreatureById(state, content, targetId, name, Date.now());
+  const targetId = namingTargetId || game.firstCreatureId(state);
+  const result = game.nameCreatureById(state, content, targetId, name);
   if (!result.success) return;
   state = result.state;
   namingTargetId = null;
   namingDialog.close();
-  diorama.playNameHop();
+  diorama.playNameHop(targetId);
   hud.showToast(`${state.collection.names[targetId]} joined your book!`);
   applyResult(previous);
 }
@@ -232,32 +222,38 @@ function renderBook() {
   }));
   book.render({ foundCount: owned.length, total: 6, entries });
 }
-function feedSprout(now = Date.now()) {
+function creatureName(creatureId) {
+  return state.collection.names?.[creatureId] || content.CREATURES.find((c) => c.id === creatureId)?.name || 'Your friend';
+}
+function feedCreature(creatureId = game.firstCreatureId(state)) {
   const previous = state;
-  const result = game.feedSunberry(state, content, now);
+  const result = game.feedCreature(state, content, creatureId);
   if (!result.success) return;
   state = result.state;
-  diorama.playFeedSparkle();
-  if (game.hasSunCrest(state) && !game.hasSunCrest(previous)) {
+  diorama.playFeedSparkle(creatureId);
+  const bloomed = game.growthStages(state, content, creatureId).length > game.growthStages(previous, content, creatureId).length;
+  const reached = game.growthStages(state, content, creatureId).slice(-1)[0];
+  if (bloomed && reached) {
     audio.sfx.equip();
-    hud.showToast("Sprout's sun crest bloomed! ☀️", 2500);
+    hud.showToast(reached.toast.replace('{name}', creatureName(creatureId)), 2500);
   } else {
-    const fed = state.egg.hatchedCreatureId ? state.collection.fed[state.egg.hatchedCreatureId] || 0 : 0;
-    hud.showToast(`Nom nom! ${Math.min(fed, game.SUN_CREST_FEDS)}/${game.SUN_CREST_FEDS}`);
+    const fed = state.collection.fed?.[creatureId] || 0;
+    const stage = game.nextGrowthStage(state, content, creatureId);
+    hud.showToast(stage ? `Nom nom! ${Math.min(fed, stage.feeds)}/${stage.feeds}` : 'Nom nom!');
   }
   applyResult(previous);
 }
-function handleSecondEggTap(now) {
+function handleOtherEggTap(eggId) {
   const previous = state;
-  const result = game.tapSecondEgg(state, content, now);
+  const result = game.tapEgg(state, content, eggId);
   state = result.state;
   if (state === previous) return;
   if (result.hatched) {
     audio.sfx.hatch();
     namingTargetId = result.hatchedCreatureId;
-    const def = content.CREATURES.find((c) => c.id === result.hatchedCreatureId);
-    hud.showToast(`${def ? def.name : 'A friend'} hatched!`, 2500);
-    namingDialog.open(def ? def.name : 'Buddy');
+    const name = creatureName(result.hatchedCreatureId);
+    hud.showToast(`${name} hatched!`, 2500);
+    namingDialog.open(name);
   } else audio.sfx.crack();
   applyResult(previous);
 }
@@ -265,19 +261,19 @@ function closeBook() {
   book.close();
   if (step() === 'book') {
     const previous = state;
-    state = game.closeBook(state);
+    state = game.closeBook(state, content);
     applyResult(previous);
   } else refresh();
 }
 hud.onBookOpen(() => { bookOpenedOnce = true; renderBook(); book.open(); refresh(); });
-hud.onFeed(() => feedSprout());
+hud.onFeed(() => feedCreature());
 hud.onMuteToggle(() => hud.setMuted(audio.toggleMuted()));
 function handlePickBand(band) {
   const previous = state;
-  state = game.setBand(state, band);
-  state = game.ensureOrderBoard(state, content); // a band switch rebuilds the FREE board
+  state = game.setBand(state, band, content);
   bandDialog.close();
   applyResult(previous);
+  openNextReward();
 }
 hud.onGearHold(() => bandDialog.open());
 function anyModalOpen() {
@@ -310,19 +306,20 @@ function handlePlotTap(index, now, type) {
     state = result.state;
     audio.sfx.plant();
     diorama.playPlantPop();
-    if (!remainingSeeds().length) trayOpened = false;
+    if (!game.remainingSeeds(state, content).length) trayOpened = false;
   }
   applyResult(previous);
 }
-function handleEggTap(now) {
+function handleEggTap(eggId, now) {
+  if (eggId !== game.STARTER_EGG_ID) { handleOtherEggTap(eggId); return; }
   const previous = state;
-  const result = game.tapEgg(state, content, now);
+  const result = game.tapEgg(state, content, eggId);
   state = result.state;
   if (state === previous) return;
   if (result.hatched) {
     audio.sfx.hatch();
     hatchPauseUntil = now + 5000;
-    hud.showToast('Sprout!', 5000);
+    hud.showToast(`${content.STARTER_EGG.defaultName}!`, 5000);
     setTimeout(openNaming, 5000);
   } else audio.sfx.crack();
   applyResult(previous);
@@ -338,14 +335,16 @@ canvas.addEventListener('pointerdown', (e) => {
   if (hit.type === 'plot' || hit.type === 'sprout') handlePlotTap(hit.plotIndex, now, hit.type);
   else if (hit.type === 'seedSack' && ['replant', 'free'].includes(step())) { trayOpened = true; refresh(); }
   else if (hit.type === 'market' || hit.type === 'mannequin') openMarket();
-  else if (hit.type === 'egg') handleEggTap(now);
-  else if (hit.type === 'egg2') handleSecondEggTap(now);
-  else if (hit.type === 'creature') feedSprout(now);
-  else if (hit.type === 'creature2') diorama.playCreature2Hop();
+  else if (hit.type === 'egg') handleEggTap(hit.eggId, now);
+  else if (hit.type === 'creature') {
+    if (hit.creatureId === game.firstCreatureId(state)) feedCreature(hit.creatureId);
+    else diorama.playCreatureHop(hit.creatureId);
+  }
 });
 document.addEventListener('pointerdown', () => audio.unlockAudio(), { once: true });
 if (!state.band) bandDialog.open();
 if (step() === 'name') openNaming();
+openNextReward();
 refresh();
 function tick() {
   const now = Date.now();

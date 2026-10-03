@@ -5,6 +5,10 @@
 // rules -- fill progress here is transient UI state only, never persisted
 // (CONTRACT.md: "Partial fills and coin taps: UI-only").
 
+import { CROPS } from '../../content/index.js';
+
+const cropIcon = (id) => CROPS.find((c) => c.id === id)?.icon || '🌱';
+
 export class MarketPanel {
   constructor(root, { onFulfillOffer, onBuyArmor, onClose, onSlotFill, onCoinTap } = {}) {
     this.backdrop = document.createElement('div');
@@ -113,7 +117,7 @@ export class MarketPanel {
       const text = document.createElement('p');
       text.textContent = viewModel.band === 'older'
         ? `${offer.text} · You keep ${Object.entries(offer.keepByCrop).map(([id, qty]) => `${qty} ${offer.cropNames[id]}`).join(', ')}`
-        : `${Object.entries(offer.wants).map(([id, qty]) => `${'🥕'.repeat(id === 'carrot' ? qty : 0)}${'☀️'.repeat(id === 'sunberry' ? qty : 0)}`).join(' + ')} → ${offer.coins / 2} two-coins`;
+        : `${Object.entries(offer.wants).map(([id, qty]) => `${cropIcon(id).repeat(qty)}`).join(' + ')} → ${offer.coins / 2} two-coins`;
       card.appendChild(text);
 
       const btn = document.createElement('button');
@@ -173,7 +177,7 @@ export class MarketPanel {
         .join(', ');
       const keep = document.createElement('p');
       keep.className = 'gq-fill-hint';
-      const keptValue = Object.entries(offer.keepByCrop).reduce((sum, [id, qty]) => sum + qty * (id === 'sunberry' ? 5 : 2), 0);
+      const keptValue = Object.entries(offer.keepByCrop).reduce((sum, [id, qty]) => sum + qty * (offer.valueByCrop?.[id] ?? 2), 0);
       keep.textContent = `You'd keep: ${keepBits || 'nothing'} · ${keptValue} coin value · ${offer.coins + keptValue} total`;
       wrap.appendChild(keep);
     }
@@ -235,12 +239,12 @@ export class MarketPanel {
     const caption = document.createElement('strong');
     caption.textContent = 'Your basket · tap crops into the crate';
     basket.appendChild(caption);
-    for (const cropId of ['carrot', 'sunberry']) {
+    for (const cropId of Object.keys(offer.haveByCrop)) {
       const have = offer.haveByCrop[cropId] || 0;
       if (!have) continue;
       const button = document.createElement('button');
       button.className = 'gq-basket-item' + (offer.wants[cropId] ? ' gq-basket-needed' : '');
-      button.textContent = `${cropId === 'carrot' ? '🥕' : '☀️'} ${offer.cropNames[cropId]} ×${Math.max(0, have - (this._fill[cropId] || 0))}`;
+      button.textContent = `${cropIcon(cropId)} ${offer.cropNames[cropId] || cropId} ×${Math.max(0, have - (this._fill[cropId] || 0))}`;
       button.addEventListener('click', () => {
         const count = this._fill[cropId] || 0;
         if (!offer.wants[cropId] || count >= offer.wants[cropId] || have <= count) { this.pulse(this._fillNextEmptySlotEl); return; }

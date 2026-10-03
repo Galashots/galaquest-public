@@ -39,12 +39,12 @@ function driveToFree(band = 'younger') {
   state = game.openMarket(state);
   state = game.fulfillOffer(state, content, 'pip_crate', 41_000).state;
   state = game.buyArmor(state, content, 'leaf_crest_helmet', 41_000).state;
-  state = game.tapEgg(state, content, 41_000).state;
-  state = game.tapEgg(state, content, 41_000).state;
-  state = game.tapEgg(state, content, 41_000).state;
+  state = game.tapEgg(state, content).state;
+  state = game.tapEgg(state, content).state;
+  state = game.tapEgg(state, content).state;
   state = game.nameCreature(state, content, 'Sprout', 42_000).state;
   state = game.closeBook(state);
-  state = game.feedSunberry(state, content, 42_000).state;
+  state = game.feedCreature(state, content).state;
   state = plant(state, 0, 'carrot', 42_000);
   state = plant(state, 1, 'carrot', 42_000);
   state = plant(state, 2, 'carrot', 42_000);
@@ -111,7 +111,7 @@ test('board fills pay out, spend crops, and redraw the same order', () => {
   state = result.state;
   assert.equal(state.basket.coins, coinsBefore + 10);
   assert.equal(state.basket.crops.carrot, 10 - 5);
-  assert.equal(state.offersFilled.crate, 2, 'contract-path crate fill plus this board fill');
+  assert.equal(state.offersFilled.pip_crate, 2, 'contract-path crate fill plus this board fill');
   assert.equal(state.freeOrderFills, 1);
   // Persistent refillable board: the crate is open again under a new instance id.
   const after = game.openBoardOrders(state, content).filter((o) => o.offerId === 'pip_crate');
@@ -126,7 +126,7 @@ test('board fills pay out, spend crops, and redraw the same order', () => {
   const filled = game.fulfillBoardOrder(older, content, big.id, 62_000);
   assert.equal(filled.success, true);
   assert.equal(filled.coinsEarned, 26);
-  assert.equal(filled.state.offersFilled.big, 1);
+  assert.equal(filled.state.offersFilled.pip_big_order, 1);
   assert.deepEqual(filled.state.basket.crops, { carrot: 0, sunberry: 0 });
 });
 
@@ -143,9 +143,9 @@ test('board fills count toward Pip gift exactly like direct fills', () => {
     state = harvest(state, 2, 82_000 + i * 1_000);
   }
   assert.equal(state.freeOrderFills, 2);
-  assert.equal(state.giftEarned, true);
-  assert.equal(state.starSeeds, 1);
-  assert.ok(state.secondEgg, 'gift via board fills still grants the Leaf egg');
+  assert.equal(game.rewardEarned(state, 'pip_gift'), true);
+  assert.equal((state.seeds.sunberry || 0), 1);
+  assert.ok(game.findEgg(state, 'pip_gift'), 'gift via board fills still grants the Leaf egg');
 });
 
 test('legacy direct fills in FREE still work and gain a board', () => {
@@ -162,7 +162,7 @@ test('legacy direct fills in FREE still work and gain a board', () => {
   // With a board present, direct fills route through the open order.
   const routed = game.fulfillOffer(result.state, content, 'pip_crate', 62_000);
   assert.equal(routed.success, true);
-  assert.equal(routed.state.offersFilled.crate, 3, 'drive + legacy + routed fills');
+  assert.equal(routed.state.offersFilled.pip_crate, 3, 'drive + legacy + routed fills');
 });
 
 test('board fills are safe no-ops when unknown, unfillable, or pre-FREE', () => {
@@ -208,10 +208,10 @@ test('FREE chip points at the market only when a board order is fillable', () =>
   state = game.fulfillOffer(state, content, 'pip_crate', 62_000).state;
   state = game.fulfillOffer(state, content, 'pip_crate', 62_000).state;
   assert.deepEqual([state.basket.crops.carrot, state.basket.crops.sunberry], [0, 1]);
-  state = game.openGift(state);
-  state = game.tapSecondEgg(state, content, 62_000).state;
-  state = game.tapSecondEgg(state, content, 62_000).state;
-  state = game.tapSecondEgg(state, content, 62_000).state;
+  state = game.markRewardSeen(state, 'pip_gift');
+  state = game.tapEgg(state, content, 'pip_gift').state;
+  state = game.tapEgg(state, content, 'pip_gift').state;
+  state = game.tapEgg(state, content, 'pip_gift').state;
   const goal = game.currentGoal(state, content, 62_000);
   assert.notEqual(goal.targetKey, 'market', 'empty basket points at the farm, not the stall');
 });
