@@ -5,4 +5,4 @@ export { CREATURES } from './creatures.js';
 export { ARMOR } from './armor.js';
 export { NPCS, OFFERS, DIALOG, MARKET } from './market.js';
 export { QUESTIONS } from './questions.js';
-export { TUTORIAL, TUTORIAL_SEEDS, STARTER_EGG, FEEDING, REWARDS } from './progression.js';
+export { TUTORIAL, TUTORIAL_SEEDS, STARTER_EGG, FEEDING, REWARDS, BREEDING } from './progression.js';

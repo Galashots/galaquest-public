@@ -1,0 +1,130 @@
+{
+ "version": 2,
+ "savedAt": 1791055291178,
+ "state": {
+  "version": 2,
+  "band": "younger",
+  "createdAt": 1791055291178,
+  "farm": {
+   "plots": [
+    {
+     "cropId": "carrot",
+     "plantedAt": 4000000000000,
+     "watered": true
+    },
+    {
+     "cropId": "carrot",
+     "plantedAt": 4000000000000,
+     "watered": true
+    },
+    {
+     "cropId": "carrot",
+     "plantedAt": 4000000000000,
+     "watered": true
+    }
+   ]
+  },
+  "basket": {
+   "crops": {
+    "carrot": 4,
+    "sunberry": 1
+   },
+   "coins": 12
+  },
+  "seeds": {},
+  "armor": {
+   "owned": [],
+   "equipped": {
+    "helmet": null,
+    "chest": null,
+    "boots": null,
+    "shield": null
+   }
+  },
+  "eggs": [
+   {
+    "cracks": 4,
+    "maxCracks": 4,
+    "readyToHatch": false,
+    "hatchTaps": 3,
+    "requiredHatchTaps": 3,
+    "hatched": true,
+    "elementHint": "sun",
+    "hatchedCreatureId": "sprout",
+    "id": "starter",
+    "label": null,
+    "creatureId": null
+   },
+   {
+    "cracks": 4,
+    "maxCracks": 4,
+    "readyToHatch": false,
+    "hatchTaps": 3,
+    "requiredHatchTaps": 3,
+    "hatched": true,
+    "elementHint": "leaf",
+    "hatchedCreatureId": "mossbun",
+    "id": "pip_gift",
+    "label": "Leaf egg",
+    "creatureId": "mossbun"
+   },
+   {
+    "cracks": 0,
+    "maxCracks": 4,
+    "readyToHatch": false,
+    "hatchTaps": 0,
+    "requiredHatchTaps": 3,
+    "hatched": false,
+    "elementHint": "fire",
+    "hatchedCreatureId": null,
+    "id": "bred_1",
+    "label": "Fire egg",
+    "creatureId": "cinderkit",
+    "bred": true,
+    "parentIds": [
+     "sprout",
+     "cinderkit"
+    ],
+    "startedAt": 0,
+    "hatchAt": 4000000000000,
+    "observedAt": 0
+   }
+  ],
+  "collection": {
+   "owned": {
+    "sprout": true,
+    "mossbun": true,
+    "cinderkit": true
+   },
+   "names": {
+    "sprout": "Sprout",
+    "mossbun": "Mossy",
+    "cinderkit": "Cinder"
+   },
+   "fed": {
+    "sprout": 3
+   }
+  },
+  "goals": {
+   "stepIndex": 11
+  },
+  "rewards": {
+   "earned": [
+    "pip_gift"
+   ],
+   "seen": [
+    "pip_gift"
+   ]
+  },
+  "bookSeen": true,
+  "offersFilled": {},
+  "replantPlanted": 0,
+  "freeOrderFills": 2,
+  "orderBoard": null,
+  "breeding": {
+   "seed": 99,
+   "made": 1
+  },
+  "helpAlong": {}
+ }
+}

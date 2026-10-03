@@ -27,6 +27,9 @@ next.
   bands that should see it. Only list orders the player can actually grow.
 - **A reward** (seeds or a new egg after some play): add an entry to `REWARDS` in
   `progression.js`. New egg rewards appear on the farm and in the goal chip automatically.
+- **Breeding knobs** (hatch time, nest slots, which elements/rarities can result, help-along grades):
+  the `BREEDING` entry in `progression.js`. A new element also needs its label and tint there. The
+  odds the dialog shows and the hatch uses are the same function, `previewBreed` in `rules/breeding.js`.
 - **A creature growth stage:** add to `FEEDING.stages` in `progression.js`; a new `adornment`
   also needs a builder in the renderer.
 - **A new system:** a new module in `game/src/rules/` with its own tests, re-exported from

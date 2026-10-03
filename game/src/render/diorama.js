@@ -346,7 +346,8 @@ export class Diorama {
   /** Tints an egg toward the hinted element (procedural shell and sculpted egg alike). */
   _glowEgg(view, element) {
     const hint = this.content.CROPS.find((c) => c.element === element);
-    const glowColor = new THREE.Color(hint ? hint.color : '#ffd54f');
+    const tint = this.content.BREEDING?.elements[element];
+    const glowColor = new THREE.Color(hint ? hint.color : tint ? tint.color : '#ffd54f');
     const intensity = view.slot === 0 ? 0.35 : 0.5;
     for (const material of view.group.userData.glow) {
       material.emissive = glowColor;

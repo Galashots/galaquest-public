@@ -1,7 +1,8 @@
 // Headless-Chromium screenshots of the game at two iPad viewports, over raw CDP.
 // Usage: node tools/screenshot.mjs [--out <dir>] [--save <file.json>]   (default tmp/screenshots)
 // --save writes that JSON (a full localStorage payload) to the save key before capture, so a
-// mid-game state can be photographed.
+// mid-game state can be photographed. --click <selector> (repeatable) clicks that element, in order,
+// before capture, so a dialog can be photographed.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,6 +31,7 @@ const outIndex = process.argv.indexOf('--out');
 const outDir = resolve(outIndex > 0 ? process.argv[outIndex + 1] : 'tmp/screenshots');
 const saveIndex = process.argv.indexOf('--save');
 const saveJson = saveIndex > 0 ? readFileSync(resolve(process.argv[saveIndex + 1]), 'utf8') : null;
+const clicks = process.argv.flatMap((a, i) => (a === '--click' ? [process.argv[i + 1]] : []));
 const SAVE_KEY = 'gq.farmSlice.v1';
 const errors = [];
 let chrome, server, profile, ws;
@@ -103,6 +105,14 @@ async function capture(sessionId, url, vp) {
     if (result.value === true) break;
     if (Date.now() - start > 30000) throw new Error(`timeout waiting for canvas (${vp.name})`);
     await sleep(250);
+  }
+  for (const selector of clicks) {
+    await sleep(300);
+    const { result } = await send('Runtime.evaluate', {
+      expression: `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (el) el.click(); return !!el; })()`,
+      returnByValue: true,
+    }, sessionId);
+    if (!result.value) throw new Error(`--click: nothing matches ${selector}`);
   }
   await sleep(500); // let a few more frames render
   const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId);

@@ -13,6 +13,8 @@
 //   offersFilled    { [offerId]: n }
 //   freeOrderFills  orders filled in free play
 //   orderBoard      the free-play order board (src/depth/orders.js), or null
+//   breeding        { seed, made }   bred eggs are entries in `eggs` (see breeding.js)
+//   helpAlong       help-along question state (src/depth/help-along.js)
 import * as farm from './farm.js';
 import * as economy from './economy.js';
 import * as armor from './armor.js';
@@ -53,6 +55,8 @@ export function createGameState(now, numPlots = NUM_PLOTS) {
     replantPlanted: 0,
     freeOrderFills: 0,
     orderBoard: null,
+    breeding: { seed: (now >>> 0) || 1, made: 0 },
+    helpAlong: {},
   };
 }
 

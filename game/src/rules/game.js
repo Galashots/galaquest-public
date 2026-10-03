@@ -6,6 +6,7 @@
 //   planting.js   plant, water, harvest
 //   market.js     offers, order board, armor
 //   creatures.js  eggs, hatching, naming, feeding, growth
+//   breeding.js   pair two creatures to make a timed egg
 //   rewards.js    rewards earned by playing (content.REWARDS)
 //   guide.js      the goal chip and arrow target
 export {
@@ -25,5 +26,9 @@ export {
   hatchCreatureId, unhatchedEggs, tapEgg, firstCreatureId, hatchedCreatures, nameCreatureById, nameCreature,
   closeBook, canFeed, feedCreature, growthStages, adornments, nextGrowthStage,
 } from './creatures.js';
+export {
+  breedableCreatures, nestEggs, nestFree, canBreed, previewBreed, pickOutcome, startBreeding, eggProgress,
+  observeNest, helpAlongOffer, answerHelpAlong,
+} from './breeding.js';
 export { checkRewards, rewardEarned, unseenRewards, markRewardSeen } from './rewards.js';
 export { currentGoal, FREE_PLAY_GOALS } from './guide.js';

@@ -12,11 +12,14 @@ a short playtest. `docs/VISION.md` says *what* we're building; this file says *i
 - **Easy to grow (2026-10).** Rules split into one module per system; content is data (tutorial,
   market, rewards, feeding growth); any number of eggs and creatures; the free-play goal chip picks
   from a priority list; versioned saves with migrations. See "Adding things" in `AGENTS.md`.
+- **Breeding (2026-10).** Once two creatures are owned, a 💕 button opens a one-slot nest: pick two
+  parents, see every possible result and its chance, make an egg for free. It is ready after a few
+  minutes (a ring shows progress, never a countdown), the child taps it to hatch, and a question can
+  shorten the wait for rare eggs (`rules/breeding.js`).
 
 ## 1. Deeper farm loop (next)
 
-- Land **breeding v1** (open PR: pair two creatures to make an egg) and **Pip's Garden Festival**
-  (open PR), rebuilt on the new layout.
+- Land **Pip's Garden Festival** (open PR), rebuilt on the new layout.
 - More crops (quick basic crops, slow rare crops) and more creatures, all as data.
 - Creatures visibly transform as they're fed (stages, not just a crest).
 - A second armor set, plus forging armor from crops.

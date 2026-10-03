@@ -55,3 +55,28 @@ export const REWARDS = [
     toast: 'Star seed in your sack — plant it! ✦',
   },
 ];
+
+/**
+ * Breeding: pair two creatures you own to make an egg (src/rules/breeding.js). No cost.
+ * `hatchSeconds`: how long a bred egg takes to be ready (the child still taps it to hatch).
+ * `nestSlots`: how many bred eggs can be growing at once.
+ * `elements`: the elements a bred egg can be, with the label and egg tint shown to the child.
+ * `rarities`: the rarities a bred egg can be, rarest last. A parent pair whose trait has no
+ *   creature in the pool resolves to the nearest rarity that does (ties go to the commoner one).
+ * `helpAlong`: answering a question can shorten a rare egg's wait (src/depth/help-along.js).
+ *   `grades` picks the question grade by the grown-up's band. Wrong answers just give a hint.
+ */
+export const BREEDING = {
+  hatchSeconds: 300,
+  nestSlots: 1,
+  parentsNeeded: 2,
+  elements: {
+    sun: { label: 'Sun', color: '#ffd54f' },
+    fire: { label: 'Fire', color: '#ff7043' },
+    water: { label: 'Water', color: '#4fc3f7' },
+    leaf: { label: 'Leaf', color: '#8bc34a' },
+    spark: { label: 'Spark', color: '#fff176' },
+  },
+  rarities: ['common', 'rare', 'epic'],
+  helpAlong: { grades: { younger: 2, older: 5 } },
+};
