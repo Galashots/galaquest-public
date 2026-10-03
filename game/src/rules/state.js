@@ -10,6 +10,7 @@
 //   collection      { owned, names, fed }   keyed by creature id
 //   goals           { stepIndex }     position in content.TUTORIAL
 //   rewards         { earned: [id], seen: [id] }
+//   decorations     [id]              farm decorations earned (content.REWARDS grant.decoration)
 //   offersFilled    { [offerId]: n }
 //   freeOrderFills  orders filled in free play
 //   orderBoard      the free-play order board (src/depth/orders.js), or null
@@ -48,6 +49,7 @@ export function createGameState(now, numPlots = NUM_PLOTS) {
     collection: collection.createCollectionState(),
     goals: goals.createGoalState(),
     rewards: { earned: [], seen: [] },
+    decorations: [],
     bookSeen: false,
     offersFilled: {},
     replantPlanted: 0,
@@ -95,7 +97,10 @@ export function migrateSave(saved, version) {
   else if (version !== SAVE_VERSION) return null;
   if (!Array.isArray(state.farm?.plots) || !Number.isInteger(state.goals?.stepIndex) ||
       !Array.isArray(state.eggs) || !state.eggs.length || !state.basket || !state.collection) return null;
-  return { ...createGameState(state.createdAt ?? 0, state.farm.plots.length), ...state, version: SAVE_VERSION };
+  // Fields added since the save was made (or missing from it) take their new-game defaults.
+  const merged = { ...createGameState(state.createdAt ?? 0, state.farm.plots.length) };
+  for (const [key, value] of Object.entries(state)) if (value !== undefined) merged[key] = value;
+  return { ...merged, version: SAVE_VERSION };
 }
 
 /** The egg the farm started with. */

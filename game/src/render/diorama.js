@@ -26,6 +26,13 @@ const EGG_SLOTS = [
 const ADORNMENTS = {
   sunCrest: { build: (THREE_, gen_) => gen_.buildSunCrest(THREE_), spark: '#ffd54f' },
 };
+/** Farm decorations granted by rewards (content.REWARDS grant.decoration), by id. */
+const DECORATIONS = {
+  festivalBunting: gen.buildFestivalBunting,
+  festivalPots: gen.buildFestivalPots,
+  festivalLanterns: gen.buildFestivalLanterns,
+  festivalBanner: gen.buildFestivalBanner,
+};
 const MARKET_POSITION = new THREE.Vector3(2.6, 0, -2.2);
 const MANNEQUIN_POSITION = new THREE.Vector3(4.15, 0, -1.5);
 const HERO_POSITION = new THREE.Vector3(0.7, 0, -0.7);
@@ -109,6 +116,7 @@ export class Diorama {
       if (this._lastArmor) this.syncArmor(this._lastArmor.equippedDefs, this._lastArmor.forSaleDef);
       if (this._lastEggs) this.syncEggs(this._lastEggs);
       this.syncAdornments(this._lastAdornments);
+      this.syncDecorations(this._lastDecorations, { quiet: true });
     };
     canvas.addEventListener('webglcontextlost', this._onContextLost, false);
     canvas.addEventListener('webglcontextrestored', this._onContextRestored, false);
@@ -174,6 +182,7 @@ export class Diorama {
 
     // One view per egg id, made by syncEggs: { group, slot, visible, wobble, creature, adorned }.
     this.eggViews = new Map();
+    this.decorations = new Map(); // decoration id -> group
   }
 
   _setupLighting() {
@@ -469,6 +478,33 @@ export class Diorama {
     }
   }
 
+  /**
+   * Adds each earned decoration once (with a pop and sparkles when it is new this session).
+   * Decorations are only ever added: rewards are never taken away.
+   */
+  syncDecorations(ids = [], { quiet = false } = {}) {
+    this._lastDecorations = ids;
+    for (const id of ids) {
+      if (this.decorations.has(id) || !DECORATIONS[id]) continue;
+      const group = DECORATIONS[id](THREE);
+      this.scene.add(group);
+      this.decorations.set(id, group);
+      if (quiet || !this._decorationsSeeded) continue;
+      this.sparkles.spawn(new THREE.Box3().setFromObject(group).getCenter(new THREE.Vector3()), '#ffd54f', 18);
+      this.tweens.pop(group, { peak: 1.12, duration: 0.45 });
+    }
+    // Decorations already earned when the game loads appear without fanfare.
+    this._decorationsSeeded = true;
+  }
+
+  /** Every hatched creature hops high and spins for a few seconds. Never saved. */
+  playCelebration(seconds = 6) {
+    this._danceUntil = this._sway + seconds;
+    for (const view of this.eggViews.values()) {
+      if (view.creature) this.sparkles.spawn(view.creature.position.clone().add(new THREE.Vector3(0, 0.8, 0)), '#ffd54f', 14);
+    }
+  }
+
   // -- One-shot juice hooks (called right after a successful action) ------
 
   playPlantPop() {
@@ -624,8 +660,13 @@ export class Diorama {
       }
       if (view.creature) {
         const phase = view.slot;
-        view.creature.position.y = base.y + Math.abs(Math.sin(this._sway * 3 + phase)) * 0.15;
-        view.creature.rotation.y = Math.sin(this._sway * 0.7 + phase) * 0.4;
+        if (this._sway < (this._danceUntil || 0)) {
+          view.creature.position.y = base.y + Math.abs(Math.sin(this._sway * 7 + phase)) * 0.45;
+          view.creature.rotation.y += dt * 7;
+        } else {
+          view.creature.position.y = base.y + Math.abs(Math.sin(this._sway * 3 + phase)) * 0.15;
+          view.creature.rotation.y = Math.sin(this._sway * 0.7 + phase) * 0.4;
+        }
       }
     }
 

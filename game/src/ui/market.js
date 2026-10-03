@@ -36,6 +36,10 @@ export class MarketPanel {
     this.npcLine.className = 'gq-npc-line';
     this.panel.appendChild(this.npcLine);
 
+    this.trackEl = document.createElement('div');
+    this.trackEl.className = 'gq-track-line';
+    this.panel.appendChild(this.trackEl);
+
     this.bodyEl = document.createElement('div');
     this.panel.appendChild(this.bodyEl);
 
@@ -83,7 +87,7 @@ export class MarketPanel {
   }
 
   /**
-   * @param {{npcGreeting:string, band:string|null,
+   * @param {{npcGreeting:string, band:string|null, trackLines?:string[],
    *   offers: Array<{id:string, text:string, wants:Object, coins:number,
    *     canFulfill:boolean, haveByCrop:Object, cropNames:Object,
    *     perCropRate:number, keepByCrop:Object}>,
@@ -92,6 +96,8 @@ export class MarketPanel {
   render(viewModel) {
     this._lastViewModel = viewModel;
     this.npcLine.textContent = viewModel.npcGreeting || '';
+    this.trackEl.textContent = (viewModel.trackLines || []).join('  ·  ');
+    this.trackEl.style.display = viewModel.trackLines?.length ? 'block' : 'none';
 
     if (this.selectedOfferId) {
       const offer = viewModel.offers.find((o) => o.id === this.selectedOfferId);

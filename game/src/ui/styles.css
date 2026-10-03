@@ -514,3 +514,5 @@ html, body {
 .gq-basket-items strong { flex-basis: 100%; }
 .gq-basket-item { min-height: 56px; border: 3px solid #b86d11; border-radius: 14px; background: #fff8df; padding: 8px 12px; font: inherit; font-weight: 800; }
 .gq-basket-needed { border-color: #43a047; box-shadow: 0 0 0 3px #b1eab5; }
+
+.gq-track-line { text-align: center; font-weight: 700; color: #6a3d9a; margin: 2px 0 6px; font-size: 16px; }

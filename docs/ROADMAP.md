@@ -12,11 +12,12 @@ a short playtest. `docs/VISION.md` says *what* we're building; this file says *i
 - **Easy to grow (2026-10).** Rules split into one module per system; content is data (tutorial,
   market, rewards, feeding growth); any number of eggs and creatures; the free-play goal chip picks
   from a priority list; versioned saves with migrations. See "Adding things" in `AGENTS.md`.
+- **Pip's Garden Festival.** Free-play orders build bunting, flowers, lanterns and a banner, then a
+  Water egg prize, all as reward entries with a progress line at the market.
 
 ## 1. Deeper farm loop (next)
 
-- Land **breeding v1** (open PR: pair two creatures to make an egg) and **Pip's Garden Festival**
-  (open PR), rebuilt on the new layout.
+- Land **breeding v1** (pair two creatures to make an egg), rebuilt on the new layout.
 - More crops (quick basic crops, slow rare crops) and more creatures, all as data.
 - Creatures visibly transform as they're fed (stages, not just a crest).
 - A second armor set, plus forging armor from crops.

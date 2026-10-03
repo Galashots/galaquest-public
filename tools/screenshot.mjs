@@ -86,14 +86,16 @@ async function capture(sessionId, url, vp) {
   await send('Emulation.setDeviceMetricsOverride',
     { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: true }, sessionId);
   if (saveJson) {
-    // Seed localStorage on the page origin, then reload so the game boots from it.
-    await send('Page.navigate', { url }, sessionId);
-    await sleep(800);
+    // Seed localStorage from a plain (non-game) file on the same origin, so the game itself loads
+    // only once. Loading the game first and then reloading cut its model downloads off mid-way,
+    // which Chrome reports as a texture error.
+    await send('Page.navigate', { url: `${url}content/index.js` }, sessionId);
+    await sleep(300);
     await send('Runtime.evaluate', {
       expression: `localStorage.setItem(${JSON.stringify(SAVE_KEY)}, ${JSON.stringify(saveJson)})`,
     }, sessionId);
   }
-  await send('Page.navigate', { url: saveJson ? url + '?r=' + Date.now() : url }, sessionId);
+  await send('Page.navigate', { url }, sessionId);
   const start = Date.now();
   for (;;) {
     const { result } = await send('Runtime.evaluate', {
