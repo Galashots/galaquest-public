@@ -33,7 +33,7 @@ export function previewBreeding(parentA, parentB) {
   return { ...odds, outcomes };
 }
 
-function nextRoll(seed) {
+export function nextRoll(seed) {
   const next = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
   return [next, next / 4294967296];
 }

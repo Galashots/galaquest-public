@@ -29,6 +29,9 @@ next.
   `REWARDS` in `progression.js`. New eggs appear on the farm and in the goal chip automatically;
   a new decoration id also needs a builder in `DECORATIONS` in `game/src/render/diorama.js`.
   Give rewards a shared `track` (and a `TRACKS` entry) to show a progress line at the market.
+- **Breeding knobs** (hatch time, nest slots, which elements/rarities can result, help-along grades):
+  the `BREEDING` entry in `progression.js`. A new element also needs its label and tint there. The
+  odds the dialog shows and the hatch uses are the same function, `previewBreed` in `rules/breeding.js`.
 - **A creature growth stage:** add to `FEEDING.stages` in `progression.js`; a new `adornment`
   also needs a builder in the renderer.
 - **A new system:** a new module in `game/src/rules/` with its own tests, re-exported from

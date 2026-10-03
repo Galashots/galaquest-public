@@ -6,7 +6,7 @@
 //
 // A goal is { step, text, targetKey, plotIndex?, eggId? }.
 // targetKey: 'plot' | 'sprout' | 'ripeCrop' | 'market' | 'mannequin' | 'egg' | 'nameDialog'
-//          | 'book' | 'creature'
+//          | 'book' | 'creature' | 'breed'
 import * as economy from './economy.js';
 import * as farm from './farm.js';
 import { cropsById, findById } from './state.js';
@@ -15,6 +15,7 @@ import { readyPlotIndexes, unwateredGrowingPlotIndexes } from './planting.js';
 import { openBoardOrders } from './market.js';
 import { unhatchedEggs, firstCreatureId } from './creatures.js';
 import { unseenRewards } from './rewards.js';
+import { canBreed } from './breeding.js';
 
 const firstEmptyPlot = (state) => state.farm.plots.findIndex((p) => !p.cropId);
 const firstPlantedPlot = (state) => state.farm.plots.findIndex((p) => p.cropId);
@@ -59,6 +60,9 @@ export const FREE_PLAY_GOALS = [
     const unwatered = unwateredGrowingPlotIndexes(state, content, now);
     return unwatered.length ? { text: 'Water your sprouts', targetKey: 'sprout', plotIndex: unwatered[0] } : null;
   },
+  // Breeding sits below every farm task on purpose: a new egg is the thing to do while the
+  // crops are growing, never a reason to leave ripe crops, orders or empty plots waiting.
+  (state, content) => (canBreed(state, content) ? { text: 'Make an egg!', targetKey: 'breed' } : null),
   (state, content, now) => {
     // Everything is planted and watered: point at the crop closest to ripe.
     const byId = cropsById(content);

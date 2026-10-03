@@ -14,10 +14,13 @@ a short playtest. `docs/VISION.md` says *what* we're building; this file says *i
   from a priority list; versioned saves with migrations. See "Adding things" in `AGENTS.md`.
 - **Pip's Garden Festival.** Free-play orders build bunting, flowers, lanterns and a banner, then a
   Water egg prize, all as reward entries with a progress line at the market.
+- **Breeding (2026-10).** Once two creatures are owned, a 💕 button opens a one-slot nest: pick two
+  parents, see every possible result and its chance, make an egg for free. It is ready after a few
+  minutes (a ring shows progress, never a countdown), the child taps it to hatch, and a question can
+  shorten the wait for rare eggs (`rules/breeding.js`).
 
 ## 1. Deeper farm loop (next)
 
-- Land **breeding v1** (pair two creatures to make an egg), rebuilt on the new layout.
 - More crops (quick basic crops, slow rare crops) and more creatures, all as data.
 - Creatures visibly transform as they're fed (stages, not just a crest).
 - A second armor set, plus forging armor from crops.

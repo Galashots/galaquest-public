@@ -64,6 +64,18 @@ export class Hud {
     this.bookBtn.textContent = '\u{1F4D6}';
     this.overlay.appendChild(this.bookBtn);
 
+    this.breedBtn = document.createElement('button');
+    this.breedBtn.className = 'gq-breed-btn';
+    this.breedBtn.setAttribute('aria-label', 'Make an egg');
+    this.breedBtn.textContent = '\u{1F495}';
+    this.breedBtn.style.display = 'none';
+    this.overlay.appendChild(this.breedBtn);
+
+    this.nestRing = document.createElement('div');
+    this.nestRing.className = 'gq-nest-ring';
+    this.nestRing.style.display = 'none';
+    this.overlay.appendChild(this.nestRing);
+
     this.feedBtn = document.createElement('button');
     this.feedBtn.className = 'gq-feed-btn';
     this.feedBtn.textContent = '☀️ Feed Sprout';
@@ -88,6 +100,19 @@ export class Hud {
   }
   onMuteToggle(cb) { this.muteBtn.addEventListener('click', cb); }
   onBookOpen(cb) { this.bookBtn.addEventListener('click', cb); }
+  onBreed(cb) { this.breedBtn.addEventListener('click', cb); }
+  setBreedVisible(on, attract = false) {
+    this.breedBtn.style.display = on ? 'block' : 'none';
+    this.breedBtn.classList.toggle('gq-attract', !!attract);
+  }
+  /** pos {x, y, progress} for the growing nest egg, or null. A ring, never a number. */
+  setNestRing(pos) {
+    this.nestRing.style.display = pos ? 'block' : 'none';
+    if (!pos) return;
+    this.nestRing.style.left = `${pos.x}px`;
+    this.nestRing.style.top = `${pos.y}px`;
+    this.nestRing.style.setProperty('--progress', `${Math.round(pos.progress * 100)}%`);
+  }
   onFeed(cb) { this.feedBtn.addEventListener('click', cb); }
   setFeedVisible(on) { this.feedBtn.style.display = on ? 'block' : 'none'; }
   /** goal: feeds needed for the next growth stage, or null once fully grown. */

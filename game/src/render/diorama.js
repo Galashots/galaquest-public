@@ -2,6 +2,7 @@
 // juice; it never touches game rules directly -- main.js reads game state
 // with the rules modules and calls the small sync/pick/play API below.
 import * as THREE from '../../vendor/three.module.min.js';
+import { placeEggs } from './placement.js';
 import * as gen from './procgen.js';
 import { TweenManager, SparkleBurst } from './juice.js';
 import { CreatureModels } from './models.js';
@@ -22,6 +23,9 @@ const EGG_SLOTS = [
   new THREE.Vector3(-2.7, 0, -0.3),
   new THREE.Vector3(-1.0, 0, -1.2),
   new THREE.Vector3(-3.6, 0, -1.7),
+  new THREE.Vector3(-0.7, 0, -2.9),
+  new THREE.Vector3(-2.4, 0, -3.0),
+  new THREE.Vector3(3.9, 0, 0.7),
 ];
 const ADORNMENTS = {
   sunCrest: { build: (THREE_, gen_) => gen_.buildSunCrest(THREE_), spark: '#ffd54f' },
@@ -290,16 +294,35 @@ export class Diorama {
   /** One view per egg, in egg order: wobble, cracks, element glow, then a creature on hatch. */
   syncEggs(eggs) {
     this._lastEggs = eggs;
-    const ids = new Set(eggs.map((e) => e.id));
-    for (const [id, view] of this.eggViews) {
-      if (!ids.has(id)) { view.group.visible = false; view.visible = false; if (view.creature) view.creature.visible = false; }
+    this._placement = placeEggs(eggs, EGG_SLOTS.length, this._placement);
+    for (const [id, view] of this.eggViews) if (!this._placement.has(id)) this._hideView(view);
+    for (const egg of eggs) {
+      const slot = this._placement.get(egg.id);
+      if (slot !== undefined) this._syncEgg(egg, slot);
     }
-    eggs.forEach((egg, i) => this._syncEgg(egg, i));
   }
 
-  _syncEgg(egg, index) {
+  /** An egg or creature with no farm spot right now (see placement.js); it lives in the book. */
+  _hideView(view) {
+    if (view.visible) this.sparkles.spawn(view.group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 20);
+    view.group.visible = false;
+    view.visible = false;
+    if (view.creature) view.creature.visible = false;
+    view.hidden = true;
+  }
+
+  _syncEgg(egg, slot) {
     let view = this.eggViews.get(egg.id);
-    if (!view) view = this._makeEggView(egg, index);
+    if (!view) view = this._makeEggView(egg, slot);
+    if (view.slot !== slot) {
+      view.slot = slot;
+      view.group.position.copy(EGG_SLOTS[slot]);
+      if (view.creature) view.creature.position.copy(EGG_SLOTS[slot]);
+    }
+    if (view.hidden) {
+      view.hidden = false;
+      if (view.creature) view.creature.visible = true;
+    }
     const group = view.group;
     const cracksShown = group.userData.cracks.length;
     for (let i = cracksShown; i < egg.cracks + egg.hatchTaps; i++) {
@@ -323,8 +346,7 @@ export class Diorama {
     }
   }
 
-  _makeEggView(egg, index) {
-    const slot = index % EGG_SLOTS.length;
+  _makeEggView(egg, slot) {
     const group = gen.buildEgg(THREE);
     group.position.copy(EGG_SLOTS[slot]);
     group.userData.surfaces = [group.userData.shell];
@@ -355,7 +377,8 @@ export class Diorama {
   /** Tints an egg toward the hinted element (procedural shell and sculpted egg alike). */
   _glowEgg(view, element) {
     const hint = this.content.CROPS.find((c) => c.element === element);
-    const glowColor = new THREE.Color(hint ? hint.color : '#ffd54f');
+    const tint = this.content.BREEDING?.elements[element];
+    const glowColor = new THREE.Color(hint ? hint.color : tint ? tint.color : '#ffd54f');
     const intensity = view.slot === 0 ? 0.35 : 0.5;
     for (const material of view.group.userData.glow) {
       material.emissive = glowColor;

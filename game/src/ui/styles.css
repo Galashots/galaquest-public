@@ -515,4 +515,27 @@ html, body {
 .gq-basket-item { min-height: 56px; border: 3px solid #b86d11; border-radius: 14px; background: #fff8df; padding: 8px 12px; font: inherit; font-weight: 800; }
 .gq-basket-needed { border-color: #43a047; box-shadow: 0 0 0 3px #b1eab5; }
 
+/* -- Breeding ------------------------------------------------------------- */
+.gq-breed-btn { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); left: calc(max(16px, env(safe-area-inset-left)) + 84px); width: 68px; height: 68px; border-radius: 20px; border: 4px solid #d6478a; background: var(--gq-cream); font-size: 1.9rem; z-index: 5; cursor: pointer; }
+.gq-breed-btn.gq-attract { animation: gq-bounce-y 0.8s ease-in-out infinite; }
+.gq-breed-panel { text-align: center; }
+.gq-breed-sub { margin: 0 0 12px; color: var(--gq-brown); font-weight: 700; }
+.gq-breed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.gq-breed-tile { min-height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 4px solid var(--gq-green); border-radius: 16px; background: #f3fff0; font: inherit; cursor: pointer; }
+.gq-breed-tile small { opacity: 0.75; }
+.gq-breed-selected { background: #ffdf80; border-color: #d6478a; }
+.gq-breed-dot { display: inline-block; width: 26px; height: 26px; flex: none; border-radius: 50%; border: 3px solid rgba(0,0,0,0.25); }
+.gq-breed-odds { text-align: left; background: #fff; border: 3px solid var(--gq-brown); border-radius: 16px; padding: 12px; margin-bottom: 14px; }
+.gq-breed-traits { margin: 6px 0 10px; font-weight: 700; }
+.gq-breed-outcome { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 0.95rem; }
+.gq-breed-name { flex: 1 1 40%; font-weight: 700; }
+.gq-breed-bar { flex: 1 1 25%; height: 14px; border-radius: 7px; background: #e6e0cf; overflow: hidden; }
+.gq-breed-fill { display: block; height: 100%; background: #d6478a; }
+.gq-breed-go { margin-right: 10px; }
+.gq-breed-progress { height: 28px; border-radius: 14px; border: 4px solid var(--gq-brown); background: #e6e0cf; overflow: hidden; margin: 8px 0 16px; }
+.gq-breed-progress-fill { display: block; height: 100%; background: #ffca28; }
+.gq-breed-help { border-top: 3px dashed var(--gq-brown); padding-top: 12px; margin-bottom: 12px; }
+.gq-breed-help .gq-btn { margin: 4px; }
+.gq-breed-hint { color: #8a4b00; font-weight: 700; }
+.gq-nest-ring { position: absolute; width: 56px; height: 56px; margin: -28px; border-radius: 50%; background: conic-gradient(#ff80b5 var(--progress), #ffffff88 0); mask: radial-gradient(transparent 52%, black 54%); -webkit-mask: radial-gradient(transparent 52%, black 54%); pointer-events: none; z-index: 4; }
 .gq-track-line { text-align: center; font-weight: 700; color: #6a3d9a; margin: 2px 0 6px; font-size: 16px; }
