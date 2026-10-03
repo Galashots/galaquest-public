@@ -1,45 +1,31 @@
 name: test
 
-# The runtime suite has zero dependencies: three.js is vendored under public/vendor/ and the tests
-# import it directly. So there is deliberately no install step -- nothing to install, and npm
-# lookups are the one thing this project cannot afford (see README, "Zero npm installs").
 on:
   push:
+    branches: [main]
   pull_request:
 
-# Superseded runs on the same ref carry no evidence value -- only the newest head's result binds to
-# a reviewable SHA -- so cancel them instead of letting every push queue a duplicate.
 concurrency:
-  group: test-${{ github.workflow }}-${{ github.ref }}
+  group: test-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege. The suite reads the checkout and writes nothing back. Fork pull requests get a
-# read-only token regardless; stating it here means the job cannot quietly gain write scope if the
-# repository default ever changes.
 permissions:
   contents: read
 
 jobs:
-  unit:
+  test:
     runs-on: ubuntu-latest
-    # The suite finishes in well under a minute; a run that takes ten is hung, not slow.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          # The migration exporter verifies its explicit originating SHA against the checked-out
-          # source authorities. A shallow checkout omits that commit object on pull requests.
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          # 24, not 22, because persistence will use the built-in node:sqlite. On 22 that module
-          # exists only behind --experimental-sqlite, so a 22 runner would force the flag onto every
-          # test command for a store player save data depends on. Moving the runner is the cheaper
-          # half of that trade. Local development is on 24 already.
           node-version: '24'
-      # Scoped on purpose: test/ is the runtime unit suite. Keeping the glob explicit means a future
-      # tool directory that carries its own differently-runnered tests cannot break this gate.
-      - run: node --test test/*.test.mjs
-      # The three.js farm game carries its own node --test suite (game rules, economy, egg, depth
-      # rules). Same runner, explicit globs, so it gates the product without widening the one above.
-      - run: node --test prototypes/farm-slice/test/*.test.mjs prototypes/farm-slice/test/depth/*.test.mjs
+      - run: node --test 'test/**/*.test.mjs'
+      # Boots the game in headless Chrome at iPad sizes; fails on any browser error.
+      - run: CHROME="$(command -v google-chrome)" node tools/screenshot.mjs --out tmp/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: tmp/screenshots/

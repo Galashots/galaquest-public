@@ -1,126 +1,68 @@
+// Static file server for the game. No dependencies: `node server.mjs [port]`.
+// Serves game/ at the site root and prints LAN URLs so an iPad on the same Wi-Fi can play.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { extname, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
-import { promisify } from 'node:util';
-import { brotliDecompress } from 'node:zlib';
-
-import { attachGameServer } from './net/gameServer.mjs';
-import { handleForgeApiRequest } from './net/forgeApi.mjs';
-import { handleRegistryApiRequest } from './net/registryApi.mjs';
 
 export const DEFAULT_PORT = 5201;
-const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)));
-export const PUBLIC_DIR = join(HERE, 'public');
-export const UNITY_WEB_BUILD_DIR = join(HERE, 'unity', 'GalaQuest', 'Builds', 'GalaQuestWebGL');
-// The three.js farm game (docs/product/PRODUCT_VISION.md, Platform). Mounted at /farm/ so the hosted
-// playtest instance serves it to an iPad from the same origin as everything else.
-export const FARM_DIR = join(HERE, 'prototypes', 'farm-slice');
-const decompressBrotli = promisify(brotliDecompress);
+export const GAME_DIR = resolve(fileURLToPath(new URL('./game', import.meta.url)));
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
-  '.data': 'application/octet-stream',
   '.glb': 'model/gltf-binary',
-  '.gltf': 'model/gltf+json',
   '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.jpg': 'image/jpeg',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
-  '.wasm': 'application/wasm',
 };
 
-function safePath(requestUrl) {
-  const pathname = new URL(requestUrl, 'http://runtime.local').pathname;
-  const decoded = decodeURIComponent(pathname);
-  const relative = normalize(decoded).replace(/^[/\\]+/, '');
-  const full = resolve(PUBLIC_DIR, relative || 'index.html');
-  if (full !== PUBLIC_DIR && !full.startsWith(PUBLIC_DIR + sep)) return null;
-  return full;
-}
-
-/** A directory mounted at `/<mount>/`: undefined for any other URL, null for a path that escapes it. */
-function safeMountedPath(requestUrl, mount, root) {
-  const pathname = new URL(requestUrl, 'http://runtime.local').pathname;
-  const prefix = `/${mount}`;
-  if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) return undefined;
-
-  const suffix = pathname === prefix ? '' : pathname.slice(prefix.length + 1);
-  const decoded = decodeURIComponent(suffix);
-  const relative = decoded.length === 0 ? 'index.html' : normalize(decoded).replace(/^[/\\]+/, '');
-  const full = resolve(root, relative);
+/** Resolve a request path inside `root`, or null if it escapes. */
+export function resolveInside(root, pathname) {
+  const relative = normalize(decodeURIComponent(pathname)).replace(/^[/\\]+/, '');
+  const full = resolve(root, relative || 'index.html');
   if (full !== root && !full.startsWith(root + sep)) return null;
   return full;
 }
 
-export function createRuntimeServer(options = {}) {
-  const unityWebBuildDir = resolve(options.unityWebBuildDir ?? UNITY_WEB_BUILD_DIR);
-  const farmDir = resolve(options.farmDir ?? FARM_DIR);
+export function createGameServer({ root = GAME_DIR } = {}) {
   return createServer(async (request, response) => {
     try {
-      // The Asset Forge API is same-origin with the game so generated model bytes can move directly
-      // into the real Three.js inspection scene without exposing the Meshy credential to the browser.
-      // handleForgeApiRequest returns false for every non-Forge URL, preserving the existing runtime.
-      if (await handleForgeApiRequest(request, response)) return;
-
-      // Studio Library (#92 STUDIO-V2A): a read-only, same-origin passthrough of the canonical
-      // asset registry, augmented with a live "can this checkout actually serve these bytes"
-      // check. See net/registryApi.mjs's own header for why this is not a second asset database.
-      if (await handleRegistryApiRequest(request, response)) return;
-
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         response.writeHead(405, { allow: 'GET, HEAD' });
         response.end('method not allowed');
         return;
       }
-
-      // The farm page loads its modules by relative path, so `/farm` must become `/farm/` before
-      // `./src/main.js` can resolve under the mount rather than at the site root.
-      const requestPath = new URL(request.url ?? '/', 'http://runtime.local').pathname;
-      if (requestPath === '/farm') {
-        response.writeHead(302, { location: '/farm/' });
+      const { pathname } = new URL(request.url ?? '/', 'http://local');
+      // Old links pointed at /farm/; the game now lives at the root.
+      if (pathname === '/farm' || pathname.startsWith('/farm/')) {
+        response.writeHead(302, { location: '/' });
         response.end();
         return;
       }
-
-      // Each mount answers undefined for "not mine" and null for "mine, but escapes the root", so a
-      // refused mount path is a 403 here and never falls through to public/.
-      const unityPath = safeMountedPath(request.url ?? '/', 'unity', unityWebBuildDir);
-      const farmPath = safeMountedPath(request.url ?? '/', 'farm', farmDir);
-      let fullPath;
-      if (unityPath !== undefined) fullPath = unityPath;
-      else if (farmPath !== undefined) fullPath = farmPath;
-      else fullPath = safePath(request.url ?? '/');
+      const fullPath = resolveInside(root, pathname.endsWith('/') ? `${pathname}index.html` : pathname);
       if (!fullPath) {
         response.writeHead(403);
         response.end('forbidden');
         return;
       }
-
       const body = await readFile(fullPath);
-      const unityBrotli = unityPath !== undefined && fullPath.toLowerCase().endsWith('.br');
-      const acceptsBrotli = /(?:^|,)\s*br\s*(?:;|,|$)/i.test(request.headers['accept-encoding'] ?? '');
-      // Browsers only negotiate Brotli on secure contexts. The physical-iPad route is intentionally
-      // plain HTTP on the local Wi-Fi, so serve the same build bytes decompressed when `br` was not
-      // offered instead of handing Safari an encoding it did not agree to decode.
-      const responseBody = unityBrotli && !acceptsBrotli ? await decompressBrotli(body) : body;
-      const contentPath = unityBrotli ? fullPath.slice(0, -3) : fullPath;
-      const headers = {
+      response.writeHead(200, {
         'cache-control': 'no-store',
-        'content-length': responseBody.byteLength,
-        'content-type': CONTENT_TYPES[extname(contentPath).toLowerCase()] ?? 'application/octet-stream',
-      };
-      if (unityBrotli && acceptsBrotli) headers['content-encoding'] = 'br';
-      response.writeHead(200, headers);
-      response.end(request.method === 'HEAD' ? undefined : responseBody);
+        'content-length': body.byteLength,
+        'content-type': CONTENT_TYPES[extname(fullPath).toLowerCase()] ?? 'application/octet-stream',
+      });
+      response.end(request.method === 'HEAD' ? undefined : body);
     } catch (error) {
       const notFound = error?.code === 'ENOENT' || error?.code === 'EISDIR';
       response.writeHead(notFound ? 404 : 500, { 'content-type': 'text/plain; charset=utf-8' });
-      response.end(notFound ? 'not found' : `error: ${error.message}`);
+      response.end(notFound ? 'not found' : 'server error');
       if (!notFound) console.error(error);
     }
   });
@@ -133,65 +75,10 @@ function lanAddresses() {
     .map((entry) => entry.address);
 }
 
-export function startRuntimeServer(port = DEFAULT_PORT, options = {}) {
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error(`invalid runtime port: ${port}`);
-  }
-  if (port === 5199) {
-    throw new Error('port 5199 belongs to the decision lab; choose a runtime port such as 5201');
-  }
-
-  const server = createRuntimeServer();
-  // The multiplayer endpoint shares this port on purpose: one URL for both iPads, no second port to
-  // forward, and no chance of the page loading from one host while the socket points at another.
-  const game = attachGameServer(server, options);
-  server.on('close', () => game.stop());
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`port ${port} is already in use; pass another port to node server.mjs`);
-      process.exitCode = 1;
-      return;
-    }
-    throw error;
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const port = Number(process.argv[2] ?? process.env.PORT ?? DEFAULT_PORT);
+  createGameServer().listen(port, '0.0.0.0', () => {
+    console.log(`Hatch & Harvest: http://localhost:${port}/`);
+    for (const address of lanAddresses()) console.log(`  on your Wi-Fi: http://${address}:${port}/`);
   });
-  server.listen(port, '0.0.0.0', () => {
-    console.log(`GalaQuest runtime serving ${PUBLIC_DIR}`);
-    console.log(`  cwd=${process.cwd()}`);
-    console.log(`  port=${port}`);
-    console.log(`  local=http://localhost:${port}/`);
-    console.log(`  multiplayer=ws://localhost:${port}/ws`);
-    console.log(`  forge=http://localhost:${port}/forge.html`);
-    for (const address of lanAddresses()) console.log(`  lan=http://${address}:${port}/`);
-  });
-  return server;
-}
-
-const entrypoint = process.argv[1] ? resolve(process.argv[1]) : null;
-if (entrypoint === resolve(fileURLToPath(import.meta.url))) {
-  const port = Number(process.argv[2] ?? DEFAULT_PORT);
-  // GALAQUEST_REWARD_STORE_PATH is opt-in and unset for every real invocation (the family's own
-  // `node server.mjs 5201`, and every other tools/runtime-test harness) -- it exists solely so a
-  // harness that owns its own server (tools/runtime-test/owned-server.mjs) can point it at a scratch
-  // file instead of the real, tracked data/rewards.db. Without this, a harness proving something as
-  // permanent as Workshop I ownership (net/rewardStore.mjs's own durable, never-un-bought design)
-  // would durably and irreversibly "buy" it in the children's real save. See data/README.md's own
-  // "tests must never open a store at a path under data/" rule, extended here to this harness layer.
-  const rewardStorePath = process.env.GALAQUEST_REWARD_STORE_PATH || undefined;
-  // #87: GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS carries the identical opt-in discipline as
-  // GALAQUEST_REWARD_STORE_PATH immediately above, and is unset for every real invocation -- the
-  // family's own `node server.mjs 5201` never sets it, no npm script sets it, and the only writer
-  // anywhere in the tree is tools/runtime-test/owned-server.mjs on behalf of one harness.
-  //
-  // WHY IT EXISTS. drive-corpse-loot.mjs has to reach a REAL personal corpse claim before it can
-  // prove anything about the presenter, and a corpse only carries gear when an unseeded server dice
-  // roll says so (world/enemyDrops.js: 20% on a frost-wolf, 0% on a common wolf). The hosted matrix
-  // job spent its entire budget re-killing an enemy waiting for that roll and went red having never
-  // once opened the loot panel it exists to test. This hands the server a fixed item list instead,
-  // so the corpse itself, the claim, the wire, the presenter, and the collect path all stay real and
-  // only the DICE stop being a coin flip a CI gate has to sit through.
-  //
-  // Unset -> the empty list -> net/gameServerCore.mjs behaves exactly as it did before this existed.
-  const guaranteedCorpseItemIds = (process.env.GALAQUEST_TEST_GUARANTEED_CORPSE_ITEMS ?? '')
-    .split(',').map((itemId) => itemId.trim()).filter((itemId) => itemId.length > 0);
-  startRuntimeServer(port, { rewardStorePath, guaranteedCorpseItemIds });
 }

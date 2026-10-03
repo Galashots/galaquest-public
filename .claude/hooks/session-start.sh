@@ -1,8 +1,7 @@
 #!/bin/bash
-# Cloud SessionStart hook. The repo has no npm/pip/etc dependencies to install
-# (see README.md "Running it"), but the required unit gate needs Node 24+ for
-# the built-in node:sqlite surface (net/rewardStore.mjs). Cloud containers can
-# default to an older Node via nvm, so ensure the session has Node 24+ here.
+# Cloud SessionStart hook. No npm dependencies to install, but tests use
+# Node 24 features and cloud containers can default to an older Node via nvm,
+# so ensure the session has Node 24+ here.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then

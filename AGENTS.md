@@ -1,61 +1,54 @@
-# GalaQuest public agent authority
+# Working on Hatch & Harvest
 
-Keep these hard boundaries. Before choosing an implementation or review surface, use the task router in `docs/GUIDANCE.md`; load only the relevant domain guidance and mechanical proof. `docs/WORKFLOW.md` owns package framing and production continuation.
+This repo holds one game: **Hatch & Harvest**, a three.js creature-collecting farm game for children,
+played on iPad Safari. Read `docs/VISION.md` for what we're building and `docs/ROADMAP.md` for what's
+next.
 
-## Repository topology
+## Layout
 
-- **PUBLIC — `Galashots/galaquest-public`** is the primary active development authority. Normal gameplay, code, tests, CI, browser/playtesting work, public assets, and new development belong here.
-- **PRIVATE** is archive/provenance authority, private production evidence, provider/account history, and a source for bounded safe ports. It is not the default development repository and its private files are not public startup prerequisites.
-- **LOCAL** clones and worktrees are execution surfaces only. A local checkout is not a separate project authority. Bind review and acceptance evidence to the exact public commit SHA being tested.
+- `game/` — the game. Open `game/index.html`; everything it loads lives here.
+  - `game/content/` — crops, creatures, armor, offers, dialog. **New content goes here as data.**
+  - `game/src/rules/` — pure game rules. No DOM, no three.js. All unit-tested.
+  - `game/src/render/` — the three.js diorama.
+  - `game/src/ui/` — the DOM touch UI.
+  - `game/src/main.js` — wires rules, render and UI together.
+- `test/` — `node --test` unit tests.
+- `tools/screenshot.mjs` — boots the game in headless Chromium at iPad sizes and saves PNGs.
+- `docs/` — vision, roadmap, and the first-session experience contract (`CONTRACT.md`).
 
-## Startup: orient, do not hunt
+## Commands
 
-Work only from the known current checkout. Confirm the public repository and exact head before relying
-on branch, PR, CI, deployment, or prior-chat state; `docs/WORKFLOW.md` owns the orientation sequence.
+```bash
+node server.mjs                     # play at http://localhost:5201/
+node --test 'test/**/*.test.mjs'    # unit tests
+node tools/screenshot.mjs           # iPad screenshots in tmp/screenshots/ + browser error check
+```
 
-If the current directory is not a Git checkout, **do not recursively search the machine** for repositories, old worktrees, Downloads, Desktop folders, or historical clones. Use a known path supplied by the owner, or use live GitHub authority until the intended checkout is known.
+Node 24+. There are no npm dependencies and no build step. Keep it that way: don't add packages.
 
-## Branch, PR, and evidence policy
+## Rules
 
-- Work from public `main` on a task branch and through a pull request. **Do not push directly to `main`.**
-- Do not force-push, rewrite shared history, squash/amend shared commits, merge, or close PRs unless the
-  Owner explicitly authorizes that action.
-- Keep one coherent objective per branch/PR; `docs/WORKFLOW.md` owns package sizing, checkpoints,
-  scope reforecast, writer topology, context health, and handoff detail.
-- Every material test, browser observation, review conclusion, and acceptance claim names the **exact
-  public SHA** it proves.
-- Run relevant tests from the actual checkout; do not trust stale counts or weaken behavior to make CI pass.
+1. **Work on a branch and open a PR.** Never push straight to `main`. One clear goal per PR.
+2. **Keep tests green and honest.** Run the unit tests and the screenshot check before pushing. Don't
+   weaken or skip a test to get green.
+3. **Rules stay pure.** Game logic goes in `game/src/rules/` with tests. Rendering and UI only read
+   state and call rules.
+4. **Content is data.** Adding a crop, creature or armor piece should mean editing `game/content/`,
+   not game code.
+5. **Look at it.** For any visible change, take screenshots and look at them before handing off. The
+   Owner's eyes on the running game are the final judge of how it looks.
+6. **iPad first.** Touch only (no hover or keyboard-only actions), readable at tablet size, light on
+   memory.
+7. **Kid-safe.** Follow `docs/CONTRACT.md` §7 (no premium currency, no guilt text, no fail sounds, no
+   analytics or network calls beyond static files). Never commit children's names, classwork or
+   profile data.
+8. **Assets.** Record every new shipped asset in `ASSET-LICENSES.md`. **No paid Meshy or other
+   provider spend without the Owner's explicit OK for that specific work.**
+9. **Owner decides product direction.** Suggestions go in PRs or issues; only the Owner edits
+   `docs/VISION.md`.
 
-## Guidance is part of the product
+## Old material
 
-- Active guidance must be executable from public authority, not private files, remembered chats, machine state, or historical provider authorization. Repair task-relevant guidance in the same PR when practical.
-- Keep `test/guidance-integrity.test.mjs` effective; repair stale guidance rather than weakening its objective checks. `docs/GUIDANCE.md` owns deliberate exceptions.
-
-## Product authority
-
-- `docs/product/PRODUCT_VISION.md` records settled Owner direction; agent suggestions and isolated observations do not become decisions by repetition.
-- `docs/product/PRODUCT_SYSTEM.md` governs live Issues and decision provenance. Search existing records before claiming work is new, selected, rejected, or prioritized; Project views and chats are not independent authority.
-- Follow applicable design contracts through the task router. Preserve new product signals in the owning record without silently expanding a writer's package or manufacturing a new Owner gate for already-settled direction.
-
-## Visual and product acceptance
-
-- **Running-game pixels are final appearance authority; human visual judgment accepts.** Measurements, isolated renders, and automated checks can diagnose or reject, not replace that judgment.
-- **The producer must visually self-review every new or materially changed player-visible asset before handoff.** For Unity-bound assets, that review includes the actual Unity import at gameplay framing and motion when relevant. `docs/review-guides/asset-visual-review.md` owns the evidence/acceptance contract; `.agents/skills/visual-reference-first/SKILL.md` owns the make-look-fix iteration loop.
-- Producer self-review is **not independent acceptance**. Consequential player-visible work requires the fresh review seam defined by `docs/WORKFLOW.md`; asset promotion into shipped production remains Owner-controlled.
-- If Google Drive is used for source custody or Owner review, use only the controlled lifecycle in `docs/pipeline/google-drive-asset-custody.md`. A Drive decision does not itself promote an asset; ratchet the decision into the GitHub/registry authority that owns that lifecycle.
-- Do not silently change a hero or important character's rig, skeleton, fingers, body, topology, or anatomy to make gear or placement pass. If the defect is in the body/rig rather than the attachment, stop and report it.
-- Asset promotion into shipped production remains Owner-controlled; qualification and evidence are not approval.
-- No paid Meshy or other provider spend without explicit owner authorization for that **specific current work**. A budget, historical spend, old delegation, credit ceiling, or presence of a guarded `--go` tool is never authorization by itself.
-- Read `ASSET-LICENSES.md` before adding, replacing, or reclassifying shipped assets. Do not call paid-plan Meshy gear CC0 unless the recorded licence actually says CC0.
-
-## Private-source boundary
-
-Private GalaQuest material may be inspected when a bounded public-safe port genuinely requires it, but it remains source/provenance rather than the active development authority.
-
-Use this sequence:
-
-`inspect the needed private source once -> define the exact public-safe surface -> implement/port in public -> test public -> bind acceptance to the resulting public SHA`
-
-Do not bulk-copy private branches or preserve duplicate active implementations. Third-party or franchise-inspired private gear remains private unless its redistribution and project use are explicitly cleared.
-
-If a routed public instruction names a missing path, repair or report the guidance defect; do not hunt for a private substitute.
+The Unity project, the old action-adventure client, the multiplayer server and the old process docs
+were removed in the rescue. They are all on the `archive/pre-rescue` branch. To bring something back:
+`git checkout origin/archive/pre-rescue -- <path>`.

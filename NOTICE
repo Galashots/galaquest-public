@@ -19,12 +19,9 @@ THIRD-PARTY COMPONENTS
 Some components in this repository ARE covered by their own licences, and those licences govern
 those components regardless of the paragraph above:
 
-  * public/vendor/three.module.min.js and the loaders/utils beside it are three.js,
+  * game/vendor/three.module.min.js and the loaders/utils beside it are three.js,
     Copyright 2010-2024 Three.js Authors, MIT licensed. Their licence headers are intact and must
     remain intact in any redistribution.
-
-  * Several environment and prop models derive from CC0 1.0 Universal asset packs. CC0 material may
-    be reused freely under CC0 terms.
 
 ASSETS ARE NOT COVERED BY THE SOURCE POSTURE
 --------------------------------------------
