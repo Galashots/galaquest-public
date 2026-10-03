@@ -110,6 +110,7 @@ export class MarketPanel {
     const wrap = document.createElement('div');
     wrap.className = 'gq-offers';
     this.offerCards = [];
+    this.fillableCards = [];
     viewModel.offers.forEach((offer) => {
       const card = document.createElement('div');
       card.className = 'gq-offer-card';
@@ -140,6 +141,7 @@ export class MarketPanel {
 
       wrap.appendChild(card);
       this.offerCards.push(card);
+      if (offer.canFulfill && !offer.paused) this.fillableCards.push(card);
     });
     this.bodyEl.appendChild(wrap);
   }
@@ -370,10 +372,11 @@ export class MarketPanel {
       }
       return this.backBtn.getBoundingClientRect();
     }
-    if (step === 'offer' && this.offerCards?.length) return this.offerCards[Math.floor(Date.now() / 1400) % this.offerCards.length].getBoundingClientRect();
-    // In FREE play the board holds 2-3 refillable cards, so the panel center
-    // would land on one of them. Point at the title instead: the arrow means
-    // "go to the market", never "pick this card" (CONTRACT.md section 7).
+    // The arrow sways evenly between the cards the player can fill, so there is always an
+    // obvious next step but never a favoured deal (docs/CONTRACT.md §7). In the first visit
+    // that is both cards; in free play it is whichever board orders the basket can fill.
+    const cards = step === 'offer' ? this.offerCards : step === 'free' ? this.fillableCards : null;
+    if (cards?.length) return cards[Math.floor(Date.now() / 1400) % cards.length].getBoundingClientRect();
     if (step === 'free') return this.titleEl.getBoundingClientRect();
     return this.bodyEl.getBoundingClientRect();
   }
