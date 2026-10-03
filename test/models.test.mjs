@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import test from 'node:test';
 
 import * as THREE from '../game/vendor/three.module.min.js';
-import { CREATURES } from '../game/content/content.js';
+import { CREATURES } from '../game/content/index.js';
 import {
   CREATURE_MODEL_HEIGHT, CREATURE_MODEL_IDS, CREATURE_MODEL_MAX_LENGTH,
   CREATURE_MODEL_YAW, CreatureModels, EGG_MODEL_HEIGHT, normalizeModel,

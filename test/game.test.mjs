@@ -43,7 +43,7 @@ function toFirstHarvest() {
   state = plant(state, 1, 'sunberry', 0);
   assert.equal(game.currentGoal(state, content, 0).step, 'plant');
   state = plant(state, 2, 'carrot', 0);
-  assert.equal(state.egg.cracks, 1);
+  assert.equal(game.starterEgg(state).cracks, 1);
   assert.equal(game.currentGoal(state, content, 0).step, 'grow');
   state = reload(state, 0);
   assert.equal(game.readyPlotIndexes(state, content, 19_999).length, 0);
@@ -58,11 +58,11 @@ function toFirstHarvest() {
   assert.equal(game.currentGoal(state, content, 20_000).step, 'harvest');
   state = harvest(state, 2, 20_000);
   assert.equal(game.currentGoal(state, content, 20_000).step, 'harvest', 'market waits for the sunberry');
-  assert.equal(state.egg.cracks, 1);
+  assert.equal(game.starterEgg(state).cracks, 1);
   state = reload(state, 20_000);
   state = harvest(state, 1, 25_000);
   assert.deepEqual({ carrot: state.basket.crops.carrot, sunberry: state.basket.crops.sunberry }, { carrot: 6, sunberry: 2 });
-  assert.equal(state.egg.cracks, 2);
+  assert.equal(game.starterEgg(state).cracks, 2);
   assert.equal(game.currentGoal(state, content, 25_000).step, 'market');
   return reload(state, 25_000);
 }
@@ -77,26 +77,26 @@ function fullPath(offerId, expectedCoins, expectedCarrots, expectedSunberries) {
   assert.equal(state.basket.coins, expectedCoins);
   assert.equal(state.basket.crops.carrot, expectedCarrots);
   assert.equal(state.basket.crops.sunberry, expectedSunberries);
-  assert.equal(state.offersFilled[offerId === 'pip_crate' ? 'crate' : 'bundle'], 1);
+  assert.equal(state.offersFilled[offerId], 1);
   assert.equal(game.fulfillOffer(state, content, offerId, 25_000).success, false, 'only the chosen first sale commits');
-  assert.equal(state.egg.cracks, 3);
+  assert.equal(game.starterEgg(state).cracks, 3);
   assert.equal(game.currentGoal(state, content, 25_000).step, 'armor');
   state = reload(state, 25_000);
   state = game.buyArmor(state, content, 'leaf_crest_helmet', 25_000).state;
   assert.equal(state.armor.equipped.helmet, 'leaf_crest_helmet');
   assert.equal(state.basket.coins, expectedCoins - 10);
-  assert.equal(state.egg.cracks, 4);
-  assert.equal(state.egg.readyToHatch, true);
+  assert.equal(game.starterEgg(state).cracks, 4);
+  assert.equal(game.starterEgg(state).readyToHatch, true);
   assert.equal(game.currentGoal(state, content, 25_000).step, 'hatch');
   state = reload(state, 25_000);
-  state = game.tapEgg(state, content, 360_000).state;
-  assert.equal(state.egg.hatchTaps, 1);
+  state = game.tapEgg(state, content).state;
+  assert.equal(game.starterEgg(state).hatchTaps, 1);
   state = reload(state, 360_000);
-  assert.equal(state.egg.hatchTaps, 0, 'hatch taps are transient');
-  state = game.tapEgg(state, content, 360_000).state;
-  state = game.tapEgg(state, content, 360_000).state;
-  state = game.tapEgg(state, content, 360_000).state;
-  assert.equal(state.egg.hatchedCreatureId, 'sprout');
+  assert.equal(game.starterEgg(state).hatchTaps, 0, 'hatch taps are transient');
+  state = game.tapEgg(state, content).state;
+  state = game.tapEgg(state, content).state;
+  state = game.tapEgg(state, content).state;
+  assert.equal(game.starterEgg(state).hatchedCreatureId, 'sprout');
   assert.equal(game.currentGoal(state, content, 360_000).step, 'name');
   state = reload(state, 360_000);
   assert.equal(game.currentGoal(state, content, 360_000).targetKey, 'nameDialog');
@@ -104,12 +104,12 @@ function fullPath(offerId, expectedCoins, expectedCarrots, expectedSunberries) {
   assert.equal(state.collection.names.sprout.length, 12);
   assert.equal(game.currentGoal(state, content, 365_000).step, 'book');
   state = reload(state, 365_000);
-  assert.equal(game.feedSunberry(state, content, 365_000).success, false, 'feeding early cannot consume the last berry');
+  assert.equal(game.feedCreature(state, content).success, false, 'feeding early cannot consume the last berry');
   state = game.closeBook(state);
   assert.equal(state.bookSeen, true);
   assert.equal(game.currentGoal(state, content, 365_000).step, 'feed');
   state = reload(state, 365_000);
-  state = game.feedSunberry(state, content, 365_000).state;
+  state = game.feedCreature(state, content).state;
   assert.equal(state.collection.fed.sprout, 1);
   assert.equal(state.basket.crops.sunberry, expectedSunberries - 1);
   assert.equal(game.currentGoal(state, content, 365_000).step, 'replant');
@@ -121,7 +121,7 @@ function fullPath(offerId, expectedCoins, expectedCarrots, expectedSunberries) {
   assert.equal(state.basket.crops.carrot, expectedCarrots + 9);
   assert.equal(game.currentGoal(state, content, 385_000).step, 'free');
   state = reload(state, 385_000);
-  assert.equal(state.egg.cracks, 4);
+  assert.equal(game.starterEgg(state).cracks, 4);
   assert.equal(state.basket.coins, expectedCoins - 10);
   return state;
 }
@@ -133,12 +133,12 @@ test('the creature fetched ahead of the hatch is the one that hatches, for every
   const hints = [null, ...new Set(content.CROPS.map((crop) => crop.element).filter(Boolean))];
   for (const hint of hints) {
     let state = game.createGameState(0);
-    state = { ...state, egg: { ...state.egg, cracks: 4, readyToHatch: true, elementHint: hint } };
-    const expected = game.nextHatchCreatureId(state, content);
+    state = { ...state, eggs: [{ ...game.starterEgg(state), cracks: 4, readyToHatch: true, elementHint: hint }] };
+    const expected = game.hatchCreatureId(game.starterEgg(state), content);
     assert.ok(expected, `a creature is predicted for hint ${hint}`);
-    for (let i = 0; i < 3; i++) state = game.tapEgg(state, content, 0).state;
-    assert.equal(state.egg.hatchedCreatureId, expected, `hint ${hint}`);
-    assert.equal(game.nextHatchCreatureId(state, content), null, 'nothing left to fetch once hatched');
+    for (let i = 0; i < 3; i++) state = game.tapEgg(state, content).state;
+    assert.equal(game.starterEgg(state).hatchedCreatureId, expected, `hint ${hint}`);
+    assert.equal(game.hatchCreatureId(game.starterEgg(state), content), null, 'nothing left to fetch once hatched');
   }
 });
 

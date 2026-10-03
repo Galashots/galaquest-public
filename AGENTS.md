@@ -7,14 +7,33 @@ next.
 ## Layout
 
 - `game/` — the game. Open `game/index.html`; everything it loads lives here.
-  - `game/content/` — crops, creatures, armor, offers, dialog. **New content goes here as data.**
-  - `game/src/rules/` — pure game rules. No DOM, no three.js. All unit-tested.
-  - `game/src/render/` — the three.js diorama.
-  - `game/src/ui/` — the DOM touch UI.
+  - `game/content/` — all game data: `crops.js`, `creatures.js`, `armor.js`, `market.js`
+    (NPCs, offers, which offers/armor the market shows), `progression.js` (tutorial, feeding
+    growth, rewards), `questions.js`. **New content goes here.**
+  - `game/src/rules/` — pure game rules, one module per system. No DOM, no three.js. All tested.
+    `game.js` re-exports them; `state.js` owns the state shape and save migrations.
+  - `game/src/render/` — the three.js diorama. `game/src/ui/` — the DOM touch UI.
   - `game/src/main.js` — wires rules, render and UI together.
 - `test/` — `node --test` unit tests.
 - `tools/screenshot.mjs` — boots the game in headless Chromium at iPad sizes and saves PNGs.
 - `docs/` — vision, roadmap, and the first-session experience contract (`CONTRACT.md`).
+
+## Adding things
+
+- **A crop, creature or armor piece:** add an entry to `crops.js`, `creatures.js` or `armor.js`.
+  A creature model goes in `game/assets/creatures/<id>.glb` and is listed in
+  `game/src/render/models.js`; without one, a procedural body is drawn.
+- **A market order:** add it to `OFFERS` in `market.js`, and list its id in `MARKET.board` for the
+  bands that should see it. Only list orders the player can actually grow.
+- **A reward** (seeds or a new egg after some play): add an entry to `REWARDS` in
+  `progression.js`. New egg rewards appear on the farm and in the goal chip automatically.
+- **A creature growth stage:** add to `FEEDING.stages` in `progression.js`; a new `adornment`
+  also needs a builder in the renderer.
+- **A new system:** a new module in `game/src/rules/` with its own tests, re-exported from
+  `game.js`. If it gives the player something to do, add a suggestion to `FREE_PLAY_GOALS` in
+  `guide.js` so the goal chip points at it.
+- **A new saved field:** add it to `createGameState` in `state.js`. If old saves need converting,
+  bump `SAVE_VERSION` and add a migration step with a test.
 
 ## Commands
 

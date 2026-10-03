@@ -64,7 +64,7 @@ test('Ember pieces are never offered and never buyable', () => {
 });
 
 test('every Sprout price is payable in the 2-coin economy', () => {
-  const shop = content.ARMOR.filter((a) => a.set === game.SHOP_ARMOR_SET);
+  const shop = content.ARMOR.filter((a) => a.set === content.MARKET.armorSet);
   assert.equal(shop.length, 4);
   for (const piece of shop) {
     assert.equal(piece.price % 2, 0, `${piece.id} must cost an even number of 2-coins`);
@@ -77,7 +77,7 @@ test('pre-package saves with only the helmet owned resume at the vest', () => {
   // keep it valid and the shop must continue at the second piece.
   let state = game.createGameState(0);
   state = {
-    ...game.migrateRetention(state),
+    ...state,
     armor: { owned: ['leaf_crest_helmet'], equipped: { helmet: 'leaf_crest_helmet', chest: null, boots: null, shield: null } },
   };
   assert.equal(game.nextArmorForSale(state, content)?.id, 'sprout_chest');

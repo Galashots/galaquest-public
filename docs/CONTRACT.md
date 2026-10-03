@@ -80,13 +80,7 @@ LearnAlberta blocks automated fetches, so the outcome wording was cross-checked 
 
 ## 4. State model
 
-**Save.** The save lives in `localStorage["gq.farmSlice.v1"]`, with try/catch on every access. If storage is unavailable, the game still plays; it just doesn't persist.
-
-```
-{v:1, band, goal, cracks, egg:"WOBBLE"|"READY"|"HATCHED",
- plots:[{crop, plantedAt, watered, harvested}], basket:{carrot, sunberry},
- coins, offersFilled:{crate, bundle}, equipped:{head}, creatures:[{id, name, fed}], bookSeen}
-```
+**Save.** The save lives in `localStorage["gq.farmSlice.v1"]`, with try/catch on every access. If storage is unavailable, the game still plays; it just doesn't persist. The state shape and the migrations from older saves are in `game/src/rules/state.js`; the goal steps below are `TUTORIAL` in `game/content/progression.js`.
 
 - **When to save:** on every goal change, plant, water, harvest, offer commit, and purchase.
 - **Ripeness:** computed from `now − plantedAt`, clamped at ≥0. Once a crop is ripe it stays ripe.
