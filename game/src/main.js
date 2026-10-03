@@ -30,7 +30,7 @@ const giftDialog = new GiftDialog(app, { onTake: handleTakeGift });
 let giftRewardId = null;
 const seedLabel = (cropId) => {
   const crop = content.CROPS.find((c) => c.id === cropId);
-  return crop?.starSeed ? '✦ Star seed' : `${crop?.freeSeed ? '🥕 ' : ''}${crop ? crop.name : cropId} seed`;
+  return crop?.starSeed ? '✦ Star seed' : `${crop?.icon ? `${crop.icon} ` : ''}${crop ? crop.name : cropId} seed`;
 };
 const tray = new SeedTray(app, (cropId) => { selectedSeed = cropId; refresh(); }, seedLabel);
 let selectedSeed = null;

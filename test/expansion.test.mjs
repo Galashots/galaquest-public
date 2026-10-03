@@ -134,3 +134,14 @@ test('the free-play guide always has an answer', () => {
     assert.ok(goal.text && goal.targetKey, `goal at ${now}`);
   }
 });
+
+test('the feed step uses the name the child chose', () => {
+  let state = game.createGameState(0);
+  state = {
+    ...state,
+    goals: { stepIndex: content.TUTORIAL.findIndex((s) => s.id === 'feed') },
+    eggs: [{ ...game.starterEgg(state), hatched: true, hatchedCreatureId: 'sprout' }],
+    collection: { owned: { sprout: true }, names: { sprout: 'Buddy' }, fed: {} },
+  };
+  assert.equal(game.currentGoal(state, content, 0).text, 'Feed Buddy a sunberry');
+});

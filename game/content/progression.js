@@ -50,6 +50,8 @@ export const REWARDS = [
       egg: { id: 'pip_gift', element: 'leaf', creatureId: 'mossbun', label: 'Leaf egg' },
     },
     title: 'Pip has a gift for you!',
+    text: '“Two more orders filled — you’re a true farmer now! For you: a twinkling ✦ star seed for '
+      + 'your sack, and this speckled Leaf egg. I can hear a little Mossbun inside!” — Pip',
     toast: 'Star seed in your sack — plant it! ✦',
   },
 ];

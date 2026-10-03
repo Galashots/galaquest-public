@@ -5,9 +5,9 @@
 // rules -- fill progress here is transient UI state only, never persisted
 // (CONTRACT.md: "Partial fills and coin taps: UI-only").
 
-// Presentation only: content has no icon field yet, so other crops fall back to a seedling.
-const CROP_ICONS = { carrot: '🥕', sunberry: '☀️' };
-const cropIcon = (id) => CROP_ICONS[id] || '🌱';
+import { CROPS } from '../../content/index.js';
+
+const cropIcon = (id) => CROPS.find((c) => c.id === id)?.icon || '🌱';
 
 export class MarketPanel {
   constructor(root, { onFulfillOffer, onBuyArmor, onClose, onSlotFill, onCoinTap } = {}) {

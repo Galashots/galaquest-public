@@ -18,10 +18,10 @@ const PLOT_POSITIONS = [
 const EGG_SLOTS = [
   new THREE.Vector3(-3.8, 0, 2.4),
   new THREE.Vector3(-2.85, 0, 3.55),
-  new THREE.Vector3(-4.1, 0, 0.8),
-  new THREE.Vector3(-2.7, 0, 0.9),
-  new THREE.Vector3(-4.1, 0, -0.8),
-  new THREE.Vector3(-2.6, 0, -0.5),
+  new THREE.Vector3(-4.1, 0, 0.0),
+  new THREE.Vector3(-2.7, 0, -0.3),
+  new THREE.Vector3(-1.0, 0, -1.2),
+  new THREE.Vector3(-3.6, 0, -1.7),
 ];
 const ADORNMENTS = {
   sunCrest: { build: (THREE_, gen_) => gen_.buildSunCrest(THREE_), spark: '#ffd54f' },

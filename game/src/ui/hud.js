@@ -94,6 +94,7 @@ export class Hud {
   setFeedMeter(fed, visible, goal = null, name = '') {
     this.feedMeter.style.display = visible ? 'block' : 'none';
     this.feedMeter.textContent = goal ? `☀️ ${name} ${Math.min(fed, goal)}/${goal}` : `☀️ ${name} full`;
+    if (name) this.feedBtn.textContent = `☀️ Feed ${name}`;
   }
 
   setGoalText(text) {

@@ -13,7 +13,7 @@ import { cropsById, findById } from './state.js';
 import { step } from './progress.js';
 import { readyPlotIndexes, unwateredGrowingPlotIndexes } from './planting.js';
 import { openBoardOrders } from './market.js';
-import { unhatchedEggs } from './creatures.js';
+import { unhatchedEggs, firstCreatureId } from './creatures.js';
 import { unseenRewards } from './rewards.js';
 
 const firstEmptyPlot = (state) => state.farm.plots.findIndex((p) => !p.cropId);
@@ -86,7 +86,12 @@ const TUTORIAL_GOALS = {
   hatch: () => ({ text: 'Tap the egg!', targetKey: 'egg', eggId: 'starter' }),
   name: () => ({ text: 'Name your creature', targetKey: 'nameDialog' }),
   book: () => ({ text: 'Open your book', targetKey: 'book' }),
-  feed: () => ({ text: 'Feed Sprout a sunberry', targetKey: 'creature' }),
+  feed: (state, content) => {
+    const id = firstCreatureId(state);
+    const name = state.collection.names[id] || findById(content.CREATURES, id)?.name || 'your creature';
+    const food = findById(content.CROPS, content.FEEDING.food)?.name.toLowerCase() || content.FEEDING.food;
+    return { text: `Feed ${name} a ${food}`, targetKey: 'creature' };
+  },
   replant: (state, content, now) => {
     if (farm.allPlotsEmpty(state.farm)) return { text: 'Plant again', targetKey: 'plot', plotIndex: firstEmptyPlot(state) };
     const empty = firstEmptyPlot(state);
