@@ -1,6 +1,6 @@
 // One shared house-style template for every GalaQuest farm creature reference image.
 //   node prompts.mjs <id> [variant] > prompt.txt
-// Names/elements/rarity/shape/colors follow prototypes/farm-slice/content/content.js (origin/co-ceo/shell).
+// Names/elements/rarity/shape/colors follow game/content/content.js (origin/co-ceo/shell).
 
 const HOUSE = 'Original character design for a 3D creature-collector farm adventure game, shown as a single '
   + 'finished stylized 3D game model render: chunky toy-like sculpt, smooth clean surfaces, bold hand-painted '

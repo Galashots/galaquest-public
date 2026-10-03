@@ -1,6 +1,6 @@
 # Farm creatures, egg and hero: Meshy batch of 2026-09-24
 
-Provenance for the models the farm game (`prototypes/farm-slice/`) loads. The Owner authorized up to
+Provenance for the models the farm game (`game/`) loads. The Owner authorized up to
 500 Meshy credits for new farm-game assets on 2026-09-24. An agent produced the batch under that
 authorization; it spent **353 credits** over 36 paid calls (balance 4801 → 4448, matching the sum of
 per-task `consumed_credits` exactly).
@@ -20,9 +20,9 @@ The manifest names files as the batch folder did. In this repository:
 
 | Manifest | Repository |
 | --- | --- |
-| `ship/<creature>.glb` | `prototypes/farm-slice/assets/creatures/<creature>.glb` |
-| `ship/egg.glb` | `prototypes/farm-slice/assets/egg.glb` |
-| `ship/hero.glb` | `prototypes/farm-slice/assets/candidates/hero.glb`: a candidate, not loaded by the game yet |
+| `ship/<creature>.glb` | `game/assets/creatures/<creature>.glb` |
+| `ship/egg.glb` | `game/assets/egg.glb` |
+| `ship/hero.glb` | `game/assets/candidates/hero.glb`: a candidate, not loaded by the game yet |
 | `refs/<asset>.png` | `refs/<asset>.jpg` (downsized) |
 | The batch folder's own tools scripts (prompts, egg re-bake, region recolour) | `recipes/prompts.mjs`, `recipes/rebake_egg.py`, `recipes/recolor_region.py` |
 | `tools/budget/recompress_glb.py` | `tools/budget/recompress_glb.py` (the repository's own) |
