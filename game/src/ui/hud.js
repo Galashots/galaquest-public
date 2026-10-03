@@ -90,7 +90,11 @@ export class Hud {
   onBookOpen(cb) { this.bookBtn.addEventListener('click', cb); }
   onFeed(cb) { this.feedBtn.addEventListener('click', cb); }
   setFeedVisible(on) { this.feedBtn.style.display = on ? 'block' : 'none'; }
-  setFeedMeter(fed, visible) { this.feedMeter.style.display = visible ? 'block' : 'none'; this.feedMeter.textContent = `☀️ Sprout ${Math.min(fed, 3)}/3`; }
+  /** goal: feeds needed for the next growth stage, or null once fully grown. */
+  setFeedMeter(fed, visible, goal = null, name = '') {
+    this.feedMeter.style.display = visible ? 'block' : 'none';
+    this.feedMeter.textContent = goal ? `☀️ ${name} ${Math.min(fed, goal)}/${goal}` : `☀️ ${name} full`;
+  }
 
   setGoalText(text) {
     if (this.chip.textContent === text) return;
