@@ -23,7 +23,12 @@ jobs:
           node-version: '24'
       - run: node --test 'test/**/*.test.mjs'
       # Boots the game in headless Chrome at iPad sizes; fails on any browser error.
-      - run: CHROME="$(command -v google-chrome)" node tools/screenshot.mjs --out tmp/screenshots
+      - run: CHROME="$(command -v google-chrome)" node tools/screenshot.mjs --out tmp/screenshots/new-game
+      # Saved games: a mid-game v2 save with three eggs, and a v1 save that must migrate.
+      - run: |
+          for save in tools/fixtures/*.json; do
+            CHROME="$(command -v google-chrome)" node tools/screenshot.mjs --save "$save" --out "tmp/screenshots/$(basename "$save" .json)"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
