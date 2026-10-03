@@ -30,5 +30,5 @@ export {
   breedableCreatures, nestEggs, nestFree, canBreed, previewBreed, pickOutcome, startBreeding, eggProgress,
   observeNest, helpAlongOffer, answerHelpAlong,
 } from './breeding.js';
-export { checkRewards, rewardEarned, unseenRewards, markRewardSeen } from './rewards.js';
+export { checkRewards, rewardEarned, newlyEarned, unseenRewards, markRewardSeen, trackProgress } from './rewards.js';
 export { currentGoal, FREE_PLAY_GOALS } from './guide.js';

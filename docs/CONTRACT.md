@@ -144,7 +144,7 @@ Each player plays alone. The adult says only "Do whatever you like." Record each
 - Absence or guilt text, such as "We missed you!".
 - Red crosses, "Wrong!", lost coins or crops, or fail sounds.
 - Any question gate on the hatch or on any first-session step.
-- Nudging toward one offer, such as a "Best deal!" badge or a biased arrow.
+- Nudging toward one offer, such as a "Best deal!" badge or a biased arrow. (The arrow may sway evenly between every offer the player can fill; it never favours one.)
 - Countdowns, flashing above 3 Hz, or "Are you sure you want to quit?".
 - Network calls beyond static files, or analytics.
 

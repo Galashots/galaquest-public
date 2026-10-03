@@ -36,6 +36,10 @@ export class MarketPanel {
     this.npcLine.className = 'gq-npc-line';
     this.panel.appendChild(this.npcLine);
 
+    this.trackEl = document.createElement('div');
+    this.trackEl.className = 'gq-track-line';
+    this.panel.appendChild(this.trackEl);
+
     this.bodyEl = document.createElement('div');
     this.panel.appendChild(this.bodyEl);
 
@@ -83,7 +87,7 @@ export class MarketPanel {
   }
 
   /**
-   * @param {{npcGreeting:string, band:string|null,
+   * @param {{npcGreeting:string, band:string|null, trackLines?:string[],
    *   offers: Array<{id:string, text:string, wants:Object, coins:number,
    *     canFulfill:boolean, haveByCrop:Object, cropNames:Object,
    *     perCropRate:number, keepByCrop:Object}>,
@@ -92,6 +96,8 @@ export class MarketPanel {
   render(viewModel) {
     this._lastViewModel = viewModel;
     this.npcLine.textContent = viewModel.npcGreeting || '';
+    this.trackEl.textContent = (viewModel.trackLines || []).join('  ·  ');
+    this.trackEl.style.display = viewModel.trackLines?.length ? 'block' : 'none';
 
     if (this.selectedOfferId) {
       const offer = viewModel.offers.find((o) => o.id === this.selectedOfferId);
@@ -110,6 +116,7 @@ export class MarketPanel {
     const wrap = document.createElement('div');
     wrap.className = 'gq-offers';
     this.offerCards = [];
+    this.fillableCards = [];
     viewModel.offers.forEach((offer) => {
       const card = document.createElement('div');
       card.className = 'gq-offer-card';
@@ -140,6 +147,7 @@ export class MarketPanel {
 
       wrap.appendChild(card);
       this.offerCards.push(card);
+      if (offer.canFulfill && !offer.paused) this.fillableCards.push(card);
     });
     this.bodyEl.appendChild(wrap);
   }
@@ -370,10 +378,11 @@ export class MarketPanel {
       }
       return this.backBtn.getBoundingClientRect();
     }
-    if (step === 'offer' && this.offerCards?.length) return this.offerCards[Math.floor(Date.now() / 1400) % this.offerCards.length].getBoundingClientRect();
-    // In FREE play the board holds 2-3 refillable cards, so the panel center
-    // would land on one of them. Point at the title instead: the arrow means
-    // "go to the market", never "pick this card" (CONTRACT.md section 7).
+    // The arrow sways evenly between the cards the player can fill, so there is always an
+    // obvious next step but never a favoured deal (docs/CONTRACT.md §7). In the first visit
+    // that is both cards; in free play it is whichever board orders the basket can fill.
+    const cards = step === 'offer' ? this.offerCards : step === 'free' ? this.fillableCards : null;
+    if (cards?.length) return cards[Math.floor(Date.now() / 1400) % cards.length].getBoundingClientRect();
     if (step === 'free') return this.titleEl.getBoundingClientRect();
     return this.bodyEl.getBoundingClientRect();
   }

@@ -538,3 +538,4 @@ html, body {
 .gq-breed-help .gq-btn { margin: 4px; }
 .gq-breed-hint { color: #8a4b00; font-weight: 700; }
 .gq-nest-ring { position: absolute; width: 56px; height: 56px; margin: -28px; border-radius: 50%; background: conic-gradient(#ff80b5 var(--progress), #ffffff88 0); mask: radial-gradient(transparent 52%, black 54%); -webkit-mask: radial-gradient(transparent 52%, black 54%); pointer-events: none; z-index: 4; }
+.gq-track-line { text-align: center; font-weight: 700; color: #6a3d9a; margin: 2px 0 6px; font-size: 16px; }

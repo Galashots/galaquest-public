@@ -25,8 +25,10 @@ next.
   `game/src/render/models.js`; without one, a procedural body is drawn.
 - **A market order:** add it to `OFFERS` in `market.js`, and list its id in `MARKET.board` for the
   bands that should see it. Only list orders the player can actually grow.
-- **A reward** (seeds or a new egg after some play): add an entry to `REWARDS` in
-  `progression.js`. New egg rewards appear on the farm and in the goal chip automatically.
+- **A reward** (seeds, a new egg, or a farm decoration after some play): add an entry to
+  `REWARDS` in `progression.js`. New eggs appear on the farm and in the goal chip automatically;
+  a new decoration id also needs a builder in `DECORATIONS` in `game/src/render/diorama.js`.
+  Give rewards a shared `track` (and a `TRACKS` entry) to show a progress line at the market.
 - **Breeding knobs** (hatch time, nest slots, which elements/rarities can result, help-along grades):
   the `BREEDING` entry in `progression.js`. A new element also needs its label and tint there. The
   odds the dialog shows and the hatch uses are the same function, `previewBreed` in `rules/breeding.js`.

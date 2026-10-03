@@ -61,6 +61,7 @@ function syncVisuals(now) {
     ['market', 'offer', 'armor', 'free'].includes(step()) ? game.nextArmorForSale(state, content) : null);
   diorama.syncEggs(state.eggs);
   for (const egg of game.unhatchedEggs(state)) diorama.preloadCreature(game.hatchCreatureId(egg, content));
+  diorama.syncDecorations(state.decorations);
   diorama.syncAdornments(Object.fromEntries(game.hatchedCreatures(state)
     .map(({ creatureId }) => [creatureId, game.adornments(state, content, creatureId)])));
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
@@ -122,6 +123,15 @@ function refresh() {
   hud.setArrowTarget(target);
 }
 
+/** One line per reward track, shown in free play: "🎪 Festival 3/8 · lanterns in 2 more orders". */
+function trackLines() {
+  if (step() !== 'free') return [];
+  return content.TRACKS.map((t) => game.trackProgress(state, content, t.id)).filter(Boolean).map((p) => {
+    if (!p.next) return `${p.track.icon} ${p.track.doneText}`;
+    const more = p.next.remaining === 1 ? '1 more order' : `${p.next.remaining} more orders`;
+    return `${p.track.icon} ${p.track.name} ${p.done}/${p.total} · ${p.next.label} in ${more}`;
+  });
+}
 function renderMarket() {
   const cropNames = Object.fromEntries(content.CROPS.map((c) => [c.id, c.name]));
   const defs = game.visibleOffers(state, content);
@@ -135,7 +145,7 @@ function renderMarket() {
     perCropRate: o.coins / Object.values(o.wants).reduce((a, b) => a + b, 0),
   }));
   const armorDef = game.nextArmorForSale(state, content);
-  market.render({ npcGreeting: content.NPCS[0].greeting, band: state.band, offers,
+  market.render({ npcGreeting: content.NPCS[0].greeting, band: state.band, offers, trackLines: trackLines(),
     armor: armorDef ? {
       id: armorDef.id, name: armorDef.name, price: armorDef.price,
       canAfford: economy.canAfford(state.basket, armorDef.price), coins: state.basket.coins,
@@ -169,9 +179,18 @@ function handleFulfillOffer(id) {
   hud.showToast(`+${paid} coins · ${Array.from({length: paid / 2}, (_, i) => (i + 1) * 2).join(', ')}`, 2500);
   market.selectedOfferId = null;
   market._fill = {};
+  announceNewRewards(previous);
   applyResult(previous);
   renderMarket();
   openNextReward();
+}
+
+/** Toast rewards that have no dialog of their own; start a dance for celebrated ones. */
+function announceNewRewards(previous) {
+  for (const reward of game.newlyEarned(previous, state, content)) {
+    if (!reward.title && reward.toast) setTimeout(() => hud.showToast(reward.toast, 2500), 2600);
+    if (reward.celebrate) { audio.sfx.hatch(); diorama.playCelebration(8); }
+  }
 }
 
 function openNextReward() {

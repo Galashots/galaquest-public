@@ -40,6 +40,10 @@ export const FEEDING = {
  * Rewards earned by playing. Each is granted once, the first time its condition holds.
  * `when.freeOrderFills`: orders filled in free play.
  * `grant.seeds`: limited seeds added to the sack. `grant.egg`: a new egg, ready to hatch.
+ * `grant.decoration`: a farm decoration id (the renderer has a builder for each).
+ * A reward with a `title` is announced in a dialog and the goal chip until opened; one
+ * without is just a `toast`. `track` groups rewards into a progress line (see TRACKS);
+ * `label` names the reward in that line. `celebrate` makes every creature dance.
  */
 export const REWARDS = [
   {
@@ -54,6 +58,28 @@ export const REWARDS = [
       + 'your sack, and this speckled Leaf egg. I can hear a little Mossbun inside!” — Pip',
     toast: 'Star seed in your sack — plant it! ✦',
   },
+  // Pip's Garden Festival: every free-play order builds the party, then a Water egg.
+  { id: 'festival_bunting', track: 'festival', label: 'bunting', when: { freeOrderFills: 1 },
+    grant: { decoration: 'festivalBunting' }, toast: 'Bunting for the festival! 🎉' },
+  { id: 'festival_pots', track: 'festival', label: 'flowers', when: { freeOrderFills: 3 },
+    grant: { decoration: 'festivalPots' }, toast: 'Flowers for the festival! 🌸' },
+  { id: 'festival_lanterns', track: 'festival', label: 'lanterns', when: { freeOrderFills: 5 },
+    grant: { decoration: 'festivalLanterns' }, toast: 'Lanterns for the festival! 🏮' },
+  { id: 'festival_banner', track: 'festival', label: 'the banner', when: { freeOrderFills: 7 },
+    grant: { decoration: 'festivalBanner' }, toast: 'The festival banner is up! 🎪' },
+  {
+    id: 'festival_prize', track: 'festival', label: 'a Water egg', when: { freeOrderFills: 8 },
+    grant: { egg: { id: 'festival', element: 'water', creatureId: 'puddlefin', label: 'Water egg' } },
+    title: 'The Garden Festival is ready!',
+    text: '“You built the whole festival! Here is a prize for the best farmer: a Water egg.” — Pip',
+    toast: 'A Water egg! 💧',
+    celebrate: true,
+  },
+];
+
+/** Progress lines shown at the market for reward tracks. */
+export const TRACKS = [
+  { id: 'festival', icon: '🎪', name: 'Festival', doneText: 'Festival complete! Thank you for building it!' },
 ];
 
 /**
