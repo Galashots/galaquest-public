@@ -1,0 +1,127 @@
+{
+  "version": 2,
+  "savedAt": 1791055291178,
+  "state": {
+    "version": 2,
+    "band": "younger",
+    "createdAt": 1791055291178,
+    "farm": {
+      "plots": [
+        {
+          "cropId": null,
+          "plantedAt": null,
+          "watered": false
+        },
+        {
+          "cropId": null,
+          "plantedAt": null,
+          "watered": false
+        },
+        {
+          "cropId": null,
+          "plantedAt": null,
+          "watered": false
+        }
+      ]
+    },
+    "basket": {
+      "crops": {
+        "carrot": 4,
+        "sunberry": 1
+      },
+      "coins": 12
+    },
+    "seeds": {},
+    "armor": {
+      "owned": [],
+      "equipped": {
+        "helmet": null,
+        "chest": null,
+        "boots": null,
+        "shield": null
+      }
+    },
+    "eggs": [
+      {
+        "cracks": 4,
+        "maxCracks": 4,
+        "readyToHatch": false,
+        "hatchTaps": 3,
+        "requiredHatchTaps": 3,
+        "hatched": true,
+        "elementHint": "sun",
+        "hatchedCreatureId": "sprout",
+        "id": "starter",
+        "label": null,
+        "creatureId": null
+      },
+      {
+        "cracks": 4,
+        "maxCracks": 4,
+        "readyToHatch": false,
+        "hatchTaps": 3,
+        "requiredHatchTaps": 3,
+        "hatched": true,
+        "elementHint": "leaf",
+        "hatchedCreatureId": "mossbun",
+        "id": "pip_gift",
+        "label": "Leaf egg",
+        "creatureId": "mossbun"
+      },
+      {
+        "cracks": 0,
+        "maxCracks": 4,
+        "readyToHatch": true,
+        "hatchTaps": 0,
+        "requiredHatchTaps": 3,
+        "hatched": false,
+        "elementHint": "water",
+        "hatchedCreatureId": null,
+        "id": "festival",
+        "label": "Water egg",
+        "creatureId": "puddlefin"
+      }
+    ],
+    "collection": {
+      "owned": {
+        "sprout": true,
+        "mossbun": true
+      },
+      "names": {
+        "sprout": "Sprout",
+        "mossbun": "Mossy"
+      },
+      "fed": {
+        "sprout": 3
+      }
+    },
+    "goals": {
+      "stepIndex": 11
+    },
+    "rewards": {
+      "earned": [
+        "festival_bunting",
+        "pip_gift",
+        "festival_pots",
+        "festival_lanterns",
+        "festival_banner",
+        "festival_prize"
+      ],
+      "seen": [
+        "pip_gift",
+        "festival_prize"
+      ]
+    },
+    "bookSeen": true,
+    "offersFilled": {},
+    "replantPlanted": 0,
+    "freeOrderFills": 8,
+    "orderBoard": null,
+    "decorations": [
+      "festivalBunting",
+      "festivalPots",
+      "festivalLanterns",
+      "festivalBanner"
+    ]
+  }
+}

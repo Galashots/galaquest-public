@@ -25,5 +25,5 @@ export {
   hatchCreatureId, unhatchedEggs, tapEgg, firstCreatureId, hatchedCreatures, nameCreatureById, nameCreature,
   closeBook, canFeed, feedCreature, growthStages, adornments, nextGrowthStage,
 } from './creatures.js';
-export { checkRewards, rewardEarned, unseenRewards, markRewardSeen } from './rewards.js';
+export { checkRewards, rewardEarned, newlyEarned, unseenRewards, markRewardSeen, trackProgress } from './rewards.js';
 export { currentGoal, FREE_PLAY_GOALS } from './guide.js';

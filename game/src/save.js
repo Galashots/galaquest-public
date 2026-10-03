@@ -1,6 +1,6 @@
 // localStorage save/load, wrapped in try/catch: private browsing, a full quota or disabled
 // storage must never crash the game. Old saves are migrated by rules/state.js.
-import { SAVE_VERSION, createGameState, migrateSave, ensureOrderBoard } from './rules/game.js';
+import { SAVE_VERSION, createGameState, migrateSave, ensureOrderBoard, checkRewards } from './rules/game.js';
 import * as content from '../content/index.js';
 
 const SAVE_KEY = 'gq.farmSlice.v1'; // the key predates save version 2; the payload carries the version
@@ -26,7 +26,8 @@ export function loadGame(now) {
     const raw = window.localStorage.getItem(SAVE_KEY);
     const payload = raw ? JSON.parse(raw) : null;
     const state = payload ? migrateSave(payload.state, payload.version) : null;
-    if (state) return { state: ensureOrderBoard(state, content), isNewGame: false };
+    // checkRewards grants anything added to content since this save was made.
+    if (state) return { state: checkRewards(ensureOrderBoard(state, content), content), isNewGame: false };
   } catch (err) {
     console.warn('[save] could not load game, starting fresh', err);
   }
