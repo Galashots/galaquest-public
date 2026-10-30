@@ -20,8 +20,10 @@ function findChrome() {
   const base = '/opt/pw-browsers';
   if (existsSync(base)) {
     for (const dir of readdirSync(base).filter((d) => d.startsWith('chromium-')).sort().reverse()) {
-      const bin = join(base, dir, 'chrome-linux', 'chrome');
-      if (existsSync(bin)) return bin;
+      for (const sub of ['chrome-linux64', 'chrome-linux']) {
+        const bin = join(base, dir, sub, 'chrome');
+        if (existsSync(bin)) return bin;
+      }
     }
   }
   return 'google-chrome'; // PATH lookup; `chromium` is tried if this fails to spawn
