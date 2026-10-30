@@ -4,7 +4,7 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import { placeEggs } from './placement.js';
 import * as gen from './procgen.js';
-import { TweenManager, SparkleBurst } from './juice.js';
+import { TweenManager, SparkleBurst, easeOutBack } from './juice.js';
 import { CreatureModels } from './models.js';
 import { addCrack, seatCrack } from './cracks.js';
 
@@ -29,6 +29,7 @@ const EGG_SLOTS = [
 ];
 const ADORNMENTS = {
   sunCrest: { build: (THREE_, gen_) => gen_.buildSunCrest(THREE_), spark: '#ffd54f' },
+  starHalo: { build: (THREE_, gen_) => gen_.buildStarHalo(THREE_), spark: '#fff59d', lift: 0.32 },
 };
 /** Farm decorations granted by rewards (content.REWARDS grant.decoration), by id. */
 const DECORATIONS = {
@@ -100,7 +101,7 @@ export class Diorama {
     this._lastFarm = null;
     this._lastArmor = null;
     this._lastEggs = null;
-    this._lastAdornments = {};
+    this._lastGrowth = {};
     this._preloadIds = new Set();
 
     // Outlives _buildScene: a lost context rebuilds the scene from the same
@@ -119,7 +120,7 @@ export class Diorama {
       if (this._lastFarm) this.syncFarm(this._lastFarm.farmState, this._lastFarm.now);
       if (this._lastArmor) this.syncArmor(this._lastArmor.equippedDefs, this._lastArmor.forSaleDef);
       if (this._lastEggs) this.syncEggs(this._lastEggs);
-      this.syncAdornments(this._lastAdornments);
+      this.syncGrowth(this._lastGrowth);
       this.syncDecorations(this._lastDecorations, { quiet: true });
     };
     canvas.addEventListener('webglcontextlost', this._onContextLost, false);
@@ -371,7 +372,7 @@ export class Diorama {
       target: creature.scale, prop: null, from: 0, to: 1, duration: 0.5,
       onUpdate: (v) => creature.scale.setScalar(v),
     });
-    if (this._lastAdornments) this.syncAdornments(this._lastAdornments);
+    if (this._lastGrowth) this.syncGrowth(this._lastGrowth);
   }
 
   /** Tints an egg toward the hinted element (procedural shell and sculpted egg alike). */
@@ -433,18 +434,23 @@ export class Diorama {
     });
     group.userData.creatureId = creatureDef.id;
     group.userData.eggId = eggId;
+    // The outer group carries hatch/hop pops; the body inside it carries the growth size,
+    // so a pop never resets how big a creature has grown. Adornments ride on the body.
+    const body = new THREE.Group();
+    group.add(body);
+    group.userData.body = body;
     const model = this.models.instance(creatureDef.id, creatureDef.shape);
-    group.add(model ?? gen.buildCreature(THREE, creatureDef));
+    body.add(model ?? gen.buildCreature(THREE, creatureDef));
     // Unparented and unscaled here, so the world box is the creature's own height.
     group.userData.height = model ? model.userData.height : new THREE.Box3().setFromObject(group).max.y;
-    if (model) group.add(gen.creatureShadow(THREE));
+    if (model) body.add(gen.creatureShadow(THREE));
     else if (this.models.has(creatureDef.id)) {
       this.models.load(creatureDef.id).then(() => {
         const upgrade = this.models.instance(creatureDef.id, creatureDef.shape);
         const view = this.eggViews.get(eggId);
         if (!upgrade || !view || view.creature !== group) return;
-        clearGroupDisposing(group);
-        group.add(upgrade, gen.creatureShadow(THREE));
+        clearGroupDisposing(body);
+        body.add(upgrade, gen.creatureShadow(THREE));
         group.userData.height = upgrade.userData.height;
         // No pop here: a pop restores the scale it started from, which could
         // freeze a half-grown creature if this lands during the hatch grow-in.
@@ -452,12 +458,18 @@ export class Diorama {
         // The sculpted upgrade replaces the whole subtree, so bloomed
         // adornments must be re-attached rather than assumed to survive.
         view.adorned = {};
-        this.syncAdornments(this._lastAdornments);
+        this.syncGrowth(this._lastGrowth);
         this.sparkles.spawn(group.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#fff3b0', 12);
       });
     }
     tag(group);
     return group;
+  }
+
+  /** Height just above a creature's head, counting how big it has grown and its halo. */
+  _creatureTop(view) {
+    const { height, body } = view.creature.userData;
+    return height * body.scale.x + (view.adorned.starHalo ? 0.45 : 0.1);
   }
 
   /** The view whose creature has this id (first match), or null. */
@@ -469,27 +481,38 @@ export class Diorama {
   }
 
   /**
-   * Adornments grown by feeding, as { [creatureId]: ['sunCrest', ...] }. Added
-   * groups perched on the creature; idempotent across frames, and the
-   * body/rig underneath is never edited.
+   * Growth from feeding, as { [creatureId]: { adornments: ['sunCrest', ...], size } }.
+   * Adornments are added groups perched on the creature, and size scales its body (with
+   * a grow-in when it changes this session). Idempotent across frames; the rig
+   * underneath is never edited.
    */
-  syncAdornments(map) {
-    this._lastAdornments = map || {};
+  syncGrowth(map) {
+    this._lastGrowth = map || {};
     for (const view of this.eggViews.values()) {
       const creature = view.creature;
       if (!creature) continue;
-      const wanted = this._lastAdornments[creature.userData.creatureId] || [];
+      const growth = this._lastGrowth[creature.userData.creatureId] || {};
+      const body = creature.userData.body;
+      const size = growth.size || 1;
+      if (body.userData.size === undefined) body.scale.setScalar(size);
+      else if (body.userData.size !== size) {
+        this.tweens.add({ target: body, prop: '__grow', from: body.scale.x, to: size, duration: 0.7,
+          ease: easeOutBack, onUpdate: (v) => body.scale.setScalar(v) });
+        this.sparkles.spawn(creature.position.clone().add(new THREE.Vector3(0, 0.6 * size, 0)), '#c5e1a5', 20);
+      }
+      body.userData.size = size;
+      const wanted = growth.adornments || [];
       for (const [name, def] of Object.entries(ADORNMENTS)) {
         const has = view.adorned[name];
         if (wanted.includes(name) && !has) {
           const height = creature.userData.height || 0.5;
           const piece = def.build(THREE, gen);
           piece.scale.setScalar(THREE.MathUtils.clamp(height / 0.6, 0.9, 1.8));
-          piece.position.set(0, height - 0.02, 0);
+          piece.position.set(0, height - 0.02 + (def.lift || 0), 0);
           piece.traverse((o) => {
             o.userData.pickType = 'creature'; o.userData.eggId = view.id; o.userData.creatureId = creature.userData.creatureId;
           });
-          creature.add(piece);
+          body.add(piece);
           view.adorned[name] = piece;
           this.sparkles.spawn(creature.position.clone().add(new THREE.Vector3(0, 0.8, 0)), def.spark, 16);
         } else if (!wanted.includes(name) && has) {
@@ -604,14 +627,14 @@ export class Diorama {
         const view = this.eggViews.get(descriptor.eggId ?? 'starter');
         if (!view) return null;
         return view.creature
-          ? view.creature.position.clone().add(new THREE.Vector3(0, view.creature.userData.height + 0.1, 0))
+          ? view.creature.position.clone().add(new THREE.Vector3(0, this._creatureTop(view), 0))
           : EGG_SLOTS[view.slot].clone().add(new THREE.Vector3(0, 1, 0));
       }
       case 'creature': {
         // Just above its head, as for the egg: a fixed low offset put the arrow on its face.
         const view = this._creatureView(descriptor.creatureId);
         return view
-          ? view.creature.position.clone().add(new THREE.Vector3(0, view.creature.userData.height + 0.1, 0))
+          ? view.creature.position.clone().add(new THREE.Vector3(0, this._creatureTop(view), 0))
           : null;
       }
       default:
@@ -690,6 +713,8 @@ export class Diorama {
           view.creature.position.y = base.y + Math.abs(Math.sin(this._sway * 3 + phase)) * 0.15;
           view.creature.rotation.y = Math.sin(this._sway * 0.7 + phase) * 0.4;
         }
+        const halo = view.adorned.starHalo;
+        if (halo) halo.rotation.y += dt * 1.2;
       }
     }
 

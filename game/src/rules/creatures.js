@@ -66,16 +66,23 @@ export function closeBook(state) {
   return completeStep({ ...state, bookSeen: true }, 'book');
 }
 
-export function canFeed(state, content) {
-  return ['feed', 'free'].includes(step(state)) && economy.countOf(state.basket, content.FEEDING.food) > 0;
+/** The crop a creature would eat next: the first of content.FEEDING.foods in the basket, or null. */
+export function feedFood(state, content) {
+  return content.FEEDING.foods.find((id) => economy.countOf(state.basket, id) > 0) ?? null;
 }
 
-/** Feed a creature (default: the first hatchling) one piece of content.FEEDING.food. */
+/** A creature (default: the first hatchling) can eat when there is food and it is still growing. */
+export function canFeed(state, content, creatureId = firstCreatureId(state)) {
+  return ['feed', 'free'].includes(step(state)) && feedFood(state, content) !== null
+    && !!creatureId && nextGrowthStage(state, content, creatureId) !== null;
+}
+
+/** Feed a creature (default: the first hatchling) one piece of its food (see feedFood). */
 export function feedCreature(state, content, creatureId = firstCreatureId(state)) {
-  if (!creatureId || !collection.isDiscovered(state.collection, creatureId) || !canFeed(state, content)) {
+  if (!creatureId || !collection.isDiscovered(state.collection, creatureId) || !canFeed(state, content, creatureId)) {
     return { state, success: false };
   }
-  const basket = economy.addCrop(state.basket, content.FEEDING.food, -1);
+  const basket = economy.addCrop(state.basket, feedFood(state, content), -1);
   let next = { ...state, basket, collection: collection.feedCreature(state.collection, creatureId) };
   if (creatureId === firstCreatureId(state)) next = completeStep(next, 'feed');
   return { state: next, success: true };
@@ -90,6 +97,11 @@ export function growthStages(state, content, creatureId) {
 /** Adornments a creature has grown, e.g. ['sunCrest']. */
 export function adornments(state, content, creatureId) {
   return growthStages(state, content, creatureId).map((s) => s.adornment).filter(Boolean);
+}
+
+/** How big a creature has grown: the `size` of its latest stage that sets one, else 1. */
+export function growthSize(state, content, creatureId) {
+  return growthStages(state, content, creatureId).reduce((size, s) => s.size ?? size, 1);
 }
 
 /** The next growth stage for a creature, or null once fully grown. */

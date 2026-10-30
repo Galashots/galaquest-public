@@ -13,7 +13,9 @@ import { cropsById, findById } from './state.js';
 import { step } from './progress.js';
 import { readyPlotIndexes, unwateredGrowingPlotIndexes } from './planting.js';
 import { openBoardOrders } from './market.js';
-import { unhatchedEggs, firstCreatureId } from './creatures.js';
+import {
+  unhatchedEggs, firstCreatureId, hatchedCreatures, feedFood, canFeed,
+} from './creatures.js';
 import { unseenRewards } from './rewards.js';
 import { canBreed } from './breeding.js';
 
@@ -63,6 +65,14 @@ export const FREE_PLAY_GOALS = [
   // Breeding sits below every farm task on purpose: a new egg is the thing to do while the
   // crops are growing, never a reason to leave ripe crops, orders or empty plots waiting.
   (state, content) => (canBreed(state, content) ? { text: 'Make an egg!', targetKey: 'breed' } : null),
+  (state, content) => {
+    // Still waiting on crops: grow a creature that isn't fully grown yet.
+    const hungry = hatchedCreatures(state).find((c) => canFeed(state, content, c.creatureId));
+    if (!hungry) return null;
+    const name = state.collection.names[hungry.creatureId] || findById(content.CREATURES, hungry.creatureId)?.name;
+    const food = findById(content.CROPS, feedFood(state, content))?.name.toLowerCase();
+    return { text: `Feed ${name} a ${food}`, targetKey: 'creature', creatureId: hungry.creatureId };
+  },
   (state, content, now) => {
     // Everything is planted and watered: point at the crop closest to ripe.
     const byId = cropsById(content);
@@ -93,7 +103,8 @@ const TUTORIAL_GOALS = {
   feed: (state, content) => {
     const id = firstCreatureId(state);
     const name = state.collection.names[id] || findById(content.CREATURES, id)?.name || 'your creature';
-    const food = findById(content.CROPS, content.FEEDING.food)?.name.toLowerCase() || content.FEEDING.food;
+    const foodId = feedFood(state, content) ?? content.FEEDING.foods[0];
+    const food = findById(content.CROPS, foodId)?.name.toLowerCase() || foodId;
     return { text: `Feed ${name} a ${food}`, targetKey: 'creature' };
   },
   replant: (state, content, now) => {

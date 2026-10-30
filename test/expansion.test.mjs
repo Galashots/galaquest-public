@@ -106,7 +106,8 @@ test('tapping one egg never touches another', () => {
 });
 
 test('growth stages come from content', () => {
-  const c = { ...content, FEEDING: { ...content.FEEDING, stages: [...content.FEEDING.stages, { feeds: 5, adornment: 'bigCrest' }] } };
+  const c = { ...content, FEEDING: { ...content.FEEDING,
+    stages: [{ feeds: 3, adornment: 'sunCrest' }, { feeds: 5, adornment: 'bigCrest' }] } };
   let state = freeState();
   state = { ...state, basket: { ...state.basket, crops: { sunberry: 10 } } };
   const feeds = [];
@@ -116,6 +117,63 @@ test('growth stages come from content', () => {
   }
   assert.deepEqual(feeds, ['', 'sunCrest', 'sunCrest', 'sunCrest+bigCrest']);
   assert.equal(game.nextGrowthStage(state, c, 'sprout'), null);
+});
+
+test('creatures eat sunberries first, then carrots', () => {
+  let state = freeState();
+  state = { ...state, basket: { ...state.basket, crops: { sunberry: 1, carrot: 2 } } };
+  assert.equal(game.feedFood(state, content), 'sunberry');
+  state = game.feedCreature(state, content).state;
+  assert.deepEqual(state.basket.crops, { sunberry: 0, carrot: 2 });
+  assert.equal(game.feedFood(state, content), 'carrot');
+  state = game.feedCreature(state, content).state;
+  assert.equal(state.basket.crops.carrot, 1);
+  state = { ...state, basket: { ...state.basket, crops: {} } };
+  assert.equal(game.canFeed(state, content), false, 'nothing to eat');
+  assert.equal(game.feedCreature(state, content).success, false);
+});
+
+test('creatures grow bigger at later stages and stop at full size', () => {
+  let state = freeState();
+  state = { ...state, basket: { ...state.basket, crops: { carrot: 20 } } };
+  const sizes = [];
+  for (let fed = 1; fed < 10; fed++) {
+    sizes.push(game.growthSize(state, content, 'sprout'));
+    state = game.feedCreature(state, content).state;
+  }
+  // fed counts 1..9, then 10: crest at 3, bigger at 6, grown up at 10.
+  assert.deepEqual(sizes, [1, 1, 1, 1, 1, 1.15, 1.15, 1.15, 1.15]);
+  assert.equal(game.growthSize(state, content, 'sprout'), 1.3);
+  assert.deepEqual(game.adornments(state, content, 'sprout'), ['sunCrest', 'starHalo']);
+  assert.equal(game.nextGrowthStage(state, content, 'sprout'), null);
+  // A fully grown creature doesn't eat, so no food is wasted on it.
+  const carrots = state.basket.crops.carrot;
+  assert.equal(game.canFeed(state, content, 'sprout'), false);
+  assert.equal(game.feedCreature(state, content, 'sprout').success, false);
+  assert.equal(state.basket.crops.carrot, carrots);
+});
+
+test('any hatched creature can be fed and grows on its own count', () => {
+  let state = freeState();
+  state = { ...state, eggs: [...state.eggs, game.createEgg({ id: 'a', creatureId: 'mossbun', ready: true })],
+    basket: { ...state.basket, crops: { carrot: 5 } } };
+  state = game.tapEgg(state, content, 'a').state;
+  while (!game.findEgg(state, 'a').hatched) state = game.tapEgg(state, content, 'a').state;
+  for (let i = 0; i < 3; i++) state = game.feedCreature(state, content, 'mossbun').state;
+  assert.deepEqual(game.adornments(state, content, 'mossbun'), ['sunCrest']);
+  assert.deepEqual(game.adornments(state, content, 'sprout'), [], 'Sprout was not fed');
+});
+
+test('free play suggests feeding a growing creature while crops grow', () => {
+  let state = freeState();
+  state = { ...state, basket: { ...state.basket, crops: { carrot: 1 } } };
+  for (let i = 0; i < state.farm.plots.length; i++) state = game.plantPlot(state, content, i, 'carrot', 0).state;
+  for (let i = 0; i < state.farm.plots.length; i++) state = game.waterPlot(state, content, i, 0).state;
+  const goal = game.currentGoal(state, content, 1);
+  assert.equal(goal.text, 'Feed Sprout a carrot');
+  assert.equal(goal.creatureId, 'sprout');
+  state = { ...state, collection: { ...state.collection, fed: { sprout: 10 } } };
+  assert.equal(game.currentGoal(state, content, 1).text, 'Your crops are growing...', 'fully grown: no nagging');
 });
 
 test('free-play seeds offer limited seeds first, then the free seed', () => {
