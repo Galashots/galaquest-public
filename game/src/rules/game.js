@@ -24,7 +24,7 @@ export {
 } from './market.js';
 export {
   hatchCreatureId, unhatchedEggs, tapEgg, firstCreatureId, hatchedCreatures, nameCreatureById, nameCreature,
-  closeBook, canFeed, feedCreature, growthStages, adornments, nextGrowthStage,
+  closeBook, feedFood, canFeed, feedCreature, growthStages, growthSize, adornments, nextGrowthStage,
 } from './creatures.js';
 export {
   breedableCreatures, nestEggs, nestFree, canBreed, previewBreed, pickOutcome, startBreeding, eggProgress,

@@ -32,8 +32,9 @@ next.
 - **Breeding knobs** (hatch time, nest slots, which elements/rarities can result, help-along grades):
   the `BREEDING` entry in `progression.js`. A new element also needs its label and tint there. The
   odds the dialog shows and the hatch uses are the same function, `previewBreed` in `rules/breeding.js`.
-- **A creature growth stage:** add to `FEEDING.stages` in `progression.js`; a new `adornment`
-  also needs a builder in the renderer.
+- **A creature growth stage:** add to `FEEDING.stages` in `progression.js` (`size` makes it bigger);
+  a new `adornment` also needs a builder in `ADORNMENTS` in the renderer. `FEEDING.foods` lists what
+  creatures eat, favourite first.
 - **A new system:** a new module in `game/src/rules/` with its own tests, re-exported from
   `game.js`. If it gives the player something to do, add a suggestion to `FREE_PLAY_GOALS` in
   `guide.js` so the goal chip points at it.

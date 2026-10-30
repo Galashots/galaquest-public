@@ -62,8 +62,9 @@ function syncVisuals(now) {
   diorama.syncEggs(state.eggs);
   for (const egg of game.unhatchedEggs(state)) diorama.preloadCreature(game.hatchCreatureId(egg, content));
   diorama.syncDecorations(state.decorations);
-  diorama.syncAdornments(Object.fromEntries(game.hatchedCreatures(state)
-    .map(({ creatureId }) => [creatureId, game.adornments(state, content, creatureId)])));
+  diorama.syncGrowth(Object.fromEntries(game.hatchedCreatures(state).map(({ creatureId }) => [creatureId, {
+    adornments: game.adornments(state, content, creatureId), size: game.growthSize(state, content, creatureId),
+  }])));
   diorama.setSeedSackVisible(['replant', 'free'].includes(step()));
   diorama.setWateringCanVisible(['grow', 'replant', 'free'].includes(step()) &&
     game.unwateredGrowingPlotIndexes(state, content, now).length > 0);
@@ -98,8 +99,9 @@ function refresh() {
   hud.setFeedVisible(game.canFeed(state, content));
   const firstCreatureId = game.firstCreatureId(state);
   const stage = firstCreatureId ? game.nextGrowthStage(state, content, firstCreatureId) : null;
+  const food = content.CROPS.find((c) => c.id === game.feedFood(state, content));
   hud.setFeedMeter(firstCreatureId ? state.collection.fed?.[firstCreatureId] || 0 : 0, !!firstCreatureId,
-    stage ? stage.feeds : null, firstCreatureId ? creatureName(firstCreatureId) : '');
+    stage ? stage.feeds : null, firstCreatureId ? creatureName(firstCreatureId) : '', food?.icon);
   const seeds = game.remainingSeeds(state, content);
   if (seeds.length && !seeds.includes(selectedSeed)) selectedSeed = seeds[0];
   const trayKey = `${trayOpened}:${seeds.join(',')}:${selectedSeed}:${step()}`;
@@ -113,7 +115,7 @@ function refresh() {
   else if (namingDialog.backdrop.style.display === 'flex') target = rectPoint(namingDialog.suggestionsEl.getBoundingClientRect());
   else if (book.isOpen) target = rectPoint(book.closeBtn.getBoundingClientRect());
   else if (market.isOpen) target = rectPoint(market.getArrowTargetRect(step()));
-  else if (goal.targetKey === 'creature' && hud.feedBtn.style.display !== 'none') target = rectPoint(hud.feedBtn.getBoundingClientRect());
+  else if (goal.targetKey === 'creature' && !goal.creatureId && hud.feedBtn.style.display !== 'none') target = rectPoint(hud.feedBtn.getBoundingClientRect());
   else {
     const point = diorama.worldPositionFor(goal);
     if (point) target = diorama.projectToScreen(point, app.clientWidth, app.clientHeight);
@@ -437,7 +439,7 @@ canvas.addEventListener('pointerdown', (e) => {
   else if (hit.type === 'market' || hit.type === 'mannequin') openMarket();
   else if (hit.type === 'egg') handleEggTap(hit.eggId, now);
   else if (hit.type === 'creature') {
-    if (hit.creatureId === game.firstCreatureId(state)) feedCreature(hit.creatureId);
+    if (game.canFeed(state, content, hit.creatureId)) feedCreature(hit.creatureId);
     else diorama.playCreatureHop(hit.creatureId);
   }
 });

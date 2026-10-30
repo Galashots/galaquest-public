@@ -30,10 +30,18 @@ export const TUTORIAL_SEEDS = {
 /** The egg every new farm starts with. Its creature follows the first special crop harvested. */
 export const STARTER_EGG = { id: 'starter', defaultName: 'Sprout' };
 
-/** Feeding: creatures eat `food`; growth stages unlock at feed counts. */
+/**
+ * Feeding: creatures eat the first of `foods` in the basket (so a sunberry before a carrot).
+ * Growth stages unlock at feed counts. `adornment`: a piece the renderer adds (it has a
+ * builder for each). `size`: how big the creature grows, 1 being hatchling size.
+ */
 export const FEEDING = {
-  food: 'sunberry',
-  stages: [{ feeds: 3, adornment: 'sunCrest', toast: "{name}'s sun crest bloomed! ☀️" }],
+  foods: ['sunberry', 'carrot'],
+  stages: [
+    { feeds: 3, adornment: 'sunCrest', toast: "{name}'s sun crest bloomed! ☀️" },
+    { feeds: 6, size: 1.15, toast: '{name} grew bigger! 🌱' },
+    { feeds: 10, size: 1.3, adornment: 'starHalo', toast: '{name} is all grown up! ⭐' },
+  ],
 };
 
 /**

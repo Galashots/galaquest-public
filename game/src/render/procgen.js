@@ -428,6 +428,28 @@ export function buildSunCrest(THREE) {
   return group;
 }
 
+/**
+ * A fully grown creature's star halo: a thin glowing gold ring with five little
+ * stars, floating just above its head (the renderer lifts it and spins it slowly).
+ */
+export function buildStarHalo(THREE) {
+  const group = new THREE.Group();
+  group.name = 'starHalo';
+  const glow = { emissive: '#ffd54f', emissiveIntensity: 0.45 };
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.022, 8, 28), mat(THREE, '#ffe082', glow));
+  ring.rotation.x = Math.PI / 2;
+  group.add(ring);
+  const starGeo = new THREE.OctahedronGeometry(0.05, 0);
+  const starMat = mat(THREE, '#fff59d', glow);
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    const star = new THREE.Mesh(starGeo, starMat);
+    star.position.set(Math.cos(angle) * 0.17, 0.02, Math.sin(angle) * 0.17);
+    group.add(star);
+  }
+  return group;
+}
+
 export function buildEgg(THREE) {
   const group = new THREE.Group();
   const shell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 16), mat(THREE, '#fff6e0', { emissive: '#000000', emissiveIntensity: 0 }));

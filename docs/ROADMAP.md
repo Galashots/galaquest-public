@@ -18,11 +18,14 @@ a short playtest. `docs/VISION.md` says *what* we're building; this file says *i
   parents, see every possible result and its chance, make an egg for free. It is ready after a few
   minutes (a ring shows progress, never a countdown), the child taps it to hatch, and a question can
   shorten the wait for rare eggs (`rules/breeding.js`).
+- **Creatures grow up (2026-10).** Every hatched creature can be fed (tap it), on sunberries or
+  carrots. Three stages: the sun crest at 3 feeds, bigger at 6, and "all grown up" with a star halo
+  at 10. A fully grown creature stops eating, and the goal chip suggests feeding while crops grow.
 
 ## 1. Deeper farm loop (next)
 
 - More crops (quick basic crops, slow rare crops) and more creatures, all as data.
-- Creatures visibly transform as they're fed (stages, not just a crest).
+- Creatures transform in their own way per element or species (today every creature grows the same).
 - A second armor set, plus forging armor from crops.
 - **Child playtest** against `docs/CONTRACT.md` §6.
 

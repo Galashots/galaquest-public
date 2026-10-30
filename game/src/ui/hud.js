@@ -115,11 +115,14 @@ export class Hud {
   }
   onFeed(cb) { this.feedBtn.addEventListener('click', cb); }
   setFeedVisible(on) { this.feedBtn.style.display = on ? 'block' : 'none'; }
-  /** goal: feeds needed for the next growth stage, or null once fully grown. */
-  setFeedMeter(fed, visible, goal = null, name = '') {
+  /**
+   * goal: feeds needed for the next growth stage, or null once fully grown.
+   * foodIcon: the crop the button would feed.
+   */
+  setFeedMeter(fed, visible, goal = null, name = '', foodIcon = '☀️') {
     this.feedMeter.style.display = visible ? 'block' : 'none';
-    this.feedMeter.textContent = goal ? `☀️ ${name} ${Math.min(fed, goal)}/${goal}` : `☀️ ${name} full`;
-    if (name) this.feedBtn.textContent = `☀️ Feed ${name}`;
+    this.feedMeter.textContent = goal ? `⭐ ${name} ${Math.min(fed, goal)}/${goal}` : `⭐ ${name} all grown up!`;
+    if (name) this.feedBtn.textContent = `${foodIcon} Feed ${name}`;
   }
 
   setGoalText(text) {
